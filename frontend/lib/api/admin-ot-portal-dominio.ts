@@ -21,7 +21,10 @@ export interface PortalDominioDns {
 }
 
 export interface DominioPortal {
+  id: string;
   host: string;
+  /** El organismo usa el principal activo en el enlace, el QR y los correos. */
+  principal: boolean;
   estado: PortalDominioEstado;
   motivo: string | null;
   dns: PortalDominioDns[];
@@ -59,7 +62,7 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 async function request(
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   scope: PortalDominioScope | undefined,
   json?: unknown,
@@ -90,15 +93,15 @@ async function requireDomain(response: Response): Promise<DominioPortal> {
   return (await response.json()) as DominioPortal;
 }
 
-/** GET — dominio vigente del organismo, o `null` si no tiene (404 o cuerpo vacío). */
-export async function getPortalDominio(scope?: PortalDominioScope): Promise<DominioPortal | null> {
+/** GET — dominios del organismo (hasta 10). Lista vacía si no tiene ninguno. */
+export async function getPortalDominios(scope?: PortalDominioScope): Promise<DominioPortal[]> {
   const response = await request("GET", base, scope);
-  if (response.status === 404 || response.status === 204) return null;
+  if (response.status === 404 || response.status === 204) return [];
   if (!response.ok) throw await toApiError(response);
-  return ((await response.json()) as DominioPortal | null) ?? null;
+  return ((await response.json()) as DominioPortal[] | null) ?? [];
 }
 
-/** POST { host } — registra el dominio; queda pendiente con sus instrucciones de DNS. */
+/** POST { host } — agrega un dominio; queda pendiente con sus instrucciones de DNS. */
 export async function registerPortalDominio(
   host: string,
   scope?: PortalDominioScope,
@@ -106,15 +109,31 @@ export async function registerPortalDominio(
   return requireDomain(await request("POST", base, scope, { host }));
 }
 
-/** POST /verificar — comprobación a demanda del TXT. */
-export async function verifyPortalDominio(scope?: PortalDominioScope): Promise<DominioPortal> {
-  return requireDomain(await request("POST", `${base}/verificar`, scope));
+/** POST /{id}/verificar — comprobación a demanda del TXT. */
+export async function verifyPortalDominio(
+  id: string,
+  scope?: PortalDominioScope,
+): Promise<DominioPortal> {
+  return requireDomain(await request("POST", `${base}/${encodeURIComponent(id)}/verificar`, scope));
 }
 
-/** DELETE — retira el dominio; el portal sigue en el enlace del punto. */
-export async function deletePortalDominio(scope?: PortalDominioScope): Promise<void> {
-  const response = await request("DELETE", base, scope);
+/** PUT /{id}/principal — el dominio activo pasa a ser el que usan enlace, QR y correos. */
+export async function setPortalDominioPrincipal(
+  id: string,
+  scope?: PortalDominioScope,
+): Promise<DominioPortal> {
+  return requireDomain(await request("PUT", `${base}/${encodeURIComponent(id)}/principal`, scope));
+}
+
+/** DELETE /{id} — retira el dominio; el portal sigue en los otros o en el enlace del punto. */
+export async function deletePortalDominio(id: string, scope?: PortalDominioScope): Promise<void> {
+  const response = await request("DELETE", `${base}/${encodeURIComponent(id)}`, scope);
   if (!response.ok) throw await toApiError(response);
+}
+
+/** Dominio principal y activo, o `null` (otro no se inventa). */
+export function principalActivo(dominios: DominioPortal[]): DominioPortal | null {
+  return dominios.find((d) => d.principal && d.estado === "activo") ?? null;
 }
 
 const ESTADOS: Record<PortalDominioEstado, TenantDomainStatus> = {
