@@ -119,12 +119,12 @@ public sealed class DomainStateMachineTests
     }
 
     [Fact]
-    public void AC3_Certificado_SoloVerifiedPasaAActive()
+    public void Certificado_NoActiva_LaActivacionLaPideElSuperAdmin()
     {
-        var decision = DomainStateMachine.DecideCertificate(TenantDomainStatus.Verified, Now);
+        var decision = DomainStateMachine.DecideCertificate(TenantDomainStatus.Verified);
 
-        decision.NewStatus.Should().Be(TenantDomainStatus.Active);
-        decision.ActivatedAt.Should().Be(Now);
+        decision.NewStatus.Should().Be(TenantDomainStatus.Verified);
+        decision.ActivatedAt.Should().BeNull();
     }
 
     [Theory]
@@ -133,7 +133,7 @@ public sealed class DomainStateMachineTests
     [InlineData(TenantDomainStatus.Active)]
     public void AC3_Certificado_EnCualquierOtroEstado_NoCambiaDeEstado(string status)
     {
-        var decision = DomainStateMachine.DecideCertificate(status, Now);
+        var decision = DomainStateMachine.DecideCertificate(status);
 
         decision.NewStatus.Should().Be(status);
         decision.ActivatedAt.Should().BeNull();

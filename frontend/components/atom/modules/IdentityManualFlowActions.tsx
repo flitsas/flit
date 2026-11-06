@@ -31,7 +31,7 @@ import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 const CHIP_RECHAZADA = 'Rechazada · esperando nueva captura';
 
 const AVISO_CORREO =
-  'No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido.';
+  'No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido, o cópialo y envíalo por otro canal.';
 
 const BTN_BASE =
   'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:focus-visible:ring-[#7C9BFF] disabled:cursor-not-allowed disabled:opacity-70';

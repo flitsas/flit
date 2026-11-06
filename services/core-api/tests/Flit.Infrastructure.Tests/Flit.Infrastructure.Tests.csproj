@@ -23,6 +23,8 @@
       se bifurque entre este proyecto y el de Security.Application.Tests.
     -->
     <Compile Include="..\Shared\EmailGolden.cs" Link="Shared\EmailGolden.cs" />
+    <!-- HU #14301 — extractor de texto de PDF de Flit.Admin.Tests, ENLAZADO (no copiado) para verificar lo que imprime la carta. -->
+    <Compile Include="..\Flit.Admin.Tests\GeneracionDocumental\PdfTextExtractor.cs" Link="Shared\PdfTextExtractor.cs" />
   </ItemGroup>
 
   <ItemGroup>

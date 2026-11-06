@@ -203,7 +203,7 @@ public static class IdentityInfrastructureExtensions
         services.AddMemoryCache();
         services.AddScoped<Flit.Admin.Application.Companies.Domains.ITenantDomainResolver,
             Flit.Infrastructure.Domains.CachedTenantDomainResolver>();
-        // Reservados y CNAME del borde (Domains:Reserved, Domains:EdgeTarget). Igual que
+        // Reservados e IP del borde (Domains:Reserved, Domains:EdgeIp). Igual que
         // ImprontaValidationPolicyOptions: Application consume el POCO YA resuelto, sin IOptions.
         if (configuration is not null)
         {

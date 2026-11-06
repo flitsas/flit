@@ -7,4 +7,9 @@ namespace Flit.Admin.Domain.Companies.Domains;
 public static class TenantDomainPurposes
 {
     public const string Hub = "HUB";
+
+    /// <summary>Productos que pueden tener dominio propio en una red.</summary>
+    public static IReadOnlyList<string> Products { get; } = ["tramites", "comparendos", "diagnostico"];
+
+    public static bool IsProduct(string? purpose) => purpose is not null && Products.Contains(purpose);
 }

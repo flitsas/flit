@@ -47,10 +47,10 @@ public sealed class VerifyDomainHandlerTests
     {
         var repo = Substitute.For<ITenantDomainRepository>();
         var current = NewDomain(TenantDomainStatus.Pending, "tok-123");
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(current);
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(current);
         repo.ApplyCheckOutcomeAsync(
                 Arg.Is(TenantId), Arg.Is(TenantDomainStatus.Verified), Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Is(0), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(),
-                Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                Arg.Any<Guid?>(), Arg.Any<string?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci => NewDomain(TenantDomainStatus.Verified, "tok-123"));
 
         var dns = new FakeDnsTxtResolver();
@@ -68,11 +68,11 @@ public sealed class VerifyDomainHandlerTests
     {
         var repo = Substitute.For<ITenantDomainRepository>();
         var current = NewDomain(TenantDomainStatus.Pending, "tok-123");
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(current);
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(current);
         repo.ApplyCheckOutcomeAsync(
                 Arg.Is(TenantId), Arg.Is(TenantDomainStatus.Failed), Arg.Is(DomainStatusReasons.TxtNotFound), Arg.Any<DateTimeOffset?>(),
                 Arg.Any<DateTimeOffset?>(), Arg.Is(1), Arg.Any<DateTimeOffset?>(),
-                Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci => NewDomain(TenantDomainStatus.Failed, "tok-123", checkAttempts: 1));
 
         var dns = new FakeDnsTxtResolver(); // sin registrar el host ⇒ NotFound
@@ -88,11 +88,11 @@ public sealed class VerifyDomainHandlerTests
     public async Task AC7_ValorIncorrecto_PasaAFailedConTxtMismatch()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(NewDomain(TenantDomainStatus.Pending, "tok-esperado"));
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(NewDomain(TenantDomainStatus.Pending, "tok-esperado"));
         repo.ApplyCheckOutcomeAsync(
                 Arg.Is(TenantId), Arg.Is(TenantDomainStatus.Failed), Arg.Is(DomainStatusReasons.TxtMismatch), Arg.Any<DateTimeOffset?>(),
                 Arg.Any<DateTimeOffset?>(), Arg.Is(1), Arg.Any<DateTimeOffset?>(),
-                Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci => NewDomain(TenantDomainStatus.Failed, "tok-esperado", checkAttempts: 1));
 
         var dns = new FakeDnsTxtResolver();
@@ -108,10 +108,10 @@ public sealed class VerifyDomainHandlerTests
     public async Task AC7_DesapareceEnActivo_SigueActivoConGracia()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(NewDomain(TenantDomainStatus.Active, "tok-123"));
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(NewDomain(TenantDomainStatus.Active, "tok-123"));
         repo.ApplyCheckOutcomeAsync(
                 Arg.Is(TenantId), Arg.Is(TenantDomainStatus.Active), Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Is(0), Arg.Any<DateTimeOffset?>(),
-                Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+                Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci => NewDomain(TenantDomainStatus.Active, "tok-123", graceUntil: Now.AddDays(3)));
 
         var dns = new FakeDnsTxtResolver(); // TXT desapareció
@@ -127,7 +127,7 @@ public sealed class VerifyDomainHandlerTests
     public async Task Cooldown_ComprobacionMuyReciente_Responde429()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>())
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(NewDomain(TenantDomainStatus.Pending, "tok-123", lastCheckedAt: Now.AddSeconds(-5)));
 
         var handler = new VerifyDomainHandler(repo, new FakeDnsTxtResolver(), NewOptions(), new FrozenTimeProvider(Now));
@@ -137,14 +137,14 @@ public sealed class VerifyDomainHandlerTests
         result.RetryAfterSeconds.Should().BeGreaterThan(0);
         await repo.DidNotReceive().ApplyCheckOutcomeAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(),
-            Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task DominioInexistente_Responde404()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
 
         var handler = new VerifyDomainHandler(repo, new FakeDnsTxtResolver(), NewOptions(), new FrozenTimeProvider(Now));
         var result = await handler.HandleAsync(TenantId, changedByUserId: null, TestContext.Current.CancellationToken);

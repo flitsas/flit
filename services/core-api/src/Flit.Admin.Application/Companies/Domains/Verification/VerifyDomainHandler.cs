@@ -39,9 +39,12 @@ public sealed class VerifyDomainHandler(
     private readonly DomainVerificationOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
-    public async Task<VerifyDomainResult> HandleAsync(Guid tenantId, Guid? changedByUserId, CancellationToken cancellationToken = default)
+    public Task<VerifyDomainResult> HandleAsync(Guid tenantId, Guid? changedByUserId, CancellationToken cancellationToken = default) =>
+        HandleAsync(tenantId, changedByUserId, TenantDomainPurposes.Hub, cancellationToken);
+
+    public async Task<VerifyDomainResult> HandleAsync(Guid tenantId, Guid? changedByUserId, string purpose, CancellationToken cancellationToken = default)
     {
-        var current = await _repository.GetByTenantIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var current = await _repository.GetByTenantIdAsync(tenantId, purpose, cancellationToken).ConfigureAwait(false);
         if (current is null)
         {
             return VerifyDomainResult.NotFound();
@@ -74,6 +77,7 @@ public sealed class VerifyDomainHandler(
             now,
             changedByUserId,
             changedByJob: null,
+            purpose,
             cancellationToken).ConfigureAwait(false);
 
         if (updated is null)

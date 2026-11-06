@@ -17,7 +17,11 @@ public sealed record DetailedProcedureRowDto(
     bool IsLeasing,
     string PaymentType,
     // Nullable: solo los trámites de la familia TRASPASO tienen clase de traspaso.
-    string? TransferType);
+    string? TransferType,
+    // HU #14319 — canal efectivo (los trámites sin dato, incluido el migrado, llegan como «tramites») y OT del canal.
+    string Channel = "tramites",
+    Guid? ChannelTransitOfficeId = null,
+    string? ChannelTransitOfficeName = null);
 
 /// <summary>Totales agregados para KPIs del reporte detallado (HU #10819).</summary>
 public sealed record DetailedReportSummaryDto(
@@ -54,4 +58,10 @@ public sealed record DetailedReportFilter(
 {
     /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
     public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
+    /// <summary>HU #14319 — código de <c>TramiteCanal</c> ya validado por el endpoint; <c>null</c> = todos los canales.</summary>
+    public string? Channel { get; init; }
+
+    /// <summary>HU #14319 — organismo del canal (punto de atención Persona Natural OT); <c>null</c> = sin filtro.</summary>
+    public Guid? ChannelTransitOfficeId { get; init; }
 }
