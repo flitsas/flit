@@ -58,6 +58,16 @@ public sealed class ProcedureInstanceBiometricValidation
 
     /// <summary>SHA-256 (hex) del token enviado por magic-link. El token crudo nunca se persiste.</summary>
     public string TokenHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// HU #14305 (Feature #14304, Épica #14271) — token de la captura manual CIFRADO (Data Protection), solo mientras la validación
+    /// espera la captura del cliente; permite al Super Admin copiar el enlace sin regenerarlo. Cambia a propósito la regla de la
+    /// #13202 («solo el hash»): el token en claro sigue sin persistirse. Se llena al activar, regenerar o rechazar; se BORRA al
+    /// enviar la captura (<see cref="RegistrarCapturaManual"/>) y al aprobar. Nulo en enlaces emitidos antes de este cambio. Nunca
+    /// sale en un DTO, un log ni la auditoría.
+    /// </summary>
+    public string? ManualCaptureTokenEncrypted { get; set; }
+
     public DateTimeOffset ExpiresAt { get; set; }
 
     // ── Proveedor de validación de identidad (HU #10233 — Kyverum Verify) ────────
@@ -215,6 +225,86 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>Código (lista cerrada, constante en código) del motivo de rechazo de la revisión manual.</summary>
     public string? RejectionReasonCode { get; set; }
 
+    // HU #14310 — resultado informativo (no es un control de seguridad) de la validación de cada foto en el dispositivo.
+    // Todas NULL en capturas anteriores. Los valores salen de ManualPhotoCheckStates / ManualPhotoCheckReasons.
+    public string? FaceCheckStatus { get; set; }
+
+    public string? FaceCheckReason { get; set; }
+
+    public string? IdFrontCheckStatus { get; set; }
+
+    public string? IdFrontCheckReason { get; set; }
+
+    public string? IdBackCheckStatus { get; set; }
+
+    public string? IdBackCheckReason { get; set; }
+
+    /// <summary>HU #14310 — resultado de las tres fotos, o <c>null</c> si la captura es anterior a este cambio.</summary>
+    public ManualPhotoChecks? PhotoChecks =>
+        FaceCheckStatus is null && IdFrontCheckStatus is null && IdBackCheckStatus is null
+            ? null
+            : new ManualPhotoChecks(
+                ManualPhotoCheck.FromColumns(FaceCheckStatus, FaceCheckReason) ?? ManualPhotoCheck.Unknown,
+                ManualPhotoCheck.FromColumns(IdFrontCheckStatus, IdFrontCheckReason) ?? ManualPhotoCheck.Unknown,
+                ManualPhotoCheck.FromColumns(IdBackCheckStatus, IdBackCheckReason) ?? ManualPhotoCheck.Unknown);
+
+    /// <summary>
+    /// HU #14301 (Feature #14300, Épica #14271) — serie del código de integridad de la carta de identidad que FLIT emite al
+    /// aprobar una validación MANUAL (derivada de forma estable de la evidencia). NULL en toda validación de Kyverum: no se
+    /// confunde con <see cref="CertificateHash"/> (la serie <c>firmaSerie</c> de Kyverum que lee el sello del FUR).
+    /// </summary>
+    public string? CartaSerie { get; set; }
+
+    /// <summary>Hash (SHA-256 hex) de la evidencia sellada en la carta: el mismo que se imprime en «Código de integridad».</summary>
+    public string? CartaSha256 { get; set; }
+
+    /// <summary>SHA-256 hex de los bytes del PDF guardado (verifica que el archivo en custodia no cambió).</summary>
+    public string? CartaPdfSha256 { get; set; }
+
+    /// <summary>Ruta opaca del PDF en el storage (jamás una URL ni dato personal).</summary>
+    public string? CartaPath { get; set; }
+
+    /// <summary>Instante en que se generó la carta (el «Sellado» del PDF).</summary>
+    public DateTimeOffset? CartaGeneratedAt { get; set; }
+
+    /// <summary>¿Ya tiene carta? Una validación se genera UNA sola vez (idempotente).</summary>
+    public bool TieneCartaIdentidad => !string.IsNullOrWhiteSpace(CartaPath);
+
+    /// <summary>
+    /// HU #14301 — ¿le corresponde la carta de FLIT? Solo la validación MANUAL ya aprobada por una persona de FLIT
+    /// (<see cref="BiometricApprovalOrigins.Manual"/>); la aprobada por Kyverum trae su propio certificado.
+    /// </summary>
+    public bool CorrespondeCartaIdentidad =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && string.Equals(Status, BiometricEstados.Aprobado, StringComparison.Ordinal)
+        && string.Equals(ApprovalOrigin, BiometricApprovalOrigins.Manual, StringComparison.Ordinal);
+
+    /// <summary>
+    /// HU #14301 — registra la carta generada. Idempotente: si ya existe NO la pisa y devuelve <c>false</c> (la serie, el hash y la
+    /// ruta de la primera generación no cambian). Solo aplica a <see cref="CorrespondeCartaIdentidad"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">La validación no es una aprobación manual.</exception>
+    /// <exception cref="ArgumentException">Serie/ruta vacías o hashes que no son SHA-256 (64 hex).</exception>
+    public bool RegistrarCartaIdentidad(string serie, string evidenceSha256, string pdfSha256, string path, DateTimeOffset now)
+    {
+        if (!CorrespondeCartaIdentidad)
+            throw new InvalidOperationException("Solo una validación manual aprobada por FLIT tiene carta de identidad.");
+        if (TieneCartaIdentidad)
+            return false;
+        if (string.IsNullOrWhiteSpace(serie) || string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("La carta exige serie y ruta.");
+        if (evidenceSha256?.Length != 64 || pdfSha256?.Length != 64)
+            throw new ArgumentException("Los hashes de la carta deben ser SHA-256 (64 hex).");
+
+        CartaSerie = serie;
+        CartaSha256 = evidenceSha256;
+        CartaPdfSha256 = pdfSha256;
+        CartaPath = path;
+        CartaGeneratedAt = now;
+        UpdatedAt = now;
+        return true;
+    }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 
     /// <summary>
@@ -251,7 +341,7 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </para>
     /// </summary>
     /// <exception cref="IdentidadManualNoActivableException">Aprobada y vigente.</exception>
-    public void ActivarFlujoManual(Guid userId, DateTimeOffset now, string tokenHash)
+    public void ActivarFlujoManual(Guid userId, DateTimeOffset now, string tokenHash, string? tokenEncrypted = null)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("El usuario que activa el flujo manual es obligatorio.", nameof(userId));
@@ -263,6 +353,7 @@ public sealed class ProcedureInstanceBiometricValidation
         Provider = BiometricProviders.Manual;
         Status = BiometricEstados.ManualActivo;
         TokenHash = tokenHash;
+        ManualCaptureTokenEncrypted = tokenEncrypted;
         ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
         ManualActivatedBy = userId;
         ManualActivatedAt = now;
@@ -305,7 +396,7 @@ public sealed class ProcedureInstanceBiometricValidation
     /// quién ni cuándo se activó, ni las fotos o el consentimiento (en <c>rechazado</c> sigue <c>rechazado</c>).
     /// </summary>
     /// <exception cref="FlujoManualNoActivoException">No espera captura (<see cref="EsperaCapturaManual"/>).</exception>
-    public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash)
+    public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash, string? tokenEncrypted = null)
     {
         if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
             throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
@@ -315,6 +406,7 @@ public sealed class ProcedureInstanceBiometricValidation
             throw new ArgumentException("El enlace regenerado debe ser distinto del anterior.", nameof(tokenHash));
 
         TokenHash = tokenHash;
+        ManualCaptureTokenEncrypted = tokenEncrypted; // sustituye al cifrado anterior (HU #14305)
         ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
         ResendCount++;
         LastResentAt = now;
@@ -373,7 +465,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <exception cref="ManualCaptureStateException">Sesión no vigente o sin consentimiento del ciclo actual.</exception>
     /// <exception cref="ArgumentException">Falta alguna ruta o el hash de la firma no es SHA-256.</exception>
     public void RegistrarCapturaManual(
-        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now)
+        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now,
+        ManualPhotoChecks? photoChecks = null)
     {
         AsegurarSesionManualVigente(now);
         if (!TieneConsentimientoManualVigente)
@@ -389,7 +482,17 @@ public sealed class ProcedureInstanceBiometricValidation
         IdBackPhotoPath = idBackPath;
         SignatureImagePath = signaturePath;
         SignatureImageSha256 = signatureSha256;
+        // HU #14310 — la captura nueva SOBRESCRIBE el resultado anterior; sin dato, las tres quedan «sin resultado».
+        var checks = photoChecks ?? ManualPhotoChecks.AllUnknown;
+        FaceCheckStatus = checks.Face.State;
+        FaceCheckReason = checks.Face.Reason;
+        IdFrontCheckStatus = checks.IdFront.State;
+        IdFrontCheckReason = checks.IdFront.Reason;
+        IdBackCheckStatus = checks.IdBack.State;
+        IdBackCheckReason = checks.IdBack.Reason;
         Status = BiometricEstados.PendienteRevisionManual;
+        // HU #14305 — el enlace se consumió: el token cifrado se borra (el hash queda para que el público lo reconozca).
+        ManualCaptureTokenEncrypted = null;
         // HU #13299 — la captura nueva abre una revisión nueva: el motivo y la revisión (quién y cuándo) del rechazo previo, que se
         // conservan mientras el cliente repite la captura, se LIMPIAN aquí; la historia queda en la auditoría (manual_rechazado).
         RejectionReasonCode = null;
@@ -422,6 +525,7 @@ public sealed class ProcedureInstanceBiometricValidation
             throw new InvalidOperationException("Solo una validación manual ya aprobada se sella como aprobada manualmente.");
 
         ApprovalOrigin = BiometricApprovalOrigins.Manual;
+        ManualCaptureTokenEncrypted = null; // HU #14305: aprobar nunca deja un token vivo
         ReviewedBy = reviewerId;
         ReviewedAt = now;
         RejectionReasonCode = null;
@@ -444,7 +548,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     /// <exception cref="RevisionManualNoPendienteException">No está en <c>pendiente_revision_manual</c>.</exception>
     /// <exception cref="ArgumentException">Revisor vacío, motivo fuera de la lista o token mal formado/repetido.</exception>
-    public void RechazarRevisionManual(Guid reviewerId, string reasonCode, DateTimeOffset now, string tokenHash)
+    public void RechazarRevisionManual(
+        Guid reviewerId, string reasonCode, DateTimeOffset now, string tokenHash, string? tokenEncrypted = null)
     {
         if (reviewerId == Guid.Empty)
             throw new ArgumentException("El usuario que revisa es obligatorio.", nameof(reviewerId));
@@ -463,6 +568,7 @@ public sealed class ProcedureInstanceBiometricValidation
         ReviewedAt = now;
 
         TokenHash = tokenHash;
+        ManualCaptureTokenEncrypted = tokenEncrypted;
         ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
         ManualActivatedAt = now;
         UpdatedAt = now;
@@ -491,6 +597,7 @@ public sealed class ProcedureInstanceBiometricValidation
     public void Approve(DateTimeOffset now)
     {
         Status = BiometricEstados.Aprobado;
+        ManualCaptureTokenEncrypted = null; // HU #14305: aprobar nunca deja un token de captura vivo
         ValidatedAt = now;
         ValidUntil = BiometricRules.FechaFinVigencia(now);
         // HU #13303: toda aprobación que pasa por aquí (Kyverum, mock, reconciliación) es AUTOMÁTICA. La del flujo manual también

@@ -120,6 +120,58 @@ public sealed class ManualCaptureSubmitHandlerTests
         $"{entry.Message} {entry.Detail}".Should().NotContain("900111222").And.NotContain("Ana").And.NotContain(Token);
     }
 
+    // ── HU #14310 — resultado de la validación de las fotos ─────────────────────────────────
+
+    private const string FotosJson =
+        """{"rostro":{"estado":"verificada","motivo":null},"anverso":{"estado":"no_verificada","motivo":"lado_incorrecto"},"reverso":{"estado":"no_verificada","motivo":"sin_soporte"}}""";
+
+    [Fact]
+    public async Task HU14310_AC1_EnvioConValidacionFotos_GuardaElResultadoDeLasTresFotos()
+    {
+        var v = Fila();
+
+        var (_, error) = await Handler().HandleAsync(Command() with { ValidacionFotos = FotosJson }, Ct);
+
+        error.Should().BeNull();
+        v.PhotoChecks.Should().Be(new ManualPhotoChecks(
+            ManualPhotoCheck.Verified,
+            ManualPhotoCheck.NotVerified("lado_incorrecto"),
+            ManualPhotoCheck.NotVerified("sin_soporte")));
+        await _repo.Received(1).TryPersistManualCaptureAsync(v, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("esto no es json")]
+    [InlineData("""{"rostro":{"estado":"verificada"}""")]
+    public async Task HU14310_AC3_AC4_SinCampoOJsonInvalido_TodasNoVerificadasSinResultado_YNoRechazaLaCaptura(string? raw)
+    {
+        var v = Fila();
+
+        var (result, error) = await Handler().HandleAsync(Command() with { ValidacionFotos = raw }, Ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be("pendiente_revision_manual");
+        v.PhotoChecks.Should().Be(ManualPhotoChecks.AllUnknown);
+        v.FaceCheckStatus.Should().Be("no_verificada");
+        v.FaceCheckReason.Should().Be("sin_resultado");
+    }
+
+    [Fact]
+    public async Task HU14310_RechazadaQueRepiteLaCaptura_SobrescribeElResultadoAnterior()
+    {
+        var v = FilaRechazada();
+        v.FaceCheckStatus = "no_verificada";
+        v.FaceCheckReason = "sin_rostro";
+
+        var (_, error) = await Handler().HandleAsync(Command() with { ValidacionFotos = FotosJson }, Ct);
+
+        error.Should().BeNull();
+        v.PhotoChecks!.Face.Should().Be(ManualPhotoCheck.Verified);
+        v.FaceCheckReason.Should().BeNull();
+    }
+
     // ── HU #13299 — repetición de la captura estando 'rechazado' (rechazo con enlace nuevo) ─────────────────
 
     private ProcedureInstanceBiometricValidation FilaRechazada(DateTimeOffset? expiresAt = null)

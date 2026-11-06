@@ -285,6 +285,7 @@ public static class DependencyInjection
         services.AddScoped<ActivarIdentidadManualHandler>();
         services.AddScoped<VencerIdentidadHandler>();
         services.AddScoped<RegenerarEnlaceManualHandler>();
+        services.AddScoped<CopiarEnlaceManualHandler>();
         // HU #13298/#13299 (Feature #13282 C) — aprobar y rechazar la revisión manual (Super Admin).
         services.AddScoped<AprobarValidacionManualHandler>();
         services.AddScoped<RechazarValidacionManualHandler>();
@@ -321,6 +322,8 @@ public static class DependencyInjection
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
         services.AddScoped<Identity.IdentitySignatureCapture>();
         services.AddScoped<Identity.IIdentitySignatureCapture>(sp => sp.GetRequiredService<Identity.IdentitySignatureCapture>());
+        // HU #14301 (Feature #14300, Épica #14271) — carta de identidad de FLIT al aprobar una validación manual.
+        services.AddScoped<Identity.IIdentityLetterService, Identity.IdentityLetterService>();
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
         services.AddScoped<GetIdentityAuditHandler>();
         // CF-07 (Feature #11004, ADR-0036) — misma bitácora, sin depender de instanceId (standalone + trámite).

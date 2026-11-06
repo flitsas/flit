@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Eye, Info, Search } from 'lucide-react';
+import { Eye, Info, Link2, Search } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
-import { RowActions } from '@/components/atom/RowActions';
+import { ActionsMenu } from '@/components/atom/ActionsMenu';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { usePaginacion } from '@/components/atom/usePaginacion';
 import { WIZARD_INPUT, WIZARD_LABEL, WIZARD_SELECT } from '@/components/operacion/wizard-field-styles';
@@ -23,11 +23,13 @@ import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_INPUT_CLASS, MANUAL_SELECT_CLASS } from './manual-field-styles';
 import { ManualStatusBadge } from './ManualStatusBadge';
 import { ManualReviewDetailModal } from './ManualReviewDetailModal';
+import { useCopiarEnlaceManual } from './CopiarEnlaceManual';
+import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
 
 /**
  * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
  * (`Validaciones`) ya comprobó el rol. Tabla del modelo único de trámites: `DataTable` (cabecera
- * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `RowActions`, paginación numerada con
+ * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `ActionsMenu`, paginación numerada con
  * «Filas por página» y `CarLoaderModal` mientras carga.
  */
 
@@ -143,6 +145,7 @@ export function ValidacionesManuales({
 
   const recargar = useCallback(() => setReloadKey((k) => k + 1), []);
   const hayFiltros = Boolean(status || origin || q);
+  const { copiar, region: regionCopiar } = useCopiarEnlaceManual(recargar);
 
   const columns: DataTableColumn<ManualListItem>[] = [
     {
@@ -161,14 +164,28 @@ export function ValidacionesManuales({
       header: 'Acciones',
       align: 'right',
       render: (r) => (
-        <RowActions
-          actions={[
+        <ActionsMenu
+          ariaLabel={`Acciones de ${r.fullName}`}
+          items={[
             {
+              key: 'ver-detalle',
+              label: 'Ver detalle',
+              ariaLabel: `Ver detalle de ${r.fullName}`,
               icon: Eye,
-              label: `Ver detalle de ${r.fullName}`,
-              tone: 'primary',
-              onClick: () => setDetalleId(r.id),
+              onSelect: () => setDetalleId(r.id),
             },
+            // HU #14306: solo si espera captura del cliente (no aprobada ni con captura enviada).
+            ...(puedeCopiarEnlaceManual(r.status)
+              ? [
+                  {
+                    key: 'copiar-enlace',
+                    label: 'Copiar enlace',
+                    ariaLabel: `Copiar enlace de ${r.fullName}`,
+                    icon: Link2,
+                    onSelect: () => void copiar(r.id),
+                  },
+                ]
+              : []),
           ]}
         />
       ),
@@ -259,6 +276,8 @@ export function ValidacionesManuales({
           </button>
         </div>
       )}
+
+      {regionCopiar}
 
       <p className="sr-only" role="status" aria-live="polite">
         {carga === 'loading' ? 'Cargando validaciones manuales…' : `${total} validaciones manuales`}
