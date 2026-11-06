@@ -14150,6 +14150,115 @@ paths:
         "401": { description: Sin sesión. }
         "403": { description: Sin alcance sobre el organismo. }
         "409": { description: PORTAL_MARCA_CONFLICTO. }
+  /api/v1/admin/ot/portal-marca/logo:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Carga el logo (PNG, JPEG o WebP, hasta 512 KB)
+      description: >-
+        Multipart, campo file. Se valida el contenido real y que coincida con la extensión. Cada carga es una versión nueva con
+        id propio y la anterior se conserva. Error: 400 PORTAL_MARCA_ARCHIVO_INVALIDO con el motivo exacto.
+      operationId: AdminOtPortalMarcaLogoPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Marca con el logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_ARCHIVO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita el logo del borrador (las versiones se conservan)
+      operationId: AdminOtPortalMarcaLogoDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/banner:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Carga el banner (PNG, JPEG o WebP, hasta 2 MB)
+      operationId: AdminOtPortalMarcaBannerPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Marca con el banner en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_ARCHIVO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita el banner del borrador (las versiones se conservan)
+      operationId: AdminOtPortalMarcaBannerDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin banner en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/imagenes/{id}:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Imagen de la marca, también de borrador (solo con sesión)
+      description: El ot_admin solo ve las imágenes de su organismo (otro organismo, 403). Cache-Control private.
+      operationId: AdminOtPortalMarcaImagen
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binario de la imagen.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { description: Sin sesión. }
+        "403": { description: La imagen es de otro organismo. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
 
 components:
   securitySchemes:

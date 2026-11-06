@@ -31,6 +31,26 @@ public static class AdminOtPortalMarcaEndpoints
             .WithSummary("Publica el borrador: exige nombre, colores y contraste 4,5:1");
         group.MapPost("/retire", RetirarAsync).WithName("AdminOtPortalMarcaRetire")
             .WithSummary("Retira la marca publicada y conserva el borrador");
+        group.MapPost("/logo", (HttpContext h, IFormFile? file, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository b,
+                [FromServices] IPortalMarcaRepository r, [FromServices] PortalMarcaImagenHandler hd, CancellationToken ct) =>
+                SubirAsync(h, file, transitOfficeId, PortalMarcaImagen.KindLogo, b, r, hd, ct))
+            .WithName("AdminOtPortalMarcaLogoPost").DisableAntiforgery()
+            .WithSummary("Carga el logo (PNG, JPEG o WebP, hasta 512 KB)");
+        group.MapPost("/banner", (HttpContext h, IFormFile? file, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository b,
+                [FromServices] IPortalMarcaRepository r, [FromServices] PortalMarcaImagenHandler hd, CancellationToken ct) =>
+                SubirAsync(h, file, transitOfficeId, PortalMarcaImagen.KindBanner, b, r, hd, ct))
+            .WithName("AdminOtPortalMarcaBannerPost").DisableAntiforgery()
+            .WithSummary("Carga el banner (PNG, JPEG o WebP, hasta 2 MB)");
+        group.MapDelete("/logo", (HttpContext h, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository b,
+                [FromServices] IPortalMarcaRepository r, [FromServices] PortalMarcaImagenHandler hd, CancellationToken ct) =>
+                QuitarAsync(h, transitOfficeId, PortalMarcaImagen.KindLogo, b, r, hd, ct))
+            .WithName("AdminOtPortalMarcaLogoDelete").WithSummary("Quita el logo del borrador");
+        group.MapDelete("/banner", (HttpContext h, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository b,
+                [FromServices] IPortalMarcaRepository r, [FromServices] PortalMarcaImagenHandler hd, CancellationToken ct) =>
+                QuitarAsync(h, transitOfficeId, PortalMarcaImagen.KindBanner, b, r, hd, ct))
+            .WithName("AdminOtPortalMarcaBannerDelete").WithSummary("Quita el banner del borrador");
+        group.MapGet("/imagenes/{id:guid}", LeerImagenAsync).WithName("AdminOtPortalMarcaImagen")
+            .WithSummary("Imagen de la marca, también de borrador, solo con sesión y del organismo propio");
 
         return app;
     }
@@ -84,6 +104,59 @@ public static class AdminOtPortalMarcaEndpoints
             return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
 
         return Resultado(await accion(organismo, body.RowVersion, actor).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> SubirAsync(
+        HttpContext http, IFormFile? file, Guid? transitOfficeId, string kind, IOtClientProcedureRepository bandeja,
+        IPortalMarcaRepository repo, PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (file is null)
+            return Problema(400, PortalMarcaErrores.ArchivoInvalido, $"Falta el archivo del {PortalMarcaReglas.NombreImagen(kind)} (campo «file»).");
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        var stream = file.OpenReadStream();
+        await using (stream.ConfigureAwait(false))
+            return Resultado(await handler.SubirAsync(organismo, kind, file.FileName, stream, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> QuitarAsync(
+        HttpContext http, Guid? transitOfficeId, string kind, IOtClientProcedureRepository bandeja,
+        IPortalMarcaRepository repo, PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Results.Ok(await handler.QuitarAsync(organismo, kind, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> LeerImagenAsync(
+        HttpContext http, Guid id, [FromServices] IOtClientProcedureRepository bandeja, [FromServices] PortalMarcaImagenHandler handler,
+        CancellationToken ct)
+    {
+        if (await handler.BuscarAsync(id, ct).ConfigureAwait(false) is not { } imagen)
+            return Problema(404, PortalMarcaErrores.NoEncontrada, "La imagen no existe.");
+
+        // El SuperAdmin ve la de cualquier organismo; el ot_admin solo la del suyo (si no, 403 y no se revela nada más).
+        if (!EsSuperAdmin(http.User))
+        {
+            var propio = await OrganismoPropioAsync(http.User, bandeja, ct).ConfigureAwait(false);
+            if (propio is null || propio != imagen.TransitOfficeId)
+                return Prohibido();
+        }
+
+        if (await handler.AbrirAsync(imagen, ct).ConfigureAwait(false) is not { } contenido)
+            return Problema(404, PortalMarcaErrores.NoEncontrada, "La imagen no existe.");
+
+        http.Response.Headers.CacheControl = "private, no-cache";
+        http.Response.Headers.ETag = $"\"{contenido.Sha256}\"";
+        return Results.Stream(contenido.Contenido, contenido.ContentType);
     }
 
     // ── Alcance ────────────────────────────────────────────────────────────────────────────────────────────────────
