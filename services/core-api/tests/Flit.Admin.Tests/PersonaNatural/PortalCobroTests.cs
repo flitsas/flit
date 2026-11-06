@@ -133,12 +133,24 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     }
 
     [Fact]
+    public async Task GuardarUnMedio_DeUnOrganismoInexistente_NoGuarda_YDiceElMotivo()
+    {
+        var repo = new CobroEnMemoria();
+        var alcance = new AlcanceCobroPn(Guid.NewGuid(), EsSuperAdmin: true);
+        var tarifas = new TarifasFalsas { OrganismoExiste = false };
+
+        (await new GuardarMedioCobroPnHandler(repo, tarifas, new AuditoriaFalsa()).HandleAsync(alcance, "PASARELA", false, Guid.NewGuid(), Ct))
+            .Should().Be(CobroPnErrores.OrganismoNoExiste);
+        repo.Guardados.Should().Be(0);
+    }
+
+    [Fact]
     public async Task AC5_EnLaWebNoSeOfreceNiSeGuardaPin_NiComoBanderaNiComoSwitch()
     {
         var repo = new CobroEnMemoria();
         var web = new AlcanceCobroPn(null, true);
 
-        (await new GuardarMedioCobroPnHandler(repo, new AuditoriaFalsa()).HandleAsync(web, "PIN", true, Guid.NewGuid(), Ct)).Should().Be(CobroPnErrores.PinEnWeb);
+        (await new GuardarMedioCobroPnHandler(repo, new TarifasFalsas(), new AuditoriaFalsa()).HandleAsync(web, "PIN", true, Guid.NewGuid(), Ct)).Should().Be(CobroPnErrores.PinEnWeb);
         (await new GuardarSwitchCobroPnHandler(repo, new TarifasFalsas(), new AuditoriaFalsa())
             .HandleAsync(web, Guid.NewGuid(), "PIN", "TRAMITE", false, Guid.NewGuid(), Ct)).Should().Be(CobroPnErrores.PinEnWeb);
         var vista = await new LeerCobroPnHandler(repo, new TarifasFalsas()).HandleAsync(web, Ct);
@@ -413,7 +425,9 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
         public Task<TarifaPnView?> ObtenerAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<TarifaPnView>?> HistorialAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> TipoExisteAsync(Guid tipoId, CancellationToken ct = default) => Task.FromResult(true);
-        public Task<bool> OrganismoExisteAsync(Guid organismoId, CancellationToken ct = default) => Task.FromResult(true);
+        public bool OrganismoExiste { get; init; } = true;
+
+        public Task<bool> OrganismoExisteAsync(Guid organismoId, CancellationToken ct = default) => Task.FromResult(OrganismoExiste);
         public Task<TarifaPnVersionadaResult> VersionarAsync(Guid? tipoId, Guid? organismoId, IReadOnlyList<TarifaPnValor> valores, DateOnly vigenteDesde, Guid actor, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<TarifaPnView>> VigentesDelTipoEnOrganismoAsync(Guid tipoId, Guid organismoId, DateOnly fecha, CancellationToken ct = default) => throw new NotSupportedException();
     }
