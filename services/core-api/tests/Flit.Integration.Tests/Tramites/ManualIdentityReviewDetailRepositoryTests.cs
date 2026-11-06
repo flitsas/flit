@@ -90,6 +90,25 @@ public sealed class ManualIdentityReviewDetailRepositoryTests(PostgresDatabaseFi
         d.LinkExpiresAt.Should().BeNull();
     }
 
+    /// <summary>HU #14302 — <c>CartaDisponible</c>: solo manual + aprobada + carta ya generada.</summary>
+    [PostgresFact]
+    public async Task HU14302_CartaDisponible_solo_con_manual_aprobada_y_carta_generada()
+    {
+        var conCarta = await SeedAsync(BiometricEstados.Aprobado, approvalOrigin: BiometricApprovalOrigins.Manual);
+        var sinCarta = await SeedAsync(BiometricEstados.Aprobado, approvalOrigin: BiometricApprovalOrigins.Manual);
+        var pendiente = await SeedAsync(BiometricEstados.PendienteRevisionManual);
+        await using (var ctx = NewContext())
+        {
+            var v = await ctx.ProcedureInstanceBiometricValidations.FindAsync([conCarta], Ct);
+            v!.RegistrarCartaIdentidad("FL-AAAAAAAA-AAAAAA", new string('a', 64), new string('b', 64), "it14302/c.pdf", Now);
+            await ctx.SaveChangesAsync(Ct);
+        }
+
+        (await DetailAsync(conCarta))!.CartaDisponible.Should().BeTrue();
+        (await DetailAsync(sinCarta))!.CartaDisponible.Should().BeFalse();
+        (await DetailAsync(pendiente))!.CartaDisponible.Should().BeFalse();
+    }
+
     [PostgresFact]
     public async Task ManualActivo_con_rutas_y_consentimiento_de_un_ciclo_anterior_no_muestra_ni_imagenes_ni_consentimiento()
     {

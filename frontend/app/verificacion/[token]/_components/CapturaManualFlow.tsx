@@ -18,7 +18,9 @@ import { PasoCaptura } from "./PasoCaptura";
 import { PasoFirma, type SubmitOutcome } from "./PasoFirma";
 import { EnvioExitoso } from "./EnvioExitoso";
 import { EnviandoInfo } from "./EnviandoInfo";
-import { CAPTURE_STEP_INDEX, STEP_INDEX_DATOS, type Captures } from "@/lib/captura-manual/captures";
+import { CAPTURE_STEP_INDEX, STEP_INDEX_DATOS, type Captures, type Fotos } from "@/lib/captura-manual/captures";
+import { armarValidacion, documentoSinReverso, type MotorFotos } from "@/lib/captura-manual/validacionFotos";
+import { motorLocal } from "@/lib/captura-manual/motorLocal";
 
 type Load =
   | { kind: "loading" }
@@ -28,9 +30,18 @@ type Load =
 
 /**
  * Orquesta la página: carga la sesión por token (4 estados: cargando, error, terminal, lista) y
- * muestra la barra de 5 pasos. `client` es inyectable para pruebas.
+ * muestra la barra de 5 pasos. `client` y `motorFotos` son inyectables para pruebas.
  */
-export function CapturaManualFlow({ token, client }: { token: string; client?: ManualCaptureClient }) {
+export function CapturaManualFlow({
+  token,
+  client,
+  motorFotos = motorLocal,
+}: {
+  token: string;
+  client?: ManualCaptureClient;
+  /** Motor que valida las fotos en el dispositivo (por defecto, el local). */
+  motorFotos?: MotorFotos;
+}) {
   const api = useMemo(() => client ?? getManualCaptureClient(), [client]);
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [steps, dispatch] = useReducer(stepsReducer, initialStepsState);
@@ -38,6 +49,9 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
   const [attempt, setAttempt] = useState(0);
   // Las imágenes (Blob) viven solo en memoria del flujo hasta el envío final; recargar reinicia en Datos.
   const [captures, setCaptures] = useState<Captures>({});
+  // Resultado de la validación de cada foto e intentos fallidos por lado: viven aquí (no en el visor) para que
+  // «Atrás» no reinicie el contador.
+  const [fotos, setFotos] = useState<Fotos>({});
   // El consentimiento ya se registró: volver a Datos no lo re-envía ni desmarca la casilla.
   const [consented, setConsented] = useState(false);
   // Aviso al volver a un paso por un error del envío (413/415 o consentimiento requerido).
@@ -144,6 +158,7 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           token={token}
           client={api}
           captures={captures}
+          validacion={armarValidacion({ rostro: fotos.rostro?.resultado, anverso: fotos.anverso?.resultado, reverso: fotos.reverso?.resultado })}
           onSignature={(png) => setCaptures((c) => ({ ...c, firma: png ?? undefined }))}
           onOutcome={onOutcome}
           onSendingChange={setSending}
@@ -153,9 +168,14 @@ export function CapturaManualFlow({ token, client }: { token: string; client?: M
           key={step.id}
           kind={step.id}
           blob={captures[step.id]}
-          onCaptured={(blob) => {
+          motor={motorFotos}
+          sinReverso={documentoSinReverso(load.view.documentType)}
+          foto={fotos[step.id]}
+          onFallo={(fallos) => setFotos((f) => ({ ...f, [step.id]: { ...f[step.id], fallos } }))}
+          onCaptured={(blob, resultado) => {
             setNotice(null);
             setCaptures((c) => ({ ...c, [step.id]: blob }));
+            setFotos((f) => ({ ...f, [step.id]: { fallos: f[step.id]?.fallos ?? 0, resultado } }));
             dispatch({ type: "next" });
           }}
         />

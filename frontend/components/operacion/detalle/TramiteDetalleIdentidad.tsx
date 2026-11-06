@@ -25,6 +25,11 @@ import {
 } from './primitivos';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import {
+  estadoCertificado,
+  TEXTO_CERTIFICADO_EN_PREPARACION,
+  type EstadoCertificado,
+} from '@/lib/identity/certificado-validacion';
 
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C).
@@ -75,7 +80,7 @@ interface FilaIdentidad {
   statusText: string;
   timestamp: string | null;
   validationId: string | null;
-  certificado: boolean;
+  certificado: EstadoCertificado;
 }
 
 /**
@@ -115,7 +120,7 @@ function construirFilas(
         statusText: ESTADO_LABEL[ultima.status] ?? ultima.status,
         timestamp: ultima.validatedAt ?? ultima.createdAt ?? null,
         validationId: ultima.id,
-        certificado: ultima.status === 'aprobado',
+        certificado: estadoCertificado(ultima),
       };
     }
     if (enBaul) {
@@ -126,7 +131,7 @@ function construirFilas(
         statusText: 'Acreditado por firma del baúl',
         timestamp: null,
         validationId: null,
-        certificado: false,
+        certificado: 'ninguno' as EstadoCertificado,
       };
     }
     return {
@@ -136,7 +141,7 @@ function construirFilas(
       statusText: 'Sin iniciar',
       timestamp: null,
       validationId: null,
-      certificado: false,
+      certificado: 'ninguno' as EstadoCertificado,
     };
   });
 }
@@ -171,7 +176,16 @@ function FilaValidacion({
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <StatusBadge tone={fila.tone} label={fila.statusText} />
-          {fila.certificado && fila.validationId && !sinDescarga ? (
+          {fila.certificado === 'en_preparacion' && !sinDescarga ? (
+            <span
+              className="text-xs text-flit-primary/70 dark:text-white/70"
+              role="status"
+              aria-live="polite"
+            >
+              {TEXTO_CERTIFICADO_EN_PREPARACION}
+            </span>
+          ) : null}
+          {fila.certificado === 'descargable' && fila.validationId && !sinDescarga ? (
             <button
               type="button"
               onClick={() => onDescargar(fila.validationId as string, fila.label)}

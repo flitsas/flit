@@ -762,4 +762,202 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "4-superadmin/9-validaciones-manuales",
+    title: "Validación de identidad manual",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "validaciones manuales",
+      "validacion manual",
+      "identidad manual",
+      "flujo manual",
+      "activar flujo manual",
+      "regenerar enlace",
+      "copiar enlace",
+      "enlace de captura",
+      "enlace vencido",
+      "correo no salio",
+      "aprobar identidad",
+      "rechazar identidad",
+      "esperando captura",
+      "pendiente de revision",
+    ],
+    summary:
+      "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "1. Qué es y cuándo usarla",
+        paragraphs: [
+          "La validación manual es la alternativa cuando la persona no logra validar su identidad por el camino normal. La persona toma sus fotos y su firma desde un enlace, y tú decides si aprueba o no. Solo el Super Admin puede activarla y resolverla.",
+          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 24 horas.",
+        ],
+      },
+      {
+        id: "activar",
+        title: "2. Activar el flujo manual",
+        paragraphs: [],
+        bullets: [
+          "Paso 1: entra a Validaciones y abre el detalle de la validación.",
+          "Paso 2: en Acciones, elige «Activar flujo manual» y confirma.",
+          "Paso 3: el caso aparece en la pestaña «Validaciones manuales» con el estado «Esperando captura».",
+        ],
+      },
+      {
+        id: "enlace",
+        title: "3. Copiar o regenerar el enlace",
+        paragraphs: [
+          "En la fila, abre «Acciones» y usa «Copiar enlace» cuando el correo no llegó o el cliente prefiere recibirlo por otro canal.",
+        ],
+        bullets: [
+          "Paso 1: en la pestaña «Validaciones manuales», busca la fila de la persona.",
+          "Paso 2: en la columna Acciones, pulsa el ícono de copiar enlace. Verás el mensaje «Enlace copiado».",
+          "Paso 3: pégalo en el canal que uses con el cliente.",
+          "Copiar no cambia el enlace ni envía otro correo: el enlace que ya salió sigue funcionando.",
+          "La acción aparece mientras el caso espera una captura, también si fue rechazado y la persona debe repetirla.",
+          "Si el enlace venció o no se puede recuperar, verás el motivo y la opción «Regenerar enlace». Regenerar crea un enlace nuevo, envía el correo y deja sin servicio el anterior.",
+          "Los enlaces emitidos antes de que existiera esta opción no se pueden copiar: toca regenerarlos una vez.",
+          "Cada copia queda registrada con quién la hizo y cuándo.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "El enlace le da acceso a la captura de esa persona. Compártelo solo con ella.",
+          },
+        ],
+      },
+      {
+        id: "revisar",
+        title: "4. Revisar y decidir",
+        paragraphs: [
+          "Cuando la persona envía sus fotos y su firma, el caso pasa a «Pendiente de revisión». Abre el detalle desde la fila para ver las imágenes y decidir.",
+        ],
+        bullets: [
+          "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
+          "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+        ],
+      },
+      {
+        id: "estados",
+        title: "5. Estados",
+        paragraphs: [],
+        bullets: [
+          "Esperando captura: la persona aún no envía sus fotos.",
+          "Pendiente de revisión: ya envió la captura y falta tu decisión.",
+          "Aprobada manual: la aprobaste y la identidad está vigente.",
+          "Rechazada: la rechazaste y la persona puede repetir la captura.",
+          "Vencida: el plazo terminó sin completarse.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/10-fotos-captura-manual",
+    title: "Fotos de la captura manual: cuáles se revisan y qué significa «No verificada»",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "no verificada",
+      "foto no verificada",
+      "fotos captura manual",
+      "validar fotos",
+      "continuar sin verificar",
+      "lado del documento",
+      "revision manual fotos",
+    ],
+    summary:
+      "Qué revisa la página de captura en cada foto, cuándo la persona puede continuar sin verificar y cómo leer el aviso «No verificada» en la revisión.",
+    blocks: [
+      {
+        id: "que-revisa",
+        title: "1. Qué se revisa en cada foto",
+        paragraphs: [
+          "Al tomar cada foto, la página de captura la revisa en el mismo celular de la persona. Para esta revisión, la imagen no se envía a ningún servicio externo.",
+        ],
+        bullets: [
+          "Selfie: debe aparecer un solo rostro dentro del óvalo.",
+          "Anverso: debe verse un documento con un rostro.",
+          "Reverso: debe verse un documento con código de barras o QR.",
+          "Pasaporte: se revisa que sea un documento, pero no el lado. La persona toma igual las tres fotos.",
+        ],
+      },
+      {
+        id: "repetir",
+        title: "2. Si la foto no pasa",
+        paragraphs: [
+          "La persona ve el motivo y repite la foto. Tras tres fotos rechazadas de un mismo lado, si la siguiente tampoco pasa, puede elegir «Continuar sin verificar». También puede continuar si su celular no logra hacer la revisión.",
+        ],
+      },
+      {
+        id: "no-verificada",
+        title: "3. Qué hacer con una foto «No verificada»",
+        paragraphs: [
+          "En el detalle de revisión, esas fotos muestran «No verificada» y el motivo. Es información para que las mires con más cuidado: no impide aprobar ni rechazar.",
+          "Una foto verificada tampoco es una aprobación. La revisión no comprueba si la persona está presente ni si el rostro coincide con el del documento: esa decisión sigue siendo tuya.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Las capturas enviadas antes de esta revisión no muestran este aviso.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/11-carta-identidad-manual",
+    title: "Carta de identidad de una validación manual",
+    audience: "Todos",
+    sectionId: "superadmin",
+    keywords: [
+      "carta de identidad",
+      "carta selfie",
+      "certificado de identidad",
+      "certificado de validacion de identidad",
+      "descargar certificado",
+      "certificado en preparacion",
+      "validacion manual aprobada",
+      "codigo de integridad",
+      "serie de la carta",
+      "sello del fur",
+      "consolidado",
+      "expediente",
+    ],
+    summary:
+      "Qué es la carta que FLIT emite al aprobar una identidad manual, dónde queda en el trámite y cómo descargarla.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "Qué es",
+        paragraphs: [
+          "Cuando el Super Admin aprueba una validación de identidad manual, FLIT emite una carta con el resultado, los datos de la persona, sus fotos y su firma. Cumple el mismo papel que el certificado de una validación automática.",
+          "La carta se genera una sola vez. Si esa identidad aprobada se reutiliza en otro trámite de la misma persona, ese trámite recibe la misma carta.",
+        ],
+      },
+      {
+        id: "tramite",
+        title: "Dónde queda en el trámite",
+        paragraphs: [
+          "La carta entra al expediente y al consolidado, asociada a su actor. Si el trámite tiene varias personas en un mismo rol, cada una tiene su propia carta. En una persona jurídica, la carta es la de su representante legal.",
+          "Un trámite puede combinar actores validados de forma automática y manual: cada uno conserva su propio documento.",
+          "En el FUR, el sello de una identidad manual muestra la serie de la carta. El código de integridad completo se consulta en la carta.",
+        ],
+      },
+      {
+        id: "descargar",
+        title: "Cómo descargarla",
+        paragraphs: [
+          "Paso 1. Abre el detalle de la validación aprobada, desde el trámite, la prevalidación o las validaciones manuales.",
+          "Paso 2. Pulsa «Descargar certificado». El PDF se guarda en tu equipo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo.",
+          },
+        ],
+      },
+    ],
+  },
 ];

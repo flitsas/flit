@@ -26,13 +26,30 @@ public sealed record NetworkDetailedProcedureRowDto(
     string? TransformationDetail,
     bool IsLeasing,
     string PaymentType,
-    string? TransferType)
+    string? TransferType,
+    // HU #14319 — canal efectivo y OT del canal.
+    string Channel = "tramites",
+    Guid? ChannelTransitOfficeId = null,
+    string? ChannelTransitOfficeName = null)
 {
     /// <summary>La misma fila en la forma de la ruta de siempre (sin el cliente dueño).</summary>
     public DetailedProcedureRowDto ToRow() => new(
         Id, ReferenceNumber, ProcedureTypeName, Category, Status, CreatedByDisplayName, SubmittedAt, CompletedAt,
-        PersonDocument, PersonFullName, HasTransformation, TransformationDetail, IsLeasing, PaymentType, TransferType);
+        PersonDocument, PersonFullName, HasTransformation, TransformationDetail, IsLeasing, PaymentType, TransferType,
+        Channel, ChannelTransitOfficeId, ChannelTransitOfficeName);
 }
+
+/// <summary>
+/// HU #14320 — página del reporte detallado en modo «todas las compañías» (SuperAdmin): las mismas filas del
+/// reporte de red (cada una con <c>tenantId</c>/<c>tenantName</c>) y los totales, sin el listado de clientes
+/// del alcance (en este modo es el universo completo).
+/// </summary>
+public sealed record AllCompaniesDetailedProceduresPageDto(
+    IReadOnlyList<NetworkDetailedProcedureRowDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    NetworkDetailedReportSummaryDto Summary);
 
 /// <summary>Conteo por cliente de la red (AC1/AC2: los totales dicen de quién son).</summary>
 public sealed record TenantCountDto(Guid TenantId, string TenantName, int Count);
@@ -80,4 +97,10 @@ public sealed record NetworkDetailedReportFilter(
 {
     /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
     public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
+    /// <summary>HU #14319 — código de <c>TramiteCanal</c> ya validado por el endpoint; <c>null</c> = todos los canales.</summary>
+    public string? Channel { get; init; }
+
+    /// <summary>HU #14319 — organismo del canal; <c>null</c> = sin filtro.</summary>
+    public Guid? ChannelTransitOfficeId { get; init; }
 }

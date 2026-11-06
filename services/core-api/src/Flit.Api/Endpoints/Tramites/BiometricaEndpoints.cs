@@ -380,11 +380,47 @@ internal static class BiometricaEndpoints
                 "sin_certificado" => Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay certificado disponible para esta validación."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la descarga del certificado."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                // HU #14302 — carta de una validación manual que aún no se pudo generar/leer: reintentable.
+                "carta_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "La carta de identidad aún no está disponible. Intenta descargarla de nuevo en unos minutos."),
                 _ => Results.File(result!.Content, result.ContentType, result.FileName),
             };
         })
         .WithName("DescargarCertificadoIdentidad")
         .Produces(StatusCodes.Status200OK, contentType: "application/pdf");
+
+        // GET carta de identidad de una validación MANUAL aprobada, SIN trámite (HU #14302, Épica #14271): sirve la prevalidación
+        // standalone. Super Admin: cualquier compañía (el tenant sale de la fila, no del header). Resto: mismo permiso del módulo
+        // que la bitácora y el detalle del trámite (validaciones.read/manage o tramites.read) y solo su propio tenant; otro tenant
+        // responde 404 (no revela que existe). Genera la carta si falta; si no puede, 503 reintentable.
+        group.MapGet("/biometric-validations/{id:guid}/certificado", async (
+            Guid id,
+            HttpContext http,
+            DescargarCertificadoIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            Guid? scope = null;
+            if (!RequestTenantResolver.IsSuperAdmin(http.User))
+            {
+                if (!RequestTenantResolver.TryResolveNonEmptyTenantId(http.User, out var tenantId))
+                    return Results.Problem(statusCode: 403, title: "Forbidden", detail: "El usuario autenticado no tiene una compañía asignada.");
+                scope = tenantId;
+            }
+
+            var (result, error) = await handler.HandleCartaPorValidacionAsync(id, scope, ct);
+            return error switch
+            {
+                null => Results.File(result!.Content, result.ContentType, result.FileName),
+                "carta_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "La carta de identidad aún no está disponible. Intenta descargarla de nuevo en unos minutos."),
+                _ => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+            };
+        })
+        .RequireIdentityModuleOrTramites()
+        .WithName("DescargarCartaIdentidadPorValidacion")
+        .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
         // secreto o no, firma, resultado y reconciliaciones. Diagnóstico desde la API sin entrar a la BD/pod.
@@ -723,6 +759,50 @@ internal static class BiometricaEndpoints
         .WithName("RegenerarEnlaceManual")
         .WithSummary("Regenera el enlace de captura manual (solo Super Admin); invalida el anterior y lo envía por correo")
         .Produces<RegenerarEnlaceManualResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
+        // POST copiar el enlace de captura manual vigente (HU #14305, Feature #14304, Épica #14271). SOLO Super Admin (misma
+        // policy que regenerate-manual-link). Devuelve el enlace completo SIN regenerarlo: token y hash no cambian y no hay correo.
+        // Cross-tenant: el tenant sale de la fila. La respuesta lleva el token en la URL, así que va con Cache-Control: no-store.
+        // 409 con `code`: enlace_vencido | enlace_no_disponible | flujo_manual_no_activo (en los dos primeros se regenera).
+        group.MapPost("/biometric-validations/{id:guid}/manual-link/copy", async (
+            Guid id,
+            HttpContext http,
+            CopiarEnlaceManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que copia el enlace.");
+
+            http.Response.Headers.CacheControl = "no-store";
+            var (result, error) = await handler.HandleAsync(new CopiarEnlaceManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(new { url = result!.Url, expiresAt = result.ExpiresAt }),
+                CopiarEnlaceManualHandler.NoEncontrada => Results.Json(
+                    new { code = error, message = "Validación de identidad no encontrada." },
+                    statusCode: StatusCodes.Status404NotFound),
+                CopiarEnlaceManualHandler.EnlaceVencido => Results.Json(
+                    new { code = error, message = "El enlace de captura venció: regenera uno nuevo." },
+                    statusCode: StatusCodes.Status409Conflict),
+                CopiarEnlaceManualHandler.EnlaceNoDisponible => Results.Json(
+                    new { code = error, message = "El enlace ya no está disponible para copiar: regenera uno nuevo si hace falta." },
+                    statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Json(
+                    new { code = CopiarEnlaceManualHandler.FlujoManualNoActivo, message = "La validación no está esperando una captura manual." },
+                    statusCode: StatusCodes.Status409Conflict),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("CopiarEnlaceManual")
+        .WithSummary("Devuelve el enlace de captura manual vigente (solo Super Admin) sin regenerarlo ni enviar correo")
+        .Produces(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden)
         .Produces(StatusCodes.Status404NotFound)
