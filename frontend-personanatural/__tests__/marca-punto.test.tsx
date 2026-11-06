@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProveedorMarca, LogoInicio } from "@/components/marca/MarcaPunto";
+import { BannerMarca, ProveedorMarca, LogoInicio } from "@/components/marca/MarcaPunto";
 import { CanalPunto } from "@/components/punto/CanalPunto";
 import { crearCliente } from "@/lib/api/cliente";
 import { marcaAplicable } from "@/lib/marca/marca";
@@ -236,5 +236,24 @@ describe("logo con enlace al inicio", () => {
     const enlace = await conRuta("/tramite/1", null);
     expect(enlace).toHaveAttribute("href", "/");
     expect(enlace).toHaveAccessibleName("FLIT — Ir al inicio del portal");
+  });
+});
+
+describe("banner de una marca publicada sin banner propio", () => {
+  it("usa el de FLIT, y sin marca publicada no dibuja ninguno", async () => {
+    const { render } = await import("@testing-library/react");
+    const marca = { nombre: "Tránsito X", logoUrl: null, bannerUrl: null, version: 1, colores: { primario: "#123456", secundario: "#123456", sobrePrimario: "#FFFFFF" } };
+    const { container } = render(
+      <ProveedorMarca marca={marca}>
+        <BannerMarca />
+      </ProveedorMarca>,
+    );
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("/assets/banners/");
+    const sinMarca = render(
+      <ProveedorMarca marca={null}>
+        <BannerMarca />
+      </ProveedorMarca>,
+    );
+    expect(sinMarca.container.querySelector("img")).toBeNull();
   });
 });

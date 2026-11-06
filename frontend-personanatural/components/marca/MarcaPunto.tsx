@@ -48,14 +48,21 @@ export function LogoInicio({ alt, etiqueta }: { alt: string; etiqueta: string })
   );
 }
 
-/** Banner del organismo en la entrada del punto. Sin banner propio no se dibuja nada (el punto no tenía banner). */
+/**
+ * Banner en la entrada del punto. Una marca publicada sin banner propio usa el de FLIT (regla 12 de la épica); sin marca
+ * publicada no se dibuja nada, porque el punto sin marca sigue como hoy.
+ */
 export function BannerMarca() {
   const marca = useMarca();
-  if (!marca?.bannerUrl) return null;
+  if (!marca) return null;
   return (
     <div className="dashboard-banner overflow-hidden rounded-[9px] border border-border bg-card">
       {/* eslint-disable-next-line @next/next/no-img-element -- ruta del propio BFF, sin optimizador de Next */}
-      <img src={marca.bannerUrl} alt={marca.nombre ? `Banner de ${marca.nombre}` : "Banner del organismo"} className="h-full w-full object-contain" />
+      <img
+        src={marca.bannerUrl ?? ASSETS.banners[0].src}
+        alt={marca.bannerUrl ? (marca.nombre ? `Banner de ${marca.nombre}` : "Banner del organismo") : ASSETS.banners[0].alt}
+        className="h-full w-full object-contain"
+      />
     </div>
   );
 }
