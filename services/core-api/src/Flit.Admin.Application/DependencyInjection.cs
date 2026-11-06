@@ -499,6 +499,10 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaOtHandler>();
         services.AddScoped<Plataforma.PersonaNatural.TiposTarifaOtHandler>();
         services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasOtHandler>();
+        // HU #14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal.
+        services.AddScoped<Plataforma.PersonaNatural.LeerCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarMedioCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarSwitchCobroPnHandler>();
         // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
         services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();

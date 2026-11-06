@@ -302,6 +302,9 @@ public static class AdminInfrastructureExtensions
         // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (admin.persona_natural_tariffs).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalTarifaRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalTarifaRepository>();
+            // HU #14393 (Feature #14392) — banderas de medios y switches de cobro del portal (DDL 182).
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCobroRepository,
+                Flit.Infrastructure.PersonaNatural.PersonaNaturalCobroRepository>();
         // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
