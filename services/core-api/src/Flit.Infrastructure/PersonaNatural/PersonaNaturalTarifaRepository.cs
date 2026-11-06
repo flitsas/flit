@@ -26,7 +26,8 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
               FROM admin.persona_natural_tariffs t
               LEFT JOIN tramites.procedure_types p ON p.id = t.procedure_type_id
               LEFT JOIN catalogs.transit_offices o ON o.id = t.transit_office_id
-             WHERE ({filtro.TipoTramiteId}::uuid IS NULL OR t.procedure_type_id = {filtro.TipoTramiteId}::uuid)
+             WHERE t.superseded_at IS NULL
+               AND ({filtro.TipoTramiteId}::uuid IS NULL OR t.procedure_type_id = {filtro.TipoTramiteId}::uuid)
                AND ({filtro.OrganismoId}::uuid IS NULL OR t.transit_office_id = {filtro.OrganismoId}::uuid)
                AND ({filtro.Concepto}::text IS NULL OR t.concept = {filtro.Concepto}::text)
                AND (NOT {filtro.SoloVigentes} OR (t.valid_from <= {fecha} AND (t.valid_to IS NULL OR t.valid_to >= {fecha})))
@@ -59,7 +60,8 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
               FROM admin.persona_natural_tariffs t
               LEFT JOIN tramites.procedure_types p ON p.id = t.procedure_type_id
               LEFT JOIN catalogs.transit_offices o ON o.id = t.transit_office_id
-             WHERE t.concept = {fila.Concept}
+             WHERE t.superseded_at IS NULL
+               AND t.concept = {fila.Concept}
                AND t.procedure_type_id IS NOT DISTINCT FROM {fila.ProcedureTypeId}::uuid
                AND t.transit_office_id IS NOT DISTINCT FROM {fila.TransitOfficeId}::uuid
             """).ToListAsync(ct).ConfigureAwait(false);
@@ -87,13 +89,17 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
             {
                 foreach (var v in valores)
                 {
-                    // Lo que estaba abierto antes (valor anterior de la auditoría). La función lo cierra el día anterior al inicio.
+                    // Lo que estaba vigente antes (valor anterior de la auditoría): la versión que empezó el mismo día, que la función
+                    // marca como reemplazada (HU #14389), o la abierta anterior, que cierra el día anterior al inicio. Primero la del
+                    // mismo día: es la que el valor nuevo corrige.
                     var abierta = await db.Database.SqlQuery<Guid>($"""
                         SELECT id AS "Value" FROM admin.persona_natural_tariffs
                          WHERE concept = {v.Concepto}
                            AND procedure_type_id IS NOT DISTINCT FROM {tipoId}::uuid
                            AND transit_office_id IS NOT DISTINCT FROM {organismoId}::uuid
-                           AND valid_to IS NULL AND valid_from < {vigenteDesde}
+                           AND superseded_at IS NULL
+                           AND (valid_from = {vigenteDesde} OR (valid_to IS NULL AND valid_from < {vigenteDesde}))
+                         ORDER BY valid_from DESC
                         """).ToListAsync(ct).ConfigureAwait(false);
                     foreach (var idAbierta in abierta)
                     {

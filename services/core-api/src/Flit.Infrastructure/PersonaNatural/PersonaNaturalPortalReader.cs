@@ -117,7 +117,7 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
             SELECT id, concept, procedure_type_id,
                    transit_office_id, amount_cop
               FROM admin.persona_natural_tariffs
-             WHERE valid_from <= {fecha} AND (valid_to IS NULL OR valid_to >= {fecha})
+             WHERE superseded_at IS NULL AND valid_from <= {fecha} AND (valid_to IS NULL OR valid_to >= {fecha})
             """).ToListAsync(ct).ConfigureAwait(false);
         return filas.Select(f => new TarifaVigente(f.Concept, f.ProcedureTypeId, f.TransitOfficeId, f.AmountCop, f.Id)).ToList();
     }
