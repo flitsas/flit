@@ -296,7 +296,6 @@ Flit.Admin.Domain.Companies.TransitOffices.ITransitOfficeTenantWriteRepository =
 Flit.Admin.Domain.Companies.VehicleOwnership.IVehicleOwnershipGuard => Flit.Admin.Application.Companies.VehicleOwnership.VehicleOwnershipGuard (Scoped)
 Flit.Admin.Domain.Companies.VehicleOwnership.IVehicleTenantOwnershipChecker => Flit.Infrastructure.Persistence.Repositories.StubVehicleTenantOwnershipChecker (Scoped)
 Flit.Admin.Domain.Companies.Whitelist.IWhitelistRepository => Flit.Infrastructure.Persistence.Repositories.WhitelistRepository (Scoped)
-Flit.Admin.Domain.CompanyDocumentParams.ICompanyDocumentParamRepository => Flit.Infrastructure.Persistence.Repositories.CompanyDocumentParamRepository (Scoped)
 Flit.Admin.Domain.DocumentOrderOverrides.IDocumentOrderOverrideRepository => Flit.Infrastructure.Persistence.Repositories.DocumentOrderOverrideRepository (Scoped)
 Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver => Flit.Infrastructure.Services.ResolvedDocumentMatrixResolver (Scoped)
 Flit.Admin.Domain.DocumentOrderOverrides.ITenantCatalog => Flit.Infrastructure.Persistence.Repositories.TenantCatalog (Scoped)
