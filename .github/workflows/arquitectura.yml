@@ -67,6 +67,8 @@ jobs:
           likec4 export json --project flit -o out/flit.json docs/arquitectura
 
       - name: Validar metadatos y revisión de repo público
+        env:
+          VALIDAR_RUTAS: ${{ (github.base_ref || github.ref_name) == 'develop' && 'error' || 'aviso' }}
         run: node docs/arquitectura/tools/validar-metadata.mjs out/flit.json arquitectura/landscape docs/arquitectura
 
       - uses: actions/upload-artifact@v4
