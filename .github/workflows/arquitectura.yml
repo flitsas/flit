@@ -87,7 +87,7 @@ jobs:
         include:
           - { proyecto: landscape, carpeta: arquitectura/landscape }
           - { proyecto: flit, carpeta: docs/arquitectura }
-    uses: flitsas/flit-atlas/.github/workflows/atlas-publicar-arquitectura.yml@f6/arquitectura-likec4
+    uses: flitsas/flit-atlas/.github/workflows/atlas-publicar-arquitectura.yml@v1
     with:
       tipo: modelo
       proyecto: ${{ matrix.proyecto }}
