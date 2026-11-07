@@ -74,7 +74,7 @@ jobs:
           - { contrato: consultas-resultado, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/resultado.proto, version: 1.0.0 }
           - { contrato: consultas-runt-intempo, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/runt_intempo.proto, version: 1.0.0 }
           - { contrato: consultas-validacion-identidad, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/validacion_identidad.proto, version: 1.0.0 }
-          - { contrato: diagnostico, aplicativo: flit2-core-diagnostico, tipo: proto, ruta: contracts/proto/flit/diagnostico/v1/diagnostico.proto, version: 1.0.0 }
+          - { contrato: diagnostico-grpc, aplicativo: flit2-core-diagnostico, tipo: proto, ruta: contracts/proto/flit/diagnostico/v1/diagnostico.proto, version: 1.0.0 }
           - { contrato: identidad, aplicativo: flit2-core-identity, tipo: proto, ruta: contracts/proto/flit/identidad/v1/identidad.proto, version: 1.0.0 }
           - { contrato: notificaciones-mensajes-muertos, aplicativo: flit2-core-notificaciones, tipo: proto, ruta: contracts/proto/flit/notificaciones/v1/mensajes_muertos.proto, version: 1.0.0 }
           - { contrato: notificaciones, aplicativo: flit2-core-notificaciones, tipo: proto, ruta: contracts/proto/flit/notificaciones/v1/notificaciones.proto, version: 1.0.0 }
