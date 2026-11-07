@@ -16,9 +16,9 @@ abre también el cambio allá.
 
 | Vista | Tipo | Archivo |
 |---|---|---|
-| `landscape` | Estática | `arquitectura/landscape/views.c4` |
-| `flit2_contexto`, `flit2_contenedores`, `eventos_rabbitmq` | Estática | `views.c4` |
-| `flit2_core_api_componentes`, `flit2_gateway_componentes` | Componentes | `componentes/` |
+| `landscape` y su detalle `landscape_usuarios`, `landscape_satelites`, `landscape_fuentes`, `landscape_entidades`, `landscape_terceros` | Estática | `arquitectura/landscape/views.c4` |
+| `flit2_contexto`, `flit2_contenedores` y su detalle `flit2_aplicaciones`, `flit2_negocio`, `flit2_negocio_salidas`, `flit2_plataforma`, `eventos_rabbitmq` | Estática | `views.c4` |
+| `flit2_core_api_componentes` y su detalle `flit2_core_api_entrada`, `flit2_core_api_dominio`, `flit2_core_api_transversal`, `flit2_core_api_ia`; `flit2_gateway_componentes` | Componentes | `componentes/` |
 | `flujo_radicacion_tramite`, `flujo_login_oidc_suite`, `flujo_login_marca_blanca`, `flujo_ocr_ia`, `flujo_ocr_comparendos`, `flujo_consulta_runt` | Dinámica | `dinamicas/` |
 
 Las vistas de despliegue por ambiente no se escriben a mano ni viven en este repo: las genera Atlas desde gitops.
@@ -67,6 +67,7 @@ una versión de al menos dos semanas de publicada.
 | `k8s_workload` | Aplicación y servicio | Nombre exacto del Deployment; es la llave del drift |
 | `ambientes` | Opcional | Dónde corre, si no es en todos (`dev`) |
 | `openapi*`, `asyncapi*`, `proto*` | Si tiene contrato | Ruta en `contracts/`; debe existir |
+| `aplicativo` | Si tiene slug | Slug del catálogo de Atlas |
 | `adr` | Opcional | `ADR-NNNN` separados por coma; deben existir en el repo |
 
 ### Tags
@@ -78,5 +79,12 @@ migración · `#ia` usa un LLM · `#externo_publico` expuesto a terceros · `#su
 
 ## Publicación en Atlas
 
-El job `publicar` de `arquitectura.yml` corre en push a `develop` o `release` solo si están `ATLAS_URL` y
-`ATLAS_PUBLICAR_ARQUITECTURA=true`. Hoy no publica: la segunda variable no existe y Atlas aún no expone el endpoint.
+El job `publicar` de `arquitectura.yml` llama al workflow reutilizable `atlas-publicar-arquitectura.yml@v1` de `flitsas/flit-atlas`, una
+vez por proyecto, en push a `develop`, `staging` o `release`, solo si están `ATLAS_URL` y `ATLAS_PUBLICAR_ARQUITECTURA=true`. Hoy no publica: la
+segunda variable no existe. `metadata.aplicativo` lleva el slug del elemento en el catálogo de Atlas; si no hay slug, no se inventa.
+
+## Que se lea sin zoom
+
+Atlas muestra cada vista en un marco de 928 px de ancho. Una vista de resumen lleva hasta unos 15 nodos, agrupados con el tipo `grupo`, y
+`navigateTo` hacia su detalle. Los elementos usan `size sm` y `textSize xl` desde la especificación. `likec4 validate` no avisa de una vista
+ilegible: dibújala con `likec4 export png`, encógela a 928 px y mírala antes de subirla.
