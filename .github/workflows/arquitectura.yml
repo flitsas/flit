@@ -1,0 +1,96 @@
+name: arquitectura
+
+# Modelos LikeC4 de FLIT (Atlas HU 6.2 y ATLAS-ADR-0056). Valida en cada PR que los toque. En push a develop, staging o release
+# puede además publicar en Atlas con el workflow reutilizable oficial y el token OIDC de GitHub Actions, sin secretos.
+#
+# La publicación necesita dos variables: ATLAS_URL y ATLAS_PUBLICAR_ARQUITECTURA='true'. ATLAS_URL ya existe como variable de
+# organización, así que por sí sola no apaga nada; la segunda se enciende cuando el tag v1 de flit-atlas traiga
+# atlas-publicar-arquitectura.yml.
+
+on:
+  pull_request:
+    paths:
+      - 'arquitectura/**'
+      - 'docs/arquitectura/**'
+      - 'contracts/**'
+      - '.github/workflows/arquitectura.yml'
+  push:
+    branches: [develop, staging, release]
+    paths:
+      - 'arquitectura/**'
+      - 'docs/arquitectura/**'
+      - 'contracts/**'
+      - '.github/workflows/arquitectura.yml'
+
+permissions: {}
+
+concurrency:
+  group: arquitectura-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  LIKEC4_VERSION: '1.59.4'
+
+jobs:
+  validar:
+    name: validar modelos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Se instala fuera del repo para que no lo afecten su package.json ni su .npmrc.
+      - name: Instalar LikeC4
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --prefix likec4 --ignore-scripts --no-audit --no-fund "likec4@${LIKEC4_VERSION}"
+          echo "$PWD/likec4/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Validar landscape
+        run: likec4 validate arquitectura/landscape
+
+      - name: Validar FLIT 2.0
+        run: likec4 validate docs/arquitectura
+
+      - name: Exportar JSON
+        run: |
+          mkdir -p out
+          likec4 export json --project landscape -o out/landscape.json arquitectura/landscape
+          likec4 export json --project flit -o out/flit.json docs/arquitectura
+
+      - name: Validar metadatos y revisión de repo público
+        run: node docs/arquitectura/tools/validar-metadata.mjs out/flit.json arquitectura/landscape docs/arquitectura
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arquitectura
+          path: out/
+          retention-days: 14
+
+  publicar:
+    name: publicar ${{ matrix.proyecto }} en Atlas
+    needs: validar
+    if: github.event_name == 'push' && vars.ATLAS_URL != '' && vars.ATLAS_PUBLICAR_ARQUITECTURA == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { proyecto: landscape, carpeta: arquitectura/landscape }
+          - { proyecto: flit, carpeta: docs/arquitectura }
+    uses: flitsas/flit-atlas/.github/workflows/atlas-publicar-arquitectura.yml@v1
+    with:
+      tipo: modelo
+      proyecto: ${{ matrix.proyecto }}
+      aplicativo: flit2
+      carpeta: ${{ matrix.carpeta }}
+      atlas_url: ${{ vars.ATLAS_URL }}

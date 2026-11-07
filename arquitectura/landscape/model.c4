@@ -1,0 +1,297 @@
+// Landscape de la empresa: actores, sistemas de FLIT y sistemas externos, sin detalle interno.
+// Lo interno de cada sistema vive en su repo: flit (docs/arquitectura) y flito (docs/arquitectura).
+// Lo marcado [por verificar] no se pudo comprobar en el código de flit ni de flito al escribirlo (06/11/2026).
+model {
+  // ── Actores ──────────────────────────────────────────────
+  usuarios = grupo 'Usuarios' {
+    description 'Quienes operan FLIT 2.0 y FLITO'
+    gestor = actor 'Gestor / radicador' {
+      description 'Usuario de empresa cliente que radica y sigue trámites'
+    }
+    organismo = actor 'Organismo de tránsito' {
+      description 'Secretaría que recibe, revisa y aprueba trámites'
+    }
+    ciudadano = actor 'Ciudadano / propietario' {
+      #pii
+      description 'Firma, valida identidad y consulta su trámite; radica en el portal de Persona Natural'
+    }
+    cea = actor 'CEA' {
+      description 'Centro de enseñanza automovilística'
+    }
+    admin_compania = actor 'Administrador de compañía'
+    superadmin = actor 'Administrador FLIT'
+    operador_flito = actor 'Operador / finanzas FLITO'
+  }
+  integrador = actor 'Integrador (sistema del cliente)' {
+    #externo_publico
+    description 'Sistema de un cliente que consume las API de integración'
+  }
+
+  // ── Sistemas de FLIT ─────────────────────────────────────
+  flit2 = system 'FLIT 2.0 (Suite)' {
+    #critico #pii #suite
+    description 'Hub, Trámites, Comparendos, Diagnóstico y Persona Natural. Monorepo flitsas/flit'
+    link https://github.com/flitsas/flit 'Repositorio'
+    metadata {
+      aplicativo 'flit2'
+      owner 'Líder técnico FLIT 2.0 [por verificar]'
+      repo 'flitsas/flit'
+      criticidad 'critica'
+      datos_personales 'si'
+    }
+  }
+  flit1 = system 'FLIT 1 (legado)' {
+    #legado #pii
+    description 'Sistema legado en retiro hacia FLIT 2.0. Se modela como una sola caja, sin detalle [por verificar]'
+    metadata {
+      aplicativo 'legados-v1'
+      owner 'Mantenimiento del legado [por verificar]'
+      repo 'Repositorios legados de flitsas [por verificar]'
+      criticidad 'alta'
+      datos_personales 'si'
+    }
+  }
+  flito = system 'FLITO (Operaciones)' {
+    #critico #pii
+    description 'Operación para organismos, CEA y gestoras: SOAT, impuestos, derechos, comparendos, liquidación y facturación'
+    link https://github.com/flitsas/flito 'Repositorio'
+    metadata {
+      aplicativo 'flito'
+      owner 'Líder FLITO [por verificar]'
+      repo 'flitsas/flito'
+      criticidad 'critica'
+      datos_personales 'si'
+    }
+  }
+  atlas = system 'Flit Atlas' {
+    #pii
+    description 'Conocimiento central: catálogo, equipo, contratos, documentación, diagramas y gobierno de IA'
+    link https://github.com/flitsas/flit-atlas 'Repositorio'
+    metadata {
+      aplicativo 'atlas'
+      owner 'Líder técnico [por verificar]'
+      repo 'flitsas/flit-atlas'
+      criticidad 'media'
+      datos_personales 'si'
+    }
+  }
+  satelites = grupo 'Satélites' {
+    description 'Productos y servicios de apoyo de FLIT'
+    scheduler = system 'flit-scheduler' {
+      description 'Ejecuta peticiones HTTP periódicas contra las API de FLIT'
+      metadata {
+        aplicativo 'flit-scheduler'
+        owner 'DevOps [por verificar]'
+        repo 'flitsas/flit-scheduler'
+        criticidad 'media'
+        datos_personales 'no'
+      }
+    }
+    file_manager = system 'File manager (MinIO)' {
+      #pii
+      description 'Gestor de archivos de la plataforma, sobre almacenamiento S3'
+      metadata {
+        owner 'DevOps [por verificar]'
+        repo 'flitsas/flit-file-manager-minio'
+        criticidad 'alta'
+        datos_personales 'si'
+      }
+    }
+    firmas = system 'FLIT Firmas' {
+      #pii
+      description 'Apalanca firmas de trámites en borrador'
+      metadata {
+        aplicativo 'firmas'
+        owner 'Líder Firmas [por verificar]'
+        repo 'flitsas/flit-firmas'
+        criticidad 'media'
+        datos_personales 'si'
+      }
+    }
+    egress = system 'flit-egress' {
+      description 'Proxy de salida controlado hacia destinos externos'
+      metadata {
+        aplicativo 'infraestructura-flit-egress'
+        owner 'DevOps [por verificar]'
+        repo 'flitsas/flit-egress'
+        criticidad 'alta'
+        datos_personales 'no'
+      }
+    }
+    certify = system 'FLIT Certify' {
+      description 'Plataforma de QA multitenant'
+      metadata {
+        aplicativo 'certify'
+        owner 'QA [por verificar]'
+        repo 'flitsas/flit-certify'
+        criticidad 'baja'
+        datos_personales 'no'
+      }
+    }
+    brain = system 'Flit Brain' {
+      #pii
+      description 'Orquestador de fuentes externas. Sin referencias desde flit ni flito [por verificar]'
+      metadata {
+        owner '[por verificar]'
+        repo 'flitsas/flit-brain'
+        criticidad 'media'
+        datos_personales 'si'
+      }
+    }
+    vigia = system 'Panel Vigía' {
+      #ia
+      description 'Observabilidad de la infraestructura con chat operativo [por verificar]'
+      metadata {
+        aplicativo 'vigia'
+        owner 'DevOps [por verificar]'
+        repo 'flitsas/flit-infra-studio'
+        criticidad 'media'
+        datos_personales 'no'
+      }
+    }
+    maps = system 'FLIT Maps' {
+      #pii #ia
+      description 'Mapas e inteligencia de comparendos. Sin repo en flitsas [por verificar]'
+      metadata {
+        aplicativo 'flitsas-maps'
+        owner '[por verificar]'
+        repo '[por verificar]'
+        criticidad 'baja'
+        datos_personales 'si'
+      }
+    }
+    people = system 'FLIT People' {
+      #pii #objetivo
+      description 'Producto del catálogo de Atlas; su repo no tiene código [por verificar]'
+      metadata {
+        aplicativo 'people'
+        owner '[por verificar]'
+        repo 'flitsas/flit-people'
+        criticidad 'baja'
+        datos_personales 'si'
+      }
+    }
+    sentinel = system 'FLIT Sentinel' {
+      #objetivo
+      description 'Producto del catálogo de Atlas; sin repo identificado [por verificar]'
+      metadata {
+        aplicativo 'sentinel'
+        owner '[por verificar]'
+        repo '[por verificar]'
+        criticidad 'baja'
+        datos_personales 'no'
+      }
+    }
+  }
+
+  // ── Externos ─────────────────────────────────────────────
+  fuentes = grupo 'Fuentes de datos' {
+    description 'RUNT, SIMIT y proveedores de consulta'
+    runt = external 'RUNT'
+    simit = external 'SIMIT (FCM)'
+    rues = external 'RUES'
+    verifik = external 'Verifik'
+    kyverum = external 'Kyverum'
+    intempo = external 'Intempo'
+    fasecolda = external 'Fasecolda'
+    mercadolibre = external 'MercadoLibre'
+    fuente_comparendos = external 'Fuente de comparendos' {
+      description 'Proveedor que exige salir por el proxy de salida'
+    }
+  }
+  entidades = grupo 'Entidades y reportes' {
+    description 'Bandejas, facturación y reportes regulatorios'
+    quipux = external 'Quipux'
+    siigo = external 'Siigo → DIAN'
+    rndc = external 'RNDC'
+    uiaf = external 'UIAF (SIREL)'
+    supertransporte = external 'Supertransporte (PESV)'
+  }
+  terceros = grupo 'Servicios de terceros' {
+    description 'IA, correo, almacenamiento, firma y mensajería'
+    idsecure = external 'IdSecure'
+    llm = external 'Proveedores LLM' {
+      #ia
+      description 'Anthropic y proveedores compatibles con OpenAI'
+    }
+    ado = external 'Azure DevOps'
+    correo = external 'Proveedor SMTP'
+    objstore = external 'Almacenamiento S3'
+    google_drive = external 'Google Drive'
+    whatsapp = external 'WhatsApp (Meta)'
+    zapsign = external 'ZapSign'
+  }
+
+  // ── Actores → sistemas ───────────────────────────────────
+  usuarios.gestor -> flit2 'Radica y sigue trámites'
+  usuarios.organismo -> flit2 'Revisa y aprueba trámites'
+  usuarios.ciudadano -> flit2 'Firma, valida identidad y radica'
+  usuarios.admin_compania -> flit2 'Administra usuarios y productos'
+  usuarios.superadmin -> flit2 'Parametriza la plataforma'
+  integrador -> flit2 'API externa e ICT' {
+    #externo_publico
+  }
+  usuarios.operador_flito -> flito 'Opera SOAT, impuestos y liquidación'
+  usuarios.organismo -> flito 'Consulta y gestiona'
+  usuarios.cea -> flito 'Consulta y gestiona'
+
+  // ── FLIT 1 / FLIT 2 ↔ FLITO ──────────────────────────────
+  flito -> flit1 'Lee reporte de trámites y facturas' {
+    #vigente
+  }
+  flit2 -[async]-> flito 'Aviso tramite.cambio (webhook firmado)'
+  flito -> flit2 'Lee el feed external-api y envía adjuntos'
+
+  // ── FLIT 2 → externos (detalle en flit/docs/arquitectura) ─
+  flit2 -> fuentes.verifik 'Consulta RUNT, SIMIT, RUES y RNMC'
+  flit2 -> fuentes.kyverum 'RUNT, comparendos y certificados'
+  fuentes.kyverum -[async]-> flit2 'Webhooks'
+  flit2 -> fuentes.intempo 'Consulta RUNT'
+  flit2 -> fuentes.rues 'Consulta empresa'
+  flit2 -> entidades.quipux 'Bandeja de organismos'
+  terceros.idsecure -> flit2 'Validación de identidad [por verificar]'
+  flit2 -> terceros.llm 'OCR, Dr. FLIT y redacción' {
+    #ia
+  }
+  flit2 -> terceros.ado 'Escala casos de soporte'
+  flit2 -> terceros.correo 'Envía correo'
+  flit2 -> terceros.objstore 'Guarda archivos'
+  flit2 -> satelites.file_manager 'Adjuntos'
+  flit2 -> satelites.egress 'Salida controlada'
+  satelites.egress -> fuentes.fuente_comparendos 'Consulta comparendos'
+
+  // ── FLITO → externos (detalle en flito/docs/arquitectura) ─
+  flito -> fuentes.runt 'Consulta directa'
+  flito -> fuentes.simit 'Estado de cuenta y comparendos'
+  flito -> fuentes.verifik 'SIMIT'
+  flito -> fuentes.kyverum 'RUNT y CEA'
+  flito -> fuentes.fasecolda 'Guía de valores'
+  flito -> entidades.siigo 'Facturación electrónica'
+  flito -> entidades.rndc 'Despachos'
+  flito -> entidades.uiaf 'Reportes LAFT'
+  flito -> entidades.supertransporte 'PESV'
+  flito -> terceros.google_drive 'Lee documentos'
+  flito -> terceros.whatsapp 'Mensajería'
+  flito -> terceros.zapsign 'Firma electrónica'
+  flito -> fuentes.mercadolibre 'Precios de referencia'
+  flito -> terceros.llm 'OCR y Dr. FLIT' {
+    #ia
+  }
+  flito -> terceros.ado 'Escala casos de soporte'
+
+  // ── Satélites (repos distintos de flit y flito: solo se leyó su README) ─
+  satelites.scheduler -> flit1 'Dispara jobs HTTP [por verificar]'
+  satelites.firmas -> flit1 'Apalanca firmas de trámites [por verificar]'
+  satelites.vigia -> terceros.llm 'Chat operativo [por verificar]' {
+    #ia
+  }
+  satelites.maps -> terceros.llm 'Inteligencia [por verificar]' {
+    #ia
+  }
+
+  // ── Atlas ────────────────────────────────────────────────
+  flit2 -> atlas 'Publica contratos desde CI (OIDC)'
+  flito -> atlas 'Publica desde CI [por verificar]' {
+    #objetivo
+  }
+}
