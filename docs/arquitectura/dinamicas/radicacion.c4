@@ -3,13 +3,14 @@ views {
   dynamic view flujo_radicacion_tramite {
     title 'Radicación de un trámite'
     description 'Del radicador al cambio de estado y sus avisos. Las validaciones internas no se detallan.'
-    gestor -> flit2.tramites_web 'Radica'
-    flit2.tramites_web -> flit2.gateway 'POST /api/v1 desde el BFF'
-    flit2.gateway -> flit2.core_api 'Reenvía'
-    flit2.core_api -> flit2.db 'Guarda el trámite y la outbox'
-    flit2.core_api -> flit2.bus 'tramites.procedure.state_changed'
-    flit2.bus -> flit2.core_notificaciones 'Consume'
-    flit2.core_notificaciones -> correo 'Correo a los destinatarios del estado'
-    flit2.core_notificaciones -> organismo 'Webhook de estado'
+    usuarios.gestor -> flit2.apps.tramites_web 'Radica'
+    flit2.apps.tramites_web -> flit2.gateway 'POST /api/v1 desde el BFF'
+    flit2.gateway -> flit2.negocio.core_api 'Reenvía'
+    flit2.negocio.core_api -> flit2.datos.db 'Guarda el trámite y la outbox'
+    flit2.negocio.core_api -[async]-> flit2.datos.bus 'tramites.procedure.state_changed'
+    flit2.datos.bus -> flit2.plataforma.core_notificaciones 'Consume'
+    flit2.plataforma.core_notificaciones -> terceros.correo 'Correo a los destinatarios del estado'
+    flit2.plataforma.core_notificaciones -> usuarios.organismo 'Webhook de estado'
+    autoLayout TopBottom 45 25
   }
 }
