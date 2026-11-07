@@ -2,7 +2,7 @@ using System.Reflection;
 using Flit.Admin.Application.Companies.NotificationDeliveryLogs;
 using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
-using Flit.Admin.Domain.CompanyDocumentParams;
+using Flit.Admin.Application.Companies.PersonalizedDocuments;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtMetrics;
 using Flit.Analytics.Application.CompanyQueries;
@@ -172,7 +172,7 @@ public sealed class TenantParityTests(PostgresDatabaseFixture fixture) : Postgre
         yield return new(typeof(DetailedProcedureRowDto), "Id ReferenceNumber ProcedureTypeName Category Status CreatedByDisplayName SubmittedAt CompletedAt PersonDocument PersonFullName HasTransformation TransformationDetail IsLeasing PaymentType TransferType");
         yield return new(typeof(AdminAuditLogEntry), "Id TenantId TenantType Module EntityName Operation Result ErrorCode ChangedBy TargetEntityType TargetEntityId ClientIp ChangedAt ChangedByName ChangedByEmail TargetName FieldName OldValue NewValue");
         yield return new(typeof(NotificationDeliveryLogRecord), "Id TemplateKey Channel Recipient Result FailureReason DurationMs OccurredAt");
-        yield return new(typeof(CompanyDocumentParamItem), "Id TenantId DocumentTypeCode State");
+        yield return new(typeof(CompanyPersonalizedDocumentRecord), "Id TenantId DocumentType Version Status IsActive Filename StoragePath StorageSha256 SizeBytes PageCount Notes CreatedAt CreatedBy ActivatedAt ActivatedBy DeactivatedAt DeactivatedBy");
         yield return new(typeof(PendingInvitationSummary), "InvitationId Email FullName CreatedAt");
         yield return new(typeof(TopProducerDto), "UserId DisplayName SubmittedCount ApprovedCount RejectedCount");
         yield return new(typeof(OtClientCompanyOptionDto), "TenantId Name");
