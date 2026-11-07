@@ -4,24 +4,26 @@ views {
   dynamic view flujo_login_oidc_suite {
     title 'Login OIDC de la suite (PKCE)'
     description 'Abrir un producto sin sesión. El navegador nunca ve el token. Quién atiende según la bandera: [por verificar].'
-    gestor -> flit2.tramites_web 'Abre Trámites sin sesión'
-    flit2.tramites_web -> flit2.hub 'Redirige a /connect/authorize (PKCE)'
-    flit2.hub -> flit2.gateway '/connect/authorize'
-    flit2.gateway -> flit2.core_api 'Revisa producto y rol'
-    flit2.core_api -> flit2.db 'Empresa, usuario y roles'
-    flit2.tramites_web -> flit2.gateway 'Canjea el código (servidor a servidor)'
-    flit2.gateway -> flit2.core_api '/connect/token'
-    flit2.tramites_web -> gestor 'Crea la sesión con cookie cifrada'
+    usuarios.gestor -> flit2.apps.tramites_web 'Abre Trámites sin sesión'
+    flit2.apps.tramites_web -> flit2.apps.hub 'Redirige a /connect/authorize (PKCE)'
+    flit2.apps.hub -> flit2.gateway '/connect/authorize'
+    flit2.gateway -> flit2.negocio.core_api 'Revisa producto y rol'
+    flit2.negocio.core_api -> flit2.datos.db 'Empresa, usuario y roles'
+    flit2.apps.tramites_web -> flit2.gateway 'Canjea el código (servidor a servidor)'
+    flit2.gateway -> flit2.negocio.core_api '/connect/token'
+    flit2.apps.tramites_web -> usuarios.gestor 'Crea la sesión con cookie cifrada'
+    autoLayout TopBottom 45 25
   }
 
   // V12. Fuente: rutas public-branding y public-network del gateway y OidcTokenAcceptance en Flit.Suite.AspNetCore.
   dynamic view flujo_login_marca_blanca {
     title 'Login por marca blanca'
     description 'El host define la marca y el emisor del token. Detalle del emisor por dominio: [por verificar].'
-    gestor -> flit2.hub 'Entra por el host de la marca'
-    flit2.hub -> flit2.gateway '/api/v1/public/branding y /public/network'
-    flit2.gateway -> flit2.core_api 'Resuelve la marca del host'
-    flit2.hub -> flit2.gateway '/connect/authorize'
-    flit2.gateway -> flit2.core_api 'Emite con el emisor del dominio'
+    usuarios.gestor -> flit2.apps.hub 'Entra por el host de la marca'
+    flit2.apps.hub -> flit2.gateway '/api/v1/public/branding y /public/network'
+    flit2.gateway -> flit2.negocio.core_api 'Resuelve la marca del host'
+    flit2.apps.hub -> flit2.gateway '/connect/authorize'
+    flit2.gateway -> flit2.negocio.core_api 'Emite con el emisor del dominio'
+    autoLayout TopBottom 45 25
   }
 }

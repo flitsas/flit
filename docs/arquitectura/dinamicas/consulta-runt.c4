@@ -4,10 +4,11 @@ views {
   dynamic view flujo_consulta_runt {
     title 'Consulta del RUNT'
     description 'Por gRPC hacia core-consultas. Proveedor que atiende cada fuente en cada ambiente: [por verificar].'
-    flit2.core_api -> flit2.core_consultas 'ConsultasService (gRPC)'
-    flit2.core_consultas -> intempo 'Consulta RUNT'
-    flit2.core_consultas -> kyverum 'Respaldo [por verificar]'
-    flit2.core_consultas -> flit2.db 'Guarda la consulta'
-    flit2.core_consultas -> flit2.bus 'consultas.consulta.realizada'
+    flit2.negocio.core_api -> flit2.plataforma.core_consultas 'ConsultasService (gRPC)'
+    flit2.plataforma.core_consultas -> fuentes.intempo 'Consulta RUNT'
+    flit2.plataforma.core_consultas -> fuentes.kyverum 'Respaldo [por verificar]'
+    flit2.plataforma.core_consultas -> flit2.datos.db 'Guarda la consulta'
+    flit2.plataforma.core_consultas -> flit2.datos.bus 'consultas.consulta.realizada'
+    autoLayout TopBottom 45 25
   }
 }
