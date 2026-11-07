@@ -11,7 +11,7 @@ import { RequisitosPunto } from "@/components/punto/RequisitosPunto";
 import { Badge, Card, Nav, Row } from "@/components/tramite/piezas";
 import type { ClientePortal, Diagnostico, ResultadoVehiculoPunto, VehiculoDelTramite } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
-import { ASSETS } from "@/lib/assets";
+import { LogoPortal } from "@/components/marca/MarcaPunto";
 import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import {
   datosTecnicos,
@@ -139,8 +139,7 @@ export function DiagnosticoPunto({
   return (
     <div className="min-h-screen bg-background font-sans text-foreground" aria-label="Wizard del punto">
       <header className="wizard-header flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background py-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={ASSETS.logo} alt="FLIT 2.0" className="h-9 w-auto" />
+        <LogoPortal alt="FLIT 2.0" />
         <div className="flex flex-wrap items-center justify-end gap-4 text-sm md:gap-6">
           <p className="max-w-md truncate font-medium text-foreground/80" title={organismoNombre}>
             Punto de atención · {organismoNombre}

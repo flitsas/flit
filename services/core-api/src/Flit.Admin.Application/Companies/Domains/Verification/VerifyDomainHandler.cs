@@ -93,31 +93,6 @@ public sealed class VerifyDomainHandler(
     }
 
     /// <summary>Consulta el TXT y lo reduce a los 4 casos de <see cref="DnsCheckOutcome"/> (AC7). Nunca loguea el valor crudo del TXT (auditoría DnsClient).</summary>
-    internal async Task<DnsCheckOutcome> CheckAsync(string host, string expectedToken, CancellationToken cancellationToken)
-    {
-        var lookup = await _dnsResolver.LookupAsync(host, cancellationToken).ConfigureAwait(false);
-        if (lookup.Error is not null)
-        {
-            return DnsCheckOutcome.Error;
-        }
-
-        if (!lookup.Found || lookup.Values.Count == 0)
-        {
-            return DnsCheckOutcome.NotFound;
-        }
-
-        return lookup.Values.Any(v => string.Equals(NormalizeTxtValue(v), expectedToken, StringComparison.Ordinal))
-            ? DnsCheckOutcome.Matches
-            : DnsCheckOutcome.Mismatch;
-    }
-
-    /// <summary>El registro TXT suele publicarse como <c>flit-verify=&lt;token&gt;</c>; también se acepta el token desnudo.</summary>
-    private static string NormalizeTxtValue(string rawValue)
-    {
-        const string prefix = "flit-verify=";
-        var trimmed = rawValue.Trim().Trim('"');
-        return trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? trimmed[prefix.Length..]
-            : trimmed;
-    }
+    internal Task<DnsCheckOutcome> CheckAsync(string host, string expectedToken, CancellationToken cancellationToken) =>
+        DomainTxtCheck.EvaluarAsync(_dnsResolver, host, expectedToken, cancellationToken);
 }

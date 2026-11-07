@@ -17,6 +17,15 @@ public static class ConceptosTarifaPn
 
     /// <summary>Los dos renglones base siempre son «de un tipo»; solo los adicionales pueden valer para cualquiera.</summary>
     public static bool ExigeTipo(string concepto) => concepto is DerechosTransito or ServicioFlit;
+
+    /// <summary>
+    /// HU #14388 — conceptos que un administrador del organismo (<c>ot_admin</c>) puede fijar para su organismo: derechos de
+    /// tránsito y las tres transformaciones. Servicio FLIT y envío del documento son solo del SuperAdmin.
+    /// </summary>
+    public static readonly IReadOnlyList<string> EditablesPorOrganismo =
+        [DerechosTransito, "CAMBIO_COLOR", "CONVERSION_COMBUSTIBLE", "CAMBIO_CARROCERIA"];
+
+    public static bool EditablePorOrganismo(string concepto) => EditablesPorOrganismo.Contains(concepto);
 }
 
 /// <summary>Estado de una versión de tarifa a una fecha: vigente, futura (aún no inicia) o cerrada (historial).</summary>
@@ -44,10 +53,14 @@ public sealed record TarifaPnView(
     DateTimeOffset CreadaEn,
     Guid? CreadaPor,
     DateTimeOffset? ActualizadaEn,
-    Guid? ActualizadaPor);
+    Guid? ActualizadaPor,
+    string? CreadaPorNombre = null);
 
 /// <summary>Filtros del listado. <c>SoloVigentes</c> deja las versiones en vigor en <c>Fecha</c>; <c>Fecha</c> nula = hoy en Colombia.</summary>
 public sealed record TarifaPnFiltro(bool SoloVigentes, Guid? TipoTramiteId, Guid? OrganismoId, string? Concepto, DateOnly? Fecha);
+
+/// <summary>Un tipo de trámite del portal, para el formulario de precios del organismo (HU #14388).</summary>
+public sealed record TipoTarifaPnView(Guid Id, string Codigo, string Nombre);
 
 /// <summary>Un valor de la versión que se registra.</summary>
 public sealed record TarifaPnValor(string Concepto, long ValorCop);
@@ -71,6 +84,16 @@ public interface IPersonaNaturalTarifaRepository
     DateOnly HoyColombia();
 
     Task<IReadOnlyList<TarifaPnView>> ListarAsync(TarifaPnFiltro filtro, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14388 — lo que un organismo ve: sus propias versiones y los valores generales (organismo nulo) que le aplican.
+    /// Con <paramref name="tipoId"/> deja las del tipo y las de cualquier tipo (conceptos adicionales generales).
+    /// </summary>
+    Task<IReadOnlyList<TarifaPnView>> ListarDelOrganismoAsync(
+        Guid organismoId, Guid? tipoId, string? concepto, bool soloVigentes, DateOnly? fecha, CancellationToken ct = default);
+
+    /// <summary>HU #14388 — tipos que el superadministrador habilitó para el portal, por nombre.</summary>
+    Task<IReadOnlyList<TipoTarifaPnView>> ListarTiposDelPortalAsync(CancellationToken ct = default);
 
     Task<TarifaPnView?> ObtenerAsync(Guid id, CancellationToken ct = default);
 

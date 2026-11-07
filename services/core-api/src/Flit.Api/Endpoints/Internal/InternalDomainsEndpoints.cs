@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using Flit.Admin.Application.Companies.Domains;
 using Flit.Admin.Application.Companies.Domains.Verification;
+using Flit.Admin.Application.Companies.TransitOffices.PortalDominio;
 using Flit.Admin.Domain.Companies.Domains;
+using Flit.Admin.Domain.Companies.TransitOffices.PortalDominio;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Flit.Api.Endpoints.Internal;
@@ -58,17 +60,31 @@ public static class InternalDomainsEndpoints
             .Produces(StatusCodes.Status409Conflict)
             .AllowAnonymous();
 
+        // HU #14384 - el borde avisa que NO pudo emitir el certificado de un dominio de portal: queda el motivo y una alerta, sin activar.
+        app.MapPut("/api/v1/internal/domains/{host}/certificate-failure", PutCertificateFailureAsync)
+            .WithName("InternalDomainCertificateFailure")
+            .WithTags("Internal")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .AllowAnonymous();
+
         return app;
     }
 
     /// <summary>Ventana de renovación: certificados con <c>certificate_expires_at</c> dentro de 30 días entran igual que los dominios sin certificado emitido — el poller de #12426 los trata idéntico (pide/renueva).</summary>
     private static readonly TimeSpan CertificateRenewalWindow = TimeSpan.FromDays(30);
 
+    /// <summary>Proposito con el que el aprovisionamiento publica los dominios de portal de organismo (el borde los enruta al portal, no al frontend de FLIT).</summary>
+    public const string PortalDomainPurpose = "portal-pn";
+
     internal static async Task<IResult> GetPendingCertificateDomainsAsync(
         HttpRequest request,
         [FromServices] ITenantDomainRepository repository,
         [FromServices] IConfiguration configuration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromServices] IPortalDominioRepository? portales = null)
     {
         var expectedKey = configuration[ConfigKey];
         if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
@@ -76,16 +92,19 @@ public static class InternalDomainsEndpoints
             return Results.Unauthorized();
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var hosts = await repository.ListPendingCertificateHostsAsync(now + CertificateRenewalWindow, cancellationToken).ConfigureAwait(false);
-        return Results.Ok(new ActiveDomainsResponse(hosts));
+        var renewBefore = DateTimeOffset.UtcNow + CertificateRenewalWindow;
+        var hosts = await repository.ListPendingCertificateHostsAsync(renewBefore, cancellationToken).ConfigureAwait(false);
+        // HU #14384: los dominios de portal siguen el mismo proceso de certificados que los de marca blanca.
+        IReadOnlyList<string> delPortal = portales is null ? [] : await portales.ListarHostsPendientesDeCertificadoAsync(renewBefore, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new ActiveDomainsResponse([.. hosts, .. delPortal]));
     }
 
     internal static async Task<IResult> GetProvisioningDomainsAsync(
         HttpRequest request,
         [FromServices] ITenantDomainRepository repository,
         [FromServices] IConfiguration configuration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromServices] IPortalDominioRepository? portales = null)
     {
         var expectedKey = configuration[ConfigKey];
         if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
@@ -94,7 +113,12 @@ public static class InternalDomainsEndpoints
         }
 
         var domains = await repository.ListProvisioningAsync(cancellationToken).ConfigureAwait(false);
-        return Results.Ok(new ProvisioningDomainsResponse(domains));
+        // HU #14383: los dominios de portal se agregan con el proposito portal-pn (lo de marca blanca no cambia).
+        IReadOnlyList<PortalDominioAprovisionamiento> delPortal = portales is null ? [] : await portales.ListarAprovisionamientoAsync(cancellationToken).ConfigureAwait(false);
+        var todos = domains.Concat(delPortal.Select(p => new DomainProvisioningItem(p.Host, PortalDomainPurpose, p.Status, p.CertificateIssuedAt, p.CertificateExpiresAt)))
+            .OrderBy(d => d.Host, StringComparer.Ordinal)
+            .ToList();
+        return Results.Ok(new ProvisioningDomainsResponse(todos));
     }
 
     internal static async Task<IResult> PutCertificateAsync(
@@ -103,7 +127,8 @@ public static class InternalDomainsEndpoints
         HttpRequest request,
         [FromServices] ApplyDomainCertificateHandler handler,
         [FromServices] IConfiguration configuration,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromServices] PortalDominioCertificadoHandler? portalHandler = null)
     {
         var expectedKey = configuration[ConfigKey];
         if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
@@ -117,6 +142,20 @@ public static class InternalDomainsEndpoints
         }
 
         var result = await handler.HandleAsync(host, body.IssuedAt, body.ExpiresAt, cancellationToken).ConfigureAwait(false);
+        if (portalHandler is not null && result.Outcome == Flit.Admin.Application.Companies.Domains.Verification.ApplyDomainCertificateOutcome.NotFound)
+        {
+            // HU #14382: el host no es de marca blanca; puede ser el dominio de un portal. Verificado + certificado => activo.
+            switch (await portalHandler.EmitidoAsync(host, body.IssuedAt, body.ExpiresAt, cancellationToken).ConfigureAwait(false))
+            {
+                case PortalDominioCertificadoResultado.Actualizado:
+                    return Results.Ok();
+                case PortalDominioCertificadoResultado.NoVerificado:
+                    return Results.Json(
+                        new { error = DomainErrors.NotVerified, message = "El dominio aun no comprobo titularidad (pending/failed)." },
+                        statusCode: StatusCodes.Status409Conflict);
+            }
+        }
+
         return result.Outcome switch
         {
             Flit.Admin.Application.Companies.Domains.Verification.ApplyDomainCertificateOutcome.NotFound =>
@@ -125,6 +164,31 @@ public static class InternalDomainsEndpoints
                 Results.Json(
                     new { error = DomainErrors.NotVerified, message = "El dominio aún no comprobó titularidad (pending/failed)." },
                     statusCode: StatusCodes.Status409Conflict),
+            _ => Results.Ok(),
+        };
+    }
+
+    /// <summary>HU #14384: el cuerpo lleva el motivo breve (reason) que dejo el proceso de certificados. Sin secretos ni trazas.</summary>
+    internal static async Task<IResult> PutCertificateFailureAsync(
+        string host,
+        DomainCertificateFailureRequestBody? body,
+        HttpRequest request,
+        [FromServices] PortalDominioCertificadoHandler handler,
+        [FromServices] IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var expectedKey = configuration[ConfigKey];
+        if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
+        {
+            return Results.Unauthorized();
+        }
+
+        return await handler.FalloAsync(host, body?.Reason, cancellationToken).ConfigureAwait(false) switch
+        {
+            PortalDominioCertificadoResultado.NoEsDePortal =>
+                Results.NotFound(new { error = DomainErrors.NotFound, message = $"El host {host} no es el dominio de un portal." }),
+            PortalDominioCertificadoResultado.NoVerificado =>
+                Results.Json(new { error = DomainErrors.NotVerified, message = "El dominio no esta verificado." }, statusCode: StatusCodes.Status409Conflict),
             _ => Results.Ok(),
         };
     }
@@ -171,3 +235,6 @@ public sealed record ProvisioningDomainsResponse(IReadOnlyList<DomainProvisionin
 
 /// <summary>Cuerpo de <c>PUT /api/v1/internal/domains/{host}/certificate</c> (HU #12425 AC3, #12426).</summary>
 public sealed record DomainCertificateRequestBody(DateTimeOffset IssuedAt, DateTimeOffset? ExpiresAt);
+
+/// <summary>Cuerpo de <c>PUT /api/v1/internal/domains/{host}/certificate-failure</c> (HU #14384).</summary>
+public sealed record DomainCertificateFailureRequestBody(string? Reason);

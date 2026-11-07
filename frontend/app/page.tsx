@@ -19,7 +19,7 @@ import { IctReports } from "@/components/atom/modules/IctReports";
 import { IctTrazabilidad } from "@/components/atom/modules/IctTrazabilidad";
 import { ToastProvider } from "@/components/admin/Toast";
 import { AccesoDenegadoAlert } from "@/components/shared/AccesoDenegadoAlert";
-import { ACCESS_DENIED_PARAM, ACCESS_DENIED_VALUE } from "@/lib/auth/guard";
+import { ACCESS_DENIED_MODULE_PARAM, ACCESS_DENIED_PARAM, ACCESS_DENIED_VALUE } from "@/lib/auth/guard";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import {
@@ -83,6 +83,7 @@ function HomeContent() {
   // HU #13650 — aviso «No tienes acceso a este módulo.»: lo dispara un `?m=` sin permiso o la marca
   // `?acceso=denegado` con la que el middleware devuelve al inicio al que abrió /admin/* o /empresa/* sin permiso.
   const [accesoDenegado, setAccesoDenegado] = useState(false);
+  const [moduloDenegado, setModuloDenegado] = useState<string | null>(null);
   const accessMark = params.get(ACCESS_DENIED_PARAM);
   const lastDeniedRef = useRef<string | null>(null);
   const replaceIssuedRef = useRef<string | null>(null);
@@ -92,8 +93,9 @@ function HomeContent() {
     if (!hydrated || !authed || accessMark !== ACCESS_DENIED_VALUE) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccesoDenegado(true);
+    setModuloDenegado(params.get(ACCESS_DENIED_MODULE_PARAM));
     router.replace("/", { scroll: false });
-  }, [accessMark, hydrated, authed, router]);
+  }, [accessMark, hydrated, authed, router, params]);
 
   // Sync / revalidar ?m= cuando cambian rawModule O navigableIds (post-RBAC).
   // Importante: un solo replace por módulo denegado — sin loop de router.replace.
@@ -180,7 +182,7 @@ function HomeContent() {
         </div>
       ) : null}
 
-      {accesoDenegado ? <AccesoDenegadoAlert onClose={() => setAccesoDenegado(false)} /> : null}
+      {accesoDenegado ? <AccesoDenegadoAlert modulo={moduloDenegado} onClose={() => setAccesoDenegado(false)} /> : null}
 
       {/* Hold / loading RBAC: no montar módulo pedido (sin flash). */}
       {/* El inicio se bifurca por rol (HU #11940): el tablero del gestor mide producción de una

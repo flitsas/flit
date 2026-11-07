@@ -83,4 +83,20 @@ public sealed class CotizadorPersonaNaturalTests
         b.TotalCop.Should().Be(a.TotalCop);
         b.VersionTarifa.Should().Be(a.VersionTarifa);
     }
+    [Fact]
+    public void HU14395_ConPredicado_SoloSumanLosConceptosCobrados_YSinPredicadoNadaCambia()
+    {
+        var tarifas = Base(100, 10).Append(T("ENVIO_DOCUMENTO", 5)).ToArray();
+        var sin = CotizadorPersonaNatural.Calcular(Tipo, Organismo, true, ["ENVIO_DOCUMENTO"], tarifas).Cotizacion!;
+        var todos = CotizadorPersonaNatural.Calcular(Tipo, Organismo, true, ["ENVIO_DOCUMENTO"], tarifas, _ => true).Cotizacion!;
+        var sinGestion = CotizadorPersonaNatural.Calcular(Tipo, Organismo, true, ["ENVIO_DOCUMENTO"], tarifas, c => c is "DERECHOS_TRANSITO").Cotizacion!;
+        var nada = CotizadorPersonaNatural.Calcular(Tipo, Organismo, true, [], tarifas, _ => false).Cotizacion!;
+
+        todos.Should().BeEquivalentTo(sin);
+        sinGestion.Lineas.Select(l => l.Codigo).Should().Equal("DERECHOS_TRANSITO");
+        sinGestion.TotalCop.Should().Be(100);
+        sinGestion.AdicionalesNoAplicados.Should().Equal("ENVIO_DOCUMENTO");
+        nada.Lineas.Should().BeEmpty();
+        nada.TotalCop.Should().Be(0);
+    }
 }
