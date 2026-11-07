@@ -1,41 +1,121 @@
-// Vistas estáticas de FLIT 2.0 (plan 01 §5). Las dinámicas están en dinamicas/ y las de componentes en componentes/.
+// Vistas estáticas de FLIT 2.0 (plan 01 §5). Cada resumen cabe en el marco de Atlas y lleva al detalle con navigateTo.
+// Las dinámicas están en dinamicas/ y las de componentes en componentes/.
 // Las vistas de despliegue no se escriben a mano: las emitirá el generador desde gitops y nunca viven en este repo.
 views {
   // V02
   view flit2_contexto of flit2 {
     title 'FLIT 2.0: contexto'
-    description 'El sistema con sus actores y los sistemas con los que habla.'
+    description 'El sistema con sus usuarios y los sistemas con los que habla.'
     include
-      flit2,
-      gestor, organismo, ciudadano, admin_compania, superadmin, integrador,
-      flito, flit1, atlas, file_manager, egress,
-      verifik, kyverum, intempo, rues, quipux, idsecure, llm, ado, correo, objstore
+      flit2 with { navigateTo flit2_contenedores },
+      usuarios,
+      integrador,
+      flito,
+      atlas,
+      satelites,
+      fuentes,
+      entidades,
+      terceros
+    autoLayout TopBottom 45 25
   }
 
-  // V04
+  // V04, resumen
   view flit2_contenedores of flit2 {
     title 'FLIT 2.0: contenedores'
-    description 'Aplicaciones, servicios y almacenes, con sus relaciones hacia afuera.'
-    include *
+    description 'Resumen por grupos. Toca un grupo para ver sus contenedores.'
+    include
+      flit2.apps with { navigateTo flit2_aplicaciones },
+      flit2.gateway,
+      flit2.negocio with { navigateTo flit2_negocio },
+      flit2.plataforma with { navigateTo flit2_plataforma },
+      flit2.datos with { navigateTo eventos_rabbitmq },
+      usuarios,
+      integrador,
+      flito,
+      satelites,
+      fuentes,
+      entidades,
+      terceros
+    autoLayout TopBottom 45 25
+  }
+
+  // V04, detalle
+  view flit2_aplicaciones of flit2.apps {
+    title 'FLIT 2.0: aplicaciones web'
+    description 'Hub y frontends: todos entran a la API por el gateway.'
+    include
+      flit2.apps.*,
+      flit2.gateway,
+      usuarios
+    autoLayout TopBottom 45 25
+  }
+
+  view flit2_negocio of flit2.negocio {
+    title 'FLIT 2.0: servicios de negocio'
+    description 'Cómo se hablan entre sí y con la plataforma. Lo que sale de FLIT está en flit2_negocio_salidas.'
+    include
+      flit2.negocio.core_api with { navigateTo flit2_core_api_componentes },
+      flit2.negocio.*,
+      flit2.gateway,
+      flit2.plataforma,
+      flit2.datos
+    autoLayout TopBottom 45 25
+  }
+
+  view flit2_negocio_salidas {
+    title 'FLIT 2.0: salidas de los servicios de negocio'
+    description 'A qué fuentes, entidades, terceros y satélites llama cada servicio.'
+    include
+      flit2.negocio.core_api with { navigateTo flit2_core_api_componentes },
+      flit2.negocio.core_comparendos,
+      flit2.negocio.core_diagnostico,
+      flit2.negocio.core_personanatural,
+      fuentes,
+      entidades,
+      terceros,
+      satelites
+    exclude
+      flit2.negocio.* -> flit2.negocio.*
+    autoLayout LeftRight 60 25
+  }
+
+  view flit2_plataforma of flit2.plataforma {
+    title 'FLIT 2.0: servicios de plataforma'
+    description 'Identidad, consultas, notificaciones y ML.'
+    include
+      flit2.plataforma.*,
+      flit2.gateway,
+      flit2.negocio,
+      flit2.datos,
+      flito,
+      satelites,
+      fuentes,
+      terceros
+    autoLayout TopBottom 45 25
   }
 
   // V14
-  view eventos_rabbitmq of flit2 {
+  view eventos_rabbitmq of flit2.datos {
     title 'FLIT 2.0: eventos por RabbitMQ'
     description 'Quién publica y quién consume en el bus, según contracts/asyncapi.'
     include
-      flit2.bus,
-      flit2.core_api, flit2.core_identity, flit2.core_consultas, flit2.core_notificaciones,
-      flit2.core_diagnostico, flit2.core_personanatural
+      flit2.datos.bus,
+      flit2.negocio.core_api,
+      flit2.negocio.core_diagnostico,
+      flit2.negocio.core_personanatural,
+      flit2.plataforma.core_identity,
+      flit2.plataforma.core_consultas,
+      flit2.plataforma.core_notificaciones
     exclude
-      flit2.core_api -> flit2.core_consultas,
-      flit2.core_api -> flit2.core_notificaciones,
-      flit2.core_api -> flit2.core_personanatural,
-      flit2.core_diagnostico -> flit2.core_consultas,
-      flit2.core_diagnostico -> flit2.core_identity,
-      flit2.core_diagnostico -> flit2.core_api,
-      flit2.core_personanatural -> flit2.core_consultas,
-      flit2.core_personanatural -> flit2.core_notificaciones,
-      flit2.core_personanatural -> flit2.core_api
+      flit2.negocio.core_api -> flit2.plataforma.core_consultas,
+      flit2.negocio.core_api -> flit2.plataforma.core_notificaciones,
+      flit2.negocio.core_api -> flit2.negocio.core_personanatural,
+      flit2.negocio.core_diagnostico -> flit2.plataforma.core_consultas,
+      flit2.negocio.core_diagnostico -> flit2.plataforma.core_identity,
+      flit2.negocio.core_diagnostico -> flit2.negocio.core_api,
+      flit2.negocio.core_personanatural -> flit2.plataforma.core_consultas,
+      flit2.negocio.core_personanatural -> flit2.plataforma.core_notificaciones,
+      flit2.negocio.core_personanatural -> flit2.negocio.core_api
+    autoLayout LeftRight 60 25
   }
 }

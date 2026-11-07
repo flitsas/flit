@@ -49,5 +49,6 @@ views {
   view flit2_gateway_componentes of flit2.gateway {
     title 'Gateway: componentes'
     include flit2.gateway.*
+    autoLayout TopBottom 45 25
   }
 }
