@@ -918,7 +918,6 @@ Flit.Tramites.Domain.Integration.ITransitOfficeQuipuxCanalReader => Flit.Infrast
 Flit.Tramites.Domain.Integration.ITransitOfficeResolver => Flit.Infrastructure.OtRules.TransitOfficeResolver (Scoped)
 Flit.Tramites.Domain.Repositories.IBulkTramitesBatchRepository => Flit.Infrastructure.Persistence.Repositories.BulkTramitesBatchRepository (Scoped)
 Flit.Tramites.Domain.Repositories.ICatalogRepository => Flit.Infrastructure.Persistence.Repositories.CatalogRepository (Scoped)
-Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider => Flit.Infrastructure.Persistence.Repositories.ChecklistCompanyParamsProvider (Scoped)
 Flit.Tramites.Domain.Repositories.IConsolidadoExportSettingsRepository => Flit.Infrastructure.Persistence.Repositories.ConsolidadoExportSettingsRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IConsolidadoLoteRepository => Flit.Infrastructure.Persistence.Repositories.ConsolidadoLoteRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository => Flit.Infrastructure.Persistence.Repositories.DeferredSignatureMarkRepository (Scoped)
