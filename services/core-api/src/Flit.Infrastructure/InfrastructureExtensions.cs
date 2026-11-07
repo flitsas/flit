@@ -186,8 +186,6 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog, DbVehicleBodyworkCatalog>();
         // Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019) — cerrado, 6 valores.
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleServiceTypeCatalog, DbVehicleServiceTypeCatalog>();
-        // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
-        services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
         // HU #11184 — orden del expediente configurado por el OT (admin.ot_document_precedence).
