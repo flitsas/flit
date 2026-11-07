@@ -1,0 +1,14 @@
+views {
+  // V01 del plan 01 §5.
+  view landscape {
+    title 'Landscape de FLIT S.A.S.'
+    description 'Actores, sistemas de FLIT y sistemas externos.'
+    include *
+    style element.tag = #objetivo {
+      opacity 40%
+    }
+    style element.tag = #legado {
+      color gray
+    }
+  }
+}

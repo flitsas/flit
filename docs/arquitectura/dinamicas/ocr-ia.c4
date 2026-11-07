@@ -1,0 +1,23 @@
+views {
+  // V10. Fuente: Flit.Tramites.Application/Ocr y Flit.Infrastructure/Ai. El orden de respaldo entre proveedores: [por verificar].
+  dynamic view flujo_ocr_ia {
+    title 'OCR de un documento del trámite'
+    description 'Del documento al modelo pasando por el router de IA. Orden de respaldo entre proveedores: [por verificar].'
+    gestor -> flit2.tramites_web 'Carga el documento'
+    flit2.tramites_web -> flit2.gateway '/api/v1 desde el BFF'
+    flit2.gateway -> flit2.core_api.ocr 'Analiza el documento'
+    flit2.core_api.ocr -> flit2.core_api.ia_router 'Pide al modelo'
+    flit2.core_api.ia_router -> llm 'Extrae los datos'
+    flit2.core_api.ocr -> flit2.db 'Guarda el resultado'
+  }
+
+  // V10, variante de Comparendos.
+  dynamic view flujo_ocr_comparendos {
+    title 'OCR de comparendos'
+    flit2.comparendos_web -> flit2.gateway '/api/v1/comparendos'
+    flit2.gateway -> flit2.core_comparendos 'Reenvía'
+    flit2.core_comparendos -> file_manager 'Guarda la evidencia'
+    flit2.core_comparendos -> llm 'Extrae los datos'
+    flit2.core_comparendos -> flit2.db 'Guarda el resultado'
+  }
+}

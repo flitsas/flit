@@ -1,0 +1,41 @@
+// Vistas estáticas de FLIT 2.0 (plan 01 §5). Las dinámicas están en dinamicas/ y las de componentes en componentes/.
+// Las vistas de despliegue no se escriben a mano: las emitirá el generador desde gitops y nunca viven en este repo.
+views {
+  // V02
+  view flit2_contexto of flit2 {
+    title 'FLIT 2.0: contexto'
+    description 'El sistema con sus actores y los sistemas con los que habla.'
+    include
+      flit2,
+      gestor, organismo, ciudadano, admin_compania, superadmin, integrador,
+      flito, flit1, atlas, file_manager, egress,
+      verifik, kyverum, intempo, rues, quipux, idsecure, llm, ado, correo, objstore
+  }
+
+  // V04
+  view flit2_contenedores of flit2 {
+    title 'FLIT 2.0: contenedores'
+    description 'Aplicaciones, servicios y almacenes, con sus relaciones hacia afuera.'
+    include *
+  }
+
+  // V14
+  view eventos_rabbitmq of flit2 {
+    title 'FLIT 2.0: eventos por RabbitMQ'
+    description 'Quién publica y quién consume en el bus, según contracts/asyncapi.'
+    include
+      flit2.bus,
+      flit2.core_api, flit2.core_identity, flit2.core_consultas, flit2.core_notificaciones,
+      flit2.core_diagnostico, flit2.core_personanatural
+    exclude
+      flit2.core_api -> flit2.core_consultas,
+      flit2.core_api -> flit2.core_notificaciones,
+      flit2.core_api -> flit2.core_personanatural,
+      flit2.core_diagnostico -> flit2.core_consultas,
+      flit2.core_diagnostico -> flit2.core_identity,
+      flit2.core_diagnostico -> flit2.core_api,
+      flit2.core_personanatural -> flit2.core_consultas,
+      flit2.core_personanatural -> flit2.core_notificaciones,
+      flit2.core_personanatural -> flit2.core_api
+  }
+}
