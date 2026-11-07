@@ -1,0 +1,357 @@
+// Contenedores de FLIT 2.0 (nivel 2 de C4). Extiende el sistema flit2 del landscape (arquitectura/landscape).
+// Comprobado contra el código el 06/11/2026: appsettings.json del gateway, AddFlitGrpcClient de cada servicio,
+// contracts/ y docker-compose.prod.yml. k8s_workload es la llave del drift (plan 01 §8.4).
+model {
+  extend flit2 {
+    hub = webapp 'Hub de la suite' {
+      technology 'Next.js'
+      description 'Portada, pantalla de login e inicio con los productos'
+      metadata {
+        owner 'Líder FLIT 2.0, frente Plataforma [por verificar]'
+        repo_path 'frontend-hub'
+        k8s_workload 'frontend-hub'
+        criticidad 'alta'
+        datos_personales 'no'
+      }
+    }
+    tramites_web = webapp 'Trámites (web + BFF)' {
+      #pii #critico
+      technology 'Next.js, @flit/auth'
+      description 'Producto Trámites; BFF de /api/v1; manual y Dr. FLIT'
+      metadata {
+        owner 'Líder FLIT 2.0, Trámites [por verificar]'
+        repo_path 'frontend'
+        k8s_workload 'frontend'
+        criticidad 'critica'
+        datos_personales 'si'
+      }
+    }
+    comparendos_web = webapp 'Comparendos (web)' {
+      #pii
+      technology 'Next.js'
+      description 'Producto Comparendos'
+      metadata {
+        owner 'Líder Comparendos [por verificar]'
+        repo_path 'frontend-comparendos'
+        k8s_workload 'frontend-comparendos'
+        criticidad 'media'
+        datos_personales 'si'
+      }
+    }
+    diagnostico_web = webapp 'Diagnóstico (web)' {
+      #pii
+      technology 'Next.js'
+      description 'Producto Diagnóstico Vehicular'
+      metadata {
+        owner 'Líder Diagnóstico [por verificar]'
+        repo_path 'frontend-diagnostico'
+        k8s_workload 'frontend-diagnostico'
+        ambientes 'dev'
+        criticidad 'media'
+        datos_personales 'si'
+      }
+    }
+    personanatural_web = webapp 'Portal Persona Natural (web)' {
+      #pii #externo_publico
+      technology 'Next.js'
+      description 'Portal público: el ciudadano consulta, cotiza y radica sin cuenta'
+      metadata {
+        owner 'Líder Persona Natural [por verificar]'
+        repo_path 'frontend-personanatural'
+        k8s_workload 'frontend-personanatural'
+        ambientes 'dev'
+        criticidad 'media'
+        datos_personales 'si'
+      }
+    }
+    gateway = service 'Gateway' {
+      #critico
+      technology '.NET, YARP'
+      description 'Única entrada de la API: reparte cada ruta a su servicio'
+      metadata {
+        owner 'Líder FLIT 2.0, frente Plataforma [por verificar]'
+        repo_path 'services/core-api/src/Flit.Gateway'
+        k8s_workload 'gateway'
+        criticidad 'critica'
+        datos_personales 'no'
+      }
+    }
+    core_api = service 'core-api' {
+      #pii #critico #ia
+      technology '.NET 10, EF Core'
+      description 'Negocio de Trámites y API externa. Atiende también el login mientras la bandera de identidad esté apagada'
+      metadata {
+        owner 'Líder FLIT 2.0, Trámites [por verificar]'
+        repo_path 'services/core-api/src/Flit.Api'
+        k8s_workload 'core-api'
+        criticidad 'critica'
+        datos_personales 'si'
+        openapi 'contracts/openapi/core-api.v1.yaml'
+        openapi_externo 'contracts/openapi/external-api.v1.json'
+        openapi_plataforma 'contracts/openapi/platform.v1.yaml'
+        asyncapi 'contracts/asyncapi/tramites-events.v1.yaml'
+        asyncapi_webhooks 'contracts/asyncapi/domain-events.v1.yaml'
+        proto 'contracts/proto/flit/tramites/v1'
+        adr 'ADR-0060, ADR-0067, ADR-0068, ADR-0071, ADR-0075'
+      }
+    }
+    core_identity = service 'core-identity' {
+      #pii #critico #suite
+      technology '.NET, OpenIddict'
+      description 'Identidad de la suite: OIDC, autenticación, productos y empresas'
+      metadata {
+        owner 'Frente de identidad [por verificar]'
+        repo_path 'services/core-identity'
+        k8s_workload 'core-identity'
+        criticidad 'critica'
+        datos_personales 'si'
+        proto 'contracts/proto/flit/identidad/v1/identidad.proto'
+        asyncapi 'contracts/asyncapi/plataforma-events.v1.yaml'
+      }
+    }
+    core_consultas = service 'core-consultas' {
+      #pii
+      technology '.NET, gRPC'
+      description 'Consultas a fuentes externas como capacidad de plataforma'
+      metadata {
+        owner 'Frente de consultas y notificaciones [por verificar]'
+        repo_path 'services/core-consultas'
+        k8s_workload 'core-consultas'
+        criticidad 'alta'
+        datos_personales 'si'
+        proto 'contracts/proto/flit/consultas/v1'
+        asyncapi 'contracts/asyncapi/consultas-events.v1.yaml'
+        adr 'ADR-0065'
+      }
+    }
+    core_notificaciones = service 'core-notificaciones' {
+      #pii
+      technology '.NET, gRPC'
+      description 'Correo, webhooks salientes y mensajes muertos'
+      metadata {
+        owner 'Frente de consultas y notificaciones [por verificar]'
+        repo_path 'services/core-notificaciones'
+        k8s_workload 'core-notificaciones'
+        criticidad 'alta'
+        datos_personales 'si'
+        proto 'contracts/proto/flit/notificaciones/v1'
+        asyncapi 'contracts/asyncapi/notificaciones-events.v1.yaml'
+      }
+    }
+    core_comparendos = service 'core-comparendos' {
+      #pii #ia
+      technology '.NET'
+      description 'Gestión de Comparendos (GDC V2) con OCR por LLM'
+      metadata {
+        owner 'Líder Comparendos [por verificar]'
+        repo_path 'services/core-comparendos'
+        k8s_workload 'core-comparendos'
+        criticidad 'media'
+        datos_personales 'si'
+        proto 'contracts/proto/flit/comparendos/v1/comparendos.proto'
+      }
+    }
+    core_diagnostico = service 'core-diagnostico' {
+      #pii #ia
+      technology '.NET'
+      description 'Diagnóstico Vehicular: lotes, dictamen y tablero'
+      metadata {
+        owner 'Líder Diagnóstico [por verificar]'
+        repo_path 'services/core-diagnostico'
+        k8s_workload 'core-diagnostico'
+        ambientes 'dev'
+        criticidad 'media'
+        datos_personales 'si'
+        openapi 'contracts/openapi/diagnostico.v1.yaml'
+        asyncapi 'contracts/asyncapi/diagnostico-events.v1.yaml'
+        proto 'contracts/proto/flit/diagnostico/v1/diagnostico.proto'
+        adr 'ADR-0072, ADR-0074, ADR-0075'
+      }
+    }
+    core_personanatural = service 'core-personanatural' {
+      #pii
+      technology '.NET'
+      description 'BFF del portal Persona Natural; radica en core-api por bus y gRPC'
+      metadata {
+        owner 'Líder Persona Natural [por verificar]'
+        repo_path 'services/core-personanatural'
+        k8s_workload 'core-personanatural'
+        ambientes 'dev'
+        criticidad 'media'
+        datos_personales 'si'
+        proto 'contracts/proto/flit/personanatural/v1/personanatural.proto'
+        adr 'ADR-0075'
+      }
+    }
+    core_ict = service 'core-ict' {
+      #pii #externo_publico
+      technology '.NET'
+      description 'Carga de trámites en lote por terceros'
+      metadata {
+        owner 'Líder Integraciones [por verificar]'
+        repo_path 'services/core-ict'
+        k8s_workload 'core-ict'
+        criticidad 'alta'
+        datos_personales 'si'
+        openapi 'contracts/openapi/core-ict.v1.yaml'
+      }
+    }
+    migracion_api = service 'migracion-api' {
+      #temporal #pii
+      technology '.NET'
+      description 'Migración de FLIT 1 a FLIT 2'
+      metadata {
+        owner 'Líder Migración [por verificar]'
+        repo_path 'services/core-api/tools/Flit.DataMigration.Api'
+        k8s_workload 'migracion-api'
+        criticidad 'media'
+        datos_personales 'si'
+      }
+    }
+    python_ml = service 'python-ml' {
+      #pii
+      technology 'Python 3.13, FastAPI'
+      description 'OCR y ML; hoy expone el OCR de cédula [por verificar quién lo consume]'
+      metadata {
+        owner 'Líder IA [por verificar]'
+        repo_path 'services/python-ml'
+        k8s_workload 'python-ml'
+        criticidad 'baja'
+        datos_personales 'si'
+        openapi 'contracts/openapi/python-ml.v1.yaml'
+      }
+    }
+    db = database 'PostgreSQL' {
+      #pii #critico
+      technology 'PostgreSQL'
+      description 'Una base por ambiente y un esquema por servicio'
+      metadata {
+        owner 'DevOps [por verificar]'
+        repo_path 'deploy/postgres'
+        criticidad 'critica'
+        datos_personales 'si'
+      }
+    }
+    bus = queue 'RabbitMQ' {
+      #pii
+      technology 'RabbitMQ'
+      description 'Exchanges por productor: flit.plataforma, flit.tramites, flit.consultas, flit.diagnostico y flit.notificaciones'
+      metadata {
+        owner 'DevOps [por verificar]'
+        repo_path 'deploy/rabbitmq'
+        k8s_workload 'rabbitmq'
+        criticidad 'alta'
+        datos_personales 'si'
+      }
+    }
+  }
+
+  // ── Usuarios → aplicaciones ──────────────────────────────
+  gestor -> flit2.tramites_web 'Radica y sigue trámites'
+  organismo -> flit2.tramites_web 'Revisa y aprueba trámites'
+  ciudadano -> flit2.tramites_web 'Firma y valida identidad'
+  ciudadano -> flit2.personanatural_web 'Consulta, cotiza y radica'
+  admin_compania -> flit2.hub 'Administra usuarios y productos'
+  superadmin -> flit2.hub 'Parametriza la plataforma'
+  integrador -> flit2.gateway 'API externa (/api/v1/external)' {
+    #externo_publico
+  }
+  integrador -> flit2.core_ict 'Carga trámites en lote' {
+    #externo_publico
+  }
+
+  // ── Aplicaciones → gateway ───────────────────────────────
+  flit2.tramites_web -> flit2.hub 'Redirige al login OIDC'
+  flit2.comparendos_web -> flit2.hub 'Redirige al login OIDC'
+  flit2.diagnostico_web -> flit2.hub 'Redirige al login OIDC'
+  flit2.hub -> flit2.gateway '/connect y /.well-known'
+  flit2.tramites_web -> flit2.gateway '/api/v1 desde el BFF'
+  flit2.comparendos_web -> flit2.gateway '/api/v1/comparendos'
+  flit2.diagnostico_web -> flit2.gateway '/api/v1/diagnostico'
+  flit2.personanatural_web -> flit2.gateway '/api/v1/persona-natural'
+
+  // ── Gateway → servicios (appsettings.json#ReverseProxy) ──
+  flit2.gateway -> flit2.core_api '/api, /hubs, /connect y /.well-known'
+  flit2.gateway -> flit2.core_identity 'Rutas de identidad, con bandera'
+  flit2.gateway -> flit2.core_comparendos '/api/v1/comparendos'
+  flit2.gateway -> flit2.core_diagnostico '/api/v1/diagnostico'
+  flit2.gateway -> flit2.core_personanatural '/api/v1/persona-natural'
+  flit2.gateway -> flit2.core_consultas '/api/v1/consultas/avisos'
+  flit2.gateway -> flit2.core_ict '/api/v1/ict y el host de ICT'
+  flit2.gateway -> flit2.migracion_api '/api/v1/migracion'
+  flit2.gateway -> flit2.python_ml '/ml'
+
+  // ── gRPC entre servicios (AddFlitGrpcClient) ─────────────
+  flit2.core_api -[grpc]-> flit2.core_consultas 'Consultas y validación de identidad'
+  flit2.core_api -[grpc]-> flit2.core_notificaciones 'Notificaciones y mensajes muertos'
+  flit2.core_api -[grpc]-> flit2.core_personanatural 'Lee la radicación'
+  flit2.core_api -[grpc]-> flit2.core_ict 'Estado de vuelta a ICT'
+  flit2.core_ict -[grpc]-> flit2.core_api 'Orquestación de ICT'
+  flit2.core_ict -[grpc]-> flit2.core_consultas 'ConsultasService'
+  flit2.core_comparendos -[grpc]-> flit2.core_consultas 'FuentesComparendosService'
+  flit2.core_comparendos -[grpc]-> flit2.core_identity 'IdentidadService y EmpresasService'
+  flit2.core_comparendos -[grpc]-> flit2.core_notificaciones 'NotificacionesService'
+  flit2.core_comparendos -[grpc]-> flit2.core_api 'CatalogosService'
+  flit2.core_diagnostico -[grpc]-> flit2.core_consultas 'ConsultasService'
+  flit2.core_diagnostico -[grpc]-> flit2.core_identity 'IdentidadService y EmpresasService'
+  flit2.core_diagnostico -[grpc]-> flit2.core_api 'CatalogosService'
+  flit2.core_personanatural -[grpc]-> flit2.core_consultas 'ConsultasService'
+  flit2.core_personanatural -[grpc]-> flit2.core_notificaciones 'NotificacionesService'
+  flit2.core_personanatural -[grpc]-> flit2.core_api 'PersonaNaturalService'
+
+  // ── Base de datos (un esquema por servicio) ──────────────
+  flit2.core_api -> flit2.db 'EF Core'
+  flit2.core_identity -> flit2.db 'Esquemas de identidad y plataforma'
+  flit2.core_consultas -> flit2.db 'Su esquema'
+  flit2.core_notificaciones -> flit2.db 'Su esquema'
+  flit2.core_comparendos -> flit2.db 'Su esquema'
+  flit2.core_diagnostico -> flit2.db 'Su esquema'
+  flit2.core_personanatural -> flit2.db 'Su esquema'
+  flit2.core_ict -> flit2.db 'Su esquema [por verificar]'
+  flit2.migracion_api -> flit2.db 'Escribe lo migrado'
+
+  // ── Bus (contracts/asyncapi) ─────────────────────────────
+  flit2.core_api -[async]-> flit2.bus 'Publica tramites.* y trabajos de notificación'
+  flit2.core_identity -[async]-> flit2.bus 'Publica platform.*'
+  flit2.core_consultas -[async]-> flit2.bus 'Publica consultas.*'
+  flit2.core_diagnostico -[async]-> flit2.bus 'Publica diagnostico.* y pide consultas'
+  flit2.core_personanatural -[async]-> flit2.bus 'Publica la solicitud de radicación'
+  flit2.bus -[async]-> flit2.core_notificaciones 'Trabajos de correo y webhook'
+  flit2.bus -[async]-> flit2.core_api 'platform.*, consultas.* y radicaciones'
+  flit2.bus -[async]-> flit2.core_consultas 'Trabajos de consulta del Diagnóstico'
+  flit2.bus -[async]-> flit2.core_diagnostico 'Resultados de consulta'
+  flit2.bus -[async]-> flit2.core_personanatural 'Resolución y estado del trámite'
+
+  // ── Webhooks salientes (domain-events.v1.yaml) ───────────
+  flit2.core_notificaciones -[async]-> flito 'Aviso tramite.cambio (firmado)'
+  flit2.core_notificaciones -[async]-> organismo 'Webhook de estado al organismo'
+
+  // ── Externos ─────────────────────────────────────────────
+  flit2.core_api -> verifik 'RUNT, SIMIT, RUES y RNMC'
+  flit2.core_api -> kyverum 'RUNT, comparendos, verificación y certificados'
+  flit2.core_api -> intempo 'Consulta RUNT'
+  flit2.core_api -> rues 'Consulta empresa'
+  flit2.core_api -> quipux 'Bandeja de organismos'
+  flit2.core_api -> ado 'Casos de soporte de Dr. FLIT'
+  flit2.core_api -> llm 'OCR y Dr. FLIT (router de IA)' {
+    #ia
+  }
+  flit2.core_api -> objstore 'S3'
+  flit2.core_api -> file_manager 'Adjuntos'
+  kyverum -[async]-> flit2.gateway 'Webhooks (/api/v1/webhooks y avisos)'
+  idsecure -> flit2.gateway '/api/public/idsecure [por verificar]'
+  flit2.core_consultas -> verifik 'SIMIT'
+  flit2.core_consultas -> kyverum 'RUNT y verificación [por verificar]'
+  flit2.core_consultas -> intempo 'RUNT'
+  flit2.core_consultas -> egress 'Una fuente de comparendos sale por el proxy'
+  flit2.core_comparendos -> llm 'OCR de comparendos' {
+    #ia
+  }
+  flit2.core_comparendos -> file_manager 'Evidencias'
+  flit2.core_diagnostico -> llm 'Redacción del dictamen' {
+    #ia
+  }
+  flit2.core_diagnostico -> file_manager 'Documentos'
+  flit2.core_personanatural -> file_manager 'Adjuntos de la solicitud'
+  flit2.core_notificaciones -> correo 'SMTP'
+}
