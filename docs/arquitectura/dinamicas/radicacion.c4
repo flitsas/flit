@@ -7,7 +7,7 @@ views {
     flit2.apps.tramites_web -> flit2.gateway 'POST /api/v1 desde el BFF'
     flit2.gateway -> flit2.negocio.core_api 'Reenvía'
     flit2.negocio.core_api -> flit2.datos.db 'Guarda el trámite y la outbox'
-    flit2.negocio.core_api -> flit2.datos.bus 'tramites.procedure.state_changed'
+    flit2.negocio.core_api -[async]-> flit2.datos.bus 'tramites.procedure.state_changed'
     flit2.datos.bus -> flit2.plataforma.core_notificaciones 'Consume'
     flit2.plataforma.core_notificaciones -> terceros.correo 'Correo a los destinatarios del estado'
     flit2.plataforma.core_notificaciones -> usuarios.organismo 'Webhook de estado'
