@@ -1,0 +1,53 @@
+// Componentes del gateway (nivel 3). Son las carpetas de services/core-api/src/Flit.Gateway.
+model {
+  extend flit2.gateway {
+    rutas = component 'Rutas YARP' {
+      description 'Rutas y clústeres del proxy'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Gateway/appsettings.json'
+      }
+    }
+    configuracion = component 'Configuración' {
+      description 'Filtros de configuración del proxy, incluida la bandera de identidad'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Gateway/Configuration'
+      }
+    }
+    transformaciones = component 'Transformaciones' {
+      description 'Ajustan la petición antes de reenviarla'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Gateway/Transforms'
+      }
+    }
+    middleware = component 'Middleware' {
+      description 'Tubería común de cada petición'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Gateway/Middleware'
+      }
+    }
+    cors = component 'CORS' {
+      description 'Orígenes permitidos'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Gateway/Cors'
+      }
+    }
+    salud = component 'Salud' {
+      description 'Sondas del servicio'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Gateway/Health'
+      }
+    }
+  }
+
+  flit2.gateway.middleware -> flit2.gateway.cors 'Aplica'
+  flit2.gateway.middleware -> flit2.gateway.rutas 'Entrega al proxy'
+  flit2.gateway.configuracion -> flit2.gateway.rutas 'Ajusta'
+  flit2.gateway.rutas -> flit2.gateway.transformaciones 'Aplica'
+}
+
+views {
+  view flit2_gateway_componentes of flit2.gateway {
+    title 'Gateway: componentes'
+    include flit2.gateway.*
+  }
+}

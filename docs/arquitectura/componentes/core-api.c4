@@ -1,0 +1,166 @@
+// Componentes de core-api (nivel 3). Cada uno apunta a sus proyectos en services/core-api/src.
+model {
+  extend flit2.core_api {
+    api_host = component 'Host de la API' {
+      technology 'Minimal API'
+      description 'Endpoints y composición del servicio'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Api'
+      }
+    }
+    tramites = component 'Trámites' {
+      #pii
+      description 'Ciclo de vida del trámite'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Tramites.Application'
+      }
+    }
+    admin = component 'Administración' {
+      description 'Parametrización, empresas e IA'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Admin.Application'
+      }
+    }
+    security = component 'Seguridad' {
+      description 'Roles y permisos'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Modules.Security.Application'
+      }
+    }
+    identidad = component 'Identidad' {
+      #suite
+      description 'Login y OIDC mientras la bandera de identidad esté apagada'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Identity.Infrastructure'
+      }
+    }
+    platform = component 'Plataforma' {
+      #suite
+      description 'Productos, manifiesto y emisores'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Modules.Platform'
+      }
+    }
+    consultas_mod = component 'Consultas' {
+      description 'Cliente de las fuentes externas y de core-consultas'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Modules.Consultas'
+      }
+    }
+    notificaciones_mod = component 'Notificaciones' {
+      description 'Publicación hacia core-notificaciones'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Modules.Notificaciones'
+      }
+    }
+    quipux_mod = component 'Quipux' {
+      description 'Bandeja de organismos de tránsito'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Modules.Quipux.Application'
+      }
+    }
+    improntas = component 'Improntas' {
+      description 'Dominio de improntas'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Modules.Improntas.Domain'
+      }
+    }
+    drflit = component 'Dr. FLIT' {
+      #ia
+      description 'Asistente y escalamiento de soporte'
+      metadata {
+        repo_path 'services/core-api/src/Flit.DrFlit.Application'
+        adr 'ADR-0060'
+      }
+    }
+    ia_router = component 'Router de IA' {
+      #ia
+      description 'Multiproveedor por herramienta'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Infrastructure/Ai'
+        adr 'ADR-0070'
+      }
+    }
+    ocr = component 'OCR' {
+      #ia
+      description 'Análisis de documentos del trámite'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Tramites.Application/Ocr'
+      }
+    }
+    analytics = component 'Analítica' {
+      description 'Reportes 2.0'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Analytics.Application'
+      }
+    }
+    external_api = component 'API externa' {
+      #externo_publico
+      description 'Feed de sincronización, autenticación de clientes y adjuntos'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Api/Endpoints'
+        openapi 'contracts/openapi/external-api.v1.json'
+        adr 'ADR-0067, ADR-0068, ADR-0071'
+      }
+    }
+    avisos_flito = component 'Avisos a FLITO' {
+      description 'Encola el webhook tramite.cambio'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Infrastructure/FlitoSignals'
+        adr 'ADR-0071'
+      }
+    }
+    persona_natural = component 'Persona Natural' {
+      description 'Consume radicaciones y expone la fachada gRPC'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Api/PersonaNatural'
+        adr 'ADR-0075'
+      }
+    }
+    sdk = component 'SDK de plataforma' {
+      description 'Bus, outbox y gRPC para los servicios de la suite'
+      metadata {
+        repo_path 'services/core-api/src/Flit.Platform.Sdk'
+      }
+    }
+  }
+
+  flit2.core_api.api_host -> flit2.core_api.tramites 'Casos de uso de trámites'
+  flit2.core_api.api_host -> flit2.core_api.admin 'Administración'
+  flit2.core_api.api_host -> flit2.core_api.security 'Autoriza'
+  flit2.core_api.api_host -> flit2.core_api.identidad 'Login y OIDC'
+  flit2.core_api.api_host -> flit2.core_api.platform 'Productos'
+  flit2.core_api.api_host -> flit2.core_api.analytics 'Reportes'
+  flit2.core_api.api_host -> flit2.core_api.drflit 'Asistente'
+  flit2.core_api.api_host -> flit2.core_api.external_api 'Expone /api/v1/external'
+  flit2.core_api.api_host -> flit2.core_api.persona_natural 'Fachada gRPC'
+  flit2.core_api.tramites -> flit2.core_api.ocr 'Analiza documentos'
+  flit2.core_api.tramites -> flit2.core_api.consultas_mod 'Consulta fuentes'
+  flit2.core_api.tramites -> flit2.core_api.notificaciones_mod 'Notifica'
+  flit2.core_api.tramites -> flit2.core_api.quipux_mod 'Bandeja de organismos'
+  flit2.core_api.tramites -> flit2.core_api.improntas 'Improntas'
+  flit2.core_api.tramites -> flit2.core_api.avisos_flito 'Marca cambios para FLITO'
+  flit2.core_api.external_api -> flit2.core_api.tramites 'Lee el feed y recibe adjuntos'
+  flit2.core_api.persona_natural -> flit2.core_api.tramites 'Crea el trámite radicado'
+  flit2.core_api.ocr -> flit2.core_api.ia_router 'Pide al modelo'
+  flit2.core_api.drflit -> flit2.core_api.ia_router 'Pide al modelo [por verificar]'
+  flit2.core_api.ia_router -> llm 'Anthropic y compatibles con OpenAI' {
+    #ia
+  }
+  flit2.core_api.drflit -> ado 'Casos de soporte'
+  flit2.core_api.quipux_mod -> quipux 'Bandeja de organismos'
+  flit2.core_api.consultas_mod -[grpc]-> flit2.core_consultas 'ConsultasService'
+  flit2.core_api.notificaciones_mod -[grpc]-> flit2.core_notificaciones 'NotificacionesService'
+  flit2.core_api.avisos_flito -[async]-> flit2.bus 'notificaciones.webhook.send'
+  flit2.core_api.tramites -[async]-> flit2.bus 'tramites.*'
+  flit2.core_api.tramites -> flit2.db 'EF Core'
+}
+
+views {
+  // V06
+  view flit2_core_api_componentes of flit2.core_api {
+    title 'core-api: componentes'
+    description 'Grupos funcionales de core-api y sus salidas.'
+    include *
+  }
+}
