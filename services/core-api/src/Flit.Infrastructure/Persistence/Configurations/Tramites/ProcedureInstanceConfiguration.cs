@@ -233,6 +233,16 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("parent_tenant_id_at_creation")
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
+        // HU #14317 — canal del trámite y OT del canal (172-HU14317). Van en el INSERT y nunca en un UPDATE
+        // (mismo criterio que el snapshot del padre). CHECK, FK e índice viven en el DDL crudo.
+        builder.Property(x => x.Channel)
+            .HasColumnName("channel")
+            .HasMaxLength(20)
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+        builder.Property(x => x.ChannelTransitOfficeId)
+            .HasColumnName("channel_transit_office_id")
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+
         // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite
         // (boolean NOT NULL DEFAULT true; las filas previas quedan true). Va en el INSERT y nunca en
         // un UPDATE: la política de la compañía cambia, el trámite en curso no.

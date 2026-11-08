@@ -1,13 +1,27 @@
 'use client';
 
 import { formatFechaHora } from '@/lib/format/date';
-import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import { canalLabel } from '@/lib/tramites/tramites-row-labels';
+import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
 import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
 /**
  * Columna vehículo 4/12 — card con imagen placeholder (spec flit-detalle-tramite).
  */
-export function DetalleVehiculoSidebar({ item }: { item: InstanceSummary }) {
+/**
+ * HU #14322 — `canal` es el detalle ya cargado del trámite. `null` (aún cargando o con error) pinta
+ * «—»: no se asume «Trámites» hasta saber que el backend no trae el dato.
+ */
+export function DetalleVehiculoSidebar({
+  item,
+  canal = null,
+}: {
+  item: InstanceSummary;
+  canal?: Pick<
+    ProcedureInstanceDetail,
+    'channel' | 'channelTransitOfficeName'
+  > | null;
+}) {
   const modelo = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
 
   return (
@@ -32,6 +46,15 @@ export function DetalleVehiculoSidebar({ item }: { item: InstanceSummary }) {
       >
         <p>Creado: {formatFechaHora(item.createdAt)}</p>
         <p>Actualizado: {item.updatedAt ? formatFechaHora(item.updatedAt) : '—'}</p>
+        {/* HU #14322 — solo lectura: texto, sin control para cambiarlo (ningún rol lo edita). */}
+        <p data-testid="detalle-canal">
+          Canal: <span className="font-semibold">{canal ? canalLabel(canal.channel) : '—'}</span>
+        </p>
+        {canal?.channel === 'pn_punto' && canal.channelTransitOfficeName ? (
+          <p data-testid="detalle-canal-ot">
+            OT del punto: <span className="font-semibold">{canal.channelTransitOfficeName}</span>
+          </p>
+        ) : null}
       </div>
     </aside>
   );

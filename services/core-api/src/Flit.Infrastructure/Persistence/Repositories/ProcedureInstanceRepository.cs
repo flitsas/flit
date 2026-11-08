@@ -472,6 +472,22 @@ internal sealed partial class ProcedureInstanceRepository(
         return rows.ToDictionary(r => r.Id, r => r.LegalName);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetTransitOfficeNamesAsync(
+        IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct)
+    {
+        if (transitOfficeIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = transitOfficeIds.Distinct().ToList();
+        var rows = await db.TransitOffices
+            .AsNoTracking()
+            .Where(o => distinct.Contains(o.Id))
+            .Select(o => new { o.Id, o.Name })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.Id, r => r.Name);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken ct)
     {
@@ -1888,8 +1904,17 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.SignatureImagePath, signature)
                 .SetProperty(x => x.SignatureImageSha256, signatureSha)
                 .SetProperty(x => x.Status, status)
+                // HU #14305 — el enlace se consumió: se borra el token cifrado (RegistrarCapturaManual lo dejó en null).
+                .SetProperty(x => x.ManualCaptureTokenEncrypted, validation.ManualCaptureTokenEncrypted)
                 // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
                 .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
+                // HU #14310 — resultado de la validación de fotos; sobrescribe el de la captura anterior.
+                .SetProperty(x => x.FaceCheckStatus, validation.FaceCheckStatus)
+                .SetProperty(x => x.FaceCheckReason, validation.FaceCheckReason)
+                .SetProperty(x => x.IdFrontCheckStatus, validation.IdFrontCheckStatus)
+                .SetProperty(x => x.IdFrontCheckReason, validation.IdFrontCheckReason)
+                .SetProperty(x => x.IdBackCheckStatus, validation.IdBackCheckStatus)
+                .SetProperty(x => x.IdBackCheckReason, validation.IdBackCheckReason)
                 .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
                 .SetProperty(x => x.ReviewedAt, validation.ReviewedAt)
                 .SetProperty(x => x.UpdatedAt, updatedAt), ct);

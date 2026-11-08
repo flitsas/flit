@@ -31,6 +31,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
           AND (@personName::text IS NULL OR v.person_full_name ILIKE '%' || @personName::text || '%')
           AND (@hasTransformation::boolean IS NULL OR v.has_transformation = @hasTransformation::boolean)
           AND (@isLeasing::boolean IS NULL OR v.is_leasing = @isLeasing::boolean)
+          AND (@channel::text IS NULL OR v.channel = @channel::text)
+          AND (@channelOffice::uuid IS NULL OR v.channel_transit_office_id = @channelOffice::uuid)
           AND {FamilyByDetailView}
         """ + "\n";
 
@@ -51,7 +53,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
                 SELECT v.id, v.reference_number, v.procedure_type_name, v.category, v.status,
                        v.created_by_display_name, v.submitted_at, v.completed_at,
                        v.person_document, v.person_full_name, v.has_transformation,
-                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type
+                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type,
+                       v.channel, v.channel_transit_office_id, v.channel_transit_office_name
                 """ + BaseFrom + """
                 ORDER BY v.created_at DESC, v.id DESC
                 LIMIT @pageSize OFFSET @offset;
@@ -77,7 +80,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
                 SELECT v.id, v.reference_number, v.procedure_type_name, v.category, v.status,
                        v.created_by_display_name, v.submitted_at, v.completed_at,
                        v.person_document, v.person_full_name, v.has_transformation,
-                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type
+                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type,
+                       v.channel, v.channel_transit_office_id, v.channel_transit_office_name
                 """ + BaseFrom + """
                 ORDER BY v.created_at DESC, v.id DESC;
                 """);
@@ -165,7 +169,10 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
             reader.GetString(13),
             // `transfer_type` es NULL fuera de la familia TRASPASO (DDL 90): ahí la pregunta no
             // aplica, y una celda vacía lo dice mejor que inventarle una clase de traspaso.
-            reader.IsDBNull(14) ? null : reader.GetString(14));
+            reader.IsDBNull(14) ? null : reader.GetString(14),
+            reader.GetString(15),
+            reader.IsDBNull(16) ? null : reader.GetGuid(16),
+            reader.IsDBNull(17) ? null : reader.GetString(17));
 
     private static void BindFilter(DbCommand cmd, DetailedReportFilter filter)
     {
@@ -181,6 +188,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
         AddParam(cmd, "personName", (object?)filter.PersonName ?? DBNull.Value);
         AddParam(cmd, "hasTransformation", filter.HasTransformation.HasValue ? filter.HasTransformation.Value : DBNull.Value);
         AddParam(cmd, "isLeasing", filter.IsLeasing.HasValue ? filter.IsLeasing.Value : DBNull.Value);
+        AddParam(cmd, "channel", (object?)filter.Channel ?? DBNull.Value);
+        AddParam(cmd, "channelOffice", (object?)filter.ChannelTransitOfficeId ?? DBNull.Value);
         AnalyticsFamilyFilter.AddParam(cmd, filter.AllowedFamilies);
     }
 

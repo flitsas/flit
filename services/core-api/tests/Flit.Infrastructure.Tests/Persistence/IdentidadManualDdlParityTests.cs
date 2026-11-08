@@ -88,6 +88,41 @@ public sealed class IdentidadManualDdlParityTests
     }
 
     [Fact]
+    public void HU14310_ElDdl171YElModeloEfAlineanLasColumnasDeValidacionDeFotos()
+    {
+        const string resource = "Flit.Infrastructure.Persistence.Sql.Ddl.171-HU14310-validacion-fotos-captura-manual.sql";
+        using var stream = typeof(FlitDbContext).Assembly.GetManifestResourceStream(resource);
+        stream.Should().NotBeNull($"el DDL embebido {resource} debe existir");
+        var ddl = new StreamReader(stream!, Encoding.UTF8).ReadToEnd();
+
+        foreach (var estado in new[] { ManualPhotoCheckStates.Verificada, ManualPhotoCheckStates.NoVerificada })
+            ddl.Should().Contain($"'{estado}'");
+        foreach (var motivo in ManualPhotoCheckReasons.Todos)
+            ddl.Should().Contain($"'{motivo}'");
+
+        using var db = new FlitDbContext(
+            new DbContextOptionsBuilder<FlitDbContext>().UseInMemoryDatabase(nameof(HU14310_ElDdl171YElModeloEfAlineanLasColumnasDeValidacionDeFotos)).Options);
+        var entity = db.Model.FindEntityType(typeof(ProcedureInstanceBiometricValidation))!;
+        var columnas = new Dictionary<string, string>
+        {
+            [nameof(ProcedureInstanceBiometricValidation.FaceCheckStatus)] = "face_check_status",
+            [nameof(ProcedureInstanceBiometricValidation.FaceCheckReason)] = "face_check_reason",
+            [nameof(ProcedureInstanceBiometricValidation.IdFrontCheckStatus)] = "id_front_check_status",
+            [nameof(ProcedureInstanceBiometricValidation.IdFrontCheckReason)] = "id_front_check_reason",
+            [nameof(ProcedureInstanceBiometricValidation.IdBackCheckStatus)] = "id_back_check_status",
+            [nameof(ProcedureInstanceBiometricValidation.IdBackCheckReason)] = "id_back_check_reason",
+        };
+        foreach (var (propiedad, columna) in columnas)
+        {
+            ddl.Should().Contain($"ADD COLUMN IF NOT EXISTS {columna} ");
+            var p = entity.FindProperty(propiedad);
+            p.Should().NotBeNull(propiedad);
+            p!.GetColumnName().Should().Be(columna);
+            p!.IsNullable.Should().BeTrue($"{columna} es NULL (capturas anteriores)");
+        }
+    }
+
+    [Fact]
     public void LasAlertasDeAtascadosDeKyverumNoContanLosEstadosManuales()
     {
         var tipo = typeof(FlitDbContext).Assembly

@@ -369,6 +369,13 @@ export interface InstanceSummary {
 export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
 
 /**
+ * Épica #14296 — canal por el que entró el trámite (código del contrato). Distinto de `fuente`: la
+ * fuente es la columna del listado de trámites; el canal es el eje de Reportes Detallados y del
+ * detalle.
+ */
+export type TramiteCanal = 'tramites' | 'pn_web' | 'pn_punto' | 'integracion' | 'aplicacion';
+
+/**
  * Cómo queda acreditada una parte en el listado. Son los ÚNICOS tres estados válidos:
  * - `pendiente`: la validación de identidad no se ha realizado (y no hay firma del baúl).
  * - `firmado`: identidad validada y aprobada, o firma del baúl vigente.
@@ -540,6 +547,14 @@ export interface Actor {
 export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
+  /**
+   * HU #14322 (Épica #14296) — canal de entrada. Ausente en un backend anterior al campo o en un
+   * trámite histórico: la pantalla lo muestra como «Trámites».
+   */
+  channel?: TramiteCanal | null;
+  /** Solo con canal `pn_punto`: el OT del punto. */
+  channelTransitOfficeId?: string | null;
+  channelTransitOfficeName?: string | null;
   status: InstanceStatus;
   /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
   rejectedFrom?: RejectedFrom | null;
@@ -1672,6 +1687,11 @@ export interface BiometricValidation {
    * Nunca trae el nombre del revisor.
    */
   approvalOrigin?: 'automatica' | 'manual' | null;
+  /**
+   * HU #14303 — true solo si la validación es manual, está aprobada y su carta ya se generó. Ausente/false en
+   * manual aprobada = «certificado en preparación». No aplica a Kyverum (su certificado no cambia).
+   */
+  cartaDisponible?: boolean;
 }
 
 /**
@@ -1711,6 +1731,12 @@ export interface RegenerarEnlaceManualResult {
   expiresAt: string;
   activatedAt: string;
   emailEnviado: boolean;
+}
+
+/** Respuesta de POST .../biometric-validations/{id}/manual-link/copy (HU #14306). El `url` NO se guarda en ningún estado persistente. */
+export interface CopiarEnlaceManualResult {
+  url: string;
+  expiresAt: string;
 }
 
 /**

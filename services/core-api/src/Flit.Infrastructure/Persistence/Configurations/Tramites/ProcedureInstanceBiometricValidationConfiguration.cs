@@ -40,6 +40,8 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
             .IsRequired().HasDefaultValue("");
         builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(40).IsRequired().HasDefaultValue("enviado");
         builder.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+        // HU #14305 — token de la captura manual cifrado (Data Protection); nulo salvo mientras espera la captura (DDL 170).
+        builder.Property(x => x.ManualCaptureTokenEncrypted).HasColumnName("manual_capture_token_encrypted").HasMaxLength(2000);
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
         builder.Property(x => x.Attempts).HasColumnName("attempts").IsRequired().HasDefaultValue(0);
         builder.Property(x => x.MaxAttempts).HasColumnName("max_attempts").IsRequired().HasDefaultValue(5);
@@ -73,6 +75,22 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.ReviewedBy).HasColumnName("reviewed_by");
         builder.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
         builder.Property(x => x.RejectionReasonCode).HasColumnName("rejection_reason_code");
+        // HU #14310 (DDL 171) — resultado de la validación de cada foto en el dispositivo; NULL en capturas anteriores.
+        builder.Property(x => x.FaceCheckStatus).HasColumnName("face_check_status").HasMaxLength(20);
+        builder.Property(x => x.FaceCheckReason).HasColumnName("face_check_reason").HasMaxLength(30);
+        builder.Property(x => x.IdFrontCheckStatus).HasColumnName("id_front_check_status").HasMaxLength(20);
+        builder.Property(x => x.IdFrontCheckReason).HasColumnName("id_front_check_reason").HasMaxLength(30);
+        builder.Property(x => x.IdBackCheckStatus).HasColumnName("id_back_check_status").HasMaxLength(20);
+        builder.Property(x => x.IdBackCheckReason).HasColumnName("id_back_check_reason").HasMaxLength(30);
+        builder.Ignore(x => x.PhotoChecks);
+
+        // HU #14301 — carta de identidad que FLIT emite al aprobar una validación manual (DDL 169). Propias de FLIT: no usan
+        // certificate_hash (la serie de Kyverum que lee el sello del FUR).
+        builder.Property(x => x.CartaSerie).HasColumnName("letter_series").HasMaxLength(60);
+        builder.Property(x => x.CartaSha256).HasColumnName("letter_sha256").HasMaxLength(64);
+        builder.Property(x => x.CartaPdfSha256).HasColumnName("letter_pdf_sha256").HasMaxLength(64);
+        builder.Property(x => x.CartaPath).HasColumnName("letter_path");
+        builder.Property(x => x.CartaGeneratedAt).HasColumnName("letter_generated_at");
         builder.HasIndex(x => new { x.TenantId, x.Status, x.ManualActivatedAt })
             .HasDatabaseName("ix_biometric_validations_manual_tab")
             .HasFilter("provider = 'manual'");

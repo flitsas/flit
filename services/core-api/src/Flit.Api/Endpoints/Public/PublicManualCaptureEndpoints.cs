@@ -87,7 +87,9 @@ internal static class PublicManualCaptureEndpoints
                 Upload(files["anverso"], anverso),
                 Upload(files["reverso"], reverso),
                 Upload(files["firma"], firma),
-                string.IsNullOrWhiteSpace(ua) ? null : ua);
+                string.IsNullOrWhiteSpace(ua) ? null : ua,
+                // HU #14310 — campo de formulario opcional; se sanea en el caso de uso (lista cerrada, nunca rechaza).
+                ReadValidacionFotos(http));
 
             var (result, error) = await handler.HandleAsync(command, ct);
             return error is null ? Results.Ok(result) : Error(error);
@@ -108,6 +110,10 @@ internal static class PublicManualCaptureEndpoints
 
         return app;
     }
+
+    /// <summary>Campo <c>validacionFotos</c> del formulario ya parseado por el binding de <c>IFormFileCollection</c>; nunca lanza.</summary>
+    private static string? ReadValidacionFotos(HttpContext http) =>
+        http.Request.HasFormContentType && http.Request.Form.TryGetValue("validacionFotos", out var v) ? v.ToString() : null;
 
     private static ManualCaptureUpload? Upload(IFormFile? file, Stream? stream) =>
         file is null || stream is null ? null : new ManualCaptureUpload(stream, file.Length);

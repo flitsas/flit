@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.Domains;
+using Flit.Admin.Application.Companies.Domains.Activation;
 using Flit.Admin.Application.Companies.Domains.GetDomain;
 using Flit.Admin.Application.Companies.Domains.RegisterDomain;
 using Flit.Admin.Application.Companies.Domains.RemoveDomain;
 using Flit.Admin.Application.Companies.Domains.Verification;
 using Flit.Admin.Domain.Companies.Domains;
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -61,7 +63,164 @@ public static class AdminCompaniesDomainEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status429TooManyRequests);
 
+        // Los dominios de toda la red: el HUB, uno por producto habilitado, y la activación.
+        var network = app
+            .MapGroup("/api/v1/admin/companies/{tenantId:guid}/domains")
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .WithTags("Admin · Dominio de la red");
+
+        network.MapGet("", ListNetworkDomainsAsync)
+            .WithName("AdminNetworkDomainsList")
+            .WithSummary("Dominios de la red y lo que falta para activarla")
+            .Produces<NetworkDomainsResponse>(StatusCodes.Status200OK);
+
+        network.MapPost("/activate", ActivateNetworkAsync)
+            .WithName("AdminNetworkDomainsActivate")
+            .WithSummary("Activa los dominios de la red; sus usuarios dejan de entrar por el hub de FLIT")
+            .Produces<NetworkDomainsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status409Conflict);
+
+        network.MapGet("/{purpose}", GetProductDomainAsync)
+            .WithName("AdminProductDomainGet")
+            .WithSummary("Obtiene el dominio de un producto de la red")
+            .Produces<TenantDomainResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound);
+
+        network.MapPut("/{purpose}", RegisterProductDomainAsync)
+            .WithName("AdminProductDomainRegister")
+            .WithSummary("Registra o cambia el dominio de un producto de la red")
+            .Produces<TenantDomainResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status409Conflict);
+
+        network.MapDelete("/{purpose}", RemoveProductDomainAsync)
+            .WithName("AdminProductDomainRemove")
+            .WithSummary("Retira el dominio de un producto de la red")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound);
+
+        network.MapPost("/{purpose}/verify", VerifyProductDomainAsync)
+            .WithName("AdminProductDomainVerify")
+            .WithSummary("Comprueba a demanda el registro TXT del dominio de un producto")
+            .Produces<TenantDomainResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status429TooManyRequests);
+
         return app;
+    }
+
+    private static IResult PurposeInvalid(string purpose) => Results.Json(
+        new { error = DomainErrors.PurposeInvalid, message = $"\"{purpose}\" no es un producto con dominio propio." },
+        statusCode: StatusCodes.Status400BadRequest);
+
+    internal static async Task<IResult> ListNetworkDomainsAsync(
+        Guid tenantId,
+        [FromServices] ITenantDomainRepository repository,
+        [FromServices] ITenantProductFlags productFlags,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        var flags = await productFlags.GetAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var domains = await repository.ListByTenantIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(ToNetworkResponse(domains, NetworkActivationStatus.From(domains, flags), options.EdgeIp));
+    }
+
+    internal static async Task<IResult> ActivateNetworkAsync(
+        Guid tenantId,
+        HttpContext httpContext,
+        [FromServices] ActivateNetworkHandler handler,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(tenantId, ResolveUserId(httpContext.User), cancellationToken).ConfigureAwait(false);
+        return result.Outcome == ActivateNetworkOutcome.NotReady
+            ? Results.Json(
+                new { error = DomainErrors.NotReady, message = "Falta un dominio, su comprobación o su certificado.", pending = result.Status.Pending },
+                statusCode: StatusCodes.Status409Conflict)
+            : Results.Ok(ToNetworkResponse(result.Domains, result.Status, options.EdgeIp));
+    }
+
+    private static NetworkDomainsResponse ToNetworkResponse(IReadOnlyList<TenantDomain> domains, NetworkActivationStatus status, string edgeIp) => new(
+        domains.Select(d => TenantDomainResponse.From(d, edgeIp)).ToArray(),
+        status.Products,
+        new NetworkActivationResponse(status.Ready, status.Active, status.Pending));
+
+    internal static async Task<IResult> GetProductDomainAsync(
+        Guid tenantId,
+        string purpose,
+        [FromServices] GetDomainHandler handler,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (!TenantDomainPurposes.IsProduct(purpose)) return PurposeInvalid(purpose);
+
+        var domain = await handler.HandleAsync(tenantId, purpose, cancellationToken).ConfigureAwait(false);
+        return domain is null
+            ? NotFoundResponse(tenantId)
+            : Results.Ok(TenantDomainResponse.From(domain, options.EdgeIp));
+    }
+
+    internal static async Task<IResult> RegisterProductDomainAsync(
+        Guid tenantId,
+        string purpose,
+        RegisterDomainRequestBody? body,
+        HttpContext httpContext,
+        [FromServices] RegisterDomainHandler handler,
+        [FromServices] ITenantProductFlags productFlags,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (!TenantDomainPurposes.IsProduct(purpose)) return PurposeInvalid(purpose);
+
+        var flags = await productFlags.GetAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        if (!NetworkActivationStatus.EnabledProducts(flags).Contains(purpose))
+        {
+            return Results.Json(
+                new { error = DomainErrors.ProductNotEnabled, message = $"La empresa no tiene habilitado {purpose}." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var result = await handler.HandleAsync(new RegisterDomainCommand
+        {
+            TenantId = tenantId,
+            Purpose = purpose,
+            Host = body?.Host,
+            RowVersion = body?.RowVersion,
+            ChangedBy = ResolveUserId(httpContext.User),
+        }, cancellationToken).ConfigureAwait(false);
+        return ToResult(result, tenantId, options.EdgeIp);
+    }
+
+    internal static async Task<IResult> RemoveProductDomainAsync(
+        Guid tenantId,
+        string purpose,
+        HttpContext httpContext,
+        [FromServices] RemoveDomainHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (!TenantDomainPurposes.IsProduct(purpose)) return PurposeInvalid(purpose);
+
+        var result = await handler.HandleAsync(
+            new RemoveDomainCommand { TenantId = tenantId, Purpose = purpose, ChangedBy = ResolveUserId(httpContext.User) },
+            cancellationToken).ConfigureAwait(false);
+        return result.Outcome == RemoveDomainOutcome.Retired ? Results.NoContent() : NotFoundResponse(tenantId);
+    }
+
+    internal static async Task<IResult> VerifyProductDomainAsync(
+        Guid tenantId,
+        string purpose,
+        HttpContext httpContext,
+        [FromServices] VerifyDomainHandler handler,
+        [FromServices] DomainOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (!TenantDomainPurposes.IsProduct(purpose)) return PurposeInvalid(purpose);
+
+        var result = await handler.HandleAsync(tenantId, ResolveUserId(httpContext.User), purpose, cancellationToken).ConfigureAwait(false);
+        return ToVerifyResult(result, tenantId, options.EdgeIp);
     }
 
     private static async Task<IResult> VerifyDomainAsync(
@@ -72,16 +231,16 @@ public static class AdminCompaniesDomainEndpoints
         CancellationToken cancellationToken)
     {
         var result = await handler.HandleAsync(tenantId, ResolveUserId(httpContext.User), cancellationToken).ConfigureAwait(false);
-        return ToVerifyResult(result, tenantId, options.EdgeTarget);
+        return ToVerifyResult(result, tenantId, options.EdgeIp);
     }
 
-    internal static IResult ToVerifyResult(VerifyDomainResult result, Guid tenantId, string edgeTarget) => result.Outcome switch
+    internal static IResult ToVerifyResult(VerifyDomainResult result, Guid tenantId, string edgeIp) => result.Outcome switch
     {
         VerifyDomainOutcome.NotFound => NotFoundResponse(tenantId),
         VerifyDomainOutcome.Cooldown => Results.Json(
             new { error = DomainErrors.VerificationCooldown, message = "La comprobación se pidió hace muy poco. Intenta de nuevo más tarde.", retryAfterSeconds = result.RetryAfterSeconds },
             statusCode: StatusCodes.Status429TooManyRequests),
-        _ => Results.Ok(TenantDomainResponse.From(result.Domain!, edgeTarget)),
+        _ => Results.Ok(TenantDomainResponse.From(result.Domain!, edgeIp)),
     };
 
     internal static async Task<IResult> GetDomainAsync(
@@ -93,7 +252,7 @@ public static class AdminCompaniesDomainEndpoints
         var domain = await handler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
         return domain is null
             ? NotFoundResponse(tenantId)
-            : Results.Ok(TenantDomainResponse.From(domain, options.EdgeTarget));
+            : Results.Ok(TenantDomainResponse.From(domain, options.EdgeIp));
     }
 
     private static async Task<IResult> RegisterDomainAsync(
@@ -113,7 +272,7 @@ public static class AdminCompaniesDomainEndpoints
         };
 
         var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
-        return ToResult(result, tenantId, options.EdgeTarget);
+        return ToResult(result, tenantId, options.EdgeIp);
     }
 
     private static async Task<IResult> RemoveDomainAsync(
@@ -130,9 +289,9 @@ public static class AdminCompaniesDomainEndpoints
             : NotFoundResponse(tenantId);
     }
 
-    internal static IResult ToResult(RegisterDomainResult result, Guid tenantId, string edgeTarget) => result.Outcome switch
+    internal static IResult ToResult(RegisterDomainResult result, Guid tenantId, string edgeIp) => result.Outcome switch
     {
-        RegisterDomainOutcome.Registered => Results.Ok(TenantDomainResponse.From(result.Domain!, edgeTarget)),
+        RegisterDomainOutcome.Registered => Results.Ok(TenantDomainResponse.From(result.Domain!, edgeIp)),
         RegisterDomainOutcome.Conflict => Results.Json(
             new { error = DomainErrors.ConcurrencyConflict, message = "El dominio fue modificado por otra persona. Recarga e intenta de nuevo." },
             statusCode: StatusCodes.Status409Conflict),

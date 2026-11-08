@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.0"
+  version: "1.1.0"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -2189,11 +2189,12 @@ paths:
         Lo consulta @flit/auth desde el servidor de cada app antes del authorize: en un dominio de red el
         emisor OIDC es el hub de esa red (su dominio con purpose HUB). Igual que /public/branding, el
         dominio sale solo del sello X-Flit-Domain y la forma es siempre la misma; hubUrl es null en el
-        dominio de FLIT, en un host desconocido o en una red sin dominio HUB activo.
+        dominio de FLIT, en un host desconocido o en una red sin dominio HUB activo. tramitesUrl es el dominio
+        de Trámites de la red (el hub enlaza allí su administración), o null si la red no tiene uno activo.
       security: []
       responses:
         "200":
-          description: URL del hub de la red, o null.
+          description: URLs del hub y de Trámites de la red, o null.
           headers:
             Cache-Control: { schema: { type: string, example: "public, max-age=60" } }
             Vary: { schema: { type: string, example: "X-Flit-Domain" } }
@@ -2201,9 +2202,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [hubUrl]
+                required: [hubUrl, tramitesUrl]
                 properties:
                   hubUrl: { type: string, format: uri, nullable: true, example: "https://marcablanca.cliente.com" }
+                  tramitesUrl: { type: string, format: uri, nullable: true, example: "https://tramites.marcablanca.cliente.com" }
         "429":
           description: Límite de tasa por IP excedido (policy public-branding). Sin cuerpo informativo.
 
@@ -2447,6 +2449,180 @@ paths:
                     items: { type: string }
                 required: [hosts]
         "401": { description: Clave interna ausente o incorrecta. }
+
+  /api/v1/admin/companies/{tenantId}/domains:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (cabeza de grupo MARCA_BLANCA).
+    get:
+      tags: [Admin · Dominio de la red]
+      operationId: adminNetworkDomainsList
+      summary: Dominios de la red y lo que falta para activarla.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dominios vigentes, productos habilitados y estado de activación.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkDomainsResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+
+  /api/v1/admin/companies/{tenantId}/domains/activate:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (cabeza de grupo MARCA_BLANCA).
+    post:
+      tags: [Admin · Dominio de la red]
+      operationId: adminNetworkDomainsActivate
+      summary: Activa los dominios de la red.
+      description: >
+        Exige el dominio HUB y uno por producto habilitado, comprobados y con certificado. Desde aquí, los usuarios de
+        la red dejan de iniciar sesión por el hub de FLIT. Repetirlo con la red activa no cambia nada.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Red activa.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NetworkDomainsResponse" }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "409": { description: "DOMAIN_NOT_READY: falta un dominio, su comprobación o su certificado (campo pending)." }
+
+  /api/v1/admin/companies/{tenantId}/domains/{purpose}:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (cabeza de grupo MARCA_BLANCA).
+      - name: purpose
+        in: path
+        required: true
+        schema: { type: string, enum: [tramites, comparendos, diagnostico] }
+    get:
+      tags: [Admin · Dominio de la red]
+      operationId: adminProductDomainGet
+      summary: Obtiene el dominio de un producto de la red.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dominio vigente del producto.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "400": { description: "DOMAIN_PURPOSE_INVALID." }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "404": { description: El producto no tiene un dominio registrado. }
+    put:
+      tags: [Admin · Dominio de la red]
+      operationId: adminProductDomainRegister
+      summary: Registra o cambia el dominio de un producto de la red.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterDomainRequest" }
+      responses:
+        "200":
+          description: Dominio registrado, en pending.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "400": { description: "DOMAIN_PURPOSE_INVALID, DOMAIN_HOST_INVALID o DOMAIN_HOST_RESERVED." }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "409": { description: "DOMAIN_PRODUCT_NOT_ENABLED, DOMAIN_HOST_ALREADY_REGISTERED o CONCURRENCY_CONFLICT." }
+    delete:
+      tags: [Admin · Dominio de la red]
+      operationId: adminProductDomainRemove
+      summary: Retira el dominio de un producto de la red.
+      security:
+        - bearerAuth: []
+      responses:
+        "204": { description: Retirado. }
+        "400": { description: "DOMAIN_PURPOSE_INVALID." }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "404": { description: El producto no tiene un dominio registrado. }
+
+  /api/v1/admin/companies/{tenantId}/domains/{purpose}/verify:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (cabeza de grupo MARCA_BLANCA).
+      - name: purpose
+        in: path
+        required: true
+        schema: { type: string, enum: [tramites, comparendos, diagnostico] }
+    post:
+      tags: [Admin · Dominio de la red]
+      operationId: adminProductDomainVerify
+      summary: Comprueba a demanda el registro TXT del dominio de un producto.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Resultado de la comprobación.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantDomainResponse" }
+        "400": { description: "DOMAIN_PURPOSE_INVALID." }
+        "401": { description: No autenticado. }
+        "403": { description: Autenticado pero sin rol SuperAdmin. }
+        "404": { description: El producto no tiene un dominio registrado. }
+        "429": { description: Se pidió la comprobación antes de que venciera el enfriamiento. }
+
+  /api/v1/internal/domains/provisioning:
+    get:
+      tags: [Internal]
+      operationId: internalProvisioningDomains
+      summary: >-
+        USO INTERNO — dominios que el borde debe publicar (Ingress y certificado), con las fechas de
+        certificado que la plataforma conoce. Lo consume el sincronizador del clúster.
+      security: []
+      parameters:
+        - name: X-Internal-Key
+          in: header
+          required: true
+          schema: { type: string }
+          description: Clave compartida servicio a servicio.
+      responses:
+        "200":
+          description: Dominios comprobados, activos o con certificado ya emitido.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [domains]
+                properties:
+                  domains:
+                    type: array
+                    items:
+                      type: object
+                      required: [host, purpose, status]
+                      properties:
+                        host: { type: string }
+                        purpose: { type: string }
+                        status: { type: string }
+                        certificateIssuedAt: { type: string, format: date-time, nullable: true }
+                        certificateExpiresAt: { type: string, format: date-time, nullable: true }
+        "401": { description: Clave ausente o incorrecta. }
 
   /api/v1/internal/domains/pending-certificate:
     get:
@@ -6669,6 +6845,131 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/detailed-report/procedures:
+    get:
+      operationId: detailedReportProcedures
+      tags: [Analytics]
+      summary: Consulta paginada del reporte detallado con filtros por atributos del trámite
+      description: >
+        Feature #10813. Con una compañía (`tenantId` obligatorio para SuperAdmin; el resto usa la de su token).
+        HU #14319 — cada fila trae el canal efectivo (`channel`; sin dato se lee como `tramites`, incluido el
+        migrado de FLIT 1.0) y el organismo del canal; `channel` y `channelTransitOfficeId` filtran con el mismo
+        predicado en listado, conteo y resumen. Un canal fuera del catálogo responde 400 con el motivo.
+        HU #14320 — `allCompanies=true` (solo SuperAdmin; otro rol responde 403 sin datos) consulta TODAS las
+        compañías en la misma pantalla: `tenantId` no se envía (enviarlo es 400), cada fila agrega `tenantId` y
+        `tenantName` y la respuesta es `AllCompaniesDetailedProceduresPage`. El acceso queda auditado en la
+        auditoría de acceso consolidado (`network.reports.procedures`). Sin `allCompanies`, el comportamiento con
+        una compañía elegida no cambia (SuperAdmin sin `tenantId` sigue en 400). Sin permiso nuevo:
+        `reportes.detallados.read`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Compañía a consultar (SuperAdmin). No se envía con `allCompanies=true`.
+        - $ref: "#/components/parameters/ReportAllCompanies"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Página del reporte (`DetailedProceduresPage`; con `allCompanies=true`, `AllCompaniesDetailedProceduresPage`).
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/DetailedProceduresPage"
+                  - $ref: "#/components/schemas/AllCompaniesDetailedProceduresPage"
+        "400":
+          description: Fechas ausentes, rango inválido, canal fuera del catálogo, falta `tenantId` (SuperAdmin sin `allCompanies`) o `allCompanies` con `tenantId`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin permiso de reportes detallados, tenant ajeno, o `allCompanies=true` de un rol distinto de SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/detailed-report/procedures/export:
+    get:
+      operationId: detailedReportExportExcel
+      tags: [Analytics]
+      summary: Exporta a Excel el reporte detallado filtrado
+      description: >
+        Feature #10816. Mismos filtros que `GET /api/v1/detailed-report/procedures` (sin paginación). HU #14319 —
+        el archivo termina con las columnas «Canal» (nombre visible del catálogo) y «OT del canal». HU #14320 —
+        con `allCompanies=true` (solo SuperAdmin) exporta las mismas filas que el listado e incluye «Compañía» como
+        primera columna; sin registros deja solo la cabecera; el acceso queda auditado (`network.reports.export`).
+        Sin permiso nuevo: `reportes.detallados.export`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/ReportAllCompanies"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
+      responses:
+        "200":
+          description: Archivo `reporte_detallado_{from}_{to}.xlsx` (o `reporte_detallado_todas_las_companias_{from}_{to}.xlsx` con `allCompanies`).
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Fechas ausentes, rango inválido, canal fuera del catálogo, `allCompanies` con `tenantId` o sin registros (modo una compañía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin permiso de exportación, tenant ajeno, o `allCompanies=true` de un rol distinto de SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network/reports/procedures:
     get:
       operationId: tramitesNetworkReportsProcedures
@@ -6685,7 +6986,8 @@ paths:
         (AC3). El conjunto viaja a la base como un único parámetro de arreglo (`tenant_id = ANY(@tenants)`);
         un conjunto vacío produce un reporte sin registros, nunca uno sin filtro (AC4). Ni el listado ni la
         exportación incluyen contenido ni enlaces de documentos generados o anexos (AC6). Las rutas de
-        `/api/v1/detailed-report` no cambian ni reciben parámetros nuevos (AC7). Cada petición deja un
+        `/api/v1/detailed-report` no reciben `childTenantId` ni el alcance de red (AC7; HU #14319 agrega
+        `channel` y `channelTransitOfficeId` a ambas familias). Cada petición deja un
         registro en la auditoría de acceso consolidado (`network.reports.procedures`, HU #12361) con los
         filtros de texto libre registrados solo por nombre.
       security:
@@ -6703,6 +7005,8 @@ paths:
         - $ref: "#/components/parameters/NetworkReportPersonName"
         - $ref: "#/components/parameters/NetworkReportHasTransformation"
         - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
         - name: page
           in: query
           required: false
@@ -6714,7 +7018,7 @@ paths:
           description: Tamaño de página (por defecto 20; por encima de 100 cae al tope).
       responses:
         "200":
-          description: Página del reporte detallado de la red.
+          description: Página del reporte detallado de la red (cada fila con `channel`, `channelTransitOfficeId` y `channelTransitOfficeName`, HU #14319).
           content:
             application/json:
               schema:
@@ -6762,9 +7066,13 @@ paths:
         - $ref: "#/components/parameters/NetworkReportPersonName"
         - $ref: "#/components/parameters/NetworkReportHasTransformation"
         - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
       responses:
         "200":
-          description: Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»).
+          description: >
+            Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»); desde HU #14319 termina con las
+            columnas «Canal» (nombre visible) y «OT del canal».
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema:
@@ -7565,7 +7873,7 @@ paths:
       tags: [Tramites, Identidad]
       summary: Regenerar el enlace de captura manual (solo Super Admin) — HU #13287, Épica #13202
       description: >
-        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación que espera
+        Emite un enlace de captura NUEVO de 24 h (token guardado como hash SHA-256 y, cifrado, para poder copiarlo — HU #14305) para una validación que espera
         captura: `manual_activo`, o `rechazado` tras una revisión manual (HU #13299; sigue `rechazado`); el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
         público recibe 404; no se distingue «reemplazado» de «inválido» y el front lo cubre con «enlace inválido o
         reemplazado»). Envía el correo al titular y audita `manual_enlace_regenerado`. Si el correo no sale la
@@ -7593,6 +7901,57 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
+  /api/v1/tramites/biometric-validations/{id}/manual-link/copy:
+    post:
+      operationId: copiarEnlaceManual
+      tags: [Tramites, Identidad]
+      summary: Copiar el enlace de captura manual vigente (solo Super Admin) — HU #14305, Épica #14271
+      description: >
+        Devuelve el enlace de captura completo de una validación que espera captura (`manual_activo`, o `rechazado` tras
+        una revisión manual) y cuyo enlace sigue vigente, SIN regenerarlo: el token y el hash no cambian y no se envía
+        correo. El token se guarda cifrado (Data Protection) además del hash desde la activación, la regeneración o el
+        rechazo, y se borra al enviar la captura. La auditoría registra `manual_enlace_copiado` (quién y cuándo; sin token
+        ni URL). Solo Super Admin; el tenant sale de la fila (NO se usa X-Tenant-Id). La respuesta lleva
+        `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Enlace vigente.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, description: Enlace completo de captura (contiene el token). }
+                  expiresAt: { type: string, format: date-time }
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin.
+        "404":
+          description: Validación de identidad no encontrada (`code` = not_found).
+        "409":
+          description: >
+            `code`: `enlace_vencido` (pasó la vigencia de 24 h), `enlace_no_disponible` (captura ya enviada, enlace emitido
+            antes del cifrado, o token que no se puede descifrar; se regenera) o `flujo_manual_no_activo` (la validación no
+            espera captura).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, enum: [enlace_vencido, enlace_no_disponible, flujo_manual_no_activo] }
+                  message: { type: string }
   /api/v1/tramites/biometric-validations/{id}/vencer:
     post:
       operationId: vencerIdentidad
@@ -7945,6 +8304,15 @@ paths:
                 anverso: { type: string, format: binary, description: "Anverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
                 reverso: { type: string, format: binary, description: "Reverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
                 firma: { type: string, format: binary, description: "Firma trazada (PNG; máx. 2 MiB)." }
+                validacionFotos:
+                  type: string
+                  maxLength: 2048
+                  description: >
+                    HU #14310. Opcional. JSON con el resultado de la validación en el dispositivo de cada foto:
+                    `{"rostro":{"estado":"verificada","motivo":null},"anverso":{"estado":"no_verificada","motivo":"lado_incorrecto"},"reverso":{...}}`.
+                    `estado` ∈ verificada | no_verificada; `motivo` (solo no verificada) ∈ sin_rostro, varios_rostros, sin_documento,
+                    lado_incorrecto, sin_soporte, sin_resultado. Es INFORMATIVO (no es un control de seguridad) y nunca rechaza el envío:
+                    campo ausente, demasiado largo, JSON inválido o valor desconocido dejan esa foto «no_verificada / sin_resultado».
       responses:
         "200":
           description: Captura recibida; la validación queda pendiente de revisión.
@@ -8672,6 +9040,10 @@ paths:
         Kyverum (`GET /v1/validations/{kyverumVerificationId}/certificado`), con el mismo Bearer API key del
         create. Solo aplica a validaciones del proveedor `kyverum` con id de verificación. Keyed por
         `validationId`, sirve para cualquier parte (comprador/vendedor).
+
+        HU #14302 — para una validación **manual** aprobada (`provider=manual`) devuelve la carta de identidad en PDF que
+        emite FLIT, con las mismas reglas de pertenencia y tenant. Si la carta falta se genera en ese momento; si no se
+        puede obtener responde `503` (reintentable), nunca `502` ni `500`.
       security:
         - bearerAuth: []
       parameters:
@@ -8714,7 +9086,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: El proveedor de identidad no está disponible (transitorio).
+          description: >
+            El proveedor de identidad no está disponible (transitorio), o la carta de una validación manual aún no se
+            pudo generar/leer (HU #14302; reintentar).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/biometric-validations/{id}/certificado:
+    get:
+      operationId: descargarCartaIdentidadPorValidacion
+      tags: [Tramites, Identidad]
+      summary: Descargar la carta de identidad (PDF) de una validación manual aprobada, sin trámite
+      description: >
+        HU #14302 (Épica #14271). Sirve la carta de FLIT de una validación MANUAL aprobada por id, p. ej. una prevalidación
+        sin trámite. Si la carta falta se genera en ese momento. Super Admin: cualquier compañía (el tenant sale de la fila).
+        Demás usuarios: permiso del módulo de identidad (`validaciones.read`/`validaciones.manage` o `tramites.read`, mismo de la
+        bitácora) y solo validaciones de su propio tenant; otro tenant responde 404 para no revelar que existe.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF de la carta.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Sin sesión.
+        "403":
+          description: Sin permiso del módulo de identidad, o usuario de un organismo de tránsito.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe, es de otro tenant, no es manual o no está aprobada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: La carta aún no se pudo generar o leer; reintentar.
           content:
             application/json:
               schema:
@@ -14153,6 +14573,30 @@ components:
       in: query
       required: false
       schema: { type: boolean }
+    ReportAllCompanies:
+      name: allCompanies
+      in: query
+      required: false
+      schema: { type: boolean, default: false }
+      description: >
+        Solo SuperAdmin (HU #14320): consulta todas las compañías; otro rol responde 403 sin datos. No se envía
+        junto con `tenantId`. Cada fila agrega `tenantId` y `tenantName`. El acceso queda auditado.
+    ReportChannel:
+      name: channel
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/TramiteCanal"
+      description: >
+        Canal del trámite (HU #14319). Sin dato, todos. Una fila sin canal cuenta como `tramites`; `integracion` (ICT)
+        solo aparece al filtrar por ese canal. `aplicacion` responde vacío sin error. Un código fuera del catálogo
+        responde 400 con el motivo. Sin permiso adicional: se rige por el de reportes detallados.
+    ReportChannelTransitOfficeId:
+      name: channelTransitOfficeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Organismo del punto de atención del canal Persona Natural OT (HU #14319). Distinto de `transitOfficeId`.
     NetworkAccessAuditFrom:
       name: from
       in: query
@@ -14193,6 +14637,17 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Trámites · Canal del trámite (HU #14317, Feature #14315, Épica #14296) ────
+    TramiteCanal:
+      type: string
+      description: >-
+        Canal por el que entró el trámite. Nombres visibles: tramites = Trámites, pn_web = Persona Natural Web,
+        pn_punto = Persona Natural OT, integracion = Integración, aplicacion = Aplicación (reservado, hoy no se
+        asigna). Lo devuelven el detalle del trámite (`ProcedureInstanceDetail.channel`, HU #14318) y los reportes
+        detallados, que además lo filtran (HU #14319). Un trámite sin dato, incluido el migrado, se lee como `tramites`.
+        El cliente nunca lo envía al crear: lo fija el servidor.
+      enum: [tramites, pn_web, pn_punto, integracion, aplicacion]
+
     # ── Admin · Integraciones externas por compañía (HU #14067, Épica #14021, ADR-0075) ────
     ExternalIntegration:
       type: object
@@ -14656,8 +15111,9 @@ components:
         rowVersion: { type: integer, format: int64, nullable: true, description: Ausente en el primer registro. }
     TenantDomainResponse:
       type: object
-      required: [host, status, statusChangedAt, verification, certificate, rowVersion]
+      required: [purpose, host, status, statusChangedAt, verification, certificate, rowVersion]
       properties:
+        purpose: { type: string, description: "HUB o el código del producto que sirve el dominio." }
         host: { type: string }
         status: { type: string, enum: [pending, verified, active, failed] }
         statusReason:
@@ -14668,12 +15124,14 @@ components:
         statusChangedAt: { type: string, format: date-time }
         verification:
           type: object
-          required: [txtName, txtValue, cnameName, cnameTarget]
+          required: [txtName, txtValue, aName, aValue, cnameName, cnameTarget]
           properties:
             txtName: { type: string, description: "_flit-verify.<host>" }
             txtValue: { type: string, description: "Token de comprobación (HU #12425)." }
-            cnameName: { type: string }
-            cnameTarget: { type: string, description: "Destino del borde (Domains:EdgeTarget, HU #12421)." }
+            aName: { type: string, description: "Nombre del registro A que apunta el dominio al borde." }
+            aValue: { type: string, description: "IP pública del borde (Domains:EdgeIp). Vacía si el ambiente no la tiene configurada." }
+            cnameName: { type: string, deprecated: true, description: "Obsoleto: usar aName. Se conserva por compatibilidad del contrato." }
+            cnameTarget: { type: string, deprecated: true, description: "Obsoleto y siempre vacío: el dominio se apunta con un registro A (aValue)." }
         verifiedAt: { type: string, format: date-time, nullable: true }
         activatedAt: { type: string, format: date-time, nullable: true }
         certificate:
@@ -14685,6 +15143,28 @@ components:
         nextCheckAt: { type: string, format: date-time, nullable: true }
         graceUntil: { type: string, format: date-time, nullable: true }
         rowVersion: { type: integer, format: int64 }
+
+    NetworkDomainsResponse:
+      type: object
+      required: [domains, products, activation]
+      properties:
+        domains:
+          type: array
+          items: { $ref: "#/components/schemas/TenantDomainResponse" }
+        products:
+          type: array
+          description: Productos habilitados; cada uno necesita su propio dominio.
+          items: { type: string }
+        activation:
+          type: object
+          required: [ready, active, pending]
+          properties:
+            ready: { type: boolean, description: "Todos los dominios comprobados y con certificado; falta activar." }
+            active: { type: boolean }
+            pending:
+              type: array
+              description: Propósitos sin dominio listo (HUB o código de producto).
+              items: { type: string }
 
     # ── Admin · Generación documental (Feature #12201, ADR-0056) ───────────────
     StandaloneRuesRequest:
@@ -18577,7 +19057,116 @@ components:
         isLeasing: { type: boolean }
         paymentType: { type: string }
         transferType: { type: string, nullable: true }
-      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType]
+        channel:
+          $ref: "#/components/schemas/TramiteCanal"
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo del punto de atención (HU #14319); solo con `channel = pn_punto`.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: Nombre del organismo del canal (HU #14319).
+      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType, channel]
+
+    DetailedProcedureRow:
+      type: object
+      description: >
+        Fila del reporte detallado (`GET /api/v1/detailed-report/procedures`, Feature #10813). HU #14319 agrega el
+        canal efectivo y el organismo del canal.
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        procedureTypeName: { type: string }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        status: { type: string }
+        createdByDisplayName: { type: string }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        personDocument: { type: string }
+        personFullName: { type: string }
+        hasTransformation: { type: boolean }
+        transformationDetail: { type: string, nullable: true }
+        isLeasing: { type: boolean }
+        paymentType: { type: string }
+        transferType: { type: string, nullable: true }
+        channel:
+          $ref: "#/components/schemas/TramiteCanal"
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo del punto de atención (HU #14319); solo con `channel = pn_punto`.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: Nombre del organismo del canal (HU #14319).
+      required: [id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType, channel]
+
+    DetailedReportSummary:
+      type: object
+      description: Totales del reporte detallado (HU #10819).
+      properties:
+        totalCount: { type: integer }
+        byStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              count: { type: integer }
+            required: [status, count]
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byProcedureType:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+      required: [totalCount, byStatus, byCategory, byProcedureType]
+
+    DetailedProceduresPage:
+      type: object
+      description: Respuesta de `GET /api/v1/detailed-report/procedures` con una compañía (Feature #10813).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/DetailedReportSummary"
+      required: [items, totalCount, page, pageSize, summary]
+
+    AllCompaniesDetailedProceduresPage:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/detailed-report/procedures?allCompanies=true` (HU #14320, solo SuperAdmin): las
+        mismas filas con `tenantId` y `tenantName` de la compañía dueña, y los totales con desglose por compañía
+        (`summary.byTenant`). Sin `scope`: en este modo el alcance es el universo completo.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkDetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/NetworkDetailedReportSummary"
+      required: [items, totalCount, page, pageSize, summary]
 
     NetworkTenantCount:
       type: object
@@ -18767,9 +19356,26 @@ components:
       description: >
         Detalle de `GET /api/v1/tramites/instances/{id}` (gestor y SuperAdmin) y objeto `instance` de
         `GET /api/v1/tramites/network/instances/{id}`. Aquí se documentan solo los campos de vigencia de
-        la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
+        la HU #12791 y el canal (HU #14318); el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
       additionalProperties: true
       properties:
+        channel:
+          allOf:
+            - $ref: "#/components/schemas/TramiteCanal"
+          description: >
+            HU #14318 (Feature #14315, Épica #14296) — canal por el que entró el trámite. Solo lectura: se
+            fija al crear. Un trámite sin dato (histórico o migrado de V1) devuelve `tramites`. Aditivo.
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            HU #14318 — organismo de tránsito del punto de atención; solo con `channel = pn_punto`, `null` en
+            los demás. Distinto del organismo del trámite, que puede cambiar al enviarlo al OT. Aditivo.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: HU #14318 — nombre del organismo de `channelTransitOfficeId`; `null` si no aplica. Aditivo.
         improntaGeneracionHabilitada:
           type: boolean
           description: >
@@ -19202,6 +19808,13 @@ components:
             Épica #13202 — código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL. Solo con
             status=rechazado y provider=manual; `null` en cualquier otro caso (las rechazadas de Kyverum/mock siguen con
             `rejectionReason`). Sin texto libre ni PII.
+        cartaDisponible:
+          type: boolean
+          default: false
+          description: >
+            HU #14302 (Épica #14271) — `true` solo si la validación es MANUAL, está aprobada y su carta de identidad ya fue
+            generada. Cuando es `true`, la carta se descarga por `GET /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado`.
+            No expone la ruta, la serie ni el hash.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]
@@ -19796,6 +20409,33 @@ components:
             Código del último rechazo. Tras rechazar (HU #13299) el estado es `rechazado` con este campo no nulo hasta que el
             cliente envíe la captura nueva (que lo limpia).
         linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo cuando se espera captura (manual_activo o rechazado con motivo). }
+        validacionFotos:
+          type: object
+          nullable: true
+          description: >
+            HU #14310. Resultado informativo de la validación de cada foto en el dispositivo de la persona (no es un control de
+            seguridad; no bloquea aprobar ni rechazar). `null` en capturas anteriores a este cambio: no se muestra aviso.
+          required: [rostro, anverso, reverso]
+          properties:
+            rostro: { $ref: "#/components/schemas/ManualPhotoCheck" }
+            anverso: { $ref: "#/components/schemas/ManualPhotoCheck" }
+            reverso: { $ref: "#/components/schemas/ManualPhotoCheck" }
+        cartaDisponible:
+          type: boolean
+          default: false
+          description: >
+            HU #14302 — `true` solo si la validación es manual, está aprobada y su carta de identidad ya fue generada (misma regla
+            que `BiometricValidationDto.cartaDisponible`). Se descarga por `GET /api/v1/tramites/biometric-validations/{id}/certificado`.
+    ManualPhotoCheck:
+      type: object
+      required: [estado]
+      properties:
+        estado: { type: string, enum: [verificada, no_verificada] }
+        motivo:
+          type: string
+          nullable: true
+          enum: [sin_rostro, varios_rostros, sin_documento, lado_incorrecto, sin_soporte, sin_resultado]
+          description: Solo cuando `estado` es no_verificada.
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]

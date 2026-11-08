@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFrom": "frontend/lib/manual (pnpm manual:export)",
-  "articleCount": 47,
+  "articleCount": 50,
   "articles": [
     {
       "slug": "0-introduccion/1-bienvenida",
@@ -876,7 +876,8 @@
           "paragraphs": [
             "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
             "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
-            "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora."
+            "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
+            "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite."
           ],
           "bullets": [],
           "callouts": []
@@ -1498,7 +1499,7 @@
       "href": "/manual/1-gestor/14-reportes-detallados",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas y cómo entrar.",
+      "summary": "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas, cómo entrar y cómo ver de qué canal salió cada trámite.",
       "primarySource": false,
       "blocks": [
         {
@@ -1541,8 +1542,28 @@
           "callouts": []
         },
         {
+          "id": "canal",
+          "title": "4. De qué canal salió cada trámite",
+          "paragraphs": [
+            "La columna Canal dice por dónde entró cada trámite. La pone el sistema al crearlo y no se puede cambiar.",
+            "Los trámites antiguos que no tienen este dato aparecen como Trámites."
+          ],
+          "bullets": [
+            "Trámites: lo creó un gestor en el producto Trámites.",
+            "Persona Natural Web: llegó del portal Persona Natural.",
+            "Persona Natural OT: llegó del punto de atención de un organismo de tránsito. La fila muestra además cuál organismo.",
+            "Integración: llegó por la integración con terceros.",
+            "Aplicación: reservado para más adelante; por ahora no trae trámites.",
+            "Para filtrar, elige el canal en el selector Canal y pulsa Buscar. Si eliges Persona Natural OT aparece «OT del punto», para ver solo los de un organismo.",
+            "«OT del punto» es distinto del filtro «Organismo de tránsito», que busca por el organismo del trámite.",
+            "Si no hay resultados verás «No hay trámites con ese canal.».",
+            "Cada compañía ve solo sus trámites. El Super Admin puede elegir «Todas las compañías» para comparar los canales entre empresas; la tabla muestra entonces la compañía de cada fila."
+          ],
+          "callouts": []
+        },
+        {
           "id": "consejos",
-          "title": "4. Consejos",
+          "title": "5. Consejos",
           "paragraphs": [],
           "bullets": [
             "Acota primero el rango de fechas: la grilla puede crecer rápido si tu compañía maneja mucho volumen.",
@@ -3037,6 +3058,188 @@
               "variant": "info",
               "title": null,
               "text": "Capturas pendientes: este artículo aún no tiene imágenes del portal ni del punto; se agregarán cuando el pipeline de capturas cubra esos portales."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/9-validaciones-manuales",
+      "title": "Validación de identidad manual",
+      "href": "/manual/4-superadmin/9-validaciones-manuales",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es y cuándo usarla",
+          "paragraphs": [
+            "La validación manual es la alternativa cuando la persona no logra validar su identidad por el camino normal. La persona toma sus fotos y su firma desde un enlace, y tú decides si aprueba o no. Solo el Super Admin puede activarla y resolverla.",
+            "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 24 horas."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "activar",
+          "title": "2. Activar el flujo manual",
+          "paragraphs": [],
+          "bullets": [
+            "Paso 1: entra a Validaciones y abre el detalle de la validación.",
+            "Paso 2: en Acciones, elige «Activar flujo manual» y confirma.",
+            "Paso 3: el caso aparece en la pestaña «Validaciones manuales» con el estado «Esperando captura»."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "enlace",
+          "title": "3. Copiar o regenerar el enlace",
+          "paragraphs": [
+            "En la fila, abre «Acciones» y usa «Copiar enlace» cuando el correo no llegó o el cliente prefiere recibirlo por otro canal."
+          ],
+          "bullets": [
+            "Paso 1: en la pestaña «Validaciones manuales», busca la fila de la persona.",
+            "Paso 2: en la columna Acciones, pulsa el ícono de copiar enlace. Verás el mensaje «Enlace copiado».",
+            "Paso 3: pégalo en el canal que uses con el cliente.",
+            "Copiar no cambia el enlace ni envía otro correo: el enlace que ya salió sigue funcionando.",
+            "La acción aparece mientras el caso espera una captura, también si fue rechazado y la persona debe repetirla.",
+            "Si el enlace venció o no se puede recuperar, verás el motivo y la opción «Regenerar enlace». Regenerar crea un enlace nuevo, envía el correo y deja sin servicio el anterior.",
+            "Los enlaces emitidos antes de que existiera esta opción no se pueden copiar: toca regenerarlos una vez.",
+            "Cada copia queda registrada con quién la hizo y cuándo."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "El enlace le da acceso a la captura de esa persona. Compártelo solo con ella."
+            }
+          ]
+        },
+        {
+          "id": "revisar",
+          "title": "4. Revisar y decidir",
+          "paragraphs": [
+            "Cuando la persona envía sus fotos y su firma, el caso pasa a «Pendiente de revisión». Abre el detalle desde la fila para ver las imágenes y decidir."
+          ],
+          "bullets": [
+            "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
+            "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "estados",
+          "title": "5. Estados",
+          "paragraphs": [],
+          "bullets": [
+            "Esperando captura: la persona aún no envía sus fotos.",
+            "Pendiente de revisión: ya envió la captura y falta tu decisión.",
+            "Aprobada manual: la aprobaste y la identidad está vigente.",
+            "Rechazada: la rechazaste y la persona puede repetir la captura.",
+            "Vencida: el plazo terminó sin completarse."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/10-fotos-captura-manual",
+      "title": "Fotos de la captura manual: cuáles se revisan y qué significa «No verificada»",
+      "href": "/manual/4-superadmin/10-fotos-captura-manual",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Qué revisa la página de captura en cada foto, cuándo la persona puede continuar sin verificar y cómo leer el aviso «No verificada» en la revisión.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-revisa",
+          "title": "1. Qué se revisa en cada foto",
+          "paragraphs": [
+            "Al tomar cada foto, la página de captura la revisa en el mismo celular de la persona. Para esta revisión, la imagen no se envía a ningún servicio externo."
+          ],
+          "bullets": [
+            "Selfie: debe aparecer un solo rostro dentro del óvalo.",
+            "Anverso: debe verse un documento con un rostro.",
+            "Reverso: debe verse un documento con código de barras o QR.",
+            "Pasaporte: se revisa que sea un documento, pero no el lado. La persona toma igual las tres fotos."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "repetir",
+          "title": "2. Si la foto no pasa",
+          "paragraphs": [
+            "La persona ve el motivo y repite la foto. Tras tres fotos rechazadas de un mismo lado, si la siguiente tampoco pasa, puede elegir «Continuar sin verificar». También puede continuar si su celular no logra hacer la revisión."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "no-verificada",
+          "title": "3. Qué hacer con una foto «No verificada»",
+          "paragraphs": [
+            "En el detalle de revisión, esas fotos muestran «No verificada» y el motivo. Es información para que las mires con más cuidado: no impide aprobar ni rechazar.",
+            "Una foto verificada tampoco es una aprobación. La revisión no comprueba si la persona está presente ni si el rostro coincide con el del documento: esa decisión sigue siendo tuya."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Las capturas enviadas antes de esta revisión no muestran este aviso."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/11-carta-identidad-manual",
+      "title": "Carta de identidad de una validación manual",
+      "href": "/manual/4-superadmin/11-carta-identidad-manual",
+      "audience": "Todos",
+      "sectionId": "superadmin",
+      "summary": "Qué es la carta que FLIT emite al aprobar una identidad manual, dónde queda en el trámite y cómo descargarla.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "Qué es",
+          "paragraphs": [
+            "Cuando el Super Admin aprueba una validación de identidad manual, FLIT emite una carta con el resultado, los datos de la persona, sus fotos y su firma. Cumple el mismo papel que el certificado de una validación automática.",
+            "La carta se genera una sola vez. Si esa identidad aprobada se reutiliza en otro trámite de la misma persona, ese trámite recibe la misma carta."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "tramite",
+          "title": "Dónde queda en el trámite",
+          "paragraphs": [
+            "La carta entra al expediente y al consolidado, asociada a su actor. Si el trámite tiene varias personas en un mismo rol, cada una tiene su propia carta. En una persona jurídica, la carta es la de su representante legal.",
+            "Un trámite puede combinar actores validados de forma automática y manual: cada uno conserva su propio documento.",
+            "En el FUR, el sello de una identidad manual muestra la serie de la carta. El código de integridad completo se consulta en la carta."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "descargar",
+          "title": "Cómo descargarla",
+          "paragraphs": [
+            "Paso 1. Abre el detalle de la validación aprobada, desde el trámite, la prevalidación o las validaciones manuales.",
+            "Paso 2. Pulsa «Descargar certificado». El PDF se guarda en tu equipo."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo."
             }
           ]
         }
