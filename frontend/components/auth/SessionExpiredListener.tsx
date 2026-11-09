@@ -58,7 +58,7 @@ export function SessionExpiredListener() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-flit-primary/40 dark:bg-background/70 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm px-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-expired-title"

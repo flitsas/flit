@@ -12,7 +12,9 @@ export function CaptureCard({ children }: { productName?: string | null; childre
         <div className="rounded-[18px] border border-border bg-card p-4 shadow-[var(--shadow-card)] sm:p-6">
           <header className="mb-4 flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/logo-flit-dark.svg" alt="FLIT" className="h-10 w-auto" />
+            <img src="/assets/logo-flit-dark.svg" alt="FLIT" className="h-10 w-auto dark:hidden" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/assets/logo-flit-white.svg" alt="FLIT" className="hidden h-10 w-auto dark:block" />
           </header>
           {children}
         </div>

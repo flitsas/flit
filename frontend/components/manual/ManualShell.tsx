@@ -125,7 +125,7 @@ export function ManualShell({
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-flit-primary/40 dark:bg-background/70 lg:hidden"
+          className="fixed inset-0 z-40 bg-[var(--overlay)] lg:hidden"
           aria-label="Cerrar menú"
           onClick={() => setMobileOpen(false)}
         />

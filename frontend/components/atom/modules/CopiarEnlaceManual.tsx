@@ -139,7 +139,7 @@ function RegenerarDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-flit-primary/45 px-4 py-6 dark:bg-background/70"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--overlay)] px-4 py-6"
       style={{ backdropFilter: 'blur(6px)' }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();

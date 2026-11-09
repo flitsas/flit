@@ -17,7 +17,7 @@
   --dr-flit-text-inverse: var(--primary-foreground);
   --dr-flit-panel-bg: var(--color-flit-bg);
   --dr-flit-card-bg: var(--card);
-  --dr-flit-overlay: color-mix(in srgb, var(--primary) 45%, transparent);
+  --dr-flit-overlay: var(--overlay);
   --dr-flit-focus: var(--ring);
   --dr-flit-icon-tint: var(--badge-info-bg);
   --dr-flit-code-bg: var(--surface-sunken);
@@ -34,10 +34,9 @@
   --dr-flit-font: var(--font-poppins, Inter, system-ui, sans-serif);
 }
 
-/* Oscuro: los tokens del kit ya cambian solos; solo el fondo del panel y el velo necesitan su valor. */
+/* Oscuro: los tokens del kit ya cambian solos; solo el fondo del panel necesita su valor. */
 .dark .dr-flit {
   --dr-flit-panel-bg: var(--background);
-  --dr-flit-overlay: color-mix(in srgb, var(--background) 70%, transparent);
 }
 
 @keyframes drFlitSlideIn {
