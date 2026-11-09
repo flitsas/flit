@@ -176,7 +176,7 @@ interface Props {
   extrasSlot?: ReactNode;
 }
 
-const BORDER = '#DFE5ED';
+const BORDER = 'var(--border)';
 const BLUE = 'var(--color-flit-brand)';
 
 // `ResumenDisclosure` desapareció: transformaciones y prenda eran las últimas que lo usaban y ahora
@@ -258,7 +258,7 @@ function PrendaDocumentoVerButton({
           {busy ? 'Abriendo…' : 'Ver'}
         </button>
         {error ? (
-          <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+          <span className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </span>
         ) : null}
@@ -311,7 +311,7 @@ function IdentidadStatusBanner({
     return (
       <div
         className="flex items-center gap-3 rounded-xl p-3"
-        style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
+        style={{ background: 'var(--badge-success-bg)', border: '1px solid var(--badge-success-border)' }}
         role="status"
         aria-live="polite"
         data-testid="identidad-verificada"
@@ -345,21 +345,21 @@ function IdentidadStatusBanner({
   return (
     <div
       className="flex items-center gap-3 rounded-xl p-3"
-      style={{ background: '#EEF5FF', border: '1px solid #DFE5ED' }}
+      style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}
       role="status"
       aria-live="polite"
       data-testid="identidad-pendiente"
     >
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-        style={{ background: '#59677D', color: 'white' }}
+        style={{ background: 'var(--muted-foreground)', color: 'var(--card)' }}
         aria-hidden
       >
         <Clock className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
         {/* Copy Flit 2.0 · S4. */}
-        <p className="text-xs font-bold" style={{ color: '#59677D' }}>
+        <p className="text-xs font-bold" style={{ color: 'var(--muted-foreground)' }}>
           Validación de identidad pendiente.
         </p>
         <p className="text-xs opacity-70">
@@ -451,7 +451,7 @@ function CertificadoIdButton({
         </span>
       )}
       {error && (
-        <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+        <span className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </span>
       )}
@@ -957,7 +957,7 @@ export default function MatriculaResumen({
                             background: 'var(--badge-warning-bg)',
                             color: 'var(--badge-warning-fg)',
                           }
-                        : { borderColor: BORDER, color: '#59677D' }
+                        : { borderColor: BORDER, color: 'var(--muted-foreground)' }
                     }
                   >
                     <Star className="h-3.5 w-3.5" fill={prioritario ? 'currentColor' : 'none'} aria-hidden="true" />

@@ -207,24 +207,24 @@ export function BlindajeDeclaracionCard({
       </p>
 
       {error && (
-        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}
 
       <div
         className={cn(
-          'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md sm:max-w-sm dark:bg-[#162744]',
-          listo ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]',
+          'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md sm:max-w-sm',
+          listo ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
         )}
-        style={{ borderColor: '#E2E8F0' }}
+        style={{ borderColor: 'var(--border)' }}
       >
         <span
           className={cn(
             'absolute right-3 top-3 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs',
-            listo ? 'font-semibold text-white' : 'bg-red-50 font-medium text-red-600',
+            listo ? 'font-semibold' : 'bg-[var(--badge-danger-bg)] font-medium text-[var(--badge-danger-fg)]',
           )}
-          style={listo ? { background: '#8CC63F' } : undefined}
+          style={listo ? { background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' } : undefined}
         >
           {listo ? 'Validado' : '* Obligatorio'}
         </span>
@@ -257,12 +257,12 @@ export function BlindajeDeclaracionCard({
             ))}
           </select>
           {opcion === null && (
-            <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }}>
+            <p className="text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
               Escoge el nivel de blindaje o el desmonte.
             </p>
           )}
           {!certificado && (
-            <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }}>
+            <p className="text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
               Adjunta el certificado obligatorio.
             </p>
           )}
@@ -274,7 +274,7 @@ export function BlindajeDeclaracionCard({
         {opcion && (
           <div
             className="mt-3 rounded-lg px-2.5 py-2 text-[11px] leading-snug"
-            style={{ background: '#F8FAFC' }}
+            style={{ background: 'var(--surface-sunken)' }}
           >
             <p className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
               <span className="font-normal opacity-70">Debes adjuntar: </span>
@@ -303,10 +303,10 @@ export function BlindajeDeclaracionCard({
                 type="button"
                 onClick={() => inputRef.current?.click()}
                 disabled={busy || disabled}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-card px-4 text-[12px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
                 style={{
-                  borderColor: certificado ? 'var(--color-flit-brand)' : '#FF4E00',
-                  color: certificado ? 'var(--color-flit-brand)' : '#FF4E00',
+                  borderColor: certificado ? 'var(--color-flit-brand)' : 'var(--destructive)',
+                  color: certificado ? 'var(--color-flit-brand)' : 'var(--destructive)',
                   borderWidth: certificado ? 1 : 2,
                 }}
               >
@@ -319,7 +319,7 @@ export function BlindajeDeclaracionCard({
                   onClick={() => void borrar(certificado.id)}
                   disabled={busy || disabled}
                   className="text-xs font-semibold disabled:opacity-50"
-                  style={{ color: '#FF4E00' }}
+                  style={{ color: 'var(--destructive)' }}
                   aria-label="Borrar certificado de blindaje"
                 >
                   {deletingId === certificado.id ? 'Borrando…' : 'Borrar'}

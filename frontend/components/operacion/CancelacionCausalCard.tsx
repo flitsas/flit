@@ -103,24 +103,24 @@ export function CancelacionCausalCard({
       </p>
 
       {error && (
-        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}
 
       <div
         className={cn(
-          'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md sm:max-w-sm dark:bg-[#162744]',
-          causal ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]',
+          'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md sm:max-w-sm',
+          causal ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
         )}
-        style={{ borderColor: '#E2E8F0' }}
+        style={{ borderColor: 'var(--border)' }}
       >
         <span
           className={cn(
             'absolute right-3 top-3 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs',
-            causal ? 'font-semibold text-white' : 'bg-red-50 font-medium text-red-600',
+            causal ? 'font-semibold' : 'bg-[var(--badge-danger-bg)] font-medium text-[var(--badge-danger-fg)]',
           )}
-          style={causal ? { background: '#8CC63F' } : undefined}
+          style={causal ? { background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' } : undefined}
         >
           {causal ? 'Validado' : '* Obligatorio'}
         </span>
@@ -149,7 +149,7 @@ export function CancelacionCausalCard({
             ))}
           </select>
           {causal === null && (
-            <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }}>
+            <p className="text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
               {instanceId
                 ? 'Escoge la causal por la que se cancela.'
                 : 'Guarda el trámite para poder declarar la causal.'}
