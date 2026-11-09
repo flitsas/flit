@@ -98,19 +98,19 @@ internal sealed class ProveedorContratosRenting(IHttpClientFactory http, Renting
         ? $"Falta configurar la API de contratos de Renting: {string.Join(", ", faltan)}."
         : motivoCertificado;
 
-    public async Task<ConsultarContratoConductorResponse> ConsultarAsync(string placa, DateOnly fecha, CancellationToken ct)
+    public async Task<ConsultarContratoConductorResponse> ConsultarAsync(string placa, DateOnly fecha, CancellationToken ct, TimeOnly? hora = null)
     {
         var reloj = Stopwatch.StartNew();
         try
         {
             var token = await TokenAsync(ct).ConfigureAwait(false);
-            var respuesta = await PedirAsync(token, placa, fecha, ct).ConfigureAwait(false);
+            var respuesta = await PedirAsync(token, placa, fecha, hora, ct).ConfigureAwait(false);
             if (respuesta.StatusCode == HttpStatusCode.Unauthorized)
             {
                 // Token vencido antes del TTL: se pide uno nuevo una sola vez.
                 respuesta.Dispose();
                 Invalidar(token);
-                respuesta = await PedirAsync(await TokenAsync(ct).ConfigureAwait(false), placa, fecha, ct).ConfigureAwait(false);
+                respuesta = await PedirAsync(await TokenAsync(ct).ConfigureAwait(false), placa, fecha, hora, ct).ConfigureAwait(false);
             }
 
             using (respuesta)
@@ -188,11 +188,22 @@ internal sealed class ProveedorContratosRenting(IHttpClientFactory http, Renting
         return r;
     }
 
-    private Task<HttpResponseMessage> PedirAsync(string token, string placa, DateOnly fecha, CancellationToken ct)
+    /// <summary>
+    /// GDC punto 19: el instante de la infracción para <c>offenseDate</c>. La hora del comparendo es la del reloj de la
+    /// calle (sin zona) y se envía TAL CUAL, en <c>yyyy-MM-ddTHH:mm:00.000Z</c>.
+    /// <para>
+    /// La <c>Z</c> NO es una conversión a UTC: es un literal. Renting compara el reloj del contrato tal cual cuando la
+    /// fecha llega sin offset o con <c>Z</c>; con <c>-05:00</c> le suma 5 horas (sonda con la API real, placa QPN193,
+    /// 7-oct-2026). Por eso aquí nunca se suma ni se resta nada. Sin hora (compatibilidad): mediodía, también con <c>Z</c>.
+    /// </para>
+    /// </summary>
+    internal static string InstanteInfraccion(DateOnly fecha, TimeOnly? hora) =>
+        fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T"
+        + (hora ?? new TimeOnly(12, 0)).ToString("HH:mm", CultureInfo.InvariantCulture) + ":00.000Z";
+
+    private Task<HttpResponseMessage> PedirAsync(string token, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct)
     {
-        // HU #14368 / GDC ID19: mediodía con offset Colombia (-05:00) solo en el query a Renting.
-        // No altera timestamptz ni ExportacionBandeja; la fecha calendario del comparendo se conserva.
-        var instante = fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T12:00:00.000-05:00";
+        var instante = InstanteInfraccion(fecha, hora);
         var ruta = $"{opciones.RutaContratos}?plate={Uri.EscapeDataString(placa.Trim().ToUpperInvariant())}&offenseDate={Uri.EscapeDataString(instante)}";
         var mensaje = Mensaje(HttpMethod.Get, ruta);
         mensaje.Headers.Authorization = new("Bearer", token);

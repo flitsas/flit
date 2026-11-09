@@ -146,6 +146,9 @@ message ConsultarContratoConductorRequest {
   string fecha = 3;
   // Referencia opaca de quien consulta (por ejemplo el id del comparendo). Solo trazabilidad.
   string referencia = 4;
+  // Hora de la infracción, HH:mm (24 h), tal como la trae el comparendo: hora local sin zona. Se envía a la gestora sin
+  // convertir. Ausente: se consulta al mediodía de la fecha (compatibilidad).
+  optional string hora = 5;
 }
 
 enum ResultadoContratoConductor {
