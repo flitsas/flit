@@ -282,7 +282,7 @@ export function LoteDescargaAlertCard({
                 aria-valuemin={0}
                 aria-valuemax={lote.total}
                 aria-valuenow={lote.procesados}
-                className="h-1 w-full overflow-hidden rounded-full bg-flit-gray dark:bg-white/10"
+                className="h-1 w-full overflow-hidden rounded-full bg-flit-gray dark:bg-secondary"
               >
                 <div
                   className="h-full rounded-full transition-[width]"
@@ -329,7 +329,7 @@ export function LoteDescargaAlertCard({
         {conPartes ? (
           <ul
             aria-label="Partes de la descarga"
-            className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-white/10"
+            className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-border"
           >
             {partesConPdf.map((parte) => {
               const descargando = descargandoParte === parte.numero;

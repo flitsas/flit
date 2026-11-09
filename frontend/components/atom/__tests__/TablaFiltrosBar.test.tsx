@@ -228,7 +228,7 @@ describe("EncabezadoFiltrable", () => {
     expect(filas().map((l) => l.textContent)).toEqual(["Beta"]);
     expect(embudo("Nombre")).toHaveAttribute("data-activo", "true");
     expect(embudo("Nombre")).toHaveAccessibleName(/Nombre: filtro activo/);
-    expect(embudo("Nombre").className).toMatch(/text-\[#3B4FD6\]/);
+    expect(embudo("Nombre").className).toMatch(/text-flit-brand-ink/);
     expect(embudo("Creación")).not.toHaveAttribute("data-activo");
   });
 

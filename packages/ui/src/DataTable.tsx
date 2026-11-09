@@ -16,7 +16,7 @@ import {
 // filas-tarjeta (bg-card con borde y esquinas redondeadas, separadas por border-spacing),
 // scroll horizontal responsive, estados (UiStateBoundary) y la Pagination compartida.
 // Bug #13055 — homologada con la tabla de trámites: cabecera y filas salen de `table-styles`
-// (cabecera #DFE5ED fija al hacer scroll, fila-tarjeta blanca con sombra azul al pasar el puntero)
+// (cabecera fija al hacer scroll y fila-tarjeta que se realza al pasar el puntero; colores por token)
 // y la paginación es la estándar, con «Filas por página» cuando se pasa `onPageSizeChange`.
 
 export type CellAlign = "left" | "center" | "right";
@@ -194,7 +194,7 @@ function FragmentRow<T>({
   return (
     <>
       <tr
-        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${onRowClick ? "cursor-pointer" : ""}`}
+        className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onRowClick ? "cursor-pointer" : ""}`}
         onClick={onRowClick ? () => onRowClick(row) : undefined}
       >
         {columns.map((col, i) => (

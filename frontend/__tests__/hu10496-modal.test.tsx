@@ -94,8 +94,9 @@ describe("HU #10496 — Modal (AC1 ancho + blur, AC2 contraste dark)", () => {
       </Modal>,
     );
     const panel = screen.getByRole("dialog").firstElementChild as HTMLElement;
-    expect(panel.className).toContain("dark:text-white");
-    expect(panel.className).toContain("dark:bg-[#0B0F14]");
+    // UI kit (HU #14476): superficie y texto por token, que ya resuelven el tema oscuro.
+    expect(panel.className).toContain("dark:text-foreground");
+    expect(panel.className).toContain("bg-card");
   });
 
   it("edge: cuando busy=true, ni el botón cerrar ni Escape disparan onClose", () => {

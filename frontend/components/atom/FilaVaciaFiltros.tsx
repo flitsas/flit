@@ -19,7 +19,7 @@ export function FilaVaciaFiltros({
     <tr>
       <td
         colSpan={columnas}
-        className="rounded-xl border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#0B0F14]"
+        className="rounded-xl border border-border bg-card dark:border-border dark:bg-card"
       >
         <TablaFiltrosVacio onLimpiar={onLimpiar} mensaje={mensaje} />
       </td>
