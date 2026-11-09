@@ -114,14 +114,16 @@ export function DataTable<T>({
         skeletonRows={6}
       >
         <div className={allowHorizontalScroll ? "overflow-x-auto" : "overflow-x-hidden"}>
+          {/* HU #14477 — en celular (< sm) la tabla se apila como tarjetas, solo con CSS: la cabecera queda para
+              lectores de pantalla, cada celda muestra su columna (data-label) y se anula el ancho mínimo. */}
           <table
-            className={`w-full border-separate border-spacing-y-2 text-xs ${
+            className={`w-full border-separate border-spacing-y-2 text-xs max-sm:block max-sm:min-w-0! ${
               allowHorizontalScroll ? "" : "table-fixed"
             }`}
             style={allowHorizontalScroll && minWidth ? { minWidth } : undefined}
             aria-label={ariaLabel}
           >
-            <thead>
+            <thead className="max-sm:sr-only">
               <tr>
                 {columns.map((col, i) => (
                   <th
@@ -137,10 +139,10 @@ export function DataTable<T>({
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="max-sm:flex max-sm:flex-col max-sm:gap-2">
               {showEmptyContent && (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-6 text-center">
+                <tr className="max-sm:block">
+                  <td colSpan={columns.length} className="px-4 py-6 text-center max-sm:block">
                     {emptyContent}
                   </td>
                 </tr>
@@ -194,13 +196,14 @@ function FragmentRow<T>({
   return (
     <>
       <tr
-        className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onRowClick ? "cursor-pointer" : ""}`}
+        className={`bg-card ${TABLA_ROW_HOVER_CLS} max-sm:block max-sm:rounded-xl max-sm:border max-sm:border-[var(--table-row-border)] max-sm:py-1.5 ${onRowClick ? "cursor-pointer" : ""}`}
         onClick={onRowClick ? () => onRowClick(row) : undefined}
       >
         {columns.map((col, i) => (
           <td
             key={col.key}
-            className={`border-y px-4 py-3 ${ALIGN[col.align ?? "left"]} ${
+            data-label={typeof col.header === "string" ? col.header : undefined}
+            className={`border-y px-4 py-3 max-sm:flex max-sm:items-start max-sm:justify-between max-sm:gap-3 max-sm:rounded-none max-sm:border-0 max-sm:px-4 max-sm:py-1.5 max-sm:text-right max-sm:before:shrink-0 max-sm:before:text-left max-sm:before:text-[11px] max-sm:before:font-semibold max-sm:before:uppercase max-sm:before:tracking-wide max-sm:before:text-muted-foreground max-sm:before:content-[attr(data-label)] ${ALIGN[col.align ?? "left"]} ${
               i === 0 ? "rounded-l-xl border-l" : ""
             } ${i === last ? "rounded-r-xl border-r" : ""} ${col.cellClassName ?? ""}`}
             style={{ borderColor: "var(--table-row-border)" }}
@@ -210,8 +213,8 @@ function FragmentRow<T>({
         ))}
       </tr>
       {expanded != null && expanded !== false && (
-        <tr>
-          <td colSpan={columns.length} className="px-4 pb-3">
+        <tr className="max-sm:block">
+          <td colSpan={columns.length} className="px-4 pb-3 max-sm:block">
             {expanded}
           </td>
         </tr>

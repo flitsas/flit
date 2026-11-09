@@ -34,11 +34,11 @@ export const CARDLIST_SCROLL = "overflow-x-auto";
 export const CARDLIST_TABLE = "w-full border-separate border-spacing-y-2 text-xs";
 
 /** El `<tr>` de la cabecera. La alineación se deja a cada `<th>` para no estorbar a las numéricas. */
-export const CARDLIST_HEAD_ROW = "text-left text-[10px] font-semibold uppercase tracking-wider";
+export const CARDLIST_HEAD_ROW = "text-left text-xs font-semibold uppercase tracking-wide";
 
 /** Cada `<th>`. El fondo va aquí y no en el `<tr>`: con `border-separate` es lo que pinta parejo. */
 export const CARDLIST_TH =
-  "sticky top-0 z-10 bg-[color:var(--table-header-bg)] px-4 py-2.5 font-semibold " +
+  "sticky top-0 z-10 bg-[color:var(--table-header-bg)] px-4 py-3 font-semibold " +
   "text-[color:var(--table-header-fg)] first:rounded-l-xl last:rounded-r-xl";
 
 /** El `<tr>` de una fila. `group` habilita el resaltado al pasar por encima si la fila se pulsa. */

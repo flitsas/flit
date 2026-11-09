@@ -118,6 +118,9 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-transit": "administradores",
   // SuperAdmin — Plataforma anidada dentro de Administradores
   "admin-plataforma": "administradores",
+  // HU #14479 — secciones con nombre de Administradores (sus hijos heredan el grupo del padre).
+  "admin-documentos": "administradores",
+  "admin-seguridad": "administradores",
   // Admin OT — pestañas hub en el dock
   // HU #12856 (Feature #12847) — Reglas/Requisitos/Configuración salieron de este mapa: ya no
   // viven en el dock de ningún usuario de tenant OT (admin u operador), solo en la barra de
