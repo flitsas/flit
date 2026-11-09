@@ -935,6 +935,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ultimo_evento_en");
 
+                    b.Property<DateOnly?>("UltimoIntentoConsultaContraventor")
+                        .HasColumnType("date")
+                        .HasColumnName("ultimo_intento_consulta_contraventor");
+
                     b.Property<decimal?>("ValorAdicional")
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)")
