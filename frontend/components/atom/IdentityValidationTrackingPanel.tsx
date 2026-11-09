@@ -324,7 +324,7 @@ export function IdentityValidationTrackingPanel({
           {events && events.length > 0 && compacto && (
             <ul className="space-y-2" aria-label="Bitácora de la validación">
               {filasVisibles.map(({ e, i }) => (
-                <li key={i} className="rounded-xl border bg-white px-3 py-2.5 text-xs dark:bg-[#0B0F14]" style={{ borderColor: '#DFE5ED' }}>
+                <li key={i} className="rounded-xl border bg-card px-3 py-2.5 text-xs dark:bg-card" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                     <span className="font-semibold">{auditStageLabel(e.stage, true)}</span>
                     <StatusBadge

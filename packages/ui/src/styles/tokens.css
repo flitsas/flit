@@ -14,7 +14,9 @@
    * primary = identidad (títulos, encabezados); secondary = acción (botones, enlaces, menú activo).
    * `--brand-accent` (cierre del degradado) y `--brand-bg` (fondo tintado) los deriva BrandStyle
    * del secundario; alert/gray son semánticos de FLIT y no varían por red. */
-  --color-flit-primary: var(--brand-primary, #162744);
+  /* Tinta de títulos: sin marca de socio, #162744 en claro y #e6f0ff en oscuro (--flit-primary-tema, HU #14478).
+   * Una Marca Blanca la sigue fijando con su --brand-primary en los dos temas (BrandStyle). */
+  --color-flit-primary: var(--brand-primary, var(--flit-primary-tema, #162744));
   --color-flit-brand: var(--brand-secondary, #557eff);
   --color-flit-brand-ink: var(--flit-brand-ink);
   --color-flit-tech: var(--brand-accent, #00dbd5);
@@ -166,11 +168,11 @@
 
   /* Dock inferior flotante — Contrato D (GUIA-DOCK-INFERIOR-FLOTANTE) × flit_design_tokens.
      Solo presentación: no cambia catálogo, permisos ni layout de navegación. */
-  --nav-vidrio: rgba(255, 255, 255, 0.94);
+  --nav-vidrio: var(--card);
   --nav-vidrio-dark: rgba(22, 39, 68, 0.9);
   --nav-panel-bg: #ffffff;
   --nav-borde: #dfe5ed;
-  --nav-app-bg: var(--brand-tint, #eef5ff);
+  --nav-app-bg: var(--brand-tint, #e4edfb);
   --nav-texto: #59677d;
   --nav-texto-fuerte: var(--color-flit-primary);
   --nav-texto-tenue: #667085;
@@ -179,7 +181,7 @@
      Marca Blanca, sus colores. */
   --nav-activo: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--brand-accent, #0f6fa8) 100%);
   --nav-radio-pill: 999px;
-  --nav-radio-panel: 18px;
+  --nav-radio-panel: 20px;
   --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
   --nav-sombra-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
   --nav-sombra-activo: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
@@ -203,7 +205,42 @@
   --shadow-modal: 0 24px 60px rgba(22, 39, 68, 0.18);
   --shadow-button: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
   --placa-fondo: #ffd100;
+  /* Velo detrás de diálogos y paneles (pedido de S3): tinta translúcida. */
+  --overlay: rgba(22, 39, 68, 0.45);
   --placa-texto: #111111;
+
+  /* Estados del trámite (lib/tramites/estados.ts, pedido de S1): los 10 tonos de siempre, ahora por token.
+     Sus SVG de public/assets/estados conservan el `accent` en hex. */
+  --estado-borrador-bg: rgba(94,106,123,0.14);
+  --estado-borrador-fg: #5E6A7B;
+  --estado-borrador-border: rgba(94,106,123,0.35);
+  --estado-preparado-bg: rgba(85,126,255,0.14);
+  --estado-preparado-fg: #4465CC;
+  --estado-preparado-border: rgba(85,126,255,0.35);
+  --estado-preasignacion-bg: rgba(224,138,0,0.14);
+  --estado-preasignacion-fg: #8A5400;
+  --estado-preasignacion-border: rgba(224,138,0,0.35);
+  --estado-asignado-bg: rgba(99,102,241,0.14);
+  --estado-asignado-fg: #4F46E5;
+  --estado-asignado-border: rgba(99,102,241,0.35);
+  --estado-entregado-bg: rgba(0,169,157,0.14);
+  --estado-entregado-fg: #007A71;
+  --estado-entregado-border: rgba(0,169,157,0.35);
+  --estado-aprobado-bg: rgba(140,198,63,0.14);
+  --estado-aprobado-fg: #557926;
+  --estado-aprobado-border: rgba(140,198,63,0.35);
+  --estado-rechazado-bg: rgba(255,0,0,0.14);
+  --estado-rechazado-fg: #CC0000;
+  --estado-rechazado-border: rgba(255,0,0,0.35);
+  --estado-anulado-bg: rgba(193,39,45,0.14);
+  --estado-anulado-fg: #C1272D;
+  --estado-anulado-border: rgba(193,39,45,0.35);
+  --estado-revocado-bg: rgba(139,92,246,0.14);
+  --estado-revocado-fg: #6D28D9;
+  --estado-revocado-border: rgba(139,92,246,0.35);
+  --estado-subsanacion-bg: rgba(255,78,0,0.14);
+  --estado-subsanacion-fg: #BF3B00;
+  --estado-subsanacion-border: rgba(255,78,0,0.35);
 }
 
 .dark {
@@ -275,9 +312,9 @@
   --table-row-hover: #182846;
 
   /* Dock — superficies y texto en tema oscuro (píldoras inactivas legibles). */
-  --nav-vidrio: var(--nav-vidrio-dark);
+  --nav-vidrio: var(--card);
   --nav-borde: #233452;
-  --nav-app-bg: rgba(255, 255, 255, 0.08);
+  --nav-app-bg: #182846;
   --nav-texto: rgba(255, 255, 255, 0.78);
   --nav-texto-fuerte: #ffffff;
   --nav-texto-tenue: rgba(255, 255, 255, 0.55);
@@ -293,4 +330,40 @@
   --gradient-action: linear-gradient(90deg, #8fb0ff 0%, #6fd0f0 55%, #5fe6e1 100%);
   --surface-sunken: #182846;
   --border-strong: #33486e;
+  --overlay: rgba(4, 9, 20, 0.7);
+
+  /* Tinta de títulos en oscuro cuando no hay marca de socio (ver --color-flit-primary). */
+  --flit-primary-tema: #e6f0ff;
+
+  /* Estados del trámite en oscuro: mismo tono, texto aclarado hasta ≥ 5:1 sobre la tarjeta oscura. */
+  --estado-borrador-bg: rgba(94,106,123,0.2);
+  --estado-borrador-fg: #9ea6b0;
+  --estado-borrador-border: rgba(94,106,123,0.45);
+  --estado-preparado-bg: rgba(85,126,255,0.2);
+  --estado-preparado-fg: #99b2ff;
+  --estado-preparado-border: rgba(85,126,255,0.45);
+  --estado-preasignacion-bg: rgba(224,138,0,0.2);
+  --estado-preasignacion-fg: #ecb966;
+  --estado-preasignacion-border: rgba(224,138,0,0.45);
+  --estado-asignado-bg: rgba(99,102,241,0.2);
+  --estado-asignado-fg: #a1a3f7;
+  --estado-asignado-border: rgba(99,102,241,0.45);
+  --estado-entregado-bg: rgba(0,169,157,0.2);
+  --estado-entregado-fg: #66cbc4;
+  --estado-entregado-border: rgba(0,169,157,0.45);
+  --estado-aprobado-bg: rgba(140,198,63,0.2);
+  --estado-aprobado-fg: #badd8c;
+  --estado-aprobado-border: rgba(140,198,63,0.45);
+  --estado-rechazado-bg: rgba(255,0,0,0.2);
+  --estado-rechazado-fg: #ff6666;
+  --estado-rechazado-border: rgba(255,0,0,0.45);
+  --estado-anulado-bg: rgba(193,39,45,0.2);
+  --estado-anulado-fg: #da7d81;
+  --estado-anulado-border: rgba(193,39,45,0.45);
+  --estado-revocado-bg: rgba(139,92,246,0.2);
+  --estado-revocado-fg: #b99dfa;
+  --estado-revocado-border: rgba(139,92,246,0.45);
+  --estado-subsanacion-bg: rgba(255,78,0,0.2);
+  --estado-subsanacion-fg: #ff9566;
+  --estado-subsanacion-border: rgba(255,78,0,0.45);
 }

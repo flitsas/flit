@@ -10,9 +10,12 @@
  * línea en `Tramites.tsx` (gestor) y en `OTTramites.tsx` (OT).
  */
 
-/** Gris de la barra de cabecera y color de su texto. */
-export const TABLA_HEADER_BG = '#DFE5ED';
-export const TABLA_HEADER_FG = '#162744';
+/**
+ * Fondo de la barra de cabecera y color de su texto. Salen de los tokens (`--table-header-*`): en el UI kit
+ * «Diseño Inteligente» (HU #14476) la cabecera es tinta con texto blanco y en oscuro se adapta sola.
+ */
+export const TABLA_HEADER_BG = 'var(--table-header-bg)';
+export const TABLA_HEADER_FG = 'var(--table-header-fg)';
 
 /**
  * Celda de cabecera: versalita de 10px y barra FIJA al hacer scroll.
@@ -23,17 +26,15 @@ export const TABLA_HEADER_FG = '#162744';
  * transparentarían por debajo.
  */
 export const TABLA_HEADER_CELL_CLS =
-  'sticky top-0 z-10 px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider';
+  'sticky top-0 z-10 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide';
 
 /**
- * Fila de listado: tarjeta blanca que se ilumina al pasar el puntero.
- *
- * El realce es una SOMBRA azul, no un cambio de borde: la fila conserva su contorno neutro y lo que
- * cambia es la elevación, que es lo que hace que se lea como una tarjeta que se puede abrir. El
- * borde azul que usaba el gestor competía con el borde de estado y decía otra cosa.
+ * Fila de listado: al pasar el puntero toma la superficie hundida del kit (`--table-row-hover`), como en
+ * el UI kit «Diseño Inteligente» (HU #14476). Se conserva la sombra suave, que es la que hace que la fila
+ * se lea como una tarjeta que se puede abrir; el borde no cambia, para no competir con el de estado.
  */
 export const TABLA_ROW_HOVER_CLS =
-  'transition hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]';
+  'transition hover:bg-[var(--table-row-hover)] hover:shadow-[var(--shadow-card-hover)]';
 
 /** Línea secundaria dentro de una celda (fechas bajo el radicado, gestor bajo la empresa…). */
 export const TABLA_CELDA_SECUNDARIA_CLS = 'text-[10px] opacity-55';

@@ -4,9 +4,8 @@
   .dock-capsula {
     background: var(--nav-vidrio);
     border: 1px solid var(--nav-borde);
-    box-shadow: var(--nav-sombra-dock);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    /* UI kit «Diseño Inteligente» (HU #14479): cápsula sólida con la sombra de diálogo del kit. */
+    box-shadow: var(--shadow-modal);
     border-radius: var(--nav-radio-pill);
   }
 

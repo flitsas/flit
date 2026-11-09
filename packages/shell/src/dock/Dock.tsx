@@ -174,10 +174,19 @@ function DockGroupPill({
           id={panelId}
           role="region"
           aria-label={group.label}
-          className="panel-up absolute bottom-full left-0 z-30 mb-2.5 max-h-[min(70vh,32rem)] min-w-[16rem] overflow-y-auto rounded-[var(--nav-radio-panel)] border border-[var(--nav-borde)] p-2"
+          className="panel-up absolute bottom-full left-0 z-30 mb-3.5 max-h-[min(70vh,32rem)] min-w-[18rem] overflow-y-auto rounded-[var(--nav-radio-panel)] border border-[var(--nav-borde)] pb-2"
           style={{ background: "var(--nav-panel-bg)", boxShadow: "var(--nav-sombra-panel)", left: shift ? `${shift}px` : undefined }}
         >
-          <ul className="flex flex-col gap-0.5">
+          {/* Franja tinta del kit con el nombre del grupo. Decorativa: la región ya se anuncia con ese nombre. */}
+          <div
+            aria-hidden="true"
+            className="mb-2 flex items-center gap-2.5 px-4 py-3 text-sm font-semibold"
+            style={{ background: "var(--table-header-bg)", color: "var(--table-header-fg)" }}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{group.label}</span>
+          </div>
+          <ul className="flex flex-col gap-1 px-2">
             {group.items.map((it) => (
               <DockPanelItem key={it.key} item={it} onNavigate={onNavigate} />
             ))}
@@ -189,7 +198,7 @@ function DockGroupPill({
 }
 
 const itemClass = (active: boolean) =>
-  `dock-panel-item group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors ${
+  `dock-panel-item group flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-sm transition-colors ${
     active ? "text-white" : "text-[var(--nav-texto)] hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
   }`;
 
@@ -225,7 +234,7 @@ function DockPanelItem({ item, onNavigate }: { item: DockEntry; onNavigate: () =
       <button
         type="button"
         onClick={() => setNestedOpen((v) => !v)}
-        className={`group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] ${
+        className={`group flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] ${
           item.active || kids.some((c) => c.active) ? "font-semibold text-[var(--nav-texto-fuerte)]" : "text-[var(--nav-texto)]"
         }`}
         aria-expanded={nestedOpen}
