@@ -261,6 +261,38 @@ public sealed class PagoPuntoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task HU14449_SiCambiaLaTarifaEntreLaConsultaYLaConfirmacion_SeCobraElTotalNuevo()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        var antes = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement;
+        antes.GetProperty("totalCop").GetInt64().Should().Be(366_000);
+
+        _host.Medios.Derechos = 200_000;
+        var pagado = await PagarCajaAsync(id);
+
+        pagado.ValorCop.Should().Be(381_000);
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().SingleAsync(c => c.SolicitudId == id, TestContext.Current.CancellationToken)).ValorCop.Should().Be(381_000);
+    }
+
+    [Fact]
+    public async Task HU14449_SiLaCotizacionFallaAlConfirmar_NoSeRegistraElPago()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        _host.Medios.SinTarifa = true;
+        await FluentActions.Awaiting(() => PagarCajaAsync(id)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "sin_tarifa");
+
+        (await EstadoDeAsync(id)).Should().Be("pendiente_pago");
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().CountAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task HU14449_ConElIdVencido_ElEstadoLoMarca_YAlHabilitarDeNuevoVigeHastaElNuevoDia_ConElTotalRecalculado()
     {
         await IniciarAsync();
