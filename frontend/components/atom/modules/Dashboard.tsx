@@ -56,6 +56,7 @@ import type {
   MonthlyTrendPoint,
 } from "@/lib/api/types";
 import type { BiometricValidationStats } from "@/lib/api/types/procedure-runtime";
+import { InicioModulos } from "@/components/inicio/InicioModulos";
 
 /** KPI de volumen del dashboard gestor (HU #12700 / E03). */
 export const DASHBOARD_KPI_TOTAL_LABEL = COPY.E03;
@@ -775,6 +776,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           </div>
         </UiStateBoundary>
       )}
+
+      {/* HU #14481 — cifras por estado y módulos del rol en acordeón. */}
+      <InicioModulos />
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
