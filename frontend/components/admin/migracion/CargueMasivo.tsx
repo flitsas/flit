@@ -303,7 +303,7 @@ export function CargueMasivo() {
       {error && <AvisoError error={error} />}
 
       {invalidas.length > 0 && (
-        <section className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <section className="rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-4">
           <h3 className="text-sm font-semibold">
             {sinFilasValidas
               ? "Ninguna fila del archivo se puede migrar"
@@ -365,7 +365,7 @@ export function CargueMasivo() {
                   </p>
                 )}
                 {reconciliado === false && (
-                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  <p className="mt-1 text-xs text-[var(--badge-warning-fg)]">
                     No se pudo contrastar con el servidor. Lo que ves es el avance guardado en este
                     navegador y puede estar desactualizado.
                   </p>
@@ -407,7 +407,7 @@ export function CargueMasivo() {
                   onClick={migrarSeleccionadas}
                   disabled={corriendo || pendientes.length === 0}
                   className={`flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-                    dryRun ? "bg-flit-brand" : "bg-amber-600 hover:bg-amber-700"
+                    dryRun ? "bg-flit-brand" : "bg-[var(--badge-warning-fg)] hover:opacity-90 dark:text-[var(--destructive-foreground)]"
                   }`}
                 >
                   {corriendo ? (

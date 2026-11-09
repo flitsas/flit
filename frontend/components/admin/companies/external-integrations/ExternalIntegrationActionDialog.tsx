@@ -102,7 +102,7 @@ export function ExternalIntegrationActionDialog({
       busy={busy}
       title={copy.title}
       icon={copy.icon}
-      iconBg={copy.danger ? "#FF4E00" : "var(--color-flit-brand)"}
+      iconBg={copy.danger ? "var(--destructive)" : "var(--color-flit-brand)"}
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
@@ -120,7 +120,7 @@ export function ExternalIntegrationActionDialog({
         </div>
       }
     >
-      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-foreground">
+      <div className="flex flex-col gap-3 text-sm text-flit-primary">
         <p>{copy.body}</p>
         {action === "rotate" && (
           <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-border p-3 focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2">
@@ -128,7 +128,7 @@ export function ExternalIntegrationActionDialog({
               type="checkbox"
               checked={revocarAnterior}
               onChange={(e) => setRevocarAnterior(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#FF4E00] focus-visible:outline-none"
+              className="mt-0.5 h-4 w-4 accent-destructive focus-visible:outline-none"
             />
             <span>
               <span className="font-semibold">Dejar sin efecto la clave anterior ahora mismo</span>

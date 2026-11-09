@@ -159,12 +159,12 @@ function CampoTexto({
         aria-invalid={Boolean(error)}
         aria-describedby={hintId}
         className={FIELD_CLASS}
-        style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: error ? "var(--destructive)" : "var(--border)" }}
       />
       <p
         id={hintId}
         role={error ? "alert" : undefined}
-        className={`mt-1 ${error ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
+        className={`mt-1 ${error ? "text-xs font-semibold text-destructive" : HELP_TEXT}`}
       >
         {error ?? ayuda}
       </p>
@@ -319,7 +319,7 @@ export function ParametrosTab() {
                         aria-invalid={Boolean(errores[campo])}
                         aria-describedby={hintId}
                         className={`${FIELD_CLASS} pr-24`}
-                        style={{ borderColor: errores[campo] ? "#FF4E00" : "#DFE5ED" }}
+                        style={{ borderColor: errores[campo] ? "var(--destructive)" : "var(--border)" }}
                       />
                       <span
                         aria-hidden="true"
@@ -331,7 +331,7 @@ export function ParametrosTab() {
                     <p
                       id={hintId}
                       role={errores[campo] ? "alert" : undefined}
-                      className={`mt-1 ${errores[campo] ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
+                      className={`mt-1 ${errores[campo] ? "text-xs font-semibold text-destructive" : HELP_TEXT}`}
                     >
                       {errores[campo] ??
                         `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}. Vacío: usa el valor habitual del portal (${r.habitual}).`}
@@ -356,7 +356,7 @@ export function ParametrosTab() {
                 value={form.captcha}
                 onChange={(e) => cambiar("captcha", e.target.value as Formulario["captcha"])}
                 className={FIELD_CLASS}
-                style={{ borderColor: "#DFE5ED" }}
+                style={{ borderColor: "var(--border)" }}
               >
                 <option value="">Lo habitual del portal ({CAPTCHA_HABITUAL})</option>
                 <option value="si">Activada</option>

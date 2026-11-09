@@ -94,8 +94,8 @@ export function FechaCalendario({
         aria-describedby={describedBy}
         onClick={() => setOpen((v) => !v)}
         className={`flex w-full min-w-0 items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2 text-left text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 ${
-          invalid ? "border-[#E5484D]" : "border-border"
-        } ${value ? "text-flit-primary dark:text-foreground" : "text-muted-foreground"}`}
+          invalid ? "border-destructive" : "border-border"
+        } ${value ? "text-flit-primary" : "text-muted-foreground"}`}
       >
         <span>{texto}</span>
         <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -123,7 +123,7 @@ export function FechaCalendario({
                 }}
                 components={{ DayButton: Dia }}
                 classNames={{
-                  root: "rdp-root text-flit-primary dark:text-foreground",
+                  root: "rdp-root text-flit-primary",
                   chevron: "fill-flit-brand",
                   day_button:
                     "rounded-lg text-xs font-medium hover:bg-flit-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand",

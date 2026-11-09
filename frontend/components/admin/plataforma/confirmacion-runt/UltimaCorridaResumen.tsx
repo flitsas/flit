@@ -24,10 +24,10 @@ export function duracionDe(run: Pick<RuntConfirmationRun, "startedAt" | "finishe
 
 /** Tarjetas de resumen (patrón del artifact): la cifra manda, con su tono semántico. */
 const STAT_TONE = {
-  neutral: "text-flit-primary dark:text-foreground",
-  ok: "text-[#15803D]",
-  warn: "text-[#C2410C]",
-  bad: "text-[#991B1B]",
+  neutral: "text-flit-primary",
+  ok: "text-[var(--flit-success-ink)]",
+  warn: "text-destructive",
+  bad: "text-destructive",
   mute: "text-muted-foreground",
 } as const;
 
@@ -64,14 +64,14 @@ export function UltimaCorridaResumen({ run, titulo }: { run: RuntConfirmationRun
 
   return (
     <div className="flex flex-col gap-2" data-testid="confirmacion-runt-ultima-corrida">
-      {titulo ? <p className="text-xs font-semibold text-flit-primary dark:text-foreground">{titulo}</p> : null}
+      {titulo ? <p className="text-xs font-semibold text-flit-primary">{titulo}</p> : null}
       {run.skippedReason ? (
-        <p className="rounded-lg bg-[#FF4E00]/10 px-3 py-2 text-xs font-semibold text-[#B33600] dark:text-[#FF8A5B]">
+        <p className="rounded-lg bg-[var(--badge-danger-bg)] px-3 py-2 text-xs font-semibold text-destructive">
           {SKIPPED_LABEL[run.skippedReason] ?? run.skippedReason}
         </p>
       ) : null}
       {run.errorMessage ? (
-        <p className="rounded-lg bg-[#991B1B]/10 px-3 py-2 text-xs text-[#991B1B]">{run.errorMessage}</p>
+        <p className="rounded-lg bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive">{run.errorMessage}</p>
       ) : null}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {stats.map((s) => (

@@ -328,7 +328,7 @@ function PersonalizedDocumentSection({
         v.isActive ? (
           <span
             className="rounded-md px-1.5 py-0.5 text-xs font-semibold"
-            style={{ color: "#0a8f8b", background: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" }}
+            style={{ color: "var(--flit-success-ink)", background: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" }}
           >
             Vigente
           </span>
@@ -367,7 +367,7 @@ function PersonalizedDocumentSection({
   ];
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)" }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-xs font-semibold">{meta.title}</h3>
@@ -379,7 +379,7 @@ function PersonalizedDocumentSection({
             onClick={() => setDialog({ kind: "deactivate" })}
             disabled={submitting}
             className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
           >
             <Undo2 className="h-3.5 w-3.5" aria-hidden />
             Volver al documento del sistema
@@ -395,7 +395,7 @@ function PersonalizedDocumentSection({
             style={{ borderColor: "var(--color-flit-tech)", background: "color-mix(in srgb, var(--color-flit-tech) 6%, transparent)" }}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "#0a8f8b" }} aria-hidden />
+              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} aria-hidden />
               <span className="min-w-0">
                 <span className="block truncate text-xs font-semibold">
                   {active.filename} <span className="opacity-60">· v{active.version}</span>
@@ -418,7 +418,7 @@ function PersonalizedDocumentSection({
         ) : (
           <p
             className="rounded-xl border px-3 py-2 text-xs opacity-70"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
             data-testid={`personalized-doc-empty-${documentType}`}
           >
             Ningún documento personalizado activo: se usa el generado por FLIT.
@@ -429,7 +429,7 @@ function PersonalizedDocumentSection({
       {/* Carga de un PDF nuevo */}
       <div className="mt-3">
         {uploadError && (
-          <p role="alert" className="mb-2 text-xs font-medium" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="mb-2 text-xs font-medium" style={{ color: "var(--destructive)" }}>
             {uploadError}
           </p>
         )}
@@ -437,7 +437,7 @@ function PersonalizedDocumentSection({
           <label
             htmlFor={inputId}
             className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs"
-            style={file ? { borderColor: "var(--color-flit-brand)" } : { borderColor: "#DFE5ED" }}
+            style={file ? { borderColor: "var(--color-flit-brand)" } : { borderColor: "var(--border)" }}
           >
             {file ? (
               <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
@@ -464,7 +464,7 @@ function PersonalizedDocumentSection({
             disabled={!file || submitting}
             onClick={() => file && setDialog({ kind: "activate", file })}
             className="flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             Cargar y activar
@@ -524,7 +524,7 @@ function PersonalizedDocumentSection({
             </p>
           )}
           {preview.error && (
-            <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="text-sm" style={{ color: "var(--destructive)" }}>
               {preview.error}
             </p>
           )}
@@ -533,7 +533,7 @@ function PersonalizedDocumentSection({
               src={preview.url}
               title={`Vista previa de ${preview.label}`}
               className="h-[70vh] w-full rounded-xl border"
-              style={{ borderColor: "#DFE5ED" }}
+              style={{ borderColor: "var(--border)" }}
             />
           )}
         </Modal>
@@ -581,7 +581,7 @@ function DocumentActionDialog({
       busy={busy}
       size="sm"
       icon={isActivation ? AlertTriangle : Undo2}
-      iconBg={isActivation ? "#F9AC00" : "var(--color-flit-brand)"}
+      iconBg={isActivation ? "var(--color-flit-alert)" : "var(--color-flit-brand)"}
       title={title}
     >
       {isActivation ? (
@@ -589,7 +589,7 @@ function DocumentActionDialog({
           <div
             role="alert"
             className="mt-2 rounded-xl border px-3 py-2 text-xs"
-            style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+            style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           >
             {warningText}
           </div>

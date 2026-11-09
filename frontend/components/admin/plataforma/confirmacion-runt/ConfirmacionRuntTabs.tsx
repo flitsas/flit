@@ -37,7 +37,7 @@ export function ConfirmacionRuntTabs({
             aria-selected={active}
             onClick={() => router.push(confirmacionRuntTabPath(tab.id))}
             className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition"
-            style={{ color: active ? "var(--color-flit-brand)" : "#162744", opacity: active ? 1 : 0.65 }}
+            style={{ color: active ? "var(--color-flit-brand)" : "var(--color-flit-primary)", opacity: active ? 1 : 0.65 }}
           >
             {tab.label}
             {active && (

@@ -10,7 +10,7 @@ import type {
 } from '@/lib/api/types/procedure-parametrization';
 
 const CAMPO =
-  'w-full rounded-xl border px-3 py-2 text-xs border-border bg-card text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
+  'w-full rounded-xl border px-3 py-2 text-xs border-border bg-card text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
 
 /**
  * Alta de un tipo de trámite.
@@ -68,7 +68,7 @@ export function NuevoTipoTramiteModal({
       aria-label="Nuevo tipo de trámite"
     >
       <div className="w-full max-w-lg rounded-2xl border bg-card p-5 border-border">
-        <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">
+        <h2 className="text-base font-semibold text-flit-primary">
           Nuevo tipo de trámite
         </h2>
         <p className="mt-1 text-xs opacity-70">
@@ -78,7 +78,7 @@ export function NuevoTipoTramiteModal({
 
         <div className="mt-4 flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">Código</span>
+            <span className="text-xs font-semibold text-flit-primary">Código</span>
             <input
               className={`${CAMPO} font-mono`}
               value={code}
@@ -90,7 +90,7 @@ export function NuevoTipoTramiteModal({
               No se puede cambiar después: es la llave con la que el tipo viaja a ICT, a Quipux y a
               los expedientes ya creados.
               {code.trim() && !codeValido && (
-                <span className="ml-1 font-medium" style={{ color: '#C2410C' }}>
+                <span className="ml-1 font-medium" style={{ color: 'var(--destructive)' }}>
                   Solo letras, dígitos y guion bajo; empieza por letra; mínimo 3 caracteres.
                 </span>
               )}
@@ -103,7 +103,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">Nombre</span>
+            <span className="text-xs font-semibold text-flit-primary">Nombre</span>
             <input
               className={CAMPO}
               value={name}
@@ -117,7 +117,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">Familia</span>
+            <span className="text-xs font-semibold text-flit-primary">Familia</span>
             <select
               className={CAMPO}
               value={family}
@@ -133,7 +133,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">
+            <span className="text-xs font-semibold text-flit-primary">
               Descripción <span className="font-normal opacity-60">(opcional)</span>
             </span>
             <input
@@ -148,7 +148,7 @@ export function NuevoTipoTramiteModal({
               integraciones, y descubrirlo cuando un pre-trámite de ICT no materialice es tarde. */}
           <p
             className="rounded-xl border px-3 py-2 text-xs"
-            style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
+            style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
           >
             Crear el tipo aquí no lo da de alta en ICT ni en Quipux. Si este trámite llega por
             integración o se radica en la secretaría, hay que mapear su código en esos catálogos.
@@ -156,7 +156,7 @@ export function NuevoTipoTramiteModal({
         </div>
 
         {error && (
-          <p className="mt-3 text-xs" role="alert" style={{ color: '#C2410C' }}>
+          <p className="mt-3 text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
             {error}
           </p>
         )}
@@ -174,7 +174,7 @@ export function NuevoTipoTramiteModal({
             onClick={() => void crear()}
             disabled={!puedeGuardar}
             className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+            style={{ background: 'var(--gradient-action)' }}
           >
             {guardando ? (
               <span className="inline-flex items-center gap-1.5">

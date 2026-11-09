@@ -534,7 +534,7 @@ export function QuipuxSettingsForm() {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <header className="border-b border-border pb-3">
-      <h2 className="text-sm font-semibold text-flit-primary dark:text-foreground">{title}</h2>
+      <h2 className="text-sm font-semibold text-flit-primary">{title}</h2>
       <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
     </header>
   );

@@ -160,24 +160,24 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                 const badge = ESTADO_BADGE[item.estado] ?? ESTADO_BADGE.vencida;
                 return (
                   <tr key={item.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-                    <td className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
+                    <td className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
                       {formatDate(registro)}
                     </td>
-                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
+                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
                       <span className="font-mono">
                         {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </span>
                     </td>
-                    <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
+                    <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
                       {item.codigoHash ?? "—"}
                     </td>
-                    <td className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
+                    <td className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
                       {item.fullName}
                     </td>
-                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
+                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
                       {formatDate(item.vigenciaDesde)} — {formatDate(item.vigenciaHasta)}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                       <span
                         className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
                         style={{ color: badge.color, borderColor: badge.border, background: badge.bg }}
@@ -185,7 +185,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                         {ESTADO_LABELS[item.estado] ?? item.estado}
                       </span>
                     </td>
-                    <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "var(--border)" }}>
                       {/* Corregir/Anular solo sobre firmas activas: el contenido de una revocada es
                           histórico. Sin Corregir, arreglar un código hash mal digitado obligaba a
                           anular la firma y volver a registrarla. */}
@@ -266,7 +266,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           busy={revoking}
           size="sm"
           icon={AlertTriangle}
-          iconBg="#FF4E00"
+          iconBg="var(--destructive)"
           title="Anular firma"
         >
           <p className="mt-2 text-sm opacity-80">
@@ -287,7 +287,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
               onClick={() => void confirmRevoke()}
               disabled={revoking}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              style={{ background: "#FF4E00" }}
+              style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
             >
               {revoking && <Loader2 className="h-4 w-4 animate-spin" />}
               Anular firma

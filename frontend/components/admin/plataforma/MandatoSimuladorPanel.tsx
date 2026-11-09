@@ -265,7 +265,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+          className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
         >
           {error}
         </p>
@@ -345,7 +345,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             ))}
           </select>
           {typesStatus === "error" ? (
-            <span className="block text-xs text-[#FF4E00]">
+            <span className="block text-xs text-destructive">
               No se pudieron cargar los tipos de trámite publicados.
             </span>
           ) : null}
@@ -471,7 +471,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             </span>
           ) : null}
           {signersStatus === "error" ? (
-            <span className="block text-[11px] text-[#FF4E00]">
+            <span className="block text-[11px] text-destructive">
               No se pudieron cargar los mandatarios de este organismo.
             </span>
           ) : null}
@@ -498,7 +498,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
               disabled={busy || !officeId || !procedureTypeCode}
               onClick={() => void handleSend()}
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               <Mail className="h-3.5 w-3.5" aria-hidden="true" />
               {sending ? "Enviando…" : "Enviar por correo"}
@@ -511,7 +511,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
           disabled={busy || !officeId || !procedureTypeCode}
           onClick={() => void handlePreview()}
           className="ml-auto inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
           {previewing ? "Generando…" : "Ver PDF"}

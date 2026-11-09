@@ -123,10 +123,10 @@ export function BannerListTable({
           <tbody>
             {items.map((b) => (
               <tr key={b.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+                <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "var(--border)" }}>
                   {b.name}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   {/* AC1 mejora: la miniatura no recorta (object-contain) y, al hacer clic, abre
                       la imagen completa en un visualizador — la miniatura sigue siendo chica para
                       no romper el alto de la fila, pero nada del banner queda oculto. */}
@@ -136,7 +136,7 @@ export function BannerListTable({
                     aria-label={`Ver la imagen completa del banner ${b.name}`}
                     title="Ver imagen completa"
                     className="flex h-14 w-32 items-center justify-center overflow-hidden rounded-lg border bg-secondary transition hover:opacity-80"
-                    style={{ borderColor: "#DFE5ED" }}
+                    style={{ borderColor: "var(--border)" }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- preview binaria vía endpoint público streaming, no un asset estático */}
                     <img
@@ -146,7 +146,7 @@ export function BannerListTable({
                     />
                   </button>
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   {b.linkUrl ? (
                     <span className="inline-flex items-center gap-1">
                       <StatusBadge label="SÍ" tone="info" ariaLabel={`${b.name} tiene enlace`} />
@@ -166,16 +166,16 @@ export function BannerListTable({
                     <StatusBadge label="NO" tone="neutral" ariaLabel={`${b.name} no tiene enlace`} />
                   )}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   <StatusBadge label={ESTADO_LABEL[b.estado]} tone={bannerEstadoTone(b.estado)} />
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {formatFechaHora(b.validFrom, "Sin fecha programada")}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {formatFechaHora(b.validUntil, "Sin fecha programada")}
                 </td>
-                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "var(--border)" }}>
                   <RowActions
                     actions={[
                       {

@@ -31,11 +31,11 @@ const PESTANAS: Array<{ id: Pestana; label: string }> = [
 
 /** Mismo mapa de tonos que los hitos de Trazabilidad ICT: color + ícono, y el texto siempre al lado. */
 const TONO: Record<RuntConfirmationVerdict, { fg: string; bg: string; Icon: LucideIcon }> = {
-  confirmed: { fg: "#15803D", bg: "rgba(34,197,94,0.14)", Icon: Check },
-  pending: { fg: "#C2410C", bg: "rgba(255,78,0,0.14)", Icon: Hourglass },
-  discrepancy: { fg: "#991B1B", bg: "rgba(153,27,27,0.14)", Icon: X },
-  unverifiable: { fg: "#64748B", bg: "rgba(148,163,184,0.16)", Icon: CircleDashed },
-  error: { fg: "#6B21A8", bg: "rgba(107,33,168,0.14)", Icon: Ban },
+  confirmed: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: Check },
+  pending: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: Hourglass },
+  discrepancy: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: X },
+  unverifiable: { fg: "var(--badge-neutral-fg)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
+  error: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
 };
 
 const FLAG_LABEL: Record<string, string> = {
@@ -170,7 +170,7 @@ export function IntentoDetalle({
         })}
       </div>
 
-      <div className="p-4 text-xs text-flit-primary dark:text-foreground">
+      <div className="p-4 text-xs text-flit-primary">
         {pestana === "veredicto" && (
           <div className="flex flex-col gap-4">
             {/* El veredicto y su porqué, juntos y arriba: es lo que vino a leer quien abrió la fila. */}
@@ -226,7 +226,7 @@ export function IntentoDetalle({
                   type="button"
                   onClick={() => setConfirmando(true)}
                   data-testid="consultar-ahora"
-                  className="ml-auto rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-2 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+                  className="ml-auto rounded-full bg-[image:var(--gradient-action)] px-3 py-2 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                 >
                   Consultar ahora
                 </button>
@@ -239,7 +239,7 @@ export function IntentoDetalle({
                     onClick={() => void consultarAhora()}
                     disabled={consultando}
                     data-testid="consultar-ahora-confirmar"
-                    className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="rounded-full bg-[image:var(--gradient-action)] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
                   >
                     {consultando ? "Consultando…" : "Sí, consultar"}
                   </button>
@@ -350,7 +350,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
     return (
       <section className="flex flex-col gap-2">
         {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
-        <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "#C2410C" }}>
+        <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "var(--destructive)" }}>
           {vista.resultado === "no_encontrado"
             ? `El proveedor no encontró el vehículo con ese documento${vista.mensaje ? `: «${vista.mensaje}»` : "."}`
             : vista.resultado === "error"
@@ -441,14 +441,14 @@ function SolicitudesTabla({ solicitudes }: { solicitudes: Solicitud[] }) {
 }
 
 const ESTADO_SOLICITUD: Record<string, { bg: string; fg: string }> = {
-  AUTORIZADA: { bg: "rgba(34,197,94,0.14)", fg: "#15803D" },
-  APROBADA: { bg: "rgba(34,197,94,0.14)", fg: "#15803D" },
-  REGISTRADA: { bg: "rgba(255,78,0,0.14)", fg: "#C2410C" },
-  RECHAZADA: { bg: "rgba(153,27,27,0.14)", fg: "#991B1B" },
+  AUTORIZADA: { bg: "rgba(34,197,94,0.14)", fg: "var(--flit-success-ink)" },
+  APROBADA: { bg: "rgba(34,197,94,0.14)", fg: "var(--flit-success-ink)" },
+  REGISTRADA: { bg: "rgba(255,78,0,0.14)", fg: "var(--destructive)" },
+  RECHAZADA: { bg: "rgba(153,27,27,0.14)", fg: "var(--destructive)" },
 };
 
 function EstadoSolicitud({ estado }: { estado: string }) {
-  const tono = ESTADO_SOLICITUD[estado.toUpperCase()] ?? { bg: "rgba(148,163,184,0.16)", fg: "#475569" };
+  const tono = ESTADO_SOLICITUD[estado.toUpperCase()] ?? { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)" };
   return (
     <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: tono.bg, color: tono.fg }}>
       {estado}

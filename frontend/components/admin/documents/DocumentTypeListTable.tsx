@@ -80,29 +80,29 @@ export function DocumentTypeListTable({
             const activo = d.estado === "activo";
             return (
               <tr key={d.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+                <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "var(--border)" }}>
                   {d.codigo}
                 </td>
-                <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "var(--border)" }}>
                   {d.nombre}
                   {d.descripcion && <p className="mt-0.5 text-xs font-normal opacity-60">{d.descripcion}</p>}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   <StatusBadge
                     label={d.esAutogenerado ? "Autogenerado" : "Cargue"}
                     tone={d.esAutogenerado ? "info" : "neutral"}
                   />
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   <StatusBadge
                     label={activo ? "Activo" : "Inactivo"}
                     tone={activo ? "success" : "danger"}
                   />
                 </td>
-                <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "var(--border)" }}>
                   {formatDate(d.fechaCreacion)}
                 </td>
-                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "var(--border)" }}>
                   <div className="flex items-center justify-end gap-1">
                     <RowActions
                       actions={[

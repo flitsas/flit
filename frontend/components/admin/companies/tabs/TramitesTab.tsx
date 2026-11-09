@@ -271,7 +271,7 @@ function FieldError({ message }: { message?: string }) {
     return null;
   }
   return (
-    <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+    <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
       {message}
     </p>
   );

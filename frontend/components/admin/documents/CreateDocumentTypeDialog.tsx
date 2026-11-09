@@ -178,13 +178,13 @@ export function CreateDocumentTypeDialog({
                 readOnly
                 aria-readonly="true"
                 className="w-full cursor-not-allowed rounded-xl border px-3 py-2 font-mono text-xs outline-none opacity-80"
-                style={{ borderColor: "#DFE5ED", background: "#F4F7FB" }}
+                style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
               />
             </Field>
           )}
 
           {errors.form && (
-            <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
               {errors.form}
             </p>
           )}
@@ -198,7 +198,7 @@ export function CreateDocumentTypeDialog({
               maxLength={150}
               aria-describedby={errors.nombre ? "dt-nombre-error" : undefined}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-              style={{ borderColor: errors.nombre ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: errors.nombre ? "var(--destructive)" : "var(--border)" }}
             />
           </Field>
 
@@ -211,7 +211,7 @@ export function CreateDocumentTypeDialog({
               rows={3}
               aria-describedby={errors.descripcion ? "dt-desc-error" : undefined}
               className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-              style={{ borderColor: errors.descripcion ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: errors.descripcion ? "var(--destructive)" : "var(--border)" }}
             />
           </Field>
 
@@ -230,7 +230,7 @@ export function CreateDocumentTypeDialog({
               placeholder="Ej.: Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda."
               aria-describedby={errors.instruccionCargue ? "dt-instruccion-error" : undefined}
               className="w-full resize-none rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-              style={{ borderColor: errors.instruccionCargue ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: errors.instruccionCargue ? "var(--destructive)" : "var(--border)" }}
             />
           </Field>
 
@@ -318,7 +318,7 @@ export function CreateDocumentTypeDialog({
               onClick={submit}
               disabled={submitting}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {submitting ? "Guardando…" : cta}
@@ -350,7 +350,7 @@ function Field({
       {children}
       {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p id={`${htmlFor}-error`} className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p id={`${htmlFor}-error`} className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

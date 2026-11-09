@@ -165,7 +165,7 @@ export function AiToolCard({
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id={`ai-tool-${tool.toolCode}`} className="text-sm font-bold text-flit-primary dark:text-foreground">
+          <h2 id={`ai-tool-${tool.toolCode}`} className="text-sm font-bold text-flit-primary">
             {label}
           </h2>
           <StatusBadge tone="info" label={`Activo: ${etiquetaProveedor(tool.activeProvider)}`} />
@@ -210,7 +210,7 @@ export function AiToolCard({
 
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-flit-primary dark:text-foreground">
+                  <span className="text-xs font-semibold text-flit-primary">
                     {etiquetaProveedor(slot.providerCode)}
                   </span>
                   <StatusBadge
@@ -296,7 +296,7 @@ export function AiToolCard({
           type="button"
           onClick={() => void guardar()}
           disabled={!dirty || saving || activating}
-          className="ml-auto rounded-xl bg-[#162744] px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+          className="ml-auto rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
         >
           {saving ? "Guardando…" : "Guardar prioridad y opciones"}
         </button>
@@ -316,7 +316,7 @@ export function AiToolCard({
           }}
           busy={activating}
           icon={AlertTriangle}
-          iconBg="#F9AC00"
+          iconBg="var(--color-flit-alert)"
           title="Cambiar proveedor activo"
           titleClassName="text-base font-bold text-flit-primary"
           size="md"

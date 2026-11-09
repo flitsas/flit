@@ -9,7 +9,7 @@
  * `#0B0F14`, que es un surface inventado por componente y no está autorizado.
  */
 export const OT_INPUT_CLS =
-  "w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-flit-primary placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70 dark:text-foreground";
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-flit-primary placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70";
 
 export const OT_FILTER_FORM_CLS =
   "grid grid-cols-1 gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";

@@ -42,8 +42,7 @@ export interface AuditLogTableProps {
 
 const FIELD_CLS =
   "h-10 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-flit-primary " +
-  "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 " +
-  "dark:text-foreground";
+  "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30";
 
 const ALL_EVENTS = "";
 
@@ -123,7 +122,7 @@ export function AuditLogTable({
       header: titulo("campo", "Campo modificado"),
       render: (entry) => (
         <span
-          className="font-medium text-flit-primary dark:text-foreground"
+          className="font-medium text-flit-primary"
           title={technicalKey(entry.entityName, entry.fieldName)}
         >
           {eventLabel(entry.entityName, entry.fieldName)}

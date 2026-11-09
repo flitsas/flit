@@ -159,7 +159,7 @@ function FurResultGuide({
   const guide = buildFurGuide({ code, family, prenda, color, carroceria, combustible, blindaje });
   return (
     <section
-      className="md:col-span-2 rounded-2xl border border-border bg-[#F7F9FC] p-4 dark:bg-secondary"
+      className="md:col-span-2 rounded-2xl border border-border bg-secondary p-4"
       aria-labelledby="fur-guide-title"
       data-testid="fur-result-guide"
     >
@@ -181,7 +181,7 @@ function FurResultGuide({
               {guide.casillas.map((c) => (
                 <li
                   key={c.n}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm text-foreground ring-1 ring-[#DFE5ED] dark:ring-white/15"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm text-foreground ring-1 ring-border"
                 >
                   <span className="font-semibold tabular-nums">{c.n}</span>
                   <span>{c.label}</span>
@@ -557,7 +557,7 @@ export function FurSimulatorPanel() {
               disabled={!canSimulate || previewLoading}
               aria-busy={previewLoading}
               className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               Simular FUR
             </button>

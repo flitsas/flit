@@ -132,7 +132,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
         </label>
 
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-semibold text-flit-primary dark:text-foreground">Imagen</span>
+          <span className="text-sm font-semibold text-flit-primary">Imagen</span>
           <InlineAlert tone="info" compact>
             JPG, PNG o WEBP, de hasta 2 MB.
           </InlineAlert>
@@ -209,7 +209,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
           <p className={`${PN_HINT_CLS} sm:col-span-2`}>Hora de Colombia. Sin fechas, el banner se muestra siempre que esté visible.</p>
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-foreground">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary">
           <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} className="h-4 w-4 accent-[color:var(--color-flit-brand)]" />
           Mostrar este banner en el portal
         </label>

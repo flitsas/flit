@@ -101,9 +101,9 @@ export function MandatarioBajaDialog({
       onClose={onClose}
       busy={busy}
       icon={AlertTriangle}
-      iconBg={conImpacto || eliminar ? "#FF4E00" : "#F9AC00"}
+      iconBg={conImpacto || eliminar ? "var(--destructive)" : "var(--color-flit-alert)"}
       title={titulo}
-      titleClassName="text-base font-bold text-flit-primary dark:text-foreground"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
       zClassName="z-[110]"
     >
@@ -116,7 +116,7 @@ export function MandatarioBajaDialog({
 
         {carga.fase === "error" && (
           <div role="alert" className="space-y-2">
-            <p className="text-[#E5484D]">No se pudo revisar el impacto. Inténtalo de nuevo.</p>
+            <p className="text-destructive">No se pudo revisar el impacto. Inténtalo de nuevo.</p>
             <button
               type="button"
               className="rounded-xl border px-3 py-1.5 text-xs font-semibold"
@@ -147,11 +147,11 @@ export function MandatarioBajaDialog({
         {impact && conImpacto && (
           <div
             className="space-y-2 rounded-xl border px-3 py-2 leading-relaxed"
-            style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
+            style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)" }}
             role="note"
             data-testid="mandatario-baja-impacto"
           >
-            <p className="font-semibold text-flit-primary dark:text-foreground">
+            <p className="font-semibold text-flit-primary">
               {eliminar ? "Eliminar" : "Desactivar"} a {signer.fullName} tiene estos efectos:
             </p>
             {impact.onlyActiveFor.length > 0 && (
@@ -196,7 +196,7 @@ export function MandatarioBajaDialog({
         )}
 
         {error && (
-          <p role="alert" className="text-[#E5484D]" data-testid="mandatario-baja-error">
+          <p role="alert" className="text-destructive" data-testid="mandatario-baja-error">
             {error}
           </p>
         )}
@@ -215,7 +215,7 @@ export function MandatarioBajaDialog({
             onClick={() => void confirmar()}
             disabled={busy || carga.fase !== "listo"}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: eliminar || conImpacto ? "#FF4E00" : "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: eliminar || conImpacto ? "var(--destructive)" : "var(--gradient-action)" }}
           >
             {conImpacto ? `Sí, ${verbo.toLowerCase()}` : verbo}
           </button>

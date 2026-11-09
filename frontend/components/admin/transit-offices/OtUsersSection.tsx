@@ -439,7 +439,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               type="button"
               onClick={() => setShowDeleted((v) => !v)}
               aria-pressed={showDeleted}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-secondary"
               style={{ color: "var(--color-flit-brand)" }}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -452,7 +452,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               type="button"
               onClick={() => setInviteOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               Invitar usuario
             </button>
@@ -782,7 +782,7 @@ function OtInviteUserDialog({
               type="submit"
               disabled={busy || missingRole}
               className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               {busy ? "Enviando…" : "Enviar invitación"}
             </button>

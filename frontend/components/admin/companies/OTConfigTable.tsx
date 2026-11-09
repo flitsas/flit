@@ -260,7 +260,7 @@ export function OTConfigTable({
               <span
                 role="status"
                 className="flex items-center gap-1 text-xs font-semibold"
-                style={{ color: "#0a8f8b" }}
+                style={{ color: "var(--flit-success-ink)" }}
               >
                 <Check className="h-3 w-3" /> Guardado
               </span>
@@ -269,7 +269,7 @@ export function OTConfigTable({
               <span
                 id={reasonId}
                 className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                style={{ color: "#b25a00", borderColor: "#f0c38e", background: "#fff7ed" }}
+                style={{ color: "var(--badge-warning-fg)", borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)" }}
               >
                 {reason} en FLIT
               </span>

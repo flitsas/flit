@@ -55,7 +55,7 @@ export function MandatarioGeneralCard({
           <span
             aria-hidden="true"
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-white"
-            style={{ background: hay ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "#B7C2D3" }}
+            style={{ background: hay ? "var(--gradient-action)" : "var(--border-strong)" }}
           >
             {hay ? <UserCheck className="h-6 w-6" /> : <UserPlus className="h-6 w-6" />}
           </span>
@@ -69,7 +69,7 @@ export function MandatarioGeneralCard({
             {hay ? (
               <>
                 <p
-                  className="mt-0.5 truncate text-lg font-bold text-flit-primary dark:text-foreground"
+                  className="mt-0.5 truncate text-lg font-bold text-flit-primary"
                   data-testid="ot-mandatos-general-signer"
                 >
                   {nombre}
@@ -82,7 +82,7 @@ export function MandatarioGeneralCard({
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {signer ? (
                     <>
-                      <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary dark:text-foreground">
+                      <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary">
                         {etiquetaModelo(signer)}
                       </span>
                       <MandatarioVigenciaBadge signer={signer} />
@@ -94,7 +94,7 @@ export function MandatarioGeneralCard({
                         />
                       ) : null}
                       {natural ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary dark:text-foreground">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary">
                           <ShieldCheck className="h-3.5 w-3.5 text-flit-brand" aria-hidden="true" />
                           {etiquetaTipoFirma(tipoDeFirmaMandatario(signer))}
                         </span>
@@ -129,7 +129,7 @@ export function MandatarioGeneralCard({
             onClick={onEditar}
             aria-label="Editar mandatario general del organismo"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
             {hay ? "Cambiar mandatario" : "Elegir mandatario"}

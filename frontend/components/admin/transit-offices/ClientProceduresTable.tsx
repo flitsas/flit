@@ -186,16 +186,16 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-xl dark:text-foreground"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-xl"
         >
-          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
           </p>
           <div className="p-1.5">
             {opciones.map((opcion) => (
               <div
                 key={opcion.id}
-                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-border [&+&]:pt-2"
               >
                 <p className="mb-1.5 text-xs font-medium">{opcion.label}</p>
                 <span className="flex items-center gap-1.5">
@@ -215,7 +215,7 @@ function SortMenu({
                         }}
                         className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                           seleccionada
-                            ? "border-[#2C6BED] bg-[#2C6BED] text-white"
+                            ? "border-flit-brand bg-flit-brand text-white"
                             : "border-border text-muted-foreground hover:bg-secondary"
                         }`}
                       >
@@ -327,7 +327,7 @@ function renderCelda(
           {row.prioritario && (
             <Star
               className="h-3.5 w-3.5 shrink-0"
-              style={{ color: "#F59E0B", fill: "#F59E0B" }}
+              style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }}
               aria-label="Trámite prioritario"
             />
           )}
@@ -634,7 +634,7 @@ export function ClientProceduresTable({
                 <td
                   key={columna.key}
                   className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
-                  style={{ borderColor: "#DFE5ED" }}
+                  style={{ borderColor: "var(--border)" }}
                 >
                   {renderCelda(columna.key, row, onVerDetalle)}
                 </td>
@@ -651,7 +651,7 @@ export function ClientProceduresTable({
               {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                style={{ borderColor: "#DFE5ED" }}
+                style={{ borderColor: "var(--border)" }}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -660,12 +660,12 @@ export function ClientProceduresTable({
                   {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <span className="rounded-full bg-[var(--badge-success-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--flit-success-ink)]">
                           SOAT
                         </span>
                       )}
                       {row.impuestoDepartamentalPagado && (
-                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                        <span className="rounded-full bg-[var(--badge-info-bg)] px-2 py-0.5 text-[10px] font-semibold text-flit-brand-ink">
                           Impuesto
                         </span>
                       )}

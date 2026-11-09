@@ -90,7 +90,7 @@ export function AiTransitionsTable({
 
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-bold text-flit-primary dark:text-foreground">
+      <h3 className="text-xs font-bold text-flit-primary">
         Historial de cambios — {toolLabel}
       </h3>
       <DataTable<AiProviderTransitionView>

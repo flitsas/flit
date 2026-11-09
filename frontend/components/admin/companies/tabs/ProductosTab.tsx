@@ -90,7 +90,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
 
   if (loadError) {
     return (
-      <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+      <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
         No se pudieron cargar los productos de la compañía. Recarga la página para intentarlo de nuevo.
       </p>
     );
@@ -140,7 +140,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
                     role="alertdialog"
                     aria-labelledby={`apagar-${p.productCode}`}
                     className="ml-12 rounded-xl border px-4 py-3 text-xs"
-                    style={{ borderColor: "#FF4E00" }}
+                    style={{ borderColor: "var(--destructive)" }}
                   >
                     <p id={`apagar-${p.productCode}`} className="font-semibold">
                       ¿Apagar {p.name} para esta compañía?
@@ -154,7 +154,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
                         type="button"
                         onClick={() => void apply(p, false)}
                         className="rounded-lg px-3 py-1.5 font-semibold text-white"
-                        style={{ background: "#FF4E00" }}
+                        style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
                       >
                         Apagar {p.name}
                       </button>
@@ -171,7 +171,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
       )}
 
       {error && (
-        <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

@@ -51,7 +51,7 @@ export function OtCampo({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
       <dt className="text-xs text-flit-primary/70 dark:text-muted-foreground">{campo}</dt>
-      <dd className="break-words text-xs font-medium text-flit-primary dark:text-foreground">
+      <dd className="break-words text-xs font-medium text-flit-primary">
         {valor === null || valor === undefined || valor === "" ? "—" : valor}
       </dd>
     </>
@@ -63,7 +63,7 @@ export function OtSello({ texto, color, soft }: { texto: string; color: string; 
   return (
     <span
       className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={soft ? { background: `${color}22`, color } : { background: color, color: "#fff" }}
+      style={soft ? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color } : { background: color, color: "#fff" }}
     >
       {texto}
     </span>

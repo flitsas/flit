@@ -369,7 +369,7 @@ export function LegalRepresentativesTab({
               </p>
               {totalReported > items.length && (
                 <p
-                  className="text-xs font-semibold text-[#B45309]"
+                  className="text-xs font-semibold text-[var(--badge-warning-fg)]"
                   role="status"
                   data-testid="representantes-truncado"
                 >

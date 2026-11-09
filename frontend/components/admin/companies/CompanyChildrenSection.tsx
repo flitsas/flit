@@ -201,20 +201,20 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
                       >
                         <td
                           className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {child.razonSocial}
                         </td>
                         <td
                           className="border-y px-4 py-3 font-mono"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {child.nit}
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           {tenantTypeLabel(child.tenantType)}
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           {child.estadoActivo ? (
                             <StatusBadge label="Activo" tone="success" />
                           ) : (
@@ -223,13 +223,13 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
                         </td>
                         <td
                           className="border-y px-4 py-3 opacity-70"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {formatDate(child.fechaVinculacion)}
                         </td>
                         <td
                           className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           <RowActions
                             actions={[

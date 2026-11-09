@@ -185,7 +185,7 @@ export function DeedsFormPanel({
   );
 
   const errStyle = (field: string) =>
-    fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
+    fieldErrors[field] ? { borderColor: "var(--destructive)" } : undefined;
 
   return (
     <Modal
@@ -201,7 +201,7 @@ export function DeedsFormPanel({
           <p
             role="alert"
             className="rounded-xl border px-3 py-2 text-xs font-medium"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
             {banner}
           </p>
@@ -212,7 +212,7 @@ export function DeedsFormPanel({
           <span className="mb-1 block text-xs font-semibold">Compañía</span>
           <div
             className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
           >
             <Building2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             <span className="min-w-0">
@@ -233,7 +233,7 @@ export function DeedsFormPanel({
             value={form.description}
             onChange={(e) => patch({ description: e.target.value })}
             className={OT_INPUT_CLS}
-            style={errStyle("description") || (missingDescription ? { borderColor: "#FF4E00" } : undefined)}
+            style={errStyle("description") || (missingDescription ? { borderColor: "var(--destructive)" } : undefined)}
             placeholder="Escritura de constitución, poder general…"
             aria-required="true"
             aria-invalid={Boolean(fieldErrors.description) || missingDescription}
@@ -259,7 +259,7 @@ export function DeedsFormPanel({
               form.file
                 ? { borderColor: "var(--color-flit-brand)" }
                 : missingFile
-                  ? { borderColor: "#FF4E00" }
+                  ? { borderColor: "var(--destructive)" }
                   : undefined
             }
           >
@@ -288,7 +288,7 @@ export function DeedsFormPanel({
             aria-describedby={missingFile ? "deed-file-error" : undefined}
           />
           {missingFile && (
-            <p id="deed-file-error" role="alert" className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
+            <p id="deed-file-error" role="alert" className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }}>
               El documento PDF es obligatorio.
             </p>
           )}
@@ -307,7 +307,7 @@ export function DeedsFormPanel({
               value={form.vigenciaDesde}
               onChange={(e) => patch({ vigenciaDesde: e.target.value })}
               className={OT_INPUT_CLS}
-              style={errStyle("vigenciaDesde") || (missingDesde ? { borderColor: "#FF4E00" } : undefined)}
+              style={errStyle("vigenciaDesde") || (missingDesde ? { borderColor: "var(--destructive)" } : undefined)}
               aria-required="true"
               aria-invalid={Boolean(fieldErrors.vigenciaDesde) || missingDesde}
               aria-describedby={
@@ -327,7 +327,7 @@ export function DeedsFormPanel({
               value={form.vigenciaHasta}
               onChange={(e) => patch({ vigenciaHasta: e.target.value })}
               className={OT_INPUT_CLS}
-              style={errStyle("vigenciaHasta") || (missingHasta ? { borderColor: "#FF4E00" } : undefined)}
+              style={errStyle("vigenciaHasta") || (missingHasta ? { borderColor: "var(--destructive)" } : undefined)}
               aria-required="true"
               aria-invalid={Boolean(fieldErrors.vigenciaHasta) || missingHasta}
               aria-describedby={
@@ -337,7 +337,7 @@ export function DeedsFormPanel({
           </Field>
         </div>
       </div>
-      <div className="mt-5 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
+      <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border)" }}>
         {footer}
       </div>
     </Modal>
@@ -363,7 +363,7 @@ function Field({
       <label htmlFor={id} className="mb-1 block text-xs font-semibold">
         {label}
         {required && (
-          <span aria-hidden="true" style={{ color: "#FF4E00" }}>
+          <span aria-hidden="true" style={{ color: "var(--destructive)" }}>
             {" "}
             *
           </span>
@@ -374,7 +374,7 @@ function Field({
         <p
           id={`${id}-error`}
           className="mt-1 text-xs font-medium"
-          style={{ color: "#FF4E00" }}
+          style={{ color: "var(--destructive)" }}
           role="alert"
         >
           {error}

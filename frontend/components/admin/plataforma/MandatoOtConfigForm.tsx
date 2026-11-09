@@ -704,7 +704,7 @@ export function MandatoOtConfigForm({
                 disabled={busy}
                 onClick={() => void handleSaveMeta()}
                 className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 {saving ? "Guardando…" : "Guardar plantilla"}
               </button>
@@ -717,7 +717,7 @@ export function MandatoOtConfigForm({
                   disabled={busy}
                   onClick={() => void handleSaveOtDefaultSigner()}
                   className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                  style={{ background: "var(--gradient-action)" }}
                 >
                   {saving ? "Guardando…" : "Guardar mandatario general"}
                 </button>
@@ -727,7 +727,7 @@ export function MandatoOtConfigForm({
                 disabled={busy}
                 onClick={onClose}
                 className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 Cerrar
               </button>
@@ -749,7 +749,7 @@ export function MandatoOtConfigForm({
         {error ? (
           <p
             role="alert"
-            className="rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+            className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
           >
             {error}
           </p>
@@ -778,13 +778,13 @@ export function MandatoOtConfigForm({
               <div
                 role="alert"
                 data-testid="mandato-formatos-error"
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
               >
                 <span>No se pudo cargar la lista de formatos de contrato.</span>
                 <button
                   type="button"
                   onClick={formatos.reload}
-                  className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+                  className="rounded-full border border-[var(--badge-danger-border)] px-3 py-1 font-semibold"
                 >
                   Reintentar
                 </button>
@@ -827,14 +827,14 @@ export function MandatoOtConfigForm({
             {terceroAjeno ? (
               <div
                 className="rounded-2xl border px-4 py-3"
-                style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
+                style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)" }}
                 data-testid="mandato-template-ajena-warning"
                 role="alert"
               >
-                <p className="text-[11px] font-semibold leading-relaxed text-[#8a6000]">
+                <p className="text-[11px] font-semibold leading-relaxed text-[var(--badge-warning-fg)]">
                   Esta redacción es de otro organismo.
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-[#8a6000]">
+                <p className="mt-1 text-[11px] leading-relaxed text-[var(--badge-warning-fg)]">
                   El contrato de {office.name} quedaría nombrando a{" "}
                   <span className="font-semibold">{terceroAjeno}</span>, que no interviene en sus
                   trámites. Puedes guardarlo igual si es lo que quieres.
@@ -844,12 +844,12 @@ export function MandatoOtConfigForm({
 
             {templateCode === "auto" ? (
               <div
-                className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-[#F4F7FC] via-white to-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)] px-4 py-3 dark:from-white/5 dark:via-[#0B0F14] dark:to-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)]"
+                className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-secondary via-card to-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)] px-4 py-3 dark:to-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)]"
                 data-testid="mandato-system-template-badge"
                 role="status"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-[#162244] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-flit-brand">
+                  <span className="inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">
                     Sistema
                   </span>
                   <span className="inline-flex items-center rounded-full border border-flit-brand/35 bg-card/80 px-2.5 py-0.5 text-[11px] font-semibold text-foreground dark:border-flit-tech/40">
@@ -872,7 +872,7 @@ export function MandatoOtConfigForm({
                 data-testid="mandato-custom-template-banner"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-flit-brand to-flit-tech px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  <span className="inline-flex items-center rounded-full bg-[image:var(--gradient-action)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                     Propia
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
@@ -890,7 +890,7 @@ export function MandatoOtConfigForm({
                   type="button"
                   disabled={busy}
                   onClick={() => void handleRemoveCustom()}
-                  className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF4E00] disabled:opacity-50"
+                  className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-destructive disabled:opacity-50"
                 >
                   <Trash2 className="h-3 w-3" aria-hidden="true" />
                   Quitar y volver a {effectiveTemplateName}
@@ -956,7 +956,7 @@ export function MandatoOtConfigForm({
                     disabled={busy}
                     onClick={() => void handleSaveEditor()}
                     className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
-                    style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                    style={{ background: "var(--gradient-action)" }}
                   >
                     {saving ? "Guardando editor…" : "Guardar plantilla del editor"}
                   </button>
@@ -1097,7 +1097,7 @@ export function MandatoOtConfigForm({
               </>
             ) : null}
             {rulesStatus === "error" ? (
-              <p role="alert" className="text-[11px] text-[#FF4E00]">
+              <p role="alert" className="text-[11px] text-destructive">
                 {error?.includes("compañías") || error?.includes("API") || error?.includes("migración")
                   ? error
                   : "No se pudieron cargar las compañías."}{" "}

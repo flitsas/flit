@@ -12,9 +12,8 @@ import { externalIntegrationErrorMessage } from "./externalIntegrationErrors";
 
 const INPUT_CLS =
   "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
-  "dark:text-foreground";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-foreground";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary";
 const HINT_CLS = "text-xs font-normal text-muted-foreground";
 const DISPLAY_NAME_MAX = 120;
 const PURPOSE_MAX = 300;

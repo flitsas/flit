@@ -79,7 +79,7 @@ export function JobsComoFunciona() {
 function Punto({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{titulo}</p>
+      <p className="text-sm font-semibold text-flit-primary">{titulo}</p>
       <p className="mt-0.5 text-sm text-muted-foreground">{children}</p>
     </div>
   );

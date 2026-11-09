@@ -37,18 +37,18 @@ export function UnlinkCompanyDialog({ child, headName, onClose, onUnlinked }: Un
       size="sm"
       zClassName="z-[90]"
       title="Desvincular cliente"
-      titleClassName="text-lg font-semibold text-flit-primary dark:text-foreground"
+      titleClassName="text-lg font-semibold text-flit-primary"
     >
       <p className="mt-2 text-sm opacity-80">
-        ¿Confirmas desvincular a <strong>{child.razonSocial}</strong> de la cabeza{" "}
+        ¿Confirmas desvincular a <strong>{child.razonSocial}</strong> de la cabeza{""}
         <strong>{headName}</strong>?
       </p>
-      <p className="mt-2 text-sm font-medium" style={{ color: "#8a6000" }} role="note">
+      <p className="mt-2 text-sm font-medium" style={{ color: "var(--badge-warning-fg)" }} role="note">
         La cabeza de red dejará de ver los datos de este cliente tras la desvinculación.
       </p>
 
       {error && (
-        <p role="alert" className="mt-3 text-sm" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="mt-3 text-sm" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -62,7 +62,7 @@ export function UnlinkCompanyDialog({ child, headName, onClose, onUnlinked }: Un
           onClick={() => void confirm()}
           disabled={busy}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "#FF4E00" }}
+          style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
         >
           {busy ? "Procesando…" : "Desvincular"}
         </button>

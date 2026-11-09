@@ -77,7 +77,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
               {instancia.avisos.map((aviso, i) => (
                 <li key={i} className="flex items-start gap-1.5">
                   <AlertTriangle
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500"
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--badge-warning-fg)]"
                     aria-hidden="true"
                   />
                   <span className="opacity-90">{aviso}</span>
@@ -116,7 +116,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
   if (conProblemas) {
     return (
       <Titular
-        icono={<XCircle className="h-5 w-5 text-red-500" aria-hidden="true" />}
+        icono={<XCircle className="h-5 w-5 text-destructive" aria-hidden="true" />}
         texto="La migración reportó problemas"
         detalle="Revisa abajo qué instancia falló y por qué. Reintentar es seguro."
       />
@@ -137,7 +137,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
 
   return (
     <Titular
-      icono={<CheckCircle2 className="h-5 w-5 text-emerald-500" aria-hidden="true" />}
+      icono={<CheckCircle2 className="h-5 w-5 text-[var(--flit-success-ink)]" aria-hidden="true" />}
       texto={yaMigrado ? "El trámite ya estaba migrado" : "Migración completada"}
       detalle={
         yaMigrado
@@ -205,17 +205,17 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
  * abajo, en la pantalla donde el color es justo lo que la gente mira para saber si ya migró.
  */
 const TONO_ESTADO: Record<string, string> = {
-  Simulated: "bg-flit-brand/10 text-flit-brand dark:text-[#8AA6FF]",
-  Skipped: "bg-slate-500/10 text-muted-foreground",
-  NotMigrated: "bg-slate-500/10 text-muted-foreground",
-  NoAttachments: "bg-slate-500/10 text-muted-foreground",
-  NotFoundInV1: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  Simulated: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]",
+  Skipped: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
+  NotMigrated: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
+  NoAttachments: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
+  NotFoundInV1: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]",
 };
 
 function Insignia({ estado, conProblemas }: { estado: string; conProblemas: boolean }) {
   const clases = conProblemas
-    ? "bg-red-500/10 text-red-600 dark:text-red-400"
-    : (TONO_ESTADO[estado] ?? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400");
+    ? "bg-[var(--badge-danger-bg)] text-destructive"
+    : (TONO_ESTADO[estado] ?? "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]");
 
   return (
     <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${clases}`}>

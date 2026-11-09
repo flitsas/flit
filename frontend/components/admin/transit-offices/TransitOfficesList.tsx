@@ -70,10 +70,10 @@ function matchesQuipux(office: TransitOfficeOperationalStatus, filter: QuipuxFil
 
 // Selects de filtro — tokens FLIT (borde soft, foco azul marca).
 const FILTER_SELECT_CLS =
-  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-card px-3 py-2 text-sm text-flit-primary outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-border dark:text-foreground";
-const FILTER_OPTION_CLS = "bg-card text-flit-primary dark:text-foreground";
+  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-card px-3 py-2 text-sm text-flit-primary outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-border";
+const FILTER_OPTION_CLS = "bg-card text-flit-primary";
 const FILTER_INPUT_CLS =
-  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-card py-2 pl-9 pr-3 text-sm text-flit-primary outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-border dark:text-foreground";
+  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-card py-2 pl-9 pr-3 text-sm text-flit-primary outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-border";
 
 export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps = {}) {
   const router = useRouter();
@@ -417,7 +417,7 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
   return (
     <div className="flex flex-col gap-1">
       {office.divipoCode ? (
-        <span className="font-mono text-xs text-flit-primary dark:text-foreground">{office.divipoCode}</span>
+        <span className="font-mono text-xs text-flit-primary">{office.divipoCode}</span>
       ) : (
         <StatusBadge
           label="Sin código integrador"

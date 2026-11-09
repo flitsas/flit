@@ -91,7 +91,7 @@ export function TiposTramitePanel() {
   if (error) {
     return (
       <div className="flex flex-col items-start gap-3 p-6" role="alert">
-        <p className="text-xs" style={{ color: '#C2410C' }}>
+        <p className="text-xs" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
         <button
@@ -120,13 +120,13 @@ export function TiposTramitePanel() {
             onChange={(e) => setFiltro(e.target.value)}
             placeholder="Buscar por nombre, código o familia…"
             aria-label="Buscar tipo de trámite"
-            className="w-full max-w-xs rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="w-full max-w-xs rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           />
           <button
             type="button"
             onClick={() => setCreando(true)}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+            style={{ background: 'var(--gradient-action)' }}
           >
             Nuevo tipo
           </button>
@@ -147,12 +147,12 @@ export function TiposTramitePanel() {
                   style={
                     activo
                       ? { borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }
-                      : { borderColor: '#DFE5ED' }
+                      : { borderColor: 'var(--border)' }
                   }
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="min-w-0">
-                      <span className="block text-xs font-semibold text-flit-primary dark:text-foreground">
+                      <span className="block text-xs font-semibold text-flit-primary">
                         {t.name}
                       </span>
                       <span className="block text-xs opacity-55">{familiaLabel(t.family)}</span>
@@ -160,13 +160,13 @@ export function TiposTramitePanel() {
                     {t.wizardEnabled ? (
                       <CheckCircle2
                         className="h-3.5 w-3.5 shrink-0"
-                        style={{ color: '#0E9F6E' }}
+                        style={{ color: 'var(--flit-success-ink)' }}
                         aria-label="Operable"
                       />
                     ) : (
                       <span
                         className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ background: '#C8D2E0' }}
+                        style={{ background: 'var(--border-strong)' }}
                         aria-label="No operable"
                       />
                     )}
@@ -189,7 +189,7 @@ export function TiposTramitePanel() {
             <div className="flex flex-col gap-4">
               <header className="flex flex-col gap-3 border-b pb-4 border-border">
                 <div>
-                  <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">
+                  <h2 className="text-base font-semibold text-flit-primary">
                     {tipo.name}
                   </h2>
                   <code className="text-xs opacity-55">{tipo.code}</code>
@@ -204,14 +204,14 @@ export function TiposTramitePanel() {
                         setConfirmarRetiro(true);
                         setErrorRetiro(null);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold border-border transition hover:border-[#C2410C] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-                      style={{ color: '#C2410C' }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold border-border transition hover:border-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                      style={{ color: 'var(--destructive)' }}
                     >
                       <Archive className="h-3.5 w-3.5" aria-hidden="true" />
                       Retirar del catálogo
                     </button>
                     {errorRetiro && (
-                      <span className="text-xs" role="alert" style={{ color: '#C2410C' }}>
+                      <span className="text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
                         {errorRetiro}
                       </span>
                     )}
@@ -249,7 +249,7 @@ export function TiposTramitePanel() {
                   Cargando la configuración…
                 </p>
               ) : errorDetalle ? (
-                <p className="py-6 text-xs" role="alert" style={{ color: '#C2410C' }}>
+                <p className="py-6 text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
                   {errorDetalle}
                 </p>
               ) : (
@@ -334,7 +334,7 @@ function ConfirmarRetiro({
       aria-label="Retirar tipo de trámite"
     >
       <div className="w-full max-w-md rounded-2xl border bg-card p-5 border-border">
-        <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">
+        <h2 className="text-base font-semibold text-flit-primary">
           Retirar «{nombre}» del catálogo
         </h2>
         <p className="mt-2 text-xs leading-relaxed opacity-80">
@@ -354,7 +354,7 @@ function ConfirmarRetiro({
             onClick={onConfirmar}
             disabled={retirando}
             className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: '#C2410C' }}
+            style={{ background: 'var(--destructive)' }}
           >
             {retirando ? 'Retirando…' : 'Sí, retirar'}
           </button>
@@ -376,10 +376,10 @@ function Validacion({ detalle }: { detalle: { validacion: { isValid: boolean; er
   return (
     <div
       className="rounded-xl border px-3 py-2.5 text-xs"
-      style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
+      style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
       role="status"
     >
-      <p className="mb-1.5 flex items-center gap-1.5 font-semibold" style={{ color: '#B87A00' }}>
+      <p className="mb-1.5 flex items-center gap-1.5 font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
         La parametrización tiene {v.errors.length} {v.errors.length === 1 ? 'problema' : 'problemas'}
       </p>

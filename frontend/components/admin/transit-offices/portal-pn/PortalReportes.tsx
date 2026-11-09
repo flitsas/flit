@@ -231,7 +231,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
       <div>
         <h2
           id="portal-reportes-titulo"
-          className="text-base font-bold text-flit-primary dark:text-foreground"
+          className="text-base font-bold text-flit-primary"
         >
           Reportes
         </h2>
@@ -279,7 +279,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
               ) : (
                 <p
                   role="status"
-                  className="px-4 py-10 text-center text-sm font-semibold text-flit-primary dark:text-foreground"
+                  className="px-4 py-10 text-center text-sm font-semibold text-flit-primary"
                 >
                   {REPORTE_PORTAL_VACIO}
                 </p>

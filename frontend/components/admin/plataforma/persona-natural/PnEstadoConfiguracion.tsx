@@ -144,8 +144,8 @@ export function PnEstadoConfiguracion({
         <h2 id="pn-estado-titulo" className="sr-only">
           Estado de la configuración
         </h2>
-        <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-foreground">
-          <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#8CC63F] text-white">
+        <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary">
+          <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--flit-success-ink)] text-white">
             <Check className="h-4 w-4" />
           </span>
           <span>Configuración completa. {frasePortal(resumen, pasos)}</span>
@@ -164,7 +164,7 @@ export function PnEstadoConfiguracion({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-        <h2 id="pn-estado-titulo" className="text-base font-bold text-flit-primary dark:text-foreground">
+        <h2 id="pn-estado-titulo" className="text-base font-bold text-flit-primary">
           Estado de la configuración
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -209,16 +209,16 @@ export function PnEstadoConfiguracion({
                   <span
                     aria-hidden="true"
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      p.hecho ? "bg-[#8CC63F] text-white" : "border-2 border-border text-muted-foreground"
+                      p.hecho ? "bg-[var(--flit-success-ink)] text-white" : "border-2 border-border text-muted-foreground"
                     }`}
                   >
                     {p.hecho ? <Check className="h-4 w-4" /> : i + 1}
                   </span>
-                  <span className="text-sm font-bold text-flit-primary dark:text-foreground">
+                  <span className="text-sm font-bold text-flit-primary">
                     <span className="sr-only">Paso {i + 1}: </span>
                     {p.titulo}
                   </span>
-                  <span className={`ml-auto text-xs font-semibold ${p.hecho ? "text-[#4F7A12]" : "text-[#B45309]"}`}>
+                  <span className={`ml-auto text-xs font-semibold ${p.hecho ? "text-[var(--flit-success-ink)]" : "text-[var(--badge-warning-fg)]"}`}>
                     {p.hecho ? "Hecho" : "Pendiente"}
                   </span>
                 </div>
@@ -233,7 +233,7 @@ export function PnEstadoConfiguracion({
           </ol>
 
           <div className="flex flex-col gap-2 rounded-xl bg-secondary p-3">
-            <p className="flex items-start gap-2 text-sm font-semibold text-flit-primary dark:text-foreground">
+            <p className="flex items-start gap-2 text-sm font-semibold text-flit-primary">
               <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{frasePortal(resumen, pasos)}</span>
             </p>

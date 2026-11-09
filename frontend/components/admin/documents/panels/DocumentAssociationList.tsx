@@ -66,7 +66,7 @@ export function DocumentAssociationList({
             disabled={busy}
             aria-label={`Remover ${label}`}
             className="rounded-lg border p-1 disabled:opacity-40"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

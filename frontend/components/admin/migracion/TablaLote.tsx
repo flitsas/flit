@@ -43,7 +43,7 @@ export function TablaLote({
   // (por clave), así que cambiar de página no la pierde.
   const pg = usePaginacion("migracion.TablaLote");
   const head = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
-  const cell = { borderColor: "#DFE5ED" } as const;
+  const cell = { borderColor: "var(--border)" } as const;
 
   const seleccionables = filas.filter((f) => !estaTerminada(f));
   const todasMarcadas =
@@ -208,15 +208,15 @@ function motivoDelFallo(fila: FilaLote): string | null {
 }
 
 const TONO: Record<EstadoFila, string> = {
-  pendiente: "bg-black/5 dark:bg-secondary opacity-70",
-  en_curso: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  pendiente: "bg-secondary opacity-70",
+  en_curso: "bg-[var(--badge-info-bg)] text-flit-brand-ink",
   // Deliberadamente NO verde: una simulación no migró nada, y el verde es la señal universal de
   // «hecho». Se parece más a un pendiente informado que a un logro.
-  simulado: "bg-flit-brand/10 text-flit-brand dark:text-[#8AA6FF]",
-  migrado: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  con_avisos: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  fallido: "bg-red-500/10 text-red-600 dark:text-red-400",
-  ya_estaba: "bg-slate-500/10 text-muted-foreground",
+  simulado: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]",
+  migrado: "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]",
+  con_avisos: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]",
+  fallido: "bg-[var(--badge-danger-bg)] text-destructive",
+  ya_estaba: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
 };
 
 function Estado({ estado }: { estado: EstadoFila }) {

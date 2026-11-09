@@ -441,7 +441,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               disabled={exportDisabled}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
               data-testid="ot-report-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}

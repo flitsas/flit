@@ -93,11 +93,11 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
         {(pregunta.trim() || respuesta.trim()) && (
           <div className="rounded-xl border border-border bg-secondary p-3" aria-label="Así se verá en el portal" role="group">
             <p className="mb-1 text-xs font-semibold text-muted-foreground">Así se verá en el portal</p>
-            <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{pregunta.trim() || "Tu pregunta"}</p>
+            <p className="text-sm font-semibold text-flit-primary">{pregunta.trim() || "Tu pregunta"}</p>
             <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{respuesta.trim() || "Tu respuesta"}</p>
           </div>
         )}
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-foreground">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary">
           <input
             type="checkbox"
             checked={activa}

@@ -33,7 +33,7 @@ function OtPortalPersonaNaturalPageInner() {
       surface="panel"
     >
       <PortalPnAccess>
-        <nav aria-label="Miga de pan" className="mb-3 text-xs" style={{ color: "#162744" }}>
+        <nav aria-label="Miga de pan" className="mb-3 text-xs" style={{ color: "var(--color-flit-primary)" }}>
           <Link href="/" className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             Inicio
           </Link>{" "}

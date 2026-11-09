@@ -29,7 +29,7 @@ const TIPOS_SECCION: { valor: WizardSectionType; etiqueta: string }[] = [
 ];
 
 const CAMPO =
-  'rounded-lg border px-2 py-1.5 text-xs border-border bg-card text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
+  'rounded-lg border px-2 py-1.5 text-xs border-border bg-card text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
 
 export function TipoTramiteRecorrido({
   procedureTypeId,
@@ -180,7 +180,7 @@ export function TipoTramiteRecorrido({
           onClick={() => void guardar()}
           disabled={guardando}
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+          style={{ background: 'var(--gradient-action)' }}
         >
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
@@ -192,14 +192,14 @@ export function TipoTramiteRecorrido({
           )}
         </button>
         {ok && (
-          <span className="text-xs font-medium" style={{ color: '#0E9F6E' }} role="status">
+          <span className="text-xs font-medium" style={{ color: 'var(--flit-success-ink)' }} role="status">
             Guardado
           </span>
         )}
       </div>
 
       {error && (
-        <p className="text-xs" role="alert" style={{ color: '#C2410C' }}>
+        <p className="text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
       )}

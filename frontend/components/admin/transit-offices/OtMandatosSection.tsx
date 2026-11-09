@@ -84,7 +84,7 @@ export function OtFormatoContratoChip({ formato }: { formato: OtFormatoVista | n
   return (
     <div className="flex flex-col items-start gap-1 md:items-end">
       <p
-        className="inline-flex items-center gap-2 rounded-full border border-[#D6E2FF] bg-[#EFF4FF] px-3 py-1.5 text-xs text-muted-foreground dark:border-border dark:bg-secondary"
+        className="inline-flex items-center gap-2 rounded-full border border-[var(--badge-info-border)] bg-[var(--badge-info-bg)] px-3 py-1.5 text-xs text-muted-foreground"
         data-testid="ot-formato-contrato"
       >
         <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden />

@@ -115,7 +115,7 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
         <button
           type="submit"
           className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           <Search className="h-4 w-4" /> Buscar
         </button>

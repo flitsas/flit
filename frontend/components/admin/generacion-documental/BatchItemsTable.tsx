@@ -137,17 +137,17 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
                 const errores = row.validationErrors ?? [];
                 return (
                   <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-                    <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
                       {row.rowNumber ?? "—"}
                     </td>
-                    <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                       {generacionDocumentalTypeLabel(row.documentType)}
                       {row.scenario ? ` · ${row.scenario}` : ""}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                       <StatusBadge label={vista.label} tone={vista.tone} />
                     </td>
-                    <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "var(--border)" }}>
                       {errores.length > 0 ? (
                         <ul className="space-y-1">
                           {errores.map((error, index) => (

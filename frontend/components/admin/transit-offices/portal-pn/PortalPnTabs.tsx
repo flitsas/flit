@@ -30,7 +30,7 @@ export function PortalPnTabs({ transitOfficeId, reportes, cobro, domain, initial
       id: "reportes",
       label: "Reportes",
       content: reportes ?? (
-        <p role="status" className="rounded-xl border px-4 py-6 text-center text-xs opacity-70" style={{ borderColor: "#DFE5ED" }}>
+        <p role="status" className="rounded-xl border px-4 py-6 text-center text-xs opacity-70" style={{ borderColor: "var(--border)" }}>
           Los trámites que llegan por el portal se consultan en esta pestaña.
         </p>
       ),
@@ -39,7 +39,7 @@ export function PortalPnTabs({ transitOfficeId, reportes, cobro, domain, initial
       id: "cobro",
       label: "Cobro",
       content: cobro ?? (
-        <p role="status" className="rounded-xl border px-4 py-6 text-center text-xs opacity-70" style={{ borderColor: "#DFE5ED" }}>
+        <p role="status" className="rounded-xl border px-4 py-6 text-center text-xs opacity-70" style={{ borderColor: "var(--border)" }}>
           Los precios de cobro del portal se configuran en esta pestaña.
         </p>
       ),

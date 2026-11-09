@@ -132,7 +132,7 @@ function MandatarioFirmaPreviewImage({
     return <p className="text-xs text-muted-foreground">Cargando imagen de la firma…</p>;
   }
   if (imageStatus === "error") {
-    return <p className="text-xs text-[#C81E1E]">{imageError}</p>;
+    return <p className="text-xs text-destructive">{imageError}</p>;
   }
   if (imageStatus === "empty") {
     return (

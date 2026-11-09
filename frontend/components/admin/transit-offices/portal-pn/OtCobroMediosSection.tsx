@@ -26,8 +26,8 @@ import type {
   TipoCobro,
 } from "@/lib/api/admin-ot-portal-cobro";
 
-export const COBRO_ON = "#8CC63F";
-export const COBRO_OFF = "#91A5B5";
+export const COBRO_ON = "var(--flit-success-ink)";
+export const COBRO_OFF = "var(--border-strong)";
 
 export const MOTIVO_SIN_MONTO =
   "Este concepto no tiene un monto mayor que cero. Define el valor en Precios y vuelve a encenderlo.";
@@ -241,7 +241,7 @@ export function OtCobroMediosSection({
       .flatMap((m) => m.conceptos)
       .find((c) => c.charge === charge)?.montoCop;
     return monto && monto > 0 ? (
-      <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-foreground">
+      <span className="text-sm font-semibold tabular-nums text-flit-primary">
         {cop.format(monto)}
       </span>
     ) : (
@@ -275,7 +275,7 @@ export function OtCobroMediosSection({
             onChange={(next) => moverSwitch(tipo, medio, charge, next)}
           />
           <span className="flex flex-col leading-tight">
-            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary dark:text-foreground">
+            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary">
               {NOMBRE_CORTO[charge]}
               {soloSuperAdmin && <Lock className="h-3 w-3" aria-hidden="true" />}
             </span>
@@ -313,7 +313,7 @@ export function OtCobroMediosSection({
         {interruptor(tipo, medio, "TRAMITE")}
         {interruptor(tipo, medio, "GESTION")}
         <div className="flex flex-col items-start gap-1 leading-tight">
-          <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-foreground">
+          <span className="text-sm font-semibold tabular-nums text-flit-primary">
             {total > 0 ? cop.format(total) : "Sin cobro"}
           </span>
           {medio.ofrecido ? (
@@ -331,7 +331,7 @@ export function OtCobroMediosSection({
       key: "tipo",
       header: "Trámite",
       render: (t) => (
-        <span className="font-semibold text-flit-primary dark:text-foreground">{t.nombre}</span>
+        <span className="font-semibold text-flit-primary">{t.nombre}</span>
       ),
     },
     { key: "TRAMITE", header: NOMBRE_CONCEPTO.TRAMITE, render: (t) => celdaMonto(t, "TRAMITE") },
@@ -355,12 +355,12 @@ export function OtCobroMediosSection({
       >
         <span
           aria-hidden="true"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E6EFFC] text-[#557EFF] dark:bg-secondary dark:text-foreground"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary text-flit-brand-ink"
         >
           <Icono className="h-5 w-5" />
         </span>
         <div className="min-w-[12rem] flex-1">
-          <p className="text-base font-semibold text-flit-primary dark:text-foreground">
+          <p className="text-base font-semibold text-flit-primary">
             {NOMBRE_MEDIO[m.method]}
           </p>
           <p className="text-sm text-muted-foreground">{AYUDA_MEDIO[m.method]}</p>
@@ -371,7 +371,7 @@ export function OtCobroMediosSection({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-flit-primary dark:text-foreground">
+          <span className="text-sm font-semibold text-flit-primary">
             {m.enabled ? "Activado" : "Desactivado"}
           </span>
           <CobroSwitch

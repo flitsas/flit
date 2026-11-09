@@ -107,7 +107,7 @@ export function ContenidoTab() {
         className="flex flex-col gap-3 rounded-[18px] border border-border bg-card p-4"
       >
         <div>
-          <h2 id="pn-publicacion-titulo" className="text-base font-bold text-flit-primary dark:text-foreground">
+          <h2 id="pn-publicacion-titulo" className="text-base font-bold text-flit-primary">
             Publicación del contenido
           </h2>
           <p className="text-sm text-muted-foreground">
@@ -131,7 +131,7 @@ export function ContenidoTab() {
                     tone={sinPublicar ? "warning" : "success"}
                   />
                 </div>
-                <p className="text-sm font-semibold text-flit-primary dark:text-foreground">Lo que ve hoy el ciudadano</p>
+                <p className="text-sm font-semibold text-flit-primary">Lo que ve hoy el ciudadano</p>
                 <span className="text-xs text-muted-foreground">
                   {borrador.versionPublicada === null
                     ? "Todavía no has publicado nada: el portal muestra sus preguntas y banners de siempre (contenido por defecto)."

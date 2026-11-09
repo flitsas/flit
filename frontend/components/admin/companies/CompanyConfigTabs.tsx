@@ -255,7 +255,7 @@ export function CompanyConfigTabs({
                 <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
                   Configurando
                 </span>
-                <span className="text-sm font-bold text-flit-primary dark:text-foreground">
+                <span className="text-sm font-bold text-flit-primary">
                   {company.razonSocial}
                 </span>
                 <span className="text-xs opacity-70">NIT {company.nit}</span>
@@ -294,7 +294,7 @@ export function CompanyConfigTabs({
                 className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-60 ${
                   pendingChangeCount === 0 ? "opacity-60" : ""
                 }`}
-                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 <Save className="h-4 w-4" aria-hidden /> Guardar todo
               </button>
@@ -349,7 +349,7 @@ export function CompanyConfigTabs({
           role="alert"
           aria-live="polite"
           className="rounded-xl border px-4 py-3 text-xs font-medium"
-          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+          style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
         >
           {errorBanner}
         </div>

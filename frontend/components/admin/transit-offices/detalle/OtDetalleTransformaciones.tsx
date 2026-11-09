@@ -42,7 +42,7 @@ function Valor({ texto, ausente }: { texto: string | null; ausente: string }) {
   if (!texto) {
     return <span className="text-xs italic text-flit-primary/60 dark:text-muted-foreground">{ausente}</span>;
   }
-  return <span className="text-xs font-semibold text-flit-primary dark:text-foreground">{texto}</span>;
+  return <span className="text-xs font-semibold text-flit-primary">{texto}</span>;
 }
 
 /**

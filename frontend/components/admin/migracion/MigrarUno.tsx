@@ -100,7 +100,7 @@ export function MigrarUno() {
             className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm tabular-nums"
           />
           {id.trim() !== "" && !idValido && (
-            <p className="text-xs text-red-500">El id debe ser un número entero positivo.</p>
+            <p className="text-xs text-destructive">El id debe ser un número entero positivo.</p>
           )}
         </div>
 
@@ -118,7 +118,7 @@ export function MigrarUno() {
           // El color sigue al modo, no al revés: ámbar cuando va a escribir en V2. El gris de
           // antes se leía como un botón deshabilitado justo cuando sí se podía pulsar.
           className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-            dryRun ? "bg-flit-brand" : "bg-amber-600 hover:bg-amber-700"
+            dryRun ? "bg-flit-brand" : "bg-[var(--badge-warning-fg)] hover:opacity-90 dark:text-[var(--destructive-foreground)]"
           }`}
         >
           {corriendo ? (

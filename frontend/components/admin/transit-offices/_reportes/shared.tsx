@@ -141,7 +141,7 @@ export function Bar({
   onClick?: () => void;
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((value / total) * 100));
-  const fill = color ?? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))";
+  const fill = color ?? "var(--gradient-brand)";
 
   const content = (
     <>

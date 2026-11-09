@@ -104,7 +104,7 @@ export function NotificacionBuzonPruebasSection({
         <div
           role="alert"
           data-testid="notificaciones-buzon-error"
-          className="flex items-center justify-between gap-3 rounded-xl border border-[#FF4E00]/30 bg-[#FF4E00]/10 px-3 py-2 text-xs text-[#9A3412] dark:text-[#FFB199]"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
         >
           <span>No se pudo cargar el buzón de pruebas.</span>
           <button
@@ -142,7 +142,7 @@ export function NotificacionBuzonPruebasSection({
                 <button
                   type="submit"
                   disabled={saving || email.trim().length === 0}
-                  className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  className="rounded-full bg-[image:var(--gradient-action)] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   {saving ? "Guardando…" : "Guardar"}
                 </button>
@@ -157,7 +157,7 @@ export function NotificacionBuzonPruebasSection({
               </div>
             </div>
             {formError ? (
-              <p role="alert" className="inline-flex items-center gap-1.5 text-xs text-[#B42318]">
+              <p role="alert" className="inline-flex items-center gap-1.5 text-xs text-destructive">
                 <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {formError}
               </p>
@@ -176,7 +176,7 @@ export function NotificacionBuzonPruebasSection({
               </p>
             ) : (
               <p
-                className="inline-flex items-center gap-1.5 text-xs text-[#9A3412] dark:text-[#FFB199]"
+                className="inline-flex items-center gap-1.5 text-xs text-destructive"
                 data-testid="notificaciones-buzon-sin-configurar"
               >
                 <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

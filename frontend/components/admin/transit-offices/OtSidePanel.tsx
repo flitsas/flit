@@ -59,12 +59,12 @@ export function OtSidePanel({
       busy={disabled}
       size={SIZE[width]}
       zClassName={zClassName}
-      panelClassName={surface === "modal" ? "!bg-[#EEF5FF] dark:!bg-[#0B0F14]" : ""}
+      panelClassName={surface === "modal" ? "!bg-secondary" : ""}
       bodyClassName={scrollable ? "" : "!overflow-y-hidden"}
       header={({ titleId }) => (
         <div className="flex items-start justify-between gap-3">
           {/* El nombre accesible del diálogo es `ariaLabel`; el texto visible es `title`. */}
-          <h2 id={titleId} aria-label={ariaLabel} className="text-base font-bold text-flit-primary dark:text-foreground">
+          <h2 id={titleId} aria-label={ariaLabel} className="text-base font-bold text-flit-primary">
             {title}
           </h2>
           <button

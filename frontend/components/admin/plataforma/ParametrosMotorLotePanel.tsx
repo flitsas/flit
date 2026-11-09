@@ -270,7 +270,7 @@ export function ParametrosMotorLotePanel() {
     const rango = describirLimite(limite);
     return (
       <div key={c} className="flex flex-col gap-1">
-        <label htmlFor={id} className="text-xs font-semibold text-flit-primary dark:text-foreground">
+        <label htmlFor={id} className="text-xs font-semibold text-flit-primary">
           {ETIQUETAS_PARAMETROS_MOTOR[c]}
         </label>
         <div
@@ -291,7 +291,7 @@ export function ParametrosMotorLotePanel() {
             disabled={ocupado}
             aria-invalid={error ? true : undefined}
             aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
-            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-foreground"
+            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
           />
           <span className="shrink-0 pr-3 text-[11px] text-muted-foreground" aria-hidden="true">
             {UNIDADES[c]}
@@ -320,7 +320,7 @@ export function ParametrosMotorLotePanel() {
     >
       <div className="flex items-start justify-between gap-4 rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-col gap-0.5">
-          <label htmlFor="parametros-motor-isActive" className="text-sm font-semibold text-flit-primary dark:text-foreground">
+          <label htmlFor="parametros-motor-isActive" className="text-sm font-semibold text-flit-primary">
             Motor encendido
           </label>
           <p id="parametros-motor-isActive-hint" className="text-[11px] leading-snug text-muted-foreground">
@@ -370,7 +370,7 @@ export function ParametrosMotorLotePanel() {
 
       {GRUPOS.map((g) => (
         <fieldset key={g.titulo} className="rounded-2xl border border-border bg-card p-4">
-          <legend className="px-1 text-sm font-semibold text-flit-primary dark:text-foreground">{g.titulo}</legend>
+          <legend className="px-1 text-sm font-semibold text-flit-primary">{g.titulo}</legend>
           <div className="mt-2 grid gap-x-5 gap-y-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
             {g.campos.map(campo)}
           </div>
@@ -395,7 +395,7 @@ export function ParametrosMotorLotePanel() {
           type="button"
           onClick={descartar}
           disabled={ocupado || !sucio}
-          className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-foreground"
+          className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
         >
           Descartar cambios
         </button>
@@ -410,7 +410,7 @@ export function ParametrosMotorLotePanel() {
         data-testid="parametros-motor-resultado"
         role="status"
         aria-live="polite"
-        className="text-xs font-semibold text-flit-primary dark:text-foreground"
+        className="text-xs font-semibold text-flit-primary"
       >
         {resultado}
       </p>

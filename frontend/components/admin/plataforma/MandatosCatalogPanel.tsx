@@ -273,13 +273,13 @@ export function MandatosCatalogPanel() {
           <div
             role="alert"
             data-testid="mandatos-formatos-error"
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
           >
             <span>No se pudo cargar la lista de formatos de contrato.</span>
             <button
               type="button"
               onClick={formatos.reload}
-              className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+              className="rounded-full border border-[var(--badge-danger-border)] px-3 py-1 font-semibold"
             >
               Reintentar
             </button>
@@ -441,7 +441,7 @@ function ResetFormatoDialog({
       onClose={onCancel}
       busy={busy}
       icon={AlertTriangle}
-      iconBg="#F9AC00"
+      iconBg="var(--color-flit-alert)"
       title="Restablecer redacción de fábrica"
       titleClassName="text-base font-bold text-flit-primary"
       size="md"
@@ -453,7 +453,7 @@ function ResetFormatoDialog({
         </p>
         <p
           className="rounded-xl border px-3 py-2 leading-relaxed"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
           El nombre, el tipo y el historial de versiones se conservan. Los mandatos ya generados no cambian.
@@ -472,7 +472,7 @@ function ResetFormatoDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {busy ? "Restableciendo…" : "Restablecer"}
           </button>
@@ -514,7 +514,7 @@ function ResetConfirmDialog({
       onClose={onCancel}
       busy={busy}
       icon={AlertTriangle}
-      iconBg="#F9AC00"
+      iconBg="var(--color-flit-alert)"
       title="Restablecer configuración"
       titleClassName="text-base font-bold text-flit-primary"
       size="md"
@@ -530,7 +530,7 @@ function ResetConfirmDialog({
         </ul>
         <p
           className="rounded-xl border px-3 py-2 leading-relaxed"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
           Las reglas por compañía no se eliminan.
@@ -549,7 +549,7 @@ function ResetConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {busy ? "Restableciendo…" : "Restablecer"}
           </button>

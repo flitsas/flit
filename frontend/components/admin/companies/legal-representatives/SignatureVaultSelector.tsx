@@ -180,7 +180,7 @@ export function SignatureVaultSelector({
   const bloqueCaptura = (
     <div
       className="mt-2 space-y-2 rounded-xl border px-3 py-3"
-      style={{ borderColor: "var(--flit-border, #DDE5F0)" }}
+      style={{ borderColor: "var(--border)" }}
       data-testid="sig-capture-block"
     >
       <p className="text-xs opacity-70">

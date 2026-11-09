@@ -329,7 +329,7 @@ export function CompanyMandatariosPanel({
       {sinOrganismos && (
         <p
           className="rounded-xl border px-3 py-2 text-xs"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="status"
         >
           Esta compañía todavía no tiene organismos de tránsito habilitados. Habilítalos en la
@@ -499,29 +499,29 @@ export function CompanyMandatariosPanel({
                         >
                           <td
                             className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             <span className="font-semibold">{signer.fullName}</span>
                             {candado && <MandatarioCandado />}
                           </td>
                           <td
                             className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             {formatDocumentWithType(signer.documentType, signer.documentNumber)}
                           </td>
                           <td
                             className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             {etiquetaModelo(signer)}
                           </td>
-                          <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                             <MandatarioVigenciaBadge signer={signer} />
                           </td>
                           <td
                             className="border-y px-4 py-3"
-                            style={{ borderColor: "#DFE5ED" }}
+                            style={{ borderColor: "var(--border)" }}
                             data-testid="mandatario-validacion-celda"
                           >
                             {requiereValidacionPropia(signer) ? (
@@ -536,7 +536,7 @@ export function CompanyMandatariosPanel({
                           </td>
                           <td
                             className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             <MandatarioOrganismos
                               signerName={signer.fullName}
@@ -548,7 +548,7 @@ export function CompanyMandatariosPanel({
                           </td>
                           <td
                             className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                            style={{ borderColor: "#DFE5ED" }}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             <RowActions
                               actions={

@@ -194,7 +194,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         <span className="inline-flex items-center gap-2">
           <span
             aria-hidden="true"
-            className="h-4 w-4 shrink-0 rounded-full border border-black/10"
+            className="h-4 w-4 shrink-0 rounded-full border border-border"
             style={{ background: tag.color }}
           />
           <span className="text-xs">{tagColorLabel(tag.color)}</span>
@@ -244,7 +244,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               ancho disponible y no quede en una columna angosta con un hueco al lado. */}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-flit-primary dark:text-foreground">
+              <h2 className="text-sm font-semibold text-flit-primary">
                 Orden de documentos del expediente
               </h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -273,7 +273,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               ni siquiera se monta (evita la llamada a la API de políticas de prenda). */}
           {superAdmin && (
             <section className="space-y-3 rounded-2xl border bg-card p-4">
-              <h3 className="text-sm font-semibold text-flit-primary dark:text-foreground">
+              <h3 className="text-sm font-semibold text-flit-primary">
                 Documento de prenda por compañía
               </h3>
               <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
@@ -391,7 +391,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               <button
                 type="button"
                 className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "#FF4E00" }}
+                style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
                 disabled={deleting}
                 onClick={() => void confirmDelete()}
               >

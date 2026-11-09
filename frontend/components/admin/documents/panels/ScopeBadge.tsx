@@ -10,7 +10,7 @@ type BadgeLevel = OverrideScope | ResolutionLevel;
 const STYLES: Record<BadgeLevel, { bg: string; fg: string; label: string }> = {
   CLIENTE: { bg: "var(--color-flit-brand)", fg: "#FFFFFF", label: "CLIENTE" },
   OT: { bg: "var(--color-flit-tech)", fg: "#0a3d3b", label: "OT" },
-  DEFAULT: { bg: "#DFE5ED", fg: "#162744", label: "DEFAULT" },
+  DEFAULT: { bg: "var(--border)", fg: "var(--color-flit-primary)", label: "DEFAULT" },
 };
 
 export function ScopeBadge({ scope }: { scope: BadgeLevel }) {

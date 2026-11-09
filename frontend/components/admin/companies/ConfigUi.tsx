@@ -21,10 +21,10 @@ export const FOCUS_RING =
 
 /** Input/select FLIT único: 48px de alto, radio 10px, label real arriba (lo pone el llamador). */
 export const FIELD_CLASS =
-  "h-12 w-full rounded-[10px] border bg-card px-3 text-xs text-flit-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand disabled:opacity-60 dark:text-foreground";
+  "h-12 w-full rounded-[10px] border bg-card px-3 text-xs text-flit-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand disabled:opacity-60";
 
 /** Etiqueta de campo (por debajo del título de bloque). */
-export const FIELD_LABEL = "mb-1.5 block text-xs font-semibold text-flit-primary dark:text-foreground";
+export const FIELD_LABEL = "mb-1.5 block text-xs font-semibold text-flit-primary";
 
 export type ChipTone = StatusTone;
 
@@ -129,7 +129,7 @@ export function ConfigCard({
     >
       {title && (
         <header className="mb-4">
-          <h3 id={titleId} className="text-base font-semibold text-flit-primary dark:text-foreground">
+          <h3 id={titleId} className="text-base font-semibold text-flit-primary">
             {title}
           </h3>
           {description && <ClampedText text={description} className="mt-1" />}
@@ -161,7 +161,7 @@ export function SubBlock({
       className={`space-y-3 ${separated ? "border-t border-border pt-4" : ""}`}
     >
       <div>
-        <h4 id={id} className="text-sm font-semibold text-flit-primary dark:text-foreground">
+        <h4 id={id} className="text-sm font-semibold text-flit-primary">
           {title}
         </h4>
         {description && <ClampedText text={description} className="mt-0.5" />}
@@ -218,12 +218,12 @@ export function Accordion({
           className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 px-5 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
         >
           <ChevronDown
-            className="h-4 w-4 shrink-0 text-flit-primary transition-transform dark:text-foreground"
+            className="h-4 w-4 shrink-0 text-flit-primary transition-transform"
             style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
             aria-hidden
           />
           <span className="min-w-0">
-            <span className={`block font-semibold text-flit-primary dark:text-foreground ${flat ? "text-sm" : "text-base"}`}>{title}</span>
+            <span className={`block font-semibold text-flit-primary ${flat ? "text-sm" : "text-base"}`}>{title}</span>
             {subtitle && <span className={`mt-0.5 block ${HELP_TEXT}`}>{subtitle}</span>}
           </span>
         </button>
@@ -280,7 +280,7 @@ export function OptionCard({
       className={`flex min-h-[48px] items-start gap-3 rounded-[14px] border px-4 py-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand has-[:focus-visible]:ring-offset-2 ${
         inactive ? "cursor-not-allowed opacity-60" : locked ? "cursor-not-allowed" : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_4%,transparent)]"
       }`}
-      style={checked ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" } : { borderColor: "#DFE5ED", background: "#FFFFFF" }}
+      style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--badge-success-bg)" } : { borderColor: "var(--border)", background: "var(--card)" }}
     >
       <input
         type={type}
@@ -294,7 +294,7 @@ export function OptionCard({
       <span
         aria-hidden
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center border-2 ${mark}`}
-        style={checked ? { borderColor: "#8CC63F", background: "#8CC63F", color: "#FFFFFF" } : { borderColor: "#59677D", background: "#FFFFFF" }}
+        style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--flit-success-ink)", color: "#FFFFFF" } : { borderColor: "var(--muted-foreground)", background: "var(--card)" }}
       >
         {checked && <Check className="h-3 w-3" strokeWidth={3} />}
       </span>

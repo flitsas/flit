@@ -331,7 +331,7 @@ export function ClientProcedureDetailModal({
       {avisos.length > 0 ? (
         <div
           className="mt-3 flex w-full items-start gap-2 rounded-xl px-3 py-2.5"
-          style={{ background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }}
+          style={{ background: "var(--badge-warning-bg)", border: "1px solid var(--badge-warning-border)" }}
           role="status"
           id={avisosId}
         >
@@ -363,7 +363,7 @@ export function ClientProcedureDetailModal({
                   background: "var(--badge-danger-bg)",
                   border: "1px solid var(--badge-danger-border)",
                 }
-              : { background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }
+              : { background: "var(--badge-warning-bg)", border: "1px solid var(--badge-warning-border)" }
           }
           role="status"
         >
@@ -441,7 +441,7 @@ export function ClientProcedureDetailModal({
           disabled={!puedeRechazar}
           aria-describedby={!puedeRechazar && avisos.length > 0 ? avisosId : undefined}
           className="h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: OT_ORANGE }}
+          style={{ background: OT_ORANGE, color: "var(--destructive-foreground)" }}
         >
           {COPY.E01Rechazar}
         </button>
@@ -463,7 +463,7 @@ export function ClientProcedureDetailModal({
   return (
     <OtDetalleShell open onClose={onClose} title={titulo} header={header} footer={footer}>
       {detailError ? (
-        <p className="m-0 text-[11px]" style={{ color: "#B45309" }} role="alert">
+        <p className="m-0 text-[11px]" style={{ color: "var(--badge-warning-fg)" }} role="alert">
           {detailError}
         </p>
       ) : null}

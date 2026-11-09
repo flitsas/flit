@@ -74,7 +74,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
   return (
     <section aria-labelledby="ai-alerts-heading" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="ai-alerts-heading" className="text-sm font-bold text-flit-primary dark:text-foreground">
+        <h2 id="ai-alerts-heading" className="text-sm font-bold text-flit-primary">
           Alertas de failover
         </h2>
         <button
@@ -136,7 +136,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
                     tone={a.acked ? "neutral" : "warning"}
                     label={a.acked ? "Leída" : "Pendiente"}
                   />
-                  <span className="text-xs font-semibold text-flit-primary dark:text-foreground">
+                  <span className="text-xs font-semibold text-flit-primary">
                     {etiquetaHerramienta(a.toolCode)}
                   </span>
                 </div>
@@ -150,7 +150,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
                   type="button"
                   onClick={() => void reconocer(a)}
                   disabled={ackId === a.id}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-60 dark:text-foreground"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-60"
                 >
                   <Check className="h-3.5 w-3.5" aria-hidden="true" />
                   {ackId === a.id ? "Marcando…" : "Marcar leída"}

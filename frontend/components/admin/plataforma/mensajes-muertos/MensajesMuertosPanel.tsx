@@ -174,7 +174,7 @@ export function MensajesMuertosPanel() {
               type="button"
               disabled={ocupado !== null}
               onClick={() => setConfirmar({ tipo: "descartar", mensaje: m })}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#E5484D] px-2.5 py-1 text-xs font-semibold text-[#E5484D] disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-destructive px-2.5 py-1 text-xs font-semibold text-destructive disabled:opacity-50"
               aria-label={`Descartar el mensaje ${m.id}`}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -192,7 +192,7 @@ export function MensajesMuertosPanel() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="tablist" aria-label="Cola de mensajes muertos" className="inline-flex gap-1 rounded-xl bg-[#EEF2F8] p-1">
+        <div role="tablist" aria-label="Cola de mensajes muertos" className="inline-flex gap-1 rounded-xl bg-secondary p-1">
           {COLAS.map(({ cola: c, etiqueta }) => (
             <button
               key={c}
@@ -241,7 +241,7 @@ export function MensajesMuertosPanel() {
           onClose={() => setConfirmar(null)}
           busy={ocupado !== null}
           icon={AlertTriangle}
-          iconBg="#F9AC00"
+          iconBg="var(--color-flit-alert)"
           title="Descartar mensaje"
           titleClassName="text-base font-bold text-flit-primary"
           size="md"
@@ -264,7 +264,7 @@ export function MensajesMuertosPanel() {
                 type="button"
                 onClick={() => void descartar(confirmar.mensaje)}
                 disabled={ocupado !== null}
-                className="rounded-xl bg-[#E5484D] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                className="rounded-xl bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground disabled:opacity-60"
               >
                 {ocupado ? "Descartando…" : "Descartar"}
               </button>
@@ -285,19 +285,19 @@ function causa(motivo: string | null): { texto: string; color: string; ayuda: st
     case "CorreoRechazadoException":
       return {
         texto: "Rechazado por el proveedor",
-        color: "#C62828",
+        color: "var(--destructive)",
         ayuda: "No se reintenta solo. Corrige la causa del detalle y reintenta, o descarta.",
       };
     case "poison":
       return {
         texto: "Mensaje inválido",
-        color: "#B45309",
+        color: "var(--badge-warning-fg)",
         ayuda: "El mensaje no se pudo leer: reintentarlo no lo arregla. Descártalo.",
       };
     default:
       return {
         texto: "Agotó los reintentos",
-        color: "#475569",
+        color: "var(--badge-neutral-fg)",
         ayuda: "Falló en todos sus reintentos automáticos. Si la causa ya pasó, reintenta.",
       };
   }

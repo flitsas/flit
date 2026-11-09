@@ -126,7 +126,7 @@ export function TarifaHistorialModal({
           </label>
         )}
         {conceptos.length === 1 && (
-          <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{CONCEPTO_LABEL[concepto]}</p>
+          <p className="text-sm font-semibold text-flit-primary">{CONCEPTO_LABEL[concepto]}</p>
         )}
 
         {status === "loading" ? (

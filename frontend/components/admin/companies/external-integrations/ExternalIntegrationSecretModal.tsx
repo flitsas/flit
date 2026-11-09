@@ -39,7 +39,7 @@ export function ExternalIntegrationSecretModal({ clientId, secret, onClose }: Ex
         </div>
       }
     >
-      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-foreground">
+      <div className="flex flex-col gap-3 text-sm text-flit-primary">
         <InlineAlert tone="warning">
           Cópiala ahora: esta clave no se podrá ver de nuevo ni se puede recuperar. Si la pierdes tendrás que generar
           una nueva. Entrégala al servicio del portal por un canal seguro.

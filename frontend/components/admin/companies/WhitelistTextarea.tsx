@@ -88,13 +88,13 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         placeholder={"comprador@dominio.com\nradicador@dominio.com"}
         aria-invalid={errors.length > 0}
         className="w-full rounded-xl border bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
-        style={{ borderColor: errors.length > 0 ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: errors.length > 0 ? "var(--destructive)" : "var(--border)" }}
       />
 
       {errors.length > 0 && (
         <ul className="space-y-1" role="alert" data-testid="whitelist-errors">
           {errors.map((e, i) => (
-            <li key={`${e.line}-${i}`} className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+            <li key={`${e.line}-${i}`} className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
               Línea {e.line}: {e.value ? `"${e.value}" — ` : ""}
               {e.message}
             </li>

@@ -40,7 +40,7 @@ const BTN_OUTLINE =
   "rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 const BTN_PRIMARY =
   "rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2";
-const GRADIENT = { background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" };
+const GRADIENT = { background: "var(--gradient-action)" };
 
 export interface MandatoFormatoEditorProps {
   /** Código del formato a editar (el catálogo no permite crear ni eliminar). */
@@ -259,7 +259,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
           ) : state === "error" || !format ? (
             <div
               role="alert"
-              className="flex flex-wrap items-center gap-2 text-[#FF4E00]"
+              className="flex flex-wrap items-center gap-2 text-destructive"
               data-testid="mandato-formato-error"
             >
               <span>No se pudo cargar el formato.</span>
@@ -366,7 +366,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   id={`${uid}-vars-err`}
                   role="alert"
                   data-testid="mandato-formato-variables-invalidas"
-                  className="rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-[#FF4E00]"
+                  className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-destructive"
                 >
                   <p className="font-semibold">Variables que no existen:</p>
                   <ul className="mt-1 list-disc space-y-0.5 pl-5">
@@ -384,7 +384,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                 <div
                   role="alert"
                   data-testid="mandato-formato-mensaje"
-                  className="space-y-1 text-[11px] text-[#FF4E00]"
+                  className="space-y-1 text-[11px] text-destructive"
                 >
                   <p>{error}</p>
                   {conflict ? (
@@ -482,7 +482,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
           open
           onClose={() => setConfirming(false)}
           icon={AlertTriangle}
-          iconBg="#F9AC00"
+          iconBg="var(--color-flit-alert)"
           title="Confirmar publicación de la plantilla"
           titleClassName="text-base font-bold text-flit-primary"
           size="md"

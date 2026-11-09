@@ -10,17 +10,17 @@
  * lo pida. Duplicar aquí es lo que hace verdadera la promesa de que el gestor no se toca.
  */
 
-export const OT_NAVY = "#162744";
+export const OT_NAVY = "var(--color-flit-primary)";
 export const OT_BLUE = "var(--color-flit-brand)";
-export const OT_GREEN = "#8CC63F";
-export const OT_WARN = "#F9AC00";
+export const OT_GREEN = "var(--flit-success-ink)";
+export const OT_WARN = "var(--badge-warning-fg)";
 /** Texto sobre la banda ámbar de avisos: el ámbar puro sobre blanco no contrasta. */
-export const OT_WARN_TEXT = "#8A6300";
+export const OT_WARN_TEXT = "var(--badge-warning-fg)";
 /** Naranja del rechazo. El prototipo usa `#FF6B00` en el botón y `#FF5722` en la modal de motivo. */
-export const OT_ORANGE = "#FF6B00";
-export const OT_BORDER = "#DFE5ED";
-export const OT_CANVAS = "#EEF5FF";
-export const OT_META = "#5E6A7B";
+export const OT_ORANGE = "var(--destructive)";
+export const OT_BORDER = "var(--border)";
+export const OT_CANVAS = "var(--secondary)";
+export const OT_META = "var(--muted-foreground)";
 
 /** Tarjeta del prototipo: sin relleno propio —cada bloque decide el suyo—. */
 export const OT_CARD =
@@ -37,7 +37,7 @@ export const OT_BANDA = "bg-secondary";
  * Degradado del CTA de aprobación. El detalle del gestor usa el degradado de marca (azul→cian); el
  * prototipo del OT usa cian→esmeralda y esa es la decisión de producto para esta pantalla.
  */
-export const OT_APROBAR_GRADIENTE = "bg-gradient-to-r from-cyan-500 to-emerald-500";
+export const OT_APROBAR_GRADIENTE = "bg-[image:var(--gradient-action)]";
 
 export const OT_OVERLAY_STYLE = {
   background: "rgba(22, 39, 68, 0.45)",

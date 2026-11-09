@@ -34,20 +34,20 @@ export function PortalPreview({ contenido }: { contenido: ContenidoPn }) {
           banners.map((b) => (
             <figure key={b.id} className="flex flex-col gap-1">
               <BannerImagen id={b.id} alt={b.textoAlternativo} className="h-32 w-full max-w-xl rounded-xl object-cover" />
-              <figcaption className="text-sm font-semibold text-flit-primary dark:text-foreground">{b.titulo}</figcaption>
+              <figcaption className="text-sm font-semibold text-flit-primary">{b.titulo}</figcaption>
             </figure>
           ))
         )}
       </section>
 
       <section aria-label="Preguntas frecuentes" className="flex flex-col gap-2">
-        <h3 className="text-sm font-bold text-flit-primary dark:text-foreground">Preguntas frecuentes</h3>
+        <h3 className="text-sm font-bold text-flit-primary">Preguntas frecuentes</h3>
         {preguntas.length === 0 ? (
           <p className="text-xs text-muted-foreground">No hay preguntas activas.</p>
         ) : (
           preguntas.map((p) => (
             <details key={p.id} className="rounded-xl border border-border bg-card px-3 py-2">
-              <summary className="cursor-pointer text-sm font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-foreground">
+              <summary className="cursor-pointer text-sm font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand">
                 {p.pregunta}
               </summary>
               {/* Texto plano: se muestra como texto, nunca como HTML. */}
@@ -58,7 +58,7 @@ export function PortalPreview({ contenido }: { contenido: ContenidoPn }) {
       </section>
 
       <section aria-label="Enlaces" className="flex flex-col gap-1">
-        <h3 className="text-sm font-bold text-flit-primary dark:text-foreground">Enlaces</h3>
+        <h3 className="text-sm font-bold text-flit-primary">Enlaces</h3>
         <ul className="flex flex-col gap-1 text-sm">
           {contenido.enlaces.map((e) => (
             <li key={e.codigo}>

@@ -17,8 +17,8 @@ export default function AdminNotificacionesNotFound() {
         className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 py-14 text-center"
       >
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FF4E00]/10"
-          style={{ color: "#FF4E00" }}
+          className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--badge-danger-bg)]"
+          style={{ color: "var(--destructive)" }}
           aria-hidden="true"
         >
           <FileQuestion className="h-6 w-6" strokeWidth={1.8} />
@@ -29,7 +29,7 @@ export default function AdminNotificacionesNotFound() {
         >
           404
         </p>
-        <h1 className="text-base font-semibold text-flit-primary dark:text-foreground">
+        <h1 className="text-base font-semibold text-flit-primary">
           Notificaciones no disponible
         </h1>
         <p className="max-w-md text-sm text-muted-foreground">
@@ -43,7 +43,7 @@ export default function AdminNotificacionesNotFound() {
         <Link
           href="/"
           className="mt-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           Volver al inicio
         </Link>

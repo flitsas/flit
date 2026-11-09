@@ -214,7 +214,7 @@ export function RuleFormPanel({
                 <button
                   type="button"
                   className="flex items-center gap-1 text-[10px] font-semibold"
-                  style={{ color: "#FF4E00" }}
+                  style={{ color: "var(--destructive)" }}
                   onClick={() => setConditions((prev) => prev.filter((_, i) => i !== index))}
                 >
                   <Trash2 className="h-3 w-3" /> Quitar
@@ -233,7 +233,7 @@ export function RuleFormPanel({
             </button>
           )}
           {conditionError && (
-            <p className="text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="text-[11px] font-medium" style={{ color: "var(--destructive)" }} role="alert">
               {conditionError}
             </p>
           )}

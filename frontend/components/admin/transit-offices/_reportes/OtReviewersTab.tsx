@@ -309,7 +309,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               disabled={exportState.busy || sinFilas}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
               data-testid="ot-reviewers-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}

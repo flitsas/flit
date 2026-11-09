@@ -110,11 +110,11 @@ export function TipoTramiteCapacidades({
   return (
     <div className="flex flex-col gap-4">
       <label className="flex max-w-md flex-col gap-1">
-        <span className="text-xs font-semibold text-flit-primary dark:text-foreground">
+        <span className="text-xs font-semibold text-flit-primary">
           Identificador de entrada
         </span>
         <select
-          className="w-full rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          className="w-full rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           value={borrador.entryMode ?? ''}
           onChange={(e) => cambiar({ entryMode: e.target.value || null })}
         >
@@ -128,11 +128,11 @@ export function TipoTramiteCapacidades({
       </label>
 
       <label className="flex max-w-md flex-col gap-1">
-        <span className="text-xs font-semibold text-flit-primary dark:text-foreground">
+        <span className="text-xs font-semibold text-flit-primary">
           Generación de impronta
         </span>
         <select
-          className="w-full rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          className="w-full rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           aria-label="Generación de impronta"
           value={borrador.improntaSource === 'MANUAL' ? 'MANUAL' : 'OPERATOR_CHOICE'}
           onChange={(e) =>
@@ -153,7 +153,7 @@ export function TipoTramiteCapacidades({
       </label>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-xs font-semibold text-flit-primary dark:text-foreground">
+        <legend className="mb-1 text-xs font-semibold text-flit-primary">
           Qué exige el trámite
         </legend>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -169,7 +169,7 @@ export function TipoTramiteCapacidades({
                 className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-flit-brand"
               />
               <span className="min-w-0">
-                <span className="block text-xs font-medium text-flit-primary dark:text-foreground">
+                <span className="block text-xs font-medium text-flit-primary">
                   {c.etiqueta}
                 </span>
                 <span className="block text-xs opacity-65">{c.ayuda}</span>
@@ -181,7 +181,7 @@ export function TipoTramiteCapacidades({
 
       {borrador.requiresBiometrics && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-xs font-semibold text-flit-primary dark:text-foreground">
+          <legend className="mb-1 text-xs font-semibold text-flit-primary">
             Quién valida identidad
           </legend>
           <div className="flex flex-wrap gap-2">
@@ -196,12 +196,12 @@ export function TipoTramiteCapacidades({
                   onChange={() => alternarActor(a.valor)}
                   className="h-3.5 w-3.5 accent-flit-brand"
                 />
-                <span className="text-flit-primary dark:text-foreground">{a.etiqueta}</span>
+                <span className="text-flit-primary">{a.etiqueta}</span>
               </label>
             ))}
           </div>
           {avisoBiometria && (
-            <p className="text-xs" style={{ color: '#B87A00' }} role="alert">
+            <p className="text-xs" style={{ color: 'var(--badge-warning-fg)' }} role="alert">
               {avisoBiometria}
             </p>
           )}
@@ -214,7 +214,7 @@ export function TipoTramiteCapacidades({
           onClick={() => void guardar()}
           disabled={guardando}
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+          style={{ background: 'var(--gradient-action)' }}
         >
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
@@ -227,14 +227,14 @@ export function TipoTramiteCapacidades({
         </button>
         <span className="text-xs opacity-70">Versión actual: {perfil.version}</span>
         {ok && (
-          <span className="text-xs font-medium" style={{ color: '#0E9F6E' }} role="status">
+          <span className="text-xs font-medium" style={{ color: 'var(--flit-success-ink)' }} role="status">
             Guardado
           </span>
         )}
       </div>
 
       {error && (
-        <p className="text-xs" role="alert" style={{ color: '#C2410C' }}>
+        <p className="text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
       )}

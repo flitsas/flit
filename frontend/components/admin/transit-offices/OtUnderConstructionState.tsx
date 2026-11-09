@@ -37,7 +37,7 @@ export function OtUnderConstructionState({
       >
         {code}
       </p>
-      <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">{title}</h2>
+      <h2 className="text-base font-semibold text-flit-primary">{title}</h2>
       <p className="max-w-md text-sm text-muted-foreground">{description}</p>
       <span className="sr-only">
         {code}. {title}. {description}

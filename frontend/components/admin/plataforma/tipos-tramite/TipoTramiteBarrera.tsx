@@ -54,14 +54,14 @@ export function TipoTramiteBarrera({
           disabled={guardando}
           onClick={() => void alternar()}
           className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
-          style={{ background: tipo.wizardEnabled ? 'var(--color-flit-brand)' : '#C8D2E0' }}
+          style={{ background: tipo.wizardEnabled ? 'var(--color-flit-brand)' : 'var(--border-strong)' }}
         >
           <span
             className="inline-block h-4 w-4 transform rounded-full bg-white transition"
             style={{ transform: tipo.wizardEnabled ? 'translateX(1.5rem)' : 'translateX(0.25rem)' }}
           />
         </button>
-        <span className="text-xs font-medium text-flit-primary dark:text-foreground">
+        <span className="text-xs font-medium text-flit-primary">
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -78,10 +78,10 @@ export function TipoTramiteBarrera({
       {impedimentos.length > 0 && (
         <div
           className="rounded-xl border px-3 py-2.5 text-xs"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
+          style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
           role="alert"
         >
-          <p className="mb-1.5 flex items-center gap-1.5 font-semibold" style={{ color: '#B87A00' }}>
+          <p className="mb-1.5 flex items-center gap-1.5 font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
             Todavía no se puede habilitar
           </p>
@@ -94,7 +94,7 @@ export function TipoTramiteBarrera({
       )}
 
       {error && (
-        <p className="text-xs" role="alert" style={{ color: '#C2410C' }}>
+        <p className="text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
       )}
