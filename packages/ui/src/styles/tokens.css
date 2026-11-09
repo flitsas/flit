@@ -21,8 +21,10 @@
   --color-flit-brand-ink: var(--flit-brand-ink);
   --color-flit-tech: var(--brand-accent, #00dbd5);
   --color-flit-alert: #ff4e00;
-  --color-flit-bg: var(--brand-bg, #eef5ff);
-  --color-flit-gray: #dfe5ed;
+  /* Fondo y gris de marca con respaldo por tema (pedido de S3, HU #14478): iguales en claro; en oscuro, el fondo y el
+   * borde oscuros del kit. En oscuro BrandStyle anula --brand-bg para que no quede el fondo claro del socio. */
+  --color-flit-bg: var(--brand-bg, var(--flit-bg-tema, #eef5ff));
+  --color-flit-gray: var(--flit-gray-tema, #dfe5ed);
   /* Dock inferior — utilities desde tokens §2D (GUIA-DOCK) alineados a flit_design_tokens */
   --color-nav-app: var(--nav-app-bg);
   --color-nav-ink: var(--nav-texto-fuerte);
@@ -334,6 +336,8 @@
 
   /* Tinta de títulos en oscuro cuando no hay marca de socio (ver --color-flit-primary). */
   --flit-primary-tema: #e6f0ff;
+  --flit-bg-tema: #0a1326;
+  --flit-gray-tema: #233452;
 
   /* Estados del trámite en oscuro: mismo tono, texto aclarado hasta ≥ 5:1 sobre la tarjeta oscura. */
   --estado-borrador-bg: rgba(94,106,123,0.2);
