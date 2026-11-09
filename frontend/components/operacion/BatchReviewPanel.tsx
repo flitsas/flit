@@ -106,7 +106,7 @@ function PieceRow({
   return (
     <li
       className="rounded-xl border p-3"
-      style={{ borderColor: marcada ? '#8CC63F' : 'var(--color-border)' }}
+      style={{ borderColor: marcada ? 'var(--flit-success-ink)' : 'var(--color-border)' }}
     >
       <label className="flex cursor-pointer items-start gap-2.5">
         <input
@@ -274,15 +274,15 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
       {errores.length > 0 && (
         <div
           className="mt-3 rounded-xl border p-3"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)' }}
           role="alert"
         >
-          <p className="text-xs font-semibold" style={{ color: '#FF4E00' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--destructive)' }}>
             Archivos que no pudimos procesar
           </p>
           <ul className="mt-1.5 space-y-1">
             {errores.map((e) => (
-              <li key={`${e.filename}-${e.motivo}`} className="text-xs" style={{ color: '#FF4E00' }}>
+              <li key={`${e.filename}-${e.motivo}`} className="text-xs" style={{ color: 'var(--destructive)' }}>
                 <span className="font-medium">{e.filename}</span> — {e.motivo}
               </li>
             ))}

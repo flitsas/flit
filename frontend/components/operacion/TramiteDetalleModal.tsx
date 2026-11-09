@@ -556,7 +556,7 @@ export function TramiteDetalleModal({
                 />
               ) : null}
             </div>
-            <p className="mt-1 text-[12px]" style={{ color: '#475569' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
               <span className="font-mono">{item.referenceNumber}</span> · {item.placa ?? '—'} ·
               Responsable: {item.gestorNombre ?? '—'}
               {consultaMode && tenantNameRed ? ` · Cliente: ${tenantNameRed}` : ''}
@@ -591,7 +591,7 @@ export function TramiteDetalleModal({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="rounded-xl border border-[#DFE5ED] bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
+              className="rounded-xl border border-border bg-card p-2"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -812,7 +812,7 @@ export function TramiteDetalleModal({
                         onClick={() => void cargarMasLinea()}
                         disabled={lineaStatus === 'loading'}
                         className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-brand)' }}
+                        style={{ borderColor: 'var(--border)', color: 'var(--color-flit-brand)' }}
                       >
                         {lineaStatus === 'loading' ? 'Cargando…' : 'Ver más'}
                       </button>
@@ -824,7 +824,7 @@ export function TramiteDetalleModal({
                 <div className="lg:col-span-12">
                   {consultaMode ? (
                     // HU #12362 (AC3) — sin petición, sin error técnico ni reintento.
-                    <p className="text-xs text-flit-primary/70 dark:text-white/70" role="status">
+                    <p className="text-xs text-muted-foreground" role="status">
                       {COPY_SECCION_FUERA_DE_ALCANCE}
                     </p>
                   ) : identidadLoading ? (
@@ -955,7 +955,7 @@ export function TramiteDetalleModal({
                                   {systemAttachments.map((a) => (
                                     <li
                                       key={a.id}
-                                      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+                                      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
                                     >
                                       <span className="min-w-0">
                                         <span className="block truncate text-xs font-medium">{a.filename}</span>
@@ -970,7 +970,7 @@ export function TramiteDetalleModal({
                                         onClick={() => void preview.download(a)}
                                         aria-label={`Descargar ${a.filename}`}
                                         title="Descargar"
-                                        className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand border-[#DFE5ED] dark:border-white/10"
+                                        className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand border-border"
                                         style={{ color: BLUE }}
                                       >
                                         <Download className="h-3.5 w-3.5" aria-hidden="true" />

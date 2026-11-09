@@ -27,7 +27,7 @@ export function DetalleVehiculoSidebar({
   return (
     <aside className={`${DETALLE_CARD} h-full`} aria-label="Datos del vehículo">
       <div
-        className="aspect-[4/3] w-full rounded-xl bg-gradient-to-br from-[#DFE5ED]/60 to-[#DFE5ED]/20 dark:from-white/10 dark:to-white/5"
+        className="aspect-[4/3] w-full rounded-xl bg-gradient-to-br from-border/60 to-border/20"
         role="img"
         aria-label={`Vehículo con placa ${item.placa ?? 'sin placa'}`}
       />
@@ -41,7 +41,7 @@ export function DetalleVehiculoSidebar({
         <p className="mt-1 font-mono text-[11px] opacity-70">VIN: {item.vin ?? '—'}</p>
       </div>
       <div
-        className="mt-3 border-t pt-3 text-[11px] border-[#DFE5ED] dark:border-white/5"
+        className="mt-3 border-t pt-3 text-[11px] border-border"
         style={{ color: DETALLE_META }}
       >
         <p>Creado: {formatFechaHora(item.createdAt)}</p>
