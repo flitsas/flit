@@ -77,6 +77,7 @@ public sealed class PlatePreassignTests
     [InlineData("R12345")]
     [InlineData("S123456")]
     [InlineData("MC029554")]
+    [InlineData("123ABC")] // HU10 — motocarro
     public void PlateRangeRules_IsValidPlate_AceptaFormatosUnificados(string plate)
     {
         PlateRangeRules.IsValidPlate(plate).Should().BeTrue();
@@ -85,7 +86,7 @@ public sealed class PlatePreassignTests
     [Theory]
     [InlineData("AB12")]
     [InlineData("ABCD12")]
-    [InlineData("123ABC")]
+    [InlineData("12ABC")] // HU10 — 123ABC pasó a ser válido (motocarro)
     [InlineData("ABC1")]
     [InlineData("")]
     [InlineData(null)]
@@ -441,7 +442,7 @@ public sealed class PlatePreassignTests
     [Theory] // AC6 — formato de placa inválido → falla.
     [InlineData("AB12")]
     [InlineData("ABCD12")]
-    [InlineData("123ABC")]
+    [InlineData("12ABC")] // HU10 — 123ABC pasó a ser válido (motocarro)
     [InlineData("ABC1")]
     public async Task ReserveOutOfRange_FormatoInvalido_Falla(string plate)
     {
@@ -790,4 +791,9 @@ public sealed class PlatePreassignTests
             Task.FromResult<IReadOnlyList<Guid>>(
                 [.. map.Where(kv => kv.Value.Contains(transitOfficeId)).Select(kv => kv.Key)]);
     }
+
+    // HU10 — 123ABC (motocarro) es válido pero NO enumerable: va al contenedor NSF, como moto o remolque.
+    [Fact]
+    public void HU10_ParsePlate_MotocarroVaAlContenedorNoEnumerable() =>
+        PlateRangeRules.ParsePlate("123ABC").Should().Be((PlateRangeRules.NonStandardFormatPrefix, PlateRangeRules.NonStandardFormatNumber));
 }

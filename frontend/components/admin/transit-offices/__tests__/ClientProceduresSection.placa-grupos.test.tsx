@@ -68,7 +68,7 @@ const AVISO = {
   MAQUINARIA: "La placa debe tener 2 letras y 6 números, por ejemplo MC029554.",
 } as const;
 const AYUDA_SIN_GRUPO =
-  "Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía.";
+  "Formatos: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía.";
 
 type Grupo = keyof typeof AYUDA;
 
@@ -284,5 +284,75 @@ describe("ClientProceduresSection — guía del dígito por grupo (HU6)", () => 
     const user = userEvent.setup();
     await abrirAsignar(user, fila({ grupoPlaca: grupo }));
     expect(screen.queryByTestId("ot-guia-digito")).not.toBeInTheDocument();
+  });
+});
+
+// HU10 — grupo MOTOCARRO (123ABC) en «Asignar» y «Corregir», y su guía del dígito.
+// Uso de ejemplo: fila con grupoPlaca "MOTOCARRO" → ayuda «Formato permitido: 123ABC…», maxLength 6.
+describe("ClientProceduresSection — motocarro (HU10)", () => {
+  const AYUDA_MOTOCARRO = "Formato permitido: 123ABC (3 números y 3 letras)." + SUFIJO;
+  const AVISO_MOTOCARRO = "La placa debe tener 3 números y 3 letras, por ejemplo 123ABC.";
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchOtProfile).mockResolvedValue({
+      operationMode: "dashboard",
+      quipuxReadOnly: false,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      featureFlags: [],
+      revocationWindowBusinessDays: null,
+    });
+    vi.mocked(fetchOtBandejaFilterFields).mockResolvedValue([]);
+    vi.mocked(fetchOtBandejaHealth).mockResolvedValue({
+      transitOfficeResolved: true,
+      transitOfficeId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      deliveredTotal: 1,
+      deliveredWithGrant: 1,
+      deliveredWithoutGrant: 0,
+      hasDeliveredWithoutGrant: false,
+    });
+  });
+
+  it("Asignar — máscara, ayuda, aviso ámbar y botón", async () => {
+    const user = userEvent.setup();
+    plateMocks.assignPlateToProcedure.mockResolvedValue(undefined);
+    const input = await abrirAsignar(user, fila({ grupoPlaca: "MOTOCARRO", clase: "MOTOCARRO" }));
+    expect(screen.getByText(AYUDA_MOTOCARRO)).toBeInTheDocument();
+    expect(input).toHaveAttribute("maxLength", "6");
+    await user.type(input, "abc12d");
+    const aviso = screen.getByText(AVISO_MOTOCARRO);
+    expect(aviso).toHaveAttribute("role", "alert");
+    expect(screen.getByRole("button", { name: /^Asignar$/i })).toBeDisabled();
+    await user.clear(input);
+    await user.type(input, "123-abc");
+    expect(input).toHaveValue("123ABC");
+    const asignar = screen.getByRole("button", { name: /^Asignar$/i });
+    expect(asignar).toBeEnabled();
+    await user.click(asignar);
+    expect(plateMocks.assignPlateToProcedure).toHaveBeenCalledWith("proc-7", "123ABC");
+  }, 15_000);
+
+  it.each(["MOTOTRICICLO", "Tricimoto"])("fallback sin grupoPlaca — %s es motocarro", async (clase) => {
+    const user = userEvent.setup();
+    await abrirAsignar(user, fila({ grupoPlaca: null, clase }));
+    expect(screen.getByText(AYUDA_MOTOCARRO)).toBeInTheDocument();
+  });
+
+  it("guía del dígito — literal del primer número (X23ABC)", async () => {
+    const user = userEvent.setup();
+    await abrirAsignar(user, fila({ grupoPlaca: "MOTOCARRO" }));
+    const guia = screen.getByTestId("ot-guia-digito");
+    expect(guia).toHaveTextContent(
+      "Dígito numérico de preferencia: el cliente prefiere el número 5 como primer número de la placa (ej. 523ABC) — solo guía para elegir la placa; puedes asignar esa u otra cualquiera.",
+    );
+    expect(guia.querySelector("b")).toHaveTextContent("5");
+  });
+
+  it("Corregir — misma máscara y aviso", async () => {
+    const user = userEvent.setup();
+    const input = await abrirCorregir(user, fila({ grupoPlaca: "MOTOCARRO" }));
+    expect(screen.getByText(AYUDA_MOTOCARRO)).toBeInTheDocument();
+    await user.type(input, "12AB");
+    expect(screen.getByText(AVISO_MOTOCARRO)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Corregir$/i })).toBeDisabled();
   });
 });

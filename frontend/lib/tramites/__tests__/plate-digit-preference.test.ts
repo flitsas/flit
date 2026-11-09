@@ -228,3 +228,22 @@ describe('avisoDigitoPlacaOt — dígito según la clase (HU7)', () => {
     expect(avisoDigitoPlacaOt({ placa: 'ABCDEF', source: 'ot', digito: '5', clase: 'MOTOCICLETA' })).toBeNull();
   });
 });
+
+// HU10 — el motocarro usa la rama del primer número y los literales de moto.
+// Uso de ejemplo: avisoDigitoPlacaOt({ placa: '523ABC', source: 'ot', digito: '5', clase: 'MOTOCARRO' }) → éxito
+describe('avisoDigitoPlacaOt — motocarro (HU10)', () => {
+  it('523ABC con 5 → «tiene como primer número el 5»', () => {
+    expect(avisoDigitoPlacaOt({ placa: '523ABC', source: 'ot', digito: '5', clase: 'MOTOCARRO' })).toEqual({
+      tono: 'exito',
+      texto:
+        'La placa 523ABC asignada por el organismo de tránsito tiene como primer número el 5, tu dígito de preferencia.',
+    });
+  });
+  it('123ABC con 3 en un TRICIMOTO → no coincide (compara el primero, no el último)', () => {
+    expect(avisoDigitoPlacaOt({ placa: '123ABC', source: 'ot', digito: '3', clase: 'TRICIMOTO' })).toEqual({
+      tono: 'info',
+      texto:
+        'La placa 123ABC asignada por el organismo de tránsito no tiene como primer número tu dígito de preferencia (3). El organismo lo toma solo como guía.',
+    });
+  });
+});

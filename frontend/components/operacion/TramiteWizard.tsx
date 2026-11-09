@@ -3418,6 +3418,8 @@ function ConsultaStep({
     fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText,
   );
   const muestraSelectorDigito = muestraDigitoPlaca && grupoPlacaPideDigito(grupoPlacaPaso1);
+  // HU10 — moto y motocarro: el dígito es el primer número de la placa.
+  const digitoPrimerNumeroPaso1 = grupoPlacaPaso1 === 'MOTO' || grupoPlacaPaso1 === 'MOTOCARRO';
 
   /**
    * Epic #12550 (ADR-0059 §Ruta Corta) — Ruta Corta: el vehículo ya tiene placa según el RUNT y el
@@ -4252,7 +4254,7 @@ function ConsultaStep({
           {muestraSelectorDigito && (
           <div className="min-w-0">
             <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
-              {grupoPlacaPaso1 === 'MOTO' ? 'Dígito numérico de preferencia' : 'Dígito de preferencia'}
+              {digitoPrimerNumeroPaso1 ? 'Dígito numérico de preferencia' : 'Dígito de preferencia'}
             </label>
             {/* AC2 (HU #10799) — con placa del RUNT no hay nada que preasignar: se dice, con la
                 placa delante, en vez de dejar un selector apagado que parece un fallo. Es la misma
@@ -4295,7 +4297,7 @@ function ConsultaStep({
                   {Array.from({ length: 10 }, (_, i) => (
                     <option key={i} value={String(i)}>
                       {/* D4 — en motos el dígito es el primer número de la placa. */}
-                      {grupoPlacaPaso1 === 'MOTO' ? `Primer número ${i}` : `Termina en ${i}`}
+                      {digitoPrimerNumeroPaso1 ? `Primer número ${i}` : `Termina en ${i}`}
                     </option>
                   ))}
                 </select>
@@ -4313,7 +4315,9 @@ function ConsultaStep({
                     ? 'Elige primero la secretaría: es el organismo que asignará la placa.'
                     : digitoPlacaSinDecidir
                       ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
-                      : grupoPlacaPaso1 === 'MOTO'
+                      : grupoPlacaPaso1 === 'MOTOCARRO'
+                        ? 'Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.'
+                        : grupoPlacaPaso1 === 'MOTO'
                         ? 'Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.'
                         : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
                 </p>

@@ -2025,7 +2025,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 className="mt-3 rounded-lg px-3 py-2 text-xs"
                 style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
               >
-                {assignGrupo === "MOTO" ? (
+                {assignGrupo === "MOTOCARRO" ? (
+                  <>
+                    Dígito numérico de preferencia: el cliente prefiere el número <b>{preferredDigit}</b> como
+                    primer número de la placa (ej. {preferredDigit}23ABC) — solo guía para elegir la placa;
+                    puedes asignar esa u otra cualquiera.
+                  </>
+                ) : assignGrupo === "MOTO" ? (
                   <>
                     Dígito numérico de preferencia: el cliente prefiere el número <b>{preferredDigit}</b> como
                     primer número de la placa (ej. ABC{preferredDigit}2D o ABC{preferredDigit}2) — solo guía
@@ -2047,7 +2053,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               value={plateInput}
               onChange={setPlateInput}
               grupo={assignGrupo}
-              ayudaSinGrupo="Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía."
+              ayudaSinGrupo="Formatos: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía."
               className="mt-4"
             />
             <div className="mt-5 flex gap-3">

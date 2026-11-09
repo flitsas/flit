@@ -947,6 +947,8 @@ export function PlacaPreasignadaSection({
   // el asistente en solo lectura (enlace directo a /tramites/{id}); desde el listado, un trámite ya
   // asignado abre el detalle, donde `DetalleVehiculoSidebar` pinta el mismo aviso.
   const placaAsignadaPorOt = esPlacaAsignadaPorOt(placa, plateSource);
+  // HU10 — moto y motocarro: el dígito es el primer número de la placa.
+  const digitoPrimerNumero = grupoPlaca === 'MOTO' || grupoPlaca === 'MOTOCARRO';
 
   // Quitar una placa elegida por el gestor (borradores antiguos): limpia `plate` (='') y regenera el
   // FUR. Sin placa, el trámite vuelve a la Ruta Larga y el organismo la asigna en Preasignación.
@@ -1065,9 +1067,11 @@ export function PlacaPreasignadaSection({
       {grupoPlacaPideDigito(grupoPlaca) && (
         <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
           <span>
-            {grupoPlaca === 'MOTO' ? 'Dígito numérico de preferencia (opcional):' : 'Dígito de preferencia (opcional):'}{' '}
+            {digitoPrimerNumero ? 'Dígito numérico de preferencia (opcional):' : 'Dígito de preferencia (opcional):'}{' '}
             <span className="font-normal opacity-70">
-              {grupoPlaca === 'MOTO'
+              {grupoPlaca === 'MOTOCARRO'
+                ? 'Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.'
+                : grupoPlaca === 'MOTO'
                 ? 'Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.'
                 : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
             </span>
@@ -1083,7 +1087,7 @@ export function PlacaPreasignadaSection({
             {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
               <option key={d} value={d}>
                 {/* D4 — en motos el dígito es el primer número de la placa. */}
-                {grupoPlaca === 'MOTO' ? `Primer número ${d}` : `Termina en ${d}`}
+                {digitoPrimerNumero ? `Primer número ${d}` : `Termina en ${d}`}
               </option>
             ))}
           </select>

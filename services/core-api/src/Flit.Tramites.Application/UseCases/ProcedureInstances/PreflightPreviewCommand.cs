@@ -63,7 +63,7 @@ public sealed record PreflightPreviewDto(
     PreflightPreviewTransitOfficeDto? TransitOffice = null,
     /// <summary>
     /// HU9 (Caso C 2026-11-09) — grupo de placa de <c>vehicle_class</c> consultado: <c>CARRO</c> |
-    /// <c>MOTO</c> | <c>REMOLQUE</c> | <c>MAQUINARIA</c> | <c>null</c> (vacía, «SIN CLASE» o desconocida).
+    /// <c>MOTO</c> | <c>MOTOCARRO</c> | <c>REMOLQUE</c> | <c>MAQUINARIA</c> | <c>null</c> (vacía, «SIN CLASE» o desconocida).
     /// Misma regla que la bandeja OT (HU8), vía <see cref="IVehiclePlateGroupResolver"/>.
     /// </summary>
     string? GrupoPlaca = null);

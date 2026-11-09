@@ -4,7 +4,7 @@ namespace Flit.Admin.Domain.PlatePreassign;
 /// HU8 [BACKEND] (Caso C 2026-11-09, D1) — grupo de placa según la clase del vehículo. Decide qué formato
 /// exige la asignación y la corrección de placa del OT (<see cref="PlateRangeRules.IsValidPlateForGroup"/>).
 /// Sin grupo (<c>null</c>): clase vacía, «SIN CLASE» o desconocida ⇒ unión de formatos actual.
-/// Valor de contrato: <see cref="PlateRangeRules.ToContractValue"/> (<c>CARRO</c> | <c>MOTO</c> |
+/// Valor de contrato: <see cref="PlateRangeRules.ToContractValue"/> (<c>CARRO</c> | <c>MOTO</c> | <c>MOTOCARRO</c> |
 /// <c>REMOLQUE</c> | <c>MAQUINARIA</c>).
 /// </summary>
 public enum PlateClassGroup
@@ -20,4 +20,9 @@ public enum PlateClassGroup
 
     /// <summary>Maquinaria agrícola y de construcción: <c>^[A-Z]{2}[0-9]{6}$</c> (MC029554).</summary>
     Maquinaria,
+
+    /// <summary>
+    /// HU10 (Caso C 2026-11-09, D5) — motocarro, mototriciclo y tricimoto: <c>^[0-9]{3}[A-Z]{3}$</c> (123ABC).
+    /// </summary>
+    Motocarro,
 }

@@ -52,7 +52,7 @@ const TEXTO_CARRO =
   "Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.";
 const AVISO_CARRO = "La placa debe tener 3 letras y 3 números, por ejemplo ABC123.";
 const AYUDA_ACTUAL =
-  "Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía.";
+  "Formatos: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía.";
 
 function fila(clase: string | null | undefined): OtClientProcedure {
   return {
