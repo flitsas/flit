@@ -23,7 +23,7 @@ public sealed record Registro(Guid DocumentoId, Guid ComparendoId, string Numero
 /// Carga por OCR (HUs #13469–#13471; §6.18, RN-050 a RN-064). Paquetes de 1 a 200 archivos que un LLM lee uno a uno;
 /// el operador revisa, corrige o completa y registra. Todo lo que cambia el operador queda en el log de ediciones.
 /// </summary>
-public sealed class ServicioOcr(
+public sealed partial class ServicioOcr(
     ComparendosDb db,
     RegistroArchivos archivos,
     IProveedorOcr proveedor,
@@ -33,7 +33,8 @@ public sealed class ServicioOcr(
     Capacidades capacidades,
     ServicioCorreo correo,
     Reloj reloj,
-    Contraventor.ServicioContraventor contraventor)
+    Contraventor.ServicioContraventor contraventor,
+    ILogger<ServicioOcr> logger)
 {
     public const int MaximoDocumentos = 200;
     public const long MaximoBytes = 20L * 1024 * 1024;
@@ -509,9 +510,11 @@ public sealed class ServicioOcr(
         {
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // El comparendo ya está registrado; el job diario reintentará.
+            // El comparendo ya está registrado; el job diario reintentará. Sin datos personales: el mensaje puede traer
+            // placa o documento, así que solo se registran los ids y el tipo de error.
+            LogConsultaInmediataFallida(logger, ex.GetType().Name, c.Id, c.TenantId);
         }
     }
 
@@ -627,4 +630,7 @@ public sealed class ServicioOcr(
             RemitenteNombre = config.RemitenteNombre,
         }, ct).ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "La consulta inmediata de conductor falló al registrar por OCR ({TipoError}; comparendo {ComparendoId}, empresa {TenantId}): queda para el reintento diario.")]
+    private static partial void LogConsultaInmediataFallida(ILogger logger, string tipoError, Guid comparendoId, Guid tenantId);
 }

@@ -10,6 +10,7 @@ using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 
@@ -57,7 +58,7 @@ public sealed class OcrDePrueba : IProveedorOcr
         }, "{\"ok\":true}", "modelo-prueba");
 }
 
-public sealed class ApiConOcr : ApiConFuente
+public class ApiConOcr : ApiConFuente
 {
     public OcrDePrueba Ocr { get; } = new();
 
@@ -694,6 +695,78 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
             .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING2", ct));
         c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.NoAplica);
         c.IntentosConsultaContraventor.Should().Be(0);
+    }
+}
+
+/// <summary>La API de contratos se cae con una excepción que no es de regla (red, timeout del cliente, etc.).</summary>
+public sealed class ApiConOcrYContratosCaidos : ApiConOcr
+{
+    public ConcurrentQueue<(LogLevel Nivel, string Mensaje)> Logs { get; } = new();
+
+    protected override void Reemplazar(IServiceCollection services)
+    {
+        base.Reemplazar(services);
+        services.AddScoped<Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos, ContratosCaidos>();
+        services.AddSingleton<ILoggerProvider>(new Captura(Logs));
+    }
+
+    private sealed class ContratosCaidos : Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos
+    {
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct) =>
+            throw new HttpRequestException($"conexión rechazada consultando {placa}");
+
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> ProbarAsync(CancellationToken ct) => throw new HttpRequestException("caída");
+    }
+
+    private sealed class Captura(ConcurrentQueue<(LogLevel, string)> destino) : ILoggerProvider, ILogger
+    {
+        public ILogger CreateLogger(string categoryName) => categoryName == typeof(ServicioOcr).FullName ? this : Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            destino.Enqueue((logLevel, formatter(state, exception) + (exception is null ? string.Empty : $" | {exception.Message}")));
+
+        public void Dispose()
+        {
+        }
+    }
+}
+
+/// <summary>GDC punto 5: si la consulta inmediata se cae, el registro sigue en pie y queda un aviso en el log, sin datos personales.</summary>
+public sealed class OcrConsultaInmediataCaidaTests(ApiConOcrYContratosCaidos api) : IClassFixture<ApiConOcrYContratosCaidos>
+{
+    [Fact]
+    public async Task Registrar_ConLaApiCaida_RegistraIgual_YDejaUnAvisoSinDatosPersonales()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar]))
+            .PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = "900123456", nombreTitular = "TITULAR DE PRUEBA S.A.S." }, ct))
+            .EnsureSuccessStatusCode();
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.OcrVer, Permisos.OcrGestionar, Permisos.BandejaVer]));
+
+        api.Ocr.Responder("caida", () => OcrDePrueba.Campos("OCR-CAIDA-1", placa: "CAI124"));
+        var form = new MultipartFormDataContent { { new StringContent("API caída"), "nombre" }, { new StringContent("true"), "iniciar" } };
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("caida")), "archivos", "caida.jpg");
+        var creado = await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", form, ct);
+        creado.EnsureSuccessStatusCode();
+        var paquete = (await creado.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+        var doc = await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.PaqueteId == paquete, ct));
+
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.AsNoTracking().SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRCAIDA1", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.Pendiente, "el job diario la reintenta");
+        var aviso = api.Logs.Should().ContainSingle(l => l.Nivel == LogLevel.Warning).Which.Mensaje;
+        aviso.Should().Contain("HttpRequestException").And.Contain(c.Id.ToString());
+        aviso.Should().NotContain("CAI124").And.NotContain("900123456");
     }
 }
 
