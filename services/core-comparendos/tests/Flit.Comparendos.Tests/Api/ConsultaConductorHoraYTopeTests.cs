@@ -247,4 +247,24 @@ public sealed class ConsultaConductorHoraYTopeTests(ApiConFuente api) : IClassFi
         Consultas("TPD120").Should().HaveCount(3, "después del tercer fallo no hay más llamadas");
         c.ErrorConsultaContraventor.Should().NotBeNullOrEmpty("el SuperAdmin sigue viendo el último error");
     }
+
+    [Theory]
+    [InlineData("N-1", "NSA122", EstadoConsultaContraventor.SinHora)]
+    [InlineData("N-2", "NSB120", EstadoConsultaContraventor.Agotada)]
+    public async Task AlDesmarcarElNit_SinHoraYAgotada_PasanANoAplica(string numero, string placa, EstadoConsultaContraventor estado)
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, id, _) = await PendienteAsync(numero, placa, new TimeOnly(10, 0));
+        await api.EnDbAsync(async db =>
+        {
+            var c = await db.Comparendos.SingleAsync(x => x.Id == id, ct);
+            (c.EstadoConsultaContraventor, c.IntentosConsultaContraventor) = (estado, (short)(estado == EstadoConsultaContraventor.Agotada ? 3 : 0));
+            await db.SaveChangesAsync(ct);
+        });
+
+        await ConsultaPorApiDeLosNitsAsync(api, empresa, activo: false);
+
+        (await Leer(id)).EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.NoAplica, "sin consulta automática para el NIT, se asigna a mano como los demás");
+    }
 }

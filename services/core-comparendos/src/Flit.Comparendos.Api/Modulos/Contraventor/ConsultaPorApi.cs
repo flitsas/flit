@@ -64,7 +64,7 @@ public static class ConsultaPorApi
 
     /// <summary>
     /// Tras cambiar un interruptor: los comparendos activos sin conductor a los que ahora aplica quedan pendientes de
-    /// consulta, y los que estaban pendientes o en error y ya no aplica pasan a asignación manual. Lo ya encontrado o no
+    /// consulta, y los que estaban pendientes, en error, sin hora o agotados y ya no aplica pasan a asignación manual. Lo ya encontrado o no
     /// encontrado no se toca.
     /// </summary>
     public static async Task RecalcularAsync(ComparendosDb db, Guid tenantId, CancellationToken ct)
@@ -74,7 +74,8 @@ public static class ConsultaPorApi
         var marcados = config is not null && EmpresaLaUsa(config) ? await MarcadosAsync(db, tenantId, ct).ConfigureAwait(false) : [];
         var candidatos = await db.Comparendos.AsNoTracking()
             .Where(c => c.TenantId == tenantId && c.Activo && c.Contraventor == null && (c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica
-                || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error))
+                || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error
+                || c.EstadoConsultaContraventor == EstadoConsultaContraventor.SinHora || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada))
             .Select(c => new Comparendo
             {
                 Id = c.Id, TenantId = c.TenantId, IdentificacionMonitoreadaId = c.IdentificacionMonitoreadaId,
