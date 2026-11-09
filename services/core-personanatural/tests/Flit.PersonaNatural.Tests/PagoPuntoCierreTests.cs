@@ -1,0 +1,329 @@
+using System.Net;
+using System.Text.Json;
+using Flit.PersonaNatural.Api.Identidad;
+using Flit.PersonaNatural.Api.Pagos;
+using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Pii;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace Flit.PersonaNatural.Tests;
+
+/// <summary>
+/// Feature CIERRE OT — HU #14464 (estado de cierre del trámite pagado) y #14466 (correo de cierre a quien radicó).
+/// Mismo host y ayudas que <see cref="PagoPuntoTests"/>.
+/// </summary>
+public sealed partial class PagoPuntoTests
+{
+    // ── HU #14464: estado de cierre ───────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14464_SinPagoConfirmado_ElCierreResponde409PagoPendiente()
+    {
+        await IniciarAsync();
+        var (_, token) = await EnPagoAsync();
+
+        var r = await Pago(HttpMethod.Get, "/cierre", token);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await PortalHost.JsonAsync(r)).RootElement.GetProperty("code").GetString().Should().Be("pago_pendiente");
+    }
+
+    [Fact]
+    public async Task HU14464_PagadaSinRespuestaDeFlit2_EsEnRegistro_ConPagoYOrganismo_SinRadicado()
+    {
+        await IniciarAsync(compuertaConmutable: true);
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        _compuerta.Permite = false;
+        await PagarCajaAsync(id);
+
+        var r = await Pago(HttpMethod.Get, "/cierre", token);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = (await PortalHost.JsonAsync(r)).RootElement;
+        json.GetProperty("estadoCierre").GetString().Should().Be("en_registro");
+        json.GetProperty("codigoPublico").GetString().Should().Be(await CodigoPublicoAsync(id)).And.StartWith("PN-");
+        json.TryGetProperty("radicadoFlit2", out _).Should().BeFalse("los nulos no viajan");
+        json.GetProperty("valorCop").GetInt64().Should().Be(366_000);
+        json.GetProperty("medio").GetString().Should().Be("caja");
+        json.GetProperty("medioCaja").GetString().Should().Be("efectivo");
+        json.GetProperty("pagadoEn").GetDateTimeOffset().Should().Be(_host.Reloj.GetUtcNow());
+        json.GetProperty("recogeEn").GetProperty("organismo").GetString().Should().Be("Tránsito de Prueba");
+    }
+
+    [Fact]
+    public async Task HU14464_ConLaRespuestaDeFlit2_EsRegistrado_ConElRadicado()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        await ResolverAsync(id, "creada", "TR-2026-000123");
+
+        var json = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement;
+
+        json.GetProperty("estadoCierre").GetString().Should().Be("registrado");
+        json.GetProperty("radicadoFlit2").GetString().Should().Be("TR-2026-000123");
+        json.GetProperty("codigoPublico").GetString().Should().Be(await CodigoPublicoAsync(id), "el código para consultar sigue siendo el público");
+    }
+
+    [Theory]
+    [InlineData("El organismo no tiene habilitado este trámite.", "El organismo no tiene habilitado este trámite.")]
+    [InlineData("regla_interna_violada", "El organismo no pudo registrar el trámite. Acércate al organismo con tu código para que lo revisen.")]
+    [InlineData("System.NullReferenceException at Foo.Bar() in x", "El organismo no pudo registrar el trámite. Acércate al organismo con tu código para que lo revisen.")]
+    public async Task HU14464_ConElRechazoDeFlit2_EsRechazado_ConUnMotivoLegibleSinDetallesInternos(string motivoInterno, string esperado)
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        await ResolverAsync(id, "rechazada_creacion", null, motivoInterno);
+
+        var json = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement;
+
+        json.GetProperty("estadoCierre").GetString().Should().Be("rechazado");
+        json.GetProperty("motivo").GetString().Should().Be(esperado);
+        json.TryGetProperty("radicadoFlit2", out _).Should().BeFalse("los nulos no viajan");
+    }
+
+    [Fact]
+    public async Task HU14464_UnTramiteSinCobro_InformaMedioSinCobro_YValorCero()
+    {
+        await IniciarAsync(compuertaConmutable: true);
+        var (_, token) = await EnPagoAsync();
+        TotalCero();
+        _compuerta.Permite = false;
+        (await Pago(HttpMethod.Post, "/confirmar", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var json = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement;
+
+        json.GetProperty("medio").GetString().Should().Be("sin_cobro");
+        json.GetProperty("valorCop").GetInt64().Should().Be(0);
+        json.TryGetProperty("medioCaja", out _).Should().BeFalse("los nulos no viajan");
+        json.GetProperty("estadoCierre").GetString().Should().Be("en_registro");
+    }
+
+    [Fact]
+    public async Task HU14464_ElCierreNoLlevaDatosPersonalesDeLasPartes()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        var cuerpo = await (await Pago(HttpMethod.Get, "/cierre", token)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        foreach (var dato in new[] { "Persona de Prueba", Vendedor, Comprador, "example.org", "3001234567", "ABC123" })
+            cuerpo.Should().NotContain(dato);
+    }
+
+    [Fact]
+    public async Task HU14464_ConsultarPorCodigo_ElMismoCierreDelMismoOrganismo_YSinPagoEs409()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        var codigo = await CodigoPublicoAsync(id);
+        (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        await ResolverAsync(id, "creada", "TR-2026-000124");
+
+        var porCodigo = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, $"/cierre/{codigo.ToLowerInvariant()}", null))).RootElement;
+        var porRadicado = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre/TR-2026-000124", null))).RootElement;
+        var delTramite = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement;
+
+        porCodigo.GetRawText().Should().Be(delTramite.GetRawText());
+        porRadicado.GetRawText().Should().Be(delTramite.GetRawText());
+        porCodigo.GetProperty("estadoCierre").GetString().Should().Be("registrado");
+    }
+
+    [Fact]
+    public async Task HU14464_ConsultarPorCodigoDeOtroOrganismoOInexistente_Es404()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var codigo = await CodigoPublicoAsync(id);
+        await using (var db = _host.NuevaDb())
+        {
+            await db.Set<SolicitudTramite>().Where(s => s.Id == id).ExecuteUpdateAsync(set => set.SetProperty(s => s.OrganismoId, Guid.NewGuid()), TestContext.Current.CancellationToken);
+        }
+
+        (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Pago(HttpMethod.Get, "/cierre/PN-2026-999999", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Pago(HttpMethod.Get, "/cierre", token)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task HU14464_SinCookieDelPuntoNoHayCierre()
+    {
+        await IniciarAsync();
+        var (_, token) = await EnPagoAsync();
+
+        (await _host.EnviarAsync(HttpMethod.Get, $"{Punto}/pago/cierre", null, token)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await _host.EnviarAsync(HttpMethod.Get, $"{Punto}/pago/cierre/PN-2026-000001")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    // ── HU #14466: correo de cierre ───────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14466_AlQuedarPagada_SeEnviaUnCorreoAQuienRadico_ConCodigoYOrganismo()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        await PagarCajaAsync(id);
+
+        var (correo, html) = _enviador.Enviados.Should().ContainSingle().Subject;
+        correo.Should().Be("vendedor@example.org", "quien radica es el primer rol del tipo");
+        html.Should().Contain(await CodigoPublicoAsync(id)).And.Contain(System.Net.WebUtility.HtmlEncode("Tránsito de Prueba")).And.Contain("Persona de Prueba");
+        foreach (var dato in new[] { Vendedor, Comprador, "3001234567", "comprador@example.org", "ABC123" })
+            html.Should().NotContain(dato);
+        _enviador.Plantillas.Should().ContainSingle().Which.Should().Be("persona-natural.cierre-punto");
+    }
+
+    [Fact]
+    public async Task HU14466_SeEnviaTambienConUnTramiteSinCobro()
+    {
+        await IniciarAsync();
+        var (_, token) = await EnPagoAsync();
+        TotalCero();
+
+        (await Pago(HttpMethod.Post, "/confirmar", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        _enviador.Enviados.Should().ContainSingle().Which.Correo.Should().Be("vendedor@example.org");
+    }
+
+    [Fact]
+    public async Task HU14466_ConsultasYReintentosDelCierre_NoReenvian()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        for (var i = 0; i < 3; i++)
+        {
+            (await Pago(HttpMethod.Get, "/cierre", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Pago(HttpMethod.Get, string.Empty, token)).StatusCode.Should().Be(HttpStatusCode.OK);
+            await _host.EnScopeAsync(async sp => await sp.GetRequiredService<ICorreoDeCierre>().EnviarSiCorrespondeAsync(id, TestContext.Current.CancellationToken));
+        }
+
+        _enviador.Enviados.Should().HaveCount(1);
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task HU14466_EnvioSimultaneo_SoloSaleUnCorreo()
+    {
+        await IniciarAsync(compuertaConmutable: true);
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        _compuerta.Permite = false;
+        _enviador.Acepta = false; // el pago no envía
+        await PagarCajaAsync(id);
+        _enviador.Enviados.Clear();
+        _enviador.Acepta = true;
+
+        var resultados = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ =>
+            _host.EnScopeAsync(sp => sp.GetRequiredService<ICorreoDeCierre>().EnviarSiCorrespondeAsync(id, TestContext.Current.CancellationToken))));
+
+        resultados.Count(x => x).Should().Be(1);
+        _enviador.Enviados.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task HU14466_ConElCorreoTecnicoDelPunto_NoSeEnvia()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await GuardarCorreoDelVendedorAsync(id, CorreoTecnicoPunto.Para(null, id));
+
+        await PagarCajaAsync(id);
+
+        _enviador.Enviados.Should().BeEmpty("el correo técnico no es de la persona");
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HU14466_SinCorreoPropioDeQuienRadica_NoSeEnvia_AunqueOtraParteTengaCorreo()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await GuardarCorreoDelVendedorAsync(id, null);
+
+        await PagarCajaAsync(id);
+
+        _enviador.Enviados.Should().BeEmpty("el comprador (otra parte) tiene correo pero no es quien radicó");
+    }
+
+    [Fact]
+    public async Task HU14466_SiElEnvioFalla_ElPagoSigueFirme_YLaSiguienteConsultaDelCierreLoReintentaUnaVez()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        _enviador.Acepta = false;
+
+        var pagado = await PagarCajaAsync(id);
+
+        pagado.Should().NotBeNull();
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        await using (var db = _host.NuevaDb())
+            (await db.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull("se libera para reintentar");
+
+        _enviador.Acepta = true;
+        (await Pago(HttpMethod.Get, "/cierre", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Pago(HttpMethod.Get, "/cierre", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        _enviador.Enviados.Count(e => e.Correo == "vendedor@example.org").Should().Be(2, "un intento fallido y un único envío aceptado");
+        await using var db2 = _host.NuevaDb();
+        (await db2.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task HU14466_SiElTransporteLanzaUnaExcepcion_ElPagoNoSeDeshace()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        _enviador.Lanza = true;
+
+        var pagado = await PagarCajaAsync(id);
+
+        pagado.ValorCop.Should().Be(366_000);
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().SingleAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull();
+    }
+
+    // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Simula la respuesta de FLIT 2.0: la solicitud pasa a creada (con radicado) o rechazada_creacion (con motivo en el historial).</summary>
+    private async Task ResolverAsync(Guid id, string hasta, string? radicado, string? motivo = null)
+    {
+        await using var db = _host.NuevaDb();
+        var s = await db.Set<SolicitudTramite>().SingleAsync(x => x.Id == id, TestContext.Current.CancellationToken);
+        db.Add(new HistorialEstado { Id = Guid.CreateVersion7(), SolicitudId = id, Desde = s.Estado, Hasta = hasta, Origen = "flit2", Motivo = motivo, OcurrioEn = _host.Reloj.GetUtcNow() });
+        s.Estado = hasta;
+        s.ReferenceNumber = radicado;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    private Task<bool> GuardarCorreoDelVendedorAsync(Guid id, string? correo) =>
+        _host.EnScopeAsync(async sp =>
+        {
+            await sp.GetRequiredService<PersonaService>().GuardarAsync(
+                id, new DatosPersona("vendedor", 1, "CC", Vendedor, "Persona de Prueba", correo, "3001234567", null), TestContext.Current.CancellationToken);
+            return true;
+        });
+}

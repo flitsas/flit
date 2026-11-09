@@ -58,12 +58,25 @@ internal sealed class FachadaFalsa : IFachadaTramites
 /// <summary>Enviador de prueba: guarda lo que se le pidió enviar.</summary>
 internal sealed class EnviadorFalso : IEnviadorCotizacion
 {
+    private readonly Lock _candado = new();
     public List<(string Correo, string Html)> Enviados { get; } = [];
+    public List<string> Plantillas { get; } = [];
     public bool Acepta = true;
+    public bool Lanza;
 
-    public Task<bool> EnviarAsync(string correo, string asunto, string html, CancellationToken ct)
+    public Task<bool> EnviarAsync(string correo, string asunto, string html, CancellationToken ct) =>
+        EnviarAsync(correo, asunto, html, "persona-natural.cotizacion", ct);
+
+    public Task<bool> EnviarAsync(string correo, string asunto, string html, string plantilla, CancellationToken ct)
     {
-        Enviados.Add((correo, html));
+        if (Lanza)
+            throw new InvalidOperationException("transporte caído");
+        lock (_candado)
+        {
+            Enviados.Add((correo, html));
+            Plantillas.Add(plantilla);
+        }
+
         return Task.FromResult(Acepta);
     }
 }

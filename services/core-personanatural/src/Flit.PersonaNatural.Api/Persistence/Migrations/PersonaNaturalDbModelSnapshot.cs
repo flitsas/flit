@@ -226,6 +226,10 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("code");
 
+                    b.Property<DateTimeOffset?>("CorreoCierreEnviadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closure_email_sent_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")

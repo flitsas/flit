@@ -37,7 +37,7 @@ internal sealed class CompuertaConmutable : ICompuertaDeRadicacion
 /// #14450 (confirmar un trámite en $0) y #14468 (radicar solo con el pago confirmado). Sobre el host real, una base efímera
 /// propia y las fachadas de core-api falsas.
 /// </summary>
-public sealed class PagoPuntoTests : IAsyncLifetime
+public sealed partial class PagoPuntoTests : IAsyncLifetime
 {
     private const string Base = "/api/v1/persona-natural";
     private const string Punto = Base + "/punto";
@@ -45,6 +45,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
     private const string Comprador = "7009876543";
 
     private readonly AlmacenEnMemoria _almacen = new();
+    private readonly EnviadorFalso _enviador = new();
     private readonly CompuertaConmutable _compuerta = new();
     private PortalHost _host = null!;
     private bool _iniciado;
@@ -63,6 +64,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         _host = await PortalHost.IniciarAsync("pnpago", (servicios, _) =>
         {
             servicios.AddSingleton<IAlmacenAdjuntos>(_almacen);
+            servicios.AddSingleton<Flit.PersonaNatural.Api.Cotizaciones.IEnviadorCotizacion>(_enviador);
             servicios.AddSingleton<ICanalPunto>(new CanalPuntoDePrueba());
             if (compuertaConmutable)
                 servicios.AddSingleton<ICompuertaDeRadicacion>(_compuerta);

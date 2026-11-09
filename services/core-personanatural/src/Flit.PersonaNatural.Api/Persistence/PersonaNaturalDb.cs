@@ -243,6 +243,7 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(c => c.PagadoEn).HasColumnName("paid_at");
             e.Property(c => c.Lineas).HasColumnName("lines").HasColumnType("jsonb");
             e.Property(c => c.VersionTarifa).HasColumnName("tariff_version").HasMaxLength(1000);
+            e.Property(c => c.CorreoCierreEnviadoEn).HasColumnName("closure_email_sent_at");
             e.Property(c => c.AnuladoPor).HasColumnName("cancelled_by").HasMaxLength(120);
             e.Property(c => c.AnuladoEn).HasColumnName("cancelled_at");
             e.Property(c => c.AnulacionMotivo).HasColumnName("cancellation_reason").HasMaxLength(500);

@@ -71,6 +71,12 @@ public sealed class CobroSolicitud
     public string? Lineas { get; set; }
 
     public string? VersionTarifa { get; set; }
+    /// <summary>
+    /// HU #14466 — momento en que se tomó el envío del correo de cierre a quien radicó. Marca persistida que garantiza UN solo
+    /// correo por pago: se reclama con un UPDATE condicionado y solo se libera si el envío falla (para reintentar).
+    /// </summary>
+    public DateTimeOffset? CorreoCierreEnviadoEn { get; set; }
+
     public string? AnuladoPor { get; set; }
     public DateTimeOffset? AnuladoEn { get; set; }
     public string? AnulacionMotivo { get; set; }

@@ -17,6 +17,8 @@ public static class PagoPuntoEndpoints
         services.TryAddScoped<CotizadorDelPunto>();
         services.TryAddScoped<IRegistroDePagos, RegistroDePagos>();
         services.TryAddScoped<PagoPuntoService>();
+        services.TryAddScoped<ICorreoDeCierre, CorreoDeCierre>();
+        services.TryAddScoped<CierrePuntoService>();
         return services;
     }
 
@@ -41,8 +43,23 @@ public static class PagoPuntoEndpoints
         pago.MapPost("/confirmar", (HttpContext http, CancellationToken ct) => Atender(http, async (s, sesion, token) =>
             Results.Json(await s.ConfirmarSinCobroAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
 
+        // HU #14464: el cierre en una sola llamada (sesión del trámite). 409 pago_pendiente si aún no hay pago confirmado.
+        pago.MapGet("/cierre", (HttpContext http, CancellationToken ct) => AtenderCierre(http, async (s, sesion, token) =>
+            Results.Json(await s.DelTramiteAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+
+        // Para «Consultar» del punto: quien vuelve con el código público ve el mismo cierre (solo cookie del punto, mismo organismo).
+        pago.MapGet("/cierre/{codigo}", (string codigo, HttpContext http, CancellationToken ct) => AtenderCierre(http, async (s, sesion, _) =>
+            Results.Json(await s.PorCodigoAsync(sesion, codigo, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+
         pago.AddEndpointFilter(PuntoEndpoints.ConSesionDePunto);
         return punto;
+    }
+
+    private static Task<IResult> AtenderCierre(HttpContext http, Func<CierrePuntoService, Punto.OrganismoPunto, string?, Task<IResult>> accion)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        var servicio = http.RequestServices.GetRequiredService<CierrePuntoService>();
+        return SolicitudesEndpoints.Atender(() => accion(servicio, PuntoEndpoints.Sesion(http), PuntoEndpoints.TokenSolicitud(http)));
     }
 
     private static Task<IResult> Atender(HttpContext http, Func<PagoPuntoService, Punto.OrganismoPunto, string?, Task<IResult>> accion)

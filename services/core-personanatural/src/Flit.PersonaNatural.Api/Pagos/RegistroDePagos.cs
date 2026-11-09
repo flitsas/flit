@@ -50,7 +50,7 @@ public interface IRegistroDePagos
 /// </list>
 /// </summary>
 public sealed class RegistroDePagos(
-    PersonaNaturalDb db, CotizadorDelPunto cotizador, RadicacionService radicacion, TimeProvider reloj) : IRegistroDePagos
+    PersonaNaturalDb db, CotizadorDelPunto cotizador, RadicacionService radicacion, ICorreoDeCierre correoCierre, TimeProvider reloj) : IRegistroDePagos
 {
     public const string IndicePagado = "uq_payment_charge_paid_per_request";
     public const int MaxDetalle = 200;
@@ -83,6 +83,9 @@ public sealed class RegistroDePagos(
 
         // El pago ya está firme. Radicar es lo siguiente; si no se logra ahora, la solicitud queda «pagada» y se reintenta.
         var radicada = await radicacion.IntentarRadicarPagadaAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
+
+        // HU #14466: el correo de cierre sale una sola vez y nunca deshace ni retrasa el pago (si falla, se reintenta al consultar el cierre).
+        await correoCierre.EnviarSiCorrespondeAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
         return radicada ? pagado with { EstadoSolicitud = EstadoSolicitud.EnCola } : pagado;
     }
 
