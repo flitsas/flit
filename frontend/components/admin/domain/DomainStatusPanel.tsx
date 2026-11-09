@@ -59,10 +59,10 @@ export interface DomainStatusPanelProps {
 }
 
 const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: typeof Clock; color: string }> = {
-  pending: { label: "Pendiente de comprobación", Icon: Clock, color: "#F9AC00" },
+  pending: { label: "Pendiente de comprobación", Icon: Clock, color: "var(--badge-warning-fg)" },
   verified: { label: "Comprobado", Icon: ShieldCheck, color: "var(--color-flit-brand)" },
-  active: { label: "Activo", Icon: CheckCircle2, color: "#8CC63F" },
-  failed: { label: "Comprobación fallida", Icon: ShieldAlert, color: "#FF4E00" },
+  active: { label: "Activo", Icon: CheckCircle2, color: "var(--flit-success-ink)" },
+  failed: { label: "Comprobación fallida", Icon: ShieldAlert, color: "var(--destructive)" },
 };
 
 const REASON_MESSAGES: Record<string, string> = {
@@ -215,7 +215,7 @@ export function DomainStatusPanel({
               onClick={() => void handleVerify()}
               disabled={verifying || (cooldownSeconds !== null && cooldownSeconds > 0)}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               <RefreshCw className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden />
               {verifying
@@ -225,12 +225,12 @@ export function DomainStatusPanel({
                   : "Comprobar ahora"}
             </button>
             {verifyMessage && (
-              <p role="status" className="text-xs font-medium" style={{ color: "#8CC63F" }}>
+              <p role="status" className="text-xs font-medium" style={{ color: "var(--flit-success-ink)" }}>
                 {verifyMessage}
               </p>
             )}
             {verifyError && (
-              <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+              <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
                 {verifyError}
               </p>
             )}
@@ -257,7 +257,7 @@ function DomainStatusBody({ domain, reasonVerbatim }: { domain: TenantDomainResp
   const expiresAt = formatDateTime(domain.certificate.expiresAt);
 
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
       <p className="text-xs font-semibold opacity-70">Dominio</p>
       <p data-testid="domain-host" className="mb-2 font-mono text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         {domain.host}
@@ -275,7 +275,7 @@ function DomainStatusBody({ domain, reasonVerbatim }: { domain: TenantDomainResp
       {changedAt && <p className="mt-1 text-[11px] opacity-60">Último cambio: {changedAt}</p>}
 
       {graceUntil && (
-        <p className="mt-2 rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}>
+        <p className="mt-2 rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}>
           Registro TXT no encontrado; el dominio sigue operando hasta {graceUntil}.
         </p>
       )}
@@ -330,7 +330,7 @@ function DnsInstructions({
         </table>
       </div>
       {!verification.aValue && (
-        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "#8a6000" }}>
+        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "var(--badge-warning-fg)" }}>
           Falta el registro A de {verification.aName}: este ambiente no tiene configurada la IP del borde.
         </p>
       )}
@@ -341,7 +341,7 @@ function DnsInstructions({
 function DnsRow({ type, name, value }: { type: string; name: string; value: string }) {
   const border = { borderColor: "var(--table-row-border)" };
   return (
-    <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+    <tr className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
       <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={border}>{type}</td>
       <td className="max-w-[220px] truncate border-y px-4 py-3 font-mono" style={border}>{name}</td>
       <td className="max-w-[260px] truncate border-y px-4 py-3 font-mono" style={border}>{value}</td>

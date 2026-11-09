@@ -131,7 +131,7 @@ export function LinkCompanyDialog({
         </div>
       ) : loadError ? (
         <div className="space-y-2 py-4">
-          <p className="text-xs" style={{ color: "#FF4E00" }} role="alert">
+          <p className="text-xs" style={{ color: "var(--destructive)" }} role="alert">
             {loadError}
           </p>
           <button type="button" onClick={() => void load()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold">
@@ -190,7 +190,7 @@ export function LinkCompanyDialog({
       )}
 
       {error && (
-        <p className="mt-2 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="mt-2 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}
@@ -204,7 +204,7 @@ export function LinkCompanyDialog({
           onClick={() => void submit()}
           disabled={submitting || loading || Boolean(loadError)}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
           Vincular

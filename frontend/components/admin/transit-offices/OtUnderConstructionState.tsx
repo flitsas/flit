@@ -22,7 +22,7 @@ export function OtUnderConstructionState({
       role="status"
       aria-live="polite"
       data-testid={testId}
-      className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-6 py-14 text-center dark:border-white/10 dark:bg-[#0B0F14]"
+      className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 py-14 text-center"
     >
       <div
         className="flex h-12 w-12 items-center justify-center rounded-xl bg-flit-brand/10"
@@ -32,13 +32,13 @@ export function OtUnderConstructionState({
         <BarChart3 className="h-6 w-6" strokeWidth={1.8} />
       </div>
       <p
-        className="text-3xl font-bold tracking-tight text-[#59677D] dark:text-white/55"
+        className="text-3xl font-bold tracking-tight text-muted-foreground"
         aria-hidden="true"
       >
         {code}
       </p>
-      <h2 className="text-base font-semibold text-flit-primary dark:text-white">{title}</h2>
-      <p className="max-w-md text-sm text-[#59677D] dark:text-white/65">{description}</p>
+      <h2 className="text-base font-semibold text-flit-primary">{title}</h2>
+      <p className="max-w-md text-sm text-muted-foreground">{description}</p>
       <span className="sr-only">
         {code}. {title}. {description}
       </span>

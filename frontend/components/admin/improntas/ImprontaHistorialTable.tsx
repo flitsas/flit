@@ -85,20 +85,20 @@ export function ImprontaHistorialTable({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono font-semibold" style={{ borderColor: "#DFE5ED" }}>
+              <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
+                <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono font-semibold" style={{ borderColor: "var(--border)" }}>
                   {row.radicado}
                 </td>
-                <td className="border-y px-4 py-3 font-medium uppercase" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 font-medium uppercase" style={{ borderColor: "var(--border)" }}>
                   {row.placa}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {formatImprontaHistorialDate(row.fechaImpresa)}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   {row.operador}
                 </td>
-                <td className="border-y px-4 py-3 rounded-r-xl border-r opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 rounded-r-xl border-r opacity-80" style={{ borderColor: "var(--border)" }}>
                   {row.flitUserName}
                 </td>
               </tr>

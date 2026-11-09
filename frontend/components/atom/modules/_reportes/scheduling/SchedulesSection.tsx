@@ -193,7 +193,7 @@ export function SchedulesSection({
   return (
     <section data-testid="schedules-section" className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-muted-foreground">
           {otTransitOfficeId
             ? "Recibe por correo un resumen del panel de tu organismo, en la hora que elijas."
             : superAdminMode
@@ -276,7 +276,7 @@ export function SchedulesSection({
                         style={
                           s.isActive
                             ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                            : { background: "#6b7a941A", color: "#6b7a94" }
+                            : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
                         }
                       >
                         {s.isActive ? "Activo" : "Inactivo"}
@@ -312,19 +312,19 @@ export function SchedulesSection({
           role="alertdialog"
           aria-label="Confirmar eliminación"
           data-testid="schedule-delete-confirm"
-          className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 space-y-2"
+          className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-4 space-y-2"
         >
-          <p className="text-sm text-flit-primary dark:text-slate-100">
+          <p className="text-sm text-flit-primary">
             ¿Eliminar el informe programado <strong>{confirmDelete.name}</strong>? Esta acción no se puede deshacer.
           </p>
           {actionError && (
-            <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">{actionError}</p>
+            <p role="alert" className="text-xs font-medium text-destructive">{actionError}</p>
           )}
           <div className="flex gap-2">
             <button
               type="button"
               onClick={handleDelete}
-              className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white"
+              className="rounded-xl bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground"
             >
               Eliminar
             </button>
@@ -334,7 +334,7 @@ export function SchedulesSection({
                 setConfirmDelete(null);
                 setActionError(null);
               }}
-              className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
+              className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-flit-primary"
             >
               Cancelar
             </button>

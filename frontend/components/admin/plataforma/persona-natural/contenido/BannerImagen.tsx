@@ -38,7 +38,7 @@ export function BannerImagen({ id, alt, className = "" }: { id: string; alt: str
     <span
       role={fallo ? "img" : undefined}
       aria-label={fallo ? `${alt} (sin vista previa)` : undefined}
-      className={`flex items-center justify-center bg-[#EEF5FF] text-[10px] text-[#59677D] dark:bg-white/5 dark:text-white/70 ${className}`}
+      className={`flex items-center justify-center bg-secondary text-[10px] text-muted-foreground ${className}`}
     >
       {fallo ? "Sin vista previa" : "Cargando…"}
     </span>

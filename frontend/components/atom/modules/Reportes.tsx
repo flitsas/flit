@@ -202,10 +202,10 @@ export function Reportes() {
   // Sin ninguna pestaña visible → estado vacío amable (§3).
   if (visibleTabs.length === 0) {
     return (
-      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
         <ModuleTitle title="Reportes y Analíticas" subtitle="Monitorea el desempeño operativo por pestañas temáticas." />
         <div
-          className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-card"
           data-testid="reportes-sin-permisos"
         >
           <ShieldQuestion className="h-10 w-10 opacity-50" aria-hidden="true" />
@@ -220,7 +220,7 @@ export function Reportes() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Reportes y Analíticas"
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."
@@ -301,7 +301,7 @@ export function Reportes() {
       {!rangeValid && activeTab !== "consultas" && !ownFilters ? (
         <div
           role="alert"
-          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-card"
         >
           <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
           <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar las métricas.</p>
@@ -309,13 +309,13 @@ export function Reportes() {
       ) : !net.ready ? (
         // La cabeza espera a conocer su alcance guardado: así ninguna pestaña pide primero «lo
         // propio» para luego pedir «la red». Para quien no es cabeza `ready` es inmediato.
-        <div role="status" aria-busy="true" aria-live="polite" className="rounded-2xl border p-8 bg-white dark:bg-[#0B0F14]">
+        <div role="status" aria-busy="true" aria-live="polite" className="rounded-2xl border p-8 bg-card">
           <span className="sr-only">Cargando alcance…</span>
         </div>
       ) : networkActive && activeTab && !NETWORK_TABS.includes(activeTab) ? (
         <div
           role="status"
-          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-card"
           data-testid="reportes-tab-no-disponible-red"
         >
           <Network className="h-8 w-8 text-[color:var(--color-flit-brand)]" aria-hidden="true" />

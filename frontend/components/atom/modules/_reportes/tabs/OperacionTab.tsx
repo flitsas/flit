@@ -43,7 +43,7 @@ const STUCK_COLUMNS: DataTableColumn<StuckItem>[] = [
   {
     key: "dias",
     header: "Días detenido",
-    cellClassName: "font-semibold text-[#F9AC00]",
+    cellClassName: "font-semibold text-[var(--badge-warning-fg)]",
     render: (item) => formatNumber(item.daysInStatus),
   },
   { key: "organismo", header: "Organismo", cellClassName: "opacity-80", render: (item) => item.transitOfficeName },
@@ -98,7 +98,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               value={formatInt(summary.aprobados)}
               tooltip="Transiciones a 'aprobado' dentro del rango de fechas."
               variation={kpiVariation("aprobados")}
-              color="#8CC63F"
+              color="var(--flit-success-ink)"
             />
             <KpiCard
               label="Rechazados"
@@ -106,7 +106,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               tooltip="Transiciones a 'rechazado' dentro del rango de fechas."
               variation={kpiVariation("rechazados")}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             <KpiCard
               label="Tasa de rechazo"
@@ -114,7 +114,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               tooltip="Rechazados / (aprobados + rechazados) × 100 en el rango."
               variation={kpiVariation("rejectionRatePct")}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             <KpiCard
               label="Atascados"
@@ -122,14 +122,14 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               tooltip="Trámites activos sin cambio de estado hace más días que el umbral (7 por defecto)."
               variation={kpiVariation("stuckCount")}
               invertVariationColor
-              color="#F9AC00"
+              color="var(--badge-warning-fg)"
             />
           </div>
         )}
       </UiStateBoundary>
 
       {/* Embudo de estados */}
-      <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="funnel-title">
+      <section className="rounded-2xl p-5 bg-card border" aria-labelledby="funnel-title">
         <h2
           id="funnel-title"
           className="text-sm font-bold mb-3"
@@ -199,7 +199,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="dist-tipo-title">
+              <section className="rounded-2xl p-5 bg-card border" aria-labelledby="dist-tipo-title">
                 <h2 id="dist-tipo-title" className="text-sm font-bold mb-3" title="Trámites entregados por tipo de trámite en el rango.">
                   Distribución por tipo de trámite
                 </h2>
@@ -214,7 +214,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                   emptyMessage="Sin entregas por tipo en el periodo."
                 />
               </section>
-              <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="dist-ot-title">
+              <section className="rounded-2xl p-5 bg-card border" aria-labelledby="dist-ot-title">
                 <h2 id="dist-ot-title" className="text-sm font-bold mb-3" title="Trámites entregados por organismo de tránsito en el rango.">
                   Distribución por organismo de tránsito
                 </h2>

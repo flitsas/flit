@@ -163,7 +163,7 @@ export function OtBandejaCountersStrip({
       onSelect={(key) => onSelect(key as OtCounterKey | "")}
       ariaLabel="Carga de trabajo del organismo"
       disabled={loading}
-      darkBgClassName="dark:bg-[#0B0F14]"
+      darkBgClassName="dark:bg-card"
     />
   );
 }

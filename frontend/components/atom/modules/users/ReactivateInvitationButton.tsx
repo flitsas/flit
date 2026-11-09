@@ -114,7 +114,7 @@ export function ReactivateInvitationButton({
         aria-label={ariaLabel}
         onClick={handleClick}
         disabled={disabled}
-        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
+        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
         style={{ color: "var(--color-flit-brand)" }}
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
@@ -124,7 +124,7 @@ export function ReactivateInvitationButton({
           role={message.type === "error" ? "alert" : "status"}
           aria-live={message.type === "error" ? "assertive" : "polite"}
           className="text-[10px] font-medium max-w-[180px] text-right"
-          style={{ color: message.type === "error" ? "#FF4E00" : "#00948F" }}
+          style={{ color: message.type === "error" ? "var(--destructive)" : "var(--flit-success-ink)" }}
         >
           {message.text}
         </p>

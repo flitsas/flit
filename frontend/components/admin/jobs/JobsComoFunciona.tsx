@@ -17,7 +17,7 @@ export function JobsComoFunciona() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-flit-brand transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:hover:bg-white/5"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-flit-brand transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
       >
         <HelpCircle className="h-4 w-4" aria-hidden="true" />
         Cómo funciona
@@ -79,8 +79,8 @@ export function JobsComoFunciona() {
 function Punto({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-sm font-semibold text-flit-primary dark:text-white">{titulo}</p>
-      <p className="mt-0.5 text-sm text-[#59677D] dark:text-white/70">{children}</p>
+      <p className="text-sm font-semibold text-flit-primary">{titulo}</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">{children}</p>
     </div>
   );
 }

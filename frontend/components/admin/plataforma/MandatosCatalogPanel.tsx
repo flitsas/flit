@@ -147,8 +147,8 @@ export function MandatosCatalogPanel() {
       header: "Organismo",
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-[#162244] dark:text-white">{row.name}</span>
-          <span className="font-mono text-[11px] text-[#59677D] dark:text-white/55">{row.code}</span>
+          <span className="font-semibold text-foreground">{row.name}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">{row.code}</span>
         </div>
       ),
     },
@@ -157,11 +157,11 @@ export function MandatosCatalogPanel() {
       header: "Plantilla",
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium text-[#162244] dark:text-white">
+          <span className="text-sm font-medium text-foreground">
             {row.hasCustomTemplate ? "Propia" : mandatoFormatName(formatos.formatos, row.templateCode)}
           </span>
           {!row.hasCustomTemplate ? (
-            <span className="font-mono text-[11px] text-[#59677D] dark:text-white/55">
+            <span className="font-mono text-[11px] text-muted-foreground">
               {row.templateCode}
             </span>
           ) : null}
@@ -173,7 +173,7 @@ export function MandatosCatalogPanel() {
       header: "Tipos por compañía",
       render: (row) => (
         <span
-          className="text-sm text-[#162244] dark:text-white"
+          className="text-sm text-foreground"
           data-testid={`mandato-tipos-${row.officeId}`}
         >
           {resumenTiposPorCompania(row.explicitPersonaJuridica, row.explicitMandatoAbierto)}
@@ -254,11 +254,11 @@ export function MandatosCatalogPanel() {
         <div className="flex flex-col gap-1">
           <h2
             id="mandatos-plantillas-heading"
-            className="text-sm font-semibold text-[#162244] dark:text-white"
+            className="text-sm font-semibold text-foreground"
           >
             Formatos de contrato{formatos.status === "ready" ? ` (${formatos.formatos.length})` : ""}
           </h2>
-          <p className="text-xs text-[#59677D] dark:text-white/65">
+          <p className="text-xs text-muted-foreground">
             Texto del contrato que FLIT genera por organismo. El Genérico es el respaldo. El tipo
             por defecto de un organismo nuevo es Mandatario de la compañía. Institucional y Abierto solo aplican si la
             plantilla del organismo lo implica (p. ej. Sabaneta). Esta pantalla convive con el hub
@@ -266,20 +266,20 @@ export function MandatosCatalogPanel() {
           </p>
         </div>
         {formatos.status === "loading" ? (
-          <p role="status" aria-live="polite" className="text-xs text-[#59677D] dark:text-white/65" data-testid="mandatos-formatos-loading">
+          <p role="status" aria-live="polite" className="text-xs text-muted-foreground" data-testid="mandatos-formatos-loading">
             Cargando formatos de contrato…
           </p>
         ) : formatos.status === "error" ? (
           <div
             role="alert"
             data-testid="mandatos-formatos-error"
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
           >
             <span>No se pudo cargar la lista de formatos de contrato.</span>
             <button
               type="button"
               onClick={formatos.reload}
-              className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+              className="rounded-full border border-[var(--badge-danger-border)] px-3 py-1 font-semibold"
             >
               Reintentar
             </button>
@@ -305,14 +305,14 @@ export function MandatosCatalogPanel() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2
             id="mandatos-aplicacion-heading"
-            className="text-sm font-semibold text-[#162244] dark:text-white"
+            className="text-sm font-semibold text-foreground"
           >
             Configuración por organismo
           </h2>
           <label className="relative block w-full sm:max-w-xs">
             <span className="sr-only">Buscar organismo o plantilla</span>
             <Search
-              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#59677D]"
+              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
             <input
@@ -323,7 +323,7 @@ export function MandatosCatalogPanel() {
                 pg.setPage(1);
               }}
               placeholder="Buscar OT o plantilla…"
-              className="w-full rounded-xl border border-[#DFE5ED] bg-white py-2 pr-3 pl-9 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+              className="w-full rounded-xl border border-border bg-card py-2 pr-3 pl-9 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             />
           </label>
         </div>
@@ -441,7 +441,7 @@ function ResetFormatoDialog({
       onClose={onCancel}
       busy={busy}
       icon={AlertTriangle}
-      iconBg="#F9AC00"
+      iconBg="var(--color-flit-alert)"
       title="Restablecer redacción de fábrica"
       titleClassName="text-base font-bold text-flit-primary"
       size="md"
@@ -453,7 +453,7 @@ function ResetFormatoDialog({
         </p>
         <p
           className="rounded-xl border px-3 py-2 leading-relaxed"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
           El nombre, el tipo y el historial de versiones se conservan. Los mandatos ya generados no cambian.
@@ -472,7 +472,7 @@ function ResetFormatoDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {busy ? "Restableciendo…" : "Restablecer"}
           </button>
@@ -514,7 +514,7 @@ function ResetConfirmDialog({
       onClose={onCancel}
       busy={busy}
       icon={AlertTriangle}
-      iconBg="#F9AC00"
+      iconBg="var(--color-flit-alert)"
       title="Restablecer configuración"
       titleClassName="text-base font-bold text-flit-primary"
       size="md"
@@ -530,7 +530,7 @@ function ResetConfirmDialog({
         </ul>
         <p
           className="rounded-xl border px-3 py-2 leading-relaxed"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
           Las reglas por compañía no se eliminan.
@@ -549,7 +549,7 @@ function ResetConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {busy ? "Restableciendo…" : "Restablecer"}
           </button>

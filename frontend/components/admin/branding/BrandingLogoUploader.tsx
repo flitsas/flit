@@ -115,7 +115,7 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
       </span>
       <div
         className={dropzone ? "flex items-center gap-4 rounded-xl border border-dashed p-3" : "flex items-center gap-4"}
-        style={dropzone ? { borderColor: dragging ? "#557EFF" : "#A9C9FC", background: dragging ? "#EEF5FF" : undefined } : undefined}
+        style={dropzone ? { borderColor: dragging ? "var(--color-flit-brand)" : "var(--badge-info-border)", background: dragging ? "var(--secondary)" : undefined } : undefined}
         data-testid={dropzone ? "zona-carga" : undefined}
         onDragOver={
           dropzone
@@ -130,7 +130,7 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
       >
         <div
           className={`flex ${previewClassName} shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white`}
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
         >
           {previewSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -168,7 +168,7 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
         onChange={(e) => void handleFileChange(e)}
       />
       {error && (
-        <p role="alert" className="text-[11px]" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-[11px]" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

@@ -217,7 +217,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
             onChange={(next) => (next ? void encender(o) : setApagando(o))}
           />
           {o.activoEnFlit === false && (
-            <span className="max-w-[240px] text-xs text-[#59677D] dark:text-white/70">
+            <span className="max-w-[240px] text-xs text-muted-foreground">
               {o.habilitado ? "Solo puedes dejar de ofrecerlo." : "No se puede ofrecer."}
             </span>
           )}
@@ -244,7 +244,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
             label={`${o.canalPuntoEncendido ? "Apagar" : "Encender"} el canal del punto de ${o.nombre}`}
             onChange={(next) => (next ? void encenderCanal(o) : setApagandoCanal(o))}
           />
-          <span className="text-xs text-[#59677D] dark:text-white/70">{o.canalPuntoEncendido ? "Encendido" : "Apagado"}</span>
+          <span className="text-xs text-muted-foreground">{o.canalPuntoEncendido ? "Encendido" : "Apagado"}</span>
           {o.canalPuntoEncendido === true && (
             <PnLinkButton onClick={() => setEnlace(o)} ariaLabel={`Enlace y QR de ${o.nombre}`}>
               Enlace y QR

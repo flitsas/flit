@@ -40,8 +40,8 @@ export function MandatosFormatosTable({
       header: "Nombre",
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-[#162244] dark:text-white">{row.name}</span>
-          <span className="font-mono text-[11px] text-[#59677D] dark:text-white/55">
+          <span className="font-semibold text-foreground">{row.name}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">
             {row.code}
           </span>
         </div>

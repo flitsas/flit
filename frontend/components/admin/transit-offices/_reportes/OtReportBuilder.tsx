@@ -385,7 +385,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
             ) : (
               <>
                 <TimeHistogram buckets={resumen.distribucionTiempos} />
-                <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+                <p className="text-[11px] text-muted-foreground">
                   Calculado sobre {formatInt(resumen.decididos)} de{" "}
                   {plural(resumen.total, "trámite recibido", "trámites recibidos")} con decisión.
                 </p>
@@ -441,7 +441,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               disabled={exportDisabled}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
               data-testid="ot-report-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
@@ -452,7 +452,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 onClick={() => void handleExport("csv")}
                 disabled={exportDisabled}
                 aria-busy={exportState.busy}
-                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60 dark:border-white/10"
+                className="rounded-xl border border-border px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60"
                 data-testid="ot-report-export"
               >
                 CSV
@@ -462,7 +462,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         }
       >
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50">
+          <span className="text-[11px] font-semibold text-muted-foreground">
             Vistas rápidas:
           </span>
           {REPORT_PRESETS.map((preset) => {
@@ -479,7 +479,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                   activa
                     ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
-                    : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand hover:text-flit-brand dark:border-white/10 dark:text-white/50"
+                    : "border-border text-muted-foreground hover:border-flit-brand hover:text-flit-brand"
                 }`}
               >
                 {preset.label}
@@ -490,7 +490,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               el usuario crea que sigue en «Gestión» y exporte otra cosa de la que espera. */}
           {presetActivo === null && (
             <span
-              className="rounded-full bg-[#F5F7FA] px-3 py-1 text-[11px] font-semibold text-[#6B7280] dark:bg-white/5 dark:text-white/50"
+              className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold text-muted-foreground"
               data-testid="ot-report-preset-personalizada"
             >
               Selección propia
@@ -501,7 +501,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         {exportState.notice && (
           <p
             role="status"
-            className="rounded-xl bg-[#F5F7FA] px-3 py-2 text-[11px] text-[#6B7280] dark:bg-white/5 dark:text-white/60"
+            className="rounded-xl bg-secondary px-3 py-2 text-[11px] text-muted-foreground"
           >
             {exportState.notice}
           </p>

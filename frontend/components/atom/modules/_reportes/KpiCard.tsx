@@ -23,26 +23,26 @@ export interface KpiCardProps {
   testId?: string;
 }
 
-const GOOD = "#8CC63F";
-const BAD = "#FF4E00";
+const GOOD = "var(--flit-success-ink)";
+const BAD = "var(--destructive)";
 
 export function KpiCard({
   label,
   value,
   tooltip,
   variation,
-  color = "#162744",
+  color = "var(--color-flit-primary)",
   invertVariationColor = false,
   testId,
 }: KpiCardProps) {
   return (
     <div
-      className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col justify-between min-h-[96px]"
+      className="rounded-2xl p-4 bg-card border flex flex-col justify-between min-h-[96px]"
       title={tooltip}
       data-testid={testId}
     >
       <p className="text-[11px] opacity-70 font-medium">{label}</p>
-      <p className="text-2xl font-bold mt-1 dark:text-white" style={{ color }}>
+      <p className="text-2xl font-bold mt-1 dark:text-foreground" style={{ color }}>
         {value}
       </p>
       {variation !== undefined && (
@@ -61,7 +61,7 @@ export function KpiCard({
 function Variation({ value, invert }: { value: number; invert: boolean }) {
   const up = value >= 0;
   const good = invert ? !up : up;
-  const colorHex = value === 0 ? "#59677D" : good ? GOOD : BAD;
+  const colorHex = value === 0 ? "var(--muted-foreground)" : good ? GOOD : BAD;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
   return (
     <span

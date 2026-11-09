@@ -28,7 +28,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
 
       <div className="space-y-3">
         <div
-          className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+          className="rounded-2xl p-4 border bg-card"
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">Identidad</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -48,7 +48,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
         </div>
 
         <div
-          className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+          className="rounded-2xl p-4 border bg-card"
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">
             Aristas activas ({activeRules.length})
@@ -71,7 +71,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
         </div>
 
         <div
-          className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+          className="rounded-2xl p-4 border bg-card"
         >
           <p className="text-[10px] font-semibold uppercase opacity-50 mb-2">
             Pasos ({steps.length})
@@ -99,7 +99,7 @@ export function Step8Guardar({ identity, rules, steps, validated }: Step8Props) 
         <div
           className="flex items-center gap-3 rounded-xl p-3 border text-xs"
           style={{
-            borderColor: validated ? 'var(--color-flit-tech)' : '#DFE5ED',
+            borderColor: validated ? 'var(--color-flit-tech)' : 'var(--border)',
             background: validated ? 'color-mix(in srgb, var(--color-flit-tech) 6%, transparent)' : 'transparent',
             color: validated ? 'var(--color-flit-tech)' : undefined,
           }}

@@ -186,7 +186,7 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
               Organismo
             </EncabezadoFiltrable>
           ),
-          render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los organismos</span>,
+          render: (g) => g.organismoNombre ?? <span className="text-muted-foreground">Todos los organismos</span>,
         },
     {
       key: "tipo",
@@ -195,7 +195,7 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
           Trámite
         </EncabezadoFiltrable>
       ),
-      render: (g) => g.tipoTramiteNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los trámites</span>,
+      render: (g) => g.tipoTramiteNombre ?? <span className="text-muted-foreground">Todos los trámites</span>,
     },
     { key: "derechos", header: "Derechos de tránsito", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "DERECHOS_TRANSITO") },
     { key: "servicio", header: "Servicio digital FLIT", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "SERVICIO_FLIT") },
@@ -282,7 +282,7 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
             getRowKey={(g) => g.clave}
             emptyContent={
               grupos.length === 0 && !filtros.hayFiltros ? (
-                <p className="text-sm text-[#59677D] dark:text-white/70">
+                <p className="text-sm text-muted-foreground">
                   No hay tarifas vigentes ni próximas. Para ver las anteriores, filtra por Estado en el encabezado de la columna.
                 </p>
               ) : (

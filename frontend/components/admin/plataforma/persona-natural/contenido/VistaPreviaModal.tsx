@@ -25,40 +25,40 @@ export function PortalPreview({ contenido }: { contenido: ContenidoPn }) {
   return (
     <div
       data-testid="pn-portal-preview"
-      className="flex flex-col gap-6 rounded-2xl border border-[#DFE5ED] bg-[#F4F8FF] p-4 dark:border-white/10 dark:bg-white/5"
+      className="flex flex-col gap-6 rounded-2xl border border-border bg-secondary p-4"
     >
       <section aria-label="Banners" className="flex flex-col gap-3">
         {banners.length === 0 ? (
-          <p className="text-xs text-[#59677D] dark:text-white/70">No hay banners activos.</p>
+          <p className="text-xs text-muted-foreground">No hay banners activos.</p>
         ) : (
           banners.map((b) => (
             <figure key={b.id} className="flex flex-col gap-1">
               <BannerImagen id={b.id} alt={b.textoAlternativo} className="h-32 w-full max-w-xl rounded-xl object-cover" />
-              <figcaption className="text-sm font-semibold text-flit-primary dark:text-white">{b.titulo}</figcaption>
+              <figcaption className="text-sm font-semibold text-flit-primary">{b.titulo}</figcaption>
             </figure>
           ))
         )}
       </section>
 
       <section aria-label="Preguntas frecuentes" className="flex flex-col gap-2">
-        <h3 className="text-sm font-bold text-flit-primary dark:text-white">Preguntas frecuentes</h3>
+        <h3 className="text-sm font-bold text-flit-primary">Preguntas frecuentes</h3>
         {preguntas.length === 0 ? (
-          <p className="text-xs text-[#59677D] dark:text-white/70">No hay preguntas activas.</p>
+          <p className="text-xs text-muted-foreground">No hay preguntas activas.</p>
         ) : (
           preguntas.map((p) => (
-            <details key={p.id} className="rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 dark:border-white/10 dark:bg-[#0B0F14]">
-              <summary className="cursor-pointer text-sm font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white">
+            <details key={p.id} className="rounded-xl border border-border bg-card px-3 py-2">
+              <summary className="cursor-pointer text-sm font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand">
                 {p.pregunta}
               </summary>
               {/* Texto plano: se muestra como texto, nunca como HTML. */}
-              <p className="mt-2 whitespace-pre-line text-sm text-[#59677D] dark:text-white/78">{p.respuesta}</p>
+              <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">{p.respuesta}</p>
             </details>
           ))
         )}
       </section>
 
       <section aria-label="Enlaces" className="flex flex-col gap-1">
-        <h3 className="text-sm font-bold text-flit-primary dark:text-white">Enlaces</h3>
+        <h3 className="text-sm font-bold text-flit-primary">Enlaces</h3>
         <ul className="flex flex-col gap-1 text-sm">
           {contenido.enlaces.map((e) => (
             <li key={e.codigo}>
@@ -66,7 +66,7 @@ export function PortalPreview({ contenido }: { contenido: ContenidoPn }) {
               {e.url ? (
                 <span className="break-all text-[color:var(--flit-brand-ink)]">{e.url}</span>
               ) : (
-                <span className="text-[#59677D] dark:text-white/70">
+                <span className="text-muted-foreground">
                   {ENLACES_LEGALES.includes(e.codigo) ? "Sin documento oficial" : "Sin valor"}
                 </span>
               )}
@@ -122,7 +122,7 @@ export function VistaPreviaModal({ onClose }: { onClose: () => void }) {
         <UiStateBoundary status={status} errorMessage="No se pudo cargar la vista previa." onRetry={() => void load()}>
           {borrador && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-[#59677D] dark:text-white/70">
+              <p className="text-xs text-muted-foreground">
                 {borrador.versionPublicada !== null ? "Ya hay una publicación en el portal." : "Todavía no has publicado nada."} Consultado el{" "}
                 {formatFechaHora(new Date())}.
               </p>

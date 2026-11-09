@@ -29,12 +29,12 @@ const OPERADOR_COLUMNS: DataTableColumn<OperadorFila>[] = [
   {
     key: "aprobados",
     header: "Aprobados",
-    render: (p) => <span style={{ color: "#8CC63F" }}>{formatInt(p.approvedCount)}</span>,
+    render: (p) => <span style={{ color: "var(--flit-success-ink)" }}>{formatInt(p.approvedCount)}</span>,
   },
   {
     key: "rechazados",
     header: "Rechazados",
-    render: (p) => <span style={{ color: p.rejectedCount > 0 ? "#FF4E00" : undefined }}>{formatInt(p.rejectedCount)}</span>,
+    render: (p) => <span style={{ color: p.rejectedCount > 0 ? "var(--destructive)" : undefined }}>{formatInt(p.rejectedCount)}</span>,
   },
   {
     key: "aprobacion",
@@ -115,7 +115,7 @@ export function ProductividadTab({ filters, networkScope, networkChildren = [] }
         skeletonRows={3}
       >
         <div className="flex flex-col gap-4">
-          <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="comparativa-title">
+          <section className="rounded-2xl p-5 bg-card border" aria-labelledby="comparativa-title">
             <h2
               id="comparativa-title"
               className="text-sm font-bold mb-3"
@@ -126,16 +126,16 @@ export function ProductividadTab({ filters, networkScope, networkChildren = [] }
             <div className="h-64" data-testid="comparativa-operadores-chart">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} />
                   <YAxis tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
                   <Tooltip
-                    contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
+                    contentStyle={{ background: "var(--primary)", border: "none", borderRadius: 10, color: "var(--primary-foreground)", fontSize: 11 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="Enviados" fill="var(--color-flit-brand)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                  <Bar dataKey="Aprobados" fill="#8CC63F" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                  <Bar dataKey="Rechazados" fill="#FF4E00" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  <Bar dataKey="Aprobados" fill="var(--flit-success-ink)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  <Bar dataKey="Rechazados" fill="var(--destructive)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

@@ -159,12 +159,12 @@ function CampoTexto({
         aria-invalid={Boolean(error)}
         aria-describedby={hintId}
         className={FIELD_CLASS}
-        style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: error ? "var(--destructive)" : "var(--border)" }}
       />
       <p
         id={hintId}
         role={error ? "alert" : undefined}
-        className={`mt-1 ${error ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
+        className={`mt-1 ${error ? "text-xs font-semibold text-destructive" : HELP_TEXT}`}
       >
         {error ?? ayuda}
       </p>
@@ -274,7 +274,7 @@ export function ParametrosTab() {
           className="flex max-w-5xl flex-col gap-6 pb-28"
           aria-label="Ajustes del portal"
         >
-          <p className="text-sm text-[#59677D] dark:text-white/78">
+          <p className="text-sm text-muted-foreground">
             Estos ajustes definen cómo se comporta el portal para el ciudadano. Si dejas un campo vacío, el portal usa su
             valor habitual, que se indica en cada campo.
           </p>
@@ -319,11 +319,11 @@ export function ParametrosTab() {
                         aria-invalid={Boolean(errores[campo])}
                         aria-describedby={hintId}
                         className={`${FIELD_CLASS} pr-24`}
-                        style={{ borderColor: errores[campo] ? "#FF4E00" : "#DFE5ED" }}
+                        style={{ borderColor: errores[campo] ? "var(--destructive)" : "var(--border)" }}
                       />
                       <span
                         aria-hidden="true"
-                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-[#59677D] dark:text-white/70"
+                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-muted-foreground"
                       >
                         {r.unidad}
                       </span>
@@ -331,7 +331,7 @@ export function ParametrosTab() {
                     <p
                       id={hintId}
                       role={errores[campo] ? "alert" : undefined}
-                      className={`mt-1 ${errores[campo] ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
+                      className={`mt-1 ${errores[campo] ? "text-xs font-semibold text-destructive" : HELP_TEXT}`}
                     >
                       {errores[campo] ??
                         `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}. Vacío: usa el valor habitual del portal (${r.habitual}).`}
@@ -356,7 +356,7 @@ export function ParametrosTab() {
                 value={form.captcha}
                 onChange={(e) => cambiar("captcha", e.target.value as Formulario["captcha"])}
                 className={FIELD_CLASS}
-                style={{ borderColor: "#DFE5ED" }}
+                style={{ borderColor: "var(--border)" }}
               >
                 <option value="">Lo habitual del portal ({CAPTCHA_HABITUAL})</option>
                 <option value="si">Activada</option>
@@ -410,7 +410,7 @@ export function ParametrosTab() {
 
           {errorGeneral && <InlineAlert tone="error">{errorGeneral}</InlineAlert>}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#DFE5ED] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-border bg-card px-4 py-3 shadow-[var(--shadow-card)]">
             <p className={HELP_TEXT} role="status">
               {hayCambios ? "Hay cambios sin guardar." : "No hay cambios por guardar."}
               {servidor.actualizadoEn && <> Última actualización: {formatFechaHora(servidor.actualizadoEn)}.</>}

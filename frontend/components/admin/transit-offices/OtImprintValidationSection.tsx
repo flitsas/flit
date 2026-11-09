@@ -30,10 +30,10 @@ type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 type HistoryPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
 const INPUT_CLS =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/70 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 
 const TEXTAREA_CLS =
-  "w-full min-h-[8rem] rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full min-h-[8rem] rounded-xl border border-border bg-card px-3 py-2 font-mono text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 
 function hydrateValidationMap(
   data: ImprintSignatureDto[],
@@ -383,10 +383,10 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           if (email || role) {
             return (
               <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="truncate text-xs text-[#162244] dark:text-white" title={email ?? undefined}>
+                <span className="truncate text-xs text-foreground" title={email ?? undefined}>
                   {email || "—"}
                 </span>
-                <span className="truncate text-[11px] text-[#59677D] dark:text-white/60" title={role ?? undefined}>
+                <span className="truncate text-[11px] text-muted-foreground" title={role ?? undefined}>
                   {role || "—"}
                 </span>
               </div>
@@ -428,10 +428,10 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
   return (
     <div className="flex flex-col gap-4" data-testid="ot-imprint-validation-section">
       <div>
-        <h2 className="text-sm font-semibold text-[#162244] dark:text-white">
+        <h2 className="text-sm font-semibold text-foreground">
           Validación de firma de impronta
         </h2>
-        <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           Consulte por placa, abra el PDF firmado, valide la firma digital y revise el historial de
           intentos.
         </p>
@@ -443,7 +443,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         aria-label="Consultar improntas firmadas por placa"
       >
         <label className="min-w-[10rem] flex-1 sm:max-w-xs">
-          <span className="mb-1 block text-xs font-semibold text-[#162244] dark:text-white">
+          <span className="mb-1 block text-xs font-semibold text-foreground">
             Placa
           </span>
           <input
@@ -522,7 +522,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
       >
         <div className="flex flex-col gap-4 p-1" data-testid="ot-imprint-validation-modal">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-[#162244] dark:text-white">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               Firma digital de la impronta
             </span>
             <textarea
@@ -538,7 +538,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
           <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
-              className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-[#162244] dark:border-white/15 dark:text-white"
+              className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground"
               onClick={closeValidateModal}
               disabled={submitting}
             >

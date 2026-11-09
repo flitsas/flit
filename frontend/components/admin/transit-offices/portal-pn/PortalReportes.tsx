@@ -231,11 +231,11 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
       <div>
         <h2
           id="portal-reportes-titulo"
-          className="text-base font-bold text-flit-primary dark:text-white"
+          className="text-base font-bold text-flit-primary"
         >
           Reportes
         </h2>
-        <p className="text-xs text-[#59677D] dark:text-white/70">
+        <p className="text-xs text-muted-foreground">
           Trámites que llegaron por el portal Persona Natural y por la aplicación. Los valores
           aparecen cuando el trámite ya tiene pago.
         </p>
@@ -279,7 +279,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
               ) : (
                 <p
                   role="status"
-                  className="px-4 py-10 text-center text-sm font-semibold text-flit-primary dark:text-white"
+                  className="px-4 py-10 text-center text-sm font-semibold text-flit-primary"
                 >
                   {REPORTE_PORTAL_VACIO}
                 </p>

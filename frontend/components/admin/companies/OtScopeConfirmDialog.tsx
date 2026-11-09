@@ -34,7 +34,7 @@ export function OtScopeConfirmDialog({
       onClose={onCancel}
       busy={busy}
       icon={AlertTriangle}
-      iconBg="#F9AC00"
+      iconBg="var(--color-flit-alert)"
       title="Confirmar cambio de organismos"
       titleClassName="text-base font-bold text-flit-primary"
       size="md"
@@ -45,7 +45,7 @@ export function OtScopeConfirmDialog({
         </p>
         <p
           className="rounded-xl border px-3 py-2 leading-relaxed"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
           Este cambio aplica a {childrenLabel} y a las radicaciones futuras de toda la red. Los
@@ -65,7 +65,7 @@ export function OtScopeConfirmDialog({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Confirmar cambio
           </button>

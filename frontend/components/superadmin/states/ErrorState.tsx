@@ -11,11 +11,11 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
     >
       <div
         className="h-14 w-14 rounded-2xl grid place-items-center"
-        style={{ background: 'rgba(255,78,0,0.10)' }}
+        style={{ background: 'var(--badge-danger-bg)' }}
       >
         <svg
           className="h-7 w-7"
-          style={{ color: '#FF4E00' }}
+          style={{ color: 'var(--destructive)' }}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}

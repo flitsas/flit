@@ -170,7 +170,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
               className="mt-3 rounded-xl px-4 py-2 text-xs font-semibold text-white"
               style={{
                 background:
-                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+                  "var(--gradient-action)",
               }}
             >
               Agregar cliente a la red
@@ -255,24 +255,24 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                     {pg.paginar(visibles).map((child) => (
                       <tr
                         key={child.id}
-                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                        className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                       >
                         <td
                           className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {child.razonSocial}
                         </td>
                         <td
                           className="border-y px-4 py-3 font-mono"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {child.nit}
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           {tenantTypeLabel(child.tenantType)}
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           {child.estadoActivo ? (
                             <StatusBadge label="Activo" tone="success" />
                           ) : (
@@ -281,13 +281,13 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                         </td>
                         <td
                           className="border-y px-4 py-3 opacity-70"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {formatDate(child.fechaVinculacion)}
                         </td>
                         <td
                           className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                          style={{ borderColor: "#DFE5ED" }}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           <RowActions
                             actions={[

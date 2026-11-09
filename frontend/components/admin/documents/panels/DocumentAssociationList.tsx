@@ -30,7 +30,7 @@ export function DocumentAssociationList({
         return (
         <li
           key={item.id}
-          className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+          className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
         >
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"
@@ -66,7 +66,7 @@ export function DocumentAssociationList({
             disabled={busy}
             aria-label={`Remover ${label}`}
             className="rounded-lg border p-1 disabled:opacity-40"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

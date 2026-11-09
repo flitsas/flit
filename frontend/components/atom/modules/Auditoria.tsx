@@ -207,7 +207,7 @@ export function Auditoria() {
         : 'ready';
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Auditoría"
         subtitle="Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación."
@@ -227,7 +227,7 @@ export function Auditoria() {
       {staleDataError && (
         <div
           className="rounded-2xl p-4 border text-xs flex items-start gap-3 shrink-0"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--destructive)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
           role="alert"
           aria-live="polite"
         >
@@ -238,7 +238,7 @@ export function Auditoria() {
               type="button"
               onClick={handleRefresh}
               className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#FF4E00' }}
+              style={{ background: 'var(--destructive)' }}
             >
               Reintentar
             </button>
@@ -283,7 +283,7 @@ export function Auditoria() {
  */
 const COLUMNAS = ['Fecha y hora', 'Módulo', 'Operación', 'Resultado', 'Actor', 'Afectado', 'Tipo tenant', 'IP'];
 const CELDA = 'border-y px-4 py-3';
-const CELDA_STYLE = { borderColor: '#DFE5ED' };
+const CELDA_STYLE = { borderColor: 'var(--border)' };
 
 function AuditoriaTable({ rows }: { rows: AdminAuditLogEntry[] }) {
   return (
@@ -358,7 +358,7 @@ function AuditoriaRow({ row: r }: { row: AdminAuditLogEntry }) {
   return (
     <tr
       aria-label={ariaLabel}
-      className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+      className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
     >
       <td className={`${CELDA} rounded-l-xl border-l text-[10px] leading-tight`} style={CELDA_STYLE}>
         <span className="opacity-80">{formatFecha(r.changedAt)}</span>

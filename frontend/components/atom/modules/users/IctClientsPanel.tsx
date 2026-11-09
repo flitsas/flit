@@ -37,7 +37,7 @@ interface Props {
   tenantId: string | null;
 }
 
-const CELDA_BORDE = { borderColor: "#DFE5ED" };
+const CELDA_BORDE = { borderColor: "var(--border)" };
 
 function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
@@ -181,7 +181,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Credenciales que usan los gestores para registrar pre-trámites por integración. El secreto se
           muestra una sola vez al crear o regenerar.
         </p>
@@ -192,7 +192,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
             setFormError(null);
           }}
           className="inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           Nuevo cliente
         </button>
@@ -202,11 +202,11 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
         <div className="rounded-xl border border-flit-brand/40 bg-flit-brand/5 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-semibold text-flit-primary dark:text-slate-100">
+              <p className="text-xs font-semibold text-flit-primary">
                 <KeyRound className="mr-1 inline h-3.5 w-3.5" />
                 Secreto de «{revealed.username}» — cópielo ahora, no se volverá a mostrar.
               </p>
-              <code className="rounded bg-white px-2 py-1 font-mono text-sm text-flit-primary dark:bg-slate-900 dark:text-slate-100">
+              <code className="rounded bg-card px-2 py-1 font-mono text-sm text-flit-primary">
                 {revealed.secret}
               </code>
             </div>
@@ -214,7 +214,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
               <button
                 type="button"
                 onClick={copySecret}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2 py-1 text-xs text-flit-brand hover:bg-flit-brand/10"
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-flit-brand hover:bg-flit-brand/10"
               >
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied ? "Copiado" : "Copiar"}
@@ -223,7 +223,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                 type="button"
                 aria-label="Cerrar"
                 onClick={() => setRevealed(null)}
-                className="rounded-lg border border-slate-300 p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="rounded-lg border border-border p-1 text-muted-foreground hover:bg-secondary"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -233,14 +233,14 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
       )}
 
       {showForm && (
-        <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-          <label className="flex flex-col gap-1 text-xs text-slate-500">
+        <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-3">
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             Usuario
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="usuario del gestor"
-              className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:bg-slate-800 dark:text-white"
+              className="rounded border border-input bg-background px-2 py-1 text-sm dark:text-foreground"
             />
           </label>
           {isSuperAdmin && (
@@ -255,14 +255,14 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
             />
           )}
           <label
-            className="flex items-center gap-2 text-xs text-slate-500"
+            className="flex items-center gap-2 text-xs text-muted-foreground"
             title="La compañía no consultará fuentes externas de pago (SOAT/RNMC/RUNT); todas sus filas caen en Con Novedades. Para pruebas de carga."
           >
             <input
               type="checkbox"
               checked={testMode}
               onChange={(e) => setTestMode(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300"
+              className="h-4 w-4 rounded border-input"
             />
             Modo prueba (no consulta fuentes de pago)
           </label>
@@ -273,7 +273,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
           >
             {creating ? "Creando…" : "Crear cliente"}
           </button>
-          {formError && <span className="text-xs text-[#FF4E00]">{formError}</span>}
+          {formError && <span className="text-xs text-destructive">{formError}</span>}
         </form>
       )}
 
@@ -310,7 +310,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
               </thead>
               <tbody>
                 {pg.paginar(clients).map((c) => (
-                  <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <tr key={c.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                     <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={CELDA_BORDE}>{c.username}</td>
                     <td className="border-y px-4 py-3" style={CELDA_BORDE}>{c.tenantName}</td>
                     <td

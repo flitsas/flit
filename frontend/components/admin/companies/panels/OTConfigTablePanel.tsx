@@ -363,7 +363,7 @@ export function OTConfigTablePanel({
         <div
           className="mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
           style={{
-            borderColor: "#DFE5ED",
+            borderColor: "var(--border)",
             background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)",
           }}
           role="note"

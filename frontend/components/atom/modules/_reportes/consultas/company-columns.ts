@@ -35,20 +35,20 @@ const ESTADO_LABEL: Record<string, string> = {
  * para que el mismo trámite se vea del mismo color desde la consulta y desde el listado.
  */
 const ESTADO_COLOR: Record<string, string> = {
-  borrador: "#9AA5B4",
-  preparado: "var(--color-flit-brand)",
-  preasignacion: "#E08A00",
-  asignado: "#6366F1",
-  entregado: "#00A8B5",
-  aprobado: "#1D6F42",
-  rechazado: "#C0392B",
-  revocado: "#8B5CF6",
-  anulado: "#6B7280",
-  subsanacion: "#FF4E00",
+  borrador: "var(--estado-borrador-fg)",
+  preparado: "var(--estado-preparado-fg)",
+  preasignacion: "var(--estado-preasignacion-fg)",
+  asignado: "var(--estado-asignado-fg)",
+  entregado: "var(--estado-entregado-fg)",
+  aprobado: "var(--estado-aprobado-fg)",
+  rechazado: "var(--estado-rechazado-fg)",
+  revocado: "var(--estado-revocado-fg)",
+  anulado: "var(--estado-anulado-fg)",
+  subsanacion: "var(--estado-subsanacion-fg)",
 };
 
 export function estadoEmpresa(estado: string): { label: string; color: string } {
-  return { label: ESTADO_LABEL[estado] ?? estado, color: ESTADO_COLOR[estado] ?? "#CBD5E1" };
+  return { label: ESTADO_LABEL[estado] ?? estado, color: ESTADO_COLOR[estado] ?? "var(--border)" };
 }
 
 const TRANSFORMACION_LABEL: Record<string, string> = {

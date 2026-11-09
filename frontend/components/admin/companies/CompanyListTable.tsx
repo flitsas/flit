@@ -111,17 +111,17 @@ export function CompanyListTable({
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
             const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
-            <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-              <td className="whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
+            <tr key={c.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
+              <td className="whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl" style={{ borderColor: "var(--border)" }}>
                 {c.code}
               </td>
-              <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "var(--border)" }}>
                 {c.nit}
               </td>
-              <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "var(--border)" }}>
                 {c.razonSocial}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                 {c.isTransitOffice ? (
                   <StatusBadge label="OT" tone="info" ariaLabel="Tipo: Organismo de Tránsito" />
                 ) : (
@@ -132,17 +132,17 @@ export function CompanyListTable({
                   />
                 )}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                 {c.estadoActivo ? (
                   <StatusBadge label="Activa" tone="success" />
                 ) : (
                   <StatusBadge label="Inactiva" tone="danger" />
                 )}
               </td>
-              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "var(--border)" }}>
                 {formatDate(c.fechaCreacion)}
               </td>
-              <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "#DFE5ED" }}>
+              <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center justify-end gap-1">
                   <RowActions
                     actions={[

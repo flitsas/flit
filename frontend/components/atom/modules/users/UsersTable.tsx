@@ -129,7 +129,7 @@ const FILTRABLES: Record<string, string> = {
 };
 
 const CELDA = "border-y px-4 py-3";
-const CELDA_STYLE = { borderColor: "#DFE5ED" };
+const CELDA_STYLE = { borderColor: "var(--border)" };
 
 export interface UsersTableProps {
   rows: UserRow[];
@@ -375,7 +375,7 @@ export function UsersTable({
           role="alert"
           data-testid="ui-error"
           className="space-y-3 py-12 text-center text-sm"
-          style={{ color: "#FF4E00" }}
+          style={{ color: "var(--destructive)" }}
         >
           <p>{error}</p>
           {onRetry && (
@@ -385,7 +385,7 @@ export function UsersTable({
               className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
               style={{
                 background:
-                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+                  "var(--gradient-action)",
               }}
             >
               Reintentar
@@ -447,7 +447,7 @@ export function UsersTable({
                 return (
                   <tr
                     key={row.rowKey}
-                    className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                    className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                   >
                     <td className={`${CELDA} rounded-l-xl border-l`} style={CELDA_STYLE}>
                       <p className="truncate font-semibold">{row.fullName}</p>

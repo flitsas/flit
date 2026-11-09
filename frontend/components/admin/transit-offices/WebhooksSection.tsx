@@ -31,8 +31,8 @@ import { WebhookFormPanel } from "./WebhookFormPanel";
 import { formatFechaHora } from "@/lib/format/date";
 // Bug #13055 — tabla homologada con el modelo de trámites.
 const HEAD_STYLE = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
-const CELL_STYLE = { borderColor: "#DFE5ED" } as const;
-const ROW_CLS = `bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`;
+const CELL_STYLE = { borderColor: "var(--border)" } as const;
+const ROW_CLS = `bg-card ${TABLA_ROW_HOVER_CLS}`;
 
 type Tab = "webhooks" | "logs";
 

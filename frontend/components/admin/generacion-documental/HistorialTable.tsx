@@ -115,26 +115,26 @@ export function HistorialTable({
             {rows.map((row) => {
               const statusView = standaloneDocumentStatusView(row.status);
               return (
-                <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="border-y px-4 py-3 rounded-l-xl border-l font-medium" style={{ borderColor: "#DFE5ED" }}>
+                <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
+                <td className="border-y px-4 py-3 rounded-l-xl border-l font-medium" style={{ borderColor: "var(--border)" }}>
                   {generacionDocumentalTypeLabel(row.documentType)}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {row.scenario ?? "—"}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {row.companyName ?? "—"}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {row.createdByUserName ?? "—"}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
                   {formatGeneracionDocumentalDate(row.createdAt)}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                   <StatusBadge label={statusView.label} tone={statusView.tone} />
                 </td>
-                <td className="border-y px-4 py-3 rounded-r-xl border-r" style={{ borderColor: "#DFE5ED" }}>
+                <td className="border-y px-4 py-3 rounded-r-xl border-r" style={{ borderColor: "var(--border)" }}>
                   {onDownload && row.status === "generated" ? (
                     <RowActions
                       actions={[

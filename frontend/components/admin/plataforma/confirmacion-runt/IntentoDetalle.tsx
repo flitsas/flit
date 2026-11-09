@@ -31,11 +31,11 @@ const PESTANAS: Array<{ id: Pestana; label: string }> = [
 
 /** Mismo mapa de tonos que los hitos de Trazabilidad ICT: color + ícono, y el texto siempre al lado. */
 const TONO: Record<RuntConfirmationVerdict, { fg: string; bg: string; Icon: LucideIcon }> = {
-  confirmed: { fg: "#15803D", bg: "rgba(34,197,94,0.14)", Icon: Check },
-  pending: { fg: "#C2410C", bg: "rgba(255,78,0,0.14)", Icon: Hourglass },
-  discrepancy: { fg: "#991B1B", bg: "rgba(153,27,27,0.14)", Icon: X },
-  unverifiable: { fg: "#64748B", bg: "rgba(148,163,184,0.16)", Icon: CircleDashed },
-  error: { fg: "#6B21A8", bg: "rgba(107,33,168,0.14)", Icon: Ban },
+  confirmed: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: Check },
+  pending: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: Hourglass },
+  discrepancy: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: X },
+  unverifiable: { fg: "var(--badge-neutral-fg)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
+  error: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
 };
 
 const FLAG_LABEL: Record<string, string> = {
@@ -145,10 +145,10 @@ export function IntentoDetalle({
   return (
     <div
       id={`intento-detalle-${row.id}`}
-      className="mx-1 rounded-2xl border border-flit-brand/30 bg-white dark:border-white/10 dark:bg-[#0B0F14]"
+      className="mx-1 rounded-2xl border border-flit-brand/30 bg-card dark:border-border"
       data-testid="intento-detalle"
     >
-      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-[#DFE5ED] px-3 dark:border-white/10">
+      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-border px-3">
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
           const deshabilitada = p.id !== "veredicto" && !row.hasRaw;
@@ -170,7 +170,7 @@ export function IntentoDetalle({
         })}
       </div>
 
-      <div className="p-4 text-xs text-flit-primary dark:text-white">
+      <div className="p-4 text-xs text-flit-primary">
         {pestana === "veredicto" && (
           <div className="flex flex-col gap-4">
             {/* El veredicto y su porqué, juntos y arriba: es lo que vino a leer quien abrió la fila. */}
@@ -184,14 +184,14 @@ export function IntentoDetalle({
                   <span className="ml-2 font-mono text-[11px] font-medium tabular-nums opacity-55">intento {row.attemptNo}</span>
                 </span>
                 <p className="text-[13px] leading-relaxed" data-testid="intento-motivo">{row.reasonText}</p>
-                <p className="text-[11px] text-[#59677D] dark:text-white/60">
+                <p className="text-[11px] text-muted-foreground">
                   <span className="font-semibold">Siguiente: </span>
                   {siguiente(row, detalle)}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-[#DFE5ED] bg-[#F4F7FC] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-border bg-secondary px-4 py-3">
               <Dato label="Consultado" value={formatFechaHora(row.queriedAt)} mono />
               <Dato label="Proveedor" value={proveedorLabel(row.providerKey)} />
               <Dato label="Cómo" value={QUERY_KIND_LABEL[row.queryKind] ?? row.queryKind} />
@@ -226,7 +226,7 @@ export function IntentoDetalle({
                   type="button"
                   onClick={() => setConfirmando(true)}
                   data-testid="consultar-ahora"
-                  className="ml-auto rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-2 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+                  className="ml-auto rounded-full bg-[image:var(--gradient-action)] px-3 py-2 text-[11px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                 >
                   Consultar ahora
                 </button>
@@ -239,7 +239,7 @@ export function IntentoDetalle({
                     onClick={() => void consultarAhora()}
                     disabled={consultando}
                     data-testid="consultar-ahora-confirmar"
-                    className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="rounded-full bg-[image:var(--gradient-action)] px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
                   >
                     {consultando ? "Consultando…" : "Sí, consultar"}
                   </button>
@@ -247,7 +247,7 @@ export function IntentoDetalle({
                     type="button"
                     onClick={() => setConfirmando(false)}
                     disabled={consultando}
-                    className="rounded-full border border-[#DFE5ED] px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50 dark:border-white/10"
+                    className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
                   >
                     Cancelar
                   </button>
@@ -312,7 +312,7 @@ function JsonCrudo({ titulo, valor }: { titulo: string; valor: unknown }) {
         tabIndex={0}
         aria-label={titulo}
         data-testid="intento-raw"
-        className="max-h-72 overflow-auto rounded-lg border border-[#DFE5ED] bg-[#F4F7FC] p-3 font-mono text-[11px] leading-relaxed dark:border-white/10 dark:bg-white/[0.03]"
+        className="max-h-72 overflow-auto rounded-lg border border-border bg-secondary p-3 font-mono text-[11px] leading-relaxed"
       >
         {JSON.stringify(valor, null, 2)}
       </pre>
@@ -350,7 +350,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
     return (
       <section className="flex flex-col gap-2">
         {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
-        <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "#C2410C" }}>
+        <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}>
           {vista.resultado === "no_encontrado"
             ? `El proveedor no encontró el vehículo con ese documento${vista.mensaje ? `: «${vista.mensaje}»` : "."}`
             : vista.resultado === "error"
@@ -366,17 +366,17 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
       {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
       <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_2fr]">
         {/* Secciones de negocio, no un volcado JSON (mismo patrón que Trazabilidad ICT → Datos). */}
-        <section className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <section className="flex flex-col gap-2 rounded-xl border border-border p-3">
           <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">Vehículo en el RUNT</h5>
           {vista.vehiculo.map((d) => (
-            <div key={d.etiqueta} className="flex justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10">
+            <div key={d.etiqueta} className="flex justify-between gap-3 border-b border-border pb-1.5 text-[11px] last:border-b-0 last:pb-0">
               <span className="shrink-0 opacity-55">{d.etiqueta}</span>
               <span className="min-w-0 break-words text-right font-medium">{d.valor ?? "—"}</span>
             </div>
           ))}
         </section>
 
-        <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-border p-3">
           <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">
             Solicitudes ante el RUNT
             <span className="ml-2 font-mono font-medium normal-case tracking-normal opacity-55">{vista.solicitudes.length}</span>
@@ -394,10 +394,10 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
       </div>
 
       {vista.garantias.length > 0 ? (
-        <section className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <section className="flex flex-col gap-2 rounded-xl border border-border p-3">
           <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">Garantías inscritas</h5>
           {vista.garantias.map((g) => (
-            <div key={`${g.acreedor}-${g.fechaInscripcion}`} className="flex flex-wrap justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10">
+            <div key={`${g.acreedor}-${g.fechaInscripcion}`} className="flex flex-wrap justify-between gap-3 border-b border-border pb-1.5 text-[11px] last:border-b-0 last:pb-0">
               <span className="font-medium">{g.acreedor}</span>
               <span className="opacity-70">{g.documento}</span>
               <span className="font-mono tabular-nums">{g.fechaInscripcion}</span>
@@ -441,14 +441,14 @@ function SolicitudesTabla({ solicitudes }: { solicitudes: Solicitud[] }) {
 }
 
 const ESTADO_SOLICITUD: Record<string, { bg: string; fg: string }> = {
-  AUTORIZADA: { bg: "rgba(34,197,94,0.14)", fg: "#15803D" },
-  APROBADA: { bg: "rgba(34,197,94,0.14)", fg: "#15803D" },
-  REGISTRADA: { bg: "rgba(255,78,0,0.14)", fg: "#C2410C" },
-  RECHAZADA: { bg: "rgba(153,27,27,0.14)", fg: "#991B1B" },
+  AUTORIZADA: { bg: "var(--badge-success-bg)", fg: "var(--flit-success-ink)" },
+  APROBADA: { bg: "var(--badge-success-bg)", fg: "var(--flit-success-ink)" },
+  REGISTRADA: { bg: "var(--badge-danger-bg)", fg: "var(--destructive)" },
+  RECHAZADA: { bg: "var(--badge-danger-bg)", fg: "var(--destructive)" },
 };
 
 function EstadoSolicitud({ estado }: { estado: string }) {
-  const tono = ESTADO_SOLICITUD[estado.toUpperCase()] ?? { bg: "rgba(148,163,184,0.16)", fg: "#475569" };
+  const tono = ESTADO_SOLICITUD[estado.toUpperCase()] ?? { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)" };
   return (
     <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: tono.bg, color: tono.fg }}>
       {estado}

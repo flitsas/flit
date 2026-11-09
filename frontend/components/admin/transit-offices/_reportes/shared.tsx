@@ -30,7 +30,7 @@ export {
 
 export function SubTitle({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
+    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
       {children}
     </p>
   );
@@ -55,14 +55,14 @@ export function Tile({
       <p className="text-xl font-semibold tabular-nums" style={accent ? { color: accent } : undefined}>
         {value}
       </p>
-      <p className="text-[11px] text-[#6B7280] dark:text-white/50">{label}</p>
-      {hint && <p className="mt-0.5 text-[10px] text-[#9AA5B4] dark:text-white/35">{hint}</p>}
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      {hint && <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>}
     </>
   );
 
   if (!onClick) {
     return (
-      <div className="rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/10">{content}</div>
+      <div className="rounded-xl border border-border px-3 py-2">{content}</div>
     );
   }
 
@@ -70,7 +70,7 @@ export function Tile({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-left transition hover:border-flit-brand hover:shadow-sm dark:border-white/10 dark:hover:border-flit-brand"
+      className="rounded-xl border border-border px-3 py-2 text-left transition hover:border-flit-brand hover:shadow-sm dark:hover:border-flit-brand"
     >
       {content}
     </button>
@@ -93,7 +93,7 @@ export function Bucket({
   const alerta = Boolean(hot) && value > 0;
   const baseCls = alerta
     ? "border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10"
-    : "border-[#DFE5ED] dark:border-white/10";
+    : "border-border";
 
   const content = (
     <>
@@ -103,7 +103,7 @@ export function Bucket({
         {value}
       </p>
       <p
-        className={`text-[11px] ${alerta ? "text-amber-700 dark:text-amber-400" : "text-[#6B7280] dark:text-white/50"}`}
+        className={`text-[11px] ${alerta ? "text-amber-700 dark:text-amber-400" : "text-[#6B7280] dark:text-muted-foreground"}`}
       >
         {label}
       </p>
@@ -141,14 +141,14 @@ export function Bar({
   onClick?: () => void;
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((value / total) * 100));
-  const fill = color ?? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))";
+  const fill = color ?? "var(--gradient-brand)";
 
   const content = (
     <>
       <span className="truncate" title={label}>
         {label}
       </span>
-      <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+      <span className="h-2 overflow-hidden rounded bg-secondary">
         <span className="block h-full rounded" style={{ width: `${pct}%`, background: fill }} />
       </span>
       <span className="tabular-nums font-semibold">{suffix ?? value}</span>
@@ -167,7 +167,7 @@ export function Bar({
     <button
       type="button"
       onClick={onClick}
-      className="grid grid-cols-[minmax(8rem,14rem)_1fr_auto] items-center gap-3 rounded-lg text-left text-xs transition hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+      className="grid grid-cols-[minmax(8rem,14rem)_1fr_auto] items-center gap-3 rounded-lg text-left text-xs transition hover:bg-secondary"
     >
       {content}
     </button>

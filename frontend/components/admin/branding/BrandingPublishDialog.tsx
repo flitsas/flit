@@ -27,7 +27,7 @@ export function BrandingPublishDialog({
   return (
     <Modal open={open} onClose={onClose} busy={busy} size="sm" icon={Rocket} title={title}>
       <p className="text-sm opacity-80">{description}</p>
-      <p className="mt-2 text-sm font-medium" style={{ color: "#8a6000" }} role="note">
+      <p className="mt-2 text-sm font-medium" style={{ color: "var(--badge-warning-fg)" }} role="note">
         {note}
       </p>
 
@@ -45,7 +45,7 @@ export function BrandingPublishDialog({
           onClick={onConfirm}
           disabled={busy}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           {busy ? "Publicando…" : "Publicar"}
         </button>
