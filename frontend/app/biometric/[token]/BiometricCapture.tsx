@@ -18,7 +18,7 @@ type LoadState =
   | { kind: 'ready'; view: BiometriaPublicView };
 
 const CARD =
-  'w-full max-w-md rounded-3xl p-7 bg-white dark:bg-[#0B0F14] border';
+  'w-full max-w-md rounded-3xl p-7 bg-card text-card-foreground border border-border shadow-[var(--shadow-card)]';
 
 /** Una de las 3 fotos requeridas. */
 interface PhotoSlotState {
@@ -126,7 +126,7 @@ export function BiometricCapture({ token }: Props) {
     return (
       <div className={CARD} role="alert">
         <h1 className="text-lg font-bold mb-2">Validación biométrica</h1>
-        <p className="text-sm" style={{ color: '#FF4E00' }}>
+        <p className="text-sm" style={{ color: "var(--destructive)" }}>
           {load.message}
         </p>
       </div>
@@ -141,9 +141,9 @@ export function BiometricCapture({ token }: Props) {
       <div className={CARD} role="status">
         <div
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
-          style={{ background: 'rgba(140,198,63,0.15)' }}
+          style={{ background: "var(--badge-success-bg)" }}
         >
-          <Check className="h-7 w-7" style={{ color: '#5B8A1F' }} />
+          <Check className="h-7 w-7" style={{ color: "var(--flit-success-ink)" }} />
         </div>
         <h1 className="text-lg font-bold text-center">¡Validación aprobada!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
@@ -200,7 +200,7 @@ export function BiometricCapture({ token }: Props) {
                 capture="environment"
                 aria-label={slot.label}
                 onChange={(e) => setFile(slot.key, e.target.files?.[0])}
-                className="text-xs flex-1 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-white file:text-xs file:font-semibold file:bg-flit-brand"
+                className="text-xs flex-1 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-primary-foreground file:text-xs file:font-semibold file:bg-flit-brand"
               />
               {previews[slot.key] ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -226,7 +226,7 @@ export function BiometricCapture({ token }: Props) {
       {result && result.estado === 'rechazado' && (
         <div
           className="rounded-xl p-3 text-xs border mt-4"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: "var(--badge-danger-border)", background: "var(--badge-danger-bg)", color: "var(--badge-danger-fg)" }}
           role="status"
           aria-live="polite"
         >
@@ -238,7 +238,7 @@ export function BiometricCapture({ token }: Props) {
       )}
 
       {submitError && (
-        <p className="text-[11px] font-medium mt-3" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-[11px] font-medium mt-3" style={{ color: "var(--destructive)" }} role="alert">
           {submitError}
         </p>
       )}
@@ -247,8 +247,8 @@ export function BiometricCapture({ token }: Props) {
         type="button"
         onClick={() => void handleSubmit()}
         disabled={!allSelected || submitting || sinIntentos}
-        className="w-full mt-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+        className="w-full mt-5 py-2.5 rounded-xl text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
         {submitting
           ? 'Validando…'

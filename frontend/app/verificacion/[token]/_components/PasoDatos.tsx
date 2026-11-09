@@ -100,7 +100,7 @@ export function PasoDatos({
           </tr>
         </thead>
         <tbody>
-          <tr className="bg-white dark:bg-[#0B0F14]">
+          <tr className="bg-card">
             <th
               scope="row"
               className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
@@ -115,7 +115,7 @@ export function PasoDatos({
               {view.fullName}
             </td>
           </tr>
-          <tr className="bg-white dark:bg-[#0B0F14]">
+          <tr className="bg-card">
             <th
               scope="row"
               className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
@@ -165,13 +165,13 @@ export function PasoDatos({
       </div>
 
       {versionMismatch ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           El texto de consentimiento cambió; recarga la página.
         </p>
       ) : null}
 
       {error && !staleText ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           No pudimos registrar tu autorización. Inténtalo de nuevo.
         </p>
       ) : null}

@@ -7,9 +7,9 @@ import type { ReactNode } from "react";
  */
 export function CaptureCard({ children }: { productName?: string | null; children: ReactNode }) {
   return (
-    <main className="flex min-h-dvh justify-center bg-[#FBF7EF] px-4 py-6">
+    <main className="flex min-h-dvh justify-center bg-[#FBF7EF] px-4 py-6 dark:bg-background">
       <div className="w-full max-w-[480px]">
-        <div className="rounded-[18px] border border-flit-gray bg-white p-4 shadow-sm sm:p-6">
+        <div className="rounded-[18px] border border-border bg-card p-4 shadow-[var(--shadow-card)] sm:p-6">
           <header className="mb-4 flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/assets/logo-flit-dark.svg" alt="FLIT" className="h-10 w-auto" />

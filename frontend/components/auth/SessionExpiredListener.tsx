@@ -42,12 +42,12 @@ export function SessionExpiredListener() {
     // HU #13004 — mientras se pide la sesión nueva al hub: tapa la pantalla para que no se vean errores sueltos.
     return (
       <div
-        className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-[#eef5ff]/95 backdrop-blur-sm dark:bg-[#05060A]/95"
+        className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-flit-bg/95 backdrop-blur-sm dark:bg-background/95"
         role="status"
         aria-live="polite"
       >
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-flit-brand border-t-transparent" aria-hidden="true" />
-        <p className="text-sm font-medium text-flit-primary dark:text-white">Reconectando tu sesión…</p>
+        <p className="text-sm font-medium text-flit-primary">Reconectando tu sesión…</p>
       </div>
     );
   }
@@ -58,25 +58,25 @@ export function SessionExpiredListener() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-flit-primary/40 dark:bg-background/70 backdrop-blur-sm px-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-expired-title"
       aria-describedby="session-expired-desc"
     >
-      <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div className="bg-card text-card-foreground rounded-2xl w-full max-w-md p-6 shadow-[var(--shadow-modal)]">
         <h2 id="session-expired-title" className="text-lg font-semibold text-flit-primary">
           Tu sesión expiró
         </h2>
-        <p id="session-expired-desc" className="mt-2 text-sm text-slate-600">
+        <p id="session-expired-desc" className="mt-2 text-sm text-muted-foreground">
           Por seguridad, tu sesión se cerró. Vuelve a iniciar sesión para continuar.
         </p>
         <button
           type="button"
           autoFocus
           onClick={goToLogin}
-          className="mt-5 w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90"
-          style={{ background: "var(--color-flit-brand)" }}
+          className="mt-5 w-full rounded-xl py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+          style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
         >
           Ir a iniciar sesión
         </button>

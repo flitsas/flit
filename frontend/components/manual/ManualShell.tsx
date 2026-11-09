@@ -125,7 +125,7 @@ export function ManualShell({
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-flit-primary/40 dark:bg-background/70 lg:hidden"
           aria-label="Cerrar menú"
           onClick={() => setMobileOpen(false)}
         />
@@ -175,14 +175,14 @@ export function ManualShell({
           <header
             className="sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-4 backdrop-blur-md lg:px-8"
             style={{
-              background: "rgba(238, 245, 255, 0.92)",
+              background: "color-mix(in srgb, var(--manual-bg) 92%, transparent)",
               borderColor: "var(--manual-border)",
             }}
           >
             <button
               type="button"
               className="rounded-lg border p-2 lg:hidden"
-              style={{ borderColor: "var(--manual-border)", background: "white" }}
+              style={{ borderColor: "var(--manual-border)", background: "var(--manual-card-bg)" }}
               onClick={() => setMobileOpen(true)}
               aria-label="Abrir menú"
             >

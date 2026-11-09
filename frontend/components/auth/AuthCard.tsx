@@ -25,10 +25,10 @@ export function AuthCard({
   if (variant === "overlay") {
     return (
       <main className="app-bg min-h-screen">
-        <div className="flex min-h-screen items-center justify-center bg-slate-900/50 px-4 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-2xl border border-flit-gray bg-white p-8 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-white">
-            <h1 className="mb-1 text-2xl font-bold text-flit-primary dark:text-white">{title}</h1>
-            {subtitle && <p className="mb-6 text-sm text-slate-500 dark:text-white/60">{subtitle}</p>}
+        <div className="flex min-h-screen items-center justify-center bg-flit-primary/50 dark:bg-background/70 px-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-flit-primary shadow-[var(--shadow-modal)]">
+            <h1 className="mb-1 text-2xl font-bold text-flit-primary">{title}</h1>
+            {subtitle && <p className="mb-6 text-sm text-muted-foreground">{subtitle}</p>}
             {children}
             {backHref && (
               <Link
@@ -46,11 +46,11 @@ export function AuthCard({
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-flit-bg px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+      <div className="w-full max-w-md bg-card text-card-foreground rounded-2xl shadow-[var(--shadow-modal)] p-8">
         {/* HU #12419 AC2 — logo de la red (o FLIT sin cambios, AC7) en acceso/recuperación. */}
         <BrandLogo variant="dark" className="h-8 w-auto mb-4" />
         <h1 className="text-2xl font-bold text-flit-primary mb-1">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500 mb-6">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-muted-foreground mb-6">{subtitle}</p>}
         {children}
         {backHref && (
           <Link
