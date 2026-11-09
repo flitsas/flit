@@ -172,16 +172,9 @@ public sealed class SubmitProcedureInstanceHandler(
         if (OtEfectivaResolver.Resolve(instance) is not { } otId)
             return false;
 
-        var canal = await _quipuxCanal.GetAsync(otId, ct).ConfigureAwait(false);
-        if (canal is null)
-            return false;
-
-        var activo = ProcedureTypeQuipuxGate.CanalActivoParaSecretaria(
-            instance.ProcedureType?.ExternalRefs,
-            canal.DivipoCode,
-            canal.QuipuxRegistration,
-            canal.QuipuxTransfer,
-            canal.QuipuxOther);
+        var activo = await QuipuxCanalResolver
+            .EsActivoAsync(_quipuxCanal, instance.ProcedureType?.ExternalRefs, otId, ct)
+            .ConfigureAwait(false);
         if (!activo)
             return false;
 
