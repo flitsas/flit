@@ -35,6 +35,8 @@ interface Props {
   consultaPunto?: boolean;
 }
 
+const MENSAJE_FALTA_PLACA = "Para consultar este trámite necesitas ingresar la placa.";
+
 /** Modal «Consultar mi trámite» (diseño UI): placa + radicado o cédula, y tracking de 5 pasos. */
 export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "", consultaPunto = false }: Props) {
   return (
@@ -80,8 +82,9 @@ function ContenidoConsulta({
         try {
           return await cliente.punto.pago.cierrePorCodigo(clasificado.radicado);
         } catch (error) {
-          // Sin pago (o de otro organismo): se cae a la consulta de siempre, que sí pide la placa.
-          if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 403) || !placaValida(placa)) throw error;
+          // Sin pago (404 uniforme; 403 y 409 por compatibilidad): se cae a la consulta de siempre, que sí pide la placa.
+          if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 403 && error.status !== 409)) throw error;
+          if (!placaValida(placa)) throw new Error(MENSAJE_FALTA_PLACA);
         }
       }
       if (!placaValida(placa)) throw new Error("Datos incompletos");
@@ -145,7 +148,7 @@ function ContenidoConsulta({
         {consulta.isPending && <MobilityLoader />}
         {consulta.isError && (
           <p role="alert" className="mt-4 rounded-[9px] border border-alert bg-alert/10 p-3 text-center text-sm text-alert">
-            {mensajeDe(consulta.error)}
+            {consulta.error instanceof Error && consulta.error.message === MENSAJE_FALTA_PLACA ? MENSAJE_FALTA_PLACA : mensajeDe(consulta.error)}
           </p>
         )}
         {consulta.isSuccess &&
