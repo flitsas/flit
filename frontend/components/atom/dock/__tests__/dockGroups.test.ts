@@ -95,21 +95,19 @@ describe("catálogo de Trámites", () => {
     expect(Object.keys(OT_ADM_DOCK)).not.toContain("preasignacion");
   });
 
-  it("SuperAdmin: Administradores en el orden de siempre, con Plataforma anidada", () => {
+  it("SuperAdmin: Administradores en cuatro secciones con nombre (HU #14479), con las mismas entradas", () => {
     const groups = dock({}, { isSuperAdmin: true });
     const admin = groups.find((g) => g.id === "administradores")!;
     expect(admin.items.map((i) => i.label)).toEqual([
-      "Compañías",
-      "Tránsito",
-      "Documental",
-      "Improntas",
-      "Quipux",
-      "Procesos periódicos",
-      "RBAC Admin",
-      "Auditoría",
+      "Compañías y tránsito",
+      "Documentos",
       "Plataforma",
-      "Generación documental",
+      "Seguridad y operación",
     ]);
+    const hijos = (key: string) => admin.items.find((i) => i.key === key)?.children?.map((c) => c.label);
+    expect(hijos("admin-transit")).toEqual(["Compañías", "Organismos", "Causales de rechazo"]);
+    expect(hijos("admin-documentos")).toEqual(["Documental", "Improntas", "Generación documental", "Quipux"]);
+    expect(hijos("admin-seguridad")).toEqual(["RBAC Admin", "Auditoría", "Procesos periódicos"]);
     const plataforma = admin.items.find((i) => i.key === "admin-plataforma");
     expect(plataforma?.children?.map((c) => c.label)).toEqual([
       "Tipos de trámites",

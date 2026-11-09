@@ -105,25 +105,41 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
 
   const superAdmin = (key: string, label: string, href: string, icon: NavIcon): Entry => ({ key, label, href, icon, superAdminOnly: true });
   entries.push(
-    superAdmin("admin-companies", "Compañías", "/admin/companies", Building2),
+    // HU #14479 (UI kit «Diseño Inteligente»): Administradores se ordena en cuatro secciones con nombre en vez de una
+    // lista plana. Cada entrada conserva su ruta y su regla de visibilidad; una sección sin entradas visibles para el
+    // rol no aparece (buildDock descarta contenedores vacíos).
     {
-      // Tránsito es contenedor: el catálogo de causales alimenta el modal de rechazo del organismo.
+      // El catálogo de causales alimenta el modal de rechazo del organismo.
       key: "admin-transit",
-      label: "Tránsito",
+      label: "Compañías y tránsito",
       href: "",
       icon: Landmark,
       superAdminOnly: true,
       children: [
+        superAdmin("admin-companies", "Compañías", "/admin/companies", Building2),
         superAdmin("admin-transit-offices", "Organismos", otHubListPath(), Landmark),
         superAdmin("admin-rejection-reasons", "Causales de rechazo", "/admin/causales-rechazo", ClipboardList),
       ],
     },
-    superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
-    superAdmin("admin-improntas", "Improntas", "/admin/improntas", Fingerprint),
-    superAdmin("admin-quipux", "Quipux", "/admin/quipux", Send),
-    superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", Timer),
-    { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: Lock, ...navGatingFor("rbac") },
-    { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+    {
+      key: "admin-documentos",
+      label: "Documentos",
+      href: "",
+      icon: FolderCog,
+      children: [
+        superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
+        superAdmin("admin-improntas", "Improntas", "/admin/improntas", Fingerprint),
+        // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
+        {
+          key: "admin-generacion-documental",
+          label: "Generación documental",
+          href: GENERACION_DOCUMENTAL_BASE_PATH,
+          icon: FileText,
+          ...navGatingFor("admin-generacion-documental"),
+        },
+        superAdmin("admin-quipux", "Quipux", "/admin/quipux", Send),
+      ],
+    },
     {
       // Plataforma es contenedor: lo núcleo es del SuperAdmin; Confirmación RUNT (HU #12313, justo después de Tipos de
       // trámites) va por permiso, así que un rol con solo ese permiso ve Plataforma con esa entrada. Banners es solo SuperAdmin.
@@ -159,13 +175,16 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         },
       ],
     },
-    // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
     {
-      key: "admin-generacion-documental",
-      label: "Generación documental",
-      href: GENERACION_DOCUMENTAL_BASE_PATH,
-      icon: FileText,
-      ...navGatingFor("admin-generacion-documental"),
+      key: "admin-seguridad",
+      label: "Seguridad y operación",
+      href: "",
+      icon: Lock,
+      children: [
+        { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: Lock, ...navGatingFor("rbac") },
+        { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+        superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", Timer),
+      ],
     },
   );
 
