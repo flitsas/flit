@@ -4285,7 +4285,10 @@ function ConsultaStep({
                   </option>
                   <option value="none">Sin preferencia</option>
                   {Array.from({ length: 10 }, (_, i) => (
-                    <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
+                    <option key={i} value={String(i)}>
+                      {/* D4 — en motos el dígito es el primer número de la placa. */}
+                      {grupoPlacaPaso1 === 'MOTO' ? `Primer número ${i}` : `Termina en ${i}`}
+                    </option>
                   ))}
                 </select>
                 {/* Tres estados, porque un selector apagado (o sin decidir) sin explicación se lee

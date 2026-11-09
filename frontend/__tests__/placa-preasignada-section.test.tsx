@@ -201,3 +201,30 @@ describe('PlacaPreasignadaSection — dígito según la clase (HU5)', () => {
     );
   });
 });
+
+// D4 (decisión del usuario 2026-11-09) — opciones del selector del FUR según el grupo.
+describe('PlacaPreasignadaSection — opciones del dígito (D4)', () => {
+  it('MOTO — «Sin preferencia» + «Primer número 0..9»; guarda el dígito tal cual', async () => {
+    const user = userEvent.setup();
+    render(<PlacaPreasignadaSection instanceId="inst-m" plateValue="" plateSource="" grupoPlaca="MOTO" readOnly={false} />);
+    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Sin preferencia',
+      ...Array.from({ length: 10 }, (_, i) => `Primer número ${i}`),
+    ]);
+    await user.selectOptions(select, '3');
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-m', [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: '3' },
+      ]),
+    );
+  });
+
+  it.each(['CARRO', null] as const)('%s — siguen «Termina en N»', async (grupo) => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" grupoPlaca={grupo} readOnly={false} />);
+    const select = await screen.findByLabelText(/Dígito de preferencia de placa/i);
+    expect(within(select).getAllByRole('option').map((o) => o.textContent).slice(1)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `Termina en ${i}`),
+    );
+  });
+});
