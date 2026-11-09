@@ -7,6 +7,7 @@
 @theme inline {
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-placa: var(--font-barlow-condensed), "Barlow Condensed", "Arial Narrow", sans-serif;
   /* HU #12419 (ADR-0060 §D5) — alias a `--brand-*` con el hex FLIT como valor por defecto. Sin
    * `<style id="brand-tokens">` inyectado (host FLIT, BrandStyle.tsx), `var(--brand-primary, …)`
    * resuelve al fallback y el CSS computa EXACTAMENTE los mismos valores de siempre (AC7).
@@ -69,29 +70,29 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
+  --foreground: #162744;
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
+  --card-foreground: #162744;
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --popover-foreground: #162744;
+  --primary: #162744;
+  --primary-foreground: #ffffff;
+  --secondary: #e4edfb;
+  --secondary-foreground: #162744;
+  --muted: #e4edfb;
+  --muted-foreground: #4a5878;
+  --accent: #e4edfb;
+  --accent-foreground: #162744;
+  --destructive: #c10000;
+  --destructive-foreground: #ffffff;
   /* Borde de marca #DFE5ED (== --color-flit-gray): token semántico unificado para todos los
      contenedores. En dark pasa a white/10 (ver .dark). HU#10492 — evita el override inline
      borderColor:#DFE5ED que dejaba "líneas claras" en modo oscuro. */
-  --border: oklch(0.9197 0.0127 255.51);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  --border: #dfe5ed;
+  --input: #74839f;
+  --ring: #557eff;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -113,26 +114,26 @@
      prototipo Lovable (OK = { color:#4F7A12, bg:#F3FBE8, border:#CDEB9C }). La semántica
      verde = válido/completo ya era correcta en prototype_rules.md; el cian era un error
      de implementación. Warning alineado a #F9AC00 (ámbar FLIT del PDF 20 ago). */
-  --badge-success-bg: #F3FBE8;
-  --badge-success-fg: #4F7A12;
-  --badge-success-border: #CDEB9C;
-  --badge-warning-bg: rgba(249, 172, 0, 0.15);
-  --badge-warning-fg: #b45309;
-  --badge-warning-border: rgba(249, 172, 0, 0.40);
-  --badge-danger-bg: rgba(255, 78, 0, 0.12);
-  --badge-danger-fg: #c2410c;
-  --badge-danger-border: rgba(255, 78, 0, 0.32);
+  --badge-success-bg: rgba(140, 198, 63, 0.15);
+  --badge-success-fg: #4a781b;
+  --badge-success-border: rgba(140, 198, 63, 0.4);
+  --badge-warning-bg: rgba(255, 78, 0, 0.12);
+  --badge-warning-fg: #d83b00;
+  --badge-warning-border: rgba(255, 78, 0, 0.35);
+  --badge-danger-bg: rgba(193, 0, 0, 0.12);
+  --badge-danger-fg: #c10000;
+  --badge-danger-border: rgba(193, 0, 0, 0.35);
   /* HU #12726 (C.3) — alertas «pendiente por acción» en detalle de trámite. Basado en
      --color-flit-alert (#FF4E00); texto #BF3B00 ≈ 5.2:1 sobre el fondo tintado (AA). */
   --badge-pending-bg: rgba(255, 78, 0, 0.12);
-  --badge-pending-fg: #bf3b00;
-  --badge-pending-border: rgba(255, 78, 0, 0.32);
-  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 14%, transparent);
-  --badge-info-fg: var(--brand-ink, #3b4fd6);
-  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 35%, transparent);
-  --badge-neutral-bg: rgba(223, 229, 237, 0.55);
-  --badge-neutral-fg: #445569;
-  --badge-neutral-border: rgba(223, 229, 237, 0.9);
+  --badge-pending-fg: #d83b00;
+  --badge-pending-border: rgba(255, 78, 0, 0.35);
+  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 12%, transparent);
+  --badge-info-fg: var(--brand-ink, #557eff);
+  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 30%, transparent);
+  --badge-neutral-bg: rgba(145, 165, 181, 0.15);
+  --badge-neutral-fg: #4a5d6e;
+  --badge-neutral-border: rgba(145, 165, 181, 0.35);
 
   /* Tinta legible del verde cuando el verde de marca (#8CC63F) se usa como color de TEXTO: en
      plano da 2.05:1 sobre blanco y no se lee. El verde de marca sigue valiendo como relleno de
@@ -141,7 +142,7 @@
      El valor es el tono `OK` del propio repo de propuesta, no uno inventado: #4F7A12, que además
      da 5.09:1 sobre blanco y cumple AA. Se llegó a él después de usar un #4A7019 propio —más
      apagado y sin razón para existiendo este—. */
-  --flit-success-ink: #4f7a12;
+  --flit-success-ink: #4a781b;
 
   /* Tinta legible del azul de marca (#557eff) cuando se usa como TEXTO pequeño: sobre blanco da
      3,61:1 (no AA). El azul de marca sigue en iconos, bordes y rellenos; esta variable es solo
@@ -153,10 +154,10 @@
      gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
      blanco que se aplanaba sobre paneles blancos; la fila lleva borde definido + sombra sutil
      que la hace flotar aunque el contenedor sea blanco. */
-  --table-header-bg: #dfe5ed;
-  --table-header-fg: #162744;
+  --table-header-bg: #162744;
+  --table-header-fg: #ffffff;
   --table-row-border: #dfe5ed;
-  --table-row-hover: #f4f8ff;
+  --table-row-hover: #e4edfb;
 
   /* Permisos por módulo (HU #13652): estado habilitado / deshabilitado de un permiso de usuario.
      Siempre acompañados de texto o icono (no solo color). Contraste sobre blanco: 4.6:1 y 5.7:1. */
@@ -168,46 +169,63 @@
   --nav-vidrio: rgba(255, 255, 255, 0.94);
   --nav-vidrio-dark: rgba(22, 39, 68, 0.9);
   --nav-panel-bg: #ffffff;
-  --nav-borde: #dde5f0;
-  --nav-app-bg: var(--brand-tint, #eaf2ff);
+  --nav-borde: #dfe5ed;
+  --nav-app-bg: var(--brand-tint, #eef5ff);
   --nav-texto: #59677d;
   --nav-texto-fuerte: var(--color-flit-primary);
   --nav-texto-tenue: #667085;
   --nav-focus: var(--brand-ink, #4f74c9);
   /* Mismo degradado horizontal del isotipo central (favicon.svg: #557EFF → #00DBD5); en una
      Marca Blanca, sus colores. */
-  --nav-activo: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%);
+  --nav-activo: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--brand-accent, #0f6fa8) 100%);
   --nav-radio-pill: 999px;
   --nav-radio-panel: 18px;
   --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
   --nav-sombra-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
-  --nav-sombra-activo: 0 10px 22px color-mix(in srgb, var(--brand-ink, #4f74c9) 22%, transparent);
+  --nav-sombra-activo: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
   --nav-duracion: 180ms;
   --nav-ease: cubic-bezier(0.2, 0, 0, 1);
   --alto-navegacion: 0px;
 
+  /* Rediseño UI kit «Diseño Inteligente» (HU #14474): tokens que el repo no tenía. */
+  --badge-purple-bg: rgba(123, 31, 162, 0.08);
+  --badge-purple-fg: #7b1fa2;
+  --badge-purple-border: rgba(123, 31, 162, 0.22);
+  --badge-tinta-bg: rgba(22, 39, 68, 0.1);
+  --badge-tinta-fg: #162744;
+  --badge-tinta-border: rgba(22, 39, 68, 0.2);
+  --gradient-action: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--brand-accent, #0f6fa8) 100%);
+  --gradient-brand: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%);
+  --surface-sunken: #e4edfb;
+  --border-strong: #c9d3e3;
+  --shadow-card: 0 1px 2px rgba(22, 39, 68, 0.05), 0 2px 6px rgba(22, 39, 68, 0.05);
+  --shadow-card-hover: 0 10px 28px rgba(22, 39, 68, 0.09);
+  --shadow-modal: 0 24px 60px rgba(22, 39, 68, 0.18);
+  --shadow-button: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
+  --placa-fondo: #ffd100;
+  --placa-texto: #111111;
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
+  --background: #0a1326;
+  --foreground: #e6f0ff;
+  --card: #121f36;
+  --card-foreground: #e6f0ff;
+  --popover: #121f36;
+  --popover-foreground: #e6f0ff;
+  --primary: #8fb0ff;
+  --primary-foreground: #0b182d;
+  --secondary: #182846;
+  --secondary-foreground: #e6f0ff;
+  --muted: #182846;
+  --muted-foreground: #a0b2d6;
+  --accent: #182846;
+  --accent-foreground: #e6f0ff;
+  --destructive: #ff8a50;
+  --destructive-foreground: #0b182d;
+  --border: #233452;
+  --input: #6b7ca6;
+  --ring: #8fb0ff;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -224,24 +242,24 @@
 
   /* Badges de estado — variantes para modo oscuro (HU #10844).
      Success: verde oscuro tintado (PDF 20 ago). Warning: #F9AC00 familia. */
-  --badge-success-bg: rgba(140, 198, 63, 0.22);
-  --badge-success-fg: #B8E986;
-  --badge-success-border: rgba(140, 198, 63, 0.45);
-  --badge-warning-bg: rgba(249, 172, 0, 0.20);
-  --badge-warning-fg: #fbbf24;
-  --badge-warning-border: rgba(249, 172, 0, 0.40);
-  --badge-danger-bg: rgba(255, 78, 0, 0.2);
-  --badge-danger-fg: #fca574;
+  --badge-success-bg: #182846;
+  --badge-success-fg: #e6f0ff;
+  --badge-success-border: #33486e;
+  --badge-warning-bg: rgba(255, 78, 0, 0.16);
+  --badge-warning-fg: #ffa070;
+  --badge-warning-border: rgba(255, 78, 0, 0.4);
+  --badge-danger-bg: rgba(255, 78, 0, 0.16);
+  --badge-danger-fg: #ff8a50;
   --badge-danger-border: rgba(255, 78, 0, 0.4);
-  --badge-pending-bg: rgba(255, 78, 0, 0.2);
-  --badge-pending-fg: #fca574;
+  --badge-pending-bg: rgba(255, 78, 0, 0.16);
+  --badge-pending-fg: #ffa070;
   --badge-pending-border: rgba(255, 78, 0, 0.4);
-  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
-  --badge-info-fg: var(--brand-ink, #a5b8ff);
-  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 40%, transparent);
-  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
-  --badge-neutral-fg: #cbd5e1;
-  --badge-neutral-border: rgba(255, 255, 255, 0.15);
+  --badge-info-bg: rgba(143, 176, 255, 0.16);
+  --badge-info-fg: var(--brand-ink, #8fb0ff);
+  --badge-info-border: rgba(143, 176, 255, 0.4);
+  --badge-neutral-bg: rgba(145, 165, 181, 0.16);
+  --badge-neutral-fg: #c3cde6;
+  --badge-neutral-border: rgba(145, 165, 181, 0.35);
 
   /* Verde de marca como texto: sobre el fondo oscuro el mismo tono ya es legible (no necesita el
      oscurecimiento que sí requiere sobre blanco). */
@@ -251,17 +269,28 @@
   --flit-brand-ink: var(--brand-ink, #6fa5ff);
 
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
-  --table-header-bg: rgba(255, 255, 255, 0.06);
-  --table-header-fg: rgba(255, 255, 255, 0.72);
-  --table-row-border: rgba(255, 255, 255, 0.1);
-  --table-row-hover: rgba(255, 255, 255, 0.04);
+  --table-header-bg: #182846;
+  --table-header-fg: #e6f0ff;
+  --table-row-border: #233452;
+  --table-row-hover: #182846;
 
   /* Dock — superficies y texto en tema oscuro (píldoras inactivas legibles). */
   --nav-vidrio: var(--nav-vidrio-dark);
-  --nav-borde: rgba(255, 255, 255, 0.1);
+  --nav-borde: #233452;
   --nav-app-bg: rgba(255, 255, 255, 0.08);
   --nav-texto: rgba(255, 255, 255, 0.78);
   --nav-texto-fuerte: #ffffff;
   --nav-texto-tenue: rgba(255, 255, 255, 0.55);
-  --nav-panel-bg: #162744;
+  --nav-panel-bg: #121f36;
+
+  /* Rediseño (HU #14474): oscuro de los tokens nuevos. Valores de la propuesta donde el kit calla. */
+  --badge-purple-bg: rgba(186, 104, 200, 0.18);
+  --badge-purple-fg: #e1bee7;
+  --badge-purple-border: rgba(186, 104, 200, 0.4);
+  --badge-tinta-bg: rgba(230, 240, 255, 0.1);
+  --badge-tinta-fg: #e6f0ff;
+  --badge-tinta-border: rgba(230, 240, 255, 0.2);
+  --gradient-action: linear-gradient(90deg, #8fb0ff 0%, #6fd0f0 55%, #5fe6e1 100%);
+  --surface-sunken: #182846;
+  --border-strong: #33486e;
 }

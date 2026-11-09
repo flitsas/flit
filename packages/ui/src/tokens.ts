@@ -1,44 +1,44 @@
 /**
- * Tokens de color FLIT derivados de
- * `.claude/skills/flit-design-guardian/references/flit_design_tokens.json`.
- * Usar estos valores en lugar de hex ad hoc (#557EFF, #FF4E00, …).
+ * Tokens de color FLIT en TypeScript, espejo de `styles/tokens.css`.
+ * Valores del UI kit «Diseño Inteligente» (HU #14474). Usar estos valores en lugar de hex ad hoc;
+ * en CSS, preferir siempre las variables (`var(--…)`), que respetan la marca blanca y el tema oscuro.
  */
 export const FLIT = {
   text: {
     primary: '#162744',
-    secondary: '#59677D',
-    muted: '#7D8798',
-    brandTitle: '#526FB8',
+    secondary: '#4A5878',
+    muted: '#5D6B86',
+    brandTitle: '#557EFF',
   },
   brand: {
-    cyan: '#4FD4CC',
-    blue: '#4F74C9',
+    cyan: '#00DBD5',
+    blue: '#557EFF',
     blueDark: '#162744',
   },
   state: {
-    success: '#70CF3A',
-    active: '#4F74C9',
-    warning: '#F05A35',
-    danger: '#E43D30',
-    draft: '#59677D',
-    muted: '#7D8798',
+    success: '#8CC63F',
+    active: '#557EFF',
+    warning: '#FF4E00',
+    danger: '#C10000',
+    draft: '#91A5B5',
+    muted: '#5D6B86',
   },
   border: {
-    soft: '#DDE5F0',
-    input: '#D9DEE8',
-    focus: '#4F74C9',
+    soft: '#DFE5ED',
+    input: '#74839F',
+    focus: '#557EFF',
   },
   background: {
-    app: '#EAF2FF',
-    modal: '#EEF5FF',
+    app: '#EEF5FF',
+    modal: '#FFFFFF',
     card: '#FFFFFF',
-    tableHeader: '#F4F6FA',
+    tableHeader: '#162744',
   },
-  /** CTA primario autorizado (turquesa → azul). */
-  gradientPrimary: 'linear-gradient(90deg, #4FD4CC 0%, #4F74C9 100%)',
+  /** CTA primario del kit (azul FLIT → azul profundo). */
+  gradientPrimary: 'linear-gradient(90deg, #557EFF 0%, #0F6FA8 100%)',
   /** Azul activo con alpha (hover / tint). */
-  blueAlpha: (a: number) => `rgba(79, 116, 201, ${a})`,
-  dangerAlpha: (a: number) => `rgba(228, 61, 48, ${a})`,
-  warningAlpha: (a: number) => `rgba(240, 90, 53, ${a})`,
-  successAlpha: (a: number) => `rgba(112, 207, 58, ${a})`,
+  blueAlpha: (a: number) => `rgba(85, 126, 255, ${a})`,
+  dangerAlpha: (a: number) => `rgba(193, 0, 0, ${a})`,
+  warningAlpha: (a: number) => `rgba(255, 78, 0, ${a})`,
+  successAlpha: (a: number) => `rgba(140, 198, 63, ${a})`,
 } as const;

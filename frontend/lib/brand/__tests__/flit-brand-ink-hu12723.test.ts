@@ -49,9 +49,10 @@ describe("HU #12723 — --flit-brand-ink (AC1)", () => {
 describe("Dock — ítem seleccionado con el degradado del isotipo central", () => {
   it("píldora, ancestro y subítem activos usan --nav-activo e icono blanco", () => {
     expect(GLOBALS).toMatch(
-      /--nav-activo:\s*linear-gradient\(90deg,\s*var\(--color-flit-brand\)\s+0%,\s*var\(--color-flit-tech\)\s+100%\)/i,
+      /--nav-activo:\s*linear-gradient\(90deg,\s*var\(--color-flit-brand\)\s+0%,\s*var\(--brand-accent,\s*#0f6fa8\)\s+100%\)/i,
     );
-    // En FLIT el degradado sigue siendo #557EFF → #00DBD5: son los valores de respaldo de los tokens.
+    // UI kit (HU #14474): en FLIT el degradado del ítem activo es #557EFF → #0F6FA8 (cierre legible con texto
+    // blanco); en una Marca Blanca cierra en su `--brand-accent`. El turquesa sigue como acento decorativo.
     expect(GLOBALS).toMatch(/--color-flit-tech:\s*var\(--brand-accent,\s*#00dbd5\)/i);
     expect(GLOBALS).toMatch(
       /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/,
