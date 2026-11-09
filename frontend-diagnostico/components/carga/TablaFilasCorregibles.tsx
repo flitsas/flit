@@ -151,7 +151,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
   return (
     <section id={TABLA_FILAS_ID} tabIndex={-1} aria-labelledby="filas-titulo" className={`${TARJETA_CLS} flex flex-col gap-3`}>
       <div>
-        <h2 id="filas-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+        <h2 id="filas-titulo" className="text-lg font-semibold text-flit-primary">
           Filas con errores
         </h2>
         <p className={AYUDA_CLS}>Corrige cada fila en la tabla; se revalida sola al dejar de escribir.</p>
@@ -178,7 +178,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
               const idDoc = `fila-${n}-error-doc`;
               return (
                 <tr key={n} className="align-top">
-                  <td className="px-4 py-2 font-semibold text-flit-primary dark:text-white">{n}</td>
+                  <td className="px-4 py-2 font-semibold text-flit-primary">{n}</td>
                   <td className="px-4 py-2">
                     <input
                       type="text"

@@ -247,7 +247,7 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
             ))}
           </select>
         </div>
-        <p className="text-sm text-[#59677D] dark:text-white/70">
+        <p className="text-sm text-muted-foreground">
           El cliente recibirá este motivo por correo y podrá repetir la captura.
         </p>
         {error && (

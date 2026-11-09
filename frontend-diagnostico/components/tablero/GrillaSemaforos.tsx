@@ -13,9 +13,9 @@ import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
 const CABECERA_CLS = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider";
 const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" } as const;
 /** Separador vertical entre columnas de la cabecera. */
-const SEPARADOR_CLS = "border-l border-white/60 dark:border-white/10";
-const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)] dark:text-slate-300";
-const DOCUMENTO_CLS = "whitespace-nowrap font-mono text-xs font-medium text-flit-primary dark:text-white";
+const SEPARADOR_CLS = "border-l border-card/60";
+const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)]";
+const DOCUMENTO_CLS = "whitespace-nowrap font-mono text-xs font-medium text-flit-primary";
 const TD_CLS = "px-3 py-2.5 align-top";
 
 const RESUELTAS: ReadonlySet<CeldaGrilla["estado"]> = new Set(["COMPLETADO", "NA", "ERROR"]);
@@ -60,7 +60,7 @@ function EncabezadoVehiculo({ vehiculo, pedidas, accion }: { vehiculo: FilaVehic
   const resueltas = vehiculo.celdas.filter((c) => pedidas.has(c.fuente) && RESUELTAS.has(c.estado)).length;
   return (
     <th scope="row" className="px-3 py-2.5 text-left align-top font-normal">
-      <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary dark:text-white">
+      <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary">
         {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
       </span>
       <span className={`mt-1 block ${TEXTO_SECUNDARIO_CLS}`}>{`${resueltas} de ${pedidas.size} consultas`}</span>
@@ -138,7 +138,7 @@ export function GrillaSemaforos({
   const pedidas = fuentesPedidas(grilla.columnas);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
+    <div className="overflow-x-auto rounded-xl border border-border">
       <table aria-label="Semáforo de consultas del lote" className="w-full min-w-[1280px] border-collapse text-sm">
         <thead>
           <tr>
@@ -181,7 +181,7 @@ export function GrillaSemaforos({
           {grilla.vehiculos.map((v) => {
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
-              <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-white dark:bg-transparent">
+              <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-card">
                 <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} accion={accionEncabezado?.(v)} />
                 <CeldaDocumentoDeclarado vehiculo={v} />
                 <CeldaDocumentosPropietario vehiculo={v} />

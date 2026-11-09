@@ -49,13 +49,13 @@ export function FranjaEstados({
   onSelect,
   ariaLabel,
   disabled = false,
-  darkBgClassName = 'dark:bg-[#162744]',
+  darkBgClassName = '',
 }: FranjaEstadosProps) {
   return (
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 ${XL_COLS[items.length] ?? 'xl:grid-cols-11'} dark:divide-white/5 dark:border-white/10 ${darkBgClassName}`}
+      className={`grid grid-cols-2 divide-border overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 ${XL_COLS[items.length] ?? 'xl:grid-cols-11'} ${darkBgClassName}`}
     >
       {items.map((item) => {
         const activo = selected === item.key;
@@ -83,11 +83,11 @@ export function FranjaEstados({
             />
             {/* Hasta dos líneas: «Solicitud de revocatoria» no cabe en una y truncarla la
                 confundía con la tarjeta de al lado. */}
-            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-flit-primary dark:text-white/70">
+            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-foreground">
               {item.label}
             </span>
             <span
-              className="text-lg font-bold leading-none tabular-nums text-[#1E293B] dark:text-white"
+              className="text-lg font-bold leading-none tabular-nums text-foreground"
               aria-hidden="true"
             >
               {item.count ?? '—'}

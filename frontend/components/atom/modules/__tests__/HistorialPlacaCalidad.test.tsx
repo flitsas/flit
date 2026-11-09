@@ -80,9 +80,9 @@ async function consultar(placa = "ABC123") {
 describe("HU #12197 — AC1: color por token, no por literal", () => {
   it("happy path: no queda ningún hex hardcodeado salvo la superficie oscura del producto", () => {
     const hexes = [...CODIGO.matchAll(/#[0-9A-Fa-f]{6}/g)].map((m) => m[0].toUpperCase());
-    // #0B0F14 es la superficie oscura de paneles/inputs en TODO el producto (toolbar de Auditoría,
-    // Modal, LOG QX…). Cambiarla solo aquí sería drift, no corrección.
-    expect([...new Set(hexes)]).toEqual(["#0B0F14"]);
+    // Rediseño UI kit (HU #14482): la superficie oscura #0B0F14 pasó al token `bg-card` en todo el
+    // producto, así que ya no queda ningún hex.
+    expect([...new Set(hexes)]).toEqual([]);
   });
 
   it("contrato: los tres hex de la deuda declarada quedaron sustituidos por su token", () => {
@@ -94,7 +94,8 @@ describe("HU #12197 — AC1: color por token, no por literal", () => {
     expect(CODIGO).toMatch(/\btext-flit-brand\b/);
     expect(CODIGO).toMatch(/\bbg-flit-brand\b/);
     expect(CODIGO).toMatch(/\bring-flit-brand\b/);
-    expect(CODIGO).toMatch(/\btext-flit-primary\b/);
+    // Rediseño UI kit (HU #14482): el texto de cuerpo usa `text-foreground`, que tiene valor oscuro.
+    expect(CODIGO).toMatch(/\btext-foreground\b/);
     expect(CODIGO).toMatch(/\btext-muted-foreground\b/);
   });
 

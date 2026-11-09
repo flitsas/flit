@@ -18,9 +18,9 @@
  *   cada formulario se acuerde de pintarlo.
  */
 export const WIZARD_INPUT =
-  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
-  'aria-[invalid=true]:border-[#FF4E00] ' +
-  'disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]';
+  'w-full rounded-xl border bg-card px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
+  'aria-[invalid=true]:border-flit-alert ' +
+  'disabled:cursor-not-allowed disabled:opacity-60';
 
 /**
  * `<select>` nativo. Igual que el campo de texto, PERO con `[color-scheme:light]` forzado para
@@ -33,7 +33,7 @@ export const WIZARD_SELECT =
   'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition ' +
   'focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
   'hover:border-flit-brand ' +
-  'aria-[invalid=true]:border-[#FF4E00] ' +
+  'aria-[invalid=true]:border-flit-alert ' +
   'disabled:cursor-not-allowed disabled:opacity-60 ' +
   '[color-scheme:light]';
 
@@ -46,13 +46,13 @@ export const WIZARD_SELECT =
  * cuando la transparencia se escribe como alfa del color en vez de como `opacity-*` — ahí no la ve
  * ningún grep, que es justo como había sobrevivido.
  */
-export const WIZARD_LABEL = 'block text-xs font-medium text-[#59677D] dark:text-white/70';
+export const WIZARD_LABEL = 'block text-xs font-medium text-muted-foreground';
 
 /** Texto de ayuda o error bajo el campo. */
 export const WIZARD_HINT = 'mt-1 block text-xs leading-snug opacity-70';
 
 /** Tarjeta de sección dentro de un paso. */
-export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#162744]';
+export const WIZARD_CARD = 'rounded-2xl border bg-card p-4';
 
 /**
  * Botón de acción del pie del asistente (`BTN` de la propuesta): 44 px de alto, 13px semibold.
@@ -97,7 +97,7 @@ export const WIZARD_BTN_BRAND_OUTLINE =
  * del CTA general del producto. Antes era azul→`#2563EB` (blue-600 de Tailwind, no un token FLIT):
  * B7 (guardián de diseño) lo corrige al degradado de marca.
  */
-export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)';
+export const WIZARD_CTA_GRADIENT = 'var(--gradient-action)';
 
 /**
  * Degradado del CTA de cierre: token FLIT `gradient.success` (cian→verde), descrito en el token
@@ -106,10 +106,10 @@ export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, var(--color-flit-bra
  * cierran el trámite. «Continuar» y «Guardar y continuar» siguen con el degradado primario,
  * porque avanzar no es cerrar.
  */
-export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, var(--color-flit-tech) 0%, #8CC63F 100%)';
+export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, var(--color-flit-tech) 0%, var(--flit-success-ink) 100%)';
 
 /**
  * Degradado del CTA de acción destructiva o de rechazo: token FLIT `gradient.danger` (naranja de alerta → rojo),
  * en pastilla con texto blanco. Sustituye al rojo plano `#C1272D`, que no es un token de la línea base.
  */
-export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)';
+export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, var(--color-flit-alert) 0%, #E43D30 100%)';

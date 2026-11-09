@@ -35,7 +35,7 @@ export function StepMarker({
     return (
       <span
         className={`grid ${tamano} shrink-0 place-items-center rounded-full text-xs font-bold`}
-        style={{ background: '#8CC63F', color: '#fff' }}
+        style={{ background: 'var(--flit-success-ink)', color: '#fff' }}
         aria-hidden="true"
       >
         <Check className={compacto ? 'h-3 w-3' : 'h-4 w-4'} strokeWidth={2.5} />
@@ -47,8 +47,8 @@ export function StepMarker({
   if (status === 'locked') {
     return (
       <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
-        style={{ border: '2px solid #DFE5ED', color: '#59677D' }}
+        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-card text-xs font-bold`}
+        style={{ border: '2px solid var(--border)', color: 'var(--muted-foreground)' }}
         aria-hidden="true"
       >
         <Lock className={compacto ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
@@ -60,7 +60,7 @@ export function StepMarker({
   if (active) {
     return (
       <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
+        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-card text-xs font-bold`}
         style={{
           border: '2px solid var(--color-flit-brand)',
           color: 'var(--color-flit-brand)',
@@ -74,8 +74,8 @@ export function StepMarker({
   }
   return (
     <span
-      className={`grid ${tamano} shrink-0 place-items-center rounded-full border-2 bg-white text-xs font-bold dark:bg-[#162744]`}
-      style={{ borderColor: '#C5CDD8', color: '#59677D' }}
+      className={`grid ${tamano} shrink-0 place-items-center rounded-full border-2 bg-card text-xs font-bold`}
+      style={{ borderColor: 'var(--border-strong)', color: 'var(--muted-foreground)' }}
       aria-hidden="true"
     >
       {index + 1}
@@ -151,14 +151,14 @@ export function WizardStepTracker({
               {i > 0 && (
                 <span
                   className={`pointer-events-none absolute left-0 right-1/2 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: prevComplete ? 'var(--color-flit-brand)' : '#DFE5ED' }}
+                  style={{ background: prevComplete ? 'var(--color-flit-brand)' : 'var(--border)' }}
                   aria-hidden="true"
                 />
               )}
               {i < displaySteps.length - 1 && (
                 <span
                   className={`pointer-events-none absolute left-1/2 right-0 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: lineAfterGreen ? 'var(--color-flit-brand)' : '#DFE5ED' }}
+                  style={{ background: lineAfterGreen ? 'var(--color-flit-brand)' : 'var(--border)' }}
                   aria-hidden="true"
                 />
               )}
@@ -186,8 +186,8 @@ export function WizardStepTracker({
                       isActive
                         ? { color: 'var(--color-flit-brand)' }
                         : s.status === 'complete'
-                          ? { color: '#59677D' }
-                          : { color: '#59677D' }
+                          ? { color: 'var(--muted-foreground)' }
+                          : { color: 'var(--muted-foreground)' }
                     }
                     title={label}
                   >

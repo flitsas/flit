@@ -147,7 +147,7 @@ describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', ()
     );
 
     // Variante oscura (Feature #10491): #8a6000 no da AA sobre fondo oscuro.
-    expect(aviso).toHaveClass('text-[#8a6000]', 'dark:text-amber-300', 'dark:bg-amber-500/10');
+    expect(aviso).toHaveClass('text-[var(--badge-warning-fg)]', 'bg-[var(--badge-warning-bg)]');
 
     // Escribir el NIT sin consultar no cambia nada: sigue OK y el aviso sigue visible.
     await user.type(screen.getByLabelText('NIT empresa vinculadora'), NIT_EMPRESA);

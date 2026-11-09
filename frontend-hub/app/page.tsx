@@ -55,7 +55,7 @@ export default async function HubRoot({ searchParams }: { searchParams: Promise<
   if (isFlitBrand(brand)) return <Landing loginUrl={config.loginUrl} />;
 
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-flit-primary px-6 py-16 text-center">
+    <main className="flex min-h-full flex-col items-center justify-center gap-8 bg-flit-primary px-6 dark:bg-secondary py-16 text-center">
       <BrandLogo variant="white" className="h-14 w-auto" />
       <p className="max-w-md text-lg text-[color:var(--brand-on-primary,#ffffff)]">{`Los servicios de ${brand.platformName} con una sola cuenta.`}</p>
       <a

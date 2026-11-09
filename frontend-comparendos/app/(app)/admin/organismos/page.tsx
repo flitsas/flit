@@ -100,7 +100,7 @@ function Alias() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-[#5B6B82] dark:text-slate-300">
+      <p className="text-sm text-muted-foreground">
         Un alias traduce el texto de secretaría que trae una fuente al organismo del catálogo. Sin organismo no se pueden enviar DP ni solicitudes de cambio.
       </p>
       <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
@@ -134,7 +134,7 @@ function Alias() {
             header: "",
             align: "right",
             render: (a) => (
-              <button type="button" aria-label={`Borrar alias ${a.texto}`} className="text-[#B42318] hover:opacity-70" onClick={() => borrar(a)}>
+              <button type="button" aria-label={`Borrar alias ${a.texto}`} className="text-destructive hover:opacity-70" onClick={() => borrar(a)}>
                 <Trash2 className="h-4 w-4" />
               </button>
             ),

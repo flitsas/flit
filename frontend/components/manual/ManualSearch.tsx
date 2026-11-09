@@ -47,7 +47,7 @@ export function ManualSearch() {
         className="flex items-center gap-2.5 rounded-xl border px-4 py-3 shadow-sm"
         style={{
           borderColor: "var(--manual-border)",
-          background: "#ffffff",
+          background: "var(--manual-card-bg)",
         }}
       >
         <Search className="h-4 w-4 shrink-0" style={{ color: "var(--manual-text-soft)" }} aria-hidden />
@@ -61,7 +61,7 @@ export function ManualSearch() {
           }}
           onFocus={() => setOpen(true)}
           placeholder="Buscar en el manual..."
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa6b4]"
+          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           style={{ color: "var(--manual-text)" }}
           autoComplete="off"
         />
@@ -82,7 +82,7 @@ export function ManualSearch() {
           className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-2 shadow-xl list-none m-0"
           style={{
             borderColor: "var(--manual-border)",
-            background: "#ffffff",
+            background: "var(--manual-card-bg)",
           }}
           role="listbox"
         >

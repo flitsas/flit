@@ -15,7 +15,7 @@ export interface DosZonasProps {
   rejillaRef?: Ref<HTMLDivElement>;
 }
 
-const TITULO_CLS = "text-lg font-semibold text-flit-primary dark:text-white";
+const TITULO_CLS = "text-lg font-semibold text-flit-primary";
 
 /**
  * Disposición de la pantalla única de creación (HU #14085): desde 1024 px dos columnas, a la izquierda Vehículos (con lo

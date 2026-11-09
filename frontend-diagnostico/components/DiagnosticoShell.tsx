@@ -124,7 +124,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
   return (
     <SesionContext.Provider value={valor}>
       <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl} layout="app">
-        <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6 dark:text-white">{contenido}</div>
+        <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>
       </SuiteShell>
     </SesionContext.Provider>
   );

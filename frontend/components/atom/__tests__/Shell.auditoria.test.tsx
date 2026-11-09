@@ -28,6 +28,8 @@ describe("Shell — dock Auditoría (HU #10680, AC1)", () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    // HU #14479: las entradas de Administradores viven en secciones con nombre.
+    await userEvent.click(screen.getByRole("button", { name: "Seguridad y operación" }));
     expect(screen.getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
   });
 

@@ -55,7 +55,7 @@ export default function ConfiguracionPagina() {
         <h2 id="configuracion-vacio" className="text-lg font-semibold">
           No tienes acceso a la configuración
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (verConfiguracion && carga.tipo === "cargando") {
@@ -97,10 +97,10 @@ export default function ConfiguracionPagina() {
   return (
     <>
       <section aria-labelledby="configuracion-titulo" className={TARJETA_CLS}>
-        <h1 id="configuracion-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+        <h1 id="configuracion-titulo" className="text-2xl font-semibold text-flit-primary">
           Configuración
         </h1>
-        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
+        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
       </section>
       {contenido}
     </>

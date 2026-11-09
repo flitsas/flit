@@ -13,7 +13,7 @@ export default async function Forbidden({ searchParams }: { searchParams: Promis
   return (
     <main className="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <h1 className="text-2xl font-semibold text-flit-primary">No tienes acceso</h1>
-      <p className="max-w-md text-slate-600">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
+      <p className="max-w-md text-muted-foreground">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
       <Link href="/?inicio=1" className="text-flit-brand underline">
         Ir a mis productos
       </Link>

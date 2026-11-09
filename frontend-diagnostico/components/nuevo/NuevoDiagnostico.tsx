@@ -91,7 +91,7 @@ export function NuevoDiagnostico() {
         <h2 id="nuevo-vacio" className="text-lg font-semibold">
           No tienes permiso para crear diagnósticos
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (carga.tipo !== "listo") {
@@ -136,10 +136,10 @@ export function NuevoDiagnostico() {
     <>
       <section aria-labelledby="nuevo-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between`}>
         <div>
-          <h1 id="nuevo-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+          <h1 id="nuevo-titulo" className="text-2xl font-semibold text-flit-primary">
             Nuevo diagnóstico
           </h1>
-          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
+          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
         </div>
         {puedeCrear && (
           <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />

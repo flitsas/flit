@@ -219,7 +219,7 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda
 
   if (idv === 'rechazado') {
     return {
-      chip: { label: 'Validación rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
+      chip: { label: 'Validación rechazada', bg: 'var(--badge-danger-bg)', color: 'var(--destructive)', border: 'var(--badge-danger-border)' },
       ready: false,
       ayuda: AYUDA_NO_TERMINALES,
     };
@@ -231,20 +231,20 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda
     const ayuda = `${AYUDA_ORIGEN} ${AYUDA_NO_TERMINALES}`;
     if (item.signaturePending) {
       return {
-        chip: { label: 'Pendiente firma', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
+        chip: { label: 'Pendiente firma', bg: 'var(--badge-purple-bg)', color: 'var(--badge-purple-fg)', border: 'var(--badge-purple-border)' },
         ready: false,
         ayuda,
       };
     }
     if (item.canSubmit) {
       return {
-        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.4)' },
+        chip: { label: 'Listo para radicar', bg: 'var(--badge-success-bg)', color: 'var(--flit-success-ink)', border: 'var(--badge-success-border)' },
         ready: true,
         ayuda,
       };
     }
     return {
-      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.35)' },
+      chip: { label: 'Identidad validada', bg: 'var(--badge-success-bg)', color: 'var(--flit-success-ink)', border: 'var(--badge-success-border)' },
       ready: false,
       ayuda,
     };
@@ -252,7 +252,7 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda
 
   // en_proceso | enviado | null (sin iniciar) → esperando la validación del cliente.
   return {
-    chip: { label: 'Pendiente validación', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
+    chip: { label: 'Pendiente validación', bg: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)', border: 'var(--badge-warning-border)' },
     ready: false,
     ayuda: AYUDA_NO_TERMINALES,
   };
@@ -286,8 +286,8 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         <span
           id={tipId}
           role="tooltip"
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-flit-primary dark:text-white/90"
-          style={{ borderColor: '#DFE5ED' }}
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-card p-2.5 text-left text-xs leading-snug text-foreground shadow-lg"
+          style={{ borderColor: 'var(--border)' }}
         >
           {ayuda}
         </span>
@@ -584,6 +584,36 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     const id = setTimeout(() => setBusquedaAplicada(search), 350);
     return () => clearTimeout(id);
   }, [search]);
+
+  // HU #14481/#14480 (Epic #14471) — entrada con filtro desde la URL: las cifras de Inicio y el buscador Ctrl K llegan
+  // con ?placa=, ?estado= o ?atajo=. Se siembra UNA vez al montar, con el mismo patrón que la bandeja del OT
+  // (ClientProceduresSection, ?placa/?vin/?status): sin parámetros el listado arranca igual que siempre, y un valor
+  // desconocido se ignora para no dejar el filtro en una opción que no existe. Se lee window.location para no exigir
+  // un boundary de router ni tocar las pruebas que montan la tabla fuera de una app real.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const placa = params.get('placa')?.trim().toUpperCase().replace(/\s+/g, '');
+    const estadoParam = params.get('estado')?.trim();
+    const atajoParam = params.get('atajo')?.trim();
+    /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
+    if (placa) {
+      setSearch(placa);
+      setBusquedaAplicada(placa);
+    }
+    const atajoDef = atajoParam ? ATAJOS_GESTOR.find((a) => a.key === atajoParam) : undefined;
+    if (atajoDef) {
+      // Igual que elegirlo en la búsqueda rápida: el atajo trae su estado.
+      setAtajo(atajoDef.key);
+      setEstado(atajoDef.estado ?? '');
+    } else if (
+      estadoParam &&
+      ((ESTADOS_TRAMITE as readonly string[]).includes(estadoParam) || estadoParam === FILTRO_RECHAZADO_PREASIGNACION)
+    ) {
+      setEstado(estadoParam as EstadoFiltro);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   // HU #12107 — catálogo de campos filtrables. Degrada con elegancia: si no carga, la tabla se
   // pinta igual con su listado y la barra ofrece reintentar (AC7). Nunca bloquea el render.
@@ -1394,7 +1424,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 fieldsError ? (
                   // Un catálogo que no carga NO deja la pantalla inservible: la tabla ya se pintó
                   // con su listado y aquí solo se dice qué falta y cómo reintentarlo.
-                  <div className="px-1 py-2 text-xs text-flit-primary/70 dark:text-white/60">
+                  <div className="px-1 py-2 text-xs text-muted-foreground">
                     <p>No se pudieron cargar los filtros.</p>
                     <button
                       type="button"
@@ -1477,7 +1507,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         {exportNotice ? (
           <p
             role="status"
-            className="text-xs text-flit-primary/70 dark:text-white/60"
+            className="text-xs text-muted-foreground"
             data-testid="tramites-export-aviso"
           >
             {exportNotice}
@@ -1583,7 +1613,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               <button
                 type="button"
                 onClick={() => void handleBulkPause(true)}
-                className="inline-flex items-center gap-1 rounded-lg border border-flit-primary/20 px-2.5 py-1 font-semibold text-flit-primary transition hover:bg-flit-primary/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-strong)] px-2.5 py-1 font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand "
               >
                 <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
               </button>
@@ -1598,18 +1628,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               </button>
             ) : null}
             {muestraPausa && particionPausa.excluidosRed > 0 ? (
-              <span className="inline-flex items-center gap-1 text-flit-primary/70 dark:text-white/70">
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                 {textoExcluidosRed(particionPausa.excluidosRed)}
               </span>
             ) : null}
             {muestraPausa && particionPausa.excluidosNoIct > 0 ? (
-              <span className="text-flit-primary/70 dark:text-white/70">
+              <span className="text-muted-foreground">
                 {textoExcluidosNoIct(particionPausa.excluidosNoIct)}
               </span>
             ) : null}
             {!pausaEnModo ? (
-              <span className="text-flit-primary/70 dark:text-white/70">{NOTA_PAUSA_MODO_FILTRO}</span>
+              <span className="text-muted-foreground">{NOTA_PAUSA_MODO_FILTRO}</span>
             ) : null}
           </BarraSeleccionLote>
         ) : null}
@@ -1725,8 +1755,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-flit-primary"
-            style={{ border: '1px solid #DFE5ED' }}
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl"
+            style={{ border: '1px solid var(--border)' }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
@@ -1913,8 +1943,8 @@ function SortableHeaderCell({
             ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
             : `Ordenar ${column.label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:bg-[#EEF5FF] dark:hover:bg-white/5 ${
-          activa ? 'text-[#2C6BED] dark:text-[#7FB0FF]' : ''
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:bg-secondary ${
+          activa ? 'text-flit-brand-ink' : ''
         }`}
       >
         {column.label}
@@ -1926,18 +1956,18 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-flit-primary"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-border bg-card normal-case shadow-xl"
         >
-          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
           </p>
           <div className="p-1.5">
             {opciones.map((opcion) => (
               <div
                 key={opcion.id}
-                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-border [&+&]:pt-2"
               >
-                <p className="mb-1.5 text-xs font-medium text-flit-primary dark:text-white">
+                <p className="mb-1.5 text-xs font-medium text-foreground">
                   {opcion.label}
                 </p>
                 <span className="flex items-center gap-1.5">
@@ -1957,8 +1987,8 @@ function SortableHeaderCell({
                         }}
                         className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                           seleccionada
-                            ? 'border-[#2C6BED] bg-[#2C6BED] text-white'
-                            : 'border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10'
+                            ? 'border-flit-brand bg-flit-brand text-white'
+                            : 'border-border text-muted-foreground hover:bg-secondary'
                         }`}
                       >
                         <Flecha className="h-3 w-3" aria-hidden="true" />
@@ -2355,7 +2385,7 @@ function ActorCell({
       {FIRMA_TEXTO[estado].label}
     </span>
   ) : (
-    <span className="whitespace-nowrap text-xs text-flit-primary/70 dark:text-white/70">
+    <span className="whitespace-nowrap text-xs text-muted-foreground">
       Sin registrar
     </span>
   );
@@ -2363,7 +2393,7 @@ function ActorCell({
   return (
     <span className="flex min-w-0 flex-col items-start gap-0.5">
       <span
-        className="block w-full break-words leading-snug text-flit-primary dark:text-white/90"
+        className="block w-full break-words leading-snug text-foreground"
         title={texto || undefined}
       >
         {texto || '—'}
@@ -2609,7 +2639,7 @@ function TramiteRow({
   const showRejectPopover =
     !!motivoRechazo || enSubsanacion || subsanacionCount > 0;
   const popoverRef = useRef<HTMLDivElement>(null);
-  const iconColor = enSubsanacion ? '#b45309' : '#c2410c';
+  const iconColor = enSubsanacion ? 'var(--badge-warning-fg)' : 'var(--destructive)';
 
   // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
   // recordar reanudarlo para poder radicarlo.
@@ -2671,7 +2701,7 @@ function TramiteRow({
             item.prioritario ? (
               <Star
                 className="h-4 w-4 shrink-0"
-                style={{ color: '#F59E0B', fill: '#F59E0B' }}
+                style={{ color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }}
                 role="img"
                 aria-label="Trámite prioritario"
               />
@@ -2696,7 +2726,7 @@ function TramiteRow({
               className="h-4 w-4"
               style={
                 item.prioritario
-                  ? { color: '#F59E0B', fill: '#F59E0B' }
+                  ? { color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }
                   : { color: 'var(--color-flit-primary)', opacity: 0.3 }
               }
               aria-hidden="true"
@@ -2714,7 +2744,7 @@ function TramiteRow({
               handleOpen();
             }}
             aria-label={`Abrir trámite ${item.referenceNumber}`}
-            className="min-w-0 truncate font-mono font-semibold text-flit-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white"
+            className="min-w-0 truncate font-mono font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
             {item.referenceNumber}
           </button>
@@ -2758,13 +2788,13 @@ function TramiteRow({
     // muda allí en vez de salir dos veces.
     placa: (
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="block truncate font-mono font-semibold tracking-wider text-flit-primary dark:text-white">
+        <span className="block truncate font-mono font-semibold tracking-wider text-foreground">
           {item.placa ?? '—'}
         </span>
         {/* El VIN no envuelve: es un token de 17 caracteres sin espacios y partirlo en dos líneas
             no ayuda a compararlo de un vistazo. El piso de la columna cabe los 17 enteros. */}
         {!shows('vin') ? (
-          <span className="block truncate font-mono text-xs text-flit-primary/80 dark:text-white/70">
+          <span className="block truncate font-mono text-xs text-muted-foreground">
             {item.vin ?? '—'}
           </span>
         ) : null}
@@ -2796,7 +2826,7 @@ function TramiteRow({
     // disponible como columna propia («Paso», grupo Desglose adicional) para quien la active.
     tramite: (
       <span
-        className="block min-w-0 break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
+        className="block min-w-0 break-words leading-snug text-xs font-semibold text-foreground"
         // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
         // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
         // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
@@ -2826,13 +2856,13 @@ function TramiteRow({
       />
     ),
     vin: (
-      <span className="block truncate font-mono text-xs text-flit-primary/80 dark:text-white/70">
+      <span className="block truncate font-mono text-xs text-muted-foreground">
         {item.vin ?? '—'}
       </span>
     ),
     vehiculo: (
       <span
-        className="block break-words leading-snug text-flit-primary/90 dark:text-white/80"
+        className="block break-words leading-snug text-foreground"
         title={vehiculo(item)}
       >
         {vehiculo(item)}
@@ -2840,7 +2870,7 @@ function TramiteRow({
     ),
     paso: (
       <span className="block min-w-0">
-        <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
+        <span className="block font-mono text-xs text-muted-foreground">
           {item.pasoActual}/{item.totalPasos}
         </span>
         <span className="block truncate text-[10px] opacity-55">
@@ -2899,7 +2929,7 @@ function TramiteRow({
               aria-haspopup="dialog"
               aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
               title="Ver motivo del OT y subsanación"
-              className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
+              className="rounded-md p-0.5 transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
             >
               <AlertCircle
                 className="h-3.5 w-3.5"
@@ -2911,16 +2941,16 @@ function TramiteRow({
               <div
                 role="dialog"
                 aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-flit-primary"
-                style={{ borderColor: 'rgba(255,78,0,0.28)' }}
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-card p-3 shadow-lg"
+                style={{ borderColor: 'var(--badge-danger-border)' }}
                 onClick={(e) => e.stopPropagation()}
               >
                 {motivoRechazo ? (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#c2410c]">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
                       Motivo del OT
                     </p>
-                    <p className="mt-1 text-sm text-flit-primary dark:text-white/90 whitespace-pre-wrap">
+                    <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">
                       {motivoRechazo}
                     </p>
                   </div>
@@ -2930,7 +2960,7 @@ function TramiteRow({
                     className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
                     style={
                       motivoRechazo
-                        ? { borderColor: 'rgba(223,229,237,0.8)' }
+                        ? { borderColor: 'var(--border)' }
                         : undefined
                     }
                   >
@@ -2938,9 +2968,9 @@ function TramiteRow({
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
                         style={{
-                          background: 'rgba(245,158,11,0.12)',
-                          color: '#b45309',
-                          borderColor: 'rgba(245,158,11,0.3)',
+                          background: 'var(--badge-warning-bg)',
+                          color: 'var(--badge-warning-fg)',
+                          borderColor: 'var(--badge-warning-border)',
                         }}
                       >
                         En subsanación
@@ -2950,9 +2980,9 @@ function TramiteRow({
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
                         style={{
-                          background: 'rgba(99,102,241,0.10)',
-                          color: '#4f46e5',
-                          borderColor: 'rgba(99,102,241,0.28)',
+                          background: 'var(--badge-purple-bg)',
+                          color: 'var(--badge-purple-fg)',
+                          borderColor: 'var(--badge-purple-border)',
                         }}
                       >
                         Subsanado ×{subsanacionCount}
@@ -2969,7 +2999,7 @@ function TramiteRow({
             Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
         {muestraPausado ? (
           <span
-            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-flit-primary/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[var(--border-strong)] bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground"
             title={item.pausedObservation ?? 'Trámite pausado'}
             aria-label={
               item.pausedObservation
@@ -3002,13 +3032,13 @@ function TramiteRow({
       </span>
     ),
     fechaCreacion: (
-      <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
+      <span className="block font-mono text-xs text-muted-foreground">
         {shortDate(item.createdAt)}
       </span>
     ),
     // Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar.
     fechaActualizacion: (
-      <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
+      <span className="block font-mono text-xs text-muted-foreground">
         {item.updatedAt ? shortDate(item.updatedAt) : '—'}
       </span>
     ),
@@ -3016,7 +3046,7 @@ function TramiteRow({
     // "SECRETARIA DISTRITAL DE…" no distingue una secretaría de otra, que es justo para lo que
     // está la columna. Envuelve en varias líneas; la fila crece lo que haga falta.
     secretaria: (
-      <span className="block text-xs leading-snug text-balance break-words text-flit-primary/90 dark:text-white/80">
+      <span className="block text-xs leading-snug text-balance break-words text-foreground">
         {item.organismoTransito ?? '—'}
       </span>
     ),
@@ -3029,7 +3059,7 @@ function TramiteRow({
     gestor: (
       <span className="block min-w-0">
         <span
-          className="block break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-foreground"
           title={item.companiaNombre ?? undefined}
         >
           {item.companiaNombre ?? '—'}
@@ -3043,7 +3073,7 @@ function TramiteRow({
       </span>
     ),
     fuente: (
-      <span className="block truncate text-xs text-flit-primary/90 dark:text-white/80">
+      <span className="block truncate text-xs text-foreground">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
       </span>
     ),
@@ -3053,7 +3083,7 @@ function TramiteRow({
     cliente: (
       <span className="block min-w-0" data-testid={`tramite-cliente-${item.id}`}>
         <span
-          className="block break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-foreground"
           title={tenantNameRed ?? undefined}
         >
           {tenantNameRed ?? '—'}
@@ -3082,20 +3112,20 @@ function TramiteRow({
             className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
               item.runtConfirmed === 'yes'
                 ? 'bg-flit-tech/20 text-[#0B6F6C] dark:text-flit-tech'
-                : 'bg-[#FF4E00]/10 text-[#B33600] dark:text-[#FF8A5B]'
+                : 'bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]'
             }`}
           >
             {item.runtConfirmed === 'yes' ? 'SÍ' : 'NO'}
           </span>
         ) : (
-          <span className="text-xs text-flit-primary/45 dark:text-white/40">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </span>
     ),
     marcas: (
       <span className="flex items-center gap-1.5">
         {marcasDe(item).length === 0 ? (
-          <span className="text-xs text-flit-primary/45 dark:text-white/40">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         ) : (
           marcasDe(item).map((marca) => (
             /* eslint-disable-next-line @next/next/no-img-element */
@@ -3133,13 +3163,13 @@ function TramiteRow({
   return (
     <tr
       onClick={handleOpen}
-      className={`group cursor-pointer bg-white text-xs dark:bg-flit-primary ${TABLA_ROW_HOVER_CLS}`}
+      className={`group cursor-pointer bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
       {includeSelectColumn ? (
         <td
-          className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle dark:border-white/10"
+          className="rounded-l-xl border-y border-l border-border px-4 py-3 align-middle"
           onClick={(e) => e.stopPropagation()}
         >
           {/* HU #13380 — UNA casilla por fila: la misma selección sirve a la descarga masiva y a la
@@ -3167,7 +3197,7 @@ function TramiteRow({
       {visibleColumns.map((key, index) => (
         <td
           key={key}
-          className={`border-y border-[#DFE5ED] px-4 py-3 align-middle text-xs dark:border-white/10 ${
+          className={`border-y border-border px-4 py-3 align-middle text-xs ${
             !includeSelectColumn && index === 0 ? 'border-l rounded-l-xl' : ''
           }`}
         >
@@ -3180,14 +3210,14 @@ function TramiteRow({
           de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
           botones en la misma celda. */}
       <td
-        className="rounded-r-xl border-y border-r border-[#DFE5ED] px-4 py-3 text-right align-middle dark:border-white/10"
+        className="rounded-r-xl border-y border-r border-border px-4 py-3 text-right align-middle"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
         <ActionsMenu
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
-          className="bg-white dark:bg-flit-primary"
+          className="bg-card"
           attention={puedeEnviarAlOt}
           attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
@@ -3204,7 +3234,7 @@ function TramiteRow({
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
       >
-        <p className="text-sm text-flit-primary/80 dark:text-white/80">
+        <p className="text-sm text-muted-foreground">
           Este trámite está <strong>pausado</strong>. Recuerda reanudarlo (despausarlo) para poder
           radicarlo. ¿Deseas continuar de todos modos?
         </p>
@@ -3212,7 +3242,7 @@ function TramiteRow({
           <button
             type="button"
             onClick={() => setConfirmPauseOpen(false)}
-            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-flit-primary/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+            className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cancelar
           </button>

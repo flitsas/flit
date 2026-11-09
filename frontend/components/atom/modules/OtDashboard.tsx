@@ -193,7 +193,7 @@ export function OtDashboard() {
 
   return (
     <div
-      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-flit-primary dark:text-white"
+      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-foreground"
       data-testid="ot-inicio"
     >
       {/* Banner + KPIs: misma grilla que el dashboard del gestor (`Dashboard.tsx`) — banner en
@@ -213,7 +213,7 @@ export function OtDashboard() {
       </div>
 
       {estado === "sin-permiso" ? (
-        <p role="status" className="rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 text-sm text-[#6B7280] dark:border-white/15 dark:bg-white/5 dark:text-white/70">
+        <p role="status" className="rounded-2xl border border-border bg-card px-5 py-4 text-sm text-muted-foreground">
           {MENSAJE_SIN_PERMISO_COLA}
         </p>
       ) : estado === "error" ? (
@@ -543,13 +543,13 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
     <Tarjeta titulo={`Actividad de los últimos ${ACTIVIDAD_DIAS} días`}>
       {estado === "cargando" && <Esqueleto filas={1} />}
       {estado === "error" && (
-        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p role="alert" className="py-6 text-center text-sm text-muted-foreground">
           No se pudo cargar la actividad reciente.
         </p>
       )}
       {estado === "listo" && !hayMovimiento && (
         // Un gráfico en blanco no distingue «no pasó nada» de «no cargó». Se dice con palabras.
-        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p className="py-6 text-center text-sm text-muted-foreground">
           No hubo movimiento en los últimos {ACTIVIDAD_DIAS} días.
         </p>
       )}
@@ -557,13 +557,13 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
         <div className="h-56 w-full" data-testid="ot-inicio-actividad">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={serie ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F5" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip cursor={{ fill: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }} />
               <Bar dataKey="radicados" name="Radicados" fill="var(--color-flit-brand)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="aprobados" name="Aprobados" fill="#8CC63F" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="rechazados" name="Rechazados" fill="#FF4E00" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="aprobados" name="Aprobados" fill="var(--flit-success-ink)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="rechazados" name="Rechazados" fill="var(--color-flit-alert)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -597,14 +597,14 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
     {
       id: "aprobados",
       name: "Aprobados",
-      color: "#8CC63F",
+      color: "var(--flit-success-ink)",
       value: resumen.aprobados,
       hint: "Aprobados por el organismo.",
     },
     {
       id: "rechazados",
       name: "Rechazados",
-      color: "#FF4E00",
+      color: "var(--color-flit-alert)",
       value: resumen.rechazados + resumen.enSubsanacion,
       hint: "Rechazados, con o sin subsanación abierta.",
     },
@@ -619,14 +619,14 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
     {
       id: "revocados",
       name: "Revocados",
-      color: "#8B5CF6",
+      color: "var(--badge-purple-fg)",
       value: resumen.revocados,
       hint: "Aprobados que el organismo revocó después.",
     },
     {
       id: "anulados",
       name: "Anulados",
-      color: "#94A3B8",
+      color: "var(--badge-neutral-fg)",
       value: resumen.anulados,
       hint: "La empresa los dio de baja después de radicarlos.",
     },
@@ -649,12 +649,12 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
     <Tarjeta titulo={`En qué quedó lo recibido en ${ACTIVIDAD_DIAS} días`}>
       {estado === "cargando" && <Esqueleto filas={1} />}
       {estado === "error" && (
-        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p role="alert" className="py-6 text-center text-sm text-muted-foreground">
           No se pudo cargar la composición del periodo.
         </p>
       )}
       {estado === "listo" && total === 0 && (
-        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p className="py-6 text-center text-sm text-muted-foreground">
           No se recibió ningún trámite en los últimos {ACTIVIDAD_DIAS} días.
         </p>
       )}
@@ -688,7 +688,7 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
             <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
               <div>
                 <p className="text-xl font-bold tabular-nums">{formatPct(pctAprobados)}</p>
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Aprobados
                 </p>
               </div>
@@ -712,13 +712,13 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
                 </span>
                 <span className="shrink-0 tabular-nums">
                   <b className="font-semibold">{g.value}</b>{" "}
-                  <span className="text-[#9AA5B4] dark:text-white/40">
+                  <span className="text-muted-foreground">
                     ({formatPct((g.value / total) * 100)})
                   </span>
                 </span>
               </li>
             ))}
-            <li className="mt-1 border-t border-[#EEF1F5] pt-1.5 text-[11px] text-[#9AA5B4] dark:border-white/10 dark:text-white/40">
+            <li className="mt-1 border-t border-border pt-1.5 text-[11px] text-muted-foreground">
               {total} recibidos en total
             </li>
           </ul>
@@ -741,19 +741,19 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
   return (
     <div
       role="alert"
-      className="flex flex-col items-start gap-3 rounded-2xl border border-[#FF4E00]/40 bg-[#FF4E00]/[0.07] px-5 py-4"
+      className="flex flex-col items-start gap-3 rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-5 py-4"
     >
-      <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-[#FF4E00]" aria-hidden="true" />
+      <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--badge-warning-fg)]" aria-hidden="true" />
         No se pudo cargar el estado de la cola
       </p>
-      <p className="text-xs text-[#6B7280] dark:text-white/60">
+      <p className="text-xs text-muted-foreground">
         {message ?? "Intenta de nuevo en un momento."}
       </p>
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold transition hover:border-flit-brand dark:border-white/15"
+        className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:border-flit-brand"
       >
         Reintentar
       </button>
@@ -806,7 +806,7 @@ function PanelOperativoKpis({
         label="Pendientes en total"
         value={pendientes}
         cargando={cargando}
-        color="#F9AC00"
+        color="var(--badge-warning-fg)"
         icon={Clock}
         hint="Incluye lo que espera a un tercero"
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
@@ -815,7 +815,7 @@ function PanelOperativoKpis({
         label={OT_KPI_ENTREGADOS_HOY}
         value={movimiento?.entregadosHoy}
         cargando={cargando}
-        color="#8CC63F"
+        color="var(--flit-success-ink)"
         icon={CheckCircle2}
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, OT_KPI_ENTREGADOS_HOY)}
       />
@@ -863,7 +863,7 @@ function PanelOperativoResto({
     <div className="flex flex-col gap-4">
       {sinPendientes ? (
         <Tarjeta>
-          <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+          <p className="py-6 text-center text-sm text-muted-foreground">
             No hay trámites pendientes en este momento.
           </p>
         </Tarjeta>
@@ -897,7 +897,7 @@ function PanelOperativoResto({
                     onAbrir(OT_DRILLDOWN_BUCKETS.enEsperaDelCliente, "En espera del cliente")
                   }
                 />
-                <p className="text-[11px] text-[#9AA5B4] dark:text-white/40">
+                <p className="text-[11px] text-muted-foreground">
                   Solo «Por revisar» espera una acción del organismo.
                 </p>
               </div>
@@ -945,9 +945,9 @@ function PanelOperativoResto({
 
 function Tarjeta({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#0B0F14]">
+    <section className="rounded-2xl border border-border bg-card p-5">
       {titulo && (
-        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
+        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {titulo}
         </h2>
       )}
@@ -1020,21 +1020,21 @@ function Kpi({
       navegable={!cargando && numero !== null && numero > 0}
       etiqueta={`Ver los ${numero} trámites: ${label.toLowerCase()}`}
       onAbrir={onAbrir}
-      className="flex w-full items-center justify-between rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="flex w-full items-center justify-between rounded-2xl border border-border bg-card p-4"
     >
       <div className="min-w-0">
         <p className="text-[11px] font-medium opacity-70">{label}</p>
         <p
-          className={`mt-1 font-bold tabular-nums ${tamano} ${sinDato ? "text-[#9AA5B4] dark:text-white/40" : ""}`}
+          className={`mt-1 font-bold tabular-nums ${tamano} ${sinDato ? "text-muted-foreground" : ""}`}
           style={sinDato ? undefined : { color }}
         >
           {cargando ? "—" : (value ?? 0)}
         </p>
-        {hint && <p className="mt-0.5 text-[10px] text-[#9AA5B4] dark:text-white/35">{hint}</p>}
+        {hint && <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>}
       </div>
       <div
         className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
-        style={{ background: `${color}1A` }}
+        style={{ background: `color-mix(in srgb, ${color} 10%, transparent)` }}
       >
         <Icon className="h-5 w-5" style={{ color }} aria-hidden="true" />
       </div>
@@ -1071,12 +1071,12 @@ function Espera({
         {label}
         {miTurno && <span className="sr-only"> (espera una acción del organismo)</span>}
       </span>
-      <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+      <span className="h-2 overflow-hidden rounded bg-secondary">
         <span
           className="block h-full rounded"
           style={{
             width: `${pct}%`,
-            background: miTurno ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "#C9D2E0",
+            background: miTurno ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "var(--border-strong)",
           }}
         />
       </span>
@@ -1108,14 +1108,14 @@ function Tramo({
       onAbrir={onAbrir}
       className={`w-full rounded-xl border px-3 py-3 text-center ${
         encendida
-          ? "border-[#FF4E00]/45 bg-[#FF4E00]/[0.06]"
-          : "border-[#DFE5ED] dark:border-white/10"
+          ? "border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)]"
+          : "border-border"
       }`}
     >
-      <p className={`text-2xl font-bold tabular-nums ${encendida ? "text-[#FF4E00]" : ""}`}>
+      <p className={`text-2xl font-bold tabular-nums ${encendida ? "text-[var(--badge-warning-fg)]" : ""}`}>
         {value}
       </p>
-      <p className="mt-0.5 text-[10px] text-[#6B7280] dark:text-white/50">{label}</p>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">{label}</p>
     </Navegable>
   );
 }
@@ -1124,7 +1124,7 @@ function Esqueleto({ filas }: { filas: number }) {
   return (
     <div className="flex flex-col gap-3" aria-hidden="true">
       {Array.from({ length: filas }, (_, i) => (
-        <div key={i} className="h-8 animate-pulse rounded-lg bg-[#EEF1F5] dark:bg-white/5" />
+        <div key={i} className="h-8 animate-pulse rounded-lg bg-secondary" />
       ))}
     </div>
   );

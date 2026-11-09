@@ -20,7 +20,7 @@ const MSG_PORTAPAPELES = 'No se pudo copiar el enlace. Inténtalo de nuevo.';
 
 const BTN =
   'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70';
-const GHOST_BTN = `${BTN} border border-[#DFE5ED] bg-white text-flit-primary hover:bg-[#F4F8FF] dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5`;
+const GHOST_BTN = `${BTN} border border-border bg-card text-flit-primary hover:bg-secondary`;
 const CTA_BTN = `${BTN} text-white hover:opacity-90`;
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -139,8 +139,8 @@ function RegenerarDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--overlay)] px-4 py-6"
+      style={{ backdropFilter: 'blur(6px)' }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -151,12 +151,12 @@ function RegenerarDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-md rounded-[18px] border border-[#DFE5ED] bg-white p-5 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+        className="w-full max-w-md rounded-[18px] border border-border bg-card p-5 text-flit-primary shadow-[var(--shadow-modal)]"
       >
         <h2 id={titleId} className="text-base font-bold">
           No se pudo copiar el enlace
         </h2>
-        <p id={descId} className="mt-3 text-sm text-flit-primary dark:text-white/80">
+        <p id={descId} className="mt-3 text-sm text-flit-primary">
           {mensaje} Regenera uno nuevo: el anterior dejará de funcionar y se enviará el nuevo por correo.
         </p>
         {error && (

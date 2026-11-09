@@ -36,10 +36,10 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
   }, [productsOpen]);
 
   const linkClass =
-    "rounded-full px-3 py-2 text-sm font-medium text-[var(--nav-texto)] transition hover:text-flit-primary dark:text-white/75 dark:hover:text-white";
+    "rounded-full px-3 py-2 text-sm font-medium text-[var(--nav-texto)] transition hover:text-flit-primary";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[var(--color-flit-gray)]/80 bg-[var(--color-flit-bg)]/85 backdrop-blur-md dark:border-white/10 dark:bg-[#05060A]/85">
+    <header className="sticky top-0 z-50 border-b border-border/80 bg-flit-bg/85 backdrop-blur-md dark:bg-background/85">
       <nav aria-label="Principal" className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 md:px-6">
         <a href="#inicio" aria-label="FLIT, inicio" className="shrink-0">
           <BrandLogo variant="dark" className="h-9 w-auto dark:hidden" />
@@ -61,24 +61,24 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
             {productsOpen && (
               <div
                 id="landing-productos"
-                className="absolute left-0 top-full mt-3 w-[26rem] rounded-2xl border border-[var(--color-flit-gray)] bg-white p-2 shadow-[var(--nav-sombra-panel)] dark:border-white/10 dark:bg-[#0B0F14]"
+                className="absolute left-0 top-full mt-3 w-[26rem] rounded-2xl border border-border bg-card p-2 shadow-[var(--nav-sombra-panel)]"
               >
                 {PRODUCTS.map((p) => (
                   <a
                     key={p.code}
                     href={`#producto-${p.code}`}
                     onClick={() => setProductsOpen(false)}
-                    className="flex items-start gap-3 rounded-xl p-3 transition hover:bg-[var(--color-flit-bg)] dark:hover:bg-white/5"
+                    className="flex items-start gap-3 rounded-xl p-3 transition hover:bg-secondary"
                   >
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-flit-brand/10 text-flit-brand">
                       {createElement(appIcon(p.icon), { className: "h-5 w-5", "aria-hidden": true })}
                     </span>
                     <span className="min-w-0">
-                      <span className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
+                      <span className="flex items-center gap-2 text-sm font-semibold text-flit-primary">
                         {p.name}
                         <StatusChip status={p.status} />
                       </span>
-                      <span className="mt-0.5 block text-xs leading-relaxed text-[var(--nav-texto)] dark:text-white/60">{p.tagline}</span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-[var(--nav-texto)]">{p.tagline}</span>
                     </span>
                   </a>
                 ))}
@@ -102,7 +102,7 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
           </a>
           <button
             type="button"
-            className="grid h-9 w-9 place-items-center rounded-full text-flit-primary hover:bg-black/5 lg:hidden dark:text-white dark:hover:bg-white/10"
+            className="grid h-9 w-9 place-items-center rounded-full text-flit-primary hover:bg-secondary lg:hidden"
             aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
             aria-expanded={mobileOpen}
             aria-controls="landing-menu-movil"
@@ -114,15 +114,15 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
       </nav>
 
       {mobileOpen && (
-        <div id="landing-menu-movil" className="border-t border-[var(--color-flit-gray)] px-4 pb-4 pt-2 lg:hidden dark:border-white/10">
-          <p className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-[var(--nav-texto)] dark:text-white/50">Productos</p>
+        <div id="landing-menu-movil" className="border-t border-border px-4 pb-4 pt-2 lg:hidden">
+          <p className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-[var(--nav-texto)]">Productos</p>
           {PRODUCTS.map((p) => (
             <a key={p.code} href={`#producto-${p.code}`} onClick={() => setMobileOpen(false)} className={`${linkClass} flex items-center gap-2`}>
               {p.name}
               <StatusChip status={p.status} />
             </a>
           ))}
-          <div className="my-2 h-px bg-[var(--color-flit-gray)] dark:bg-white/10" />
+          <div className="my-2 h-px bg-border" />
           {LINKS.map((l) => (
             <a key={l.href} href={l.href} onClick={() => setMobileOpen(false)} className={`${linkClass} block`}>
               {l.label}

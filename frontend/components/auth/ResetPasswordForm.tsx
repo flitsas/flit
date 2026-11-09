@@ -12,7 +12,7 @@ import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-p
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+  "w-full bg-card border border-input rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 export function ResetPasswordForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
@@ -33,16 +33,16 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
   if (done) {
     return (
       <div role="status" className="space-y-4">
-        <p className="text-sm text-slate-700">Tu contraseña fue actualizada correctamente.</p>
+        <p className="text-sm text-foreground">Tu contraseña fue actualizada correctamente.</p>
         {hadPriorSession && (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Por tu seguridad, cerramos la sesión que estaba activa en este navegador. Inicia sesión con tu nueva cuenta.
           </p>
         )}
         <Link
           href="/login"
-          className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "var(--color-flit-brand)" }}
+          className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+          style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
         >
           Ir a iniciar sesión
         </Link>
@@ -99,7 +99,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
         <label htmlFor="rp-confirm" className="block text-sm font-medium text-flit-primary mb-1">
@@ -122,8 +122,8 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--color-flit-brand)" }}
+        className="w-full rounded-xl py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
         {loading ? "Guardando…" : "Restablecer contraseña"}
       </button>

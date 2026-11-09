@@ -141,7 +141,7 @@ export function EstadoAcciones({
           justifyContent: embedded ? 'center' : 'flex-start',
         }}
       >
-        <span style={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>Estado del trámite:</span>
+        <span style={{ color: 'var(--muted-foreground)', fontSize: 13, fontWeight: 600 }}>Estado del trámite:</span>
         <span
           style={{
             background: chip.bg,
@@ -159,9 +159,9 @@ export function EstadoAcciones({
           <span
             title="Subsanación activa: el trámite permanece en Rechazado mientras se corrige"
             style={{
-              background: 'rgba(245,158,11,0.12)',
-              color: '#b45309',
-              border: '1px solid rgba(245,158,11,0.3)',
+              background: 'var(--badge-warning-bg)',
+              color: 'var(--badge-warning-fg)',
+              border: '1px solid var(--badge-warning-border)',
               borderRadius: 999,
               padding: '2px 10px',
               fontSize: 12,
@@ -190,8 +190,8 @@ export function EstadoAcciones({
             }}
             style={{
               background: 'transparent',
-              border: `1px solid ${a.destructive ? '#fca5a5' : '#cbd5e1'}`,
-              color: a.destructive ? '#b91c1c' : '#475569',
+              border: `1px solid ${a.destructive ? 'var(--badge-danger-border)' : 'var(--border-strong)'}`,
+              color: a.destructive ? 'var(--destructive)' : 'var(--muted-foreground)',
               borderRadius: 8,
               padding: '4px 12px',
               fontSize: 12,
@@ -207,8 +207,8 @@ export function EstadoAcciones({
       {pending ? (
         <div
           style={{
-            background: '#fff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
             borderRadius: 12,
             padding: 12,
             display: 'flex',
@@ -218,7 +218,7 @@ export function EstadoAcciones({
             maxWidth: embedded ? 420 : undefined,
           }}
         >
-          <label style={{ color: '#334155', fontSize: 12, fontWeight: 600 }}>
+          <label style={{ color: 'var(--foreground)', fontSize: 12, fontWeight: 600 }}>
             Motivo{pending.motivoRequerido ? ' (obligatorio)' : ' (opcional)'}
             <textarea
               value={motivo}
@@ -233,7 +233,7 @@ export function EstadoAcciones({
                 display: 'block',
                 width: '100%',
                 marginTop: 6,
-                border: '1px solid #cbd5e1',
+                border: '1px solid var(--border)',
                 borderRadius: 8,
                 padding: 8,
                 fontSize: 13,
@@ -247,7 +247,7 @@ export function EstadoAcciones({
               disabled={working}
               onClick={() => void ejecutar(pending)}
               style={{
-                background: pending.destructive ? '#dc2626' : WIZARD_CTA_GRADIENT,
+                background: pending.destructive ? 'var(--destructive)' : WIZARD_CTA_GRADIENT,
                 border: 'none',
                 color: '#fff',
                 borderRadius: 8,
@@ -268,8 +268,8 @@ export function EstadoAcciones({
               }}
               style={{
                 background: 'transparent',
-                border: '1px solid #cbd5e1',
-                color: '#475569',
+                border: '1px solid var(--border)',
+                color: 'var(--muted-foreground)',
                 borderRadius: 8,
                 padding: '6px 14px',
                 fontSize: 12,
@@ -283,7 +283,7 @@ export function EstadoAcciones({
       ) : null}
 
       {error ? (
-        <p role="alert" style={{ color: '#c2410c', fontSize: 13, margin: 0 }}>
+        <p role="alert" style={{ color: 'var(--destructive)', fontSize: 13, margin: 0 }}>
           {error}
         </p>
       ) : null}

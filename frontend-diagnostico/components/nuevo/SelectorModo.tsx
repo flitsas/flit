@@ -63,7 +63,7 @@ export function SelectorModo({ modo, onModo, bloqueado = false, explicacion }: S
         aria-labelledby={`${id}-etiqueta`}
         aria-describedby={descripcionId}
         aria-disabled={bloqueado || undefined}
-        className="flex w-fit gap-1 rounded-full border border-[var(--nav-borde)] bg-[var(--nav-panel-bg)] p-1 dark:border-white/10 dark:bg-white/[0.04]"
+        className="flex w-fit gap-1 rounded-full border border-[var(--nav-borde)] bg-[var(--nav-panel-bg)] p-1"
       >
         {MODOS.map((m, i) => {
           const elegido = i === actual;
@@ -82,8 +82,8 @@ export function SelectorModo({ modo, onModo, bloqueado = false, explicacion }: S
               onKeyDown={(e) => alPulsar(e, i)}
               className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition aria-disabled:cursor-not-allowed ${FOCO_CLS} ${
                 elegido
-                  ? "bg-[var(--flit-brand-ink)] text-white shadow-[var(--nav-sombra-activo)]"
-                  : "text-[var(--nav-texto)] aria-disabled:opacity-60 dark:text-slate-300"
+                  ? "bg-[var(--flit-brand-ink)] text-primary-foreground shadow-[var(--nav-sombra-activo)]"
+                  : "text-[var(--nav-texto)] aria-disabled:opacity-60"
               }`}
             >
               <m.Icono className="h-4 w-4" aria-hidden="true" />

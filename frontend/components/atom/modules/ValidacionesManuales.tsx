@@ -151,7 +151,7 @@ export function ValidacionesManuales({
     {
       key: 'nombre',
       header: 'Nombre',
-      render: (r) => <span className="font-semibold text-flit-primary dark:text-white">{r.fullName}</span>,
+      render: (r) => <span className="font-semibold text-foreground">{r.fullName}</span>,
     },
     { key: 'documento', header: 'Documento', render: (r) => <span className="font-mono">{r.documentNumber}</span> },
     { key: 'compania', header: 'Compañía', render: (r) => r.tenantName },

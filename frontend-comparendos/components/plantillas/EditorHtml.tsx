@@ -12,7 +12,7 @@ function Boton({ titulo, onClick, children }: { titulo: string; onClick: () => v
       type="button"
       title={titulo}
       aria-label={titulo}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-flit-primary hover:bg-[#EFF6FF] dark:text-white dark:hover:bg-white/10"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-flit-primary hover:bg-secondary"
       // mousedown: que el foco y la selección sigan en el área de edición.
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
@@ -67,7 +67,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-[#DFE5ED] px-2 py-1 dark:border-white/15" role="toolbar" aria-label="Formato">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border px-2 py-1" role="toolbar" aria-label="Formato">
         <Boton titulo="Negrita" onClick={() => comando("bold")}><Bold className="h-4 w-4" /></Boton>
         <Boton titulo="Cursiva" onClick={() => comando("italic")}><Italic className="h-4 w-4" /></Boton>
         <Boton titulo="Subrayado" onClick={() => comando("underline")}><Underline className="h-4 w-4" /></Boton>
@@ -81,7 +81,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
         <Boton titulo="Alinear a la derecha" onClick={() => comando("justifyRight")}><AlignRight className="h-4 w-4" /></Boton>
         <Boton titulo="Justificar" onClick={() => comando("justifyFull")}><AlignJustify className="h-4 w-4" /></Boton>
         <Boton titulo="Tabla" onClick={() => comando("insertHTML", TABLA_SIMPLE)}><Table className="h-4 w-4" /></Boton>
-        <span className="mx-1 h-5 w-px bg-[#DFE5ED]" />
+        <span className="mx-1 h-5 w-px bg-border" />
         <button type="button" className={controlCls(verVariables)} onMouseDown={(e) => e.preventDefault()} onClick={() => setVerVariables((v) => !v)}>
           <Braces className="h-3.5 w-3.5" aria-hidden />
           Insertar variable
@@ -92,7 +92,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
         </button>
       </div>
       {verVariables && (
-        <div className="max-h-56 overflow-auto rounded-xl border border-[#DFE5ED] p-2 dark:border-white/15">
+        <div className="max-h-56 overflow-auto rounded-xl border border-border p-2">
           {Object.entries(grupos).map(([grupo, lista]) => (
             <div key={grupo} className="mb-2">
               <p className="text-[11px] font-semibold uppercase opacity-60">{grupo}</p>
@@ -102,7 +102,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
                     key={v.nombre}
                     type="button"
                     title={`${v.descripcion} · Ej.: ${v.ejemplo}`}
-                    className="rounded-lg bg-[#EFF6FF] px-2 py-1 font-mono text-[11px] text-[#3B4FD6] hover:bg-[#DCE8FF] dark:bg-white/10 dark:text-white"
+                    className="rounded-lg bg-secondary px-2 py-1 font-mono text-[11px] text-flit-brand-ink hover:bg-secondary"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => (codigo === null ? comando("insertText", `{{${v.nombre}}}`) : setCodigo(`${codigo}{{${v.nombre}}}`))}
                   >
@@ -123,7 +123,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
           aria-multiline
           aria-label="Contenido de la plantilla"
           onInput={emitir}
-          className="plantilla-editor min-h-[360px] overflow-auto rounded-xl border border-[#DFE5ED] bg-white p-4 text-sm leading-relaxed text-[#1F2A3D] focus:border-flit-brand focus:outline-none dark:border-white/15 dark:bg-[#0B0F14] dark:text-white [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:bg-[#EEF2F7] [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-6"
+          className="plantilla-editor min-h-[360px] overflow-auto rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground focus:border-flit-brand focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:bg-[#EEF2F7] [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-6"
         />
       ) : (
         <textarea className={`${TEXTAREA_CLS} min-h-[360px] font-mono`} value={codigo} onChange={(e) => setCodigo(e.target.value)} aria-label="Código HTML de la plantilla" />

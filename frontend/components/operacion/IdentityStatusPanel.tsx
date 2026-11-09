@@ -232,7 +232,7 @@ export function IdentityStatusPanel({
           style={{
             background: 'transparent',
             border: 'none',
-            color: '#475569',
+            color: 'var(--muted-foreground)',
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
@@ -258,17 +258,16 @@ export function IdentityStatusPanel({
         <div
           style={{
             marginTop: 12,
-            background: '#fff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
             borderRadius: 12,
             padding: 16,
           }}
-          className="dark:bg-[#162744]"
         >
           {error && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+              style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
               role="alert"
               aria-live="polite"
             >
@@ -280,7 +279,7 @@ export function IdentityStatusPanel({
                   type="button"
                   onClick={() => void load()}
                   className="mt-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-white"
-                  style={{ background: '#FF4E00' }}
+                  style={{ background: 'var(--color-flit-alert)' }}
                 >
                   Reintentar
                 </button>
@@ -292,7 +291,7 @@ export function IdentityStatusPanel({
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-2">
               <span className="sr-only">Cargando historial de identidad…</span>
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-10 animate-pulse rounded-lg bg-black/5 dark:bg-white/5" aria-hidden />
+                <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" aria-hidden />
               ))}
             </div>
           )}
@@ -332,7 +331,7 @@ export function IdentityStatusPanel({
                     return (
                       <li
                         key={v.id}
-                        className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2 last:border-0 last:pb-0 dark:border-white/10"
+                        className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-2 last:border-0 last:pb-0"
                       >
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex flex-wrap items-center gap-1.5">

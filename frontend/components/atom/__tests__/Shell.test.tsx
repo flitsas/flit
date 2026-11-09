@@ -241,23 +241,25 @@ describe("Shell — AdminCompany", () => {
 });
 
 describe("Shell — dock SuperAdmin (HU #10469)", () => {
-  it("muestra Compañías, Tránsito, Improntas, RBAC y Auditoría dentro de Administradores", async () => {
+  it("muestra Compañías, Improntas, RBAC y Auditoría dentro de las secciones de Administradores (HU #14479)", async () => {
     setDevSuperAdminToken();
     renderShell();
     expect(within(dock()).queryByRole("link", { name: "Compañías" })).not.toBeInTheDocument();
     await userEvent.click(within(dock()).getByRole("button", { name: "Administradores" }));
+    await userEvent.click(within(dock()).getByRole("button", { name: "Compañías y tránsito" }));
     expect(within(dock()).getByRole("link", { name: "Compañías" })).toHaveAttribute("href", "/admin/companies");
-    expect(within(dock()).getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    await userEvent.click(within(dock()).getByRole("button", { name: "Documentos" }));
     expect(within(dock()).getByRole("link", { name: "Improntas" })).toBeInTheDocument();
+    await userEvent.click(within(dock()).getByRole("button", { name: "Seguridad y operación" }));
     expect(within(dock()).getByRole("link", { name: "RBAC Admin" })).toHaveAttribute("href", "/?m=rbac");
     expect(within(dock()).getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
   });
 
-  it("anida Organismos y Causales de rechazo bajo Administradores → Tránsito", async () => {
+  it("anida Organismos y Causales de rechazo bajo Administradores → Compañías y tránsito (HU #14479)", async () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(within(dock()).getByRole("button", { name: "Administradores" }));
-    await userEvent.click(within(dock()).getByRole("button", { name: "Tránsito" }));
+    await userEvent.click(within(dock()).getByRole("button", { name: "Compañías y tránsito" }));
     expect(within(dock()).getByRole("link", { name: "Organismos" })).toHaveAttribute("href", "/admin/transit-offices");
     expect(within(dock()).getByRole("link", { name: "Causales de rechazo" })).toBeInTheDocument();
   });

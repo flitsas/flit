@@ -82,17 +82,17 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                 se dice con texto, no solo con el punto, para no depender solo de color. */}
             <span
               className="absolute -left-5 top-1.5 h-3 w-3 rounded-full"
-              style={{ background: n.color, boxShadow: `0 0 0 4px ${n.color}1F` }}
+              style={{ background: n.color, boxShadow: `0 0 0 4px color-mix(in srgb, ${n.color} 12%, transparent)` }}
               aria-hidden="true"
             />
             {i < nodes.length - 1 ? (
               <span
-                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-[#DFE5ED] dark:bg-white/10"
+                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-border"
                 aria-hidden="true"
               />
             ) : null}
 
-            <div className="rounded-lg border border-[#DFE5ED] p-3 dark:border-white/10">
+            <div className="rounded-lg border border-border p-3">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="text-xs font-bold" style={{ color: DETALLE_NAVY }}>
                   {n.label}

@@ -208,7 +208,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
           <SeccionVacia mensaje="Este trámite no tiene una decisión de prenda o gravamen registrada." />
         ) : (
           <div className="flex flex-col gap-1.5">
-            <p className="text-xs text-flit-primary/70 dark:text-white/70">
+            <p className="text-xs text-muted-foreground">
               Decisión registrada por el operador durante la creación del trámite.
             </p>
             <StatusBadge
@@ -219,7 +219,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
                 su maqueta no tenía prenda, pero en un gravamen real saber a favor de quién está
                 es la mitad del dato: una prenda sin acreedor no dice nada operativo. */}
             {prenda.data.acreedorNombre || prenda.data.acreedorDocumento ? (
-              <div className="mt-2 border-t pt-2 border-[#DFE5ED] dark:border-white/10">
+              <div className="mt-2 border-t pt-2 border-border">
                 <ListaCampos>
                   {prenda.data.acreedorNombre ? (
                     <CampoValor campo="Acreedor" valor={prenda.data.acreedorNombre} />
