@@ -43,6 +43,7 @@ import type {
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/ownership-share';
 import { esPlacaAsignadaPorOt } from '@/lib/tramites/plate-digit-preference';
+import { grupoPlacaDesdeFormatoFur, grupoPlacaPideDigito, type GrupoPlaca } from '@/lib/tramites/plate-format';
 import { AvisoDigitoPlacaOt } from './AvisoDigitoPlacaOt';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
@@ -541,6 +542,29 @@ export function FirmaFurStep({
     [fv],
   );
   const organismoSelected = organismo.code.trim() !== '' || organismo.name.trim() !== '';
+
+  // HU5 (registro diferido 2026-11-09) — grupo de placa para el dígito de preferencia. MAQUINARIA y
+  // REMOLQUES los decide el catálogo del backend (`GET /fur/template-format`, el mismo que elige la
+  // plantilla del FUR); el resto, las listas exactas por clase. Si el formato no llega (error o aún
+  // cargando), quedan solo las listas: el selector se comporta como hoy salvo moto/remolque.
+  const vehicleClass = fv('vehicle_class');
+  const [furTemplateFormat, setFurTemplateFormat] = useState<string | null>(null);
+  useEffect(() => {
+    if (!instanceId || modalidad !== 'matricula_inicial') return;
+    let active = true;
+    void Promise.resolve()
+      .then(() => tramitesClient.getFurTemplateFormat(instanceId))
+      .then((r) => {
+        if (active) setFurTemplateFormat(r?.format ?? null);
+      })
+      .catch(() => {
+        if (active) setFurTemplateFormat(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [instanceId, modalidad, vehicleClass]);
+  const grupoPlaca = grupoPlacaDesdeFormatoFur(furTemplateFormat, vehicleClass);
   // HU #11199 (AC4) — marca escrita al crear el trámite con la secretaría del primer paso. Su ausencia
   // (borradores anteriores al cambio) deja el comportamiento de siempre.
   const organismoElegidoEnPasoUno = fv('transit_office_origen') === 'paso_1' && organismoSelected;
@@ -708,6 +732,8 @@ export function FirmaFurStep({
             plateValue={fv('plate')}
             plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
             preferredDigitValue={fv('plate_preferred_last_digit')}
+            grupoPlaca={grupoPlaca}
+            vehicleClass={vehicleClass}
             readOnly={readOnly}
             onRefresh={() => {
               void loadDetail();
@@ -885,6 +911,8 @@ export function PlacaPreasignadaSection({
   plateValue,
   plateSource,
   preferredDigitValue = '',
+  grupoPlaca = null,
+  vehicleClass = '',
   readOnly,
   onRefresh,
 }: {
@@ -893,6 +921,10 @@ export function PlacaPreasignadaSection({
   plateSource: string;
   /** HU #10805 — dígito de preferencia persistido (field_value `plate_preferred_last_digit`). */
   preferredDigitValue?: string;
+  /** HU5 — grupo de placa de la clase: MOTO cambia el texto; REMOLQUE/MAQUINARIA quitan el dígito. */
+  grupoPlaca?: GrupoPlaca | null;
+  /** HU7 — `vehicle_class`, para que el aviso compare el primer número en motos. */
+  vehicleClass?: string;
   readOnly: boolean;
   onRefresh?: () => void;
 }) {
@@ -1009,7 +1041,7 @@ export function PlacaPreasignadaSection({
           El organismo de tránsito asignó la placa{' '}
           <span className="font-mono font-semibold uppercase tracking-wider">{placa}</span>.
         </p>
-        <AvisoDigitoPlacaOt placa={placa} source={plateSource} digito={preferredDigitValue} />
+        <AvisoDigitoPlacaOt placa={placa} source={plateSource} digito={preferredDigitValue} clase={vehicleClass} />
       </div>,
     );
   }
@@ -1024,30 +1056,35 @@ export function PlacaPreasignadaSection({
           {error}
         </p>
       )}
-      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
-      <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
-        <span>
-          Dígito de preferencia (opcional):{' '}
-          <span className="font-normal opacity-70">
-            Indica el número en el que prefieres que termine la placa. El OT lo toma como guía:
-            puede asignar una placa que termine en ese dígito u otra.
+      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional).
+          HU5 (2026-11-09) — remolque y maquinaria no llevan dígito (D2); en motos es el primer
+          número de la serie numérica. */}
+      {grupoPlacaPideDigito(grupoPlaca) && (
+        <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
+          <span>
+            {grupoPlaca === 'MOTO' ? 'Dígito numérico de preferencia (opcional):' : 'Dígito de preferencia (opcional):'}{' '}
+            <span className="font-normal opacity-70">
+              {grupoPlaca === 'MOTO'
+                ? 'Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.'
+                : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
+            </span>
           </span>
-        </span>
-        <select
-          value={preferredDigit}
-          disabled={readOnly || savingDigit}
-          onChange={(e) => void saveDigit(e.target.value)}
-          aria-label="Dígito de preferencia de placa"
-          className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
-        >
-          <option value="">Sin preferencia</option>
-          {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-            <option key={d} value={d}>
-              Termina en {d}
-            </option>
-          ))}
-        </select>
-      </label>
+          <select
+            value={preferredDigit}
+            disabled={readOnly || savingDigit}
+            onChange={(e) => void saveDigit(e.target.value)}
+            aria-label="Dígito de preferencia de placa"
+            className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
+          >
+            <option value="">Sin preferencia</option>
+            {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+              <option key={d} value={d}>
+                Termina en {d}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>,
   );
 }

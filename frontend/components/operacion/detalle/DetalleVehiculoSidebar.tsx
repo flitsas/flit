@@ -28,6 +28,8 @@ export function DetalleVehiculoSidebar({
   const plateField = fieldValues.find((f) => f.fieldKey === 'plate');
   const preferredDigit =
     fieldValues.find((f) => f.fieldKey === PLATE_PREFERRED_LAST_DIGIT_KEY)?.valueText ?? '';
+  // HU7 — en motos el aviso compara el primer número de la placa.
+  const vehicleClass = fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText ?? '';
 
   return (
     <aside className={`${DETALLE_CARD} h-full`} aria-label="Datos del vehículo">
@@ -49,6 +51,7 @@ export function DetalleVehiculoSidebar({
             placa={plateField.valueText}
             source={plateField.source}
             digito={preferredDigit}
+            clase={vehicleClass}
             testId="detalle-aviso-digito-placa"
             className="mt-2"
           />

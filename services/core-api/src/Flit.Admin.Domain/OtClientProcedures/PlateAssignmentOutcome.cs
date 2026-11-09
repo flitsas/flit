@@ -47,9 +47,10 @@ public enum PlateAssignmentFailure
     PlateUpdateAlreadyUsed,
 
     /// <summary>
-    /// Caso C 2026-11-09 — el trámite es un carro (<c>PlateRangeRules.IsCarClass</c>) y la placa no
-    /// cumple <c>ABC123</c>. Se detecta antes de reservar en el inventario: el trámite sigue en
-    /// preasignación.
+    /// Caso C 2026-11-09 + HU8 — la clase del trámite tiene grupo de placa (carro, moto, remolque o
+    /// maquinaria; <c>PlateRangeRules.ResolvePlateClassGroup</c>) y la placa no cumple su formato.
+    /// <c>Detail</c> lleva el literal del grupo. Se detecta antes de reservar en el inventario: el trámite
+    /// sigue en preasignación.
     /// </summary>
     InvalidPlateFormatForClass,
 }

@@ -84,3 +84,16 @@ describe('DetalleVehiculoSidebar — aviso del dígito de preferencia (HU 3)', (
     expect(() => renderSidebar(undefined)).not.toThrow();
   });
 });
+
+// HU7 (corrección del usuario 2026-11-09) — en motos se compara el PRIMER dígito numérico.
+describe('DetalleVehiculoSidebar — aviso del dígito en motos (HU7)', () => {
+  it('moto ABC52D con preferencia 5 → literal de primer número', () => {
+    renderSidebar(
+      [fv('plate', 'ABC52D', 'ot'), fv('plate_preferred_last_digit', '5'), fv('vehicle_class', 'MOTOCICLETA')],
+      'ABC52D',
+    );
+    expect(screen.getByTestId('detalle-aviso-digito-placa')).toHaveTextContent(
+      'La placa ABC52D asignada por el organismo de tránsito tiene como primer número el 5, tu dígito de preferencia.',
+    );
+  });
+});

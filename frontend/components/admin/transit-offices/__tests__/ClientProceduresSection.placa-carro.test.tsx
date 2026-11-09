@@ -178,9 +178,8 @@ describe("ClientProceduresSection — formato de placa de carro (HU 2)", () => {
   });
 
   it.each([
-    ["moto", "MOTOCICLETA"],
-    ["maquinaria", "CAMIÓN GRÚA"],
-    ["remolque", "REMOLQUE"],
+    // HU6 — moto y remolque ya tienen su propio formato (ClientProceduresSection.placa-grupos.test.tsx).
+    ["maquinaria sin grupoPlaca", "CAMIÓN GRÚA"],
     ["clase vacía", ""],
     ["clase ausente", undefined],
   ])("AC5 — %s conserva la ayuda actual y «Asignar» solo exige texto", async (_n, clase) => {
