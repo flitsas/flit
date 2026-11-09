@@ -42,11 +42,12 @@ public sealed class SincronizacionOrganismosTests(ApiDePrueba api) : IClassFixtu
             .Append(new OrganismoPlataforma(cambia, "99100001", "OT DE PRUEBA RENOMBRADO", "99100", "NUEVO", "DEPTO", false))
             .Append(new OrganismoPlataforma(nuevo, "99100003", "OT NUEVO EN LA PLATAFORMA", "99100", "NUEVO", "DEPTO", true))
             .ToList();
-        var sincronizacion = new SincronizacionOrganismos(db, new PlataformaFalsa(lista), scope.ServiceProvider.GetRequiredService<Reloj>(), NullLogger<SincronizacionOrganismos>.Instance);
+        var sincronizacion = new SincronizacionOrganismos(db, new PlataformaFalsa(lista), scope.ServiceProvider.GetRequiredService<Reloj>(), scope.ServiceProvider.GetRequiredService<RemapeoOrganismos>(), NullLogger<SincronizacionOrganismos>.Instance);
 
         var r = await sincronizacion.SincronizarAsync(ct);
 
-        (r!.Nuevos, r.Actualizados, r.Retirados).Should().Be((1, 1, 1));
+        // Retirados: «sale» y los gemelos de la semilla que solo difieren en espacios (Restrepo 50606001, Arauca 81001001).
+        (r!.Nuevos, r.Actualizados, r.Retirados).Should().Be((1, 1, 3));
         var ots = await api.EnDbAsync(d => d.OrganismosTransito.AsNoTracking().Where(o => o.Id == cambia || o.Id == sale || o.Id == nuevo).ToDictionaryAsync(o => o.Id, ct));
         (ots[cambia].Nombre, ots[cambia].Municipio, ots[cambia].ActivoPlataforma).Should().Be(("OT DE PRUEBA RENOMBRADO", "NUEVO", false));
         ots[cambia].CorreosRadicacion.Should().Equal(["radicacion@ot.prueba"], "los correos de radicación son de Comparendos (S-66)");
@@ -65,8 +66,8 @@ public sealed class SincronizacionOrganismosTests(ApiDePrueba api) : IClassFixtu
         var reloj = scope.ServiceProvider.GetRequiredService<Reloj>();
         var activos = await db.OrganismosTransito.CountAsync(o => o.ActivoPlataforma, ct);
 
-        (await new SincronizacionOrganismos(db, new PlataformaFalsa(null), reloj, NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct)).Should().BeNull();
-        (await new SincronizacionOrganismos(db, new PlataformaFalsa([]), reloj, NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct))
+        (await new SincronizacionOrganismos(db, new PlataformaFalsa(null), reloj, scope.ServiceProvider.GetRequiredService<RemapeoOrganismos>(), NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct)).Should().BeNull();
+        (await new SincronizacionOrganismos(db, new PlataformaFalsa([]), reloj, scope.ServiceProvider.GetRequiredService<RemapeoOrganismos>(), NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct))
             .Should().BeNull("una lista vacía sería borrar el catálogo");
         (await db.OrganismosTransito.CountAsync(o => o.ActivoPlataforma, ct)).Should().Be(activos);
     }

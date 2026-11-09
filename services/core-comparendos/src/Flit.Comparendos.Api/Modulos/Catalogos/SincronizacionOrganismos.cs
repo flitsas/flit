@@ -40,8 +40,11 @@ public sealed class CatalogoOrganismosNoConectado : ICatalogoOrganismosPlataform
 /// actualiza nombre, municipio, departamento y si está activo. Lo que es solo de Comparendos (correos de radicación,
 /// permiso de cambio de contraventor y alias) no se toca. Un organismo que la plataforma ya no trae queda inactivo; uno
 /// que vuelve a aparecer, activo otra vez según la plataforma. Una lista vacía no se aplica: sería borrar el catálogo.
+/// GDC punto 3: un organismo que solo difiere de otro en espacios (<see cref="OrganismosGemelos"/>) no se crea, y si ya
+/// estaba se retira como uno que la plataforma no trae. Al terminar se vuelven a mapear los comparendos sin organismo.
 /// </summary>
-public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogoOrganismosPlataforma plataforma, Reloj reloj, ILogger<SincronizacionOrganismos> logger) : IEjecutorTrabajo
+public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogoOrganismosPlataforma plataforma, Reloj reloj, RemapeoOrganismos remapeo,
+    ILogger<SincronizacionOrganismos> logger) : IEjecutorTrabajo
 {
     public bool Atiende(TipoTrabajo tipo) => tipo == TipoTrabajo.SincronizacionOrganismos;
 
@@ -65,10 +68,18 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
         var ahora = reloj.Ahora;
         var locales = await db.OrganismosTransito.ToListAsync(ct).ConfigureAwait(false);
         var porCodigo = locales.ToDictionary(o => Normalizar(o.Codigo), StringComparer.Ordinal);
-        int nuevos = 0, actualizados = 0;
+        int nuevos = 0, actualizados = 0, gemelos = 0;
         var vistos = new HashSet<Guid>();
-        foreach (var r in remotos)
+        var titulares = new HashSet<string>(StringComparer.Ordinal);
+        // Por código, de menor a mayor: el primero de cada par de gemelos es el titular.
+        foreach (var r in remotos.OrderBy(r => Normalizar(r.Codigo), StringComparer.Ordinal))
         {
+            if (OrganismosGemelos.Llave(r.Codigo, r.Nombre) is { } llave && !titulares.Add(llave))
+            {
+                gemelos++;
+                continue; // gemelo: no se crea, y el que ya estaba queda sin ver (se retira abajo).
+            }
+
             if (porCodigo.TryGetValue(Normalizar(r.Codigo), out var o))
             {
                 vistos.Add(o.Id);
@@ -105,6 +116,11 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         LogSincronizado(logger, remotos.Count, nuevos, actualizados, retirados);
+        if (gemelos > 0)
+            LogGemelos(logger, gemelos);
+        var mapeados = await remapeo.RemapearSinOrganismoAsync(Comparendos.Actor.Sistema, "catálogo de organismos actualizado", null, ct).ConfigureAwait(false);
+        if (mapeados > 0)
+            LogRemapeados(logger, mapeados);
         return new ResultadoSincronizacion(remotos.Count, nuevos, actualizados, retirados);
     }
 
@@ -117,6 +133,12 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "La plataforma devolvió el catálogo de organismos vacío: no se aplica.")]
     private static partial void LogListaVacia(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "La plataforma trae {Gemelos} organismos que solo difieren en espacios de otro: no se crean (queda el de código menor).")]
+    private static partial void LogGemelos(ILogger logger, int gemelos);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tras sincronizar, {Mapeados} comparendos sin organismo quedaron con organismo.")]
+    private static partial void LogRemapeados(ILogger logger, int mapeados);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Organismos sincronizados: {Total} en la plataforma, {Nuevos} nuevos, {Actualizados} actualizados, {Retirados} retirados.")]
     private static partial void LogSincronizado(ILogger logger, int total, int nuevos, int actualizados, int retirados);
