@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 // HU #14481 / #14480 (Epic #14471) — /tramites entra con filtro desde la URL: las cifras de Inicio y el buscador
 // Ctrl K llegan con ?placa=, ?estado= o ?atajo=. El listado lo siembra UNA vez al montar; sin parámetros, arranca
@@ -126,5 +127,53 @@ describe('TramitesTable — filtro sembrado desde la URL (HU #14481)', () => {
     montar();
     await waitFor(() => expect(ultimaConsulta().estado).toBe('aprobado'));
     expect(ultimaConsulta().busquedaRapida).toBeUndefined();
+  });
+});
+
+function fila(placa: string, estado: string): InstanceSummary {
+  return {
+    id: `inst-${placa}`,
+    referenceNumber: `TR-${placa}`,
+    modalidad: 'TRASPASO',
+    estado,
+    placa,
+    vin: `VIN-${placa}`,
+    vehiculoMarca: 'Toyota',
+    vehiculoLinea: 'Corolla',
+    compradorNombre: 'Comprador',
+    compradorDocumento: '100',
+    vendedorNombre: 'Vendedor',
+    vendedorDocumento: '200',
+    organismoTransito: null,
+    pasoActual: 2,
+    totalPasos: 6,
+    createdAt: '2026-06-18T00:00:00Z',
+    draftFinalizedAt: null,
+    identityValidationStatus: null,
+    signaturePending: false,
+    canSubmit: false,
+    prioritario: false,
+    tenantId: '11111111-1111-1111-1111-111111111111',
+    companiaNombre: null,
+    subsanacionActiva: false,
+  } as unknown as InstanceSummary;
+}
+
+describe('TramitesTable — una respuesta vieja no pisa a la nueva (HU #14481)', () => {
+  it('con ?estado= la carga sin filtro que llega tarde no reemplaza al listado filtrado', async () => {
+    // Visto en navegador: el embudo marcaba «Entregado» y la tabla mostraba todos los estados, porque la carga
+    // del montaje (sin filtro) respondía después de la sembrada desde la URL.
+    mocks.searchInstances.mockImplementation(async (params?: unknown) => {
+      const p = (params ?? {}) as Consulta;
+      if (p.estado === 'entregado') return { items: [fila('ENT001', 'entregado')], total: 1 };
+      await new Promise((r) => setTimeout(r, 80));
+      return { items: [fila('BOR001', 'borrador')], total: 1 };
+    });
+    irA('?estado=entregado');
+    montar();
+    expect(await screen.findByText('ENT001')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 150));
+    expect(screen.queryByText('BOR001')).not.toBeInTheDocument();
+    expect(screen.getByText('ENT001')).toBeInTheDocument();
   });
 });

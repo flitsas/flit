@@ -871,10 +871,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [networkActive, childTenantId],
   );
 
+  // Cada carga se numera y solo la más reciente pinta: si los filtros cambian mientras una consulta sigue en
+  // vuelo (p. ej. el estado sembrado desde la URL, HU #14481), la respuesta vieja no puede pisar a la nueva.
+  const cargaVigenteRef = useRef(0);
+
   const load = useCallback(async () => {
     // HU #12363 — la cabeza espera a conocer su alcance guardado: si no, pediría primero «lo propio»
     // y acto seguido «la red», y la primera respuesta se pintaría para desaparecer al instante.
     if (!alcanceListo) return;
+    const carga = ++cargaVigenteRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -886,6 +891,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
       const [page1, counts] = await Promise.all([buscarPagina(query), contarEstados(query)]);
+      if (carga !== cargaVigenteRef.current) return;
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
@@ -903,9 +909,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       const ultimaPagina = Math.max(1, Math.ceil(page1.total / pageSize));
       if (page > ultimaPagina) setPage(ultimaPagina);
     } catch (err) {
+      if (carga !== cargaVigenteRef.current) return;
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
-      setLoading(false);
+      if (carga === cargaVigenteRef.current) setLoading(false);
     }
   }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
 
