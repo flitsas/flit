@@ -140,8 +140,11 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToList();
     }
 
+    // AsSplitQuery: en un solo JOIN las colecciones se multiplican entre sí; en PDN daba ~2.800 filas y
+    // temporales en disco por cada trámite (321 ms de media, picos de 46 s).
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .AsSplitQuery()
             .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
@@ -156,6 +159,7 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, TenantScope scope, CancellationToken ct) =>
         db.ProcedureInstances
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
@@ -284,6 +288,7 @@ internal sealed partial class ProcedureInstanceRepository(
 
     public Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .AsSplitQuery()
             .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
