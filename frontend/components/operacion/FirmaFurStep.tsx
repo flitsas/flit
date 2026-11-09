@@ -1082,7 +1082,8 @@ export function PlacaPreasignadaSection({
             <option value="">Sin preferencia</option>
             {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
               <option key={d} value={d}>
-                Termina en {d}
+                {/* D4 — en motos el dígito es el primer número de la placa. */}
+                {grupoPlaca === 'MOTO' ? `Primer número ${d}` : `Termina en ${d}`}
               </option>
             ))}
           </select>
