@@ -585,6 +585,36 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     return () => clearTimeout(id);
   }, [search]);
 
+  // HU #14481/#14480 (Epic #14471) — entrada con filtro desde la URL: las cifras de Inicio y el buscador Ctrl K llegan
+  // con ?placa=, ?estado= o ?atajo=. Se siembra UNA vez al montar, con el mismo patrón que la bandeja del OT
+  // (ClientProceduresSection, ?placa/?vin/?status): sin parámetros el listado arranca igual que siempre, y un valor
+  // desconocido se ignora para no dejar el filtro en una opción que no existe. Se lee window.location para no exigir
+  // un boundary de router ni tocar las pruebas que montan la tabla fuera de una app real.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const placa = params.get('placa')?.trim().toUpperCase().replace(/\s+/g, '');
+    const estadoParam = params.get('estado')?.trim();
+    const atajoParam = params.get('atajo')?.trim();
+    /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
+    if (placa) {
+      setSearch(placa);
+      setBusquedaAplicada(placa);
+    }
+    const atajoDef = atajoParam ? ATAJOS_GESTOR.find((a) => a.key === atajoParam) : undefined;
+    if (atajoDef) {
+      // Igual que elegirlo en la búsqueda rápida: el atajo trae su estado.
+      setAtajo(atajoDef.key);
+      setEstado(atajoDef.estado ?? '');
+    } else if (
+      estadoParam &&
+      ((ESTADOS_TRAMITE as readonly string[]).includes(estadoParam) || estadoParam === FILTRO_RECHAZADO_PREASIGNACION)
+    ) {
+      setEstado(estadoParam as EstadoFiltro);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
   // HU #12107 — catálogo de campos filtrables. Degrada con elegancia: si no carga, la tabla se
   // pinta igual con su listado y la barra ofrece reintentar (AC7). Nunca bloquea el render.
   useEffect(() => {
