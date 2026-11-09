@@ -9,6 +9,8 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Quipux;
+using Flit.Tramites.Domain.Tramites.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -628,10 +630,18 @@ public sealed class SubmitProcedureInstanceTests
     /// Clona el tipo con bloque <c>quipux</c> + familia — no mutar el singleton de
     /// <see cref="ProcedureTypeFixture"/> (contaminaría el resto de la suite).
     /// </summary>
-    private static void MarcarTipoConBloqueQuipux(ProcedureInstance instance)
+    private static void MarcarTipoConBloqueQuipux(
+        ProcedureInstance instance,
+        string familia = ProcedureTypeQuipuxGate.FamiliaMatricula)
     {
         var original = instance.ProcedureType
             ?? throw new InvalidOperationException("La instancia de prueba requiere ProcedureType.");
+        var prefijo = familia switch
+        {
+            ProcedureTypeQuipuxGate.FamiliaTraspaso => "TR",
+            ProcedureTypeQuipuxGate.FamiliaOtros => "OT",
+            _ => "MI",
+        };
         instance.ProcedureType = new ProcedureType
         {
             Id = original.Id,
@@ -644,7 +654,8 @@ public sealed class SubmitProcedureInstanceTests
             WizardEnabled = original.WizardEnabled,
             CreatedAt = original.CreatedAt,
             ExternalRefs =
-                """{"quipux":{"tipoTramite":"MATRICULA","codigoTramite":"01","familia":"MATRICULA"}}""",
+                "{\"quipux\":{\"tipoTramite\":\"" + familia + "\",\"codigoTramite\":\"01\",\"familia\":\""
+                + familia + "\",\"prefijo\":\"" + prefijo + "\"}}",
         };
     }
 
@@ -656,6 +667,39 @@ public sealed class SubmitProcedureInstanceTests
         _quipuxCanal
             .GetAsync(otId, ct)
             .Returns(new TransitOfficeQuipuxCanal("05001", QuipuxRegistration: true, QuipuxTransfer: false, QuipuxOther: false));
+        Wire(instance, ct);
+    }
+
+    /// <summary>
+    /// Caso PDN Cali/Sabaneta: OT solo en FUR (<c>field_values</c>), columna aún vacía.
+    /// </summary>
+    private void WireOtIntegradoQuipuxSoloEnFur(
+        ProcedureInstance instance,
+        string familia,
+        bool registration,
+        bool transfer,
+        bool other,
+        CancellationToken ct)
+    {
+        var otId = Guid.NewGuid();
+        instance.TransitOfficeId = null;
+        foreach (var previo in instance.FieldValues
+                     .Where(f => string.Equals(f.FieldKey, OtEfectivaResolver.FieldKey, StringComparison.OrdinalIgnoreCase))
+                     .ToList())
+            instance.FieldValues.Remove(previo);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            FieldKey = OtEfectivaResolver.FieldKey,
+            ValueText = otId.ToString(),
+            Source = "user",
+        });
+        MarcarTipoConBloqueQuipux(instance, familia);
+        _quipuxCanal
+            .GetAsync(otId, ct)
+            .Returns(new TransitOfficeQuipuxCanal("76001", registration, transfer, other));
         Wire(instance, ct);
     }
 
@@ -761,5 +805,51 @@ public sealed class SubmitProcedureInstanceTests
 
         error.Should().BeNull();
         result!.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_OtSoloEnFur_Traspaso_QuedaEnPreparadoYPromueveColumna()
+    {
+        // Regresión PDN FT2-0000331 (Cali): OT en field_values, columna null → antes iba a entregado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        WireOtIntegradoQuipuxSoloEnFur(
+            instance,
+            ProcedureTypeQuipuxGate.FamiliaTraspaso,
+            registration: false, transfer: true, other: false,
+            ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        instance.Status.Should().Be(TramiteEstado.Preparado);
+        instance.TransitOfficeId.Should().NotBeNull("hay que promover la columna para el worker Quipux");
+        await _repo.Received().SaveChangesAsync(ct);
+        _recorder.Records.Should().NotContain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_OtSoloEnFur_Matricula_QuedaEnPreparadoYPromueveColumna()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        WireOtIntegradoQuipuxSoloEnFur(
+            instance,
+            ProcedureTypeQuipuxGate.FamiliaMatricula,
+            registration: true, transfer: false, other: false,
+            ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        instance.TransitOfficeId.Should().NotBeNull();
+        await _repo.Received().SaveChangesAsync(ct);
+        _recorder.Records.Should().NotContain(r => r.ToStatus == TramiteEstado.Entregado);
     }
 }
