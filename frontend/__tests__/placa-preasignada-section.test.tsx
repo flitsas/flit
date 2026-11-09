@@ -155,3 +155,49 @@ describe('PlacaPreasignadaSection — placa asignada por el OT (HU 3)', () => {
     expect(bloque).not.toHaveTextContent(/dígito de preferencia/);
   });
 });
+
+// HU5 (registro diferido 2026-11-09) — texto y presencia del dígito según el grupo de la clase.
+// Uso de ejemplo: <PlacaPreasignadaSection ... grupoPlaca="MOTO" /> → texto del primer número.
+describe('PlacaPreasignadaSection — dígito según la clase (HU5)', () => {
+  it('MOTO — texto del dígito numérico (opcional) con prefijo en negrita y explicación normal', async () => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" grupoPlaca="MOTO" readOnly={false} />);
+    const ruta = await screen.findByTestId('fur-placa-ruta-larga');
+    expect(ruta).toHaveTextContent(
+      'Dígito numérico de preferencia (opcional): Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.',
+    );
+    expect(screen.getByText(/Indica el número con el que prefieres que empiece/)).toHaveClass('font-normal');
+    expect(screen.getByLabelText(/Dígito de preferencia de placa/i)).toBeEnabled();
+  });
+
+  it.each(['CARRO', null, undefined] as const)('%s — texto actual sin cambio', async (grupo) => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" grupoPlaca={grupo} readOnly={false} />);
+    expect(await screen.findByTestId('fur-placa-ruta-larga')).toHaveTextContent(
+      'Dígito de preferencia (opcional): Indica el número en el que prefieres que termine la placa.',
+    );
+  });
+
+  it.each(['REMOLQUE', 'MAQUINARIA'] as const)('%s — sin selector ni texto de dígito', async (grupo) => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" grupoPlaca={grupo} readOnly={false} />);
+    const ruta = await screen.findByTestId('fur-placa-ruta-larga');
+    expect(ruta).toHaveTextContent(/El organismo de tránsito la asignará en Preasignación/);
+    expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();
+    expect(ruta).not.toHaveTextContent(/preferencia/i);
+  });
+
+  it('placa asignada por el OT a una moto — aviso de primer número', async () => {
+    render(
+      <PlacaPreasignadaSection
+        instanceId="i"
+        plateValue="ABC52D"
+        plateSource="ot"
+        preferredDigitValue="5"
+        grupoPlaca="MOTO"
+        vehicleClass="MOTOCICLETA"
+        readOnly
+      />,
+    );
+    expect(await screen.findByTestId('fur-placa-asignada-ot')).toHaveTextContent(
+      'La placa ABC52D asignada por el organismo de tránsito tiene como primer número el 5, tu dígito de preferencia.',
+    );
+  });
+});

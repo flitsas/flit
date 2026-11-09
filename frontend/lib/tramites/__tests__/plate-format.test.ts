@@ -7,9 +7,19 @@
 //   esClaseCarro('CAMIÓN GRÚA') → false (maquinaria)
 //   normalizarPlacaCarro('abc-12 3') → 'ABC123'
 //   PLACA_CARRO_PATTERN.test('ABC123') → true
-//   estadoPlacaOt('ABC12', true) → { invalida: true, lista: false }
+//   estadoPlacaOt('ABC12', 'CARRO') → { invalida: true, lista: false }
 import { describe, expect, it } from 'vitest';
-import { PLACA_CARRO_PATTERN, esClaseCarro, estadoPlacaOt, normalizarPlacaCarro } from '../plate-format';
+import {
+  PLACA_CARRO_PATTERN,
+  esClaseCarro,
+  estadoPlacaOt,
+  grupoPlacaDesdeClase,
+  grupoPlacaDesdeFormatoFur,
+  grupoPlacaPideDigito,
+  normalizarPlacaCarro,
+  normalizarPlacaOt,
+  resolverGrupoPlaca,
+} from '../plate-format';
 
 describe('esClaseCarro', () => {
   it.each([
@@ -79,18 +89,109 @@ describe('PLACA_CARRO_PATTERN', () => {
 // Compartido por los modales «Asignar placa» y «Corregir placa» del OT (2026-11-09).
 describe('estadoPlacaOt', () => {
   it('carro inválido → invalida y no lista', () => {
-    expect(estadoPlacaOt('ABC12', true)).toEqual({ invalida: true, lista: false });
-    expect(estadoPlacaOt('ABC12D', true)).toEqual({ invalida: true, lista: false });
+    expect(estadoPlacaOt('ABC12', 'CARRO')).toEqual({ invalida: true, lista: false });
+    expect(estadoPlacaOt('ABC12D', 'CARRO')).toEqual({ invalida: true, lista: false });
   });
   it('carro válido → lista y sin aviso', () => {
-    expect(estadoPlacaOt('ABC123', true)).toEqual({ invalida: false, lista: true });
+    expect(estadoPlacaOt('ABC123', 'CARRO')).toEqual({ invalida: false, lista: true });
   });
   it('vacío no es error pero tampoco está listo', () => {
-    expect(estadoPlacaOt('', true)).toEqual({ invalida: false, lista: false });
-    expect(estadoPlacaOt('   ', false)).toEqual({ invalida: false, lista: false });
+    expect(estadoPlacaOt('', 'CARRO')).toEqual({ invalida: false, lista: false });
+    expect(estadoPlacaOt('   ', null)).toEqual({ invalida: false, lista: false });
   });
-  it('no carro → solo exige texto, cualquier formato', () => {
-    expect(estadoPlacaOt('ABC12D', false)).toEqual({ invalida: false, lista: true });
-    expect(estadoPlacaOt('R12345', false)).toEqual({ invalida: false, lista: true });
+  it('sin grupo → solo exige texto, cualquier formato', () => {
+    expect(estadoPlacaOt('ABC12D', null)).toEqual({ invalida: false, lista: true });
+    expect(estadoPlacaOt('R12345', null)).toEqual({ invalida: false, lista: true });
+  });
+});
+
+// HU5–HU7 (registro diferido 2026-11-09, plan preasignacion.pdf) — grupo de placa por clase.
+// Uso de ejemplo:
+//   grupoPlacaDesdeClase('Motocicleta') → 'MOTO'
+//   resolverGrupoPlaca('MAQUINARIA', 'CAMION GRUA') → 'MAQUINARIA'
+//   estadoPlacaOt('R1234', 'REMOLQUE') → { invalida: true, lista: false }
+describe('grupoPlacaDesdeClase (fallback por listas exactas)', () => {
+  it.each(['MOTOCICLETA', 'MOTOCARRO', 'CUATRIMOTO', 'CUADRICICLO', 'MOTOTRICICLO', 'TRICIMOTO', 'CICLOMOTOR'])(
+    '%s → MOTO',
+    (c) => expect(grupoPlacaDesdeClase(c)).toBe('MOTO'),
+  );
+  it.each(['REMOLQUE', 'SEMIREMOLQUE', 'SEMIRREMOLQUE', 'REMOLQUE Y SEMIRREMOLQUE', ' remolque  y semirremolque '])(
+    '%s → REMOLQUE',
+    (c) => expect(grupoPlacaDesdeClase(c)).toBe('REMOLQUE'),
+  );
+  it('carros → CARRO, normalizando tildes', () => {
+    expect(grupoPlacaDesdeClase('Automóvil')).toBe('CARRO');
+    expect(grupoPlacaDesdeClase('CAMION')).toBe('CARRO');
+  });
+  it('maquinaria, SIN CLASE, vacía y nula → sin grupo (nunca contains)', () => {
+    for (const c of ['CAMIÓN GRÚA', 'MOTONIVELADORA', 'MOTO', 'SIN CLASE', '', null, undefined]) {
+      expect(grupoPlacaDesdeClase(c)).toBeNull();
+    }
+  });
+});
+
+describe('resolverGrupoPlaca (grupoPlaca del backend primero)', () => {
+  it('usa grupoPlaca si viene, aunque la clase diga otra cosa', () => {
+    expect(resolverGrupoPlaca('MAQUINARIA', 'CAMION GRUA')).toBe('MAQUINARIA');
+    expect(resolverGrupoPlaca('REMOLQUE', 'AUTOMOVIL')).toBe('REMOLQUE');
+    expect(resolverGrupoPlaca('moto', '')).toBe('MOTO');
+  });
+  it('sin grupoPlaca (null/undefined/desconocido) cae a las listas por clase', () => {
+    expect(resolverGrupoPlaca(null, 'MOTOCICLETA')).toBe('MOTO');
+    expect(resolverGrupoPlaca(undefined, 'SEMIRREMOLQUE')).toBe('REMOLQUE');
+    expect(resolverGrupoPlaca('OTRO', 'AUTOMOVIL')).toBe('CARRO');
+    expect(resolverGrupoPlaca(undefined, 'CAMION GRUA')).toBeNull();
+  });
+});
+
+describe('grupoPlacaDesdeFormatoFur (lado gestor, FUR)', () => {
+  it('MAQUINARIA y REMOLQUES del catálogo del backend mandan', () => {
+    expect(grupoPlacaDesdeFormatoFur('MAQUINARIA', 'CAMION GRUA')).toBe('MAQUINARIA');
+    expect(grupoPlacaDesdeFormatoFur('REMOLQUES', 'CAMA BAJA')).toBe('REMOLQUE');
+  });
+  it('AUTOMOTOR o sin formato → listas por clase', () => {
+    expect(grupoPlacaDesdeFormatoFur('AUTOMOTOR', 'MOTOCICLETA')).toBe('MOTO');
+    expect(grupoPlacaDesdeFormatoFur(null, 'REMOLQUE')).toBe('REMOLQUE');
+    expect(grupoPlacaDesdeFormatoFur(undefined, '')).toBeNull();
+  });
+});
+
+describe('grupoPlacaPideDigito', () => {
+  it('REMOLQUE y MAQUINARIA no piden dígito; CARRO, MOTO y sin grupo sí', () => {
+    expect(grupoPlacaPideDigito('REMOLQUE')).toBe(false);
+    expect(grupoPlacaPideDigito('MAQUINARIA')).toBe(false);
+    expect(grupoPlacaPideDigito('CARRO')).toBe(true);
+    expect(grupoPlacaPideDigito('MOTO')).toBe(true);
+    expect(grupoPlacaPideDigito(null)).toBe(true);
+  });
+});
+
+describe('normalizarPlacaOt — máscara por grupo', () => {
+  it('maxLength por grupo: CARRO 6, MOTO 6, REMOLQUE 7, MAQUINARIA 8', () => {
+    expect(normalizarPlacaOt('abc-1234', 'CARRO')).toBe('ABC123');
+    expect(normalizarPlacaOt('abc 12de', 'MOTO')).toBe('ABC12D');
+    expect(normalizarPlacaOt('r-1234567', 'REMOLQUE')).toBe('R123456');
+    expect(normalizarPlacaOt('mc 0295549', 'MAQUINARIA')).toBe('MC029554');
+  });
+  it('sin grupo deja el texto tal cual', () => {
+    expect(normalizarPlacaOt('abc-12 d', null)).toBe('abc-12 d');
+  });
+});
+
+describe('estadoPlacaOt por grupo', () => {
+  it.each([
+    ['MOTO', 'ABC12D', true],
+    ['MOTO', 'ABC12', true],
+    ['MOTO', 'ABC123', false],
+    ['MOTO', 'AB12D', false],
+    ['REMOLQUE', 'R12345', true],
+    ['REMOLQUE', 'S543210', true],
+    ['REMOLQUE', 'R1234', false],
+    ['REMOLQUE', 'T12345', false],
+    ['MAQUINARIA', 'MC029554', true],
+    ['MAQUINARIA', 'MC02955', false],
+    ['MAQUINARIA', 'M0295541', false],
+  ] as const)('%s %s → lista=%s', (grupo, placa, lista) => {
+    expect(estadoPlacaOt(placa, grupo)).toEqual({ invalida: !lista, lista });
   });
 });

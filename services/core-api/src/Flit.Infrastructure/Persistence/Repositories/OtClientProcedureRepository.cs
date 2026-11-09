@@ -4,6 +4,7 @@ using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Admin.Domain.PlatePreassign;
+using Flit.Infrastructure.OtClientProcedures;
 using Flit.Modules.Quipux.Domain.Envios;
 using Flit.Queries.Domain;
 using Flit.Queries.Domain.Documentos;
@@ -37,6 +38,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private readonly IConsolidadoRegeneracionQueue? _regeneracionQueue;
     private readonly ILogger<OtClientProcedureRepository> _logger;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
+    private readonly Flit.Tramites.Application.Documents.IFurTemplateResolver? _furTemplateResolver;
 
     public OtClientProcedureRepository(
         FlitDbContext context,
@@ -44,7 +46,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         IPlateRangeRepository? plateRepo = null,
         IConsolidadoRegeneracionQueue? regeneracionQueue = null,
         ILogger<OtClientProcedureRepository>? logger = null,
-        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        Flit.Tramites.Application.Documents.IFurTemplateResolver? furTemplateResolver = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
@@ -57,6 +60,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         // Bug #12912 — salud de la bandeja: «con grant vigente» incluye la red (Concesión / Marca
         // Blanca). Null en tests que construyen el repo a mano: criterio previo de grant propio.
         _effectiveOffices = effectiveOffices;
+        // HU8 (Caso C 2026-11-09) — catálogo de clasificación (singleton cacheado) para el grupo de placa
+        // REMOLQUE / MAQUINARIA. Null en tests que construyen el repo a mano: solo cuentan las listas exactas.
+        _furTemplateResolver = furTemplateResolver;
     }
 
     public Task<PagedResult<OtClientProcedure>> ListAsync(
@@ -196,9 +202,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             .ToListAsync(cancellationToken)
                             .ConfigureAwait(false);
 
+                        // HU8 (Caso C 2026-11-09) — grupo de placa por fila: una resolución por clase
+                        // normalizada distinta (el catálogo lo cachea el resolver), nunca una consulta por fila.
+                        var grupos = await PlateClassGroupResolution
+                            .ResolveManyAsync(rows.Select(r => r.Row.Clase), _furTemplateResolver, cancellationToken)
+                            .ConfigureAwait(false);
+
                         var items = rows
                             .Select(r => r.Row with
                             {
+                                GrupoPlaca = PlateClassGroupResolution.Lookup(grupos, r.Row.Clase),
                                 ConsolidadoWizard = r.Consolidado.Wizard(),
                                 ConsolidadoMaestro = r.Consolidado.Maestro(),
                                 QuipuxRadicadoEn = r.QuipuxRadicadoEn,
@@ -874,13 +887,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private const string OtPlateFieldSource = "ot";
 
     /// <summary>
-    /// Caso C 2026-11-09 — regla única de formato por clase, compartida por <see cref="AssignPlateAsync"/> y
-    /// <see cref="UpdatePlateAsync"/>: si el <c>vehicle_class</c> del trámite, normalizado con
-    /// <c>FurClassificationNormalizer</c>, es un carro (<see cref="PlateRangeRules.IsCarClass"/>), la placa
-    /// (ya normalizada) debe cumplir <see cref="PlateRangeRules.IsValidCarPlate"/>. El resto de clases (o
-    /// sin clase) conserva los formatos actuales, que el endpoint ya validó con
-    /// <see cref="PlateRangeRules.IsValidPlate"/>. Debe llamarse dentro del scope de tenant del cliente y
-    /// antes de cualquier escritura. Devuelve el fallo, o <c>null</c> si la placa es admisible.
+    /// Caso C 2026-11-09 + HU8 — regla única de formato por clase, compartida por <see cref="AssignPlateAsync"/>
+    /// y <see cref="UpdatePlateAsync"/>: el <c>vehicle_class</c> del trámite se resuelve a un
+    /// <see cref="PlateClassGroup"/> (<see cref="PlateClassGroupResolution"/>: listas exactas de carro / moto /
+    /// remolque y catálogo de clasificación para remolque / maquinaria) y la placa (ya normalizada) debe
+    /// cumplir <see cref="PlateRangeRules.IsValidPlateForGroup"/>. Sin grupo (vacía, «SIN CLASE» o desconocida)
+    /// conserva la unión de formatos, que el endpoint ya validó con <see cref="PlateRangeRules.IsValidPlate"/>.
+    /// Debe llamarse dentro del scope de tenant del cliente y antes de cualquier escritura. Devuelve el fallo
+    /// con el literal del grupo, o <c>null</c> si la placa es admisible.
     /// </summary>
     private async Task<PlateAssignmentOutcome?> FailIfInvalidPlateForVehicleClassAsync(
         Guid procedureInstanceId, string normalizedPlate, CancellationToken cancellationToken)
@@ -891,12 +905,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var isCar = PlateRangeRules.IsCarClass(
-            Flit.Tramites.Application.Documents.FurClassificationNormalizer.Normalize(vehicleClass));
-        return isCar && !PlateRangeRules.IsValidCarPlate(normalizedPlate)
+        var group = await PlateClassGroupResolution
+            .ResolveAsync(vehicleClass, _furTemplateResolver, cancellationToken)
+            .ConfigureAwait(false);
+        return group is { } g && !PlateRangeRules.IsValidPlateForGroup(g, normalizedPlate)
             ? PlateAssignmentOutcome.Fail(
                 PlateAssignmentFailure.InvalidPlateFormatForClass,
-                PlateRangeRules.InvalidCarPlateFormatMessage)
+                PlateRangeRules.InvalidPlateFormatMessageFor(g))
             : null;
     }
 
@@ -958,7 +973,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.NotPreassigned);
                 }
 
-                // Caso C 2026-11-09 — regla ABC123 para carros ANTES de reservar: no se toca el inventario
+                // Caso C 2026-11-09 + HU8 — formato por grupo de clase ANTES de reservar: no se toca el inventario
                 // y el trámite sigue en preasignación.
                 var normalizedPlate = plate.Trim().ToUpperInvariant();
                 if (await FailIfInvalidPlateForVehicleClassAsync(procedureInstanceId, normalizedPlate, cancellationToken)
@@ -1133,7 +1148,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 var previousPlate = entity.Plate;
                 var normalizedPlate = plate.Trim().ToUpperInvariant();
 
-                // Caso C 2026-11-09 (tanda 2) — misma regla ABC123 para carros que la asignación, antes de
+                // Caso C 2026-11-09 (tanda 2) + HU8 — mismo formato por grupo que la asignación, antes de
                 // escribir nada: la placa anterior se conserva y la única corrección no se consume.
                 if (await FailIfInvalidPlateForVehicleClassAsync(procedureInstanceId, normalizedPlate, cancellationToken)
                         .ConfigureAwait(false) is { } formatFailure)
@@ -1550,6 +1565,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     Modelo = Field(fields, VehicleFieldKeys.Year) ?? Field(fields, VehicleFieldKeys.LegacyModel),
                     Color = Field(fields, VehicleFieldKeys.Color),
                     Clase = Field(fields, VehicleFieldKeys.Class),
+                    // HU8 (Caso C 2026-11-09) — mismo grupo de placa que la bandeja.
+                    GrupoPlaca = await PlateClassGroupResolution
+                        .ResolveAsync(Field(fields, VehicleFieldKeys.Class), _furTemplateResolver, cancellationToken)
+                        .ConfigureAwait(false),
                     Servicio = Field(fields, VehicleFieldKeys.Service),
                     Combustible = Field(fields, VehicleFieldKeys.Fuel),
                     Carroceria = Field(fields, VehicleFieldKeys.BodyType),

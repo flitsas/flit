@@ -159,8 +159,8 @@ describe("ClientProceduresSection — «Corregir placa» con máscara de carro",
   });
 
   it.each([
-    ["moto", "MOTOCICLETA"],
-    ["maquinaria", "CAMIÓN GRÚA"],
+    // HU6 — la moto ya tiene su propio formato (ClientProceduresSection.placa-grupos.test.tsx).
+    ["maquinaria sin grupoPlaca", "CAMIÓN GRÚA"],
     ["clase vacía", ""],
     ["clase ausente", undefined],
   ])("no carro (%s) — comportamiento actual intacto", async (_n, clase) => {

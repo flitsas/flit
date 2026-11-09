@@ -17,16 +17,19 @@ export function AvisoDigitoPlacaOt({
   placa,
   source,
   digito,
+  clase,
   testId,
   className = '',
 }: {
   placa: string | null | undefined;
   source: string | null | undefined;
   digito: string | null | undefined;
+  /** `vehicle_class` del trámite: en motos se compara el primer número (HU7). */
+  clase?: string | null;
   testId?: string;
   className?: string;
 }) {
-  const aviso = avisoDigitoPlacaOt({ placa, source, digito });
+  const aviso = avisoDigitoPlacaOt({ placa, source, digito, clase });
   if (!aviso) return null;
   const exito = aviso.tono === 'exito';
   const Icon = exito ? CheckCircle2 : Info;

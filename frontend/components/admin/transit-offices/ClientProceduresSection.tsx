@@ -111,7 +111,7 @@ import { buildWorkbook, type DataColumn } from "@/components/consultas/columns";
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/consultas/export";
 import { selloDeArchivo } from "@/components/operacion/tramites-export";
 import { XLSX_MIME } from "@/lib/xlsx";
-import { esClaseCarro, estadoPlacaOt } from "@/lib/tramites/plate-format";
+import { estadoPlacaOt, grupoPlacaPideDigito, resolverGrupoPlaca } from "@/lib/tramites/plate-format";
 import { PlacaOtField } from "./PlacaOtField";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 
@@ -1195,8 +1195,10 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // las clases de carro) la placa solo admite 3 letras + 3 números: el input normaliza mientras se
   // escribe y «Asignar» espera al formato. El backend aplica la misma regla (422). Otras clases, o la
   // clase vacía, conservan la ayuda con todos los formatos. Campo compartido: `PlacaOtField`.
-  const assignEsCarro = esClaseCarro(assignTarget?.clase);
-  const assignPlacaLista = estadoPlacaOt(plateInput, assignEsCarro).lista;
+  // HU6 (2026-11-09) — el formato va por grupo (CARRO / MOTO / REMOLQUE / MAQUINARIA): `grupoPlaca`
+  // del backend (catálogo de clases) y, si no viene, listas exactas por `clase`. Sin grupo, libre.
+  const assignGrupo = resolverGrupoPlaca(assignTarget?.grupoPlaca, assignTarget?.clase);
+  const assignPlacaLista = estadoPlacaOt(plateInput, assignGrupo).lista;
 
   const confirmAssignPlate = async () => {
     if (!assignTarget || !assignPlacaLista) return;
@@ -1372,8 +1374,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // roundtrip cuando el ítem del menú ya llegó deshabilitado (ver plateUpdateWindow).
   // Decisión del usuario 2026-11-09 — «Corregir placa» aplica la misma máscara de carro que
   // «Asignar placa» (mismo `PlacaOtField` y misma regla `estadoPlacaOt`).
-  const updateEsCarro = esClaseCarro(updatePlateTarget?.clase);
-  const updatePlacaLista = estadoPlacaOt(updatePlateInput, updateEsCarro).lista;
+  const updateGrupo = resolverGrupoPlaca(updatePlateTarget?.grupoPlaca, updatePlateTarget?.clase);
+  const updatePlacaLista = estadoPlacaOt(updatePlateInput, updateGrupo).lista;
 
   const confirmUpdatePlate = async () => {
     if (!updatePlateTarget || !updatePlacaLista) return;
@@ -2015,13 +2017,26 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 que termine en ese dígito o cualquier otra.
                 HU #12852 (Feature #12846) — ya no hay lista de placas del rango que marcar con ★: la
                 guía queda como sugerencia sobre la placa libre que se va a escribir abajo. */}
-            {preferredDigit && (
+            {/* HU6 (2026-11-09) — remolque y maquinaria no llevan dígito (D2); en motos el dígito es el
+                primer número de la placa (corrección del usuario). */}
+            {preferredDigit && grupoPlacaPideDigito(assignGrupo) && (
               <div
+                data-testid="ot-guia-digito"
                 className="mt-3 rounded-lg px-3 py-2 text-xs"
                 style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
               >
-                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía para elegir la
-                placa; puedes asignar esa u otra cualquiera.
+                {assignGrupo === "MOTO" ? (
+                  <>
+                    Dígito numérico de preferencia: el cliente prefiere el número <b>{preferredDigit}</b> como
+                    primer número de la placa (ej. ABC{preferredDigit}2D o ABC{preferredDigit}2) — solo guía
+                    para elegir la placa; puedes asignar esa u otra cualquiera.
+                  </>
+                ) : (
+                  <>
+                    Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía para elegir la
+                    placa; puedes asignar esa u otra cualquiera.
+                  </>
+                )}
               </div>
             )}
             {/* HU #12852 (Feature #12846) — único campo de placa: el backend siempre reserva fuera de
@@ -2031,8 +2046,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               label="Placa"
               value={plateInput}
               onChange={setPlateInput}
-              esCarro={assignEsCarro}
-              ayudaNoCarro="Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía."
+              grupo={assignGrupo}
+              ayudaSinGrupo="Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía."
               className="mt-4"
             />
             <div className="mt-5 flex gap-3">
@@ -2258,7 +2273,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               label="Placa correcta"
               value={updatePlateInput}
               onChange={setUpdatePlateInput}
-              esCarro={updateEsCarro}
+              grupo={updateGrupo}
               className="mt-3"
             />
             <div className="mt-5 flex gap-3">
