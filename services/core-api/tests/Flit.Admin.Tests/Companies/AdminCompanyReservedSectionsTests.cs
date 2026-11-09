@@ -43,8 +43,6 @@ public sealed class AdminCompanyReservedSectionsTests
         { "GET", "/transit-grants" },
         { "POST", "/transit-grants" },
         { "DELETE", $"/transit-grants/{Oficina}" },
-        { "GET", "/transit-agreements" },
-        { "PUT", $"/transit-agreements/{Oficina}" },
         { "GET", "/audit-log" },
         { "GET", "/ot-consultation-restrictions" },
         { "PUT", $"/ot-consultation-restrictions/{Oficina}/rnmc" },

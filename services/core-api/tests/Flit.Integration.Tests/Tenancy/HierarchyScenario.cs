@@ -25,7 +25,7 @@ namespace Flit.Integration.Tests.Tenancy;
 /// Cada cliente recibe <b>los mismos datos propios</b> en cada tabla que alimenta las consultas del
 /// inventario (<see cref="CoveredQueries"/>): un usuario, dos trámites (uno entregado a Ot1 con la
 /// placa compartida <see cref="SharedPlate"/> y un borrador), su historial de estado, una bitácora de
-/// notificación, un parámetro documental, un convenio con OT, una invitación pendiente y una entrada de
+/// notificación, un parámetro documental, una invitación pendiente y una entrada de
 /// auditoría. Con datos simétricos, cualquier fila «de más» en una lectura es una fuga y no un artefacto
 /// de la semilla.
 /// <para>
@@ -243,15 +243,6 @@ internal static class HierarchyScenario
             TenantId = tenant,
             DocumentTypeCode = "SOAT",
             State = "OBLIGATORIO",
-            CreatedAt = now,
-        });
-
-        ctx.CompanyTransitOfficeAgreements.Add(new CompanyTransitOfficeAgreement
-        {
-            Id = Id(0x0008, suffix, 1),
-            CompanyTenantId = tenant,
-            TransitOfficeId = Ot1,
-            IsActive = true,
             CreatedAt = now,
         });
 

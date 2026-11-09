@@ -150,8 +150,8 @@ Cuando una compañía tiene una versión activa de `mandato`, quedan **inertes**
 3. **Plantillas y familias de mandato por OT.** `MandatoTemplateResolver`, `MandatoFamiliaCodes`, el mandatario
    institucional (nombre y NIT), la ciudad de cámara, la sigla del mandatario y el objeto compuesto —incluidas las
    transformaciones declaradas que se incorporaron al objeto del contrato— no intervienen.
-4. **Política de firma del mandatario.** `IMandatoFirmaPolicy` y los tres modos (`SinBloque` por convenio
-   compañía↔organismo, `Manual` por firma física/diferida, `Estampada`) quedan inertes: los bloques de firma son
+4. **Política de firma del mandatario.** `MandatoFirmaModoResolver` y los tres modos (`SinBloque` por tipo
+   Persona jurídica, `Manual` por mandato abierto o sin estampa, `Estampada`) quedan inertes: los bloques de firma son
    los que traiga el PDF de la compañía. De aquí sale el riesgo R-3.
 
 **Se conserva íntegro** de [ADR-0036-mandatarios-multiples-y-mandato-por-ot]: la multiplicidad de mandatarios por

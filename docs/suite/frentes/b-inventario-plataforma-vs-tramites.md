@@ -196,7 +196,7 @@ Inventario completo agrupado por archivo en el anexo A. A nivel de grupo:
 | `/api/v1/superadmin/{procedure-types,procedure-entities}` | **T** |
 | `/api/v1/admin/companies` (CRUD, estado, parent, whitelist, audit-log), branding, domain, children, children/invitations, `/api/v1/company/{branding,domain}`, `/api/v1/internal/domains` | **P** |
 | `/api/v1/admin/companies/{t}/settings` y `children/{c}/settings` | **P/T**: el mismo JSON mezcla habilitación de productos y flags de trámites. Se parte en B-07 |
-| `/api/v1/admin/companies/{t}/{transit-grants,transit-blocks,transit-agreements,ot-consultation-restrictions,ot-blocking-policies,ot-prenda-document-policies}` | **T** |
+| `/api/v1/admin/companies/{t}/{transit-grants,transit-blocks,ot-consultation-restrictions,ot-blocking-policies,ot-prenda-document-policies}` | **T** |
 | `/api/v1/admin/companies/{t}/{mandate-signers,personalized-documents,document-params}` | **T** |
 | `/api/v1/admin/companies/{t}/{legal-representatives,deeds,signature-vault,identity-validations}` | **T (propuesta, D3)** |
 | `/api/v1/admin/companies/{t}/notification-delivery-logs`, `/admin/plataforma/notificaciones` (canales, buzón) | **P** |
@@ -317,7 +317,7 @@ un endpoint sin `RequireAuthorization` es anónimo.
 | SuperAdmin/Security{Modules,Permissions,Roles,Users,Audit}Endpoints.cs | /api/v1/superadmin | CRUD de módulos, permisos, roles; restaurar usuario; auditoría | SuperAdmin | P |
 | SuperAdmin/CatalogEndpoints.cs | /api/v1/superadmin | procedure-entities (T); external-data-sources, consultation-templates (P) | SuperAdmin | P/T |
 | SuperAdmin/ProcedureTypeEndpoints.cs | /api/v1/superadmin/procedure-types | CRUD, publish, archive, wizard, reglas, perfil, pasos, validate | SuperAdmin | T |
-| AdminCompaniesEndpoints.cs | /api/v1/admin/companies | index, detalle, crear, editar, status, parent, settings, whitelist, audit-log (P); transit-grants/blocks/agreements, ot-* policies (T) | AdminCompany / SuperAdmin | P/T |
+| AdminCompaniesEndpoints.cs | /api/v1/admin/companies | index, detalle, crear, editar, status, parent, settings, whitelist, audit-log (P); transit-grants/blocks, ot-* policies (T) | AdminCompany / SuperAdmin | P/T |
 | AdminCompaniesBrandingEndpoints.cs, AdminCompaniesDomainEndpoints.cs | /api/v1/admin/companies/{t}/{branding,domain} | marca y dominio | SuperAdmin | P |
 | CompanyBrandingEndpoints.cs, CompanyDomainEndpoints.cs | /api/v1/company/{branding,domain} | autogestión | MarcaBlancaHeadCompany | P |
 | Internal/InternalDomainsEndpoints.cs | /api/v1/internal/domains | active, pending-certificate, certificate | anónimo (interno) | P |
