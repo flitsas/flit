@@ -1224,13 +1224,18 @@ public sealed class GenerarFurHandler(
     {
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
+        // HU #13824 - salida de borrador: una identidad vencida a mano solo vale si el tramite salio ANTES del vencimiento.
+        var salidaDeBorrador = IdentityApprovalResolver.TieneVencidaManualLocal(instance)
+            ? await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct)
+            : null;
+
         // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
         // PARIDAD EXACTA con el gate (IdentityApprovalResolver.HasLocalVigente): sin él, una fila propia con
         // documento desfasado (documento editado tras validar) haría que el gate aprobara por la identidad
         // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now)
+            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now, salidaDeBorrador)
             && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento));
         if (own is not null)
             return own;
@@ -1243,8 +1248,12 @@ public sealed class GenerarFurHandler(
             // HU #13824 — fuera de borrador el FUR conserva el sello de una identidad que un Super Admin venció a mano.
             if (referenciada is null
                 && !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+            {
+                salidaDeBorrador ??= await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct);
                 referenciada = await repo.FindProtegidaPorVencimientoManualAsync(
-                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
+                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now,
+                    salidaDeBorrador, ct);
+            }
             return referenciada;
         }
 

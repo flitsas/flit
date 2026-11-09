@@ -1544,6 +1544,88 @@ public sealed class FurHandlerTests
         return (handler, capturing, id, tenant, sig);
     }
 
+    // HU #13824 (regresión FT9-0000001) — el FUR solo sella una identidad vencida a mano si el trámite salió de borrador
+    // ANTES del vencimiento; si salió después (matrícula sin placa exenta de firma) nunca tuvo esa firma.
+
+    private async Task<CapturingFurGenerator> FurConIdentidadVencidaAMano(DateTimeOffset? salida)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var ahora = DateTimeOffset.UtcNow;
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        instance.Status = TramiteEstado.Preasignacion;
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorNatural(instance, "comprador", "COMPRADOR", "1"));
+
+        // Identidad de OTRO trámite, aprobada hace 10 días y vencida a mano hace 5 (fin de vigencia previo dentro de 20).
+        var vencida = Bio(parte: null);
+        vencida.ValidatedAt = ahora.AddDays(-10);
+        vencida.ValidUntil = ahora.AddDays(20);
+        vencida.VencerManualmente(ahora.AddDays(-5));
+        vencida.ValidUntilPrevious = ahora.AddDays(20);
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+        _repo.GetSalidaDeBorradorAtAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(salida);
+        _repo.FindProtegidaPorVencimientoManualAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(),
+                Arg.Any<DateTimeOffset?>(), Arg.Any<CancellationToken>())
+            .Returns(call => BiometricRules.EsAprobadaVigenteParaTramite(
+                vencida, TramiteEstado.Entregado, call.ArgAt<DateTimeOffset>(3), call.ArgAt<DateTimeOffset?>(4))
+                ? vencida
+                : null);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        return capturing;
+    }
+
+    [Fact]
+    public async Task Fur_TramiteQueSalioDeBorradorDespuesDelVencimientoManual_NoSellaLaIdentidad()
+    {
+        var capturing = await FurConIdentidadVencidaAMano(salida: DateTimeOffset.UtcNow.AddDays(-1));
+
+        capturing.Captured!.IdentidadValidada.Should().BeFalse();
+        capturing.Captured.SellosIdentidad.Should().NotContainKey("comprador");
+    }
+
+    [Fact]
+    public async Task Fur_SalioSinFirma_LaValidaronDespues_YLaVencieron_NoSellaLaIdentidad()
+    {
+        // Escenario T1..T4: la identidad se aprobó hace 10 días, pero el trámite salió de borrador hace 12 (sin firma).
+        var capturing = await FurConIdentidadVencidaAMano(salida: DateTimeOffset.UtcNow.AddDays(-12));
+
+        capturing.Captured!.IdentidadValidada.Should().BeFalse();
+        capturing.Captured.SellosIdentidad.Should().NotContainKey("comprador");
+    }
+
+    [Fact]
+    public async Task Fur_TramiteQueSalioFirmadoYDespuesVencieronLaIdentidad_SigueSellado()
+    {
+        var capturing = await FurConIdentidadVencidaAMano(salida: DateTimeOffset.UtcNow.AddDays(-8));
+
+        capturing.Captured!.IdentidadValidada.Should().BeTrue();
+        capturing.Captured.SellosIdentidad.Should().ContainKey("comprador");
+    }
+
+    [Fact]
+    public async Task Fur_SinHistorialDeSalida_ConservaElSelloActual()
+    {
+        var capturing = await FurConIdentidadVencidaAMano(salida: null);
+
+        capturing.Captured!.IdentidadValidada.Should().BeTrue();
+        capturing.Captured.SellosIdentidad.Should().ContainKey("comprador");
+    }
+
     [Fact]
     public async Task Generar_CertificadoDownloadFails_GeneratesFurWithoutCertificate()
     {

@@ -127,7 +127,10 @@ public sealed class DescargarCertificadoIdentidadHandler(
             return false;
 
         // HU #13824 — un trámite fuera de borrador conserva su certificado aunque la identidad se haya vencido a mano.
-        if (!BiometricRules.EsAprobadaVigenteParaTramite(bio, instance.Status, DateTimeOffset.UtcNow))
+        var salidaDeBorrador = bio.ExpiredManuallyAt is null
+            ? null
+            : await IdentityApprovalResolver.SalidaDeBorradorAsync(repo, instance, ct);
+        if (!BiometricRules.EsAprobadaVigenteParaTramite(bio, instance.Status, DateTimeOffset.UtcNow, salidaDeBorrador))
             return false;
 
         return instance.Actors.Any(a =>

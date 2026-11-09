@@ -161,7 +161,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "2. Cola de placa (matrícula inicial en ruta larga)",
         paragraphs: [],
         bullets: [
-          "Preasignación → «Asignar placa»: escribe la placa libre que le vas a dar al trámite. El dígito de preferencia que indicó el gestor aparece como guía, sin obligarte a nada. Al asignar, el trámite pasa a Asignado y la compañía recibe correo.",
+          "Preasignación → «Asignar placa»: escribe la placa libre que le vas a dar al trámite. El dígito de preferencia que indicó el gestor aparece como guía, sin obligarte a nada. El trámite puede llegar aquí sin la firma del actor: se exige cuando el gestor lo envía con la placa ya asignada. Al asignar, el trámite pasa a Asignado y la compañía recibe correo.",
           "Asignado → «Corregir placa»: una única corrección dentro de la hora siguiente a la asignación. Vencida la hora, la acción se deshabilita.",
           "Asignado → «Liberar placa» (con motivo): el trámite vuelve a Preasignación y la placa queda disponible. Queda en el historial.",
           "El gestor, en Asignado, gestiona SOAT e impuestos y «Envía al OT»: el trámite entra a Entregado.",

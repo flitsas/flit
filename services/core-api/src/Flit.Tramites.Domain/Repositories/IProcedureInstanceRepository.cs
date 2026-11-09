@@ -431,14 +431,40 @@ public interface IProcedureInstanceRepository
     /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) cuyo fin de vigencia previo aún no llega. Para el
     /// FUR, el certificado y el gate de un trámite que NO está en borrador. Solo lectura.
     /// </summary>
+    /// <param name="salidaDeBorradorAt">
+    /// Salida de borrador del trámite (<see cref="GetSalidaDeBorradorAtAsync"/>); solo cuentan las identidades vencidas a
+    /// mano que estaban aprobadas al salir y aún no vencidas (<see cref="Entities.BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?)"/>).
+    /// Nulo = sin historial (legado): comportamiento previo.
+    /// </param>
     Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
-        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt, CancellationToken ct = default);
+
+    /// <summary>
+    /// Momento en que el trámite salió de borrador por primera vez (primera fila de
+    /// <c>procedure_instance_status_history</c> con <c>from_status = 'borrador'</c>), o <c>null</c> si no hay fila
+    /// (legado o migrados). Un trámite no vuelve a borrador, así que es único.
+    /// </summary>
+    Task<DateTimeOffset?> GetSalidaDeBorradorAtAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="GetSalidaDeBorradorAtAsync"/> en lote (UNA consulta, sin N+1) para el listado. Filtra por
+    /// <paramref name="tenantIds"/> (la vista de red es multi-tenant) además de por id. Las instancias sin fila de salida no
+    /// aparecen en el diccionario.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ListSalidasDeBorradorAsync(
+        IReadOnlyCollection<Guid> tenantIds, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
 
     /// <summary>
     /// HU #13824 — claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de las identidades vencidas a mano que los
     /// trámites ya fuera de borrador siguen honrando, en UNA consulta (listado de trámites, sin N+1). Set vacío si no hay.
     /// </summary>
-    Task<IReadOnlySet<string>> ListProtegidasPorVencimientoManualKeysAsync(
+    /// <remarks>
+    /// El valor son TODAS las identidades vencidas a mano de esa llave (aprobación y vencimiento): un trámite conserva la
+    /// firma si CUALQUIERA estaba aprobada y sin vencer cuando salió de borrador
+    /// (<see cref="Entities.BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, IReadOnlyList{Entities.IdentidadVencidaManual}?)"/>).
+    /// </remarks>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<Entities.IdentidadVencidaManual>>> ListProtegidasPorVencimientoManualKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
