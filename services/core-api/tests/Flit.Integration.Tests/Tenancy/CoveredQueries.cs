@@ -72,7 +72,9 @@ internal static class CoveredQueries
         new("Q08", "ListProcedureInstancesFilteredHandler (historial por placa, request de PlateHistoryScope)", "Guid? TenantId", 1, SupportsGlobal: true),
         new("Q09", "CompanyReadRepository.ListAsync (listado de compañías)", "— (SuperAdmin)", 1, SupportsGlobal: true, TenantOnly: true),
         new("Q10", "CompanyReadRepository.GetByIdAsync", "Guid tenantId", 1, SupportsGlobal: false),
-        new("Q11", "CompanyDocumentParamRepository.ListByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
+        // HU #14412: Q11 era el repositorio de preferencias de documentos, retirado con su tabla. El código lo toma otra
+        // lectura por tenant sin cubrir para conservar la numeración consecutiva que exige CoveredQueriesInventoryTests.
+        new("Q11", "CompanyPersonalizedDocumentRepository.ListByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
         // HU #14359: Q12 era el repositorio de convenios, retirado con su tabla. El código lo toma otra lectura
         // por tenant sin cubrir para conservar la numeración consecutiva que exige CoveredQueriesInventoryTests.
         new("Q12", "TransitGrantRepository.ListEnabledOfficeIdsAsync", "Guid tenantId", 1, SupportsGlobal: false),
@@ -247,7 +249,7 @@ internal static class CoveredQueries
 
             case "Q11":
                 {
-                    var rows = await new CompanyDocumentParamRepository(ctx).ListByTenantAsync(tenant, ct);
+                    var rows = await new CompanyPersonalizedDocumentRepository(ctx).ListByTenantAsync(tenant, ct);
                     return Rows(rows.Select(r => r.Id));
                 }
 

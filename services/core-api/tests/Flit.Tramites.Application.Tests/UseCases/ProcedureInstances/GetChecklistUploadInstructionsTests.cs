@@ -22,11 +22,6 @@ public sealed class GetChecklistUploadInstructionsTests
         "Sube el Paz y Salvo de impuestos vehiculares expedido por la Secretaría de Hacienda.";
 
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
-    private readonly IChecklistCompanyParamsProvider _companyParams = Substitute.For<IChecklistCompanyParamsProvider>();
-
-    public GetChecklistUploadInstructionsTests() =>
-        _companyParams.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>([]));
 
     /// <summary>Catálogo en memoria: solo los tipos que el test declara tienen regla.</summary>
     private sealed class FakeCatalog(params DocumentTypeRule[] rules) : IDocumentTypeCatalog
@@ -59,7 +54,7 @@ public sealed class GetChecklistUploadInstructionsTests
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(Traspaso(id, tenant));
 
-        var handler = new GetChecklistHandler(_repo, _companyParams, documentTypes: catalog);
+        var handler = new GetChecklistHandler(_repo, documentTypes: catalog);
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();

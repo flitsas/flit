@@ -44,11 +44,10 @@ public static class MatrixChecklistItems
 /// Devuelve <c>null</c> cuando el proveedor no está inyectado (tests): el llamador usa el
 /// gate del catálogo. Matriz vacía = sin documentos en Documental ⇒ checklist vacío y
 /// completo (nada que cargar). Con matriz presente, computa desde la matriz + reglas
-/// condicionales (RF30) + parámetros por gestora (RF31).
+/// condicionales (RF30).
 /// </para>
 /// </summary>
 public sealed class ChecklistMatrixCompleteness(
-    IChecklistCompanyParamsProvider companyParams,
     IResolvedChecklistMatrixProvider? matrixProvider = null,
     IDocumentTypeCatalog? documentTypes = null)
 {
@@ -84,11 +83,10 @@ public sealed class ChecklistMatrixCompleteness(
         var codigo = instance.TypeCode;
         var context = TramiteDocumentContextMapper.From(instance);
         var rules = ConditionalDocumentRules.For(codigo);
-        var parametros = await companyParams.GetForTenantAsync(tenantId, ct).ConfigureAwait(false);
         var baseItems = MatrixChecklistItems.Build(codigo, carga);
 
         var computed = ChecklistEngine.ComputeFromMatrix(
-            codigo, baseItems, manual, docTipos, context, rules, parametros);
+            codigo, baseItems, manual, docTipos, context, rules);
         if (documentTypes is not null)
         {
             var generated = await documentTypes.ListSystemGeneratedCodesAsync(ct).ConfigureAwait(false);

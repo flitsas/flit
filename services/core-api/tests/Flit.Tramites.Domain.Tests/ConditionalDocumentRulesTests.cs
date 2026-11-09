@@ -126,32 +126,4 @@ public sealed class ConditionalDocumentRulesTests
         ConditionalDocumentRules.For("no_existe").Should().BeEmpty();
         ConditionalDocumentRules.For(null).Should().BeEmpty();
     }
-
-    // ── Parámetros por gestora ────────────────────────────────────────────────
-
-    [Fact]
-    public void ApplyCompanyParams_SinParametros_DejaLaListaIgual()
-    {
-        var baseItems = new[] { Opt("soat"), Obl("factura") };
-        ChecklistEngine.ApplyCompanyParams(baseItems, null).Should().BeEquivalentTo(baseItems);
-        ChecklistEngine.ApplyCompanyParams(baseItems, []).Should().BeEquivalentTo(baseItems);
-    }
-
-    [Fact]
-    public void ApplyCompanyParams_OcultoObligatorioOpcional()
-    {
-        var baseItems = new[] { Opt("soat"), Obl("factura"), Opt("cepd") };
-        var parametros = new[]
-        {
-            new CompanyDocumentParam("soat", CompanyDocumentParamState.Obligatorio),
-            new CompanyDocumentParam("factura", CompanyDocumentParamState.Opcional),
-            new CompanyDocumentParam("cepd", CompanyDocumentParamState.Oculto),
-        };
-
-        var result = ChecklistEngine.ApplyCompanyParams(baseItems, parametros);
-
-        result.Single(i => i.Id == "soat").Obligatorio.Should().BeTrue();
-        result.Single(i => i.Id == "factura").Obligatorio.Should().BeFalse();
-        result.Should().NotContain(i => i.Id == "cepd");
-    }
 }
