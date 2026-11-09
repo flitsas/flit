@@ -28,8 +28,8 @@ type Carga = 'loading' | 'error' | 'ready';
 export function Dato({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-medium text-[#59677D] dark:text-white/70">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold text-flit-primary dark:text-white">{children}</dd>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-sm font-semibold text-foreground">{children}</dd>
     </div>
   );
 }
@@ -249,16 +249,16 @@ function DetalleCuerpo({
           <>
             <section
               aria-label="Datos del caso"
-              className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10"
+              className="rounded-2xl border border-border p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-lg font-bold text-flit-primary dark:text-white">{detail.fullName}</p>
-                  <p className="font-mono text-sm text-[#59677D] dark:text-white/70">{detail.documentNumber}</p>
+                  <p className="text-lg font-bold text-foreground">{detail.fullName}</p>
+                  <p className="font-mono text-sm text-muted-foreground">{detail.documentNumber}</p>
                 </div>
                 <ManualStatusBadge status={detail.status} />
               </div>
-              <dl className="mt-3 grid gap-3 border-t border-[#DFE5ED] pt-3 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/10">
+              <dl className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Dato label="Compañía">{detail.tenantName}</Dato>
                 <Dato label="Origen">{manualOriginLabel(detail.origin)}</Dato>
                 <Dato label="Fecha de activación">{formatFechaHora(detail.activatedAt)}</Dato>
@@ -269,8 +269,8 @@ function DetalleCuerpo({
               <div className="mt-3 flex items-start gap-2 text-sm">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-flit-brand" aria-hidden />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-[#59677D] dark:text-white/70">Consentimiento de tratamiento de datos</p>
-                  <p className="mt-0.5 font-semibold text-flit-primary dark:text-white">
+                  <p className="text-xs font-medium text-muted-foreground">Consentimiento de tratamiento de datos</p>
+                  <p className="mt-0.5 font-semibold text-foreground">
                     {detail.consentAt
                       ? `Aceptado el ${formatFechaHora(detail.consentAt)}${detail.consentTextVersion ? ` · texto ${detail.consentTextVersion}` : ''}`
                       : 'Sin constancia: el cliente aún no ha aceptado.'}
@@ -298,10 +298,10 @@ function DetalleCuerpo({
             {!sinCapturas && (
               <section aria-labelledby={`${id}-capturas`}>
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 id={`${id}-capturas`} className="text-sm font-bold text-flit-primary dark:text-white">
+                  <h3 id={`${id}-capturas`} className="text-sm font-bold text-flit-primary">
                     Capturas del cliente
                   </h3>
-                  <p className="text-xs text-[#59677D] dark:text-white/70">Toca una foto para verla en grande.</p>
+                  <p className="text-xs text-muted-foreground">Toca una foto para verla en grande.</p>
                 </div>
                 <ManualImageGallery client={client} id={detail.id} images={detail.images} onViewerChange={onViewerChange} validacionFotos={detail.validacionFotos} />
               </section>
@@ -309,7 +309,7 @@ function DetalleCuerpo({
           </>
         )}
       </UiStateBoundary>
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-[#DFE5ED] bg-white px-1 pb-1 pt-3 dark:border-white/10 dark:bg-[#162744]">
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-1 pb-1 pt-3">
         <button type="button" onClick={onClose} className={MANUAL_BTN_SECUNDARIO}>
           Cerrar
         </button>

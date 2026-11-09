@@ -204,7 +204,7 @@ export function PersonIdentityDetailDrawer({
         onClick={onClose}
       />
       <div
-        className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border bg-white shadow-2xl dark:bg-[#0B0F14]"
+        className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border bg-card shadow-2xl"
         style={{ borderColor: FLIT.border.soft }}
       >
         <header className="flex shrink-0 items-center justify-between gap-3 px-6 py-4">
@@ -236,7 +236,7 @@ export function PersonIdentityDetailDrawer({
               type="button"
               onClick={onClose}
               aria-label="Cerrar proceso"
-              className="grid h-8 w-8 place-items-center rounded-lg hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+              className="grid h-8 w-8 place-items-center rounded-lg hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
             >
               <X className="h-4 w-4 opacity-70" aria-hidden="true" />
             </button>
@@ -247,9 +247,9 @@ export function PersonIdentityDetailDrawer({
           {loading && !data && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>
-              <div className="h-4 w-2/3 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-              <div className="h-24 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
-              <div className="h-32 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+              <div className="h-4 w-2/3 animate-pulse rounded bg-secondary" />
+              <div className="h-24 w-full animate-pulse rounded-xl bg-secondary" />
+              <div className="h-32 w-full animate-pulse rounded-xl bg-secondary" />
             </div>
           )}
 
@@ -277,7 +277,7 @@ export function PersonIdentityDetailDrawer({
           {data && latest && latestMeta && (
             <div className="space-y-4 text-xs">
               <div
-                className="rounded-xl border bg-white px-4 py-3"
+                className="rounded-xl border bg-card px-4 py-3"
                 style={{ borderColor: FLIT.border.soft }}
               >
                 <div className="flex flex-wrap items-center gap-2">
@@ -289,7 +289,7 @@ export function PersonIdentityDetailDrawer({
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[15px] font-bold uppercase tracking-wide text-flit-primary dark:text-white">
+                    <p className="text-[15px] font-bold uppercase tracking-wide text-foreground">
                       {personName}
                     </p>
                   )}
@@ -385,12 +385,12 @@ function ValidationAccordionItem({
     <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: FLIT.border.soft }}>
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[rgba(79,116,201,0.05)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#4F74C9]"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="text-[13px] font-semibold text-flit-primary dark:text-white">{title}</span>
+        <span className="text-[13px] font-semibold text-foreground">{title}</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
           style={{ color: FLIT.brand.blue }}
@@ -483,7 +483,7 @@ function ValidationAccordionItem({
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
           <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
-            <p className="mb-1 text-[13px] font-semibold text-flit-primary dark:text-white">
+            <p className="mb-1 text-[13px] font-semibold text-foreground">
               Tracking de auditoría y proceso (tiempo real)
             </p>
             <p className="mb-2 text-[11px]" style={{ color: FLIT.text.secondary }}>
