@@ -10,6 +10,13 @@ const DROPPED_REQUEST = new Set([
 ]);
 const DROPPED_RESPONSE = new Set(["content-encoding", "content-length", "transfer-encoding", "connection"]);
 
+/**
+ * Tope por petición (GDC punto 10): 100 MB de archivos + 1 MB de sobre multipart, el mismo valor que el gateway y
+ * core-comparendos aceptan en la carga OCR. El proxy lee el cuerpo completo en memoria, así que por encima responde 413
+ * antes de leerlo. Las demás rutas siguen con el límite del gateway (más bajo).
+ */
+export const MAX_BODY_BYTES = 101 * 1024 * 1024;
+
 export interface ApiProxyOptions {
   productCode: string;
   /** Prefijo del lado de la API; por defecto /api/v1. */
@@ -19,6 +26,8 @@ export interface ApiProxyOptions {
    * la recuperación de contraseña del hub. Por defecto, sin sesión responde 401 SESSION_EXPIRED sin llamar a la API.
    */
   allowAnonymous?: boolean;
+  /** Tope del cuerpo en bytes; por defecto {@link MAX_BODY_BYTES}. */
+  maxBodyBytes?: number;
   config?: () => AuthConfig;
 }
 
@@ -26,6 +35,7 @@ export interface ApiProxyOptions {
 export function createApiProxy(options: ApiProxyOptions): (request: Request, path: string[]) => Promise<Response> {
   const prefix = options.prefix ?? "/api/v1";
   const config = options.config ?? (() => authConfig(options.productCode));
+  const maxBodyBytes = options.maxBodyBytes ?? MAX_BODY_BYTES;
 
   return async (request, path) => {
     const cfg = config();
@@ -46,12 +56,20 @@ export function createApiProxy(options: ApiProxyOptions): (request: Request, pat
     if (cfg.internalApiKey) headers.set("x-internal-key", cfg.internalApiKey);
 
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
+    const declared = Number(request.headers.get("content-length") ?? 0);
+    let body: ArrayBuffer | undefined;
+    if (hasBody) {
+      if (declared > maxBodyBytes) return withCookies(tooLarge(), setCookies);
+      body = await request.arrayBuffer();
+      // Sin content-length (cuerpo por partes) el tope se revisa ya leído.
+      if (body.byteLength > maxBodyBytes) return withCookies(tooLarge(), setCookies);
+    }
     let upstream: Response;
     try {
       upstream = await fetch(`${cfg.apiOrigin}${prefix}/${path.map(encodeURIComponent).join("/")}${incoming.search}`, {
         method: request.method,
         headers,
-        body: hasBody ? await request.arrayBuffer() : undefined,
+        body,
         redirect: "manual",
         cache: "no-store",
       });
@@ -68,6 +86,13 @@ export function createApiProxy(options: ApiProxyOptions): (request: Request, pat
     const dead = session && upstream.status === 401 ? clearSessionCookies(request, cfg) : [];
     return withCookies(new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders }), [...setCookies, ...dead]);
   };
+}
+
+function tooLarge(): Response {
+  return Response.json(
+    { code: "PAQUETE_DEMASIADO_GRANDE", error: "La carga supera 100 MB. Pártela en dos y envíala por separado." },
+    { status: 413 },
+  );
 }
 
 function withCookies(response: Response, cookies: string[]): Response {
