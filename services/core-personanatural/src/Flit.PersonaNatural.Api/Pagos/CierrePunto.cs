@@ -47,9 +47,11 @@ public sealed record CierrePunto(
 /// Sin pago confirmado responde 409 <c>pago_pendiente</c>.
 /// </summary>
 public sealed class CierrePuntoService(
-    PersonaNaturalDb db, SesionService sesiones, RadicacionService radicacion, ICorreoDeCierre correo)
+    PersonaNaturalDb db, SesionService sesiones, RadicacionService radicacion, ICorreoDeCierre correo, BloqueoConsultaCierre bloqueo)
 {
     public const string CodigoPagoPendiente = "pago_pendiente";
+    public const string CodigoNoEncontrado = "no_encontrado";
+    public const string CodigoConsultaBloqueada = "consulta_bloqueada";
     internal const string MotivoGenerico = "El organismo no pudo registrar el trámite. Acércate al organismo con tu código para que lo revisen.";
 
     /// <summary>Cierre del trámite de la sesión (cookie del punto + token del trámite).</summary>
@@ -64,7 +66,28 @@ public sealed class CierrePuntoService(
     }
 
     /// <summary>Cierre por código público (o radicado de FLIT 2.0) desde «Consultar» del punto: solo del organismo de la cookie.</summary>
-    public async Task<CierrePunto> PorCodigoAsync(OrganismoPunto punto, string? codigo, CancellationToken ct)
+    public async Task<CierrePunto> PorCodigoAsync(OrganismoPunto punto, string? codigo, byte[]? ipHash, CancellationToken ct)
+    {
+        // Mismo 404 para «no existe», «es de otro organismo» y «no tiene pago»: ninguna respuesta revela que el código existe.
+        // Cada 404 gasta cupo del freno (cookie + IP); un acierto lo libera.
+        try
+        {
+            var cierre = await BuscarPorCodigoAsync(punto, codigo, ct).ConfigureAwait(false);
+            await bloqueo.LiberarAsync(punto.OrganismoId, ipHash, ct).ConfigureAwait(false);
+            return cierre;
+        }
+        catch (ReglaDeNegocioException ex) when (ex.Codigo is "solicitud_no_encontrada" or CompletitudRequisitosPuntoService.CodigoOrganismoAjeno or CodigoPagoPendiente)
+        {
+            await bloqueo.RegistrarFalloAsync(punto.OrganismoId, ipHash, ct).ConfigureAwait(false);
+            throw new ReglaDeNegocioException(StatusCodes.Status404NotFound, CodigoNoEncontrado, "No encontrado", "No encontramos ese trámite.");
+        }
+    }
+
+    /// <summary>Cuánto falta para que el freno de enumeración libere a esta cookie + IP, o <c>null</c> si puede consultar.</summary>
+    public Task<TimeSpan?> EsperaDeConsultaAsync(OrganismoPunto punto, byte[]? ipHash, CancellationToken ct) =>
+        bloqueo.EsperaAsync(punto.OrganismoId, ipHash, ct);
+
+    private async Task<CierrePunto> BuscarPorCodigoAsync(OrganismoPunto punto, string? codigo, CancellationToken ct)
     {
         var norma = PiiHasher.NormalizarRadicado(codigo ?? string.Empty);
         SolicitudTramite? s = null;

@@ -1,4 +1,6 @@
+using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Punto;
+using Flit.PersonaNatural.Api.Sesiones;
 using Flit.PersonaNatural.Api.Solicitudes;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -18,6 +20,7 @@ public static class PagoPuntoEndpoints
         services.TryAddScoped<IRegistroDePagos, RegistroDePagos>();
         services.TryAddScoped<PagoPuntoService>();
         services.TryAddScoped<ICorreoDeCierre, CorreoDeCierre>();
+        services.TryAddScoped<BloqueoConsultaCierre>();
         services.TryAddScoped<CierrePuntoService>();
         return services;
     }
@@ -48,8 +51,19 @@ public static class PagoPuntoEndpoints
             Results.Json(await s.DelTramiteAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
 
         // Para «Consultar» del punto: quien vuelve con el código público ve el mismo cierre (solo cookie del punto, mismo organismo).
+        // Freno a la enumeración de códigos secuenciales: 10/min por cookie + IP y bloqueo de 10 min tras 5 fallos seguidos (429).
+        // Todo fallo (no existe, otro organismo, sin pago) es el mismo 404 no_encontrado.
         pago.MapGet("/cierre/{codigo}", (string codigo, HttpContext http, CancellationToken ct) => AtenderCierre(http, async (s, sesion, _) =>
-            Results.Json(await s.PorCodigoAsync(sesion, codigo, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+        {
+            var ipHash = http.RequestServices.GetRequiredService<PiiHasher>().HashIp(http.Connection.RemoteIpAddress?.ToString());
+            if (await s.EsperaDeConsultaAsync(sesion, ipHash, ct).ConfigureAwait(false) is { } espera)
+            {
+                http.Response.Headers.RetryAfter = Math.Ceiling(espera.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return SesionEndpoints.Problema(StatusCodes.Status429TooManyRequests, "Demasiados intentos", "Espere unos minutos antes de volver a intentar.", CierrePuntoService.CodigoConsultaBloqueada);
+            }
+
+            return Results.Json(await s.PorCodigoAsync(sesion, codigo, ipHash, ct).ConfigureAwait(false), PuntoEndpoints.Json);
+        })).RequireRateLimiting(AbusoEndpoints.PoliticaCierrePorCodigo);
 
         pago.AddEndpointFilter(PuntoEndpoints.ConSesionDePunto);
         return punto;

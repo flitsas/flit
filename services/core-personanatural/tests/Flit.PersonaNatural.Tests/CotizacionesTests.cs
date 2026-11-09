@@ -64,11 +64,16 @@ internal sealed class EnviadorFalso : IEnviadorCotizacion
     public bool Acepta = true;
     public bool Lanza;
 
+    /// <summary>El transporte no responde hasta que se cancela (para probar el tope de espera).</summary>
+    public bool Cuelga;
+
     public Task<bool> EnviarAsync(string correo, string asunto, string html, CancellationToken ct) =>
         EnviarAsync(correo, asunto, html, "persona-natural.cotizacion", ct);
 
-    public Task<bool> EnviarAsync(string correo, string asunto, string html, string plantilla, CancellationToken ct)
+    public async Task<bool> EnviarAsync(string correo, string asunto, string html, string plantilla, CancellationToken ct)
     {
+        if (Cuelga)
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
         if (Lanza)
             throw new InvalidOperationException("transporte caído");
         lock (_candado)
@@ -77,7 +82,7 @@ internal sealed class EnviadorFalso : IEnviadorCotizacion
             Plantillas.Add(plantilla);
         }
 
-        return Task.FromResult(Acepta);
+        return Acepta;
     }
 }
 

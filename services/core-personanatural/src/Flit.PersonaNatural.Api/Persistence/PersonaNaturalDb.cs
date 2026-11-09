@@ -237,16 +237,21 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(c => c.ValorCop).HasColumnName("amount_cop");
             e.Property(c => c.Medio).HasColumnName("method").HasMaxLength(20);
             e.Property(c => c.MedioCaja).HasColumnName("cash_method").HasMaxLength(20);
-            e.Property(c => c.MedioDetalle).HasColumnName("method_detail").HasMaxLength(200);
+            e.Property(c => c.MedioDetalle).HasColumnName("method_detail").HasMaxLength(200)
+                .HasComment("@pii:low Texto libre del cajero cuando el medio de caja es «otro»; no debe llevar datos personales, pero puede.");
             e.Property(c => c.PrefacturaAdjuntoId).HasColumnName("invoice_attachment_id");
-            e.Property(c => c.PagadoPor).HasColumnName("paid_by").HasMaxLength(120);
+            e.Property(c => c.PagadoPor).HasColumnName("paid_by").HasMaxLength(120)
+                .HasComment("@pii:low Identificador del operador de caja que confirmó el pago.");
             e.Property(c => c.PagadoEn).HasColumnName("paid_at");
             e.Property(c => c.Lineas).HasColumnName("lines").HasColumnType("jsonb");
             e.Property(c => c.VersionTarifa).HasColumnName("tariff_version").HasMaxLength(1000);
-            e.Property(c => c.CorreoCierreEnviadoEn).HasColumnName("closure_email_sent_at");
-            e.Property(c => c.AnuladoPor).HasColumnName("cancelled_by").HasMaxLength(120);
+            e.Property(c => c.CorreoCierreEnviadoEn).HasColumnName("closure_email_sent_at")
+                .HasComment("Momento en que se reclamó el envío único del correo de cierre; nulo = pendiente (el reclamo se libera si el transporte falla).");
+            e.Property(c => c.AnuladoPor).HasColumnName("cancelled_by").HasMaxLength(120)
+                .HasComment("@pii:low Identificador de quien anuló el cobro.");
             e.Property(c => c.AnuladoEn).HasColumnName("cancelled_at");
-            e.Property(c => c.AnulacionMotivo).HasColumnName("cancellation_reason").HasMaxLength(500);
+            e.Property(c => c.AnulacionMotivo).HasColumnName("cancellation_reason").HasMaxLength(500)
+                .HasComment("@pii:low Motivo de anulación en texto libre; puede traer datos personales.");
             e.Property(c => c.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
             e.Property(c => c.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("now()");
             e.Property(c => c.RowVersion).HasColumnName("row_version").HasDefaultValue(1L).IsConcurrencyToken();

@@ -209,7 +209,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("AnulacionMotivo")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
-                        .HasColumnName("cancellation_reason");
+                        .HasColumnName("cancellation_reason")
+                        .HasComment("@pii:low Motivo de anulación en texto libre; puede traer datos personales.");
 
                     b.Property<DateTimeOffset?>("AnuladoEn")
                         .HasColumnType("timestamp with time zone")
@@ -218,7 +219,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("AnuladoPor")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
-                        .HasColumnName("cancelled_by");
+                        .HasColumnName("cancelled_by")
+                        .HasComment("@pii:low Identificador de quien anuló el cobro.");
 
                     b.Property<string>("Codigo")
                         .IsRequired()
@@ -228,7 +230,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("CorreoCierreEnviadoEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("closure_email_sent_at");
+                        .HasColumnName("closure_email_sent_at")
+                        .HasComment("Momento en que se reclamó el envío único del correo de cierre; nulo = pendiente (el reclamo se libera si el transporte falla).");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -263,7 +266,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("MedioDetalle")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("method_detail");
+                        .HasColumnName("method_detail")
+                        .HasComment("@pii:low Texto libre del cajero cuando el medio de caja es «otro»; no debe llevar datos personales, pero puede.");
 
                     b.Property<Guid>("OrganismoId")
                         .HasColumnType("uuid")
@@ -276,7 +280,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("PagadoPor")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
-                        .HasColumnName("paid_by");
+                        .HasColumnName("paid_by")
+                        .HasComment("@pii:low Identificador del operador de caja que confirmó el pago.");
 
                     b.Property<Guid?>("PrefacturaAdjuntoId")
                         .HasColumnType("uuid")

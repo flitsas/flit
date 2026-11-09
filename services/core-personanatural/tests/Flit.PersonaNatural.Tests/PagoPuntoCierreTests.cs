@@ -121,12 +121,12 @@ public sealed partial class PagoPuntoTests
     }
 
     [Fact]
-    public async Task HU14464_ConsultarPorCodigo_ElMismoCierreDelMismoOrganismo_YSinPagoEs409()
+    public async Task HU14464_ConsultarPorCodigo_ElMismoCierreDelMismoOrganismo_YSinPagoEs404Generico()
     {
         await IniciarAsync();
         var (id, token) = await EnPagoAsync();
         var codigo = await CodigoPublicoAsync(id);
-        (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.NotFound, "sin pago no se revela que el código existe");
         await Pago(HttpMethod.Post, "/caja", token);
         await PagarCajaAsync(id);
         await ResolverAsync(id, "creada", "TR-2026-000124");
@@ -156,6 +156,107 @@ public sealed partial class PagoPuntoTests
         (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await Pago(HttpMethod.Get, "/cierre/PN-2026-999999", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await Pago(HttpMethod.Get, "/cierre", token)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task HU14464_ConsultarPorCodigo_InexistenteOtroOrganismoYSinPago_RespondenElMismo404NoEncontrado()
+    {
+        await IniciarAsync();
+        var (idSinPago, _) = await EnPagoAsync();
+        var sinPago = await CodigoPublicoAsync(idSinPago);
+
+        var inexistente = await Pago(HttpMethod.Get, "/cierre/PN-2026-999999", null);
+        var conSolicitudSinPago = await Pago(HttpMethod.Get, $"/cierre/{sinPago}", null);
+        await using (var db = _host.NuevaDb())
+        {
+            await db.Set<SolicitudTramite>().Where(s => s.Id == idSinPago).ExecuteUpdateAsync(set => set.SetProperty(s => s.OrganismoId, Guid.NewGuid()), TestContext.Current.CancellationToken);
+        }
+
+        var otroOrganismo = await Pago(HttpMethod.Get, $"/cierre/{sinPago}", null);
+
+        foreach (var r in new[] { inexistente, conSolicitudSinPago, otroOrganismo })
+        {
+            r.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await PortalHost.CodigoAsync(r)).Should().Be("no_encontrado");
+        }
+    }
+
+    [Fact]
+    public async Task HU14464_ConsultarPorCodigo_TrasCincoFallosSeguidos_Bloquea429_YSeLiberaAlPasarLaVentana()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var codigo = await CodigoPublicoAsync(id);
+
+        for (var i = 0; i < 5; i++)
+            (await Pago(HttpMethod.Get, $"/cierre/PN-2026-99999{i}", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var bloqueada = await Pago(HttpMethod.Get, $"/cierre/{codigo}", null);
+        bloqueada.StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "el bloqueo cubre también un código válido");
+        (await PortalHost.CodigoAsync(bloqueada)).Should().Be("consulta_bloqueada");
+        bloqueada.Headers.RetryAfter.Should().NotBeNull();
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(11));
+        (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task HU14464_ConsultarPorCodigo_UnAciertoLiberaLosFallosSeguidos()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var codigo = await CodigoPublicoAsync(id);
+
+        for (var ronda = 0; ronda < 2; ronda++)
+        {
+            for (var i = 0; i < 4; i++)
+                (await Pago(HttpMethod.Get, $"/cierre/PN-2026-99999{i}", null)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+    }
+
+    [Fact]
+    public async Task HU14464_ConsultarPorCodigo_MasDeDiezPorMinuto_Responde429RateLimited()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var codigo = await CodigoPublicoAsync(id);
+
+        for (var i = 0; i < 10; i++)
+            (await Pago(HttpMethod.Get, $"/cierre/{codigo}", null)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var excedida = await Pago(HttpMethod.Get, $"/cierre/{codigo}", null);
+        excedida.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await PortalHost.CodigoAsync(excedida)).Should().Be("rate_limited");
+    }
+
+    [Fact]
+    public async Task HU14466_SiElTransporteCuelga_ElPagoNoEsperaMasDelTope_YElCierreLoReintenta()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        _enviador.Cuelga = true;
+
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        var pagado = await PagarCajaAsync(id);
+        reloj.Stop();
+
+        pagado.Should().NotBeNull();
+        reloj.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        await using (var db = _host.NuevaDb())
+            (await db.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull("el reclamo se libera para reintentar");
+
+        _enviador.Cuelga = false;
+        (await Pago(HttpMethod.Get, "/cierre", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        _enviador.Enviados.Should().ContainSingle();
     }
 
     [Fact]
