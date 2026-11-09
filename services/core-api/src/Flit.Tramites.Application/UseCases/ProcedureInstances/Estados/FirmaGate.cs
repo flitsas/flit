@@ -8,7 +8,16 @@ using Flit.Tramites.Domain.Tramites.Services;
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
 /// <summary>
-/// Bug #13194 (P4, D2) — «NO SE PERMITE ENVIAR AL OT TRÁMITES SIN FIRMAR», siempre.
+/// Bug #13194 (P4, D2) — «NO SE PERMITE ENVIAR AL OT TRÁMITES SIN FIRMAR».
+///
+/// <para><b>Excepción (matrícula sin placa).</b> Solo para trámites de FLIT 2 por el canal gestor/OT: la
+/// matrícula inicial (<c>MATRICULA_NUEVA</c> y <c>MATRICULA_LEASING</c>) que se radica por preasignación de
+/// placa, aún sin placa, puede enviarse sin firma (<see cref="EximidaPorPreasignacionAsync"/>). El correo de
+/// validación de identidad se sigue enviando a las partes sin firma. Con placa asignada (p. ej. «Enviar al
+/// OT» desde Asignado), en traspaso y demás tipos (incluida <c>REMATRICULA</c>), en los trámites que no
+/// nacen en la plataforma (<c>Origin</c> del portal Persona Natural o <c>ict</c>) y cuando el canal Quipux
+/// está activo para el OT efectivo la firma sigue siendo obligatoria, exactamente como antes. El gate al
+/// encolar en Quipux (<see cref="TramiteFirmaGate"/>) no cambia.</para>
 ///
 /// <para><b>Firmado</b> = cada parte que debe firmar tiene identidad APROBADA y VIGENTE según
 /// <see cref="IdentityApprovalResolver"/> en el MISMO tenant del trámite: persona jurídica por firma del
@@ -144,6 +153,72 @@ public static class FirmaGate
     {
         ArgumentNullException.ThrowIfNull(partesSinFirma);
         return string.Join(", ", partesSinFirma.Select(p => $"{p.Parte} (notificación: {p.Notificacion})"));
+    }
+
+    /// <summary>Tipos de matrícula inicial a los que aplica la excepción (lista explícita: REMATRICULA queda fuera).</summary>
+    private static readonly string[] TiposExentosPorPreasignacion = ["MATRICULA_NUEVA", "MATRICULA_LEASING"];
+
+    /// <summary>
+    /// Parte síncrona de la excepción: tipo de la lista explícita (familia MATRICULAS), trámite nacido en la
+    /// plataforma (<c>Origin</c> nulo; excluye portal Persona Natural e <c>ict</c>), el tipo pide placa
+    /// (<c>requiresPlateRequest</c>) y todavía NO hay placa. No mira el canal Quipux: para decidir la
+    /// exención use <see cref="EximidaPorPreasignacionAsync"/>. Sin tipo cargado: sin excepción (fail-safe).
+    /// </summary>
+    public static bool EximidaPorPreasignacion(ProcedureInstance instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+
+        if (instance.Origin is not null
+            || instance.ProcedureType is not { } tipo
+            || ProcedureFamilyCodes.FromCode(tipo.Family) != ProcedureFamily.Matriculas
+            || !TiposExentosPorPreasignacion.Contains(tipo.Code, StringComparer.OrdinalIgnoreCase))
+            return false;
+
+        var ctx = TransitionContext.ForInstance(instance, TramiteActor.Gestor);
+        return ctx.RequiresPlateRequest && !ctx.HasPlate;
+    }
+
+    /// <summary>
+    /// Resolutor único de la excepción: <see cref="EximidaPorPreasignacion"/> y, además, que el trámite NO
+    /// esté en el canal Quipux. El canal se lee del OT EFECTIVO (columna o, en borrador, el
+    /// <c>transit_office_id</c> de los field_values; <see cref="OtEfectivaResolver"/>) para que un trámite
+    /// Quipux no se escape por tener la columna vacía. Fail-safe: con OT pero sin lector o si la lectura
+    /// falla, no hay exención. Sin OT elegido no hay canal Quipux posible.
+    /// </summary>
+    /// <param name="cacheCanalPorOt">Opcional: caché por OT dentro de una misma llamada (listados).</param>
+    public static async Task<bool> EximidaPorPreasignacionAsync(
+        ProcedureInstance instance,
+        ITransitOfficeQuipuxCanalReader? reader,
+        CancellationToken ct,
+        IDictionary<(Guid Ot, string? Refs), bool>? cacheCanalPorOt = null)
+    {
+        if (!EximidaPorPreasignacion(instance))
+            return false;
+
+        if (OtEfectivaResolver.Resolve(instance) is not { } otId)
+            return true;
+
+        if (reader is null)
+            return false;
+
+        var key = (otId, instance.ProcedureType?.ExternalRefs);
+        if (cacheCanalPorOt is not null && cacheCanalPorOt.TryGetValue(key, out var cached))
+            return !cached;
+
+        bool esQuipux;
+        try
+        {
+            esQuipux = await QuipuxCanalResolver
+                .EsActivoAsync(reader, key.ExternalRefs, otId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
+        }
+
+        if (cacheCanalPorOt is not null)
+            cacheCanalPorOt[key] = esQuipux;
+        return !esQuipux;
     }
 
     /// <summary>
