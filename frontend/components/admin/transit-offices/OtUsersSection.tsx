@@ -704,7 +704,7 @@ function OtInviteUserDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(22,39,68,0.45)" }}
+      style={{ background: "var(--overlay)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"

@@ -1853,7 +1853,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {approveTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Confirmar aprobación"
@@ -1913,7 +1913,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {mandatarioTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Elegir mandatario del mandato"
@@ -1989,7 +1989,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {assignTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Asignar placa"
@@ -2036,7 +2036,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {revokeTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Liberar placa"
@@ -2067,7 +2067,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           revocatoria activa radicada por el gestor (HU #12572) sobre este trámite Aprobado. */}
       {decideRevocationTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Decidir revocatoria"
@@ -2220,7 +2220,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           modal solo se abre cuando SÍ aplica. */}
       {updatePlateTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Actualizar placa"
@@ -2265,7 +2265,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {rejectTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Rechazar trámite"
@@ -2344,7 +2344,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {ltTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-label="Adjuntar Licencia de Tránsito"

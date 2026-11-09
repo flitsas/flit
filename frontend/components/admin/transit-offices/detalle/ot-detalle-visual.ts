@@ -40,7 +40,7 @@ export const OT_BANDA = "bg-secondary";
 export const OT_APROBAR_GRADIENTE = "bg-[image:var(--gradient-action)]";
 
 export const OT_OVERLAY_STYLE = {
-  background: "rgba(22, 39, 68, 0.45)",
+  background: "var(--overlay)",
   backdropFilter: "blur(6px)",
   WebkitBackdropFilter: "blur(6px)",
 } as const;

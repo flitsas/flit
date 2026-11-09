@@ -622,7 +622,7 @@ export function ClientProceduresTable({
             >
               {conCasillas && onToggle ? (
                 // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
-                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-border">
+                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle">
                   <CasillaFilaLote
                     radicado={row.referenceNumber}
                     seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}

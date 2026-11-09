@@ -1009,7 +1009,7 @@ function FullScreenShell({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[rgba(22,39,68,0.45)] backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--overlay)] backdrop-blur-sm">
       <button
         type="button"
         className="absolute inset-0"

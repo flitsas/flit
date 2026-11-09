@@ -359,7 +359,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
           <button
             type="button"
             className="absolute inset-0"
-            style={{ background: "rgba(22,39,68,0.45)", backdropFilter: "blur(6px)" }}
+            style={{ background: "var(--overlay)", backdropFilter: "blur(6px)" }}
             aria-label="Cerrar"
             onClick={() => !deleting && setDeleteTarget(null)}
           />
