@@ -1800,7 +1800,7 @@ export function TramiteWizard(props: Props) {
       {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
           franja de identidad estaba calculada para la cabecera completa. */}
       <div
-        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none dark:bg-background ${
+        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none ${
           cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
         }`}
       >

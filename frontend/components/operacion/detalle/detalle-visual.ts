@@ -31,4 +31,4 @@ export const DETALLE_OVERLAY_STYLE = {
 } as const;
 
 export const DETALLE_SHEET_CLASS =
-  'w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-2xl bg-flit-bg p-5 shadow-[var(--shadow-modal)] dark:bg-background';
+  'w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-2xl bg-flit-bg p-5 shadow-[var(--shadow-modal)]';
