@@ -14,6 +14,8 @@ import {
   isPlateDigitDecisionRequired,
   isPlateDigitUndecided,
   toPlateDigitFieldValues,
+  avisoDigitoPlacaOt,
+  esPlacaAsignadaPorOt,
   toPlateDigitUiValue,
 } from '../plate-digit-preference';
 
@@ -131,5 +133,57 @@ describe('AC5 — regresión de ruteo', () => {
     const [digitField] = toPlateDigitFieldValues(DIGITO_PLACA_NO_DECIDIDO);
     expect(digitField.fieldKey).toBe(PLATE_PREFERRED_LAST_DIGIT_KEY);
     expect(digitField.valueText).toBe('');
+  });
+});
+
+// HU 3 (registro diferido 2026-11-09) — aviso al gestor sobre la placa que asignó el OT frente a
+// su dígito de preferencia.
+//
+// Uso de ejemplo:
+//   avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '5' })
+//     → { tono: 'exito', texto: 'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.' }
+describe('esPlacaAsignadaPorOt', () => {
+  it('source "ot" con placa → asignada por el OT', () => {
+    expect(esPlacaAsignadaPorOt('ABC125', 'ot')).toBe(true);
+  });
+  it('placa anterior al cambio (source vacío o null) → asignada por el OT', () => {
+    expect(esPlacaAsignadaPorOt('ABC125', '')).toBe(true);
+    expect(esPlacaAsignadaPorOt('ABC125', null)).toBe(true);
+    expect(esPlacaAsignadaPorOt('ABC125', undefined)).toBe(true);
+  });
+  it('placa del RUNT o elegida por el gestor no es del OT; sin placa tampoco', () => {
+    expect(esPlacaAsignadaPorOt('ABC125', 'consultation')).toBe(false);
+    expect(esPlacaAsignadaPorOt('ABC125', 'user')).toBe(false);
+    expect(esPlacaAsignadaPorOt('', 'ot')).toBe(false);
+    expect(esPlacaAsignadaPorOt('  ', '')).toBe(false);
+    expect(esPlacaAsignadaPorOt(null, 'ot')).toBe(false);
+  });
+});
+
+describe('avisoDigitoPlacaOt', () => {
+  it('AC coincide — tono éxito y literal exacto', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '5' })).toEqual({
+      tono: 'exito',
+      texto: 'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    });
+  });
+  it('AC no coincide — tono informativo y literal exacto', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC123', source: 'ot', digito: '5' })).toEqual({
+      tono: 'info',
+      texto:
+        'La placa ABC123 asignada por el organismo de tránsito no termina en tu dígito de preferencia (5). El organismo lo toma solo como guía.',
+    });
+  });
+  it('AC sin preferencia — vacía, "none" o nula → null', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: 'none' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: null })).toBeNull();
+  });
+  it('placa con source vacío (asignada antes del cambio) también avisa; RUNT no', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'abc125 ', source: '', digito: '5' })?.texto).toBe(
+      'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    );
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'consultation', digito: '5' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: '', source: 'ot', digito: '5' })).toBeNull();
   });
 });

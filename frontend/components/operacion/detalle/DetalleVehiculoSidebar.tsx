@@ -1,14 +1,33 @@
 'use client';
 
 import { formatFechaHora } from '@/lib/format/date';
-import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
+import { AvisoDigitoPlacaOt } from '@/components/operacion/AvisoDigitoPlacaOt';
+import { PLATE_PREFERRED_LAST_DIGIT_KEY } from '@/lib/tramites/plate-digit-preference';
 import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
 /**
  * Columna vehículo 4/12 — card con imagen placeholder (spec flit-detalle-tramite).
  */
-export function DetalleVehiculoSidebar({ item }: { item: InstanceSummary }) {
+/**
+ * Registro diferido 2026-11-09 (HU 3) — `canal` es el detalle ya cargado del trámite (`null` mientras
+ * carga o con error). De él salen `fieldValues`: con la placa que asignó el OT (`plate`, source `ot`
+ * o vacío) y el dígito de preferencia del gestor se pinta el aviso de coincidencia bajo la placa.
+ * Tras la asignación el gestor ya no abre el asistente desde el listado (el trámite dejó de ser
+ * borrador): esta columna es lo que ve.
+ */
+export function DetalleVehiculoSidebar({
+  item,
+  canal = null,
+}: {
+  item: InstanceSummary;
+  canal?: { fieldValues?: ProcedureInstanceDetail['fieldValues'] } | null;
+}) {
   const modelo = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
+  const fieldValues = canal?.fieldValues ?? [];
+  const plateField = fieldValues.find((f) => f.fieldKey === 'plate');
+  const preferredDigit =
+    fieldValues.find((f) => f.fieldKey === PLATE_PREFERRED_LAST_DIGIT_KEY)?.valueText ?? '';
 
   return (
     <aside className={`${DETALLE_CARD} h-full`} aria-label="Datos del vehículo">
@@ -25,6 +44,15 @@ export function DetalleVehiculoSidebar({ item }: { item: InstanceSummary }) {
           Modelo: <span className="font-bold">{modelo}</span>
         </p>
         <p className="mt-1 font-mono text-[11px] opacity-70">VIN: {item.vin ?? '—'}</p>
+        {plateField && (
+          <AvisoDigitoPlacaOt
+            placa={plateField.valueText}
+            source={plateField.source}
+            digito={preferredDigit}
+            testId="detalle-aviso-digito-placa"
+            className="mt-2"
+          />
+        )}
       </div>
       <div
         className="mt-3 border-t pt-3 text-[11px] border-[#DFE5ED] dark:border-white/5"

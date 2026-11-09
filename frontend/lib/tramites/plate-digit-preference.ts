@@ -89,3 +89,49 @@ export function toPlateDigitUiValue(params: {
   if (params.rawDigit) return params.rawDigit;
   return params.declared ? DIGITO_PLACA_SIN_PREFERENCIA : DIGITO_PLACA_NO_DECIDIDO;
 }
+
+// ── Aviso al gestor: placa asignada por el OT vs dígito de preferencia (registro diferido 2026-11-09, HU 3)
+
+/** `source` del field_value `plate` cuando la escribió el organismo de tránsito al asignar. */
+export const PLATE_SOURCE_OT = 'ot';
+
+/**
+ * Verdadero cuando la placa la asignó el organismo de tránsito: `source === 'ot'`, o una placa no
+ * vacía con source vacío/nulo (las asignadas antes de que el backend marcara el origen). La del RUNT
+ * (`consultation`) y la elegida por el gestor en borradores antiguos (`user`) no cuentan.
+ */
+export function esPlacaAsignadaPorOt(
+  placa: string | null | undefined,
+  source: string | null | undefined,
+): boolean {
+  if (!(placa ?? '').trim()) return false;
+  const origen = (source ?? '').trim();
+  return origen === PLATE_SOURCE_OT || origen === '';
+}
+
+export type AvisoDigitoPlacaOt = { tono: 'exito' | 'info'; texto: string };
+
+/**
+ * Aviso para el gestor sobre la placa que asignó el OT frente a su dígito de preferencia. `null`
+ * cuando no hay preferencia (vacía o `'none'`) o la placa no la asignó el OT.
+ */
+export function avisoDigitoPlacaOt(params: {
+  placa: string | null | undefined;
+  source: string | null | undefined;
+  digito: string | null | undefined;
+}): AvisoDigitoPlacaOt | null {
+  const digito = (params.digito ?? '').trim();
+  if (!digito || digito === DIGITO_PLACA_SIN_PREFERENCIA) return null;
+  if (!esPlacaAsignadaPorOt(params.placa, params.source)) return null;
+  const placa = (params.placa ?? '').trim().toUpperCase();
+  if (placa.slice(-1) === digito) {
+    return {
+      tono: 'exito',
+      texto: `La placa ${placa} asignada por el organismo de tránsito termina en ${digito}, tu dígito de preferencia.`,
+    };
+  }
+  return {
+    tono: 'info',
+    texto: `La placa ${placa} asignada por el organismo de tránsito no termina en tu dígito de preferencia (${digito}). El organismo lo toma solo como guía.`,
+  };
+}

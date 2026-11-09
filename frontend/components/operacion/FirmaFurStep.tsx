@@ -42,6 +42,8 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/ownership-share';
+import { esPlacaAsignadaPorOt } from '@/lib/tramites/plate-digit-preference';
+import { AvisoDigitoPlacaOt } from './AvisoDigitoPlacaOt';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -905,6 +907,11 @@ export function PlacaPreasignadaSection({
   const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
   // Borrador anterior a la Epic #12550 con una placa elegida por el gestor desde el inventario.
   const placaElegida = placa !== '' && plateSource === 'user';
+  // Registro diferido 2026-11-09 (HU 3) — placa que asignó el organismo en Preasignación
+  // (`source: 'ot'`, o placa con source vacío de las asignadas antes de marcar el origen). Se ve en
+  // el asistente en solo lectura (enlace directo a /tramites/{id}); desde el listado, un trámite ya
+  // asignado abre el detalle, donde `DetalleVehiculoSidebar` pinta el mismo aviso.
+  const placaAsignadaPorOt = esPlacaAsignadaPorOt(placa, plateSource);
 
   // Quitar una placa elegida por el gestor (borradores antiguos): limpia `plate` (='') y regenera el
   // FUR. Sin placa, el trámite vuelve a la Ruta Larga y el organismo la asigna en Preasignación.
@@ -995,6 +1002,18 @@ export function PlacaPreasignadaSection({
     );
   }
 
+  if (placaAsignadaPorOt) {
+    return shell(
+      <div className="mt-2 flex flex-col gap-2" data-testid="fur-placa-asignada-ot">
+        <p className="text-xs opacity-80">
+          El organismo de tránsito asignó la placa{' '}
+          <span className="font-mono font-semibold uppercase tracking-wider">{placa}</span>.
+        </p>
+        <AvisoDigitoPlacaOt placa={placa} source={plateSource} digito={preferredDigitValue} />
+      </div>,
+    );
+  }
+
   return shell(
     <div className="mt-2 flex flex-col gap-3" data-testid="fur-placa-ruta-larga">
       <p className="text-xs opacity-70">
@@ -1007,10 +1026,12 @@ export function PlacaPreasignadaSection({
       )}
       {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
       <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
-        Dígito de preferencia (opcional)
-        <span className="text-xs font-normal opacity-70">
-          Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede
-          asignar una placa que termine en ese dígito u otra.
+        <span>
+          Dígito de preferencia (opcional):{' '}
+          <span className="font-normal opacity-70">
+            Indica el número en el que prefieres que termine la placa. El OT lo toma como guía:
+            puede asignar una placa que termine en ese dígito u otra.
+          </span>
         </span>
         <select
           value={preferredDigit}
