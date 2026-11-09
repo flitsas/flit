@@ -15,7 +15,7 @@ export const PN_CANCEL_BTN_CLS =
   "disabled:opacity-70";
 export const PN_PRIMARY_BTN_CLS =
   "inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white " +
-  "shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 " +
+  "shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 " +
   "focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70";
 export const PN_PRIMARY_BTN_STYLE = {
   background: "var(--gradient-action)",

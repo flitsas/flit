@@ -33,7 +33,7 @@ export interface GlobalFiltersProps {
 }
 
 const inputClass =
-  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white";
+  "h-10 rounded-[10px] border bg-card px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand disabled:opacity-60";
 
 export function GlobalFilters({
   filters,

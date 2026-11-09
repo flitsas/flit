@@ -69,7 +69,7 @@ export function Step5Campos({
           {steps.map((step, i) => (
             <div
               key={step.id ?? i}
-              className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+              className="rounded-2xl p-4 border bg-card"
             >
               <div className="flex items-center gap-2 mb-3">
                 <span
@@ -103,14 +103,14 @@ export function Step5Campos({
                               {field.isLocked && (
                                 <span
                                   className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
-                                  style={{ background: '#F9AC00' }}
+                                  style={{ background: 'var(--color-flit-alert)' }}
                                   title={field.lockReason ?? 'Campo bloqueado'}
                                 >
                                   LOCKED
                                 </span>
                               )}
                               {field.isRequired && (
-                                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                                <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                                   *
                                 </span>
                               )}

@@ -10,7 +10,7 @@ import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 
 /** Superficie de contenedor (tarjeta blanca con borde y sombra de card). */
 export const CARD_SURFACE =
-  "rounded-[18px] border border-border bg-card shadow-[0_8px_24px_rgba(22,39,68,0.08)]";
+  "rounded-[18px] border border-border bg-card shadow-[var(--shadow-card)]";
 
 /** Texto de ayuda (gris del token). */
 export const HELP_TEXT = "text-xs text-muted-foreground";

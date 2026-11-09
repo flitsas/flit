@@ -80,7 +80,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
   return (
     <div data-testid="alert-events-history" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">Historial de disparos</h4>
+        <h4 className="text-sm font-bold text-flit-primary">Historial de disparos</h4>
         <select
           aria-label="Filtrar por alerta"
           value={ruleId}
@@ -88,7 +88,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
             setPage(1);
             setRuleId(e.target.value);
           }}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-flit-primary dark:text-slate-100"
+          className="rounded-xl border border-input bg-background px-3 py-1.5 text-xs text-flit-primary"
         >
           <option value="">Todas las alertas</option>
           {rules.map((r) => (

@@ -2140,7 +2140,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   className="flex-1 rounded-lg px-3 py-1.5"
                   style={
                     decideRevocationMode === "reject"
-                      ? { background: "rgba(220,38,38,0.1)", color: "var(--destructive)" }
+                      ? { background: "var(--badge-danger-bg)", color: "var(--destructive)" }
                       : { color: "var(--muted-foreground)" }
                   }
                 >

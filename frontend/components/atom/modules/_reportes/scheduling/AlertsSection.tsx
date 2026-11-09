@@ -128,7 +128,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
       "rounded-lg px-3 py-1.5 text-xs font-semibold",
       active
         ? "text-white"
-        : "text-flit-primary dark:text-slate-200 border border-slate-200 dark:border-slate-700",
+        : "text-flit-primary border border-border",
     );
 
   return (
@@ -221,7 +221,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                             style={
                               r.isActive
                                 ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                                : { background: "#6b7a941A", color: "#6b7a94" }
+                                : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
                             }
                           >
                             {r.isActive ? "Activa" : "Inactiva"}
@@ -257,19 +257,19 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
               role="alertdialog"
               aria-label="Confirmar eliminación"
               data-testid="alert-delete-confirm"
-              className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 space-y-2"
+              className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-4 space-y-2"
             >
-              <p className="text-sm text-flit-primary dark:text-slate-100">
+              <p className="text-sm text-flit-primary">
                 ¿Eliminar la alerta <strong>{confirmDelete.name}</strong>? Su historial de disparos se conserva.
               </p>
               {actionError && (
-                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">{actionError}</p>
+                <p role="alert" className="text-xs font-medium text-destructive">{actionError}</p>
               )}
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white"
+                  className="rounded-xl bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground"
                 >
                   Eliminar
                 </button>
@@ -279,7 +279,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                     setConfirmDelete(null);
                     setActionError(null);
                   }}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
+                  className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-flit-primary"
                 >
                   Cancelar
                 </button>

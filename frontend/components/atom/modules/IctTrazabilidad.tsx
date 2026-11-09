@@ -69,10 +69,10 @@ const COLUMNAS = [
 const tdCls = "border-y px-4 py-3 align-middle";
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+  "rounded-lg border border-border bg-card px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
+  "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
 
 interface Filtros {
   desde: string;
@@ -298,7 +298,7 @@ export function IctTrazabilidad() {
         : "ready";
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Trazabilidad ICT"
         subtitle="Qué pasó con cada trámite que entró por la integración con terceros. Busca por número, placa o VIN y abre su recorrido completo."
@@ -310,7 +310,7 @@ export function IctTrazabilidad() {
       <div
         role="group"
         aria-label="Contadores por estado"
-        className="grid shrink-0 grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+        className="grid shrink-0 grid-cols-2 divide-border overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-4 sm:divide-x lg:grid-cols-7"
       >
         {ESTADOS_ICT.map((estado) => {
           const meta = ESTADO_ICT[estado];
@@ -334,11 +334,11 @@ export function IctTrazabilidad() {
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
+              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-muted-foreground">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
+                className="text-xl font-bold leading-none tabular-nums text-flit-primary"
                 aria-hidden="true"
               >
                 {conteo}
@@ -359,7 +359,7 @@ export function IctTrazabilidad() {
           e.preventDefault();
           aplicar(filtros);
         }}
-        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
+        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-border bg-card p-3"
         role="search"
         aria-label="Filtros de la trazabilidad ICT"
       >
@@ -476,7 +476,7 @@ export function IctTrazabilidad() {
         // que quien navega con lector necesita que se le anuncie.
         <p
           role="status"
-          className="shrink-0 text-xs text-flit-primary/70 dark:text-white/70"
+          className="shrink-0 text-xs text-flit-primary/70 dark:text-muted-foreground"
         >
           {avisoExport}
         </p>
@@ -600,8 +600,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white ${TABLA_ROW_HOVER_CLS} ${
-          abierta ? "border-flit-brand/40" : "border-[#DFE5ED] dark:border-white/10"
+        className={`cursor-pointer bg-card text-flit-primary ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "border-flit-brand/40" : "border-border"
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -655,7 +655,7 @@ function FilaTramite({
           ) : (
             <span className="flex flex-col gap-0.5">
               {señales.map((s) => (
-                <span key={s} className="text-[10px] font-semibold text-[#C2410C]">
+                <span key={s} className="text-[10px] font-semibold text-destructive">
                   {s}
                 </span>
               ))}
@@ -664,7 +664,7 @@ function FilaTramite({
         </td>
         <td className={`${tdCls} rounded-r-xl border-r`}>
           <span
-            className={`font-mono tabular-nums ${alta ? "font-semibold text-[#C2410C]" : "opacity-70"}`}
+            className={`font-mono tabular-nums ${alta ? "font-semibold text-[var(--badge-pending-fg)]" : "opacity-70"}`}
           >
             {formatearEspera(tramite.minutosEsperando)}
           </span>

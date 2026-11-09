@@ -24,7 +24,7 @@ export const OT_META = "var(--muted-foreground)";
 
 /** Tarjeta del prototipo: sin relleno propio —cada bloque decide el suyo—. */
 export const OT_CARD =
-  "rounded-xl border border-border bg-card shadow-[0_4px_12px_rgba(0,0,0,0.05)]";
+  "rounded-xl border border-border bg-card shadow-[var(--shadow-card)]";
 
 /** Marco de las rejillas de datos: recorta las bandas de encabezado a las esquinas redondeadas. */
 export const OT_MARCO =

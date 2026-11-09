@@ -28,7 +28,7 @@ const CATEGORIA_A_FAMILIA: Record<string, ProcedureFamily> = {
 };
 
 const inputClass =
-  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand dark:bg-[#0B0F14] dark:text-white";
+  "h-10 rounded-[10px] border bg-card px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand";
 
 interface DetailedReportFiltersPanelProps {
   filters: DetailedReportFiltersState;
@@ -103,7 +103,7 @@ export function DetailedReportFiltersPanel({
   }
 
   return (
-    <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"}`}>
+    <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-card"}`}>
       <div className="flex flex-wrap items-end gap-3">
         <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
         {networkScopeSelector}

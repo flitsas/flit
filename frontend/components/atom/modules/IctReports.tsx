@@ -99,9 +99,9 @@ const RANGE_TABS: ReadonlyArray<TabId> = ["novedades", "jobs", "webhooks"];
 const CAUSA_COLOR: Record<string, string> = {
   SOAT: "var(--color-flit-brand)",
   RTM: "var(--color-flit-tech)",
-  RNMC: "#9B8AFB",
-  "Documento faltante": "#F9AC00",
-  "Otra/sin clasificar": "#162744",
+  RNMC: "var(--badge-purple-fg)",
+  "Documento faltante": "var(--badge-warning-fg)",
+  "Otra/sin clasificar": "var(--color-flit-primary)",
 };
 
 /**
@@ -109,9 +109,9 @@ const CAUSA_COLOR: Record<string, string> = {
  * usa para "bien"/"falló". Los tres estados los define el backend (`EstadoWebhook`).
  */
 const ESTADO_WEBHOOK_COLOR: Record<string, string> = {
-  Entregado: "#8CC63F",
-  Fallido: "#FF4E00",
-  Pendiente: "#F9AC00",
+  Entregado: "var(--flit-success-ink)",
+  Fallido: "var(--destructive)",
+  Pendiente: "var(--badge-warning-fg)",
 };
 
 /** La pestaña activa vive en la dirección, igual que en empresa (`reportesTab`) y OT (`tab`). */
@@ -275,7 +275,7 @@ export function IctReports() {
   const nothingToExport = tabTotals[activeTab] === 0;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Reportes de Integración con Terceros"
         subtitle="Novedades, atascados y entregas de ICT, con consultas propias y envío programado."
@@ -303,7 +303,7 @@ export function IctReports() {
         <button
           type="button"
           onClick={() => setSchedulingOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-secondary"
           data-testid="ict-reportes-abrir-programacion"
         >
           <CalendarClock className="h-4 w-4" aria-hidden="true" />
@@ -322,7 +322,7 @@ export function IctReports() {
       ) : usesRange && !rangeValid ? (
         <div
           role="alert"
-          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-card"
         >
           <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
           <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar el reporte.</p>
@@ -418,7 +418,7 @@ function ExcelExportButton({
         {busy ? "Exportando…" : "Exportar Excel"}
       </button>
       {error && (
-        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "#FF4E00" }}>
+        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -620,7 +620,7 @@ function NovedadesTab({
               tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             {report.resumenPorCausa.map((c) => (
               <KpiCard
@@ -628,7 +628,7 @@ function NovedadesTab({
                 label={c.causa}
                 value={`${formatInt(c.cantidad)} · ${withPct(c.porcentajeTexto)}`}
                 tooltip="Novedades de esta causa y su peso sobre el total del periodo. Las causas cubren el 100% de las novedades: lo que no se puede clasificar cuenta en «Otra/sin clasificar»."
-                color={CAUSA_COLOR[c.causa] ?? "#162744"}
+                color={CAUSA_COLOR[c.causa] ?? "var(--color-flit-primary)"}
               />
             ))}
           </div>
@@ -702,7 +702,7 @@ function AtascadosTab({
               label="Atascados ahora"
               value={formatInt(report.total)}
               tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
-              color="#F9AC00"
+              color="var(--badge-warning-fg)"
             />
           </div>
 
@@ -784,7 +784,7 @@ function JobsTab({
               label="Corridas fuera de SLA"
               value={formatInt(report.totalFueraDeSla)}
               tooltip="Corridas que superaron el tiempo esperado para su job, en todo el periodo."
-              color={report.totalFueraDeSla > 0 ? "#FF4E00" : "#8CC63F"}
+              color={report.totalFueraDeSla > 0 ? "var(--destructive)" : "var(--flit-success-ink)"}
             />
           </div>
 

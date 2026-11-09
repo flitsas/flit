@@ -78,7 +78,7 @@ export function OtCargando({ etiqueta, filas = 3 }: { etiqueta: string; filas?: 
         <div
           key={i}
           className="h-10 animate-pulse rounded-xl dark:bg-secondary"
-          style={{ background: "rgba(223,229,237,0.5)" }}
+          style={{ background: "var(--secondary)" }}
         />
       ))}
     </div>

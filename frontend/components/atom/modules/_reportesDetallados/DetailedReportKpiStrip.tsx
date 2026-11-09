@@ -34,14 +34,14 @@ export function DetailedReportKpiStrip({ summary }: DetailedReportKpiStripProps)
         label="Estado principal"
         value={topStatus ? `${topStatus.status} (${formatNumber(topStatus.count)})` : "—"}
         tooltip="Estado con más trámites en el resultado filtrado."
-        color="#8CC63F"
+        color="var(--flit-success-ink)"
         testId="detailed-kpi-status"
       />
       <KpiCard
         label="Tipo de trámite principal"
         value={topType ? `${topType.label} (${formatNumber(topType.count)})` : "—"}
         tooltip="Tipo de trámite con más registros en el resultado filtrado."
-        color="#162744"
+        color="var(--color-flit-primary)"
         testId="detailed-kpi-type"
       />
     </div>

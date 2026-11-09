@@ -305,7 +305,7 @@ export function PortalPnDesignSection({
                     maxLength={40}
                     placeholder={textos.nombrePlaceholder}
                     className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring w-full max-w-md rounded-lg border px-3 py-2 text-sm"
-                    style={{ borderColor: "#DFE5ED" }}
+                    style={{ borderColor: "var(--border)" }}
                   />
                 </div>
               )}
@@ -366,7 +366,7 @@ export function PortalPnDesignSection({
 
               <div
                 className="rounded-xl border px-3 py-2 text-xs"
-                style={{ borderColor: "#DFE5ED" }}
+                style={{ borderColor: "var(--border)" }}
               >
                 {marca.published && marca.publishedAt ? (
                   <p style={{ color: "var(--color-flit-primary)" }}>
@@ -377,7 +377,7 @@ export function PortalPnDesignSection({
                   <p className="opacity-70">{textos.sinMarca}</p>
                 )}
                 {marca.hasUnpublishedChanges && (
-                  <p className="mt-1 font-semibold" style={{ color: "#B45309" }}>
+                  <p className="mt-1 font-semibold" style={{ color: "var(--badge-warning-fg)" }}>
                     Hay cambios en el borrador sin publicar.
                   </p>
                 )}
@@ -391,7 +391,7 @@ export function PortalPnDesignSection({
                 <div
                   role="alert"
                   className="flex flex-wrap items-center gap-3 text-xs"
-                  style={{ color: "#C10000" }}
+                  style={{ color: "var(--destructive)" }}
                 >
                   <span>{formError.message}</span>
                   {formError.conflict && (
@@ -399,7 +399,7 @@ export function PortalPnDesignSection({
                       type="button"
                       onClick={() => void load()}
                       className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-lg border px-3 py-1 font-semibold"
-                      style={{ borderColor: "#C10000" }}
+                      style={{ borderColor: "var(--destructive)" }}
                     >
                       Recargar la marca
                     </button>
@@ -410,9 +410,9 @@ export function PortalPnDesignSection({
                 <p
                   role="status"
                   className="flex items-center gap-1.5 text-xs font-medium"
-                  style={{ color: "#4F7A12" }}
+                  style={{ color: "var(--flit-success-ink)" }}
                 >
-                  <Check className="h-4 w-4 shrink-0" style={{ color: "#8CC63F" }} aria-hidden />
+                  <Check className="h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} aria-hidden />
                   {successMessage}
                 </p>
               )}
@@ -423,7 +423,7 @@ export function PortalPnDesignSection({
                   onClick={() => void handleSaveDraft()}
                   disabled={busy}
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: "#162744" }}
+                  style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
                 >
                   <Save className="h-3.5 w-3.5" aria-hidden />{" "}
                   {saving ? "Guardando…" : "Guardar borrador"}
@@ -433,7 +433,7 @@ export function PortalPnDesignSection({
                   onClick={() => setPublishOpen(true)}
                   disabled={!canPublish || busy}
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: "#557EFF" }}
+                  style={{ background: "var(--gradient-action)" }}
                 >
                   <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
                 </button>
@@ -443,7 +443,7 @@ export function PortalPnDesignSection({
                     onClick={() => setRetireOpen(true)}
                     disabled={busy}
                     className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ml-auto inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ borderColor: "#C10000", color: "#C10000" }}
+                    style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
                   >
                     <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar marca publicada
                   </button>
@@ -486,7 +486,7 @@ export function PortalPnDesignSection({
               onClick={() => void handleRetire()}
               disabled={retiring}
               className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              style={{ background: "#C10000" }}
+              style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
             >
               {retiring ? "Retirando…" : "Retirar"}
             </button>
@@ -561,7 +561,7 @@ function ImageField({
           onClick={onRemove}
           disabled={disabled}
           className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ borderColor: "#C10000", color: "#C10000" }}
+          style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
           {removing ? "Quitando…" : `Quitar ${kind === "logo" ? "logo" : "banner"}`}

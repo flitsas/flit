@@ -242,7 +242,7 @@ export function EditCompanyDialog({
                 readOnly
                 disabled
                 className="w-full cursor-not-allowed rounded-xl border px-3 py-2 font-mono text-xs opacity-60 outline-none"
-                style={{ background: "rgba(223,229,237,0.35)" }}
+                style={{ background: "var(--secondary)" }}
               />
             </Field>
 
@@ -323,7 +323,7 @@ export function EditCompanyDialog({
           <p
             role="alert"
             className="rounded-lg px-3 py-2 text-xs font-medium"
-            style={{ background: "rgba(255,78,0,0.1)", color: "var(--destructive)" }}
+            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
           >
             {formError}
           </p>

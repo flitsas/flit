@@ -108,7 +108,7 @@ export function ConsultasTab({
   if (needsCompany && !superAdmin) {
     return (
       <div
-        className="rounded-2xl border border-[#DFE5ED] p-8 text-center dark:border-white/10"
+        className="rounded-2xl border border-border p-8 text-center"
         data-testid="empresa-query-sin-compania"
       >
         <p className="text-sm font-medium">Selecciona una compañía para consultar sus trámites.</p>

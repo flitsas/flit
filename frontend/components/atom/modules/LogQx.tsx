@@ -318,7 +318,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   }, [aplicar, filtros]);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="LOG QX"
         subtitle="Trámites con integración Quipux. Filtra por fecha, placa, documento o estado, y abre la trazabilidad completa del que necesites."
@@ -346,7 +346,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
       <div
         role="group"
         aria-label="Contadores por estado"
-        className="grid shrink-0 grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+        className="grid shrink-0 grid-cols-2 divide-border overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-4 sm:divide-x lg:grid-cols-7"
       >
         {ESTADOS_BANDEJA.map((estado) => {
           const meta = ESTADO_BANDEJA[estado];
@@ -370,11 +370,11 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
+              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-muted-foreground">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
+                className="text-xl font-bold leading-none tabular-nums text-flit-primary"
                 aria-hidden="true"
               >
                 {total}
@@ -392,7 +392,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 
       <form
         onSubmit={handleSubmit}
-        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
+        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-border bg-card p-3"
         role="search"
         aria-label="Filtros del LOG QX"
       >
@@ -569,10 +569,10 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 }
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+  "rounded-lg border border-border bg-card px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
+  "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
 
 /** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
 const COLUMNAS = [
@@ -637,7 +637,7 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
+        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
           abierta ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
         }`}
         onClick={onToggle}
@@ -660,14 +660,14 @@ function FilaTramite({
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
-            <span className="ml-1.5 rounded-full bg-[#FF4E00]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#C2410C]">
+            <span className="ml-1.5 rounded-full bg-[var(--badge-danger-bg)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-destructive">
               {entry.intentos} intentos
             </span>
           )}
         </td>
         <td className={tdCls}>
           {entry.plate ? (
-            <span className="rounded border border-[#D9DEE8] bg-[#F4F6FA] px-1.5 py-0.5 font-mono font-bold tracking-wide dark:border-white/15 dark:bg-white/5">
+            <span className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono font-bold tracking-wide dark:bg-secondary">
               {entry.plate}
             </span>
           ) : (
@@ -704,7 +704,7 @@ function FilaTramite({
         <td className={`${tdCls} rounded-r-xl border-r`}>
           {espera ? (
             <span
-              className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-[#C2410C]" : ""}`}
+              className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-destructive" : ""}`}
             >
               {espera}
               {alta ? " ⚠" : ""}
@@ -717,7 +717,7 @@ function FilaTramite({
       {abierta && (
         <tr>
           {/* El detalle es su propia tarjeta, coherente con las filas-tarjeta de la tabla. */}
-          <td colSpan={10} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
+          <td colSpan={10} className="rounded-xl border bg-secondary p-0">
             <Vistazo entry={entry} onAbrir={onAbrir} esAdmin={esAdmin} />
           </td>
         </tr>
@@ -747,7 +747,7 @@ function Vistazo({
           {pasos(entry).map((p) => (
             <span
               key={p.label}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] bg-white px-2.5 py-1 text-[11px] font-medium dark:border-white/10 dark:bg-[#0B0F14]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium"
             >
               <p.Icon className="h-3.5 w-3.5" style={{ color: p.color }} aria-hidden="true" />
               {p.label}
@@ -755,7 +755,7 @@ function Vistazo({
           ))}
         </div>
         {entry.rejectionReason && (
-          <p className="mt-3 rounded-lg border-l-2 border-[#FF4E00] bg-[#FF4E00]/[0.08] px-3 py-2 text-xs text-[#C2410C]">
+          <p className="mt-3 rounded-lg border-l-2 border-destructive bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive">
             Motivo del rechazo: {entry.rejectionReason}
           </p>
         )}
@@ -778,7 +778,7 @@ function Vistazo({
         <Link
           href={hrefTramite(entry.procedureInstanceId, entry.clientTenantId, esAdmin)}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-border bg-card px-4 py-2 text-xs font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           Ver trámite
         </Link>

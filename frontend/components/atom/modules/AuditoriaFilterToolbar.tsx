@@ -93,7 +93,7 @@ const RESULT_OPTIONS: { value: '' | AdminAuditResult; label: string }[] = [
 ];
 
 const CONTROL_CLASS =
-  'w-full rounded-xl border bg-white py-2 px-2 text-xs outline-none focus:border-flit-brand dark:bg-[#0B0F14]';
+  'w-full rounded-xl border bg-card py-2 px-2 text-xs outline-none focus:border-flit-brand';
 
 /** Campo etiquetado (label asociado al control → nombre accesible = texto de la etiqueta). */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -146,7 +146,7 @@ export function AuditoriaFilterToolbar({
     resultCount === 0 ? 'Sin resultados' : `${resultCount} registro${resultCount === 1 ? '' : 's'}`;
 
   return (
-    <div className="rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0">
+    <div className="rounded-2xl border bg-card p-3 shrink-0">
       {/* Usuario (actor o afectado) + Actualizar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex-1">

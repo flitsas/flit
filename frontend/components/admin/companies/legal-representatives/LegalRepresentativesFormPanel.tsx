@@ -1021,7 +1021,7 @@ function FullScreenShell({
         style={{
           background: RL_COLOR.modal,
           borderColor: RL_COLOR.border,
-          boxShadow: "0 24px 60px rgba(22, 39, 68, 0.18)",
+          boxShadow: "var(--shadow-modal)",
         }}
         role="dialog"
         aria-modal="true"

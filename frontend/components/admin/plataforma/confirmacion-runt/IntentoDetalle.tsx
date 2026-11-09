@@ -350,7 +350,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
     return (
       <section className="flex flex-col gap-2">
         {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
-        <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "rgba(255,78,0,0.10)", color: "var(--destructive)" }}>
+        <p className="rounded-lg px-3 py-2 text-[11px] font-medium" style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}>
           {vista.resultado === "no_encontrado"
             ? `El proveedor no encontró el vehículo con ese documento${vista.mensaje ? `: «${vista.mensaje}»` : "."}`
             : vista.resultado === "error"
@@ -441,10 +441,10 @@ function SolicitudesTabla({ solicitudes }: { solicitudes: Solicitud[] }) {
 }
 
 const ESTADO_SOLICITUD: Record<string, { bg: string; fg: string }> = {
-  AUTORIZADA: { bg: "rgba(34,197,94,0.14)", fg: "var(--flit-success-ink)" },
-  APROBADA: { bg: "rgba(34,197,94,0.14)", fg: "var(--flit-success-ink)" },
-  REGISTRADA: { bg: "rgba(255,78,0,0.14)", fg: "var(--destructive)" },
-  RECHAZADA: { bg: "rgba(153,27,27,0.14)", fg: "var(--destructive)" },
+  AUTORIZADA: { bg: "var(--badge-success-bg)", fg: "var(--flit-success-ink)" },
+  APROBADA: { bg: "var(--badge-success-bg)", fg: "var(--flit-success-ink)" },
+  REGISTRADA: { bg: "var(--badge-danger-bg)", fg: "var(--destructive)" },
+  RECHAZADA: { bg: "var(--badge-danger-bg)", fg: "var(--destructive)" },
 };
 
 function EstadoSolicitud({ estado }: { estado: string }) {

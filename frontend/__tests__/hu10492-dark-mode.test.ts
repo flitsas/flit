@@ -50,8 +50,9 @@ describe("HU #10492 — AC1: bordes sin override inline (token semántico theme-
   });
 
   it("contrato: los bordes condicionales de error (#FF4E00) se preservan intactos", () => {
-    // El codemod solo debía tocar el borde base #DFE5ED, nunca el de error.
-    const anyError = contents.some((c) => /borderColor:.*#FF4E00.*#DFE5ED/.test(c));
+    // El codemod solo debía tocar el borde base #DFE5ED, nunca el de error. Con el UI kit
+    // (HU #14484) ambos son tokens: error --destructive y base --border.
+    const anyError = contents.some((c) => /borderColor:.*var\(--destructive\).*var\(--border\)/.test(c));
     expect(anyError).toBe(true);
   });
 });
@@ -63,7 +64,8 @@ describe("HU #10492 — AC2: pantalla RBAC con tema oscuro completo", () => {
   );
 
   it("happy path: el contenedor raíz usa app-bg y texto theme-aware", () => {
-    expect(rbac).toMatch(/className="app-bg[^"]*dark:text-white/);
+    // HU #14484: text-flit-primary ya cambia solo en oscuro; no necesita dark:text-white.
+    expect(rbac).toMatch(/className="app-bg[^"]*text-flit-primary/);
   });
 
   it("edge: ya no fuerza el fondo claro inline (#EEF5FF) en el raíz", () => {

@@ -410,7 +410,7 @@ export function ParametrosTab() {
 
           {errorGeneral && <InlineAlert tone="error">{errorGeneral}</InlineAlert>}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-border bg-card px-4 py-3 shadow-[0_8px_24px_rgba(22,39,68,0.08)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-border bg-card px-4 py-3 shadow-[var(--shadow-card)]">
             <p className={HELP_TEXT} role="status">
               {hayCambios ? "Hay cambios sin guardar." : "No hay cambios por guardar."}
               {servidor.actualizadoEn && <> Última actualización: {formatFechaHora(servidor.actualizadoEn)}.</>}
