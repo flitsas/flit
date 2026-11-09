@@ -136,7 +136,7 @@ function Detalle({ id }: { id: string }) {
 
   return (
     <section className="flex flex-col gap-6">
-      <Link href="/ocr" className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline">
+      <Link href="/ocr" className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         Paquetes OCR
       </Link>
@@ -190,11 +190,11 @@ function Detalle({ id }: { id: string }) {
 
       <div className="flex flex-wrap gap-2">
         <Contador etiqueta="Documentos" valor={p.cantidadDocumentos} />
-        <Contador etiqueta="En cola" valor={p.cantidadPendientes} clase="text-[#3B4FD6]" />
-        <Contador etiqueta="Completos" valor={p.cantidadCompletos} clase="text-[#1E7B3C]" />
-        <Contador etiqueta="Incompletos" valor={p.cantidadIncompletos} clase="text-[#B45309]" />
-        <Contador etiqueta="Fallidos" valor={p.cantidadFallidos} clase="text-[#B42318]" />
-        <Contador etiqueta="Duplicados" valor={p.cantidadDuplicados} clase="text-[#6D28D9]" />
+        <Contador etiqueta="En cola" valor={p.cantidadPendientes} clase="text-flit-brand-ink" />
+        <Contador etiqueta="Completos" valor={p.cantidadCompletos} clase="text-[var(--flit-success-ink)]" />
+        <Contador etiqueta="Incompletos" valor={p.cantidadIncompletos} clase="text-[var(--badge-warning-fg)]" />
+        <Contador etiqueta="Fallidos" valor={p.cantidadFallidos} clase="text-destructive" />
+        <Contador etiqueta="Duplicados" valor={p.cantidadDuplicados} clase="text-[var(--badge-purple-fg)]" />
         <Contador etiqueta="Registrados" valor={p.cantidadRegistrados} />
         <Contador etiqueta="Descartados" valor={p.cantidadDescartados} />
       </div>
@@ -253,7 +253,7 @@ function Detalle({ id }: { id: string }) {
                 <span className="flex flex-col">
                   {d.numeroComparendoExtraido ?? "—"}
                   {d.avisoNumero && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#B45309]" title={d.avisoNumero}>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--badge-warning-fg)]" title={d.avisoNumero}>
                       <AlertTriangle className="h-3 w-3" aria-hidden />
                       Verificar número
                     </span>
@@ -267,7 +267,7 @@ function Detalle({ id }: { id: string }) {
               render: (d) => {
                 const texto = motivoDocumento(d);
                 if (!texto) return "—";
-                const tono = d.estado === "Fallido" ? "text-[#B42318]" : d.estado === "Duplicado" ? "text-[#6D28D9]" : d.estado === "Descartado" ? "opacity-60" : "text-[#B45309]";
+                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "opacity-60" : "text-[var(--badge-warning-fg)]";
                 return (
                   <span className={tono} title={d.estado === "Fallido" && d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>
                     {texto}
@@ -284,7 +284,7 @@ function Detalle({ id }: { id: string }) {
                 d.comparendoId ? (
                   <button
                     type="button"
-                    className="text-xs font-semibold text-[#3B4FD6] hover:underline"
+                    className="text-xs font-semibold text-flit-brand-ink hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       setVerComparendo(d.comparendoId);
@@ -293,7 +293,7 @@ function Detalle({ id }: { id: string }) {
                     Ver comparendo
                   </button>
                 ) : (
-                  <span className="text-xs font-semibold text-[#3B4FD6]">{opera && ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado) ? "Revisar" : "Ver"}</span>
+                  <span className="text-xs font-semibold text-flit-brand-ink">{opera && ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado) ? "Revisar" : "Ver"}</span>
                 ),
             },
           ]}

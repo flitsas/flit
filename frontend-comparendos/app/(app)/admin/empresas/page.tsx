@@ -417,7 +417,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
         {/* HU #13882: el conjunto sigue al canal de correo que la empresa tiene en Trámites. */}
         <div className={ETIQUETA_CLS}>
           Conjunto de plantillas
-          <p className={`${INPUT_CLS} flex items-center bg-[#F4F6FA] dark:bg-white/5`}>{valores.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}</p>
+          <p className={`${INPUT_CLS} flex items-center bg-secondary`}>{valores.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}</p>
           <span className="font-normal opacity-70">
             Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites: Renting con «API Renting cliente», FLIT con «Colas FLIT».
           </span>
@@ -545,7 +545,7 @@ function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: ()
       <div
         role="tablist"
         aria-label="Configuración de la empresa"
-        className="flex gap-1 border-b border-[#E2E8F0] dark:border-white/10"
+        className="flex gap-1 border-b border-border"
       >
         {(
           [
@@ -559,7 +559,7 @@ function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: ()
             role="tab"
             aria-selected={pestana === valor}
             onClick={() => setPestana(valor)}
-            className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${pestana === valor ? "border-[#3B4FD6] text-[#3B4FD6] dark:text-white" : "border-transparent opacity-70 hover:opacity-100"}`}
+            className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${pestana === valor ? "border-flit-brand-ink text-flit-brand-ink" : "border-transparent opacity-70 hover:opacity-100"}`}
           >
             {etiqueta}
           </button>

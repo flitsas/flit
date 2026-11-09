@@ -150,7 +150,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             agregar(e.dataTransfer.files);
           }}
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center text-xs transition ${
-            arrastrando ? "border-flit-brand bg-[#EFF6FF] dark:bg-flit-brand/10" : "border-[#DFE5ED] dark:border-white/15"
+            arrastrando ? "border-flit-brand bg-secondary dark:bg-flit-brand/10" : "border-border"
           }`}
         >
           <Upload className="h-5 w-5 text-flit-brand" aria-hidden />
@@ -172,16 +172,16 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs">
               <span>
-                <b>{validos}</b> archivos listos{invalidos > 0 && <> · <b className="text-[#B42318]">{invalidos}</b> rechazados</>}
+                <b>{validos}</b> archivos listos{invalidos > 0 && <> · <b className="text-destructive">{invalidos}</b> rechazados</>}
               </span>
-              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setElegidos([])}>
+              <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setElegidos([])}>
                 Quitar todos
               </button>
             </div>
-            <ul className="max-h-60 overflow-y-auto rounded-xl border border-[#DFE5ED] text-xs dark:border-white/15">
+            <ul className="max-h-60 overflow-y-auto rounded-xl border border-border text-xs">
               {elegidos.map((a, i) => (
-                <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-[#EEF1F6] px-3 py-1.5 last:border-0 dark:border-white/10">
-                  <span className={`truncate ${a.error ? "text-[#B42318]" : ""}`}>
+                <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5 last:border-0">
+                  <span className={`truncate ${a.error ? "text-destructive" : ""}`}>
                     {a.archivo.name}
                     <span className="ml-2 opacity-60">{(a.archivo.size / 1024 / 1024).toFixed(1)} MB</span>
                     {a.error && <span className="ml-2 font-semibold">· {a.error}</span>}
@@ -308,11 +308,11 @@ function Paquetes() {
       <div className="flex flex-wrap gap-2">
         <Contador etiqueta="Paquetes" valor={c?.paquetes} />
         <Contador etiqueta="Documentos" valor={c?.documentos} />
-        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-[#3B4FD6]" />
-        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[#1E7B3C]" />
-        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[#B45309]" />
-        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-[#B42318]" />
-        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[#6D28D9]" />
+        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-flit-brand-ink" />
+        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[var(--flit-success-ink)]" />
+        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[var(--badge-warning-fg)]" />
+        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-destructive" />
+        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[var(--badge-purple-fg)]" />
         <Contador etiqueta="Registrados" valor={c?.registrados} />
       </div>
 

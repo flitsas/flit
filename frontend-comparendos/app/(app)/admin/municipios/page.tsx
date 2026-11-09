@@ -92,7 +92,7 @@ export default function Municipios() {
               header: "",
               align: "right",
               render: (m) => (
-                <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => (m.activo ? setConfirmar(m) : alternar(m))}>
+                <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => (m.activo ? setConfirmar(m) : alternar(m))}>
                   {m.activo ? "Desactivar" : "Activar"}
                 </button>
               ),

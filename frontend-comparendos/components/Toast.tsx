@@ -7,7 +7,7 @@ import { AlertTriangle, CheckCircle2, X, XCircle } from "lucide-react";
 // Región aria-live para accesibilidad (WCAG 2.1 AA).
 export type ToastType = "success" | "warning" | "error";
 
-const COLOR_TOAST: Record<ToastType, string> = { success: "var(--color-flit-tech)", warning: "#D9A400", error: "#FF4E00" };
+const COLOR_TOAST: Record<ToastType, string> = { success: "var(--color-flit-tech)", warning: "var(--color-flit-alert)", error: "var(--destructive)" };
 
 interface ToastItem {
   id: number;
@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="flex items-start gap-2 rounded-xl border bg-white px-4 py-3 text-xs shadow-lg dark:bg-[#0B0F14]"
+            className="flex items-start gap-2 rounded-xl border bg-card px-4 py-3 text-xs shadow-lg"
             style={{ borderColor: COLOR_TOAST[toast.type], minWidth: 260 }}
           >
             {toast.type === "success" ? (

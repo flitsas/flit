@@ -22,7 +22,7 @@ export function EtiquetasFiltros({
       {etiquetas.map((e) => (
         <span
           key={e.clave}
-          className={`flex items-center gap-1.5 rounded-full border border-flit-brand bg-[#EEF5FF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6] dark:bg-flit-brand/10 dark:text-[#8FA8FF] ${
+          className={`flex items-center gap-1.5 rounded-full border border-flit-brand bg-[var(--badge-info-bg)] px-2.5 py-1 text-xs font-semibold text-flit-brand-ink ${
             e.porDefecto ? "border-dashed" : ""
           }`}
           title={e.porDefecto ? "Filtro por defecto de la bandeja" : undefined}
@@ -42,7 +42,7 @@ export function EtiquetasFiltros({
         <button
           type="button"
           onClick={onLimpiarTodo}
-          className="rounded-full px-2 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-slate-300"
+          className="rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           Limpiar todo
         </button>

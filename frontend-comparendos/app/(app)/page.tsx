@@ -355,7 +355,7 @@ function ContenidoBandeja() {
                   Enviar aviso
                 </button>
               )}
-              <button type="button" className="font-semibold text-[#3B4FD6] hover:underline" onClick={() => setMarcados(new Map())}>
+              <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => setMarcados(new Map())}>
                 Quitar selección
               </button>
             </div>
