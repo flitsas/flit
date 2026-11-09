@@ -99,7 +99,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   if (!puedeVer) {
     contenido = (
       <Vacio titulo="No tienes permiso para ver este diagnóstico">
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
       </Vacio>
     );
   } else if (cargando || codigo403) {
@@ -107,7 +107,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   } else if (error instanceof ApiError && error.status === 404) {
     contenido = (
       <Vacio titulo="No encontramos este diagnóstico" Icono={SearchX}>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Puede que no exista o que no tengas acceso a él.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">Puede que no exista o que no tengas acceso a él.</p>
         <Link href="/" className={BOTON_SECUNDARIO_CLS}>
           Volver al inicio
         </Link>
@@ -130,7 +130,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   } else if (grilla.avance.vehiculos === 0) {
     contenido = (
       <Vacio titulo="Este diagnóstico todavía no tiene vehículos">
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">El tablero se llena cuando se confirman los vehículos del lote.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">El tablero se llena cuando se confirman los vehículos del lote.</p>
         {grilla.estado === "CREADO" && puedeCargar && (
           <Link href={`/diagnosticos/${encodeURIComponent(diagnosticoId)}/carga`} className={BOTON_PRIMARIO_CLS}>
             Cargar vehículos
@@ -188,10 +188,10 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
       <section aria-labelledby="tablero-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
         <div className="flex min-w-0 flex-col gap-2">
           <Migas migas={[{ texto: "Diagnósticos", href: volver }, { texto: grilla?.nombre ?? "Tablero del diagnóstico" }]} />
-          <h1 id="tablero-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+          <h1 id="tablero-titulo" className="text-2xl font-semibold text-flit-primary">
             {grilla?.nombre ?? "Tablero del diagnóstico"}
           </h1>
-          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
+          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={volver} className={BOTON_SECUNDARIO_CLS}>

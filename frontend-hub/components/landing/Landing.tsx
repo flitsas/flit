@@ -15,12 +15,12 @@ import { StatusChip } from "@/components/ui/StatusChip";
 const PILLAR_ICONS = { "key-round": KeyRound, plug: Plug, "shield-check": ShieldCheck, palette: Palette } as const;
 
 const card =
-  "rounded-2xl border border-[var(--color-flit-gray)] bg-white shadow-[var(--nav-sombra-dock)] dark:border-white/10 dark:bg-[#0B0F14]";
-const muted = "text-[#59677d] dark:text-white/65";
+  "rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]";
+const muted = "text-muted-foreground";
 
 export function Landing({ loginUrl }: { loginUrl: string }) {
   return (
-    <div className="min-h-full bg-[var(--color-flit-bg)] text-flit-primary dark:bg-[#05060A] dark:text-white">
+    <div className="min-h-full bg-flit-bg text-flit-primary dark:bg-background">
       <LandingNav loginUrl={loginUrl} />
       <main>
         <Hero loginUrl={loginUrl} />
@@ -62,7 +62,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
       />
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 pb-20 [&>*]:min-w-0 pt-16 md:px-6 lg:grid-cols-[1.1fr_1fr] lg:pb-28 lg:pt-24">
         <div>
-          <p className="inline-flex items-center gap-2 rounded-full border border-flit-brand/20 bg-white/70 px-3 py-1 text-xs font-semibold text-flit-brand dark:border-white/10 dark:bg-white/5">
+          <p className="inline-flex items-center gap-2 rounded-full border border-flit-brand/20 bg-card/70 px-3 py-1 text-xs font-semibold text-flit-brand">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             {COMPANY.headline}
           </p>
@@ -79,7 +79,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
             </a>
             <a
               href={demoMailto()}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--color-flit-gray)] bg-white px-6 py-3 text-sm font-semibold text-flit-primary transition hover:border-flit-brand dark:border-white/15 dark:bg-white/5 dark:text-white"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-flit-primary transition hover:border-flit-brand"
             >
               Solicitar una demostración
             </a>
@@ -104,14 +104,14 @@ function Hero({ loginUrl }: { loginUrl: string }) {
             </div>
             <ul className="mt-8 space-y-3">
               {PRODUCTS.map((p) => (
-                <li key={p.code} className="flex items-center gap-4 rounded-2xl bg-white/95 p-4 shadow-lg dark:bg-[#0B0F14]/95">
+                <li key={p.code} className="flex items-center gap-4 rounded-2xl bg-card/95 p-4 shadow-lg">
                   <ProductIcon icon={p.icon} />
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 font-semibold text-flit-primary dark:text-white">
+                    <p className="flex items-center gap-2 font-semibold text-flit-primary">
                       {p.name}
                       <StatusChip status={p.status} />
                     </p>
-                    <p className="truncate text-xs text-[#59677d] dark:text-white/60">{p.tagline}</p>
+                    <p className="truncate text-xs text-muted-foreground">{p.tagline}</p>
                   </div>
                 </li>
               ))}
@@ -155,7 +155,7 @@ function ProductsOverview() {
 function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInfo; reverse: boolean; loginUrl: string }) {
   const available = p.status === "available";
   return (
-    <section id={`producto-${p.code}`} className="scroll-mt-20 border-t border-[var(--color-flit-gray)]/70 dark:border-white/5">
+    <section id={`producto-${p.code}`} className="scroll-mt-20 border-t border-border/70">
       <div className={`mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-20 md:px-6 lg:grid-cols-2 [&>*]:min-w-0 ${reverse ? "lg:[&>*:first-child]:order-2" : ""}`}>
         <div>
           <div className="flex items-center gap-3">
@@ -193,18 +193,18 @@ function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInf
           <ul className="mt-5 grid gap-4 sm:grid-cols-2">
             {p.features.map((f) => (
               <li key={f} className="flex gap-3 text-sm leading-relaxed">
-                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-flit-tech/15 text-[#00a8a3] dark:text-flit-tech">
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]">
                   <Check className="h-3 w-3" aria-hidden="true" />
                 </span>
                 {f}
               </li>
             ))}
           </ul>
-          <div className="mt-8 border-t border-[var(--color-flit-gray)] pt-6 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#59677d] dark:text-white/50">Pensado para</p>
+          <div className="mt-8 border-t border-border pt-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pensado para</p>
             <ul className="mt-3 flex flex-wrap gap-2">
               {p.audiences.map((a) => (
-                <li key={a} className="rounded-full bg-[var(--color-flit-bg)] px-3 py-1 text-xs font-medium text-flit-primary dark:bg-white/5 dark:text-white/80">
+                <li key={a} className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-flit-primary">
                   {a}
                 </li>
               ))}
@@ -218,7 +218,7 @@ function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInf
 
 function WhyFlit() {
   return (
-    <section id="por-que-flit" className="scroll-mt-20 border-t border-[var(--color-flit-gray)]/70 bg-white/60 dark:border-white/5 dark:bg-white/[0.02]">
+    <section id="por-que-flit" className="scroll-mt-20 border-t border-border/70 bg-card/60">
       <div className="mx-auto max-w-7xl px-4 py-20 md:px-6">
         <SectionTitle eyebrow="Por qué FLIT" title="Hecha para cómo funciona la movilidad en Colombia" center />
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -263,7 +263,7 @@ function About() {
 
 function HowToStart() {
   return (
-    <section id="como-empezar" className="scroll-mt-20 border-t border-[var(--color-flit-gray)]/70 bg-white/60 dark:border-white/5 dark:bg-white/[0.02]">
+    <section id="como-empezar" className="scroll-mt-20 border-t border-border/70 bg-card/60">
       <div className="mx-auto max-w-7xl px-4 py-20 md:px-6">
         <SectionTitle
           eyebrow="Cómo empezar"
@@ -298,7 +298,7 @@ function Contact() {
           Cuéntanos qué necesitas y te mostramos cómo FLIT puede ayudarte. Te respondemos con una demostración a la medida.
         </p>
         <div className="relative mt-8 flex flex-wrap justify-center gap-3">
-          <a href={demoMailto()} className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-flit-primary transition hover:opacity-90">
+          <a href={demoMailto()} className="inline-flex items-center gap-2 rounded-full bg-card px-6 py-3 text-sm font-semibold text-flit-primary transition hover:opacity-90">
             <Mail className="h-4 w-4" aria-hidden="true" /> {CONTACT.email}
           </a>
           <a
@@ -317,9 +317,9 @@ function Contact() {
 }
 
 function Footer({ loginUrl }: { loginUrl: string }) {
-  const col = "text-sm text-[#59677d] transition hover:text-flit-brand dark:text-white/60 dark:hover:text-white";
+  const col = "text-sm text-muted-foreground transition hover:text-flit-brand";
   return (
-    <footer className="border-t border-[var(--color-flit-gray)] dark:border-white/10">
+    <footer className="border-t border-border">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-[1.5fr_1fr_1fr_1fr] md:px-6">
         <div>
           <BrandLogo variant="dark" className="h-9 w-auto dark:hidden" />
@@ -354,7 +354,7 @@ function Footer({ loginUrl }: { loginUrl: string }) {
           </ul>
         </nav>
       </div>
-      <p className="border-t border-[var(--color-flit-gray)] px-4 py-5 text-center text-[11px] text-[#59677d] dark:border-white/10 dark:text-white/50">
+      <p className="border-t border-border px-4 py-5 text-center text-[11px] text-muted-foreground">
         <a href={FLIT_PRIVACY_POLICY_URL} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
           Políticas de Privacidad y Términos de Uso
         </a>{" "}

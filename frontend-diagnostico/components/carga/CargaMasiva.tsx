@@ -144,7 +144,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         <h2 id="carga-vacio" className="text-lg font-semibold">
           No tienes permiso para cargar vehículos
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (!analisis) {
@@ -193,10 +193,10 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
   return (
     <>
       <section aria-labelledby="carga-titulo" className={TARJETA_CLS}>
-        <h1 id="carga-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+        <h1 id="carga-titulo" className="text-2xl font-semibold text-flit-primary">
           Cargar vehículos
         </h1>
-        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
+        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
       </section>
       {contenido}
     </>

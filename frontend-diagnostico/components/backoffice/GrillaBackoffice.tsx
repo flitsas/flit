@@ -175,7 +175,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     contenido =
       error instanceof ApiError && error.status === 404 ? (
         <Vacio titulo="No encontramos este lote en la compañía elegida" Icono={SearchX}>
-          <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Revisa la compañía o vuelve a la lista de sus lotes.</p>
+          <p className="max-w-md text-sm text-[var(--nav-texto)]">Revisa la compañía o vuelve a la lista de sus lotes.</p>
           <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>
             Volver a los lotes
           </Link>
@@ -206,7 +206,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     contenido =
       grilla.avance.vehiculos === 0 ? (
         <Vacio titulo="Este lote no tiene vehículos">
-          <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">No hay celdas que revisar ni llenar.</p>
+          <p className="max-w-md text-sm text-[var(--nav-texto)]">No hay celdas que revisar ni llenar.</p>
         </Vacio>
       ) : (
         <>
@@ -252,10 +252,10 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     <>
       <section aria-labelledby="grilla-bo-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
         <div className="min-w-0">
-          <h1 id="grilla-bo-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+          <h1 id="grilla-bo-titulo" className="text-2xl font-semibold text-flit-primary">
             {titulo}
           </h1>
-          <p className="mt-1 break-all text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{`Backoffice · Compañía ${empresa}`}</p>
+          <p className="mt-1 break-all text-sm font-medium text-[var(--nav-texto)]">{`Backoffice · Compañía ${empresa}`}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>

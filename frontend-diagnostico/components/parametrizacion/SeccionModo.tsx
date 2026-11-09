@@ -56,7 +56,7 @@ export function SeccionModo({
     <section className={compacta ? "flex flex-col gap-3" : `${TARJETA_CLS} flex flex-col gap-4`}>
       <fieldset aria-describedby={errorModo ? errorModoId : undefined} className="flex flex-col gap-2">
         <legend className="mb-1">
-          <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary dark:text-white"}>Modo</Titulo>
+          <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>Modo</Titulo>
         </legend>
         {!compacta && (
           <p className={AYUDA_CLS}>Simple consulta las fuentes y entrega el consolidado. Con Análisis IA suma el dictamen para un tipo de trámite.</p>

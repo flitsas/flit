@@ -25,10 +25,10 @@ export default function Inicio() {
     <>
       <section aria-labelledby="diagnostico-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between`}>
         <div>
-          <h1 id="diagnostico-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+          <h1 id="diagnostico-titulo" className="text-2xl font-semibold text-flit-primary">
             Diagnóstico vehicular
           </h1>
-          {empresa && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{empresa}</p>}
+          {empresa && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{empresa}</p>}
         </div>
         {puedeCrear && <CapturaExpress />}
       </section>

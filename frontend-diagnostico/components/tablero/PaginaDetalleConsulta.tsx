@@ -152,7 +152,7 @@ export function PaginaDetalleConsulta({
               { texto: titulo },
             ]}
           />
-          <h1 id="detalle-consulta-titulo" className="break-all text-2xl font-semibold text-flit-primary dark:text-white">
+          <h1 id="detalle-consulta-titulo" className="break-all text-2xl font-semibold text-flit-primary">
             {titulo}
           </h1>
           {detalle && nota?.(detalle)}

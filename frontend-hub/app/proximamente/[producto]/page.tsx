@@ -25,10 +25,10 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
 
   const content = (
     <section className="mx-auto max-w-3xl py-10">
-      <Link href="/?inicio=1" className="inline-flex items-center gap-1 text-sm font-medium text-[#59677d] transition hover:text-flit-brand dark:text-white/60">
+      <Link href="/?inicio=1" className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition hover:text-flit-brand">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Volver al inicio
       </Link>
-      <div className="mt-6 rounded-3xl border border-[var(--color-flit-gray)] bg-white p-8 shadow-[var(--nav-sombra-dock)] md:p-10 dark:border-white/10 dark:bg-[#0B0F14]">
+      <div className="mt-6 rounded-3xl border border-border bg-card p-8 shadow-[var(--shadow-card)] md:p-10">
         <div className="flex items-center gap-4">
           <ProductIcon icon={product.icon} size="lg" />
           <div>
@@ -39,20 +39,20 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
           </div>
         </div>
         <p className="mt-6 text-lg font-medium leading-relaxed">{product.tagline}</p>
-        <p className="mt-3 leading-relaxed text-[#59677d] dark:text-white/65">{product.description}</p>
+        <p className="mt-3 leading-relaxed text-muted-foreground">{product.description}</p>
         <p className="mt-8 text-xs font-semibold uppercase tracking-[0.16em] text-flit-brand">Lo que traerá</p>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           {product.features.map((f) => (
             <li key={f} className="flex gap-3 text-sm leading-relaxed">
-              <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-flit-tech/15 text-[#00a8a3] dark:text-flit-tech">
+              <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]">
                 <Check className="h-3 w-3" aria-hidden="true" />
               </span>
               {f}
             </li>
           ))}
         </ul>
-        <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-[var(--color-flit-gray)] pt-6 dark:border-white/10">
-          <p className="mr-auto text-sm text-[#59677d] dark:text-white/65">Cuando esté listo aparecerá aquí mismo, con tu misma cuenta.</p>
+        <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-border pt-6">
+          <p className="mr-auto text-sm text-muted-foreground">Cuando esté listo aparecerá aquí mismo, con tu misma cuenta.</p>
           <a
             href={`mailto:${CONTACT.email}?subject=${encodeURIComponent(`Quiero saber cuándo llega ${product.name}`)}`}
             className="inline-flex items-center gap-2 rounded-full bg-flit-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
@@ -64,7 +64,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
     </section>
   );
 
-  if (!user) return <main className="min-h-full bg-[var(--color-flit-bg)] px-4 text-flit-primary dark:bg-[#05060A] dark:text-white">{content}</main>;
+  if (!user) return <main className="min-h-full bg-flit-bg px-4 text-flit-primary dark:bg-background">{content}</main>;
 
   return (
     <HubShell tramitesUrl={await resolveTramitesUrl((await headers()).get("host"), hubConfig().tramitesUrl)} user={toHubUser(user)}>
