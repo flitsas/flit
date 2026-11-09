@@ -10263,16 +10263,6 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("person_id");
 
-                    b.Property<string>("PortalParte")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("portal_parte");
-
-                    b.Property<string>("PortalSolicitudRef")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("portal_solicitud_ref");
-
                     b.Property<Guid?>("ProcedureInstanceId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
@@ -10408,10 +10398,6 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "ProcedureInstanceId")
                         .HasDatabaseName("ix_procedure_instance_biometric_validations_tenant_id_instance");
-
-                    b.HasIndex("PortalSolicitudRef", "PortalParte", "CreatedAt")
-                        .HasDatabaseName("ix_biometric_validations_portal_solicitud")
-                        .HasFilter("portal_solicitud_ref IS NOT NULL");
 
                     b.HasIndex("TenantId", "Status", "ManualActivatedAt")
                         .HasDatabaseName("ix_biometric_validations_manual_tab")
