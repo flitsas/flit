@@ -122,3 +122,36 @@ describe('PlacaPreasignadaSection — dígito de preferencia (HU #10805)', () =>
     expect(select.value).toBe('7');
   });
 });
+
+// HU 3 (registro diferido 2026-11-09) — placa asignada por el OT (`source: 'ot'`, o placa con
+// source vacío de antes del cambio) vista en el asistente en solo lectura (enlace directo a
+// /tramites/{id}): se muestra la placa y el aviso del dígito de preferencia.
+describe('PlacaPreasignadaSection — placa asignada por el OT (HU 3)', () => {
+  it('coincide — muestra la placa y el aviso de éxito', async () => {
+    render(
+      <PlacaPreasignadaSection instanceId="i" plateValue="ABC125" plateSource="ot" preferredDigitValue="5" readOnly />,
+    );
+    const bloque = await screen.findByTestId('fur-placa-asignada-ot');
+    expect(bloque).toHaveTextContent(
+      'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    );
+    expect(screen.queryByTestId('fur-placa-ruta-larga')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();
+  });
+
+  it('no coincide — aviso informativo', async () => {
+    render(
+      <PlacaPreasignadaSection instanceId="i" plateValue="ABC123" plateSource="" preferredDigitValue="5" readOnly />,
+    );
+    expect(await screen.findByTestId('fur-placa-asignada-ot')).toHaveTextContent(
+      'La placa ABC123 asignada por el organismo de tránsito no termina en tu dígito de preferencia (5). El organismo lo toma solo como guía.',
+    );
+  });
+
+  it('sin preferencia — la placa se ve pero no hay aviso de dígito', async () => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="ABC123" plateSource="ot" readOnly />);
+    const bloque = await screen.findByTestId('fur-placa-asignada-ot');
+    expect(bloque).toHaveTextContent('ABC123');
+    expect(bloque).not.toHaveTextContent(/dígito de preferencia/);
+  });
+});

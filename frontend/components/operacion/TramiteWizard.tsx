@@ -4228,7 +4228,7 @@ function ConsultaStep({
           {muestraDigitoPlaca && (
           <div className="min-w-0">
             <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
-              Dígito de preasignación de placa
+              Dígito de preferencia
             </label>
             {/* AC2 (HU #10799) — con placa del RUNT no hay nada que preasignar: se dice, con la
                 placa delante, en vez de dejar un selector apagado que parece un fallo. Es la misma
@@ -4286,7 +4286,7 @@ function ConsultaStep({
                     ? 'Elige primero la secretaría: es el organismo que asignará la placa.'
                     : digitoPlacaSinDecidir
                       ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
-                      : 'Indica el número en el que prefieres que termine la placa. El organismo lo toma como guía al asignarla en Preasignación; podrás cambiarlo en el paso final.'}
+                      : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
                 </p>
               </>
             )}

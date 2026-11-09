@@ -45,6 +45,13 @@ public enum PlateAssignmentFailure
     /// (<c>plate_updated_at</c> no nulo), aunque la hora siga vigente.
     /// </summary>
     PlateUpdateAlreadyUsed,
+
+    /// <summary>
+    /// Caso C 2026-11-09 — el trámite es un carro (<c>PlateRangeRules.IsCarClass</c>) y la placa no
+    /// cumple <c>ABC123</c>. Se detecta antes de reservar en el inventario: el trámite sigue en
+    /// preasignación.
+    /// </summary>
+    InvalidPlateFormatForClass,
 }
 
 /// <summary>

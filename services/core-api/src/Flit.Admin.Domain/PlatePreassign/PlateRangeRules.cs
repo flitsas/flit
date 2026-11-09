@@ -30,6 +30,23 @@ public static partial class PlateRangeRules
     public const string InvalidPlateFormatMessage =
         "La placa no cumple el formato esperado. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
 
+    /// <summary>
+    /// Mensaje 422 cuando el trámite es un carro (<see cref="IsCarClass"/>) y la placa que asigna el
+    /// OT no es <c>ABC123</c> (Caso C 2026-11-09).
+    /// </summary>
+    public const string InvalidCarPlateFormatMessage =
+        "La placa de este vehículo debe tener 3 letras y 3 números, por ejemplo ABC123.";
+
+    /// <summary>
+    /// Clases de vehículo que son «carro» (Caso C 2026-11-09, decisión del usuario): solo admiten placa
+    /// <c>ABC123</c> al asignarla el OT. Valores ya normalizados (mayúsculas, sin tildes, espacios
+    /// colapsados). Igualdad EXACTA: hay clases CAMION* de MAQUINARIA (p. ej. «CAMION GRUA»).
+    /// </summary>
+    public static readonly IReadOnlySet<string> CarVehicleClasses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "AUTOMOVIL", "CAMIONETA", "CAMPERO", "BUS", "BUSETA", "MICROBUS", "CAMION", "TRACTOCAMION", "VOLQUETA",
+    };
+
     /// <summary>Ventana de edición del rango tras su creación (Feature #10587, consola OT).</summary>
     public static readonly TimeSpan EditWindow = TimeSpan.FromMinutes(60);
 
@@ -42,6 +59,26 @@ public static partial class PlateRangeRules
         @"^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9]{5,6}|[A-Z]{2}[0-9]{6})$",
         RegexOptions.CultureInvariant)]
     private static partial Regex PlatePattern();
+
+    /// <summary>Placa de carro: exactamente 3 letras A–Z + 3 dígitos ASCII (Caso C 2026-11-09).</summary>
+    [GeneratedRegex(@"^[A-Z]{3}[0-9]{3}$", RegexOptions.CultureInvariant)]
+    private static partial Regex CarPlatePattern();
+
+    /// <summary>
+    /// ¿La clase de vehículo es un carro? Recibe la clase YA normalizada con
+    /// <c>Flit.Tramites.Application.Documents.FurClassificationNormalizer.Normalize</c> (Admin.Domain no
+    /// puede depender de una capa de aplicación; la normaliza quien llama, en Infrastructure). Compara
+    /// por igualdad exacta contra <see cref="CarVehicleClasses"/>: nunca prefijo ni contains.
+    /// Vacía, «SIN CLASE» o cualquier otra clase ⇒ <c>false</c> (formatos actuales).
+    /// </summary>
+    public static bool IsCarClass(string? normalizedVehicleClass) =>
+        !string.IsNullOrEmpty(normalizedVehicleClass) && CarVehicleClasses.Contains(normalizedVehicleClass);
+
+    /// <summary>
+    /// ¿La placa (ya en mayúsculas y sin espacios) cumple el formato de carro <c>^[A-Z]{3}[0-9]{3}$</c>?
+    /// </summary>
+    public static bool IsValidCarPlate(string? plate) =>
+        !string.IsNullOrEmpty(plate) && CarPlatePattern().IsMatch(plate);
 
     /// <summary>¿El prefijo son exactamente 3 letras A–Z?</summary>
     public static bool IsValidPrefix(string? prefix) =>
