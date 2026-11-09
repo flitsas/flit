@@ -329,7 +329,9 @@
   --badge-tinta-bg: rgba(230, 240, 255, 0.1);
   --badge-tinta-fg: #e6f0ff;
   --badge-tinta-border: rgba(230, 240, 255, 0.2);
-  --gradient-action: linear-gradient(90deg, #8fb0ff 0%, #6fd0f0 55%, #5fe6e1 100%);
+  /* Los botones de acción llevan texto blanco fijo: en oscuro el degradado es el profundo (5,4:1 con blanco). El claro
+   * de la propuesta (#8fb0ff → #5fe6e1) daba ~2,2:1 con blanco; se vio en navegador en «Nuevo trámite». */
+  --gradient-action: linear-gradient(90deg, #3d5fd9 0%, #0f6fa8 100%);
   --surface-sunken: #182846;
   --border-strong: #33486e;
   --overlay: rgba(4, 9, 20, 0.7);
