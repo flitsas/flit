@@ -63,7 +63,7 @@ public sealed class RegistroDePagos(
         ArgumentNullException.ThrowIfNull(pedido);
         Validar(pedido);
 
-        // Lectura previa sin bloqueo: evita cotizar (llamada a core-api) cuando el resultado ya está decidido.
+        // Lectura previa sin bloqueo: descarta rápido lo ya decidido; el total se cotiza dentro de la transacción.
         var previa = await db.Set<SolicitudTramite>().AsNoTracking().Where(s => s.Id == pedido.SolicitudId)
             .Select(s => new { s.Estado, s.Datos, s.OrganismoId, s.TipoTramiteCodigo }).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw SolicitudesService.NoEncontrada();
@@ -76,13 +76,7 @@ public sealed class RegistroDePagos(
         if (previa.Estado != EstadoSolicitud.PendientePago)
             throw EstadoNoPermitePago();
 
-        var cotizacion = await cotizador.CotizarAsync(previa.TipoTramiteCodigo, previa.OrganismoId, ct).ConfigureAwait(false);
-        if (pedido.Medio == MedioDePago.SinCobro && cotizacion.TotalCop != 0)
-            throw Regla(StatusCodes.Status409Conflict, "total_mayor_cero", "El trámite tiene un valor a pagar; debe pagarse en caja.");
-        if (pedido.Medio == MedioDePago.Caja && cotizacion.TotalCop == 0)
-            throw Regla(StatusCodes.Status409Conflict, "total_cero", "El trámite no tiene valor a pagar; se confirma sin pasar por caja.");
-
-        var pagado = await ConfirmarEnTransaccionAsync(pedido, cotizacion, ct).ConfigureAwait(false);
+        var pagado = await ConfirmarEnTransaccionAsync(pedido, previa.TipoTramiteCodigo, ct).ConfigureAwait(false);
 
         // El pago ya está firme. Radicar es lo siguiente; si no se logra ahora, la solicitud queda «pagada» y se reintenta.
         var radicada = await radicacion.IntentarRadicarPagadaAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
@@ -112,7 +106,7 @@ public sealed class RegistroDePagos(
         }
     }
 
-    private async Task<PagoRegistrado> ConfirmarEnTransaccionAsync(PedidoDePago pedido, CotizacionDto cotizacion, CancellationToken ct)
+    private async Task<PagoRegistrado> ConfirmarEnTransaccionAsync(PedidoDePago pedido, string tipoCodigo, CancellationToken ct)
     {
         try
         {
@@ -124,6 +118,14 @@ public sealed class RegistroDePagos(
                     throw YaPagado();
                 if (s.Estado != EstadoSolicitud.PendientePago)
                     throw EstadoNoPermitePago();
+
+                // Se cotiza AQUÍ, con la fila bloqueada y el estado revalidado: se cobra lo vigente al confirmar. Si la
+                // cotización falla, la excepción sale de la transacción y no se registra nada.
+                var cotizacion = await cotizador.CotizarAsync(tipoCodigo, s.OrganismoId, ct2).ConfigureAwait(false);
+                if (pedido.Medio == MedioDePago.SinCobro && cotizacion.TotalCop != 0)
+                    throw Regla(StatusCodes.Status409Conflict, "total_mayor_cero", "El trámite tiene un valor a pagar; debe pagarse en caja.");
+                if (pedido.Medio == MedioDePago.Caja && cotizacion.TotalCop == 0)
+                    throw Regla(StatusCodes.Status409Conflict, "total_cero", "El trámite no tiene valor a pagar; se confirma sin pasar por caja.");
 
                 var ahora = reloj.GetUtcNow();
                 var habilitado = cobros.FirstOrDefault(c => c.Estado == EstadoCobro.Habilitado);
