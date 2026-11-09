@@ -20681,6 +20681,23 @@ components:
           description: >
             HU #12791 — adjunto `consolidado_maestro` enviado en esa radicación
             (`quipux_submissions.attachment_id`). Null si no se ha radicado.
+        clase:
+          type: string
+          nullable: true
+          description: >
+            Caso C 2026-11-09 — `vehicle_class` crudo del trámite (sin normalizar), en la lista y en el detalle.
+        grupoPlaca:
+          type: string
+          nullable: true
+          enum: [CARRO, MOTO, MOTOCARRO, REMOLQUE, MAQUINARIA, null]
+          description: >
+            HU8 (Caso C 2026-11-09) — grupo de placa de `clase`, en la lista y en el detalle. Decide el
+            formato que exigen `assign-plate` y `update-plate` (422 con el literal del grupo):
+            CARRO `^[A-Z]{3}[0-9]{3}$`, MOTO `^[A-Z]{3}[0-9]{2}[A-Z]?$`, MOTOCARRO `^[0-9]{3}[A-Z]{3}$`
+            (HU10: MOTOCARRO, MOTOTRICICLO, TRICIMOTO), REMOLQUE `^[RS][0-9]{5,6}$`,
+            MAQUINARIA `^[A-Z]{2}[0-9]{6}$`. Carro, moto y motocarro por lista exacta de clases normalizadas;
+            remolque y maquinaria según el catálogo `tramites.vehicle_classification_fur`. Null si la clase
+            es vacía, «SIN CLASE» o desconocida: rige la unión de formatos.
 
     ProcedureInstanceSummary:
       type: object

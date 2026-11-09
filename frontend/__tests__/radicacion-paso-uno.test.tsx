@@ -138,7 +138,7 @@ async function elegirSecretaria(
   await user.click(await screen.findByRole('option', { name: nombre }));
 }
 
-const digito = () => screen.getByLabelText('Dígito de preasignación de placa') as HTMLSelectElement;
+const digito = () => screen.getByLabelText('Dígito de preferencia') as HTMLSelectElement;
 
 /**
  * HU #11628 — con preasignación activa el dígito exige una elección consciente antes de "Continuar"
@@ -210,7 +210,7 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     await consultarVehiculo(user);
 
-    expect(await screen.findByLabelText('Dígito de preasignación de placa')).toBeDisabled();
+    expect(await screen.findByLabelText('Dígito de preferencia')).toBeDisabled();
     expect(screen.getByText(/Elige primero la secretaría/)).toBeInTheDocument();
   });
 
@@ -262,7 +262,7 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     expect(screen.getByTestId('ruta-corta-placa')).toHaveTextContent('WVT948');
     expect(screen.getByTestId('ruta-corta-organismo')).toHaveTextContent('Tránsito de Envigado');
     expect(screen.queryByRole('combobox', { name: /secretaría de tránsito/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dígito de preferencia')).not.toBeInTheDocument();
     // El organismo de «Datos del vehículo» tampoco se edita: viene del RUNT igual que la placa.
     expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
 
@@ -324,7 +324,7 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     expect(screen.queryByTestId('ruta-corta-organismo')).not.toBeInTheDocument();
     expect(screen.getByText(/El RUNT no reporta el organismo de tránsito del vehículo/)).toBeInTheDocument();
     // Con placa del RUNT no hay dígito que elegir: se informa la placa.
-    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dígito de preferencia')).not.toBeInTheDocument();
     expect(screen.getByText(/No aplica la preasignación de placa/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
 
@@ -584,7 +584,7 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
     expect(screen.getByTestId('ruta-corta-placa')).toHaveTextContent('WVT948');
     expect(screen.getByTestId('ruta-corta-organismo')).toHaveTextContent('Tránsito de Envigado');
     expect(screen.queryByRole('combobox', { name: /secretaría de tránsito/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dígito de preferencia')).not.toBeInTheDocument();
   });
 
   it('no ofrece cambiar la prioridad desde el paso 1', async () => {
