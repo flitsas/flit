@@ -282,4 +282,103 @@ public sealed class PreflightPreviewHandlerTests
         _store.TryTake(Guid.NewGuid(), "no-existe").Should().BeNull();
         _store.TryTake(Guid.NewGuid(), null).Should().BeNull();
     }
+
+    // ── HU9 (Caso C 2026-11-09) — grupoPlaca en el preview del paso 1 ──────────
+
+    /// <summary>Resolver de grupo con mapa fijo (la regla real se prueba en Flit.Admin.Tests).</summary>
+    private sealed class MapPlateGroupResolver(Dictionary<string, string> map) : IVehiclePlateGroupResolver
+    {
+        public List<string?> Received { get; } = [];
+
+        public Task<string?> ResolveContractValueAsync(string? rawVehicleClass, CancellationToken cancellationToken = default)
+        {
+            Received.Add(rawVehicleClass);
+            return Task.FromResult(rawVehicleClass is not null && map.TryGetValue(rawVehicleClass, out var g) ? g : null);
+        }
+    }
+
+    private RunPreflightPreviewHandler HandlerWithGroup(IVehiclePlateGroupResolver? groups, string key, IConsultationProvider provider)
+    {
+        var registry = new StaticRegistry(new Dictionary<string, IConsultationProvider> { [key] = provider });
+        return new RunPreflightPreviewHandler(
+            _repo,
+            registry,
+            new ConsultationProviderChainResolver(registry, new ConsultationChainOptions()),
+            new NullOverrideProvider(),
+            NullConsultationRestrictionPolicy.Instance,
+            _store,
+            new SingleOfficeResolver(SecretariaHabilitada),
+            NullConsultationBlockingPolicy.Instance,
+            plateGroupResolver: groups);
+    }
+
+    [Theory]
+    [InlineData("CAMIÓN GRÚA", "MAQUINARIA")]
+    [InlineData("RETROEXCAVADORA", "MAQUINARIA")]
+    [InlineData("MOTOCICLETA", "MOTO")]
+    public async Task HU9_Preview_ExponeGrupoPlacaDeLaClaseConsultada(string clase, string grupo)
+    {
+        var tenant = Guid.NewGuid();
+        _repo.FindTramitesByVinAsync(tenant, Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var groups = new MapPlateGroupResolver(new() { [clase] = grupo });
+        var provider = new StubProvider("kyverum_runt", VehiculoOk(new HydratedField(VehicleFieldKeys.Class, clase, null)));
+
+        var (result, error, _, _) = await HandlerWithGroup(groups, "kyverum_runt", provider)
+            .HandleAsync(MatriculaRequest(tenant), TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.GrupoPlaca.Should().Be(grupo);
+        groups.Received.Should().Equal([clase], "se resuelve la clase cruda que trajo la consulta, una sola vez");
+        System.Text.Json.JsonSerializer.Serialize(result, System.Text.Json.JsonSerializerOptions.Web)
+            .Should().Contain($"\"grupoPlaca\":\"{grupo}\"", "el campo va en el nivel superior del preview");
+    }
+
+    [Theory]
+    [InlineData("NAVE ESPACIAL")]
+    [InlineData("SIN CLASE")]
+    public async Task HU9_Preview_ClaseDesconocida_GrupoPlacaNull(string clase)
+    {
+        var tenant = Guid.NewGuid();
+        _repo.FindTramitesByVinAsync(tenant, Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var groups = new MapPlateGroupResolver(new() { ["CAMIÓN GRÚA"] = "MAQUINARIA" });
+        var provider = new StubProvider("kyverum_runt", VehiculoOk(new HydratedField(VehicleFieldKeys.Class, clase, null)));
+
+        var (result, _, _, _) = await HandlerWithGroup(groups, "kyverum_runt", provider)
+            .HandleAsync(MatriculaRequest(tenant), TestContext.Current.CancellationToken);
+
+        result!.GrupoPlaca.Should().BeNull();
+        System.Text.Json.JsonSerializer.Serialize(result, System.Text.Json.JsonSerializerOptions.Web)
+            .Should().Contain("\"grupoPlaca\":null");
+    }
+
+    [Fact]
+    public async Task HU9_Preview_SinClaseConsultada_GrupoPlacaNull()
+    {
+        var tenant = Guid.NewGuid();
+        _repo.FindTramitesByVinAsync(tenant, Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var groups = new MapPlateGroupResolver(new() { ["CAMIÓN GRÚA"] = "MAQUINARIA" });
+        var provider = new StubProvider("kyverum_runt", VehiculoOk(new HydratedField("vehicle_brand", "RENAULT", null)));
+
+        var (result, _, _, _) = await HandlerWithGroup(groups, "kyverum_runt", provider)
+            .HandleAsync(MatriculaRequest(tenant), TestContext.Current.CancellationToken);
+
+        result!.GrupoPlaca.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HU9_Preview_SinResolverInyectado_GrupoPlacaNull()
+    {
+        var tenant = Guid.NewGuid();
+        _repo.FindTramitesByVinAsync(tenant, Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        var provider = new StubProvider("kyverum_runt", VehiculoOk(new HydratedField(VehicleFieldKeys.Class, "CAMIÓN GRÚA", null)));
+
+        var (result, _, _, _) = await HandlerWithGroup(null, "kyverum_runt", provider)
+            .HandleAsync(MatriculaRequest(tenant), TestContext.Current.CancellationToken);
+
+        result!.GrupoPlaca.Should().BeNull();
+    }
 }

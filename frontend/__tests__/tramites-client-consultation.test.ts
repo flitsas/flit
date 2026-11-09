@@ -103,3 +103,33 @@ describe('tramitesClient.runConsultation — AC1/AC2 (HU #10885)', () => {
     expect(snapshot.queriedAt).toBeNull();
   });
 });
+
+// HU9 (registro diferido 2026-11-09) — `grupoPlaca` del nivel superior del preview llega al paso 1.
+// Uso de ejemplo: { grupoPlaca: 'MAQUINARIA' } → result.grupoPlaca === 'MAQUINARIA'; ausente → null.
+describe('tramitesClient.runPreflightPreview — grupoPlaca (HU9)', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const preview = (extra: Record<string, unknown>) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ previewToken: 'tok', overall: 'green', checks: [], vehicleFields: [], ...extra }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+  it.each(['CARRO', 'MOTO', 'REMOLQUE', 'MAQUINARIA'])('mapea grupoPlaca %s', async (g) => {
+    preview({ grupoPlaca: g });
+    const r = await tramitesClient.runPreflightPreview({ modalidad: 'matricula_inicial', vin: 'X' });
+    expect(r.grupoPlaca).toBe(g);
+  });
+
+  it('ausente, null o desconocido → null', async () => {
+    for (const extra of [{}, { grupoPlaca: null }, { grupoPlaca: 'OTRO' }]) {
+      preview(extra);
+      const r = await tramitesClient.runPreflightPreview({ modalidad: 'matricula_inicial', vin: 'X' });
+      expect(r.grupoPlaca).toBeNull();
+    }
+  });
+});
