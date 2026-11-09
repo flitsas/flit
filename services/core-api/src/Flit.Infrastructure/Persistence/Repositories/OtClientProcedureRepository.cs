@@ -110,6 +110,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                         && f.FieldKey == PlatePreferredLastDigitFieldKey)
                                     .Select(f => f.ValueText)
                                     .FirstOrDefault(),
+                                // Caso C 2026-11-09 — clase cruda del vehículo: el modal «Asignar placa» decide
+                                // si exige el formato de carro ABC123. Mismo patrón de subconsulta correlacionada.
+                                Clase = _context.ProcedureInstanceFieldValues
+                                    .Where(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == VehicleFieldKeys.Class)
+                                    .Select(f => f.ValueText)
+                                    .FirstOrDefault(),
                                 SoatPagado = _context.ProcedureInstanceFieldValues
                                     .Any(f => f.ProcedureInstanceId == p.Id
                                         && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.EnvioOtCheckFields.SoatPagado
@@ -863,6 +870,36 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         });
     }
 
+    /// <summary>Caso C 2026-11-09 (HU 3) — <c>source</c> del field_value <c>plate</c> escrito por el OT.</summary>
+    private const string OtPlateFieldSource = "ot";
+
+    /// <summary>
+    /// Caso C 2026-11-09 — regla única de formato por clase, compartida por <see cref="AssignPlateAsync"/> y
+    /// <see cref="UpdatePlateAsync"/>: si el <c>vehicle_class</c> del trámite, normalizado con
+    /// <c>FurClassificationNormalizer</c>, es un carro (<see cref="PlateRangeRules.IsCarClass"/>), la placa
+    /// (ya normalizada) debe cumplir <see cref="PlateRangeRules.IsValidCarPlate"/>. El resto de clases (o
+    /// sin clase) conserva los formatos actuales, que el endpoint ya validó con
+    /// <see cref="PlateRangeRules.IsValidPlate"/>. Debe llamarse dentro del scope de tenant del cliente y
+    /// antes de cualquier escritura. Devuelve el fallo, o <c>null</c> si la placa es admisible.
+    /// </summary>
+    private async Task<PlateAssignmentOutcome?> FailIfInvalidPlateForVehicleClassAsync(
+        Guid procedureInstanceId, string normalizedPlate, CancellationToken cancellationToken)
+    {
+        var vehicleClass = await _context.ProcedureInstanceFieldValues
+            .Where(f => f.ProcedureInstanceId == procedureInstanceId && f.FieldKey == VehicleFieldKeys.Class)
+            .Select(f => f.ValueText)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var isCar = PlateRangeRules.IsCarClass(
+            Flit.Tramites.Application.Documents.FurClassificationNormalizer.Normalize(vehicleClass));
+        return isCar && !PlateRangeRules.IsValidCarPlate(normalizedPlate)
+            ? PlateAssignmentOutcome.Fail(
+                PlateAssignmentFailure.InvalidPlateFormatForClass,
+                PlateRangeRules.InvalidCarPlateFormatMessage)
+            : null;
+    }
+
     // HU #10654 → ADR-0059 (HU #12598) — el OT asigna una placa a un trámite en 'preasignacion': reserva
     // la placa, la escribe en field_values (el trigger lo permite en ese estado) y transiciona
     // preasignacion → asignado por la política única, con fila de historial y publicación.
@@ -921,6 +958,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return PlateAssignmentOutcome.Fail(PlateAssignmentFailure.NotPreassigned);
                 }
 
+                // Caso C 2026-11-09 — regla ABC123 para carros ANTES de reservar: no se toca el inventario
+                // y el trámite sigue en preasignación.
+                var normalizedPlate = plate.Trim().ToUpperInvariant();
+                if (await FailIfInvalidPlateForVehicleClassAsync(procedureInstanceId, normalizedPlate, cancellationToken)
+                        .ConfigureAwait(false) is { } formatFailure)
+                {
+                    return formatFailure;
+                }
+
                 // HU #12849 (Feature #12846, Épica #12751) — la consola de rangos se retiró: la
                 // asignación de placa dentro de un trámite SIEMPRE reserva fuera de rango, sin
                 // importar el valor de <paramref name="outOfRange"/> recibido (se ignora a propósito,
@@ -942,7 +988,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
                 // Escribe la placa en field_values ESTANDO en preasignacion (el trigger lo permite) y
                 // persiste antes de cambiar el estado (evita el orden de operaciones del trigger).
-                var normalizedPlate = plate.Trim().ToUpperInvariant();
+                // Caso C 2026-11-09 (HU 3) — Source = "ot": el gestor distingue la placa asignada por el OT.
+                // El trigger de inmutabilidad solo mira status + field_key, no source.
                 var fv = await _context.ProcedureInstanceFieldValues
                     .FirstOrDefaultAsync(
                         f => f.ProcedureInstanceId == procedureInstanceId && f.FieldKey == "plate",
@@ -957,11 +1004,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         TenantId = accessible.ClientTenantId,
                         FieldKey = "plate",
                         ValueText = normalizedPlate,
+                        Source = OtPlateFieldSource,
                     });
                 }
                 else
                 {
                     fv.ValueText = normalizedPlate;
+                    fv.Source = OtPlateFieldSource;
                 }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -1084,6 +1133,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 var previousPlate = entity.Plate;
                 var normalizedPlate = plate.Trim().ToUpperInvariant();
 
+                // Caso C 2026-11-09 (tanda 2) — misma regla ABC123 para carros que la asignación, antes de
+                // escribir nada: la placa anterior se conserva y la única corrección no se consume.
+                if (await FailIfInvalidPlateForVehicleClassAsync(procedureInstanceId, normalizedPlate, cancellationToken)
+                        .ConfigureAwait(false) is { } formatFailure)
+                {
+                    return formatFailure;
+                }
+
                 // Mismo orden que AssignPlateAsync: escribe field_values y persiste ANTES de tocar la
                 // instancia (el trigger de denormalización dispara tr_procedure_instances_row_version;
                 // recargar después evita el DbUpdateConcurrencyException del token ya obsoleto).
@@ -1101,11 +1158,13 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         TenantId = accessible.ClientTenantId,
                         FieldKey = "plate",
                         ValueText = normalizedPlate,
+                        Source = OtPlateFieldSource,
                     });
                 }
                 else
                 {
                     fv.ValueText = normalizedPlate;
+                    fv.Source = OtPlateFieldSource;
                 }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
