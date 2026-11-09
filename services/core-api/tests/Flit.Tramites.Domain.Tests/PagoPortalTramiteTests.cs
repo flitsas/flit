@@ -49,6 +49,10 @@ public sealed class PagoPortalTramiteTests
     [InlineData(10, "caja", "efectivo", "no es fecha", "c")]
     [InlineData(10, "caja", "efectivo", "2026-11-09T15:30:00Z", "")]
     [InlineData(10, "caja", "efectivo", "2026-11-09T15:30:00Z", null)]
+    [InlineData(10, "caja", null, "2026-11-09T15:30:00Z", "c")]
+    [InlineData(10, "caja", "otro", "2026-11-09T15:30:00Z", "c")]
+    [InlineData(10, "sin_cobro", null, "2026-11-09T15:30:00Z", "c")]
+    [InlineData(0, "sin_cobro", "efectivo", "2026-11-09T15:30:00Z", "c")]
     public void UnPagoIlegible_NoSeCrea(long valor, string? medio, string? medioCaja, string? fecha, string? cobro) =>
         PagoPortalTramite.Crear(valor, medio, medioCaja, null, fecha, cobro).Should().BeNull();
 }

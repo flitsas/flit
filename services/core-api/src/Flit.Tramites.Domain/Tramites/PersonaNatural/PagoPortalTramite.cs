@@ -33,6 +33,12 @@ public sealed record PagoPortalTramite(
             return null;
         if (caja is not null && !MediosCaja.Contains(caja))
             return null;
+        if (m == MedioCajaPago && caja is null)
+            return null;
+        if (m == MedioCajaPago && caja == "otro" && detalle is null)
+            return null;
+        if (m == MedioSinCobro && (caja is not null || valorCop != 0))
+            return null;
         if (!DateTimeOffset.TryParse(pagadoEn, System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var fecha))
             return null;

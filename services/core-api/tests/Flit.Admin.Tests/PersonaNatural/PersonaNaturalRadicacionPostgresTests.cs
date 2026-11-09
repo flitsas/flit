@@ -334,6 +334,23 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
     }
 
     [Fact]
+    public async Task AC5_UnPagoIlegible_RechazaConPagoInvalido_SinCrearElTramite()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000028"), e.Parte("vendedor", "1000000029")], canal: "pn_punto") with { PagoIlegible = true };
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeFalse();
+        resultado.Codigo.Should().Be("pago_invalido");
+        (await e.TramitesAsync(ct)).Should().BeEmpty();
+        (await e.ContarPagosAsync(ct)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task LaValidacionDeOtraSolicitud_NuncaSeLigaAlTramite_NiSeBuscaPorDocumento()
     {
         var ct = TestContext.Current.CancellationToken;

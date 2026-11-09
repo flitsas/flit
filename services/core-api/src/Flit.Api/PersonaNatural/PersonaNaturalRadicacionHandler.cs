@@ -148,6 +148,13 @@ internal sealed class PersonaNaturalCreador(
             return ResultadoRadicacionPortal.SinEfecto;
         }
 
+        // HU #14469 — un pago que el portal mandó pero no se pudo leer no deja crear el trámite: se rechaza sin crear nada.
+        if (solicitud.PagoIlegible)
+        {
+            RadicacionLog.PagoIlegible(logger, evento.SolicitudId);
+            return Rechazo(MotivosDeRechazo.PagoInvalido);
+        }
+
         // Partes: roles que FLIT 2 sabe guardar. La identidad aprobada solo se exige con
         // PersonaNatural:Radicacion:ExigirIdentidadAlCrear=true; mientras está apagado el borrador se crea igual.
         if (solicitud.Partes.Any(p => !RolesSoportados.Contains(p.Rol.Trim().ToLowerInvariant())))
@@ -317,8 +324,6 @@ internal sealed class PersonaNaturalCreador(
             return;
         if (s.Pago is not { } pago)
         {
-            if (s.PagoIlegible)
-                RadicacionLog.PagoIlegible(logger, id, s.SolicitudId);
             return;
         }
 
@@ -552,6 +557,7 @@ internal static class MotivosDeRechazo
     public const string ParteNoSoportada = "parte_no_soportada";
     public const string IdentidadNoValidada = "identidad_no_validada";
     public const string OrganismoDestinoInvalido = "organismo_destino_invalido";
+    public const string PagoInvalido = "pago_invalido";
     public const string Generico = "no_fue_posible_crear";
 
     private static readonly Dictionary<string, string> Motivos = new(StringComparer.Ordinal)
@@ -567,6 +573,7 @@ internal static class MotivosDeRechazo
         [OrganismoDestinoInvalido] = "El organismo de destino elegido ya no está disponible. Elija otro organismo.",
         [SubmitGate.IdentidadNoAprobada] = "Falta validar la identidad de alguna de las partes del trámite.",
         [SubmitGate.DocumentosIncompletos] = "Faltan documentos obligatorios del trámite.",
+        [PagoInvalido] = "El pago registrado en caja no se pudo leer. Confírmelo de nuevo.",
         ["adjunto_invalido"] = "Alguno de los documentos adjuntos no se pudo registrar. Cárguelo de nuevo.",
         [InitialProcedureValidationGate.DuplicateActiveProcedure] = "Esta placa ya tiene un trámite en proceso. No puedes iniciar otro hasta que ese trámite termine o se anule. Puedes ver su estado en «Consultar mi trámite».",
         [VehicleStatePolicy.ErrorCode] = "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
@@ -604,8 +611,8 @@ internal static partial class RadicacionLog
     [LoggerMessage(EventId = 14469, Level = LogLevel.Information, Message = "Portal Persona Natural: pago del punto registrado en el trámite {ProcedureInstanceId}.")]
     public static partial void PagoRegistrado(ILogger logger, Guid procedureInstanceId);
 
-    [LoggerMessage(EventId = 14470, Level = LogLevel.Warning, Message = "Portal Persona Natural: la solicitud {SolicitudId} trajo un pago ilegible; el trámite {ProcedureInstanceId} queda sin pago registrado y debe revisarse.")]
-    public static partial void PagoIlegible(ILogger logger, Guid procedureInstanceId, Guid solicitudId);
+    [LoggerMessage(EventId = 14470, Level = LogLevel.Warning, Message = "Portal Persona Natural: la solicitud {SolicitudId} trajo un pago ilegible; se rechaza sin crear el trámite.")]
+    public static partial void PagoIlegible(ILogger logger, Guid solicitudId);
 
     [LoggerMessage(EventId = 14056, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se sembró la ficha del vehículo del trámite {ProcedureInstanceId} ({Motivo}).")]
     public static partial void VehiculoNoSembrado(ILogger logger, Guid procedureInstanceId, string motivo);

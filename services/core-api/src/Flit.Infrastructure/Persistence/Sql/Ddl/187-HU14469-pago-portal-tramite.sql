@@ -42,7 +42,11 @@ CREATE TABLE IF NOT EXISTS tramites.procedure_instance_portal_payments (
     CONSTRAINT ck_procedure_instance_portal_payments_amount CHECK (amount_cop >= 0),
     CONSTRAINT ck_procedure_instance_portal_payments_method CHECK (payment_method IN ('caja', 'sin_cobro')),
     CONSTRAINT ck_procedure_instance_portal_payments_cash_method
-        CHECK (cash_method IS NULL OR cash_method IN ('efectivo', 'datafono', 'transferencia', 'otro'))
+        CHECK (cash_method IS NULL OR cash_method IN ('efectivo', 'datafono', 'transferencia', 'otro')),
+    CONSTRAINT ck_procedure_instance_portal_payments_method_consistency CHECK (
+        (payment_method = 'caja' AND cash_method IS NOT NULL
+            AND (cash_method <> 'otro' OR NULLIF(btrim(cash_method_detail), '') IS NOT NULL))
+        OR (payment_method = 'sin_cobro' AND amount_cop = 0 AND cash_method IS NULL))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_procedure_instance_portal_payments_instance
