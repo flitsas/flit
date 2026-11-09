@@ -80,13 +80,20 @@ public static class ConsultaPorApi
             {
                 Id = c.Id, TenantId = c.TenantId, IdentificacionMonitoreadaId = c.IdentificacionMonitoreadaId,
                 NumeroDocumentoInfractor = c.NumeroDocumentoInfractor, EstadoConsultaContraventor = c.EstadoConsultaContraventor,
+                IntentosConsultaContraventor = c.IntentosConsultaContraventor,
             })
             .ToListAsync(ct).ConfigureAwait(false);
-        var aPendiente = candidatos.Where(c => c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica && DeNitMarcado(c, marcados)).Select(c => c.Id).ToList();
+        // GDC punto 20: si ya gastó los 3 intentos, al volver a aplicar queda agotada; como pendiente nadie lo consultaría.
+        var vuelven = candidatos.Where(c => c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica && DeNitMarcado(c, marcados)).ToList();
+        var aPendiente = vuelven.Where(c => c.IntentosConsultaContraventor < ServicioContraventor.MaxIntentos).Select(c => c.Id).ToList();
+        var aAgotada = vuelven.Where(c => c.IntentosConsultaContraventor >= ServicioContraventor.MaxIntentos).Select(c => c.Id).ToList();
         var aManual = candidatos.Where(c => c.EstadoConsultaContraventor != EstadoConsultaContraventor.NoAplica && !DeNitMarcado(c, marcados)).Select(c => c.Id).ToList();
         if (aPendiente.Count > 0)
             await db.Comparendos.Where(c => aPendiente.Contains(c.Id))
                 .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.Pendiente), ct).ConfigureAwait(false);
+        if (aAgotada.Count > 0)
+            await db.Comparendos.Where(c => aAgotada.Contains(c.Id))
+                .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.Agotada), ct).ConfigureAwait(false);
         if (aManual.Count > 0)
             await db.Comparendos.Where(c => aManual.Contains(c.Id))
                 .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.NoAplica), ct).ConfigureAwait(false);

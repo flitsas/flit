@@ -266,5 +266,9 @@ public sealed class ConsultaConductorHoraYTopeTests(ApiConFuente api) : IClassFi
         await ConsultaPorApiDeLosNitsAsync(api, empresa, activo: false);
 
         (await Leer(id)).EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.NoAplica, "sin consulta automática para el NIT, se asigna a mano como los demás");
+
+        // Al volver a marcar el NIT: con los 3 intentos gastados queda agotada (no «Consultando» para siempre); si no, pendiente.
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        (await Leer(id)).EstadoConsultaContraventor.Should().Be(estado == EstadoConsultaContraventor.Agotada ? EstadoConsultaContraventor.Agotada : EstadoConsultaContraventor.Pendiente);
     }
 }
