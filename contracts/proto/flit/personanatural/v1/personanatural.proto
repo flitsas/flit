@@ -75,6 +75,24 @@ message ObtenerSolicitudParaRadicarResponse {
   // Llave de idempotencia con la que se radicó y correlación de la solicitud.
   string idempotency_key = 15;
   string correlation_id = 16;
+  // Pago del portal (HU #14468). Solo canal del punto (pn_punto) ya pagado; ausente en la web.
+  PagoPortal pago = 17;
+}
+
+// Pago confirmado de una solicitud del punto. Sin datos personales.
+message PagoPortal {
+  // Total cobrado en pesos colombianos, sin decimales.
+  int64 valor_cop = 1;
+  // caja | sin_cobro
+  string medio = 2;
+  // efectivo | datafono | transferencia | otro; vacío si medio = sin_cobro.
+  string medio_caja = 3;
+  // Detalle libre cuando medio_caja = otro; vacío en los demás casos.
+  string medio_detalle = 4;
+  // Fecha y hora del pago, ISO-8601 en UTC.
+  string pagado_en = 5;
+  // Id del cobro en el portal; sirve para idempotencia en core-api.
+  string cobro_id = 6;
 }
 
 // Una parte del trámite con sus datos personales en claro (solo viajan en este RPC autenticado y auditado).

@@ -20360,6 +20360,34 @@ components:
           type: string
           nullable: true
           description: HU #14318 — nombre del organismo de `channelTransitOfficeId`; `null` si no aplica. Aditivo.
+        pagoPortal:
+          type: object
+          description: >
+            HU #14469 — pago confirmado en caja del punto de atención que el portal entregó al radicar. Solo
+            existe en trámites con `channel = pn_punto` ya pagados; en los demás la propiedad no viene. Aditivo.
+          properties:
+            valorCop:
+              type: integer
+              format: int64
+              description: "Total cobrado en pesos colombianos, sin decimales."
+            medio:
+              type: string
+              enum: [caja, sin_cobro]
+              description: "Medio del cobro: caja o sin_cobro."
+            medioCaja:
+              type: string
+              nullable: true
+              enum: [efectivo, datafono, transferencia, otro, null]
+              description: "Forma de pago en caja; null si medio = sin_cobro."
+            medioDetalle:
+              type: string
+              nullable: true
+              description: "Detalle libre cuando medioCaja = otro; null en los demás casos."
+            pagadoEn:
+              type: string
+              format: date-time
+              description: "Fecha y hora del pago (UTC)."
+          required: [valorCop, medio, pagadoEn]
         improntaGeneracionHabilitada:
           type: boolean
           description: >

@@ -6,7 +6,9 @@ using Flit.Api.PersonaNatural;
 using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -254,6 +256,83 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
         tramite.ChannelTransitOfficeId.Should().BeNull();
     }
 
+    // ── HU #14469 · pago del portal registrado en el trámite ─────────────────────────────────────
+
+    private static PagoPortalTramite PagoDePrueba(string cobro = "cobro-14469-a") =>
+        new(125_500, "caja", "otro", "Billetera de prueba", new DateTimeOffset(2026, 11, 9, 15, 30, 0, TimeSpan.Zero), cobro);
+
+    [Fact]
+    public async Task AC1_SolicitudDelPuntoConPago_GuardaElPagoLigadoAlTramite_YElTramiteSigueEnBorrador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000020"), e.Parte("vendedor", "1000000021")], canal: "pn_punto", pago: PagoDePrueba(e.SolicitudId.ToString()));
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeTrue(resultado.Codigo);
+        resultado.Estado.Should().Be("borrador");
+        var pago = await e.PagoAsync(resultado.ProcedureInstanceId!.Value, ct);
+        pago.Should().NotBeNull();
+        pago!.ValorCop.Should().Be(125_500);
+        pago.Medio.Should().Be("caja");
+        pago.MedioCaja.Should().Be("otro");
+        pago.MedioDetalle.Should().Be("Billetera de prueba");
+        pago.PagadoEn.Should().Be(new DateTimeOffset(2026, 11, 9, 15, 30, 0, TimeSpan.Zero));
+        (await e.ContarPagosAsync(ct)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AC2_ElMismoEventoDosVeces_DejaUnSoloTramiteYUnSoloPago()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000022"), e.Parte("vendedor", "1000000023")], canal: "pn_punto", pago: PagoDePrueba(e.SolicitudId.ToString()));
+        await e.SembrarValidacionesAsync(solicitud, ct);
+        var portal = new PortalFalso(solicitud);
+
+        var primera = await e.ProcesarAsync(portal, e.Evento(), ct);
+        var segunda = await e.ProcesarAsync(portal, e.Evento(), ct);
+
+        segunda.ProcedureInstanceId.Should().Be(primera.ProcedureInstanceId);
+        (await e.TramitesAsync(ct)).Should().HaveCount(1);
+        (await e.ContarPagosAsync(ct)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task AC3_UnaSolicitudWebConPago_NoGuardaNingunPago()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000024"), e.Parte("vendedor", "1000000025")], canal: "web", pago: PagoDePrueba(e.SolicitudId.ToString()));
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeTrue(resultado.Codigo);
+        (await e.PagoAsync(resultado.ProcedureInstanceId!.Value, ct)).Should().BeNull();
+        (await e.ContarPagosAsync(ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AC4_UnaSolicitudDelPuntoSinPago_CreaElTramiteComoAntes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000026"), e.Parte("vendedor", "1000000027")], canal: "pn_punto");
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeTrue(resultado.Codigo);
+        (await e.PagoAsync(resultado.ProcedureInstanceId!.Value, ct)).Should().BeNull();
+    }
+
     [Fact]
     public async Task LaValidacionDeOtraSolicitud_NuncaSeLigaAlTramite_NiSeBuscaPorDocumento()
     {
@@ -330,10 +409,10 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
         public RadicacionSolicitadaDatos Evento(string? tipo = null, Guid? organismo = null) =>
             new(SolicitudId, "PN-2026-000001", tipo ?? Codigo, 1, "huella", organismo ?? Organismo, [], null, "llave-" + SolicitudId, Guid.NewGuid());
 
-        public SolicitudPortal Solicitud(IReadOnlyList<ParteSolicitudPortal>? partes = null, string? canal = null) =>
+        public SolicitudPortal Solicitud(IReadOnlyList<ParteSolicitudPortal>? partes = null, string? canal = null, PagoPortalTramite? pago = null) =>
             new(SolicitudId, "PN-2026-000001", Codigo, 1, "huella", Organismo, "Organismo", null, null,
                 new Dictionary<string, string>(), canal is null ? DatosSolicitudPortal.Vacios : new DatosSolicitudPortal(null, null, null, canal),
-                partes ?? [], [], "llave-" + SolicitudId, Guid.NewGuid().ToString());
+                partes ?? [], [], "llave-" + SolicitudId, Guid.NewGuid().ToString(), pago);
 
         /// <summary>Texto de la observación guardada en el trámite (<c>field_key = observaciones</c>), o null si no hay.</summary>
         public async Task<string?> ObservacionesAsync(Guid tramite, CancellationToken ct)
@@ -361,6 +440,16 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
             Db.ChangeTracker.Clear();
             return await Db.Set<ProcedureInstance>().AsNoTracking().Where(p => p.ExternalRef == externa).ToListAsync(ct);
         }
+
+        public Task<PagoPortalTramite?> PagoAsync(Guid tramite, CancellationToken ct) =>
+            _scope.ServiceProvider.GetRequiredService<IProcedureInstanceRepository>().GetPagoPortalAsync(tramite, PlatformTenants.PersonaNatural, ct);
+
+        /// <summary>Pagos del portal guardados para los trámites de esta solicitud (SQL directo: la prueba corre sin GUC de tenant).</summary>
+        public async Task<int> ContarPagosAsync(CancellationToken ct) =>
+            await Db.Database.SqlQuery<int>($"""
+                SELECT count(*)::int AS "Value" FROM tramites.procedure_instance_portal_payments
+                WHERE procedure_instance_id IN (SELECT id FROM tramites.procedure_instances WHERE external_ref = {SolicitudId.ToString()})
+                """).SingleAsync(ct);
 
         public Task<int> ActoresAsync(Guid tramite, CancellationToken ct) =>
             Db.Set<ProcedureInstanceActor>().IgnoreQueryFilters().AsNoTracking().CountAsync(a => a.ProcedureInstanceId == tramite, ct);
@@ -440,6 +529,7 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
                 var refs = _solicitudRefs.ToArray();
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_instance_biometric_validations WHERE tenant_id = {PlatformTenants.PersonaNatural} AND portal_solicitud_ref = ANY({refs})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_state_change_outbox WHERE tenant_id = {PlatformTenants.PersonaNatural} AND procedure_instance_id IN (SELECT id FROM tramites.procedure_instances WHERE procedure_type_id = {Tipo})");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_instance_portal_payments WHERE tenant_id = {PlatformTenants.PersonaNatural} AND procedure_instance_id IN (SELECT id FROM tramites.procedure_instances WHERE procedure_type_id = {Tipo})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_instances WHERE tenant_id = {PlatformTenants.PersonaNatural} AND procedure_type_id = {Tipo}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_transit_office_grants WHERE transit_office_id = ANY({orgs})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = {Tipo}");

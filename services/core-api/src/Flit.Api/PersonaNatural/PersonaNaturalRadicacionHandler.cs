@@ -93,6 +93,7 @@ internal sealed class PersonaNaturalCreador(
     RegisterIntegrationAttachmentHandler adjuntos,
     TransitionProcedureInstanceHandler transicion,
     IConsultationProviderChainResolver consultas,
+    Flit.Tramites.Domain.Repositories.IProcedureInstanceRepository tramites,
     IConfiguration configuracion,
     ILogger<PersonaNaturalCreador> logger)
 {
@@ -295,12 +296,36 @@ internal sealed class PersonaNaturalCreador(
                 return Rechazo("adjunto_invalido");
         }
 
+        // 6. HU #14469 — pago confirmado en caja del punto: se guarda ligado al trámite (idempotente por trámite y por cobro).
+        await RegistrarPagoDelPuntoAsync(id, empresa, s, ct).ConfigureAwait(false);
+
         // Decisión del PO: aquí el trámite SIEMPRE se queda en borrador. Ni preflight ni radicación ni transiciones: el pago y el
         // resto del ciclo son de otra épica y los continúa FLIT 2 desde el borrador.
         db.ChangeTracker.Clear();
         var fila = await db.Set<ProcedureInstance>().AsNoTracking().Where(x => x.Id == id)
             .Select(x => new { x.ReferenceNumber, x.Status }).FirstAsync(ct).ConfigureAwait(false);
         return ResultadoRadicacionPortal.Nueva(id, fila.ReferenceNumber, fila.Status);
+    }
+
+    /// <summary>
+    /// HU #14469 — guarda el pago del portal solo cuando la solicitud es del punto de atención (<c>pn_punto</c>) y el portal lo
+    /// mandó. Otro canal no guarda nada aunque traiga pago. No cambia el estado del trámite ni rechaza la solicitud.
+    /// </summary>
+    private async Task RegistrarPagoDelPuntoAsync(Guid id, Guid empresa, SolicitudPortal s, CancellationToken ct)
+    {
+        if (TramiteCanal.DesdeSolicitudPortal(s.Datos.Canal) != TramiteCanal.PersonaNaturalOt)
+            return;
+        if (s.Pago is not { } pago)
+        {
+            if (s.PagoIlegible)
+                RadicacionLog.PagoIlegible(logger, id, s.SolicitudId);
+            return;
+        }
+
+        db.ChangeTracker.Clear();
+        var nuevo = await tramites.RegistrarPagoPortalAsync(id, empresa, pago, ct).ConfigureAwait(false);
+        if (nuevo)
+            RadicacionLog.PagoRegistrado(logger, id);
     }
 
     /// <summary>
@@ -575,6 +600,12 @@ internal static partial class RadicacionLog
 
     [LoggerMessage(EventId = 14054, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se pudo anular el borrador {ProcedureInstanceId} de una solicitud rechazada ({Error}).")]
     public static partial void NoSePudoAnular(ILogger logger, Guid procedureInstanceId, string error);
+
+    [LoggerMessage(EventId = 14469, Level = LogLevel.Information, Message = "Portal Persona Natural: pago del punto registrado en el trámite {ProcedureInstanceId}.")]
+    public static partial void PagoRegistrado(ILogger logger, Guid procedureInstanceId);
+
+    [LoggerMessage(EventId = 14470, Level = LogLevel.Warning, Message = "Portal Persona Natural: la solicitud {SolicitudId} trajo un pago ilegible; el trámite {ProcedureInstanceId} queda sin pago registrado y debe revisarse.")]
+    public static partial void PagoIlegible(ILogger logger, Guid procedureInstanceId, Guid solicitudId);
 
     [LoggerMessage(EventId = 14056, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se sembró la ficha del vehículo del trámite {ProcedureInstanceId} ({Motivo}).")]
     public static partial void VehiculoNoSembrado(ILogger logger, Guid procedureInstanceId, string motivo);
