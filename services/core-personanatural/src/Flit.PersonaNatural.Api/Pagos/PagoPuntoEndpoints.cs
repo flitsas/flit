@@ -1,0 +1,54 @@
+using Flit.PersonaNatural.Api.Punto;
+using Flit.PersonaNatural.Api.Solicitudes;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace Flit.PersonaNatural.Api.Pagos;
+
+/// <summary>
+/// Rutas del paso Pago del punto, bajo <c>/punto/pago</c>. Exigen la cookie del punto (organismo fijo) y el token de la sesión del
+/// trámite (<c>Authorization: Bearer</c>), igual que la identidad y los requisitos. Los errores salen como <c>problem+json</c> con
+/// <c>code</c> estable.
+/// </summary>
+public static class PagoPuntoEndpoints
+{
+    public static IServiceCollection AddPagosDelPunto(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.TryAddScoped<CotizadorDelPunto>();
+        services.TryAddScoped<IRegistroDePagos, RegistroDePagos>();
+        services.TryAddScoped<PagoPuntoService>();
+        return services;
+    }
+
+    public static RouteGroupBuilder MapPagoPunto(this RouteGroupBuilder punto)
+    {
+        ArgumentNullException.ThrowIfNull(punto);
+        var pago = punto.MapGroup("/pago");
+
+        // El servicio se resuelve desde RequestServices para que el host de pruebas del canal (sin base) pueda mapear el grupo.
+        // Pasar a Pago: 409 identity_pending / requisitos_incompletos si falta algo, sin cambiar el estado.
+        pago.MapPost("/iniciar", (HttpContext http, CancellationToken ct) => Atender(http, async (s, sesion, token) =>
+            Results.Json(await s.IniciarAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+
+        // Se consulta cada pocos segundos: estado, desglose y total vigentes, vencimiento e identidades pendientes.
+        pago.MapGet(string.Empty, (HttpContext http, CancellationToken ct) => Atender(http, async (s, sesion, token) =>
+            Results.Json(await s.EstadoAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+
+        pago.MapPost("/caja", (HttpContext http, CancellationToken ct) => Atender(http, async (s, sesion, token) =>
+            Results.Json(await s.HabilitarCajaAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+
+        // Sin cuerpo: el cliente nunca envía el valor; el servidor recalcula el total y solo acepta $0.
+        pago.MapPost("/confirmar", (HttpContext http, CancellationToken ct) => Atender(http, async (s, sesion, token) =>
+            Results.Json(await s.ConfirmarSinCobroAsync(sesion, token, ct).ConfigureAwait(false), PuntoEndpoints.Json)));
+
+        pago.AddEndpointFilter(PuntoEndpoints.ConSesionDePunto);
+        return punto;
+    }
+
+    private static Task<IResult> Atender(HttpContext http, Func<PagoPuntoService, Punto.OrganismoPunto, string?, Task<IResult>> accion)
+    {
+        http.Response.Headers.CacheControl = "no-store";
+        var servicio = http.RequestServices.GetRequiredService<PagoPuntoService>();
+        return SolicitudesEndpoints.Atender(() => accion(servicio, PuntoEndpoints.Sesion(http), PuntoEndpoints.TokenSolicitud(http)));
+    }
+}

@@ -214,6 +214,50 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.HasOne<SolicitudTramite>().WithOne().HasForeignKey<CotizacionCongelada>(c => c.SolicitudId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("fk_frozen_quote_procedure_request");
         });
 
+        // Feature #14447: el cobro de una solicitud del punto. Un cobro pagado y uno habilitado como máximo por solicitud.
+        modelBuilder.Entity<CobroSolicitud>(e =>
+        {
+            e.ToTable("payment_charge", t =>
+            {
+                t.HasComment("Cobro de una solicitud del punto: código de cobro, vigencia, valor, medio y quién lo confirmó o anuló. Un solo cobro pagado por solicitud. Sin datos personales.");
+                t.HasCheckConstraint("ck_payment_charge_status", "status IN (" + string.Join(", ", EstadoCobro.Todos.Select(s => $"'{s}'")) + ")");
+                t.HasCheckConstraint("ck_payment_charge_method", "method IS NULL OR method IN (" + string.Join(", ", MedioDePago.Todos.Select(s => $"'{s}'")) + ")");
+                t.HasCheckConstraint("ck_payment_charge_cash_method", "cash_method IS NULL OR cash_method IN (" + string.Join(", ", MedioDeCaja.Todos.Select(s => $"'{s}'")) + ")");
+                t.HasCheckConstraint("ck_payment_charge_amount", "amount_cop IS NULL OR amount_cop >= 0");
+                t.HasCheckConstraint("ck_payment_charge_paid", "status = 'habilitado' OR (amount_cop IS NOT NULL AND method IS NOT NULL AND paid_at IS NOT NULL)");
+            });
+            e.HasKey(c => c.Id).HasName("pk_payment_charge");
+            e.Property(c => c.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(c => c.SolicitudId).HasColumnName("procedure_request_id");
+            e.Property(c => c.OrganismoId).HasColumnName("transit_office_id");
+            e.Property(c => c.Codigo).HasColumnName("code").HasMaxLength(40).IsRequired();
+            e.Property(c => c.Estado).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(c => c.HabilitadoEn).HasColumnName("enabled_at");
+            e.Property(c => c.VenceEn).HasColumnName("expires_at");
+            e.Property(c => c.ValorCop).HasColumnName("amount_cop");
+            e.Property(c => c.Medio).HasColumnName("method").HasMaxLength(20);
+            e.Property(c => c.MedioCaja).HasColumnName("cash_method").HasMaxLength(20);
+            e.Property(c => c.MedioDetalle).HasColumnName("method_detail").HasMaxLength(200);
+            e.Property(c => c.PrefacturaAdjuntoId).HasColumnName("invoice_attachment_id");
+            e.Property(c => c.PagadoPor).HasColumnName("paid_by").HasMaxLength(120);
+            e.Property(c => c.PagadoEn).HasColumnName("paid_at");
+            e.Property(c => c.Lineas).HasColumnName("lines").HasColumnType("jsonb");
+            e.Property(c => c.VersionTarifa).HasColumnName("tariff_version").HasMaxLength(1000);
+            e.Property(c => c.AnuladoPor).HasColumnName("cancelled_by").HasMaxLength(120);
+            e.Property(c => c.AnuladoEn).HasColumnName("cancelled_at");
+            e.Property(c => c.AnulacionMotivo).HasColumnName("cancellation_reason").HasMaxLength(500);
+            e.Property(c => c.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("now()");
+            e.Property(c => c.RowVersion).HasColumnName("row_version").HasDefaultValue(1L).IsConcurrencyToken();
+            e.HasOne<SolicitudTramite>().WithMany().HasForeignKey(c => c.SolicitudId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("fk_payment_charge_procedure_request");
+            e.HasOne<Adjunto>().WithMany().HasForeignKey(c => c.PrefacturaAdjuntoId).OnDelete(DeleteBehavior.SetNull).HasConstraintName("fk_payment_charge_attachment");
+            e.HasIndex(c => c.SolicitudId, "uq_payment_charge_paid_per_request").IsUnique().HasFilter("status = 'pagado'");
+            e.HasIndex(c => c.SolicitudId, "uq_payment_charge_enabled_per_request").IsUnique().HasFilter("status = 'habilitado'");
+            e.HasIndex(c => c.PrefacturaAdjuntoId).HasDatabaseName("ix_payment_charge_invoice_attachment");
+            e.HasIndex(c => new { c.OrganismoId, c.PagadoEn }).HasDatabaseName("ix_payment_charge_office_paid_at");
+            e.HasIndex(c => c.Codigo).HasDatabaseName("ix_payment_charge_code");
+        });
+
         // Intentos fallidos de reanudar, por radicado (HU #14035): sin llaves foráneas, porque también cuentan los radicados que no existen.
         modelBuilder.Entity<IntentoReanudar>(e =>
         {

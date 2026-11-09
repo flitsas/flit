@@ -200,6 +200,150 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.CobroSolicitud", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AnulacionMotivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTimeOffset?>("AnuladoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<string>("AnuladoPor")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("cancelled_by");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("HabilitadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enabled_at");
+
+                    b.Property<string>("Lineas")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("lines");
+
+                    b.Property<string>("Medio")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("MedioCaja")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("cash_method");
+
+                    b.Property<string>("MedioDetalle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("method_detail");
+
+                    b.Property<Guid>("OrganismoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("PagadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paid_at");
+
+                    b.Property<string>("PagadoPor")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("paid_by");
+
+                    b.Property<Guid?>("PrefacturaAdjuntoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_attachment_id");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("SolicitudId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_request_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<long?>("ValorCop")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount_cop");
+
+                    b.Property<DateTimeOffset?>("VenceEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("VersionTarifa")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("tariff_version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_payment_charge");
+
+                    b.HasIndex("Codigo")
+                        .HasDatabaseName("ix_payment_charge_code");
+
+                    b.HasIndex("PrefacturaAdjuntoId")
+                        .HasDatabaseName("ix_payment_charge_invoice_attachment");
+
+                    b.HasIndex("OrganismoId", "PagadoEn")
+                        .HasDatabaseName("ix_payment_charge_office_paid_at");
+
+                    b.HasIndex(new[] { "SolicitudId" }, "uq_payment_charge_enabled_per_request")
+                        .IsUnique()
+                        .HasFilter("status = 'habilitado'");
+
+                    b.HasIndex(new[] { "SolicitudId" }, "uq_payment_charge_paid_per_request")
+                        .IsUnique()
+                        .HasFilter("status = 'pagado'");
+
+                    b.ToTable("payment_charge", "personanatural", t =>
+                        {
+                            t.HasComment("Cobro de una solicitud del punto: código de cobro, vigencia, valor, medio y quién lo confirmó o anuló. Un solo cobro pagado por solicitud. Sin datos personales.");
+
+                            t.HasCheckConstraint("ck_payment_charge_amount", "amount_cop IS NULL OR amount_cop >= 0");
+
+                            t.HasCheckConstraint("ck_payment_charge_cash_method", "cash_method IS NULL OR cash_method IN ('efectivo', 'datafono', 'transferencia', 'otro')");
+
+                            t.HasCheckConstraint("ck_payment_charge_method", "method IS NULL OR method IN ('caja', 'sin_cobro')");
+
+                            t.HasCheckConstraint("ck_payment_charge_paid", "status = 'habilitado' OR (amount_cop IS NOT NULL AND method IS NOT NULL AND paid_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_payment_charge_status", "status IN ('habilitado', 'pagado', 'anulado')");
+                        });
+                });
+
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.ConfiguracionRetencion", b =>
                 {
                     b.Property<short>("Id")
@@ -779,7 +923,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         {
                             t.HasComment("Solicitud de un ciudadano para radicar un trámite en FLIT 2 (portal persona natural).");
 
-                            t.HasCheckConstraint("ck_procedure_request_status", "status IN ('borrador', 'pendiente_validacion', 'en_cola', 'creada', 'rechazada_creacion', 'cancelada')");
+                            t.HasCheckConstraint("ck_procedure_request_status", "status IN ('borrador', 'pendiente_validacion', 'pendiente_pago', 'pagada', 'en_cola', 'creada', 'rechazada_creacion', 'cancelada')");
 
                             t.HasCheckConstraint("ck_procedure_request_vehicle", "plate IS NOT NULL OR vin IS NOT NULL");
                         });
@@ -880,6 +1024,22 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_identity_audit_procedure_request");
+                });
+
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.CobroSolicitud", b =>
+                {
+                    b.HasOne("Flit.PersonaNatural.Api.Persistence.Adjunto", null)
+                        .WithMany()
+                        .HasForeignKey("PrefacturaAdjuntoId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_payment_charge_attachment");
+
+                    b.HasOne("Flit.PersonaNatural.Api.Persistence.SolicitudTramite", null)
+                        .WithMany()
+                        .HasForeignKey("SolicitudId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_payment_charge_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.Consentimiento", b =>

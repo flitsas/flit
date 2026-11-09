@@ -447,9 +447,10 @@ public sealed class RadicacionTests : IAsyncLifetime
         await IniciarAsync();
         var (id, token) = await Completa(conComprobante: false, canalPunto: true);
 
-        var r = await Radicar(id, token, "k-punto");
+        // HU #14468: en el punto no se radica sin pago; con el pago confirmado la radicación se dispara sola.
+        (await Radicar(id, token, "k-punto")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        await PagarDelPuntoAsync(id, enCaja: true);
 
-        r.StatusCode.Should().Be(HttpStatusCode.Accepted);
         await using var db = _host.NuevaDb();
         var s = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
         s.Estado.Should().Be("en_cola");
@@ -482,7 +483,9 @@ public sealed class RadicacionTests : IAsyncLifetime
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
         var (id, token) = await Completa(validar: false, canalPunto: true);
 
-        (await Radicar(id, token, "k-punto-pruebas")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var pagado = await PagarDelPuntoAsync(id, enCaja: true);
+
+        pagado.EstadoSolicitud.Should().Be("en_cola");
     }
 
     [Fact]
@@ -491,7 +494,13 @@ public sealed class RadicacionTests : IAsyncLifetime
         await IniciarAsync(null, ("Identidad:ExigirAlRadicar", "true"));
         var (id, token) = await Completa(validar: false, canalPunto: true);
 
-        (await Radicar(id, token, "k-punto-409")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        // Con el pago ya registrado (p. ej. un estado heredado), la compuerta de identidad sigue mandando al radicar.
+        var pagado = await PagarDelPuntoAsync(id, enCaja: true);
+
+        pagado.EstadoSolicitud.Should().Be("pagada", "la radicación automática la frena la compuerta; el pago queda firme");
+        var r = await Radicar(id, token, "k-punto-409");
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await PortalHost.CodigoAsync(r)).Should().Be("identity_pending");
     }
 
     // ── Decisión de prenda obligatoria con gravamen en el RUNT ───────────────────────────────────────────────────────
@@ -665,7 +674,7 @@ public sealed class RadicacionTests : IAsyncLifetime
 
         (await RadicarConCobro(web, tokenWeb, "k-web", new { medio = "PASARELA" })).StatusCode.Should().Be(HttpStatusCode.Accepted);
         _host.Medios.UltimoAmbito.Should().BeNull();
-        (await RadicarConCobro(punto, tokenPunto, "k-punto", new { medio = "PIN" })).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await PagarDelPuntoAsync(punto, enCaja: true);
 
         _host.Medios.UltimoAmbito.Should().Be(PortalHost.Organismo.ToString());
         await using var db = _host.NuevaDb();
@@ -675,6 +684,31 @@ public sealed class RadicacionTests : IAsyncLifetime
     }
 
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Lleva una solicitud del punto a pendiente de pago y la paga (en caja o en $0) por el servicio de dominio.</summary>
+    private async Task<Flit.PersonaNatural.Api.Pagos.PagoRegistrado> PagarDelPuntoAsync(Guid id, bool enCaja)
+    {
+        await using (var db = _host.NuevaDb())
+        {
+            var codigo = await db.Set<SolicitudTramite>().Where(s => s.Id == id).Select(s => s.CodigoPublico).SingleAsync(TestContext.Current.CancellationToken);
+            await db.Set<SolicitudTramite>().Where(s => s.Id == id).ExecuteUpdateAsync(set => set.SetProperty(s => s.Estado, "pendiente_pago"), TestContext.Current.CancellationToken);
+            if (enCaja)
+            {
+                var ahora = _host.Reloj.GetUtcNow();
+                db.Add(new CobroSolicitud
+                {
+                    Id = Guid.CreateVersion7(), SolicitudId = id, OrganismoId = Guid.Parse(PortalHost.Organismo), Codigo = codigo, Estado = "habilitado",
+                    HabilitadoEn = ahora, VenceEn = Flit.PersonaNatural.Api.Pagos.VigenciaDelCobro.FinDelDia(ahora), CreatedAt = ahora, UpdatedAt = ahora,
+                });
+                await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            }
+        }
+
+        var pedido = enCaja
+            ? new Flit.PersonaNatural.Api.Pagos.PedidoDePago(id, "caja", "efectivo", null, null, "caja-1")
+            : new Flit.PersonaNatural.Api.Pagos.PedidoDePago(id, "sin_cobro");
+        return await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Pagos.IRegistroDePagos>().RegistrarPagoAsync(pedido, TestContext.Current.CancellationToken));
+    }
 
     private Task<HttpResponseMessage> RadicarConCobro(Guid id, string? token, string llave, object cuerpo) =>
         _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/radicar", cuerpo, token, false, [("Idempotency-Key", llave)]);
@@ -744,6 +778,7 @@ internal sealed class FachadaMediosFalsa : IFachadaMediosPago
     public long Gestion = 181_000;
     public bool GestionEncendida = true;
     public bool MedioDisponible = true;
+    public bool SinTarifa;
     public int Cotizaciones;
     public string? UltimoAmbito;
     public List<string> UltimosAdicionales { get; } = [];
@@ -758,6 +793,8 @@ internal sealed class FachadaMediosFalsa : IFachadaMediosPago
         UltimoAmbito = ambitoOrganismoId;
         UltimosAdicionales.Clear();
         UltimosAdicionales.AddRange(adicionales);
+        if (SinTarifa)
+            throw new FachadaException("tarifa_no_vigente", "sin tarifa", 422);
         if (!MedioDisponible)
             throw new FachadaException("medio_no_disponible", "no disponible", 409);
         List<LineaCobroDto> lineas = [new("DERECHOS_TRANSITO", "Valor del Servicio de tránsito", string.Empty, Derechos)];
