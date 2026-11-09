@@ -1,6 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { ProveedorMarca } from "@/components/marca/MarcaPunto";
 import { CanalPunto } from "@/components/punto/CanalPunto";
+import type { MarcaAplicable } from "@/lib/marca/marca";
 import { crearCliente } from "@/lib/api/cliente";
 import { json, renderConQuery } from "./utilidades";
 
@@ -22,11 +24,12 @@ const MENSAJE_ORGANISMO = "Este trámite se hace en el organismo que tiene el ve
 const MENSAJE_RUNT = "No pudimos consultar el RUNT. Inténtalo de nuevo.";
 const MENSAJE_REVISANDO = "Revisando el vehículo…";
 
-function montar(rutas: Record<string, Manejador> = {}) {
+function montar(rutas: Record<string, Manejador> = {}, marca: MarcaAplicable | null = null) {
   const todas: Record<string, Manejador> = {
     "POST /punto/entrada": () => json(ENTRADA),
     "GET /punto/tipos-tramite": () => json(TIPOS_PUNTO),
     "GET /tipos-tramite": () => json(TIPOS_PUNTO),
+    "GET /tipos-tramite?organismoId=o-1": () => json(TIPOS_PUNTO),
     ...rutas,
   };
   const llamadas: { clave: string; init: RequestInit }[] = [];
@@ -35,7 +38,11 @@ function montar(rutas: Record<string, Manejador> = {}) {
     llamadas.push({ clave, init });
     return (todas[clave] ?? (() => json({ code: "no_simulado", message: clave }, 404)))(init);
   }) as unknown as typeof fetch;
-  renderConQuery(<CanalPunto codigo="BOG" cliente={crearCliente({ fetchImpl })} />);
+  renderConQuery(
+    <ProveedorMarca marca={marca}>
+      <CanalPunto codigo="BOG" cliente={crearCliente({ fetchImpl })} />
+    </ProveedorMarca>,
+  );
   return { llamadas };
 }
 
@@ -50,8 +57,8 @@ async function elegirTipo(etiqueta = "Traspaso") {
 }
 
 async function llenar({ placa = "ABC123", documento = "1020456789", tipoNombre = "Traspaso" } = {}) {
-  fireEvent.change(screen.getByLabelText("Placa"), { target: { value: placa } });
-  fireEvent.change(screen.getByLabelText("Número de documento"), { target: { value: documento } });
+  fireEvent.change(screen.getByLabelText("Placa del vehículo"), { target: { value: placa } });
+  fireEvent.change(screen.getByLabelText("Número de Cédula"), { target: { value: documento } });
   await elegirTipo(tipoNombre);
 }
 
@@ -69,19 +76,74 @@ describe("canal del punto /o/codigo", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Este canal está apagado.");
     expect(screen.queryByRole("heading", { name: "Iniciar mi trámite" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Consultar mi trámite" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/cotizar/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cotizar mi trámite" })).not.toBeInTheDocument();
   });
 
-  it("al entrar muestra Iniciar y Consultar, sin Cotizar ni contraseña", async () => {
+  it("la entrada replica la web: cédula antes que placa, pasos, Somos, valor de los trámites, preguntas y navegación completa", async () => {
+    montar();
+    await screen.findByRole("heading", { name: "Iniciar mi trámite" });
+
+    const cedula = screen.getByLabelText("Número de Cédula");
+    const placa = screen.getByLabelText("Placa del vehículo");
+    expect(cedula.compareDocumentPosition(placa) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/en Movilidad de Bogotá/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "4 simples pasos para tu trámite" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Preguntas Frecuentes" })).toBeInTheDocument();
+
+    const nav = screen.getByRole("navigation", { name: "Secciones" });
+    expect(within(nav).getAllByRole("link").map((l) => l.textContent)).toEqual(["Trámites", "Nosotros", "Servicios", "FAQ"]);
+    // «Somos» y el pie llevan el nombre del organismo, no el de FLIT; no hay lista de organismos.
+    expect(screen.getByRole("region", { name: "Somos Movilidad de Bogotá" })).toBeInTheDocument();
+    expect(screen.getByRole("contentinfo")).toHaveTextContent("© 2026 Movilidad de Bogotá");
+    expect(screen.queryByRole("region", { name: /Organismos de tránsito integrados/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Servicios Adicionales" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Otros Servicios Vehiculares" })).toBeInTheDocument();
+  });
+
+  it("con carrusel del OT reemplaza «Servicios Adicionales»; sin él, quedan los servicios de siempre", async () => {
+    const carrusel = [{ imagenUrl: "/api/v1/persona-natural/marca/imagenes/a1", alt: "Curso de infractores", enlace: null }];
+    montar({}, { nombre: "Movilidad de Bogotá", colores: { primario: "#001682", secundario: "#CC4E0A", sobrePrimario: "#FFFFFF" }, logoUrl: null, bannerUrl: null, version: 1, carrusel });
+    expect(await screen.findByRole("region", { name: "Imágenes destacadas del organismo" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Servicios Adicionales" })).not.toBeInTheDocument();
+  });
+
+  it("«Consulta el valor de tu trámite» lista los trámites del OT, filtra y «Ver valor» abre Cotizar con ese trámite", async () => {
+    montar();
+    const columna = within(await screen.findByRole("region", { name: "Consulta el valor de tu trámite" }));
+    expect(await columna.findByRole("button", { name: "Ver el valor de Traspaso" })).toBeInTheDocument();
+
+    fireEvent.change(columna.getByLabelText("Buscar trámite"), { target: { value: "zzz" } });
+    expect(columna.getByText("No hay trámites que coincidan.")).toBeInTheDocument();
+    fireEvent.change(columna.getByLabelText("Buscar trámite"), { target: { value: "trasp" } });
+
+    fireEvent.click(columna.getByRole("button", { name: "Ver el valor de Traspaso" }));
+    const dialogo = within(await screen.findByRole("dialog"));
+    expect(dialogo.getByTestId("organismo-fijo")).toHaveTextContent("Movilidad de Bogotá");
+    expect(await dialogo.findByRole("button", { name: "Tipo de trámite" })).toHaveTextContent("Traspaso");
+  });
+
+  it("Cotizar abre con el organismo del punto fijo (sin selector); la entrada trae banners y el asistente", async () => {
+    montar();
+    expect(await screen.findByRole("region", { name: "Comunicados" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Dr. FLIT|asistente/i })).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Cotizar mi trámite" }));
+    const dialogo = within(await screen.findByRole("dialog"));
+    expect(dialogo.getByTestId("organismo-fijo")).toHaveTextContent("Movilidad de Bogotá");
+    expect(dialogo.queryByRole("button", { name: /Organismo de tránsito/ })).not.toBeInTheDocument();
+    expect(dialogo.getByRole("button", { name: "Tipo de trámite" })).not.toHaveTextContent("Primero elige un organismo");
+  });
+
+  it("al entrar muestra Iniciar, Consultar y Cotizar, sin contraseña", async () => {
     montar();
 
     expect(await screen.findByRole("heading", { name: "Movilidad de Bogotá" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Iniciar mi trámite" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Consultar mi trámite" })).toBeInTheDocument();
-    expect(screen.queryByText(/cotizar/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cotizar mi trámite" })).toBeInTheDocument();
     expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
     expect(document.querySelector('input[type="password"]')).toBeNull();
-    expect(screen.getByRole("img", { name: "FLIT" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "FLIT 2.0" })).toBeInTheDocument();
 
     const dialogo = await abrirConsultar();
     expect(dialogo.getByLabelText("Placa")).toBeInTheDocument();
@@ -96,9 +158,9 @@ describe("canal del punto /o/codigo", () => {
     const boton = await screen.findByRole("button", { name: "Iniciar trámite" });
     expect(boton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "ABC123" } });
+    fireEvent.change(screen.getByLabelText("Placa del vehículo"), { target: { value: "ABC123" } });
     expect(boton).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Número de documento"), { target: { value: "1020456789" } });
+    fireEvent.change(screen.getByLabelText("Número de Cédula"), { target: { value: "1020456789" } });
     expect(boton).toBeDisabled();
 
     await elegirTipo("Traspaso");
@@ -211,10 +273,10 @@ describe("canal del punto /o/codigo", () => {
     expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
-    expect(screen.getByLabelText("Placa")).toHaveValue("ABC123");
-    expect(screen.getByLabelText("Número de documento")).toHaveValue("1020456789");
+    expect(screen.getByLabelText("Placa del vehículo")).toHaveValue("ABC123");
+    expect(screen.getByLabelText("Número de Cédula")).toHaveValue("1020456789");
 
-    fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "XYZ987" } });
+    fireEvent.change(screen.getByLabelText("Placa del vehículo"), { target: { value: "XYZ987" } });
     fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
     await waitFor(() => expect(llamadas.filter((l) => l.clave === "POST /punto/arranque")).toHaveLength(2));
     expect(cuerpo(llamadas, "POST /punto/arranque")).toMatchObject({ placa: "XYZ987", documento: "1020456789" });

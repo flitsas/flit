@@ -8,9 +8,11 @@ interface Props {
   /** URL http(s) válida por código de enlace con documento publicado (ver `resolverContenido`). */
   enlaces?: Readonly<Record<string, string | null>>;
   soporte?: SoporteVista | null;
+  /** Nombre que firma el pie (el organismo del punto); sin él, FLIT. */
+  nombre?: string;
 }
 
-export function Pie({ enlaces = {}, soporte = null }: Props) {
+export function Pie({ enlaces = {}, soporte = null, nombre = "FLIT" }: Props) {
   const documentos = [
     { titulo: TEXTO_POLITICA_DATOS, url: enlaces.POLITICA_DATOS ?? URL_POLITICA_FLIT },
     { titulo: TEXTO_TERMINOS, url: enlaces.TERMINOS ?? null },
@@ -25,7 +27,7 @@ export function Pie({ enlaces = {}, soporte = null }: Props) {
             <a href={d.url} target="_blank" rel="noopener noreferrer" aria-label={`${d.titulo} (se abre en una pestaña nueva)`} className={CLASE_ENLACE}>{d.titulo}</a>
           </span>
         ))}
-        {" · "}© 2026 FLIT · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua
+        {" · "}© 2026 {nombre} · Todos los derechos reservados · Protegido por cifrado TLS · Auditoría continua
       </p>
       {soporte && (
         <p aria-label="Soporte">

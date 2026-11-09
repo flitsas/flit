@@ -70,6 +70,10 @@ export interface OtCobroMediosSectionProps {
   onIrAPrecios: () => void;
   /** Cómo se llama ese lugar en esta pantalla: «Precios» en el OT, «Tarifas» en Plataforma. */
   nombrePrecios?: string;
+  /** Abre el formulario de precio de ese trámite sin salir de la pantalla. Sin él, solo se ofrece «Ir a Precios». */
+  onDefinirPrecio?: (tipoTramiteId: string) => void;
+  /** Cambia cuando los precios cambian: recarga los montos sin mostrar el esqueleto. */
+  recargar?: number;
 }
 
 /** Interruptor accesible: nombre y estado también en texto, colores de la épica. */
@@ -122,6 +126,8 @@ export function OtCobroMediosSection({
   conPin = true,
   onIrAPrecios,
   nombrePrecios = "Precios",
+  onDefinirPrecio,
+  recargar = 0,
 }: OtCobroMediosSectionProps) {
   const baseId = useId();
   const { show } = useToast();
@@ -152,6 +158,17 @@ export function OtCobroMediosSection({
     });
     return () => controller.abort();
   }, [cargar]);
+
+  // Un precio nuevo o cambiado en el otro paso: se vuelven a leer los montos sin parpadeo.
+  useEffect(() => {
+    if (recargar === 0) return;
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- recarga tras un cambio de precios en el otro paso
+    cargar(controller.signal).catch(() => {
+      if (!controller.signal.aborted) setStatus("error");
+    });
+    return () => controller.abort();
+  }, [recargar, cargar]);
 
   const medios = useMemo(
     () => (cobro?.medios ?? []).filter((m) => conPin || m.method !== "PIN"),
@@ -258,6 +275,8 @@ export function OtCobroMediosSection({
     const soloSuperAdmin = !c.editable && charge === "GESTION";
     const sinPermiso = !c.editable && charge !== "GESTION";
     const avisoFila = aviso?.clave === clave && aviso.conAccesoAPrecios ? aviso : null;
+    // Sin monto y apagado: se ofrece de una vez definir el precio, sin esperar a que la persona pruebe el interruptor.
+    const sinPrecio = !!onDefinirPrecio && c.editable && !c.enabled && c.montoCop <= 0;
     const describedById = soloSuperAdmin
       ? idNotaGestion
       : sinPermiso || avisoFila
@@ -287,7 +306,7 @@ export function OtCobroMediosSection({
         {(sinPermiso || avisoFila) && (
           <p id={motivoId} className="max-w-[14rem] text-xs text-[#59677D] dark:text-white/70">
             {avisoFila?.mensaje ?? MOTIVO_SIN_PERMISO}
-            {avisoFila && (
+            {avisoFila && !onDefinirPrecio && (
               <>
                 {" "}
                 <PnLinkButton
@@ -299,6 +318,14 @@ export function OtCobroMediosSection({
               </>
             )}
           </p>
+        )}
+        {(sinPrecio || (avisoFila && onDefinirPrecio)) && (
+          <PnLinkButton
+            onClick={() => onDefinirPrecio?.(tipo.tipoTramiteId)}
+            ariaLabel={`Definir precio de ${NOMBRE_CONCEPTO[charge].toLowerCase()}, ${NOMBRE_MEDIO[medio.method]}, ${tipo.nombre}`}
+          >
+            Definir precio
+          </PnLinkButton>
         )}
       </div>
     );
