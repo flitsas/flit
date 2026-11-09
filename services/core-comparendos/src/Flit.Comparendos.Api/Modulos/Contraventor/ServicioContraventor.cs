@@ -143,9 +143,18 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             $"Se completó el documento del conductor {k.Nombres}: {k.TipoDocumento} {Comun.HtmlCorreo.Enmascarar(k.NumeroDocumento!)}.", actor);
     }
 
+    /// <summary>GDC punto 20: intentos fallidos de la consulta automática, entre manuales y automáticos, antes de «agotada».</summary>
+    public const int MaxIntentos = 3;
+
     /// <summary>
     /// Consulta la API de contratos (§4.7). Si encuentra conductor lo asigna con origen API; si ya había uno, solo lo
-    /// reemplaza con <paramref name="confirmarReemplazo"/>. Cuenta los intentos fallidos (máximo 3 automáticos, S-35).
+    /// reemplaza con <paramref name="confirmarReemplazo"/>. Cuenta los intentos fallidos: al tercero la consulta queda
+    /// «agotada» (GDC punto 20) y desde ahí solo se asigna a mano.
+    /// <para>
+    /// La hora (GDC punto 19) solo acompaña a <c>FechaImposicion</c>; si la fecha sale de <c>FechaNotificacion</c>, es
+    /// «sin hora». Sin hora se consulta a las 00:00 y a las 23:59: si las dos dan el mismo conductor se asigna; si no,
+    /// queda «sin hora» para que la gestora lo revise. Las dos consultas cuentan como un solo intento.
+    /// </para>
     /// </summary>
     public async Task<RespuestaContrato> ConsultarAsync(Comparendo c, Actor actor, bool confirmarReemplazo, CancellationToken ct)
     {
@@ -157,10 +166,18 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             throw new ReglaException("NIT_SIN_API", "La consulta automática del conductor no aplica para el propietario de este comparendo: asígnalo a mano.");
         if (c.OrganismoTransitoId is { } ot && !(await permisos.DeAsync(c.TenantId, ot, null, ct).ConfigureAwait(false)).Consulta)
             throw new ReglaException("OT_BLOQUEADO", "La consulta de contraventor está bloqueada para este organismo de tránsito.");
-        if (c.Placa is null || (c.FechaImposicion ?? c.FechaNotificacion) is not { } fecha)
+        var (fecha, hora) = c.FechaImposicion is { } fi ? (fi, c.HoraImposicion is { } h ? new TimeOnly(h.Hour, h.Minute) : (TimeOnly?)null)
+            : c.FechaNotificacion is { } fn ? (fn, (TimeOnly?)null)
+            : (default(DateOnly?), (TimeOnly?)null);
+        if (c.Placa is null || fecha is not { } dia)
             throw new ReglaException("SIN_DATOS_CONSULTA", "El comparendo no tiene placa o fecha para consultar el contrato.");
+        if (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada || c.IntentosConsultaContraventor >= MaxIntentos)
+            throw new ReglaException("CONSULTA_AGOTADA", $"La consulta automática del conductor ya se intentó {MaxIntentos} veces sin respuesta: asígnalo a mano.");
 
-        var r = await api.ConsultarAsync(c.TenantId, c.Placa, fecha, ct).ConfigureAwait(false);
+        var r = hora is not null
+            ? await api.ConsultarAsync(c.TenantId, c.Placa, dia, hora, ct).ConfigureAwait(false)
+            : await SinHoraAsync(c.TenantId, c.Placa, dia, ct).ConfigureAwait(false);
+        c.UltimoIntentoConsultaContraventor = reloj.Hoy;
         switch (r.Resultado)
         {
             case ResultadoContrato.Encontrado when r.Conductor is { } k:
@@ -175,9 +192,13 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.NoEncontrado;
                 c.ErrorConsultaContraventor = null;
                 break;
+            case ResultadoContrato.SinHora:
+                c.EstadoConsultaContraventor = EstadoConsultaContraventor.SinHora;
+                c.ErrorConsultaContraventor = null;
+                break;
             default:
-                c.EstadoConsultaContraventor = EstadoConsultaContraventor.Error;
                 c.IntentosConsultaContraventor++;
+                c.EstadoConsultaContraventor = c.IntentosConsultaContraventor >= MaxIntentos ? EstadoConsultaContraventor.Agotada : EstadoConsultaContraventor.Error;
                 var error = string.Join("\n", new[] { r.Mensaje, r.CuerpoCrudo }.Where(x => !string.IsNullOrWhiteSpace(x)));
                 c.ErrorConsultaContraventor = error.Length > 4000 ? error[..4000] : error;
                 break;
@@ -188,9 +209,46 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             // El detalle técnico del fallo queda en ErrorConsultaContraventor (solo lo ve el SuperAdmin).
             ResultadoContrato.Encontrado => "La consulta automática encontró el conductor.",
             ResultadoContrato.NoEncontrado => "La consulta automática no encontró conductor para la placa y la fecha: hay que asignarlo a mano.",
+            ResultadoContrato.SinHora => "El comparendo no trae hora y ese día el vehículo cambió de conductor: revisa quién conducía y asígnalo a mano.",
+            _ when c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada =>
+                $"No se pudo consultar el conductor después de {MaxIntentos} intentos: asígnalo a mano.",
             _ => "No se pudo consultar el conductor: se reintenta más tarde o se asigna a mano.",
         }, actor);
         return r;
+    }
+
+    /// <summary>
+    /// GDC «sin hora»: consulta el contrato a las 00:00 y a las 23:59 del día. El mismo conductor en las dos → se
+    /// asigna; las dos vacías → no encontrado; distinto, o una vacía y la otra no → «sin hora»; si alguna falla, es un
+    /// solo fallo (un intento).
+    /// </summary>
+    private async Task<RespuestaContrato> SinHoraAsync(Guid tenantId, string placa, DateOnly dia, CancellationToken ct)
+    {
+        var inicio = await api.ConsultarAsync(tenantId, placa, dia, new TimeOnly(0, 0), ct).ConfigureAwait(false);
+        if (inicio.Resultado == ResultadoContrato.Error)
+            return inicio;
+        var fin = await api.ConsultarAsync(tenantId, placa, dia, new TimeOnly(23, 59), ct).ConfigureAwait(false);
+        if (fin.Resultado == ResultadoContrato.Error)
+            return fin;
+        return (inicio, fin) switch
+        {
+            ({ Resultado: ResultadoContrato.NoEncontrado }, { Resultado: ResultadoContrato.NoEncontrado }) => inicio,
+            ({ Resultado: ResultadoContrato.Encontrado, Conductor: { } a }, { Resultado: ResultadoContrato.Encontrado, Conductor: { } b }) when MismoConductor(a, b) => inicio,
+            _ => new RespuestaContrato(ResultadoContrato.SinHora, null,
+                $"El comparendo no trae hora y el {dia:yyyy-MM-dd} el vehículo {placa} no tuvo el mismo conductor todo el día: revisa quién conducía y asígnalo a mano.", null),
+        };
+    }
+
+    /// <summary>Mismo conductor: mismo documento (si las dos lo traen), mismos nombres y mismo correo, sin distinguir mayúsculas.</summary>
+    internal static bool MismoConductor(ConductorEncontrado a, ConductorEncontrado b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        static string N(string? x) => (x ?? string.Empty).Trim();
+        if (a.NumeroDocumento is not null && b.NumeroDocumento is not null && (a.TipoDocumento != b.TipoDocumento || N(a.NumeroDocumento) != N(b.NumeroDocumento)))
+            return false;
+        return string.Equals(N(a.Nombres), N(b.Nombres), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(N(a.Correo), N(b.Correo), StringComparison.OrdinalIgnoreCase);
     }
 
     private static object Foto(Persistence.Modelo.Contraventor k) => new

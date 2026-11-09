@@ -712,7 +712,7 @@ public sealed class ApiConOcrYContratosCaidos : ApiConOcr
 
     private sealed class ContratosCaidos : Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos
     {
-        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct) =>
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct) =>
             throw new HttpRequestException($"conexión rechazada consultando {placa}");
 
         public Task<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> ProbarAsync(CancellationToken ct) => throw new HttpRequestException("caída");
