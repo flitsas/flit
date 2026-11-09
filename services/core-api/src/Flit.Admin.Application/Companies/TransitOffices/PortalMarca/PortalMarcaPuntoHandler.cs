@@ -11,6 +11,12 @@ public sealed record MarcaPuntoColoresDto(string Primario, string Secundario, st
 /// </summary>
 public sealed record MarcaPuntoDto(string Origen, string? Nombre, MarcaPuntoColoresDto? Colores, Guid? LogoId, Guid? BannerId, int Version)
 {
+    /// <summary>Carrusel publicado, en orden. Solo el origen organismo lo llena; web y FLIT van vacíos.</summary>
+    public IReadOnlyList<PortalMarcaCarruselItem> Carrusel { get; init; } = [];
+
+    /// <summary>Banners principales publicados, en orden (el primero coincide con <c>BannerId</c>). Solo el origen organismo los llena.</summary>
+    public IReadOnlyList<PortalMarcaCarruselItem> Banners { get; init; } = [];
+
     public const string OrigenOrganismo = "organismo";
     public const string OrigenWeb = "web";
     public const string OrigenFlit = "flit";
@@ -83,7 +89,11 @@ public sealed class PortalMarcaPuntoHandler(IPortalMarcaRepository repo, IPortal
             new MarcaPuntoColoresDto(p.Colors!.Primary, p.Colors.Secondary, p.Colors.OnPrimary),
             p.LogoId,
             conBanner ? p.BannerId : null,
-            marca.PublishedVersion);
+            marca.PublishedVersion)
+        {
+            Carrusel = conBanner ? p.Carousel : [],
+            Banners = conBanner ? p.Banners : [],
+        };
     }
 
     /// <summary>Solo imágenes del publicado vigente. Una de borrador, de una versión retirada o inexistente es «no encontrada».</summary>

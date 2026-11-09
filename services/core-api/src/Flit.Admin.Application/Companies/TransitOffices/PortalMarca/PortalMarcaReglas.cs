@@ -44,9 +44,44 @@ public static class PortalMarcaReglas
         [".webp"] = "image/webp",
     };
 
-    public static int LimiteBytes(string kind) => kind == PortalMarcaImagen.KindBanner ? BannerMaxBytes : LogoMaxBytes;
+    public const int CarruselMaxBytes = 512 * 1024;
+    public const int AltMaxLargo = 120;
+    public const int EnlaceMaxLargo = 500;
 
-    public static string NombreImagen(string kind) => kind == PortalMarcaImagen.KindBanner ? "banner" : "logo";
+    public static int LimiteBytes(string kind) => kind switch
+    {
+        PortalMarcaImagen.KindBanner => BannerMaxBytes,
+        PortalMarcaImagen.KindCarousel => CarruselMaxBytes,
+        _ => LogoMaxBytes,
+    };
+
+    /// <summary>Texto alternativo (1..120, texto plano sin caracteres de control) y enlace opcional http/https (≤500). Devuelve los valores recortados.</summary>
+    public static (PortalMarcaError? Error, string Alt, string? Enlace) ValidarItemCarrusel(string? alt, string? linkUrl)
+    {
+        var texto = (alt ?? string.Empty).Trim();
+        if (texto.Length is 0 or > AltMaxLargo)
+            return (Datos($"El texto alternativo de la imagen debe tener entre 1 y {AltMaxLargo} caracteres."), texto, null);
+        if (texto.Any(char.IsControl))
+            return (Datos("El texto alternativo no puede contener caracteres de control."), texto, null);
+
+        var enlace = string.IsNullOrWhiteSpace(linkUrl) ? null : linkUrl.Trim();
+        if (enlace is not null
+            && (enlace.Length > EnlaceMaxLargo
+                || enlace.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))
+                || !Uri.TryCreate(enlace, UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                || string.IsNullOrEmpty(uri.Host)))
+            return (Datos($"El enlace debe ser una dirección http o https válida de hasta {EnlaceMaxLargo} caracteres."), texto, null);
+
+        return (null, texto, enlace);
+    }
+
+    public static string NombreImagen(string kind) => kind switch
+    {
+        PortalMarcaImagen.KindBanner => "banner",
+        PortalMarcaImagen.KindCarousel => "imagen del carrusel",
+        _ => "logo",
+    };
 
     /// <summary>Formato del nombre y de los colores (al guardar el borrador). El contraste se exige al publicar.</summary>
     public static PortalMarcaError? ValidarFormato(string? platformName, BrandColors? colors)
@@ -118,19 +153,19 @@ public static class PortalMarcaReglas
         var topeTexto = limite >= 1024 * 1024 ? $"{limite / (1024 * 1024)} MB" : $"{limite / 1024} KB";
 
         if (excedio || contenido.Length > limite)
-            return (Archivo($"El {que} supera el tamaño máximo de {topeTexto}."), null);
+            return (Archivo($"{Articulo(kind)} {que} supera el tamaño máximo de {topeTexto}."), null);
         if (contenido.Length == 0)
-            return (Archivo($"El archivo del {que} está vacío."), null);
+            return (Archivo($"El archivo de{Contraccion(kind)} {que} está vacío."), null);
 
         var extension = Path.GetExtension(nombreArchivo ?? string.Empty);
         if (!TipoPorExtension.TryGetValue(extension, out var tipoDeclarado))
-            return (Archivo($"El {que} debe ser un archivo PNG, JPEG o WebP."), null);
+            return (Archivo($"{Articulo(kind)} {que} debe ser un archivo PNG, JPEG o WebP."), null);
 
         var tipoReal = await ImageContentTypeSniffer.DetectAsync(contenido, ct).ConfigureAwait(false);
         if (!TipoPorExtension.ContainsValue(tipoReal))
-            return (Archivo($"El contenido del {que} no es una imagen PNG, JPEG o WebP válida."), null);
+            return (Archivo($"El contenido de{Contraccion(kind)} {que} no es una imagen PNG, JPEG o WebP válida."), null);
         if (!string.Equals(tipoReal, tipoDeclarado, StringComparison.Ordinal))
-            return (Archivo($"El contenido del {que} no coincide con su extensión: el archivo es {NombreTipo(tipoReal)} y se cargó como {NombreTipo(tipoDeclarado)}."), null);
+            return (Archivo($"El contenido de{Contraccion(kind)} {que} no coincide con su extensión: el archivo es {NombreTipo(tipoReal)} y se cargó como {NombreTipo(tipoDeclarado)}."), null);
 
         return (null, tipoReal);
     }
@@ -140,6 +175,11 @@ public static class PortalMarcaReglas
     /// <summary>Número con coma decimal, como se escribe en los mensajes («4,5:1»).</summary>
     private static string Decimal(double valor, string formato) =>
         valor.ToString(formato, CultureInfo.InvariantCulture).Replace('.', ',');
+
+    private static string Articulo(string kind) => kind == PortalMarcaImagen.KindCarousel ? "La" : "El";
+
+    /// <summary>«del logo» / «de la imagen del carrusel».</summary>
+    private static string Contraccion(string kind) => kind == PortalMarcaImagen.KindCarousel ? " la" : "l";
 
     private static PortalMarcaError Datos(string mensaje) => new(400, PortalMarcaErrores.Datos, mensaje);
 

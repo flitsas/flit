@@ -14989,6 +14989,8 @@ paths:
     post:
       tags: ["Admin · OT · Portal Persona Natural · Marca"]
       summary: Carga el banner (PNG, JPEG o WebP, hasta 2 MB)
+      description: >-
+        LEGACY (banner único). Opera sobre el PRIMER banner de la lista `banners`: lo reemplaza conservando su texto alternativo y enlace; si no hay ninguno, crea el primero con texto «Banner del organismo». Para varios banners use /banners.
       operationId: AdminOtPortalMarcaBannerPost
       security:
         - bearerAuth: []
@@ -15015,6 +15017,8 @@ paths:
     delete:
       tags: ["Admin · OT · Portal Persona Natural · Marca"]
       summary: Quita el banner del borrador (las versiones se conservan)
+      description: >-
+        LEGACY (banner único). Quita el PRIMER banner de la lista `banners`; sin banners no hace nada.
       operationId: AdminOtPortalMarcaBannerDelete
       security:
         - bearerAuth: []
@@ -15028,6 +15032,218 @@ paths:
               schema: { $ref: "#/components/schemas/PortalMarca" }
         "401": { description: Sin sesión. }
         "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/carrusel:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Agrega una imagen AL FINAL del carrusel de la columna lateral (PNG, JPEG o WebP, hasta 512 KB; máximo 6)
+      description: Solo organismos; el ámbito web responde PORTAL_MARCA_DATOS_INVALIDOS. Borrador → publicar, igual que logo y banner.
+      operationId: AdminOtPortalMarcaCarruselPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, alt]
+              properties:
+                file: { type: string, format: binary }
+                alt: { type: string, minLength: 1, maxLength: 120, description: Texto alternativo, texto plano sin caracteres de control. }
+                linkUrl: { type: string, maxLength: 500, description: "Opcional; solo http o https." }
+      responses:
+        "200":
+          description: Marca con la imagen al final del carrusel del borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_ARCHIVO_INVALIDO o PORTAL_MARCA_DATOS_INVALIDOS (alt o enlace inválidos)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CARRUSEL_LLENO (ya hay 6 imágenes). }
+  /api/v1/admin/ot/portal-marca/carrusel/orden:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Reordena el carrusel con una permutación exacta de las imágenes actuales
+      operationId: AdminOtPortalMarcaCarruselOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imageIds]
+              properties:
+                imageIds: { type: array, items: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Marca con el carrusel en el nuevo orden.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS (no es una permutación exacta de las actuales). }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/carrusel/{imageId}:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Cambia el texto alternativo y el enlace de una imagen del carrusel
+      operationId: AdminOtPortalMarcaCarruselPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alt]
+              properties:
+                alt: { type: string, minLength: 1, maxLength: 120 }
+                linkUrl: { type: string, nullable: true, maxLength: 500, description: "Solo http o https; vacío o nulo = sin enlace." }
+      responses:
+        "200":
+          description: Marca con la imagen actualizada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA (la imagen no está en el carrusel). }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita una imagen del carrusel del borrador (las versiones del binario se conservan)
+      operationId: AdminOtPortalMarcaCarruselDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin esa imagen en el carrusel del borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
+  /api/v1/admin/ot/portal-marca/banners:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Agrega un banner AL FINAL de la lista de banners del portal (PNG, JPEG o WebP, hasta 2 MB; máximo 6)
+      description: Solo organismos; el ámbito web responde PORTAL_MARCA_DATOS_INVALIDOS. Borrador → publicar. Sin rowVersion, igual que el carrusel.
+      operationId: AdminOtPortalMarcaBannersPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, alt]
+              properties:
+                file: { type: string, format: binary }
+                alt: { type: string, minLength: 1, maxLength: 120, description: Texto alternativo obligatorio, texto plano sin caracteres de control. }
+                linkUrl: { type: string, maxLength: 500, description: "Opcional; solo http o https." }
+      responses:
+        "200":
+          description: Marca con el banner al final de la lista del borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_ARCHIVO_INVALIDO o PORTAL_MARCA_DATOS_INVALIDOS (alt o enlace inválidos)." }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO (sin alcance sobre el organismo). }
+        "409": { description: BANNERS_LLENO (ya hay 6 banners). }
+  /api/v1/admin/ot/portal-marca/banners/orden:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Reordena los banners con una permutación exacta de los actuales
+      operationId: AdminOtPortalMarcaBannersOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imageIds]
+              properties:
+                imageIds: { type: array, items: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Marca con los banners en el nuevo orden (el primero pasa a ser `bannerUrl`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS (no es una permutación exacta de los actuales). }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO. }
+  /api/v1/admin/ot/portal-marca/banners/{imageId}:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Cambia el texto alternativo y el enlace de un banner
+      operationId: AdminOtPortalMarcaBannersPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alt]
+              properties:
+                alt: { type: string, minLength: 1, maxLength: 120 }
+                linkUrl: { type: string, nullable: true, maxLength: 500, description: "Solo http o https; vacío o nulo = sin enlace." }
+      responses:
+        "200":
+          description: Marca con el banner actualizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS. }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA (el banner no está en la lista). }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita un banner del borrador (las versiones del binario se conservan)
+      operationId: AdminOtPortalMarcaBannersDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin ese banner en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
   /api/v1/admin/ot/portal-marca/imagenes/{id}:
     get:
       tags: ["Admin · OT · Portal Persona Natural · Marca"]
@@ -15546,6 +15762,30 @@ components:
             onPrimary: { type: string, example: "#FFFFFF" }
         logoId: { type: string, format: uuid, nullable: true }
         bannerId: { type: string, format: uuid, nullable: true }
+        carousel:
+          type: array
+          maxItems: 6
+          description: Carrusel de la columna lateral, en orden. Ausente en documentos viejos = vacío.
+          items:
+            type: object
+            required: [imageId, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              alt: { type: string, minLength: 1, maxLength: 120 }
+              linkUrl: { type: string, nullable: true, maxLength: 500, description: Solo http o https. }
+        banners:
+          type: array
+          maxItems: 6
+          description: >-
+            Banners principales del portal del organismo, en orden. `bannerId` es siempre el primero. Un documento con el banner único
+            legacy (sin esta clave) se lee como un solo banner con texto alternativo «Banner del organismo».
+          items:
+            type: object
+            required: [imageId, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              alt: { type: string, minLength: 1, maxLength: 120 }
+              linkUrl: { type: string, nullable: true, maxLength: 500, description: Solo http o https. }
     DominioPortal:
       type: object
       required: [id, host, principal, estado, motivo, dns, rowVersion]
@@ -15567,7 +15807,7 @@ components:
         rowVersion: { type: integer, format: int64 }
     PortalMarca:
       type: object
-      required: [transitOfficeId, draft, published, publishedVersion, publishedAt, publishedBy, hasUnpublishedChanges, logoUrl, bannerUrl, completeness, rowVersion]
+      required: [transitOfficeId, draft, published, publishedVersion, publishedAt, publishedBy, hasUnpublishedChanges, logoUrl, bannerUrl, completeness, rowVersion, carousel, banners]
       properties:
         transitOfficeId: { type: string, format: uuid }
         draft: { $ref: "#/components/schemas/PortalMarcaSnapshot" }
@@ -15586,6 +15826,32 @@ components:
         hasUnpublishedChanges: { type: boolean }
         logoUrl: { type: string, nullable: true, description: Ruta de la imagen del borrador (solo con sesión). }
         bannerUrl: { type: string, nullable: true }
+        carousel:
+          type: array
+          maxItems: 6
+          description: Carrusel del BORRADOR, en orden (vacío si no hay). Solo organismos; la marca web siempre lo devuelve vacío.
+          items:
+            type: object
+            required: [imageId, imageUrl, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              imageUrl: { type: string, description: Ruta de la imagen del borrador (solo con sesión), como bannerUrl. }
+              alt: { type: string }
+              linkUrl: { type: string, nullable: true }
+        banners:
+          type: array
+          maxItems: 6
+          description: >-
+            Banners principales del BORRADOR, en orden (vacío si no hay). Solo organismos; la marca web siempre lo devuelve vacío.
+            `bannerUrl` es la URL del primero (compatibilidad con el banner único).
+          items:
+            type: object
+            required: [imageId, imageUrl, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              imageUrl: { type: string, description: Ruta de la imagen del borrador (solo con sesión). }
+              alt: { type: string }
+              linkUrl: { type: string, nullable: true }
         completeness:
           type: object
           required: [isComplete, missing]

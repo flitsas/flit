@@ -409,6 +409,22 @@ message ObtenerMarcaPuntoResponse {
   string logo_id = 6;                // vacío = imagen de FLIT
   string banner_id = 7;              // vacío = imagen de FLIT
   int32 version = 8;                 // versión publicada; 0 si origen = flit
+  repeated CarruselItem carrusel = 9; // carrusel publicado, en orden; solo origen = organismo (web y flit van vacíos)
+  repeated BannerItem banners = 10;  // banners principales publicados, en orden (el primero coincide con banner_id); solo origen = organismo
+}
+
+// Imagen del carrusel de la columna lateral del portal del organismo. La imagen sale por ObtenerImagenMarcaPunto.
+message CarruselItem {
+  string imagen_id = 1;
+  string alt = 2;
+  string enlace = 3;                 // http/https; vacío = sin enlace
+}
+
+// Banner principal del portal del organismo. La imagen sale por ObtenerImagenMarcaPunto.
+message BannerItem {
+  string imagen_id = 1;
+  string alt = 2;
+  string enlace = 3;                 // http/https; vacío = sin enlace
 }
 
 // La marca de la web tiene la misma forma que la del punto, con origen = web o flit.
