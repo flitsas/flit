@@ -289,3 +289,74 @@ describe('D4 — opciones del selector de dígito (paso 1)', () => {
     expect(textos).toEqual(['Sin preferencia', ...Array.from({ length: 10 }, (_, i) => `Termina en ${i}`)]);
   });
 });
+
+// HU9 (registro diferido 2026-11-09) — el preview trae `grupoPlaca` (catálogo del backend) en el
+// nivel superior; si viene y es válido manda, si no, las listas exactas de HU5.
+// Uso de ejemplo: preview { grupoPlaca: 'MAQUINARIA', vehicleFields: [vehicle_class RETROEXCAVADORA] }
+// → sin selector de dígito, sin gate y sin enviar dígito.
+function previewConGrupo(clase: string, grupoPlaca: string | null | undefined) {
+  return { ...previewConClase(clase), grupoPlaca };
+}
+
+describe('HU9 — grupoPlaca del preview en el paso 1', () => {
+  it('MAQUINARIA — sin selector, sin gate, Continuar habilitado y sin enviar dígito', async () => {
+    mocks.runPreflightPreview.mockResolvedValue(previewConGrupo('RETROEXCAVADORA', 'MAQUINARIA'));
+    const user = userEvent.setup();
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+
+    expect(screen.queryByLabelText(/Dígito (numérico )?de preferencia/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Elige un dígito o indica que no tienes preferencia/)).not.toBeInTheDocument();
+    const continuar = screen.getByRole('button', { name: /Continuar/ });
+    await waitFor(() => expect(continuar).toBeEnabled());
+    await user.click(continuar);
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    const patches = mocks.patchFieldValues.mock.calls.flatMap(
+      (c) => c[1] as { fieldKey: string; valueText: string }[],
+    );
+    expect(patches.some((i) => i.fieldKey === 'plate_preferred_last_digit' && i.valueText !== '')).toBe(false);
+  });
+
+  it('grupoPlaca manda sobre la lista: MOTO con clase desconocida → textos de moto', async () => {
+    mocks.runPreflightPreview.mockResolvedValue(previewConGrupo('MOTO ELECTRICA', 'MOTO'));
+    const user = userEvent.setup();
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    expect(await screen.findByLabelText('Dígito numérico de preferencia')).toBeInTheDocument();
+  });
+
+  it.each([null, undefined, 'OTRO'])('grupoPlaca %s → fallback por listas (HU5)', async (grupo) => {
+    mocks.runPreflightPreview.mockResolvedValue(previewConGrupo('MOTOCICLETA', grupo));
+    const user = userEvent.setup();
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    expect(await screen.findByLabelText('Dígito numérico de preferencia')).toBeInTheDocument();
+  });
+
+  it('re-consultar una maquinaria tras elegir dígito en un carro borra la preferencia', async () => {
+    const user = userEvent.setup();
+    mocks.runPreflightPreview.mockResolvedValueOnce(previewConGrupo('AUTOMOVIL', 'CARRO'));
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    await waitFor(() => expect(digito()).toBeEnabled());
+    await user.selectOptions(digito(), '7');
+    mocks.runPreflightPreview.mockResolvedValueOnce(previewConGrupo('CAMION GRUA', 'MAQUINARIA'));
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/Dígito (numérico )?de preferencia/)).not.toBeInTheDocument(),
+    );
+    const continuar = screen.getByRole('button', { name: /Continuar/ });
+    await waitFor(() => expect(continuar).toBeEnabled());
+    await user.click(continuar);
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    const patches = mocks.patchFieldValues.mock.calls.flatMap(
+      (c) => c[1] as { fieldKey: string; valueText: string }[],
+    );
+    expect(patches.some((i) => i.fieldKey === 'plate_preferred_last_digit' && i.valueText === '7')).toBe(false);
+  });
+});

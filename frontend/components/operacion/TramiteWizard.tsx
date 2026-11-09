@@ -120,7 +120,7 @@ import {
   toPlateDigitFieldValues,
   toPlateDigitUiValue,
 } from '@/lib/tramites/plate-digit-preference';
-import { grupoPlacaDesdeClase, grupoPlacaPideDigito } from '@/lib/tramites/plate-format';
+import { grupoPlacaPideDigito, resolverGrupoPlaca } from '@/lib/tramites/plate-format';
 import {
   sanitizeVin,
   validateVin,
@@ -3379,6 +3379,8 @@ function ConsultaStep({
    * `plate_route_active` que la acompañaba.
    */
   const [digitoPlaca, setDigitoPlaca] = useState('');
+  /** HU9 — `grupoPlaca` de la última consulta del paso 1 (null sin consulta o si no vino). */
+  const [grupoPlacaPreview, setGrupoPlacaPreview] = useState<string | null>(null);
 
   /**
    * Epic #12550 — ruta de la matrícula que decidió el RUNT en la consulta del paso 1, con el
@@ -3409,7 +3411,10 @@ function ConsultaStep({
    * pedirla (`/fur/template-format` lee el expediente), así que en el paso 1 se comporta como hoy y
    * el paso del FUR la corrige. Antes de consultar no hay clase → comportamiento actual.
    */
-  const grupoPlacaPaso1 = grupoPlacaDesdeClase(
+  // HU9 — el preview trae `grupoPlaca` (catálogo del backend, cubre maquinaria); si viene y es
+  // válido manda, si no (versión anterior, borrador rehidratado) quedan las listas exactas de HU5.
+  const grupoPlacaPaso1 = resolverGrupoPlaca(
+    grupoPlacaPreview,
     fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText,
   );
   const muestraSelectorDigito = muestraDigitoPlaca && grupoPlacaPideDigito(grupoPlacaPaso1);
@@ -3706,9 +3711,11 @@ function ConsultaStep({
         // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
         // para la creación): en Ruta Corta no hay dígito que guiar.
         if (result.route === 'corta' && digitoPlaca) handleDigitoPlaca('');
-        // HU5 — un remolque no lleva dígito: si se había elegido para otro vehículo, se borra.
+        // HU5/HU9 — remolque y maquinaria no llevan dígito: si se había elegido para otro vehículo, se borra.
+        setGrupoPlacaPreview(result.grupoPlaca ?? null);
         const claseConsultada = result.vehicleFields.find((f) => f.fieldKey === 'vehicle_class')?.valueText;
-        if (digitoPlaca && !grupoPlacaPideDigito(grupoPlacaDesdeClase(claseConsultada))) handleDigitoPlaca('');
+        if (digitoPlaca && !grupoPlacaPideDigito(resolverGrupoPlaca(result.grupoPlaca, claseConsultada)))
+          handleDigitoPlaca('');
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
@@ -3817,6 +3824,7 @@ function ConsultaStep({
     setPreviewSnapshot(null);
     setPendingPreview(null);
     setFieldValues([]);
+    setGrupoPlacaPreview(null);
     onPreviewDone?.(null);
   };
 
