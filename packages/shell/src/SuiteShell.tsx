@@ -12,12 +12,16 @@ import { Dock } from "./dock/Dock";
 import { DockMobile } from "./dock/DockMobile";
 import { buildDock, isActive, type NavCatalog, type NavViewer } from "./nav";
 import { ProductMenu } from "./ProductMenu";
+import { CommandPalette } from "./CommandPalette";
+import { ShellNavProvider } from "./ShellNavContext";
+import type { PlateSearch, SearchAction } from "./search";
 import { ThemeToggle } from "./theme";
 
 export type { NavCatalog, NavItem, NavSection, NavViewer } from "./nav";
 export type { ShellUser } from "./AccountMenu";
 export type { AccountLink } from "./account";
 export type { SuiteApp } from "./apps";
+export type { PlateSearch, SearchAction } from "./search";
 
 const NO_LINKS: AccountLink[] = [];
 
@@ -51,6 +55,12 @@ export interface SuiteShellProps {
   onLogout?: () => void;
   /** Interruptor claro/oscuro de la suite (por defecto, sí). */
   themeToggle?: boolean;
+  /**
+   * Buscador Ctrl K (HU #14480). Las secciones salen solas del catálogo filtrado; aquí van las acciones rápidas del
+   * producto (rutas que ya existen) y a dónde lleva una placa. Cada una nombra la entrada del dock de la que depende.
+   */
+  searchActions?: SearchAction[];
+  plateSearch?: PlateSearch;
   /** Controles propios del producto en la barra, antes del menú de productos. */
   headerActions?: React.ReactNode;
   /** Capa flotante sobre el contenido (p. ej. un asistente). */
@@ -84,6 +94,8 @@ export function SuiteShell({
   accountLinks = NO_LINKS,
   onLogout,
   themeToggle = true,
+  searchActions,
+  plateSearch,
   headerActions,
   overlay,
   footer,
@@ -102,6 +114,8 @@ export function SuiteShell({
   const homeActive = isActive(homeHref.split("?")[0], pathname) && !groups.some((g) => g.active);
   const app = layout === "app";
   const menuLinks = useMemo(() => [...suiteAccountLinks(accountUrl), ...accountLinks], [accountUrl, accountLinks]);
+  const home = useMemo(() => ({ href: homeHref, label: `Inicio ${productName}` }), [homeHref, productName]);
+  const shellNav = useMemo(() => ({ groups, homeHref }), [groups, homeHref]);
   const accountUser = useMemo(() => ({ ...user, roleLabel: user.roleLabel ?? suiteRoleLabel(roles ?? []) }), [user, roles]);
 
   // La barra de siempre de Trámites (logo, tema, rol/empresa/nombre, avatar y ⋮), con lo que agrega la suite: el nombre
@@ -120,6 +134,7 @@ export function SuiteShell({
         </span>
       </Link>
       <div className="flex items-center gap-3">
+        <CommandPalette groups={groups} home={home} actions={searchActions} plate={plateSearch} />
         {themeToggle && <ThemeToggle />}
         {headerActions}
         <ProductMenu productCode={productCode} apps={apps} loadApps={loadApps} />
@@ -145,6 +160,7 @@ export function SuiteShell({
 
   if (app) {
     return (
+      <ShellNavProvider value={shellNav}>
       <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white">
         {header}
         <main className="relative min-h-0 flex-1 overflow-hidden">
@@ -157,10 +173,12 @@ export function SuiteShell({
         </main>
         {footer}
       </div>
+      </ShellNavProvider>
     );
   }
 
   return (
+    <ShellNavProvider value={shellNav}>
     <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white">
       {header}
       {/* Colchón para que el dock fijo no tape el final del contenido (guía §4.3). */}
@@ -169,5 +187,6 @@ export function SuiteShell({
       {overlay}
       {footer}
     </div>
+    </ShellNavProvider>
   );
 }
