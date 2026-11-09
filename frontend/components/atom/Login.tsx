@@ -162,7 +162,7 @@ export function Login({
       </div>
 
       {/* RIGHT — Form */}
-      <div className="w-full md:w-5/12 bg-white flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-10 order-2 overflow-y-auto">
+      <div className="w-full md:w-5/12 bg-card flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-10 order-2 overflow-y-auto">
         <div className="max-w-sm w-full mx-auto">
           <div className="flex flex-col items-center gap-3 mb-8">
             <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-tech)" }}>
@@ -178,7 +178,7 @@ export function Login({
               <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-alert)" }} />
               <div className="text-sm">
                 <p className="font-semibold" style={{ color: "var(--color-flit-alert)" }}>Acceso Restringido</p>
-                <p className="text-slate-600 text-xs mt-1">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
+                <p className="text-muted-foreground text-xs mt-1">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
                 <button
                   type="button"
                   onClick={() => setBlocked(false)}
@@ -194,7 +194,7 @@ export function Login({
               <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-alert)" }} />
               <div className="text-sm">
                 <p className="font-semibold" style={{ color: "var(--color-flit-alert)" }}>Acceso Restringido</p>
-                <p className="text-slate-600 text-xs mt-1">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
+                <p className="text-muted-foreground text-xs mt-1">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
                 <button
                   type="button"
                   onClick={() => setRoleDeactivated(false)}
@@ -215,7 +215,7 @@ export function Login({
               <ExternalLink className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
               <div className="text-sm">
                 <p className="font-semibold" style={{ color: "var(--color-flit-brand)" }}>Tu red tiene un dominio propio</p>
-                <p className="text-slate-600 text-xs mt-1">
+                <p className="text-muted-foreground text-xs mt-1">
                   Ingresa desde <strong>{networkRedirect.networkDomain}</strong> para acceder a tu cuenta.
                 </p>
                 <a
@@ -239,9 +239,9 @@ export function Login({
           ) : (
             <form onSubmit={submitCreds} className="space-y-4 animate-fade-in" aria-label="Iniciar sesión" noValidate>
               <div>
-                <label htmlFor="login-email" className="text-xs font-medium text-slate-600 mb-1.5 block">Usuario Corporativo</label>
+                <label htmlFor="login-email" className="text-xs font-medium text-muted-foreground mb-1.5 block">Usuario Corporativo</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
+                  <Mail className="h-4 w-4 absolute left-3 top-3.5 text-muted-foreground" />
                   <input
                     id="login-email"
                     type="email"
@@ -250,14 +250,14 @@ export function Login({
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@flit.io"
                     aria-invalid={error ? true : undefined}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
+                    className="w-full bg-card border border-border rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   />
                 </div>
               </div>
               <div>
-                <label htmlFor="login-password" className="text-xs font-medium text-slate-600 mb-1.5 block">Contraseña</label>
+                <label htmlFor="login-password" className="text-xs font-medium text-muted-foreground mb-1.5 block">Contraseña</label>
                 <div className="relative">
-                  <Lock className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
+                  <Lock className="h-4 w-4 absolute left-3 top-3.5 text-muted-foreground" />
                   <input
                     id="login-password"
                     type="password"
@@ -266,10 +266,10 @@ export function Login({
                     onChange={(e) => setPass(e.target.value)}
                     placeholder="••••••••"
                     aria-invalid={error ? true : undefined}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
+                    className="w-full bg-card border border-border rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   />
                 </div>
-                <Link href="/auth/forgot-password" className="inline-block text-xs mt-2 text-slate-500 hover:text-flit-brand transition">
+                <Link href="/auth/forgot-password" className="inline-block text-xs mt-2 text-muted-foreground hover:text-flit-brand transition">
                   ¿Olvidó su contraseña?
                 </Link>
               </div>

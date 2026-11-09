@@ -47,7 +47,7 @@ export function UiStateBoundary({
         {Array.from({ length: skeletonRows }).map((_, i) => (
           <div
             key={i}
-            className="h-12 rounded-xl border animate-pulse bg-[#F4F7FC] dark:bg-white/5"
+            className="h-12 rounded-xl border animate-pulse bg-secondary"
           />
         ))}
       </div>
@@ -64,14 +64,14 @@ export function UiStateBoundary({
         role="alert"
         data-testid="ui-error"
       >
-        <AlertTriangle className="h-8 w-8" style={{ color: "#FF4E00" }} />
+        <AlertTriangle className="h-8 w-8" style={{ color: "var(--color-flit-alert)" }} />
         <p className="text-sm font-medium">{errorMessage}</p>
         {onRetry && (
           <button
             type="button"
             onClick={onRetry}
             className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "var(--color-flit-brand)" }}
+            style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
           >
             <RefreshCw className="h-3.5 w-3.5" /> Reintentar
           </button>

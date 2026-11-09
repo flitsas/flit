@@ -42,7 +42,7 @@ export const CARDLIST_TH =
   "text-[color:var(--table-header-fg)] first:rounded-l-xl last:rounded-r-xl";
 
 /** El `<tr>` de una fila. `group` habilita el resaltado al pasar por encima si la fila se pulsa. */
-export const CARDLIST_ROW = `group bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`;
+export const CARDLIST_ROW = `group bg-card dark:bg-card ${TABLA_ROW_HOVER_CLS}`;
 
 /** Cada `<td>`. El borde completo de la tarjeta sale de los cuatro lados repartidos entre celdas. */
 export const CARDLIST_CELL =

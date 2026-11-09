@@ -117,7 +117,7 @@ export function MultiSelectBuscable({
         {idsConError.map((id) => {
           const nombre = seleccion.find((s) => s.id === id)?.label;
           return (
-            <li key={id} className="text-xs leading-tight" style={{ color: "#E5484D" }}>
+            <li key={id} className="text-xs leading-tight" style={{ color: "var(--badge-danger-fg)" }}>
               {nombre ? `${nombre}: ` : ""}
               {errores[id]}
             </li>
@@ -130,7 +130,7 @@ export function MultiSelectBuscable({
     return (
       <div className="space-y-2" data-testid={testId}>
         <div role="alert" className="flex items-center justify-between gap-2 text-xs">
-          <span style={{ color: "#E5484D" }}>{textoError}</span>
+          <span style={{ color: "var(--badge-danger-fg)" }}>{textoError}</span>
           {onRetry ? (
             <button type="button" className="rounded-full border px-3 py-1 font-semibold" onClick={onRetry}>
               Reintentar
@@ -175,8 +175,8 @@ export function MultiSelectBuscable({
                 className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand has-[:focus-visible]:ring-offset-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
                 style={
                   activa
-                    ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" }
-                    : { borderColor: "#DFE5ED", background: "#FFFFFF" }
+                    ? { borderColor: "var(--badge-success-fg)", background: "var(--badge-success-bg)" }
+                    : { borderColor: "var(--border)", background: "var(--card)" }
                 }
               >
                 <input
@@ -189,7 +189,7 @@ export function MultiSelectBuscable({
                 />
                 {activa ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                 <span className="text-flit-primary">{o.label}</span>
-                {o.detalle ? <span className="font-normal text-[#59677D]">· {o.detalle}</span> : null}
+                {o.detalle ? <span className="font-normal text-muted-foreground">· {o.detalle}</span> : null}
               </label>
             );
           })}
@@ -209,7 +209,7 @@ export function MultiSelectBuscable({
           type="button"
           onClick={() => onChange([])}
           disabled={disabled || n === 0}
-          className="rounded-full px-3 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 hover:underline disabled:opacity-40"
+          className="rounded-full px-3 py-1 text-xs font-semibold text-muted-foreground underline-offset-2 hover:underline disabled:opacity-40"
         >
           Limpiar
         </button>
@@ -226,7 +226,7 @@ export function MultiSelectBuscable({
               key={s.id}
               className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs"
               style={{
-                borderColor: errores[s.id] ? "#E5484D" : "#8CC63F",
+                borderColor: errores[s.id] ? "var(--badge-danger-fg)" : "var(--badge-success-fg)",
                 background: "rgba(140,198,63,0.12)",
               }}
             >
@@ -261,7 +261,7 @@ export function MultiSelectBuscable({
           placeholder={buscarPlaceholder}
           disabled={disabled}
           aria-controls={listaId}
-          className="w-full rounded-xl border bg-white py-2 pl-8 pr-3 text-xs outline-none focus:border-flit-brand dark:bg-[#0B0F14]"
+          className="w-full rounded-xl border bg-card py-2 pl-8 pr-3 text-xs outline-none focus:border-flit-brand dark:bg-card"
         />
       </div>
 
@@ -282,7 +282,7 @@ export function MultiSelectBuscable({
 
       <div
         id={listaId}
-        className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-white p-2 dark:bg-[#0B0F14]"
+        className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-card p-2 dark:bg-card"
         data-testid={`${testId}-lista`}
         role="group"
         aria-label={grupo}
