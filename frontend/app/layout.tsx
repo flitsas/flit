@@ -18,6 +18,14 @@ const poppins = localFont({
   ],
 });
 
+// Placa colombiana (UI kit «Diseño Inteligente», HU #14475): local, como Poppins.
+const barlowCondensed = localFont({
+  variable: "--font-barlow-condensed",
+  src: "./fonts/BarlowCondensed-700-latin.woff2",
+  weight: "700",
+  style: "normal",
+});
+
 const jetbrainsMono = localFont({
   variable: "--font-jetbrains-mono",
   src: "./fonts/JetBrainsMono-variable-latin.woff2",
@@ -50,7 +58,7 @@ export default async function RootLayout({
       // A-10 (HU #13001): modo de sesión en runtime (FLIT_SESSION_MODE), leído por lib/auth/session-mode.ts.
       data-session-mode={isOidcSessionMode() ? "oidc" : "legacy"}
       suppressHydrationWarning
-      className={`${poppins.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${poppins.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable} h-full`}
     >
       {/* BrandStyle no renderiza nada en host FLIT (AC7): <head> queda igual que hoy. */}
       <head>
