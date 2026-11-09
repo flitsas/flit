@@ -50,7 +50,6 @@ public sealed class GenerarFurHandler(
     ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
     IMandatoGenerator? mandatoGenerator = null,
     IMandateRequirementPolicy? mandatePolicy = null,
-    IMandatoFirmaPolicy? mandatoFirmaPolicy = null,
     IMandateSignerDirectory? mandateDirectory = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
@@ -105,10 +104,6 @@ public sealed class GenerarFurHandler(
     // HU #13172 (Feature #13118) — plantilla publicada de cada formato de mandato. Opcional: sin él (tests y DI que no
     // lo ejercitan) el mandato se emite con la redacción del generador, como antes.
     private readonly IMandateFormatTemplateProvider? _mandateFormatTemplates = mandateFormatTemplates;
-
-    // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
-    // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
-    private readonly IMandatoFirmaPolicy _mandatoFirmaPolicy = mandatoFirmaPolicy ?? NullMandatoFirmaPolicy.Instance;
 
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
     // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
@@ -1423,7 +1418,7 @@ public sealed class GenerarFurHandler(
                         var (firma, sello, metadatos, firmaIdentidad) =
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
                         mandatario = new MandatarioFirmante(
-                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad);
+                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad, signer.SignerModel);
 
                         if (enBorrador)
                             instance.MandateSignerId = signerId;
@@ -1433,14 +1428,6 @@ public sealed class GenerarFurHandler(
                 }
             }
         }
-
-        // El convenio se llavea por (compañía del trámite, organismo). El organismo del trámite se
-        // conoce aquí por su CÓDIGO; el id lo aporta la configuración del OT, que ya se resolvió arriba
-        // por ese mismo código: sin fila de configuración no hay id y el mandato conserva el bloque, que
-        // es el default seguro.
-        var modoFirma = await _mandatoFirmaPolicy
-            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, resolvedSignerId, ct)
-            .ConfigureAwait(false);
 
         var customKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind);
         byte[]? customPdf = null;
@@ -1452,11 +1439,10 @@ public sealed class GenerarFurHandler(
                 .ConfigureAwait(false);
         }
 
-        // Institucional / convenio: sin bloque MANDATARIO.
+        // Persona jurídica: sin bloque MANDATARIO.
         // Abierto o sin estampa: líneas. Si hay baúl o sello, se estampa aunque el modelo sea a mano.
         var modoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
             assignmentMode,
-            modoFirma.TieneConvenio,
             MandatoFirmaModoResolver.TieneEstampa(mandatario));
 
         var mandatoData = new MandatoData(

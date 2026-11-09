@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Analytics.Application.CompanyQueries;
@@ -72,7 +73,9 @@ internal static class CoveredQueries
         new("Q09", "CompanyReadRepository.ListAsync (listado de compañías)", "— (SuperAdmin)", 1, SupportsGlobal: true, TenantOnly: true),
         new("Q10", "CompanyReadRepository.GetByIdAsync", "Guid tenantId", 1, SupportsGlobal: false),
         new("Q11", "CompanyDocumentParamRepository.ListByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
-        new("Q12", "CompanyAgreementRepository.ListActiveOfficeIdsAsync", "Guid companyTenantId", 1, SupportsGlobal: false),
+        // HU #14359: Q12 era el repositorio de convenios, retirado con su tabla. El código lo toma otra lectura
+        // por tenant sin cubrir para conservar la numeración consecutiva que exige CoveredQueriesInventoryTests.
+        new("Q12", "TransitGrantRepository.ListEnabledOfficeIdsAsync", "Guid tenantId", 1, SupportsGlobal: false),
         new("Q13", "AdminAuditLogRepository.ListPagedAsync", "Guid? filter.TenantId", 1, SupportsGlobal: true),
         new("Q14", "InvitationRepository.ListPendingByTenantAsync", "Guid tenantId", 1, SupportsGlobal: false),
         new("Q15", "AnalyticsReadRepository.GetOverviewAsync", "Guid? tenantId", 2, SupportsGlobal: true),
@@ -250,7 +253,8 @@ internal static class CoveredQueries
 
             case "Q12":
                 {
-                    var offices = await new CompanyAgreementRepository(ctx).ListActiveOfficeIdsAsync(tenant, ct);
+                    var offices = await new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance)
+                        .ListEnabledOfficeIdsAsync(tenant, ct);
                     return Scalar(offices.Count);
                 }
 
