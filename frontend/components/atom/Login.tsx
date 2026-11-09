@@ -150,6 +150,13 @@ export function Login({
         <ParticlesCanvas />
         <div className="relative z-10 flex flex-col items-center px-8 text-center">
           <BrandLogo variant="white" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain" />
+          {/* Ilustración de ingreso del UI kit (HU #14485): decorativa, solo desde tablet para no empujar el formulario. */}
+          <img
+            src="/assets/ilustraciones/heroe-ingreso.webp"
+            alt=""
+            aria-hidden="true"
+            className="mt-8 hidden h-auto w-full max-w-[440px] object-contain md:block"
+          />
         </div>
         <a
           href={FLIT_PRIVACY_POLICY_URL}

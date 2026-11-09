@@ -205,6 +205,8 @@
   --shadow-modal: 0 24px 60px rgba(22, 39, 68, 0.18);
   --shadow-button: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
   --placa-fondo: #ffd100;
+  /* Velo detrás de diálogos y paneles (pedido de S3): tinta translúcida. */
+  --overlay: rgba(22, 39, 68, 0.45);
   --placa-texto: #111111;
 
   /* Estados del trámite (lib/tramites/estados.ts, pedido de S1): los 10 tonos de siempre, ahora por token.
@@ -328,6 +330,7 @@
   --gradient-action: linear-gradient(90deg, #8fb0ff 0%, #6fd0f0 55%, #5fe6e1 100%);
   --surface-sunken: #182846;
   --border-strong: #33486e;
+  --overlay: rgba(4, 9, 20, 0.7);
 
   /* Tinta de títulos en oscuro cuando no hay marca de socio (ver --color-flit-primary). */
   --flit-primary-tema: #e6f0ff;

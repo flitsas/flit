@@ -113,7 +113,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
+      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-[var(--overlay)] px-4 py-6 backdrop-blur-md`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
