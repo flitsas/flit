@@ -3,6 +3,7 @@
 import { formatFechaHora } from '@/lib/format/date';
 import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
+import { PagoPortalBloque } from './PagoPortalBloque';
 import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
 /**
@@ -19,7 +20,7 @@ export function DetalleVehiculoSidebar({
   item: InstanceSummary;
   canal?: Pick<
     ProcedureInstanceDetail,
-    'channel' | 'channelTransitOfficeName'
+    'channel' | 'channelTransitOfficeName' | 'pagoPortal'
   > | null;
 }) {
   const modelo = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
@@ -56,6 +57,7 @@ export function DetalleVehiculoSidebar({
           </p>
         ) : null}
       </div>
+      <PagoPortalBloque pago={canal?.pagoPortal} />
     </aside>
   );
 }
