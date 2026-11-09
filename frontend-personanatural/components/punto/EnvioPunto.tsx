@@ -1,8 +1,8 @@
 "use client";
 
-// Pasos 4 · Resumen y 5 · Envío del canal OT. Monta los MISMOS renderers del portal web (ResumenTramite y EnvioTramite)
-// con un contexto del wizard propio del punto (como RequisitosPunto con FormularioRequisitos). La radicación es la del portal
-// web (POST /solicitudes/{id}/radicar con la sesión del borrador); el pago por pasarela o caja queda para entregas futuras.
+// Resumen y Envío (cierre) del canal OT. Monta los MISMOS renderers del portal web (ResumenTramite y EnvioTramite)
+// con un contexto del wizard propio del punto (como RequisitosPunto con FormularioRequisitos). En el punto NO se radica desde
+// aquí: «Continuar al pago» lleva al paso Pago (PagoPunto) y el servidor radica solo al quedar la solicitud pagada.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useMemo } from "react";
@@ -17,7 +17,8 @@ import type { ClientePortal, DefinicionTipo } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import type { GrupoPaso, SeccionWizard } from "@/lib/tramite/pasos";
 
-export type PasoEnvioPunto = "resumen" | "envio";
+/** `pago` no se pinta aquí: el Resumen lo pide con irAPaso y quien monta el wizard muestra PagoPunto. */
+export type PasoEnvioPunto = "resumen" | "pago" | "envio";
 
 type Props = {
   cliente: ClientePortal;
@@ -58,7 +59,7 @@ export function EnvioPunto({ cliente, solicitudId, tipoCodigo, paso, onPaso, onA
   const recargar = useCallback(() => queryClient.invalidateQueries({ queryKey: claveSolicitud(solicitudId) }), [queryClient, solicitudId]);
   const irAPaso = useCallback(
     (grupo: GrupoPaso) => {
-      if (grupo === "resumen" || grupo === "envio") onPaso(grupo);
+      if (grupo === "resumen" || grupo === "pago" || grupo === "envio") onPaso(grupo);
       else if (grupo === "actores") onIrActores();
       else onAtras();
     },

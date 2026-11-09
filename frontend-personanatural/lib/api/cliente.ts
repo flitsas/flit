@@ -707,6 +707,62 @@ export interface ResultadoMultasPunto {
   multas?: MultaPunto[] | null;
 }
 
+// ── Paso Pago del punto (HU #14451/#14452): POST /punto/pago/{iniciar,caja,confirmar} y GET /punto/pago ─────────────
+export interface LineaCobroPunto {
+  codigo: string;
+  nombre: string;
+  subtitulo: string;
+  valorCop: number;
+}
+
+export interface ParteFaltantePunto {
+  parte: string;
+  ordinal: number;
+  estado: string;
+}
+
+export interface BloqueoPagoPunto {
+  code: string;
+  message: string;
+}
+
+export interface CobroCajaPunto {
+  codigo: string;
+  /** `vigente` o `vencido` según la hora de la consulta. */
+  estado: "vigente" | "vencido";
+  habilitadoEn: string;
+  venceEn: string;
+}
+
+export interface PagoConfirmadoPunto {
+  valorCop: number;
+  medio: string;
+  medioCaja?: string | null;
+  pagadoEn: string;
+}
+
+export interface EstadoPagoPunto {
+  solicitudId: string;
+  codigoPublico: string;
+  estado: string;
+  puedePagar: boolean;
+  motivoIdentidad?: string | null;
+  identidadesPendientes: ParteFaltantePunto[];
+  desglose?: LineaCobroPunto[] | null;
+  totalCop?: number | null;
+  bloqueo?: BloqueoPagoPunto | null;
+  cobro?: CobroCajaPunto | null;
+  pago?: PagoConfirmadoPunto | null;
+}
+
+export interface CajaHabilitadaPunto {
+  codigoCobro: string;
+  habilitadoEn: string;
+  venceEn: string;
+  desglose: LineaCobroPunto[];
+  totalCop: number;
+}
+
 export interface OpcionesCliente {
   base?: string;
   fetchImpl?: typeof fetch;
@@ -940,6 +996,13 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       /** Gate a Pago: el servidor calcula desde el borrador (sesión pn_sesion + cookie del punto); solo se manda el tipo. */
       requisitosCompletitud: (datos: { tipoCodigo: string }, o?: OpcionesLlamada) =>
         solicitar<CompletitudRequisitosPunto>("POST", "/punto/requisitos/completitud", { tipoCodigo: datos.tipoCodigo }, o),
+      /** Paso Pago (solo caja): iniciar es idempotente; estado se sondea; caja habilita el cobro; confirmar solo acepta total $0. */
+      pago: {
+        iniciar: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("POST", "/punto/pago/iniciar", undefined, o),
+        estado: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("GET", "/punto/pago", undefined, o),
+        caja: (o?: OpcionesLlamada) => solicitar<CajaHabilitadaPunto>("POST", "/punto/pago/caja", undefined, o),
+        confirmar: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("POST", "/punto/pago/confirmar", undefined, o),
+      },
       consultas: {
         vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
           solicitar<ResultadoVehiculoPunto>(
