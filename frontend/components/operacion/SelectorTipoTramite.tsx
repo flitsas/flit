@@ -65,8 +65,8 @@ function OpcionTarjeta({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex h-full w-full flex-col rounded-xl border bg-white p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-flit-brand enabled:hover:shadow-sm dark:bg-[#162744]"
-      style={{ borderColor: '#DFE5ED', ...(disabled ? { opacity: 0.55 } : {}) }}
+      className="flex h-full w-full flex-col rounded-xl border bg-card p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-flit-brand enabled:hover:shadow-sm"
+      style={{ borderColor: 'var(--border)', ...(disabled ? { opacity: 0.55 } : {}) }}
     >
       <span className="text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
         {titulo}
@@ -85,8 +85,8 @@ function BotonCancelar({ onClick, children }: { onClick: () => void; children: s
     <button
       type="button"
       onClick={onClick}
-      className="mt-5 rounded-xl border bg-white px-4 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand dark:bg-[#162744]"
-      style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-primary)' }}
+      className="mt-5 rounded-xl border bg-card px-4 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand"
+      style={{ borderColor: 'var(--border)', color: 'var(--color-flit-primary)' }}
     >
       {children}
     </button>
@@ -124,13 +124,13 @@ export function SelectorTipoTramite({
 
   if (status === 'error') {
     return (
-      <div className="rounded-xl border p-4" style={{ borderColor: 'rgba(255,78,0,0.32)', background: 'rgba(255,78,0,0.12)' }}>
-        <p className="text-sm" style={{ color: '#C2410C' }}>{error}</p>
+      <div className="rounded-xl border p-4" style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)' }}>
+        <p className="text-sm" style={{ color: 'var(--destructive)' }}>{error}</p>
         <button
           type="button"
           onClick={() => void reload()}
           className="mt-2 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ color: '#C2410C' }}
+          style={{ color: 'var(--destructive)' }}
         >
           Reintentar
         </button>

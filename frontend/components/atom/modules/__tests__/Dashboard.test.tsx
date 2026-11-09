@@ -156,8 +156,9 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     const card = label.closest("div.rounded-2xl");
     expect(card).not.toBeNull();
-    expect(card?.className).toContain("bg-white");
-    expect(card?.className).toContain("dark:bg-[#0B0F14]");
+    // Rediseño UI kit (HU #14482): la superficie es el token `bg-card`, que ya resuelve el tema oscuro.
+    expect(card?.className).toContain("bg-card");
+    expect(card?.className).not.toMatch(/dark:bg-\[#/);
     expect(card?.className).toContain("border");
 
     // Resoluciones sigue apagado (la compañía no lo activó): no debe verse su placeholder.
@@ -729,7 +730,8 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(heroRow?.className).toMatch(/items-stretch/);
     const grid = screen.getByTestId("dashboard-kpi-grid");
     const firstCard = grid.querySelector(":scope > div");
-    expect(firstCard?.className).toMatch(/dark:bg-\[#0B0F14\]/);
+    // Rediseño UI kit (HU #14482): `bg-card` trae su valor oscuro; ya no hay `dark:bg-[#…]` fijo.
+    expect(firstCard?.className).toMatch(/\bbg-card\b/);
   });
 
   it("AC5 edge — bannerAmbientGradient y useDominantColor siguen exportados sin cambio de firma", async () => {

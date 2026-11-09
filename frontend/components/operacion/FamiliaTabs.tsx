@@ -38,7 +38,7 @@ export function FamiliaTabs({ value, onChange, familias }: Props) {
             // Clases y no `style`: el color fijo var(--color-flit-primary) dejaba las pestañas inactivas invisibles en
             // modo oscuro.
             className={`relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand ${
-              active ? 'text-flit-brand' : 'text-flit-primary/65 dark:text-white/65'
+              active ? 'text-flit-brand' : 'text-muted-foreground'
             }`}
           >
             {t.label}

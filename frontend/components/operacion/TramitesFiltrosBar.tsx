@@ -39,9 +39,9 @@ export const PERIODOS = [
 export type Periodo = (typeof PERIODOS)[number];
 
 export const INPUT_CLS =
-  'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-flit-primary outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
+  'h-9 rounded-xl border border-border bg-card px-3 text-xs text-foreground outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2';
 export const POPOVER_SURFACE_CLS =
-  'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
+  'rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]';
 
 
 /**
@@ -99,7 +99,7 @@ export function Field({
 }) {
   return (
     <label className={`flex flex-col gap-1 ${className}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide text-[#59677D]">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -267,11 +267,11 @@ export function PeriodoPopover({
             </>
           ) : null}
 
-          <div className="mt-3 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3">
             <button
               type="button"
               onClick={handleLimpiar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-[#59677D] transition hover:bg-[#DFE5ED]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
             >
               Limpiar
             </button>
@@ -387,7 +387,7 @@ function FiltroEspecificoPopover({
           id={panelId}
           role="dialog"
           aria-label="Filtros del listado"
-          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-border bg-card p-3 shadow-lg"
         >
           {fieldsError ? (
             fieldsError
@@ -412,11 +412,11 @@ function FiltroEspecificoPopover({
           ) : (
             <>
               {condiciones.length > 0 ? (
-                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-border pb-2">
                   {condiciones.map((c) => (
                     <span
                       key={c.fieldId}
-                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-flit-brand-ink"
                     >
                       <button
                         type="button"
@@ -454,12 +454,12 @@ function FiltroEspecificoPopover({
               del DOM en vez de ocultarse con clase, para que tampoco exista para un lector de
               pantalla ni sea alcanzable con el tabulador. */}
           {campoEditado && !fieldsError ? null : (
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+          <div className="mt-2 flex items-center justify-end gap-2 border-t border-border pt-3">
             <button
               type="button"
               onClick={handleEmpezarDeCero}
               disabled={empezarDeCeroDisabled}
-              className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl border border-[var(--badge-danger-border)] px-3 py-2 text-xs font-semibold text-destructive transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Empezar de cero
             </button>
@@ -684,7 +684,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {periodoActivo ? (
-        <span className="flex items-center gap-1.5 rounded-full bg-[#EEF5FF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]">
+        <span className="flex items-center gap-1.5 rounded-full bg-[var(--badge-info-bg)] px-2.5 py-1 text-xs font-semibold text-flit-brand-ink">
           {periodo}
           <button
             type="button"
@@ -699,7 +699,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
       {chips.map((chip) => (
         <span
           key={chip.key}
-          className="flex items-center gap-1.5 rounded-full border border-flit-brand px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
+          className="flex items-center gap-1.5 rounded-full border border-flit-brand px-2.5 py-1 text-xs font-semibold text-flit-brand-ink"
         >
           {chip.label}
           <button
@@ -716,7 +716,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
         <button
           type="button"
           onClick={onLimpiarTodo}
-          className="rounded-full px-2 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          className="rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
         >
           Limpiar todo
         </button>

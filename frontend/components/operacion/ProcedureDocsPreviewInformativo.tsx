@@ -31,15 +31,15 @@ const FORMATOS_ADMITIDOS = ALLOWED_MIME.map((m) => m.split('/')[1].toUpperCase()
  * `#F59E0B` puro, que no llega a 3:1 sobre blanco.
  */
 const TONO_OBLIGATORIO = {
-  bg: 'rgba(245, 158, 11, 0.15)',
-  fg: '#B45309',
-  border: 'rgba(245, 158, 11, 0.35)',
-  punto: '#B45309',
+  bg: 'var(--badge-warning-bg)',
+  fg: 'var(--badge-warning-fg)',
+  border: 'var(--badge-warning-border)',
+  punto: 'var(--badge-warning-fg)',
 };
 
 const TONO_OPCIONAL = {
   bg: 'color-mix(in srgb, var(--color-flit-brand) 14%, transparent)',
-  fg: '#3B4FD6',
+  fg: 'var(--flit-brand-ink)',
   border: 'color-mix(in srgb, var(--color-flit-brand) 35%, transparent)',
   punto: 'var(--color-flit-brand)',
 };
@@ -72,7 +72,7 @@ function GrupoDocumentos({
     >
       <div className="flex items-center gap-2">
         <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white dark:bg-[#162744]"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-card"
           aria-hidden="true"
         >
           <FileText className="h-3.5 w-3.5" style={{ color: tono.fg }} />
@@ -204,7 +204,7 @@ export function ProcedureDocsPreviewInformativo({
             </p>
           )}
           {error && (
-            <p className="text-xs" style={{ color: '#C2410C' }} role="alert">
+            <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
               {error}
             </p>
           )}
@@ -230,7 +230,7 @@ export function ProcedureDocsPreviewInformativo({
 
               <div
                 className="mt-4 flex flex-wrap items-center justify-between gap-3 border-0 border-t pt-3"
-                style={{ borderColor: '#DFE5ED' }}
+                style={{ borderColor: 'var(--border)' }}
               >
                 <p className="flex min-w-0 items-center gap-1.5 text-xs opacity-70">
                   <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -241,8 +241,8 @@ export function ProcedureDocsPreviewInformativo({
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="shrink-0 rounded-xl border bg-white px-4 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand dark:bg-[#162744]"
-                  style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-primary)' }}
+                  className="shrink-0 rounded-xl border bg-card px-4 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand"
+                  style={{ borderColor: 'var(--border)', color: 'var(--color-flit-primary)' }}
                 >
                   Entendido
                 </button>

@@ -116,8 +116,8 @@ export function VehicleColorSearchSelect({
         aria-label={label}
         onClick={toggleOpen}
         aria-invalid={invalid || undefined}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
-        style={invalid ? { borderColor: '#FF4E00', borderWidth: 2 } : undefined}
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60"
+        style={invalid ? { borderColor: 'var(--destructive)', borderWidth: 2 } : undefined}
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
@@ -127,7 +127,7 @@ export function VehicleColorSearchSelect({
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#162744]"
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-card p-2 shadow-lg"
           role="listbox"
           aria-label={label}
         >
@@ -151,7 +151,7 @@ export function VehicleColorSearchSelect({
             {loading && options.length === 0 ? (
               <li className="px-2 py-2 text-xs opacity-55">Buscando…</li>
             ) : error ? (
-              <li className="px-2 py-2 text-xs" style={{ color: '#FF4E00' }} role="alert">
+              <li className="px-2 py-2 text-xs" style={{ color: 'var(--destructive)' }} role="alert">
                 {error}
               </li>
             ) : options.length === 0 ? (

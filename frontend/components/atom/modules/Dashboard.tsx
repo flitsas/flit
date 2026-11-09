@@ -513,7 +513,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const bannerColor = useDominantColor(s.type === "banner" ? s.imageUrl : undefined);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-foreground">
       {/* Fila superior: Banner + KPIs — la columna derecha fija el alto; el banner se estira (HU #12725 B.1). */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
@@ -677,7 +677,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 { label: "Matrículas", value: matriculas, icon: Car, color: "var(--color-flit-tech)", family: "MATRICULAS" as const },
                 { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00", family: "TRASPASO" as const },
                 { label: "Otros Trámites", value: otros, icon: Layers, color: "var(--color-flit-primary)", family: "OTROS" as const },
-                { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F", family: null },
+                { label: "Completados", value: completados, icon: CheckCircle, color: "var(--flit-success-ink)", family: null },
               ].filter((k) => k.family === null || showsInAggregates(k.family)).map((k) => {
                 const Icon = k.icon;
                 const isError = status === "error";
@@ -689,7 +689,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   // 48px, el rótulo más largo cabe y el tamaño sube al piso tipográfico de 12px.
                   <div
                     key={k.label}
-                    className="rounded-2xl p-3 flex flex-col gap-2 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+                    className="rounded-2xl p-3 flex flex-col gap-2 bg-card border border-border"
                   >
                     <div className="min-w-0">
                       {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
@@ -713,7 +713,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       {isError ? (
                         <p
                           className="text-xl font-bold flex items-center gap-1.5 min-w-0"
-                          style={{ color: "#FF4E00" }}
+                          style={{ color: "var(--destructive)" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
                           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -729,9 +729,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       )}
                       <div
                         className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
-                        style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
+                        style={{ background: `color-mix(in srgb, ${isError ? "var(--destructive)" : k.color} 10%, transparent)` }}
                       >
-                        <Icon className="h-4 w-4" style={{ color: isError ? "#FF4E00" : k.color }} />
+                        <Icon className="h-4 w-4" style={{ color: isError ? "var(--destructive)" : k.color }} />
                       </div>
                     </div>
                   </div>
@@ -758,13 +758,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             {comingSoonModules.map((m) => (
               <div
                 key={m.key}
-                className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+                className="rounded-2xl p-4 flex items-center gap-3 bg-card border border-border"
               >
                 <div
                   className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
-                  style={{ background: "#7D87981A" }}
+                  style={{ background: "var(--badge-neutral-bg)" }}
                 >
-                  <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+                  <Clock className="h-5 w-5" style={{ color: "var(--badge-neutral-fg)" }} aria-hidden="true" />
                 </div>
                 <div>
                   <p className="text-sm font-bold">{m.label}</p>
@@ -790,7 +790,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               skeletonRows={3}
             >
               {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
-              <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
+              <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
                 <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
                   Distribución General de Trámites
                   {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="distribucion-red" />}
@@ -804,7 +804,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       return (
                         <li
                           key={f.status}
-                          className="flex items-center gap-3 p-2 rounded-xl bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:bg-white/5"
+                          className="flex items-center gap-3 p-2 rounded-xl bg-secondary"
                         >
                           <span
                             className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
@@ -836,7 +836,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
+            <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
               <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
                 Validaciones Biométricas
                 {/* Sin ruta de red para biometría: sigue siendo del cliente propio y se rotula
@@ -850,9 +850,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: "Total", value: biometricStats?.total ?? 0, color: "var(--color-flit-brand)" },
-                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, color: "#8CC63F" },
-                  { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "#F9AC00" },
-                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "#FF4E00" },
+                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, color: "var(--flit-success-ink)" },
+                  { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "var(--badge-warning-fg)" },
+                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "var(--badge-danger-fg)" },
                 ].map((k) => (
                   <div key={k.label} className="rounded-xl border p-2.5">
                     <p className="text-[10px] opacity-70 font-medium">{k.label}</p>
@@ -865,7 +865,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               {expiringSoonCount > 0 && (
                 <div
                   className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium"
-                  style={{ background: "#F9AC001A", color: "#B26A00" }}
+                  style={{ background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
                 >
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   {expiringSoonCount} validación{expiringSoonCount === 1 ? "" : "es"} próxima
@@ -887,7 +887,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             emptyMessage="No hay datos de tendencia en los últimos 6 meses."
             skeletonRows={3}
           >
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
+            <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
               <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
                 Seguimiento operativo
                 {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="seguimiento-red" />}
@@ -897,7 +897,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                     <CartesianGrid
                       strokeDasharray="3 3"
-                      stroke="rgba(127,127,127,0.18)"
+                      stroke="var(--border)"
                       vertical={false}
                     />
                     <XAxis

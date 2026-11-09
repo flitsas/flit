@@ -154,7 +154,7 @@ describe('HU #13822 — reenvío por persona', () => {
 
     await user.type(campo, 'sin-arroba');
     const aviso = await within(grupoAna).findByText('Correo inválido.');
-    expect(aviso).toHaveStyle({ color: '#FF4E00' });
+    expect(aviso.getAttribute('style')).toContain('var(--destructive)');
     expect(reenviar).toBeDisabled();
 
     await user.clear(campo);
@@ -202,7 +202,7 @@ describe('HU #13822 — reenvío por persona', () => {
     await user.click(within(grupoAna).getByRole('button', { name: 'Copiar enlace' }));
     expect(writeText).toHaveBeenCalledWith('https://kyverum.local/vigente');
     const ok = await within(grupoAna).findByText('Enlace copiado.');
-    expect(ok).toHaveStyle({ color: '#8CC63F' });
+    expect(ok.getAttribute('style')).toContain('var(--flit-success-ink)');
   });
 
   it('AC4: tras reenviar el modal NO se cierra y muestra el enlace nuevo con «Copiar enlace»', async () => {

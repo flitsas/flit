@@ -44,7 +44,7 @@ type Phase = "idle" | "loading" | "error" | "empty" | "ready";
 // `--border` (== #DFE5ED en claro, white/10 en oscuro) desde la capa base de globals.css, así que
 // la pareja `border-[#DFE5ED] dark:border-white/10` era el token escrito a mano.
 const INPUT_CLS =
-  "w-full rounded-xl border bg-white px-3 py-2 text-xs uppercase text-flit-primary placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border bg-card px-3 py-2 text-xs uppercase text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 
 /** Tono semántico del chip de estado (verde válido / azul proceso / naranja-rojo alerta / gris). */
 const ESTADO_TONE: Record<string, StatusTone> = {
@@ -268,7 +268,7 @@ export function HistorialPlaca({
     // respiro px-6/pt-6/pb-10 y tinta de marca. Antes era `p-4` sin `app-bg`, que dejaba el
     // módulo con menos aire y sin el fondo azul claro del prototipo.
     <div
-      className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10 text-flit-primary dark:text-white"
+      className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10 text-foreground"
       data-testid="historial-placa-module"
     >
       {/* El título de una pantalla interna va SIEMPRE en tarjeta blanca (prototipo FLIT +
@@ -279,14 +279,14 @@ export function HistorialPlaca({
       />
 
       <form
-        className="flex shrink-0 flex-wrap items-end gap-3 rounded-2xl border bg-white p-3 dark:bg-[#0B0F14]"
+        className="flex shrink-0 flex-wrap items-end gap-3 rounded-2xl border bg-card p-3"
         onSubmit={handleSubmit}
         aria-label="Consultar historial de trámites por placa"
       >
         <div className="min-w-[10rem] flex-1 sm:max-w-xs">
           <label
             htmlFor="historial-placa-input"
-            className="mb-1 block text-xs font-semibold text-flit-primary dark:text-white"
+            className="mb-1 block text-xs font-semibold text-foreground"
           >
             Placa
           </label>

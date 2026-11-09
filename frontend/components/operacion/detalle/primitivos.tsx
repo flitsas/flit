@@ -40,7 +40,7 @@ export function DetalleBadgeSoft({ text, color }: { text: string; color: string 
   return (
     <span
       className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `${color}22`, color }}
+      style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
     >
       {text}
     </span>
@@ -69,7 +69,7 @@ export function TarjetaDetalle({
           className="text-sm font-semibold"
           style={{ color: tituloAzul ? AZUL : NAVY }}
         >
-          <span className="dark:text-white">{titulo}</span>
+          <span>{titulo}</span>
         </h4>
         {accion ?? null}
       </div>
@@ -85,8 +85,8 @@ export function TarjetaDetalle({
 export function CampoValor({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
-      <dt className="text-xs text-flit-primary/70 dark:text-white/70">{campo}</dt>
-      <dd className="text-xs font-medium break-words text-flit-primary dark:text-white">
+      <dt className="text-xs text-muted-foreground">{campo}</dt>
+      <dd className="text-xs font-medium break-words text-foreground">
         {valor === null || valor === undefined || valor === '' ? '—' : valor}
       </dd>
     </>
@@ -125,8 +125,8 @@ export function SeccionCargando({ etiqueta, filas = 3 }: { etiqueta: string; fil
       {Array.from({ length: filas }).map((_, i) => (
         <div
           key={i}
-          className="h-10 animate-pulse rounded-xl dark:bg-white/5"
-          style={{ background: 'rgba(223,229,237,0.5)' }}
+          className="h-10 animate-pulse rounded-xl"
+          style={{ background: 'var(--surface-sunken)' }}
         />
       ))}
     </div>
@@ -158,14 +158,14 @@ export function SeccionError({
 }) {
   if (sinReintento) {
     return (
-      <p className="text-xs text-flit-primary/70 dark:text-white/70" role="status">
+      <p className="text-xs text-muted-foreground" role="status">
         {mensaje}
       </p>
     );
   }
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
-      <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>
+      <p className="text-xs text-muted-foreground">{mensaje}</p>
       <button
         type="button"
         onClick={onReintentar}
@@ -181,5 +181,5 @@ export function SeccionError({
 
 /** Estado "vacío" de una sección: se dice qué falta, nunca se deja el hueco mudo. */
 export function SeccionVacia({ mensaje }: { mensaje: string }) {
-  return <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>;
+  return <p className="text-xs text-muted-foreground">{mensaje}</p>;
 }
