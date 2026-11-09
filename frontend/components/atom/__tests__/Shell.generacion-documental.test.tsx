@@ -45,6 +45,8 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell(["tramites", "generacion-documental"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    // HU #14479: las entradas de Administradores viven en secciones con nombre.
+    await userEvent.click(screen.getByRole("button", { name: "Documentos" }));
     expect(screen.getByRole("link", { name: "Generación documental" })).toHaveAttribute("href", "/admin/generacion-documental");
   });
 
@@ -77,6 +79,8 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell();
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    // HU #14479: las entradas de Administradores viven en secciones con nombre.
+    await userEvent.click(screen.getByRole("button", { name: "Documentos" }));
     expect(screen.getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
   });
 
@@ -89,6 +93,8 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell(["generacion-documental"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    // HU #14479: las entradas de Administradores viven en secciones con nombre.
+    await userEvent.click(screen.getByRole("button", { name: "Documentos" }));
     expect(screen.getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
   });
 });
