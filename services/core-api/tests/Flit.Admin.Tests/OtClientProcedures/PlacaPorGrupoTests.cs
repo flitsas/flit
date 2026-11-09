@@ -34,6 +34,7 @@ public sealed class PlacaPorGrupoTests
     private const string MensajeMoto = "La placa de esta moto debe tener 3 letras y 2 números, con o sin una letra al final, por ejemplo ABC12D o ABC12.";
     private const string MensajeRemolque = "La placa de este remolque debe empezar por R o S seguida de 5 o 6 números, por ejemplo R12345 o S54321.";
     private const string MensajeMaquinaria = "La placa de esta maquinaria debe tener 2 letras y 6 números, por ejemplo MC029554.";
+    private const string MensajeMotocarro = "La placa de este motocarro debe tener 3 números y 3 letras, por ejemplo 123ABC.";
     private const string PlacaPrevia = "ZZZ999";
 
     private static readonly Guid OtTenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa3109");
@@ -56,6 +57,9 @@ public sealed class PlacaPorGrupoTests
     [InlineData("CAMIÓN GRÚA", PlateClassGroup.Maquinaria)]
     [InlineData("camion grua", PlateClassGroup.Maquinaria)]
     [InlineData("MOTONIVELADORA", PlateClassGroup.Maquinaria)]
+    [InlineData("Motocarro", PlateClassGroup.Motocarro)]
+    [InlineData("MOTOTRICICLO", PlateClassGroup.Motocarro)]
+    [InlineData("tricimoto", PlateClassGroup.Motocarro)]
     [InlineData("MAQ. CONSTRUCCION O MINERA", PlateClassGroup.Remolque)]
     public async Task Grupo_SeResuelveConListasExactasYCatalogo(string clase, PlateClassGroup esperado)
     {
@@ -90,6 +94,9 @@ public sealed class PlacaPorGrupoTests
     [InlineData("SEMIRREMOLQUE", "S654321", "S654321")]
     [InlineData("CAMIÓN GRÚA", "mc029554", "MC029554")]
     [InlineData("AUTOMOVIL", "ABC123", "ABC123")]
+    [InlineData("MOTOCARRO", "123abc", "123ABC")]
+    [InlineData("TRICIMOTO", "523ABC", "523ABC")]
+    [InlineData("NAVE ESPACIAL", "123ABC", "123ABC")]
     [InlineData("NAVE ESPACIAL", "R12345", "R12345")]
     [InlineData("SIN CLASE", "ABC12D", "ABC12D")]
     [InlineData(null, "MC029554", "MC029554")]
@@ -114,6 +121,9 @@ public sealed class PlacaPorGrupoTests
     [InlineData("CAMIÓN GRÚA", "ABC123", MensajeMaquinaria)]
     [InlineData("MOTONIVELADORA", "R12345", MensajeMaquinaria)]
     [InlineData("CAMIONETA", "MC029554", MensajeCarro)]
+    [InlineData("MOTOTRICICLO", "ABC12D", MensajeMotocarro)]
+    [InlineData("MOTOCARRO", "ABC123", MensajeMotocarro)]
+    [InlineData("MOTOCICLETA", "123ABC", MensajeMoto)]
     public async Task Assign_PlacaDeOtroGrupo_FallaSinReservaNiTransicion(string clase, string placa, string literal)
     {
         var (db, id) = await SeedAsync(clase, TramiteEstado.Preasignacion);
@@ -138,6 +148,7 @@ public sealed class PlacaPorGrupoTests
     [InlineData("MOTOCICLETA", "ABC12D")]
     [InlineData("REMOLQUE", "S54321")]
     [InlineData("CAMIÓN GRÚA", "MC029554")]
+    [InlineData("MOTOCARRO", "123ABC")]
     public async Task Update_PlacaDelGrupo_SeCorrige(string clase, string placa)
     {
         var (db, id) = await SeedAsync(clase, TramiteEstado.Asignado);
@@ -155,6 +166,7 @@ public sealed class PlacaPorGrupoTests
     [InlineData("REMOLQUE", "X12345", MensajeRemolque)]
     [InlineData("REMOLQUE", "R1234", MensajeRemolque)]
     [InlineData("CAMIÓN GRÚA", "MC02955", MensajeMaquinaria)]
+    [InlineData("TRICIMOTO", "ABC12", MensajeMotocarro)]
     public async Task Update_PlacaDeOtroGrupo_FallaYConservaLaPrevia(string clase, string placa, string literal)
     {
         var (db, id) = await SeedAsync(clase, TramiteEstado.Asignado);
@@ -187,6 +199,7 @@ public sealed class PlacaPorGrupoTests
         var grua3 = Guid.NewGuid();
         var desconocida = Guid.NewGuid();
         var sinClase = Guid.NewGuid();
+        var motocarro = Guid.NewGuid();
         await using (var seed = NewContext(db))
         {
             SeedBase(seed);
@@ -198,6 +211,7 @@ public sealed class PlacaPorGrupoTests
             SeedProcedure(seed, grua3, "REF-G3", "camion grua", TramiteEstado.Preasignacion);
             SeedProcedure(seed, desconocida, "REF-X", "NAVE ESPACIAL", TramiteEstado.Preasignacion);
             SeedProcedure(seed, sinClase, "REF-N", null, TramiteEstado.Preasignacion);
+            SeedProcedure(seed, motocarro, "REF-MC", "MOTOTRICICLO", TramiteEstado.Preasignacion);
         }
 
         var catalog = new FakeFurCatalog();
@@ -218,6 +232,7 @@ public sealed class PlacaPorGrupoTests
         result.Data.Single(p => p.Id == grua3).GrupoPlaca.Should().Be("MAQUINARIA");
         result.Data.Single(p => p.Id == desconocida).GrupoPlaca.Should().BeNull();
         result.Data.Single(p => p.Id == sinClase).GrupoPlaca.Should().BeNull();
+        result.Data.Single(p => p.Id == motocarro).GrupoPlaca.Should().Be("MOTOCARRO");
         JsonSerializer.Serialize(result.Data.Single(p => p.Id == grua1), JsonSerializerOptions.Web)
             .Should().Contain("\"grupoPlaca\":\"MAQUINARIA\"");
         catalog.Calls.Should().BeLessThanOrEqualTo(2,

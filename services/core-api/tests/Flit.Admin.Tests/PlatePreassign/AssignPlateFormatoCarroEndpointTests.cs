@@ -27,9 +27,10 @@ public sealed class AssignPlateFormatoCarroEndpointTests : IClassFixture<AssignP
     private const string MensajeCarro = "La placa de este vehículo debe tener 3 letras y 3 números, por ejemplo ABC123.";
     private const string MensajeMoto = "La placa de esta moto debe tener 3 letras y 2 números, con o sin una letra al final, por ejemplo ABC12D o ABC12.";
     private const string MensajeRemolque = "La placa de este remolque debe empezar por R o S seguida de 5 o 6 números, por ejemplo R12345 o S54321.";
+    private const string MensajeMotocarro = "La placa de este motocarro debe tener 3 números y 3 letras, por ejemplo 123ABC.";
     private const string MensajeMaquinaria = "La placa de esta maquinaria debe tener 2 letras y 6 números, por ejemplo MC029554.";
     private const string MensajeUnion =
-        "La placa no cumple el formato esperado. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
+        "La placa no cumple el formato esperado. Ej: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
     private static readonly Guid OtTenant = Guid.Parse("0e000000-0000-4000-8000-000000001109");
 
     private readonly Factory _factory;
@@ -42,6 +43,7 @@ public sealed class AssignPlateFormatoCarroEndpointTests : IClassFixture<AssignP
     [InlineData(MensajeMoto)]
     [InlineData(MensajeRemolque)]
     [InlineData(MensajeMaquinaria)]
+    [InlineData(MensajeMotocarro)]
     public async Task AC2_FormatoDeCarroInvalido_Responde422ConLiteralExacto(string detailDelRepo)
     {
         var instanceId = Guid.NewGuid();

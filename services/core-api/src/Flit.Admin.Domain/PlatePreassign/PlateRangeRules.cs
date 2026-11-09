@@ -28,7 +28,7 @@ public static partial class PlateRangeRules
 
     /// <summary>Mensaje 422 cuando la placa no cumple el patrón unificado.</summary>
     public const string InvalidPlateFormatMessage =
-        "La placa no cumple el formato esperado. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
+        "La placa no cumple el formato esperado. Ej: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
 
     /// <summary>
     /// Mensaje 422 cuando el trámite es un carro (<see cref="IsCarClass"/>) y la placa que asigna el
@@ -51,6 +51,10 @@ public static partial class PlateRangeRules
     public const string InvalidMotoPlateFormatMessage =
         "La placa de esta moto debe tener 3 letras y 2 números, con o sin una letra al final, por ejemplo ABC12D o ABC12.";
 
+    /// <summary>HU10 (Caso C 2026-11-09, D5) — mensaje 422 de motocarro (<see cref="PlateClassGroup.Motocarro"/>).</summary>
+    public const string InvalidMotocarroPlateFormatMessage =
+        "La placa de este motocarro debe tener 3 números y 3 letras, por ejemplo 123ABC.";
+
     /// <summary>HU8 (Caso C 2026-11-09, D1) — mensaje 422 de remolque (<see cref="PlateClassGroup.Remolque"/>).</summary>
     public const string InvalidRemolquePlateFormatMessage =
         "La placa de este remolque debe empezar por R o S seguida de 5 o 6 números, por ejemplo R12345 o S54321.";
@@ -64,7 +68,16 @@ public static partial class PlateRangeRules
     /// </summary>
     public static readonly IReadOnlySet<string> MotoVehicleClasses = new HashSet<string>(StringComparer.Ordinal)
     {
-        "MOTOCICLETA", "MOTOCARRO", "CUATRIMOTO", "CUADRICICLO", "MOTOTRICICLO", "TRICIMOTO", "CICLOMOTOR",
+        "MOTOCICLETA", "CUATRIMOTO", "CUADRICICLO", "CICLOMOTOR",
+    };
+
+    /// <summary>
+    /// HU10 (Caso C 2026-11-09, D5) — clases de motocarro: placa <c>123ABC</c>. Salieron de
+    /// <see cref="MotoVehicleClasses"/> (defecto de HU8). Ya normalizadas; igualdad EXACTA.
+    /// </summary>
+    public static readonly IReadOnlySet<string> MotocarroVehicleClasses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "MOTOCARRO", "MOTOTRICICLO", "TRICIMOTO",
     };
 
     /// <summary>
@@ -82,11 +95,11 @@ public static partial class PlateRangeRules
 
     /// <summary>
     /// Unión de formatos colombianos alineada a <c>frontend/lib/validation/fieldRules.ts</c>
-    /// (<c>PLATE_PATTERN</c>): carro <c>AAA123</c>, moto <c>AAA12A</c>/<c>AAA12</c>,
+    /// (<c>PLATE_PATTERN</c>): carro <c>AAA123</c>, moto <c>AAA12A</c>/<c>AAA12</c>, motocarro <c>123AAA</c> (HU10),
     /// remolque/semirremolque <c>R|S</c> + 5–6 dígitos, maquinaria <c>AA123456</c>.
     /// </summary>
     [GeneratedRegex(
-        @"^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9]{5,6}|[A-Z]{2}[0-9]{6})$",
+        @"^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[0-9]{3}[A-Z]{3}|[RS][0-9]{5,6}|[A-Z]{2}[0-9]{6})$",
         RegexOptions.CultureInvariant)]
     private static partial Regex PlatePattern();
 
@@ -113,6 +126,10 @@ public static partial class PlateRangeRules
     /// <summary>Placa de moto: 3 letras + 2 dígitos + letra opcional (HU8).</summary>
     [GeneratedRegex(@"^[A-Z]{3}[0-9]{2}[A-Z]?$", RegexOptions.CultureInvariant)]
     private static partial Regex MotoPlatePattern();
+
+    /// <summary>Placa de motocarro: 3 dígitos + 3 letras (HU10).</summary>
+    [GeneratedRegex(@"^[0-9]{3}[A-Z]{3}$", RegexOptions.CultureInvariant)]
+    private static partial Regex MotocarroPlatePattern();
 
     /// <summary>Placa de remolque: R o S + 5 o 6 dígitos (HU8).</summary>
     [GeneratedRegex(@"^[RS][0-9]{5,6}$", RegexOptions.CultureInvariant)]
@@ -147,6 +164,11 @@ public static partial class PlateRangeRules
             return PlateClassGroup.Moto;
         }
 
+        if (MotocarroVehicleClasses.Contains(normalizedVehicleClass))
+        {
+            return PlateClassGroup.Motocarro;
+        }
+
         if (RemolqueVehicleClasses.Contains(normalizedVehicleClass))
         {
             return PlateClassGroup.Remolque;
@@ -170,6 +192,7 @@ public static partial class PlateRangeRules
         {
             PlateClassGroup.Carro => CarPlatePattern().IsMatch(plate),
             PlateClassGroup.Moto => MotoPlatePattern().IsMatch(plate),
+            PlateClassGroup.Motocarro => MotocarroPlatePattern().IsMatch(plate),
             PlateClassGroup.Remolque => RemolquePlatePattern().IsMatch(plate),
             PlateClassGroup.Maquinaria => MaquinariaPlatePattern().IsMatch(plate),
             _ => IsValidPlate(plate),
@@ -181,19 +204,21 @@ public static partial class PlateRangeRules
     {
         PlateClassGroup.Carro => InvalidCarPlateFormatMessage,
         PlateClassGroup.Moto => InvalidMotoPlateFormatMessage,
+        PlateClassGroup.Motocarro => InvalidMotocarroPlateFormatMessage,
         PlateClassGroup.Remolque => InvalidRemolquePlateFormatMessage,
         PlateClassGroup.Maquinaria => InvalidMaquinariaPlateFormatMessage,
         _ => InvalidPlateFormatMessage,
     };
 
     /// <summary>
-    /// HU8 — valor del contrato <c>grupoPlaca</c> (bandeja y detalle OT): <c>CARRO</c> | <c>MOTO</c> |
+    /// HU8 — valor del contrato <c>grupoPlaca</c> (bandeja y detalle OT): <c>CARRO</c> | <c>MOTO</c> | <c>MOTOCARRO</c> |
     /// <c>REMOLQUE</c> | <c>MAQUINARIA</c> | <c>null</c>.
     /// </summary>
     public static string? ToContractValue(PlateClassGroup? group) => group switch
     {
         PlateClassGroup.Carro => "CARRO",
         PlateClassGroup.Moto => "MOTO",
+        PlateClassGroup.Motocarro => "MOTOCARRO",
         PlateClassGroup.Remolque => "REMOLQUE",
         PlateClassGroup.Maquinaria => "MAQUINARIA",
         _ => null,

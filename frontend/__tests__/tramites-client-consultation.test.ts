@@ -119,7 +119,7 @@ describe('tramitesClient.runPreflightPreview — grupoPlaca (HU9)', () => {
       ),
     );
 
-  it.each(['CARRO', 'MOTO', 'REMOLQUE', 'MAQUINARIA'])('mapea grupoPlaca %s', async (g) => {
+  it.each(['CARRO', 'MOTO', 'MOTOCARRO', 'REMOLQUE', 'MAQUINARIA'])('mapea grupoPlaca %s', async (g) => {
     preview({ grupoPlaca: g });
     const r = await tramitesClient.runPreflightPreview({ modalidad: 'matricula_inicial', vin: 'X' });
     expect(r.grupoPlaca).toBe(g);

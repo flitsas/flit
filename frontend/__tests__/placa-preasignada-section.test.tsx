@@ -228,3 +228,18 @@ describe('PlacaPreasignadaSection — opciones del dígito (D4)', () => {
     );
   });
 });
+
+// HU10 — motocarro en el FUR: texto de la placa del motocarro y opciones «Primer número N».
+describe('PlacaPreasignadaSection — motocarro (HU10)', () => {
+  it('texto y opciones', async () => {
+    render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" grupoPlaca="MOTOCARRO" readOnly={false} />);
+    expect(await screen.findByTestId('fur-placa-ruta-larga')).toHaveTextContent(
+      'Dígito numérico de preferencia (opcional): Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.',
+    );
+    const select = screen.getByLabelText(/Dígito de preferencia de placa/i);
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Sin preferencia',
+      ...Array.from({ length: 10 }, (_, i) => `Primer número ${i}`),
+    ]);
+  });
+});
