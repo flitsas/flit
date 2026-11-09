@@ -45,7 +45,7 @@ export function AuthCard({
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-flit-bg px-4">
+    <main className="min-h-screen flex items-center justify-center bg-flit-bg px-4 dark:bg-background">
       <div className="w-full max-w-md bg-card text-card-foreground rounded-2xl shadow-[var(--shadow-modal)] p-8">
         {/* HU #12419 AC2 — logo de la red (o FLIT sin cambios, AC7) en acceso/recuperación. */}
         <BrandLogo variant="auto" className="h-8 w-auto mb-4" />

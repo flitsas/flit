@@ -138,7 +138,7 @@ export function PasoDatos({
         verificación facial, de tu documento (anverso y reverso) y tu firma. Toma menos de un minuto.
       </p>
 
-      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-flit-bg p-4">
+      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-secondary p-4">
         <h2 id="consejos-titulo" className="text-base font-semibold text-flit-primary">
           Para que salga bien
         </h2>

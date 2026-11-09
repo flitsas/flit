@@ -4,7 +4,7 @@ import { BrandLogo } from "@flit/brand/BrandLogo";
 // Contenedor de las pantallas de recuperación del hub (mismo que el de Trámites, components/auth/AuthCard.tsx).
 export function AuthCard({ title, subtitle, children, backHref = "/login" }: { title: string; subtitle?: string; children: React.ReactNode; backHref?: string | null }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-flit-bg px-4">
+    <main className="flex min-h-screen items-center justify-center bg-flit-bg px-4 dark:bg-background">
       <div className="w-full max-w-md rounded-2xl bg-card text-card-foreground p-8 shadow-[var(--shadow-modal)]">
         <BrandLogo variant="dark" className="mb-4 h-8 w-auto" />
         <h1 className="mb-1 text-2xl font-bold text-flit-primary">{title}</h1>

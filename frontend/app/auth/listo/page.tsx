@@ -24,7 +24,7 @@ export default function SesionLista() {
   }, []);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-flit-bg px-4">
+    <main className="flex min-h-screen items-center justify-center bg-flit-bg px-4 dark:bg-background">
       <p role={error ? "alert" : "status"} className="text-sm text-muted-foreground">
         {error ? (
           <>
