@@ -32,10 +32,23 @@ public static class RadicacionEndpoints
         var conSesion = app.MapGroup(SesionEndpoints.Base).AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp).MapGroup("/solicitudes/{id:guid}");
         conSesion.AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
-        conSesion.MapPost("/radicar", (Guid id, HttpContext http, RadicacionService s, CancellationToken ct) =>
+        conSesion.MapPost("/radicar", (Guid id, RadicarSolicitud? body, HttpContext http, RadicacionService s, CancellationToken ct) =>
             SolicitudesEndpoints.Atender(async () =>
-                Results.Json(await s.RadicarAsync(id, http.Request.Headers[CabeceraIdempotencia].ToString(), ct).ConfigureAwait(false), statusCode: StatusCodes.Status202Accepted))).WithMetadata(PermiteTrasRadicar.Instancia);
+            {
+                // HU #14395: el cuerpo es opcional. Sin él (o sin medio) se radica como siempre; con medio se congela la cotización.
+                var medio = body?.Medio?.Trim().ToUpperInvariant();
+                if (medio is not null && medio is not ("PASARELA" or "PIN"))
+                    return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "El medio de pago no es válido.", "datos_invalidos");
+                var adicionales = body?.Adicionales ?? [];
+                if (adicionales.Length > 4 || adicionales.Any(a => string.IsNullOrWhiteSpace(a) || a.Length > 40))
+                    return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "Los conceptos adicionales no son válidos.", "datos_invalidos");
+                var cobro = medio is null ? null : new CobroAlRadicar(medio, adicionales, body!.TotalCop);
+                return Results.Json(await s.RadicarAsync(id, http.Request.Headers[CabeceraIdempotencia].ToString(), cobro, ct).ConfigureAwait(false), statusCode: StatusCodes.Status202Accepted);
+            })).WithMetadata(PermiteTrasRadicar.Instancia);
 
         return app;
     }
 }
+
+/// <summary>Cuerpo opcional de radicar (HU #14395): medio elegido, adicionales cotizados y el total que la persona vio.</summary>
+public sealed record RadicarSolicitud(string? Medio, string[]? Adicionales, long? TotalCop);

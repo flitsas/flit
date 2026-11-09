@@ -11,6 +11,17 @@ export interface BrandingColorPickerProps {
   colors: BrandColors;
   onChange: (colors: BrandColors) => void;
   disabled?: boolean;
+  /** Feature #14374 (portal del OT): textos propios de cada color. Sin ellos, los de marca blanca. */
+  fieldCopy?: Partial<Record<"primary" | "secondary", { label: string; hint: string }>>;
+  /** Feature #14374 (portal del OT): principal antes que secundario. Sin él, el orden de marca blanca. */
+  primaryFirst?: boolean;
+  /** Feature #14374 (portal del OT): reglas de lectura propias. Sin ellas, las de marca blanca. */
+  rules?: {
+    readable: (colors: BrandColors) => boolean;
+    fix: (colors: BrandColors) => BrandColors;
+    message: string;
+    extraPairs?: (colors: BrandColors) => Array<{ label: string; ratio: number | null; ok: boolean; minimo: string }>;
+  };
 }
 
 /**
@@ -29,11 +40,15 @@ const FIELDS: Array<{ key: "secondary" | "primary"; label: string; hint: string 
  * lee bien, se ofrece corregirla automáticamente. El detalle de contraste (WCAG 4.5:1, el mismo
  * que valida el backend) queda plegado para quien lo quiera ver.
  */
-export function BrandingColorPicker({ colors, onChange, disabled = false }: BrandingColorPickerProps) {
+export function BrandingColorPicker({ colors, onChange, disabled = false, fieldCopy, primaryFirst = false, rules }: BrandingColorPickerProps) {
   const baseId = useId();
-  const pairs = useMemo(() => brandContrastPairs(colors), [colors]);
+  const pairs = useMemo(
+    () => [...brandContrastPairs(colors).map((p) => ({ ...p, minimo: "4.5:1" })), ...(rules?.extraPairs?.(colors) ?? [])],
+    [colors, rules],
+  );
   const valid = [colors.primary, colors.secondary, colors.onPrimary].every(isValidHexColor);
-  const readable = brandColorsReadable(colors);
+  const readable = rules ? rules.readable(colors) : brandColorsReadable(colors);
+  const fields = primaryFirst ? [...FIELDS].reverse() : FIELDS;
 
   function setColors(next: { primary: string; secondary: string }) {
     // El texto acompaña a los colores: así nadie tiene que elegirlo ni pensar en su contraste.
@@ -80,7 +95,8 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {FIELDS.map((field) => {
+        {fields.map((base) => {
+          const field = { ...base, ...fieldCopy?.[base.key] };
           const inputId = `${baseId}-${field.key}`;
           const value = colors[field.key] ?? "#000000";
           const fieldValid = isValidHexColor(value);
@@ -144,13 +160,13 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
             <span className="text-flit-primary">
               {readable
                 ? `Se lee bien: el texto sobre tus colores irá en ${colors.onPrimary.toUpperCase() === "#FFFFFF" ? "blanco" : "oscuro"}.`
-                : "Con estos colores el texto de los botones no se leería bien. Puedes corregirlo con un clic: ajustamos el tono sin cambiar el color."}
+                : (rules?.message ?? "Con estos colores el texto de los botones no se leería bien. Puedes corregirlo con un clic: ajustamos el tono sin cambiar el color.")}
             </span>
           </div>
           {!readable && (
             <button
               type="button"
-              onClick={() => onChange(fixContrast(colors))}
+              onClick={() => onChange(rules ? rules.fix(colors) : fixContrast(colors))}
               className="inline-flex w-fit items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
               style={{ background: "#8A6000" }}
             >
@@ -163,7 +179,7 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
               {pairs.map((p) => (
                 <li key={p.label}>
                   Contraste {p.label}: {p.ratio === null ? "—" : `${formatContrastRatio(p.ratio)}:1`}{" "}
-                  {p.ok ? "(cumple el mínimo 4.5:1)" : "(no cumple el mínimo 4.5:1)"}
+                  {p.ok ? `(cumple el mínimo ${p.minimo})` : `(no cumple el mínimo ${p.minimo})`}
                 </li>
               ))}
             </ul>

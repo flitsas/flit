@@ -101,12 +101,13 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
     /// archivo temporal y lo copia a <paramref name="output"/>. Devuelve si hubo filas. Con
     /// <paramref name="requireRows"/> y sin filas no copia nada (el llamador decide el error).
     /// </summary>
-    private static async Task<bool> WriteWorkbookAsync(
+    internal static async Task<bool> WriteWorkbookAsync(
         Stream output,
         IReadOnlyList<string> headers,
         Func<Action<IReadOnlyList<string>>, CancellationToken, Task> writeRowsAsync,
         bool requireRows,
-        CancellationToken ct)
+        CancellationToken ct,
+        string sheetName = "Reporte detallado")
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"flit-detailed-report-{Guid.NewGuid():N}.xlsx");
         var wroteRows = false;
@@ -144,7 +145,7 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                     {
                         Id = workbookPart.GetIdOfPart(worksheetPart),
                         SheetId = 1U,
-                        Name = "Reporte detallado",
+                        Name = sheetName,
                     }));
                 workbookPart.Workbook.Save();
             }

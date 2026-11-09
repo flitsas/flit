@@ -34,7 +34,9 @@ public sealed class PersonaNaturalGrpcService(
     PersonaNaturalConfiguracionPublicaReader configuracionPublica, Flit.Admin.Application.Banners.Ports.IBannerImageStorage imagenesBanner,
     IPersonaNaturalConfigRepository configuracionPn,
     Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog catalogoColores,
-    Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog catalogoCarrocerias)
+    Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog catalogoCarrocerias,
+    Flit.Admin.Application.Companies.TransitOffices.PortalMarca.PortalMarcaPuntoHandler marcaPunto,
+    Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioPuntoHandler dominioPunto)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -111,7 +113,8 @@ public sealed class PersonaNaturalGrpcService(
         respuesta.Requisitos.AddRange(resultado.Checks.Select(c => new Requisito
         {
             Codigo = c.Key,
-            Descripcion = c.Label,
+            // Sin servicio de consultas la etiqueta es solo «Consulta»: la persona necesita el motivo.
+            Descripcion = c.Key == "provider" && !string.IsNullOrWhiteSpace(c.Message) ? c.Message : c.Label,
             Estado = EstadoRequisito(c.Status),
         }));
         return respuesta;
@@ -119,12 +122,24 @@ public sealed class PersonaNaturalGrpcService(
     /// <summary>
     /// Organismos ofrecidos a Persona Natural: los que tienen grant habilitado para su empresa. Sin ninguno devuelve lista
     /// vacía, no un error. El enlace de tarifas del organismo no existe todavía como dato (HU J): viaja vacío.
+    /// HU #14391: solo los que ofrecen al menos un tipo con precio (propio o general) vigente hoy; uno sin ningún precio no
+    /// se ofrece. Se calcula en cada llamada: un precio recién registrado o cerrado se refleja en la siguiente consulta.
     /// </summary>
     public override async Task<ListarOrganismosResponse> ListarOrganismos(ListarOrganismosRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         Verificar(context);
-        var organismos = await portal.ListarOrganismosAsync(context.CancellationToken).ConfigureAwait(false);
+        var ct = context.CancellationToken;
+        var organismos = await portal.ListarOrganismosAsync(ct).ConfigureAwait(false);
+        if (organismos.Count > 0)
+        {
+            var tipos = PersonaNaturalPortalReader.AplicarListaBlanca(
+                await tiposReader.ListarAsync(ct).ConfigureAwait(false),
+                await portal.TiposHabilitadosAsync(ct).ConfigureAwait(false));
+            var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false);
+            organismos = PersonaNaturalPortalReader.ConOferta(organismos, tipos, tarifas);
+        }
+
         var respuesta = new ListarOrganismosResponse();
         respuesta.Organismos.AddRange(organismos.Select(o => new OrganismoPortal
         {
@@ -157,6 +172,77 @@ public sealed class PersonaNaturalGrpcService(
             Codigo = r.Codigo,
             Nombre = r.Nombre,
         };
+    }
+
+    /// <summary>
+    /// HU #14378 — marca publicada del organismo para el portal del punto. Sin caché por tiempo: cada llamada lee lo vigente, así
+    /// lo recién publicado o retirado se ve en la siguiente. Sin marca, con código inválido o ante una falla responde
+    /// <c>origen = flit</c> y nada más: nunca un error ni datos internos.
+    /// </summary>
+    public override async Task<ObtenerMarcaPuntoResponse> ObtenerMarcaPunto(ObtenerMarcaPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        return ARespuestaMarca(await marcaPunto.ObtenerAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false));
+    }
+
+    /// <summary>HU #14401 — marca publicada de la web de persona natural. Sin caché; sin marca o ante una falla, <c>origen = flit</c>.</summary>
+    public override async Task<ObtenerMarcaWebResponse> ObtenerMarcaWeb(ObtenerMarcaWebRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        return new ObtenerMarcaWebResponse { Marca = ARespuestaMarca(await marcaPunto.ObtenerWebAsync(context.CancellationToken).ConfigureAwait(false)) };
+    }
+
+    private static ObtenerMarcaPuntoResponse ARespuestaMarca(Flit.Admin.Application.Companies.TransitOffices.PortalMarca.MarcaPuntoDto m) => new()
+    {
+        Origen = m.Origen,
+        Nombre = m.Nombre ?? string.Empty,
+        ColorPrimario = m.Colores?.Primario ?? string.Empty,
+        ColorSecundario = m.Colores?.Secundario ?? string.Empty,
+        ColorSobrePrimario = m.Colores?.SobrePrimario ?? string.Empty,
+        LogoId = m.LogoId?.ToString() ?? string.Empty,
+        BannerId = m.BannerId?.ToString() ?? string.Empty,
+        Version = m.Version,
+    };
+    /// <summary>
+    /// HU #14383 — dominio activo del portal de un organismo, sin caché. Con <c>host</c> devuelve el código del organismo solo si ese
+    /// dominio está activo; con <c>codigo</c>, el dominio activo del organismo. Cualquier otro caso (o una falla) responde
+    /// <c>activo = false</c>.
+    /// </summary>
+    public override async Task<ObtenerDominioPuntoResponse> ObtenerDominioPunto(ObtenerDominioPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var d = string.IsNullOrWhiteSpace(request.Host)
+            ? await dominioPunto.PorCodigoAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false)
+            : await dominioPunto.PorHostAsync(request.Host, context.CancellationToken).ConfigureAwait(false);
+        return new ObtenerDominioPuntoResponse { Activo = d.Activo, Codigo = d.Codigo ?? string.Empty, Host = d.Host ?? string.Empty };
+    }
+
+    /// <summary>HU #14378 — imagen de marca PUBLICADA. Una de borrador, retirada o inexistente responde <c>encontrado = false</c>.</summary>
+    public override async Task<ObtenerImagenMarcaPuntoResponse> ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        if (!Guid.TryParse(Texto(request.ImagenId), out var id))
+            return new ObtenerImagenMarcaPuntoResponse { Encontrado = false };
+
+        var imagen = await marcaPunto.ObtenerImagenAsync(id, Texto(request.IfNoneMatch), context.CancellationToken).ConfigureAwait(false);
+        if (!imagen.Encontrada)
+            return new ObtenerImagenMarcaPuntoResponse { Encontrado = false };
+
+        var respuesta = new ObtenerImagenMarcaPuntoResponse
+        {
+            Encontrado = true,
+            NoModificado = imagen.NoModificada,
+            Sha256 = imagen.Sha256,
+            ContentType = imagen.ContentType,
+        };
+        if (imagen.Contenido is { } contenido)
+            await using (contenido.ConfigureAwait(false))
+                respuesta.Contenido = await Google.Protobuf.ByteString.FromStreamAsync(contenido, context.CancellationToken).ConfigureAwait(false);
+        return respuesta;
     }
 
     /// <summary>
@@ -289,7 +375,82 @@ public sealed class PersonaNaturalGrpcService(
         if (request.Adicionales.Count > ConceptosTarifa.Adicionales.Count)
             throw Invalido("Demasiados conceptos adicionales.");
 
+        // HU #14395: sin medio la respuesta es la de siempre; con medio, solo suman los conceptos con el switch encendido.
+        var medio = Texto(request.Medio)?.ToUpperInvariant();
+        if (medio is not null && !MediosPagoPn.Todos.Contains(medio))
+            throw Invalido("medio debe ser PASARELA o PIN.");
+        var ambito = AmbitoCobro(request.AmbitoOrganismoId);
+
         var ct = context.CancellationToken;
+        var (tipo, tarifas) = await ResolverCotizableAsync(codigo, organismo, ct).ConfigureAwait(false);
+        Func<string, bool>? cobrado = null;
+        if (medio is not null)
+        {
+            var config = await portal.ConfigCobroAsync(ambito, ct).ConfigureAwait(false);
+            if (!config.MedioHabilitado(medio))
+                throw PlatformRpcErrors.ToRpcException(MedioNoDisponible, "El medio de pago no está disponible.", StatusCode.FailedPrecondition);
+            cobrado = PersonaNaturalPortalReader.ConceptosCobrados(config, tipo.Id, organismo, medio, tarifas);
+        }
+
+        var resultado = CotizadorPersonaNatural.Calcular(
+            tipo.Id, organismo, tipo.Perfil.ComplementaryTransformationsAllowed(tipo.Familia), request.Adicionales, tarifas, cobrado);
+        if (resultado.Cotizacion is not { } cotizacion)
+            throw PlatformRpcErrors.ToRpcException(CotizadorPersonaNatural.TarifaNoVigente, "No hay tarifa vigente para este organismo y tipo de trámite.", StatusCode.FailedPrecondition);
+        if (medio is not null && cotizacion.Lineas.Count == 0)
+            throw PlatformRpcErrors.ToRpcException(MedioNoDisponible, "El medio de pago no está disponible.", StatusCode.FailedPrecondition);
+
+        var respuesta = new CotizarResponse { TotalCop = cotizacion.TotalCop, VersionTarifa = cotizacion.VersionTarifa, Medio = medio ?? string.Empty };
+        respuesta.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
+        respuesta.AdicionalesNoAplicados.AddRange(cotizacion.AdicionalesNoAplicados);
+        return respuesta;
+    }
+
+    /// <summary>
+    /// HU #14395 — medios de pago que el portal ofrece para un tipo y un organismo: bandera encendida y al menos un concepto
+    /// encendido. Lee la configuración en cada llamada (sin caché): lo recién guardado se refleja de inmediato. Cada medio trae
+    /// el total base (derechos de tránsito y servicio FLIT encendidos), sin adicionales.
+    /// </summary>
+    public override async Task<ListarMediosPagoResponse> ListarMediosPago(ListarMediosPagoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var codigo = Texto(request.TipoTramiteCodigo) ?? throw Invalido("tipo_tramite_codigo es obligatorio.");
+        if (!Guid.TryParse(Texto(request.OrganismoId), out var organismo))
+            throw Invalido("organismo_id es obligatorio y debe ser un identificador válido.");
+        var ambito = AmbitoCobro(request.AmbitoOrganismoId);
+
+        var ct = context.CancellationToken;
+        var (tipo, tarifas) = await ResolverCotizableAsync(codigo, organismo, ct).ConfigureAwait(false);
+        var config = await portal.ConfigCobroAsync(ambito, ct).ConfigureAwait(false);
+        var respuesta = new ListarMediosPagoResponse();
+        foreach (var medio in MediosPagoPn.DelPortal(ambito is null))
+        {
+            if (!config.MedioHabilitado(medio))
+                continue;
+            var resultado = CotizadorPersonaNatural.Calcular(
+                tipo.Id, organismo, false, [], tarifas, PersonaNaturalPortalReader.ConceptosCobrados(config, tipo.Id, organismo, medio, tarifas));
+            if (resultado.Cotizacion is not { Lineas.Count: > 0 } cotizacion)
+                continue;
+            var item = new MedioPago { Medio = medio, TotalCop = cotizacion.TotalCop };
+            item.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
+            respuesta.Medios.Add(item);
+        }
+
+        return respuesta;
+    }
+
+    /// <summary>Error estable cuando el medio pedido no se ofrece (bandera apagada o sin conceptos encendidos).</summary>
+    public const string MedioNoDisponible = "medio_no_disponible";
+
+    private static Guid? AmbitoCobro(string? valor) =>
+        Texto(valor) is not { } texto ? null : Guid.TryParse(texto, out var id) ? id : throw Invalido("ambito_organismo_id no es un identificador válido.");
+
+    /// <summary>
+    /// Validaciones comunes de cotizar y de listar medios: el tipo existe y está habilitado, el organismo está habilitado y
+    /// hay tarifas vigentes. Errores estables: tipo_no_disponible, organismo_no_habilitado, tipo_no_habilitado.
+    /// </summary>
+    private async Task<(TipoPersonaNatural Tipo, IReadOnlyList<TarifaVigente> Tarifas)> ResolverCotizableAsync(string codigo, Guid organismo, CancellationToken ct)
+    {
         var tipos = await tiposReader.ListarAsync(ct, codigo).ConfigureAwait(false);
         if (tipos.Count == 0)
             throw PlatformRpcErrors.ToRpcException("tipo_no_disponible", "El tipo de trámite no está disponible.", StatusCode.NotFound);
@@ -300,16 +461,7 @@ public sealed class PersonaNaturalGrpcService(
         if (!tipo.Elegibilidad.Elegible)
             throw PlatformRpcErrors.ToRpcException("tipo_no_habilitado", "El tipo de trámite no está habilitado para Persona Natural en este organismo.", StatusCode.FailedPrecondition);
 
-        var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false);
-        var resultado = CotizadorPersonaNatural.Calcular(
-            tipo.Id, organismo, tipo.Perfil.ComplementaryTransformationsAllowed(tipo.Familia), request.Adicionales, tarifas);
-        if (resultado.Cotizacion is not { } cotizacion)
-            throw PlatformRpcErrors.ToRpcException(CotizadorPersonaNatural.TarifaNoVigente, "No hay tarifa vigente para este organismo y tipo de trámite.", StatusCode.FailedPrecondition);
-
-        var respuesta = new CotizarResponse { TotalCop = cotizacion.TotalCop, VersionTarifa = cotizacion.VersionTarifa };
-        respuesta.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
-        respuesta.AdicionalesNoAplicados.AddRange(cotizacion.AdicionalesNoAplicados);
-        return respuesta;
+        return (tipo, await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -350,8 +502,7 @@ public sealed class PersonaNaturalGrpcService(
 
     /// <summary>Un tipo se ofrece en un organismo solo si los dos renglones base tienen tarifa vigente.</summary>
     private static bool TieneTarifaBase(Guid tipoId, Guid organismoId, IReadOnlyCollection<TarifaVigente> tarifas) =>
-        CotizadorPersonaNatural.Resolver(ConceptosTarifa.DerechosTransito, tipoId, organismoId, tarifas) is not null
-        && CotizadorPersonaNatural.Resolver(ConceptosTarifa.ServicioFlit, tipoId, organismoId, tarifas) is not null;
+        PersonaNaturalPortalReader.TieneTarifaBase(tipoId, organismoId, tarifas);
 
 
     // ── Pendientes de su HU: contrato publicado, sin implementación ─────────────────────────────────────────────────

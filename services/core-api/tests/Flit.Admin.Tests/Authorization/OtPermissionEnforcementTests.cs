@@ -100,7 +100,16 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
 
         OtPermissionMap.BySignature.Keys.Except(registradas.Select(r => r.Firma)).Should().BeEmpty("cada ruta del mapa debe existir");
 
+        // Épica #14297: marca y precios del portal se autorizan por rol, sin slug. No cuentan en el Anexo A, pero no pueden
+        // quedar abiertos a otros roles OT ni entrar al mapa de permisos.
+        static bool EsDelPortal(string firma) => firma.Contains(" /api/v1/admin/ot/portal-", StringComparison.Ordinal);
+        var delPortal = registradas.Where(r => EsDelPortal(r.Firma)).ToList();
+        delPortal.Should().NotBeEmpty();
+        delPortal.Should().OnlyContain(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy));
+        OtPermissionMap.BySignature.Keys.Where(EsDelPortal).Should().BeEmpty();
+
         var conPolicyOt = registradas
+            .Where(r => !EsDelPortal(r.Firma))
             .Where(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a =>
                 a.Policy == AdminAuthorization.OtModulePolicy || a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy))
             .Select(r => r.Firma).Distinct().ToList();

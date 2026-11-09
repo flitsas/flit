@@ -95,6 +95,7 @@ internal sealed class FachadaTramitesGrpc(PersonaNaturalService.PersonaNaturalSe
                 "organismo_no_habilitado" => new FachadaException(razon, "El organismo de tránsito no está habilitado.", StatusCodes.Status422UnprocessableEntity),
                 "tipo_no_habilitado" => new FachadaException(razon, "Este trámite no está habilitado en el organismo elegido.", StatusCodes.Status422UnprocessableEntity),
                 "tarifa_no_vigente" => new FachadaException(razon, "Este trámite aún no tiene tarifa en el organismo elegido.", StatusCodes.Status422UnprocessableEntity),
+                "medio_no_disponible" => new FachadaException(razon, "Ese medio de pago no está disponible para este trámite.", StatusCodes.Status409Conflict),
                 _ when ex.StatusCode == StatusCode.InvalidArgument => new FachadaException("datos_invalidos", "Revise los datos de la cotización.", StatusCodes.Status400BadRequest),
                 _ => new FachadaException("servicio_no_disponible", "El catálogo no está disponible por ahora.", StatusCodes.Status503ServiceUnavailable),
             };

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Api.Grpc;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Tramites.Domain.Entities;
@@ -160,6 +161,50 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     }
 
     [Fact]
+    public async Task ObtenerMarcaPunto_ConUnCodigoDesconocidoRespondeLaMarcaFlitSinError_YUnaImagenAjenaNoSeEncuentra()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host(habilitada: true);
+        var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
+        var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
+
+        // HU #14378: nunca un error ni datos internos: código desconocido = marca FLIT.
+        var marca = await bueno.ObtenerMarcaPuntoAsync(new ObtenerMarcaPuntoRequest { Codigo = "NO-EXISTE-14378" }, cancellationToken: ct);
+        marca.Origen.Should().Be("flit");
+        marca.Nombre.Should().BeEmpty();
+        marca.ColorPrimario.Should().BeEmpty();
+        marca.LogoId.Should().BeEmpty();
+        marca.BannerId.Should().BeEmpty();
+        marca.Version.Should().Be(0);
+
+        // Una imagen que no es de un publicado no se entrega.
+        (await bueno.ObtenerImagenMarcaPuntoAsync(new ObtenerImagenMarcaPuntoRequest { ImagenId = Guid.NewGuid().ToString() }, cancellationToken: ct))
+            .Encontrado.Should().BeFalse();
+        (await bueno.ObtenerImagenMarcaPuntoAsync(new ObtenerImagenMarcaPuntoRequest { ImagenId = "no-es-un-id" }, cancellationToken: ct))
+            .Encontrado.Should().BeFalse();
+
+        var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerMarcaPuntoAsync(new ObtenerMarcaPuntoRequest { Codigo = "AB1" }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+        PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant");
+    }
+
+    [Fact]
+    public async Task ObtenerMarcaWeb_NuncaRespondeErrorParaElPortal_YOtraEmpresaNoLaLee()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host(habilitada: true);
+        var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
+        var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
+
+        // HU #14401: la marca web publicada (si la hay en la base compartida) o la marca FLIT; nunca un error ni el banner.
+        var marca = await bueno.ObtenerMarcaWebAsync(new ObtenerMarcaWebRequest(), cancellationToken: ct);
+        marca.Marca.Origen.Should().BeOneOf("flit", "web");
+        marca.Marca.BannerId.Should().BeEmpty();
+
+        var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerMarcaWebAsync(new ObtenerMarcaWebRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+        PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant");
+    }
+
+    [Fact]
     public async Task EvaluarRequisitos_ValidaLaEntrada_YUnTipoDesconocidoNoEstaDisponible()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -275,13 +320,21 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var tipo = db.ProcedureTypes.Where(t => !t.Code.StartsWith("PN_")).OrderBy(t => t.Code).First();
         var tenant = empresa ?? db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.Code).Select(t => t.Id).First();
+        // Usuario propio: tomar uno existente podía caer en el temporal de otra prueba en paralelo, que luego no lograba borrarlo.
+        var usuario = Guid.NewGuid();
+        db.Users.Add(new User
+        {
+            Id = usuario, Email = $"pn-grpc-{usuario:N}@flit.local", DisplayName = "Usuario portal PN", Status = "active",
+            HomeTenantId = tenant, CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(ct);
         var instancia = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ProcedureTypeId = tipo.Id,
             TransitOfficeId = null, // sin organismo: otras pruebas en paralelo crean y borran organismos y una base limpia no trae catálogo
-            CreatedByUserId = db.Users.OrderBy(u => u.Email).Select(u => u.Id).First(),
+            CreatedByUserId = usuario,
             Status = "entregado",
             ExternalRef = referenciaExterna,
             Origin = "persona_natural",
