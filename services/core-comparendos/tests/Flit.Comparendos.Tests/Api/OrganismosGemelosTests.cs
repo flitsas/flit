@@ -15,13 +15,26 @@ namespace Flit.Comparendos.Tests.Api;
 
 /// <summary>
 /// GDC punto 3 — organismos que solo difieren en espacios (Restrepo/Meta y Arauca en el catálogo real) cuentan como uno,
-/// la sincronización no crea el segundo, y tras sincronizar o crear un alias los comparendos sin organismo se vuelven a
-/// mapear con texto y número.
+/// la sincronización no crea el segundo y, si ya estaba, lo retira y pasa sus comparendos y alias al titular; tras
+/// sincronizar o crear un alias los comparendos sin organismo se vuelven a mapear con texto y número. La semilla ya no
+/// trae el gemelo de Restrepo: aquí se siembra a mano, como lo tienen los ambientes que ya existían.
 /// </summary>
 public sealed class OrganismosGemelosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
 {
     private static readonly Guid Restrepo = Guid.Parse("91e3b769-4bc0-582f-94d9-5be94b3c0559");
+    private static readonly Guid GemeloRestrepo = Guid.Parse("dd68d155-3b43-56d4-b93c-aeb18fbaf0da");
     private const string TextoDesconocido = "Secretaría que ningún alias conoce";
+
+    private Task SembrarGemeloDeRestrepoAsync(CancellationToken ct) => api.EnDbAsync(async db =>
+    {
+        if (await db.OrganismosTransito.AnyAsync(o => o.Id == GemeloRestrepo, ct))
+            return;
+        db.OrganismosTransito.Add(new OrganismoTransito
+        {
+            Id = GemeloRestrepo, Codigo = "50606001", Nombre = "INST DPTAL TTOyTTE  META/RESTREPO", CodigoDivipola = "50606", Municipio = "RESTREPO", Departamento = "META",
+        });
+        await db.SaveChangesAsync(ct);
+    });
 
     private sealed class PlataformaFalsa(IReadOnlyList<OrganismoPlataforma> lista) : ICatalogoOrganismosPlataforma
     {
@@ -37,6 +50,7 @@ public sealed class OrganismosGemelosTests(ApiConFuente api) : IClassFixture<Api
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        await SembrarGemeloDeRestrepoAsync(ct);
         var empresa = await EmpresaAsync(api);
         await IngresarAsync(api, empresa,
             Item("50606099000012345678") with { Secretaria = TextoDesconocido },
@@ -50,14 +64,30 @@ public sealed class OrganismosGemelosTests(ApiConFuente api) : IClassFixture<Api
     }
 
     [Fact]
-    public async Task LaSincronizacion_NoCreaElGemelo_YVuelveAMapearLosSinOt()
+    public async Task LaSincronizacion_NoCreaElGemelo_RetiraElQueEstaba_YVuelveAMapearLosSinOt()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        await SembrarGemeloDeRestrepoAsync(ct);
         var empresa = await EmpresaAsync(api);
-        var id = (await IngresarAsync(api, empresa, Item("99300000000012345678") with { Secretaria = TextoDesconocido })).Values.Single();
+        var ids = await IngresarAsync(api, empresa,
+            Item("99300000000012345678") with { Secretaria = TextoDesconocido },
+            Item("A0912377") with { Secretaria = TextoDesconocido });
+        var id = ids["99300000000012345678"];
+        var delGemelo = ids["A0912377"];
         (await OtsAsync(empresa, ct))["99300000000012345678"].Should().BeNull("el organismo 99300000 aún no está en el catálogo");
+        // Lo que un ambiente existente ya tiene en el gemelo: un comparendo asignado y un alias.
+        var aliasDelGemelo = Guid.NewGuid();
+        await api.EnDbAsync(async d =>
+        {
+            (await d.Comparendos.SingleAsync(c => c.Id == delGemelo, ct)).OrganismoTransitoId = GemeloRestrepo;
+            d.OrganismosTransitoAlias.Add(new OrganismoTransitoAlias
+            {
+                Id = aliasDelGemelo, TextoNormalizado = "SECRETARIA DEL GEMELO DE RESTREPO", OrganismoTransitoId = GemeloRestrepo, Origen = "MANUAL", CreadoEn = DateTimeOffset.UtcNow,
+            });
+            await d.SaveChangesAsync(ct);
+        });
 
         await using var scope = api.App.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
@@ -74,8 +104,11 @@ public sealed class OrganismosGemelosTests(ApiConFuente api) : IClassFixture<Api
 
         r!.Nuevos.Should().Be(1, "el que solo difiere en espacios no se crea");
         (await api.EnDbAsync(d => d.OrganismosTransito.AnyAsync(o => o.Codigo == "99300001", ct))).Should().BeFalse();
-        (await api.EnDbAsync(d => d.OrganismosTransito.SingleAsync(o => o.Id == Guid.Parse("dd68d155-3b43-56d4-b93c-aeb18fbaf0da"), ct)))
+        (await api.EnDbAsync(d => d.OrganismosTransito.SingleAsync(o => o.Id == GemeloRestrepo, ct)))
             .ActivoPlataforma.Should().BeFalse("el gemelo de Restrepo que ya estaba se retira");
+        (await OtsAsync(empresa, ct))["A0912377"].Should().Be(Restrepo, "el comparendo del gemelo pasa al titular (y usa sus correos de radicación)");
+        (await api.EnDbAsync(d => d.Timeline.AnyAsync(t => t.ComparendoId == delGemelo && t.Descripcion.Contains("Organismo de tránsito unificado"), ct))).Should().BeTrue();
+        (await api.EnDbAsync(d => d.OrganismosTransitoAlias.SingleAsync(a => a.Id == aliasDelGemelo, ct))).OrganismoTransitoId.Should().Be(Restrepo, "el alias también");
         (await OtsAsync(empresa, ct))["99300000000012345678"].Should().Be(titular, "tras sincronizar se vuelve a mapear por número");
         (await api.EnDbAsync(d => d.Timeline.AnyAsync(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.DatosActualizados
             && t.Descripcion.Contains("Organismo de tránsito asignado"), ct))).Should().BeTrue();

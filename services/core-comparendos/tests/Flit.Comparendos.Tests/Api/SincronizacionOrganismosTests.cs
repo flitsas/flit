@@ -46,8 +46,7 @@ public sealed class SincronizacionOrganismosTests(ApiDePrueba api) : IClassFixtu
 
         var r = await sincronizacion.SincronizarAsync(ct);
 
-        // Retirados: «sale» y los gemelos de la semilla que solo difieren en espacios (Restrepo 50606001, Arauca 81001001).
-        (r!.Nuevos, r.Actualizados, r.Retirados).Should().Be((1, 1, 3));
+        (r!.Nuevos, r.Actualizados, r.Retirados).Should().Be((1, 1, 1));
         var ots = await api.EnDbAsync(d => d.OrganismosTransito.AsNoTracking().Where(o => o.Id == cambia || o.Id == sale || o.Id == nuevo).ToDictionaryAsync(o => o.Id, ct));
         (ots[cambia].Nombre, ots[cambia].Municipio, ots[cambia].ActivoPlataforma).Should().Be(("OT DE PRUEBA RENOMBRADO", "NUEVO", false));
         ots[cambia].CorreosRadicacion.Should().Equal(["radicacion@ot.prueba"], "los correos de radicación son de Comparendos (S-66)");

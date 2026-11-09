@@ -41,7 +41,8 @@ public sealed class CatalogoOrganismosNoConectado : ICatalogoOrganismosPlataform
 /// permiso de cambio de contraventor y alias) no se toca. Un organismo que la plataforma ya no trae queda inactivo; uno
 /// que vuelve a aparecer, activo otra vez según la plataforma. Una lista vacía no se aplica: sería borrar el catálogo.
 /// GDC punto 3: un organismo que solo difiere de otro en espacios (<see cref="OrganismosGemelos"/>) no se crea, y si ya
-/// estaba se retira como uno que la plataforma no trae. Al terminar se vuelven a mapear los comparendos sin organismo.
+/// estaba se retira como uno que la plataforma no trae, y sus comparendos y alias pasan al titular. Al terminar se
+/// vuelven a mapear los comparendos sin organismo.
 /// </summary>
 public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogoOrganismosPlataforma plataforma, Reloj reloj, RemapeoOrganismos remapeo,
     ILogger<SincronizacionOrganismos> logger) : IEjecutorTrabajo
@@ -70,18 +71,25 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
         var porCodigo = locales.ToDictionary(o => Normalizar(o.Codigo), StringComparer.Ordinal);
         int nuevos = 0, actualizados = 0, gemelos = 0;
         var vistos = new HashSet<Guid>();
-        var titulares = new HashSet<string>(StringComparer.Ordinal);
+        var titulares = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        var unificar = new List<(Guid Gemelo, Guid Titular)>();
         // Por código, de menor a mayor: el primero de cada par de gemelos es el titular.
         foreach (var r in remotos.OrderBy(r => Normalizar(r.Codigo), StringComparer.Ordinal))
         {
-            if (OrganismosGemelos.Llave(r.Codigo, r.Nombre) is { } llave && !titulares.Add(llave))
+            var llave = OrganismosGemelos.Llave(r.Codigo, r.Nombre);
+            if (llave is not null && titulares.TryGetValue(llave, out var titular))
             {
                 gemelos++;
-                continue; // gemelo: no se crea, y el que ya estaba queda sin ver (se retira abajo).
+                // Gemelo: no se crea; el que ya estaba queda sin ver (se retira abajo) y lo suyo pasa al titular.
+                if (porCodigo.TryGetValue(Normalizar(r.Codigo), out var gemelo) && gemelo.Id != titular)
+                    unificar.Add((gemelo.Id, titular));
+                continue;
             }
 
             if (porCodigo.TryGetValue(Normalizar(r.Codigo), out var o))
             {
+                if (llave is not null)
+                    titulares[llave] = o.Id;
                 vistos.Add(o.Id);
                 var cambio = o.Nombre != r.Nombre || o.Municipio != r.Municipio || o.Departamento != r.Departamento
                     || o.CodigoDivipola != r.MunicipioCodigo || o.ActivoPlataforma != r.Activo;
@@ -98,6 +106,8 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
 
             if (locales.Any(l => l.Id == r.Id))
                 continue; // mismo id con otro código: no se pisa a ciegas.
+            if (llave is not null)
+                titulares[llave] = r.Id;
             db.OrganismosTransito.Add(new OrganismoTransito
             {
                 Id = r.Id, Codigo = r.Codigo, Nombre = r.Nombre, CodigoDivipola = r.MunicipioCodigo, Municipio = r.Municipio,
@@ -118,6 +128,12 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
         LogSincronizado(logger, remotos.Count, nuevos, actualizados, retirados);
         if (gemelos > 0)
             LogGemelos(logger, gemelos);
+        foreach (var (gemelo, titular) in unificar)
+        {
+            var (comparendos, alias) = await remapeo.UnificarGemeloAsync(gemelo, titular, ct).ConfigureAwait(false);
+            if (comparendos + alias > 0)
+                LogUnificado(logger, gemelo, titular, comparendos, alias);
+        }
         var mapeados = await remapeo.RemapearSinOrganismoAsync(Comparendos.Actor.Sistema, "catálogo de organismos actualizado", null, ct).ConfigureAwait(false);
         if (mapeados > 0)
             LogRemapeados(logger, mapeados);
@@ -136,6 +152,9 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "La plataforma trae {Gemelos} organismos que solo difieren en espacios de otro: no se crean (queda el de código menor).")]
     private static partial void LogGemelos(ILogger logger, int gemelos);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Organismo gemelo {Gemelo} unificado en {Titular}: {Comparendos} comparendos y {Alias} alias movidos.")]
+    private static partial void LogUnificado(ILogger logger, Guid gemelo, Guid titular, int comparendos, int alias);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Tras sincronizar, {Mapeados} comparendos sin organismo quedaron con organismo.")]
     private static partial void LogRemapeados(ILogger logger, int mapeados);
