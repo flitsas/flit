@@ -1,5 +1,4 @@
 using Flit.Comparendos.Api.Persistence;
-using Flit.Comparendos.Api.Persistence.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -69,25 +68,44 @@ public sealed class MigracionNumeroSinPrefijoTests : IAsyncLifetime
         var migrador = db.GetService<IMigrator>();
         await migrador.MigrateAsync(Anterior, cancellationToken: ct);
 
-        var paquete = new PaqueteOcr { Id = Guid.NewGuid(), TenantId = TenantA, Nombre = "Lote", CreadoEn = DateTimeOffset.UtcNow };
-        db.Add(paquete);
+        // Siembra y lectura con SQL explícito, solo con columnas que ya existen en la migración anterior: el modelo de EF
+        // de hoy puede traer columnas que esa versión de la base aún no tiene.
+        var paquete = Guid.NewGuid();
+        await EjecutarAsync(conexion, """
+            INSERT INTO comparendos.paquete_ocr (id, tenant_id, nombre, estado, cantidad_documentos, cantidad_pendientes, cantidad_completos,
+                cantidad_incompletos, cantidad_fallidos, cantidad_duplicados, cantidad_registrados, cantidad_descartados, prompt_version_id, creado_por, creado_en)
+            VALUES (@paquete, @a, 'Lote', 'Pendiente', 0, 0, 0, 0, 0, 0, 0, 0, @vacio, @vacio, now())
+            """, ct, ("paquete", paquete));
         // Tenant A: dos con prefijo distinto que quedarían iguales (choque), uno con prefijo cuyo número ya existe sin
         // prefijo (choque) y uno que no choca. Tenant B: el mismo número del choque de A, que en B no choca.
-        db.AddRange(
-            Comparendo(TenantA, "D1234567890"), Comparendo(TenantA, "A1234567890"),
-            Comparendo(TenantA, "D9999999999"), Comparendo(TenantA, "9999999999"),
-            Comparendo(TenantA, "D5555555555"), Comparendo(TenantA, "AV3"),
-            Comparendo(TenantB, "D1234567890"));
-        db.AddRange(
-            Documento(paquete, "D1234567890"), Documento(paquete, "D5555555555"),
-            Documento(paquete, "D7777777777"), Comparendo(TenantA, "7777777777"));
-        await db.SaveChangesAsync(ct);
-        db.ChangeTracker.Clear();
+        foreach (var (tenant, numero) in new[]
+                 {
+                     (TenantA, "D1234567890"), (TenantA, "A1234567890"), (TenantA, "D9999999999"), (TenantA, "9999999999"),
+                     (TenantA, "D5555555555"), (TenantA, "AV3"), (TenantA, "7777777777"), (TenantB, "D1234567890"),
+                 })
+        {
+            await EjecutarAsync(conexion, """
+                INSERT INTO comparendos.comparendo (id, tenant_id, numero, numero_normalizado, tipo_ingreso, en_cobro_coactivo, activo, estado_gestion,
+                    estado_notificacion_conductor, estado_cambio_contraventor, estado_consulta_contraventor, intentos_consulta_contraventor,
+                    notificado_fisicamente, pagado, tiene_dp, gestionado, ultimo_evento_en, creado_en)
+                VALUES (gen_random_uuid(), @tenant, @numero, @numero, 0, false, true, 'SinGestion', 'SinNotificar', 'SinSolicitar', 'NoAplica', 0,
+                    false, false, false, false, now(), now())
+                """, ct, ("tenant", tenant), ("numero", numero));
+        }
+
+        foreach (var numero in new[] { "D1234567890", "D5555555555", "D7777777777" })
+        {
+            await EjecutarAsync(conexion, """
+                INSERT INTO comparendos.documento_ocr (id, tenant_id, paquete_id, archivo_id, nombre_archivo, tipo_archivo, estado, intentos,
+                    campos_faltantes, numero_comparendo_extraido, numero_normalizado)
+                VALUES (gen_random_uuid(), @a, @paquete, gen_random_uuid(), @numero || '.pdf', 'PDF', 'Completo', 0, '{}', @numero, @numero)
+                """, ct, ("paquete", paquete), ("numero", numero));
+        }
 
         await migrador.MigrateAsync(Objetivo, cancellationToken: ct);
 
-        var comparendos = await db.Set<Comparendo>().AsNoTracking().Select(c => new { c.TenantId, c.Numero, c.NumeroNormalizado }).ToListAsync(ct);
-        string NumeroDe(Guid tenant, string numero) => comparendos.Single(c => c.TenantId == tenant && c.Numero == numero).NumeroNormalizado;
+        var comparendos = await LeerAsync(conexion, "SELECT tenant_id, numero, numero_normalizado FROM comparendos.comparendo", ct);
+        string NumeroDe(Guid tenant, string numero) => comparendos.Single(c => c.Tenant == tenant && c.Numero == numero).Normalizado;
         NumeroDe(TenantA, "D1234567890").Should().Be("D1234567890");
         NumeroDe(TenantA, "A1234567890").Should().Be("A1234567890");
         NumeroDe(TenantA, "D9999999999").Should().Be("D9999999999");
@@ -95,10 +113,10 @@ public sealed class MigracionNumeroSinPrefijoTests : IAsyncLifetime
         NumeroDe(TenantA, "AV3").Should().Be("AV3");
         NumeroDe(TenantB, "D1234567890").Should().Be("1234567890");
 
-        var documentos = await db.DocumentosOcr.AsNoTracking().Select(d => new { d.NombreArchivo, d.NumeroNormalizado }).ToListAsync(ct);
-        documentos.Single(d => d.NombreArchivo == "D1234567890.pdf").NumeroNormalizado.Should().Be("D1234567890", "su comparendo conserva el prefijo");
-        documentos.Single(d => d.NombreArchivo == "D5555555555.pdf").NumeroNormalizado.Should().Be("5555555555");
-        documentos.Single(d => d.NombreArchivo == "D7777777777.pdf").NumeroNormalizado.Should().Be("D7777777777", "ya hay un comparendo sin prefijo con ese número");
+        var documentos = await LeerAsync(conexion, "SELECT tenant_id, nombre_archivo, numero_normalizado FROM comparendos.documento_ocr", ct);
+        documentos.Single(d => d.Numero == "D1234567890.pdf").Normalizado.Should().Be("D1234567890", "su comparendo conserva el prefijo");
+        documentos.Single(d => d.Numero == "D5555555555.pdf").Normalizado.Should().Be("5555555555");
+        documentos.Single(d => d.Numero == "D7777777777.pdf").Normalizado.Should().Be("D7777777777", "ya hay un comparendo sin prefijo con ese número");
 
         var reporte = avisos.Where(a => a.StartsWith("GDC_NumeroComparendoSoloDigitos", StringComparison.Ordinal)).ToList();
         reporte.Should().Contain(a => a.Contains("comparendo sin cambiar") && a.Contains(TenantA.ToString()) && a.Contains("D1234567890"));
@@ -110,23 +128,24 @@ public sealed class MigracionNumeroSinPrefijoTests : IAsyncLifetime
         reporte.Should().Contain(a => a.Contains("2 comparendos y 1 documentos OCR sin prefijo; 3 comparendos y 2 documentos sin cambiar por choque"));
     }
 
-    private static Comparendo Comparendo(Guid tenant, string numero) => new()
+    private static async Task EjecutarAsync(NpgsqlConnection conexion, string sql, CancellationToken ct, params (string Nombre, object Valor)[] parametros)
     {
-        Id = Guid.NewGuid(),
-        TenantId = tenant,
-        Numero = numero,
-        NumeroNormalizado = numero,
-        CreadoEn = DateTimeOffset.UtcNow,
-    };
+        await using var cmd = new NpgsqlCommand(sql, conexion);
+        cmd.Parameters.AddWithValue("a", TenantA);
+        cmd.Parameters.AddWithValue("vacio", Guid.Empty);
+        foreach (var (nombre, valor) in parametros)
+            cmd.Parameters.AddWithValue(nombre, valor);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 
-    private static DocumentoOcr Documento(PaqueteOcr paquete, string numero) => new()
+    /// <summary>Filas (tenant, texto, número normalizado) de una consulta de tres columnas.</summary>
+    private static async Task<List<(Guid Tenant, string Numero, string Normalizado)>> LeerAsync(NpgsqlConnection conexion, string sql, CancellationToken ct)
     {
-        Id = Guid.NewGuid(),
-        TenantId = paquete.TenantId,
-        PaqueteId = paquete.Id,
-        ArchivoId = Guid.NewGuid(),
-        NombreArchivo = $"{numero}.pdf",
-        NumeroComparendoExtraido = numero,
-        NumeroNormalizado = numero,
-    };
+        await using var cmd = new NpgsqlCommand(sql, conexion);
+        await using var lector = await cmd.ExecuteReaderAsync(ct);
+        var filas = new List<(Guid, string, string)>();
+        while (await lector.ReadAsync(ct))
+            filas.Add((lector.GetGuid(0), lector.GetString(1), lector.GetString(2)));
+        return filas;
+    }
 }
