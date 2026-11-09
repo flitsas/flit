@@ -130,9 +130,9 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
             LogGemelos(logger, gemelos);
         foreach (var (gemelo, titular) in unificar)
         {
-            var (comparendos, alias) = await remapeo.UnificarGemeloAsync(gemelo, titular, ct).ConfigureAwait(false);
-            if (comparendos + alias > 0)
-                LogUnificado(logger, gemelo, titular, comparendos, alias);
+            var (comparendos, alias, permisos, municipios) = await remapeo.UnificarGemeloAsync(gemelo, titular, ct).ConfigureAwait(false);
+            if (comparendos + alias + permisos + municipios > 0)
+                LogUnificado(logger, gemelo, titular, comparendos, alias, permisos, municipios);
         }
         var mapeados = await remapeo.RemapearSinOrganismoAsync(Comparendos.Actor.Sistema, "catálogo de organismos actualizado", null, ct).ConfigureAwait(false);
         if (mapeados > 0)
@@ -153,8 +153,8 @@ public sealed partial class SincronizacionOrganismos(ComparendosDb db, ICatalogo
     [LoggerMessage(Level = LogLevel.Warning, Message = "La plataforma trae {Gemelos} organismos que solo difieren en espacios de otro: no se crean (queda el de código menor).")]
     private static partial void LogGemelos(ILogger logger, int gemelos);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Organismo gemelo {Gemelo} unificado en {Titular}: {Comparendos} comparendos y {Alias} alias movidos.")]
-    private static partial void LogUnificado(ILogger logger, Guid gemelo, Guid titular, int comparendos, int alias);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Organismo gemelo {Gemelo} unificado en {Titular}: {Comparendos} comparendos, {Alias} alias, {Permisos} permisos por empresa y {Municipios} fuentes municipales.")]
+    private static partial void LogUnificado(ILogger logger, Guid gemelo, Guid titular, int comparendos, int alias, int permisos, int municipios);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Tras sincronizar, {Mapeados} comparendos sin organismo quedaron con organismo.")]
     private static partial void LogRemapeados(ILogger logger, int mapeados);

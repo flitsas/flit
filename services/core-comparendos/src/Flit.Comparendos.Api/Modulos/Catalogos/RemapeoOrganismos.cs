@@ -17,12 +17,28 @@ public sealed class RemapeoOrganismos(ComparendosDb db, Timeline timeline, Reloj
 
     /// <summary>
     /// GDC punto 3: un organismo gemelo (solo difiere en espacios del titular) se retira; sus comparendos y sus alias pasan
-    /// al titular, así el comparendo usa los correos de radicación del titular. Cada comparendo deja su evento. Lo ya
-    /// emitido (DP, lotes, solicitudes de cambio) es historia y no se toca.
+    /// al titular, así el comparendo usa los correos de radicación del titular. Cada comparendo deja su evento. También la
+    /// configuración vigente: los permisos de OT por empresa (si el titular ya tiene el de esa empresa y representante, se
+    /// queda el del titular y el del gemelo se borra: la tabla no admite dos) y las fuentes municipales. Lo ya emitido
+    /// (DP, lotes, solicitudes de cambio) es historia y no se toca.
     /// </summary>
-    /// <returns>Comparendos y alias movidos.</returns>
-    public async Task<(int Comparendos, int Alias)> UnificarGemeloAsync(Guid gemelo, Guid titular, CancellationToken ct)
+    /// <returns>Comparendos, alias, permisos (movidos o borrados por repetidos) y fuentes municipales movidos.</returns>
+    public async Task<(int Comparendos, int Alias, int Permisos, int Municipios)> UnificarGemeloAsync(Guid gemelo, Guid titular, CancellationToken ct)
     {
+        // Permisos: índice único (tenant, OT, representante). Primero se borran los que el titular ya tiene, después se mueven.
+        var permisos = await db.PermisosOtEmpresa.Where(p => p.OrganismoTransitoId == gemelo).ToListAsync(ct).ConfigureAwait(false);
+        var delTitular = (await db.PermisosOtEmpresa.AsNoTracking().Where(p => p.OrganismoTransitoId == titular)
+            .Select(p => new { p.TenantId, p.RepresentanteLegalId }).ToListAsync(ct).ConfigureAwait(false)).ToHashSet();
+        var repetidos = permisos.Where(p => delTitular.Contains(new { p.TenantId, p.RepresentanteLegalId })).ToList();
+        db.PermisosOtEmpresa.RemoveRange(repetidos);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        foreach (var p in permisos.Except(repetidos))
+            p.OrganismoTransitoId = titular;
+
+        var municipios = await db.MunicipiosFuente.Where(m => m.OrganismoTransitoId == gemelo).ToListAsync(ct).ConfigureAwait(false);
+        foreach (var m in municipios)
+            m.OrganismoTransitoId = titular;
+
         var nombres = await db.OrganismosTransito.AsNoTracking().Where(o => o.Id == gemelo || o.Id == titular)
             .ToDictionaryAsync(o => o.Id, o => (o.Codigo, o.Nombre), ct).ConfigureAwait(false);
         var alias = await db.OrganismosTransitoAlias.Where(a => a.OrganismoTransitoId == gemelo).ToListAsync(ct).ConfigureAwait(false);
@@ -48,7 +64,7 @@ public sealed class RemapeoOrganismos(ComparendosDb db, Timeline timeline, Reloj
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return (comparendos, alias.Count);
+        return (comparendos, alias.Count, permisos.Count, municipios.Count);
     }
 
     /// <returns>Cuántos comparendos quedaron con organismo.</returns>

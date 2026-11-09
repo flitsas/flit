@@ -79,8 +79,16 @@ public sealed class OrganismosGemelosTests(ApiConFuente api) : IClassFixture<Api
         (await OtsAsync(empresa, ct))["99300000000012345678"].Should().BeNull("el organismo 99300000 aún no está en el catálogo");
         // Lo que un ambiente existente ya tiene en el gemelo: un comparendo asignado y un alias.
         var aliasDelGemelo = Guid.NewGuid();
+        // Configuración vigente del gemelo: E1 tiene permiso en los dos (gana el del titular), E2 solo en el gemelo, y una
+        // fuente municipal apunta al gemelo.
+        var (e1, e2, municipio) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         await api.EnDbAsync(async d =>
         {
+            d.PermisosOtEmpresa.AddRange(
+                new PermisoOtEmpresa { Id = Guid.NewGuid(), TenantId = e1, OrganismoTransitoId = GemeloRestrepo, PermiteCambioContraventor = false },
+                new PermisoOtEmpresa { Id = Guid.NewGuid(), TenantId = e1, OrganismoTransitoId = Restrepo, PermiteCambioContraventor = true },
+                new PermisoOtEmpresa { Id = Guid.NewGuid(), TenantId = e2, OrganismoTransitoId = GemeloRestrepo, PermiteConsultaContraventor = false });
+            d.MunicipiosFuente.Add(new MunicipioFuente { Id = municipio, CodigoFuente = $"PRUEBA-{municipio:N}"[..20], Nombre = "Restrepo (fuente)", OrganismoTransitoId = GemeloRestrepo });
             (await d.Comparendos.SingleAsync(c => c.Id == delGemelo, ct)).OrganismoTransitoId = GemeloRestrepo;
             d.OrganismosTransitoAlias.Add(new OrganismoTransitoAlias
             {
@@ -109,6 +117,12 @@ public sealed class OrganismosGemelosTests(ApiConFuente api) : IClassFixture<Api
         (await OtsAsync(empresa, ct))["A0912377"].Should().Be(Restrepo, "el comparendo del gemelo pasa al titular (y usa sus correos de radicación)");
         (await api.EnDbAsync(d => d.Timeline.AnyAsync(t => t.ComparendoId == delGemelo && t.Descripcion.Contains("Organismo de tránsito unificado"), ct))).Should().BeTrue();
         (await api.EnDbAsync(d => d.OrganismosTransitoAlias.SingleAsync(a => a.Id == aliasDelGemelo, ct))).OrganismoTransitoId.Should().Be(Restrepo, "el alias también");
+        var permisos = await api.EnDbAsync(d => d.PermisosOtEmpresa.AsNoTracking().Where(p => p.TenantId == e1 || p.TenantId == e2).ToListAsync(ct));
+        permisos.Should().NotContain(p => p.OrganismoTransitoId == GemeloRestrepo, "nada vigente queda en el gemelo retirado");
+        permisos.Single(p => p.TenantId == e1).PermiteCambioContraventor.Should().BeTrue("E1 ya tenía permiso en el titular: se queda ese y el del gemelo se borra");
+        var deE2 = permisos.Single(p => p.TenantId == e2);
+        (deE2.OrganismoTransitoId, deE2.PermiteConsultaContraventor).Should().Be((Restrepo, false), "el permiso que solo estaba en el gemelo pasa al titular tal cual");
+        (await api.EnDbAsync(d => d.MunicipiosFuente.SingleAsync(m => m.Id == municipio, ct))).OrganismoTransitoId.Should().Be(Restrepo, "la fuente municipal también");
         (await OtsAsync(empresa, ct))["99300000000012345678"].Should().Be(titular, "tras sincronizar se vuelve a mapear por número");
         (await api.EnDbAsync(d => d.Timeline.AnyAsync(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.DatosActualizados
             && t.Descripcion.Contains("Organismo de tránsito asignado"), ct))).Should().BeTrue();
