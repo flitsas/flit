@@ -261,3 +261,31 @@ describe('HU5 — dígito de preferencia según la clase (paso 1)', () => {
     expect(patches.some((i) => i.fieldKey === 'plate_preferred_last_digit' && i.valueText === '7')).toBe(false);
   });
 });
+
+// D4 (decisión del usuario 2026-11-09) — en motos las opciones dicen «Primer número N».
+// Uso de ejemplo: clase «MOTOCICLETA» → opciones «Sin preferencia», «Primer número 0» … «Primer número 9».
+describe('D4 — opciones del selector de dígito (paso 1)', () => {
+  it('MOTO — «Primer número N» y el valor enviado sigue siendo el dígito', async () => {
+    mocks.runPreflightPreview.mockResolvedValue(previewConClase('MOTOCICLETA'));
+    const user = userEvent.setup();
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    const sel = (await screen.findByLabelText('Dígito numérico de preferencia')) as HTMLSelectElement;
+    const textos = Array.from(sel.options).filter((o) => !o.hidden).map((o) => o.textContent);
+    expect(textos).toEqual(['Sin preferencia', ...Array.from({ length: 10 }, (_, i) => `Primer número ${i}`)]);
+    await waitFor(() => expect(sel).toBeEnabled());
+    await user.selectOptions(sel, '4');
+    expect(sel.value).toBe('4');
+  });
+
+  it('CARRO — siguen «Termina en N»', async () => {
+    mocks.runPreflightPreview.mockResolvedValue(previewConClase('AUTOMOVIL'));
+    const user = userEvent.setup();
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    const textos = Array.from(digito().options).filter((o) => !o.hidden).map((o) => o.textContent);
+    expect(textos).toEqual(['Sin preferencia', ...Array.from({ length: 10 }, (_, i) => `Termina en ${i}`)]);
+  });
+});
