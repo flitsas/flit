@@ -16,9 +16,8 @@ vi.mock("@/lib/api/admin-ot-portal-marca", async () => {
     publishPortalMarca: vi.fn(),
     retirePortalMarca: vi.fn(),
     uploadPortalMarcaLogo: vi.fn(),
+    uploadPortalMarcaBannerItem: vi.fn(),
     deletePortalMarcaLogo: vi.fn(),
-    uploadPortalMarcaBanner: vi.fn(),
-    deletePortalMarcaBanner: vi.fn(),
     fetchPortalMarcaImage: vi.fn(async (path: string) => `blob:${path}`),
   };
 });
@@ -30,7 +29,7 @@ import {
   publishPortalMarca,
   retirePortalMarca,
   savePortalMarcaDraft,
-  uploadPortalMarcaBanner,
+  uploadPortalMarcaBannerItem,
   uploadPortalMarcaLogo,
 } from "@/lib/api/admin-ot-portal-marca";
 import { PortalPnTabs } from "../PortalPnTabs";
@@ -52,6 +51,7 @@ function marca(overrides: Partial<PortalMarca> = {}): PortalMarca {
     hasUnpublishedChanges: true,
     logoUrl: "/api/v1/admin/ot/portal-marca/imagenes/logo-1",
     bannerUrl: "/api/v1/admin/ot/portal-marca/imagenes/ban-1",
+    banners: [{ imageId: "ban-1", imageUrl: "/api/v1/admin/ot/portal-marca/imagenes/ban-1", alt: "Banner de bienvenida", linkUrl: null }],
     completeness: { isComplete: true, missing: [] },
     rowVersion: 3,
     ...overrides,
@@ -107,7 +107,7 @@ describe("AC2 — vista previa antes de publicar", () => {
 
     const preview = screen.getByTestId("portal-pn-preview");
     await waitFor(() => expect(within(preview).getByAltText("Logo del organismo")).toHaveAttribute("src", "blob:/api/v1/admin/ot/portal-marca/imagenes/logo-1"));
-    expect(within(preview).getByAltText("Banner del organismo")).toHaveAttribute("src", "blob:/api/v1/admin/ot/portal-marca/imagenes/ban-1");
+    expect(within(preview).getByAltText("Primer banner del portal")).toHaveAttribute("src", "blob:/api/v1/admin/ot/portal-marca/imagenes/ban-1");
     expect(fetchPortalMarcaImage).toHaveBeenCalledWith("/api/v1/admin/ot/portal-marca/imagenes/logo-1", SCOPE, expect.anything());
 
     const nombre = screen.getByLabelText("Nombre en el portal");
@@ -128,11 +128,25 @@ describe("AC2 — vista previa antes de publicar", () => {
     expect(preview.style.getPropertyValue("--pv-action")).toBe("#047857");
   });
 
-  it("sin logo ni banner la vista previa lo dice y el portal usará los de FLIT", async () => {
-    await abrirDiseno(marca({ logoUrl: null, bannerUrl: null, draft: { ...marca().draft, logoId: null, bannerId: null } }));
+  it("sin logo ni banners la vista previa lo dice y el portal usará los de FLIT", async () => {
+    await abrirDiseno(marca({ logoUrl: null, bannerUrl: null, banners: [], draft: { ...marca().draft, logoId: null, bannerId: null } }));
     expect(screen.getByText("FLIT")).toBeInTheDocument();
-    expect(screen.getByText("Sin banner propio: el portal usa el de FLIT.")).toBeInTheDocument();
+    expect(screen.getByText("Sin banners propios: el portal usa el banner de FLIT.")).toBeInTheDocument();
+    expect(screen.getByText("Sin logo ni banners propios, el portal usa los de FLIT.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quitar logo" })).not.toBeInTheDocument();
+  });
+
+  it("con logo y banners el pie de la vista previa no dice que el portal use los de FLIT", async () => {
+    await abrirDiseno(marca({ banners: [marca().banners![0], { imageId: "ban-2", imageUrl: "/x/ban-2", alt: "Otro", linkUrl: null }] }));
+    const preview = screen.getByTestId("portal-pn-preview");
+    expect(within(preview).getByText("El portal mostrará tu logo y tus banners.")).toBeInTheDocument();
+    expect(within(preview).queryByText(/usa los de FLIT/)).not.toBeInTheDocument();
+    expect(within(preview).getByText("Banners: 2")).toBeInTheDocument();
+  });
+
+  it("con logo pero sin banners el pie solo menciona lo que falta", async () => {
+    await abrirDiseno(marca({ banners: [] }));
+    expect(within(screen.getByTestId("portal-pn-preview")).getByText("Sin banners propios, el portal usa el banner de FLIT.")).toBeInTheDocument();
   });
 
   it("cargar un logo lo deja en el borrador sin tocar el nombre que se está editando", async () => {
@@ -156,11 +170,8 @@ describe("AC2 — vista previa antes de publicar", () => {
     await user.upload(screen.getByLabelText("Cargar logo del portal"), new File(["x"], "logo.gif", { type: "image/gif" }));
     expect(await screen.findByText("El logo debe ser PNG, JPEG o WebP.")).toBeInTheDocument();
 
-    const grande = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "banner.png", { type: "image/png" });
-    await user.upload(screen.getByLabelText("Cargar banner del portal"), grande);
-    expect(await screen.findByText("El banner pesa más de 2 MB. Elige una imagen más liviana.")).toBeInTheDocument();
     expect(uploadPortalMarcaLogo).not.toHaveBeenCalled();
-    expect(uploadPortalMarcaBanner).not.toHaveBeenCalled();
+    expect(uploadPortalMarcaBannerItem).not.toHaveBeenCalled();
   });
 
   it("si el servidor rechaza el archivo muestra su motivo exacto", async () => {

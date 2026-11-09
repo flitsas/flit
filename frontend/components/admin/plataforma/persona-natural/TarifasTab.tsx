@@ -4,7 +4,7 @@
 // organismo y tipo de trámite con sus conceptos (derechos de tránsito, servicio digital, envío y adicionales), el
 // estado de cada versión (vigente, futura o cerrada), filtros por columna estándar, historial por fila y creación o
 // versionado en un modal. Las cotizaciones ya emitidas no cambian al registrar una tarifa nueva. Sin datos bancarios.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { History, PencilLine, ReceiptText } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -63,15 +63,26 @@ function esSoloLectura(g: GrupoTarifa): boolean {
   return cargos.length > 0 && cargos.every((t) => t.editable === false);
 }
 
+/** Pedido externo de abrir el formulario de precio de un trámite (lo hace el paso «Medios de pago»). */
+export interface SolicitudPrecio {
+  tipoTramiteId: string;
+  /** Distingue dos pedidos seguidos del mismo trámite. */
+  nonce: number;
+}
+
 export interface TarifasTabProps {
   onCambio?: () => void;
+  /** Abre el formulario de nueva tarifa con ese trámite elegido. */
+  solicitudPrecio?: SolicitudPrecio | null;
+  /** Se invoca al cerrar (guardando o no) un formulario abierto por `solicitudPrecio`. */
+  onSolicitudCerrada?: () => void;
   /** Cliente de API; por defecto el de Plataforma. Debe ser estable entre renders. */
   api?: TarifasApi;
   /** Presentación y restricciones; por defecto Plataforma, sin cambios. */
   modo?: TarifasModo;
 }
 
-export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: TarifasTabProps = {}) {
+export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api = TARIFAS_API_PLATAFORMA, modo }: TarifasTabProps = {}) {
   const fijo = modo?.organismoFijo === true;
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
@@ -149,6 +160,31 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
       return;
     }
     setForm(mode);
+  }
+
+  // «Definir precio» desde Medios de pago: el formulario se abre con el trámite ya elegido.
+  const nonceAtendido = useRef<number | null>(null);
+  const abiertoPorSolicitud = useRef(false);
+  useEffect(() => {
+    if (!solicitudPrecio || nonceAtendido.current === solicitudPrecio.nonce) return;
+    if (tipos.length === 0 && !catalogoError) return; // espera los catálogos
+    nonceAtendido.current = solicitudPrecio.nonce;
+    if (catalogoError) {
+      show(catalogoError, "error");
+      onSolicitudCerrada?.();
+      return;
+    }
+    abiertoPorSolicitud.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacción a un pedido externo
+    setForm({ kind: "create", tipoTramiteId: solicitudPrecio.tipoTramiteId });
+  }, [solicitudPrecio, tipos, catalogoError, show, onSolicitudCerrada]);
+
+  function cerrarFormulario() {
+    setForm(null);
+    if (abiertoPorSolicitud.current) {
+      abiertoPorSolicitud.current = false;
+      onSolicitudCerrada?.();
+    }
   }
 
   function actionsFor(g: GrupoTarifa): RowAction[] {
@@ -307,9 +343,9 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
           organismos={organismos}
           api={api}
           modo={modo}
-          onClose={() => setForm(null)}
+          onClose={cerrarFormulario}
           onSaved={(nuevas) => {
-            setForm(null);
+            cerrarFormulario();
             show(
               nuevas.length === 1 ? "Tarifa guardada." : `Tarifa guardada: ${nuevas.length} cargos nuevos.`,
               "success",
