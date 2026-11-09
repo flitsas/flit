@@ -119,6 +119,22 @@ describe('Configurador de tipos de trámite', () => {
     expect(within(aviso).getByText(/está inactivo/)).toBeInTheDocument();
   });
 
+  // HU #14409 AC5 — retirar la pestaña Documentos de la ficha de compañía no toca a esta homónima.
+  it('el tipo de trámite conserva su pestaña Documentos', async () => {
+    const user = userEvent.setup();
+    render(<TiposTramitePanel />);
+
+    await user.click(await screen.findByRole('button', { name: /Blindaje/ }));
+
+    const nav = await screen.findByRole('navigation', { name: 'Configuración del tipo' });
+    expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Identidad',
+      'Capacidades',
+      'Recorrido',
+      'Documentos',
+    ]);
+  });
+
   it('avisa de que corregir un tipo publicado sube su versión', async () => {
     const user = userEvent.setup();
     render(<TiposTramitePanel />);

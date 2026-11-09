@@ -30,7 +30,6 @@ using Flit.Admin.Application.Companies.SignatureVault.GetSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.ListSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.RevokeSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.UpdateSignatureVault;
-using Flit.Admin.Application.CompanyDocumentParams;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.DocumentRequirements;
@@ -97,13 +96,6 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         group.MapPost("", CreateChildDeedAsync);
         group.MapPut("/{id:guid}", UpdateChildDeedAsync);
         group.MapDelete("/{id:guid}", DeleteChildDeedAsync);
-        return group;
-    }
-
-    public static RouteGroupBuilder MapAdminCompanyDocumentParamsChildRoutes(this RouteGroupBuilder group)
-    {
-        group.MapGet("", ListChildDocumentParamsAsync);
-        group.MapPut("", UpsertChildDocumentParamsAsync);
         return group;
     }
 
@@ -1071,54 +1063,5 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
             .ConfigureAwait(false);
 
         return outcome == DeleteDeedOutcome.Deleted ? Results.NoContent() : Results.NotFound();
-    }
-
-    private static async Task<IResult> ListChildDocumentParamsAsync(
-        Guid headTenantId,
-        Guid childTenantId,
-        ClaimsPrincipal user,
-        [FromServices] ICompanyHierarchyRepository hierarchy,
-        [FromServices] ListCompanyDocumentParamsHandler handler,
-        CancellationToken ct)
-    {
-        var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
-        if (forbid is not null)
-        {
-            return forbid;
-        }
-
-        var result = await handler.HandleAsync(childTenantId, ct).ConfigureAwait(false);
-        return Results.Ok(result);
-    }
-
-    private static async Task<IResult> UpsertChildDocumentParamsAsync(
-        Guid headTenantId,
-        Guid childTenantId,
-        UpsertCompanyDocumentParamRequest request,
-        ClaimsPrincipal user,
-        [FromServices] ICompanyHierarchyRepository hierarchy,
-        [FromServices] UpsertCompanyDocumentParamHandler handler,
-        CancellationToken ct)
-    {
-        var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
-        if (forbid is not null)
-        {
-            return forbid;
-        }
-
-        var (result, error) = await handler
-            .HandleAsync(childTenantId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), ct)
-            .ConfigureAwait(false);
-
-        return error switch
-        {
-            "invalid_code" => Results.Json(
-                new { error = "El código de documento es obligatorio." },
-                statusCode: StatusCodes.Status422UnprocessableEntity),
-            "invalid_state" => Results.Json(
-                new { error = "Estado inválido (use OCULTO, OBLIGATORIO u OPCIONAL)." },
-                statusCode: StatusCodes.Status422UnprocessableEntity),
-            _ => Results.Ok(result),
-        };
     }
 }

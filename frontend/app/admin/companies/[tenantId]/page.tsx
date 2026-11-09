@@ -16,7 +16,6 @@ import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPan
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
 import { resolveOtConfigPanelMode } from "@/lib/companies/ot-config-mode";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
-import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { CompanyUsersPanel } from "@/components/admin/companies/panels/CompanyUsersPanel";
@@ -287,12 +286,6 @@ function CompanyDetail() {
                   />
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
-                documentosSlot={
-                  <CompanyDocumentParamsPanel
-                    tenantId={tenantId}
-                    networkHeadId={managingChild ? networkHeadId : null}
-                  />
-                }
                 legalRepresentativesSlot={
                   <RepresentativesAndVaultTab
                     tenantId={tenantId}

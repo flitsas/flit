@@ -21,7 +21,7 @@ public sealed class ChecklistEngineDocTipoCasingTests
     private static ChecklistResultado Compute(
         IReadOnlyList<ChecklistItem> matriz, IReadOnlyCollection<string> docTipos) =>
         ChecklistEngine.ComputeFromMatrix(
-            "BLINDAJE", matriz, null, docTipos, new TramiteDocumentContext(), null, null);
+            "BLINDAJE", matriz, null, docTipos, new TramiteDocumentContext(), null);
 
     [Theory]
     [InlineData("Certificado-Blindaje", "certificado-blindaje")]

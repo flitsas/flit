@@ -20,14 +20,11 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 public sealed class GetChecklistPersonTypeTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
-    private readonly IChecklistCompanyParamsProvider _companyParams = Substitute.For<IChecklistCompanyParamsProvider>();
     private readonly GetChecklistHandler _handler;
 
     public GetChecklistPersonTypeTests()
     {
-        _companyParams.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>(new List<CompanyDocumentParam>()));
-        _handler = new GetChecklistHandler(_repo, _companyParams);
+        _handler = new GetChecklistHandler(_repo);
     }
 
     private static ProcedureInstance Traspaso(Guid id, Guid tenant, params string?[] personTypes)

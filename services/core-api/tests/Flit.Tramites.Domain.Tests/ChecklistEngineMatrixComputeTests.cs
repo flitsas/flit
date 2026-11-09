@@ -23,10 +23,9 @@ public sealed class ChecklistEngineMatrixComputeTests
     private static ChecklistResultado Compute(
         IReadOnlyList<ChecklistItem> matriz,
         IReadOnlyDictionary<string, bool>? manual = null,
-        IReadOnlyCollection<string>? docTipos = null,
-        IReadOnlyCollection<CompanyDocumentParam>? parametros = null) =>
+        IReadOnlyCollection<string>? docTipos = null) =>
         ChecklistEngine.ComputeFromMatrix(
-            "matricula_inicial", matriz, manual, docTipos, new TramiteDocumentContext(), null, parametros);
+            "matricula_inicial", matriz, manual, docTipos, new TramiteDocumentContext(), null);
 
     [Fact]
     public void Matriz_DefineLista_Obligatoriedad_Y_Orden()
@@ -75,14 +74,5 @@ public sealed class ChecklistEngineMatrixComputeTests
         var r = Compute(conSoatObligatorio);
 
         r.FaltanObligatorios.Should().Contain("soat");
-    }
-
-    [Fact]
-    public void Matriz_ParametroGestora_Opcional_RelajaObligatoriedad_RF31()
-    {
-        var r = Compute(Matriz, parametros: [new CompanyDocumentParam("aduana", CompanyDocumentParamState.Opcional)]);
-
-        r.Items.Single(i => i.Item.Id == "aduana").Item.Obligatorio.Should().BeFalse();
-        r.FaltanObligatorios.Should().NotContain("aduana");
     }
 }

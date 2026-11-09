@@ -15,8 +15,5 @@ describe("companyScopedPath", () => {
     expect(companyScopedPath("child-1", "/mandate-signers", "head-9")).toBe(
       "/api/v1/admin/companies/head-9/children/child-1/mandate-signers",
     );
-    expect(companyScopedPath("child-1", "/document-params", "head-9")).toBe(
-      "/api/v1/admin/companies/head-9/children/child-1/document-params",
-    );
   });
 });
