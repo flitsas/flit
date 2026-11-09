@@ -123,7 +123,7 @@ function esCanalPunto(path: string[]): boolean {
 /** Rutas del punto que ya materializaron borrador PN y usan la sesión del trámite (actores y gate de requisitos). */
 function esActoresPunto(path: string[]): boolean {
   if (path[0] !== "punto") return false;
-  return path[1] === "actores" || (path[1] === "requisitos" && path[2] === "completitud");
+  return path[1] === "actores" || path[1] === "pago" || (path[1] === "requisitos" && path[2] === "completitud");
 }
 
 /** Cookie `pn_punto` del BFF, si vino en Set-Cookie. */

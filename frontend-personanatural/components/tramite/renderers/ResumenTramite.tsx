@@ -132,7 +132,7 @@ export function ResumenTramite({ activa, onEstado }: PropsSeccion) {
       <Card title="Datos del trámite" id="resumen-tramite">
         <div className="space-y-4">
           {secciones.map((s) => (
-            <SeccionDatos key={s.id} seccion={s} onEditar={irAPaso} />
+            <SeccionDatos key={s.id} seccion={canal === "punto" && !editable ? { ...s, editar: null } : s} onEditar={irAPaso} />
           ))}
           {(lineas.length > 0 || mostrarTotal) && (
             <section aria-labelledby="resumen-valores-titulo" className="rounded-[9px] border border-border p-4">
@@ -178,12 +178,22 @@ export function ResumenTramite({ activa, onEstado }: PropsSeccion) {
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <Btn tone="secondary" onClick={() => irAPaso("requisitos")} disabled={enviando}>
-          Atrás
-        </Btn>
-        <Btn tone="positive" onClick={() => void enviar()} disabled={enviando || bloqueo.bloqueado || Boolean(igualAlRunt)} describedBy={bloqueo.bloqueado ? idBloqueo : undefined}>
-          Enviar trámite
-        </Btn>
+        {/* Con la solicitud en pendiente_pago el Resumen es solo lectura: no se vuelve a Requisitos. */}
+        {(editable || canal !== "punto") && (
+          <Btn tone="secondary" onClick={() => irAPaso("requisitos")} disabled={enviando}>
+            Atrás
+          </Btn>
+        )}
+        {canal === "punto" ? (
+          // En el punto el envío no se dispara aquí: se paga en caja y el servidor radica solo al quedar pagada.
+          <Btn onClick={() => irAPaso("pago")} disabled={Boolean(igualAlRunt)}>
+            Continuar al pago
+          </Btn>
+        ) : (
+          <Btn tone="positive" onClick={() => void enviar()} disabled={enviando || bloqueo.bloqueado || Boolean(igualAlRunt)} describedBy={bloqueo.bloqueado ? idBloqueo : undefined}>
+            Enviar trámite
+          </Btn>
+        )}
       </div>
       {enviando && <CargadorDeEnvio />}
     </div>
