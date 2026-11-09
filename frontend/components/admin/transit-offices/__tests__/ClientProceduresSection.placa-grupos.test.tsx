@@ -174,6 +174,8 @@ describe("ClientProceduresSection — placa por grupo de clase (HU6)", () => {
       await user.click(asignar);
       expect(plateMocks.assignPlateToProcedure).toHaveBeenCalledWith("proc-7", valida);
     },
+    // Teclea tres valores completos: con la suite en paralelo supera los 5 s por defecto.
+    15_000,
   );
 
   it("grupoPlaca manda sobre la clase: CAMION GRUA con grupoPlaca MAQUINARIA es maquinaria", async () => {

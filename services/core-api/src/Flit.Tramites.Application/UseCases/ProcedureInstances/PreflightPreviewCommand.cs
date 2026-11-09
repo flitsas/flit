@@ -60,7 +60,13 @@ public sealed record PreflightPreviewDto(
     /// resuelto contra los habilitados de la compañía. <c>null</c> en Ruta Larga (lo elige el gestor) y
     /// en la Corta cuando el RUNT no dijo organismo (el gestor lo elige, caso no visto en capturas).
     /// </summary>
-    PreflightPreviewTransitOfficeDto? TransitOffice = null);
+    PreflightPreviewTransitOfficeDto? TransitOffice = null,
+    /// <summary>
+    /// HU9 (Caso C 2026-11-09) — grupo de placa de <c>vehicle_class</c> consultado: <c>CARRO</c> |
+    /// <c>MOTO</c> | <c>REMOLQUE</c> | <c>MAQUINARIA</c> | <c>null</c> (vacía, «SIN CLASE» o desconocida).
+    /// Misma regla que la bandeja OT (HU8), vía <see cref="IVehiclePlateGroupResolver"/>.
+    /// </summary>
+    string? GrupoPlaca = null);
 
 /// <summary>Organismo resuelto para la Ruta Corta, en la forma que el paso 1 pinta y la creación reconfirma.</summary>
 public sealed record PreflightPreviewTransitOfficeDto(Guid Id, string Code, string Name, string? CityName);
@@ -323,10 +329,15 @@ public sealed class RunPreflightPreviewHandler(
     IConsultationBlockingPolicy? blockingPolicy = null,
     TramiteValidationPolicy? validationPolicy = null,
     IOtOperabilityGate? otOperability = null,
-    IProcedureTypeRepository? typeRepo = null)
+    IProcedureTypeRepository? typeRepo = null,
+    IVehiclePlateGroupResolver? plateGroupResolver = null)
 {
     private readonly IConsultationBlockingPolicy _blockingPolicy =
         blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
+
+    // HU9 (Caso C 2026-11-09) — grupo de placa de la clase consultada (regla de HU8 vía Infrastructure).
+    // Sin inyectar (tests que no lo ejercitan) ⇒ grupoPlaca null: el wizard cae a sus listas exactas.
+    private readonly IVehiclePlateGroupResolver? _plateGroupResolver = plateGroupResolver;
 
     // HU #11200 — el gate del paso 1 comprueba lo MISMO que el de radicación: grant vigente (resolver)
     // + organismo operativo en la plataforma (esta compuerta). Si comprobara menos, el paso 1 dejaría
@@ -615,6 +626,14 @@ public sealed class RunPreflightPreviewHandler(
         var overall = RunPreflightHandler.ComposeOverall(checks);
         var provider = providersUsed.Count == 0 ? null : string.Join(",", providersUsed);
 
+        // HU9 (Caso C 2026-11-09) — grupo de placa de la clase consultada, misma regla que la bandeja OT.
+        var grupoPlaca = _plateGroupResolver is null
+            ? null
+            : await _plateGroupResolver.ResolveContractValueAsync(
+                vehicleFields.FirstOrDefault(f => string.Equals(
+                    f.FieldKey, VehicleFieldKeys.Class, StringComparison.OrdinalIgnoreCase))?.ValueText,
+                ct).ConfigureAwait(false);
+
         return (
             new PreflightPreviewDto(
                 token,
@@ -624,7 +643,8 @@ public sealed class RunPreflightPreviewHandler(
                 DateTimeOffset.UtcNow,
                 vehicleFields.Select(f => new PreflightPreviewFieldDto(f.FieldKey, f.ValueText, f.ValueJson)).ToList(),
                 route,
-                organismoRutaCorta),
+                organismoRutaCorta,
+                grupoPlaca),
             null,
             null,
             null);
