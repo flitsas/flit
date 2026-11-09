@@ -111,7 +111,7 @@ describe('estadoPlacaOt', () => {
 //   resolverGrupoPlaca('MAQUINARIA', 'CAMION GRUA') → 'MAQUINARIA'
 //   estadoPlacaOt('R1234', 'REMOLQUE') → { invalida: true, lista: false }
 describe('grupoPlacaDesdeClase (fallback por listas exactas)', () => {
-  it.each(['MOTOCICLETA', 'MOTOCARRO', 'CUATRIMOTO', 'CUADRICICLO', 'MOTOTRICICLO', 'TRICIMOTO', 'CICLOMOTOR'])(
+  it.each(['MOTOCICLETA', 'CUATRIMOTO', 'CUADRICICLO', 'CICLOMOTOR'])(
     '%s → MOTO',
     (c) => expect(grupoPlacaDesdeClase(c)).toBe('MOTO'),
   );
@@ -193,5 +193,32 @@ describe('estadoPlacaOt por grupo', () => {
     ['MAQUINARIA', 'M0295541', false],
   ] as const)('%s %s → lista=%s', (grupo, placa, lista) => {
     expect(estadoPlacaOt(placa, grupo)).toEqual({ invalida: !lista, lista });
+  });
+});
+
+// HU10 (corrección del usuario 2026-11-09, D5) — grupo MOTOCARRO: 123ABC, dígito = primer número.
+// Uso de ejemplo: grupoPlacaDesdeClase('Mototriciclo') → 'MOTOCARRO'; estadoPlacaOt('123ABC', 'MOTOCARRO').lista → true
+describe('grupo MOTOCARRO (HU10)', () => {
+  it.each(['MOTOCARRO', 'MOTOTRICICLO', 'TRICIMOTO', ' tricimoto '])('%s → MOTOCARRO (lista exacta)', (c) => {
+    expect(grupoPlacaDesdeClase(c)).toBe('MOTOCARRO');
+  });
+  it('grupoPlaca "MOTOCARRO" del backend es válido', () => {
+    expect(resolverGrupoPlaca('MOTOCARRO', 'X')).toBe('MOTOCARRO');
+    expect(grupoPlacaDesdeFormatoFur('AUTOMOTOR', 'MOTOCARRO')).toBe('MOTOCARRO');
+  });
+  it('pide dígito', () => {
+    expect(grupoPlacaPideDigito('MOTOCARRO')).toBe(true);
+  });
+  it('máscara: mayúsculas, alfanumérico y maxLength 6', () => {
+    expect(normalizarPlacaOt('123-abcd', 'MOTOCARRO')).toBe('123ABC');
+  });
+  it.each([
+    ['123ABC', true],
+    ['ABC12D', false],
+    ['ABC123', false],
+    ['12ABC', false],
+    ['1234AB', false],
+  ] as const)('estadoPlacaOt %s → lista=%s', (placa, lista) => {
+    expect(estadoPlacaOt(placa, 'MOTOCARRO')).toEqual({ invalida: !lista, lista });
   });
 });

@@ -16,11 +16,11 @@ public sealed class PlateRangeRulesGrupoPlacaTests
     [InlineData("AUTOMOVIL", PlateClassGroup.Carro)]
     [InlineData("VOLQUETA", PlateClassGroup.Carro)]
     [InlineData("MOTOCICLETA", PlateClassGroup.Moto)]
-    [InlineData("MOTOCARRO", PlateClassGroup.Moto)]
+    [InlineData("MOTOCARRO", PlateClassGroup.Motocarro)]
     [InlineData("CUATRIMOTO", PlateClassGroup.Moto)]
     [InlineData("CUADRICICLO", PlateClassGroup.Moto)]
-    [InlineData("MOTOTRICICLO", PlateClassGroup.Moto)]
-    [InlineData("TRICIMOTO", PlateClassGroup.Moto)]
+    [InlineData("MOTOTRICICLO", PlateClassGroup.Motocarro)]
+    [InlineData("TRICIMOTO", PlateClassGroup.Motocarro)]
     [InlineData("CICLOMOTOR", PlateClassGroup.Moto)]
     [InlineData("REMOLQUE", PlateClassGroup.Remolque)]
     [InlineData("SEMIREMOLQUE", PlateClassGroup.Remolque)]
@@ -73,6 +73,14 @@ public sealed class PlateRangeRulesGrupoPlacaTests
     [InlineData(PlateClassGroup.Remolque, "X12345", false)]
     [InlineData(PlateClassGroup.Remolque, "R1234", false)]
     [InlineData(PlateClassGroup.Remolque, "R1234567", false)]
+    [InlineData(PlateClassGroup.Moto, "123ABC", false)]
+    [InlineData(PlateClassGroup.Motocarro, "123ABC", true)]
+    [InlineData(PlateClassGroup.Motocarro, "523ABC", true)]
+    [InlineData(PlateClassGroup.Motocarro, "ABC12D", false)]
+    [InlineData(PlateClassGroup.Motocarro, "ABC123", false)]
+    [InlineData(PlateClassGroup.Motocarro, "12ABC", false)]
+    [InlineData(PlateClassGroup.Motocarro, "1234AB", false)]
+    [InlineData(PlateClassGroup.Carro, "123ABC", false)]
     [InlineData(PlateClassGroup.Maquinaria, "MC029554", true)]
     [InlineData(PlateClassGroup.Maquinaria, "MC02955", false)]
     [InlineData(PlateClassGroup.Maquinaria, "ABC123", false)]
@@ -86,6 +94,7 @@ public sealed class PlateRangeRulesGrupoPlacaTests
     [InlineData("R12345")]
     [InlineData("S654321")]
     [InlineData("MC029554")]
+    [InlineData("123ABC")]
     public void IsValidPlateForGroup_SinGrupo_AceptaLaUnion(string placa) =>
         PlateRangeRules.IsValidPlateForGroup(null, placa).Should().BeTrue();
 
@@ -100,6 +109,7 @@ public sealed class PlateRangeRulesGrupoPlacaTests
     [InlineData(PlateClassGroup.Carro, "La placa de este vehículo debe tener 3 letras y 3 números, por ejemplo ABC123.")]
     [InlineData(PlateClassGroup.Moto, "La placa de esta moto debe tener 3 letras y 2 números, con o sin una letra al final, por ejemplo ABC12D o ABC12.")]
     [InlineData(PlateClassGroup.Remolque, "La placa de este remolque debe empezar por R o S seguida de 5 o 6 números, por ejemplo R12345 o S54321.")]
+    [InlineData(PlateClassGroup.Motocarro, "La placa de este motocarro debe tener 3 números y 3 letras, por ejemplo 123ABC.")]
     [InlineData(PlateClassGroup.Maquinaria, "La placa de esta maquinaria debe tener 2 letras y 6 números, por ejemplo MC029554.")]
     public void InvalidPlateFormatMessageFor_LiteralesExactos(PlateClassGroup grupo, string literal) =>
         PlateRangeRules.InvalidPlateFormatMessageFor(grupo).Should().Be(literal);
@@ -107,9 +117,15 @@ public sealed class PlateRangeRulesGrupoPlacaTests
     [Theory]
     [InlineData(PlateClassGroup.Carro, "CARRO")]
     [InlineData(PlateClassGroup.Moto, "MOTO")]
+    [InlineData(PlateClassGroup.Motocarro, "MOTOCARRO")]
     [InlineData(PlateClassGroup.Remolque, "REMOLQUE")]
     [InlineData(PlateClassGroup.Maquinaria, "MAQUINARIA")]
     [InlineData(null, null)]
     public void ToContractValue_ValoresDelContrato(PlateClassGroup? grupo, string? valor) =>
         PlateRangeRules.ToContractValue(grupo).Should().Be(valor);
+
+    // HU10 — el mensaje de la unión (clase sin grupo) suma el ejemplo de motocarro.
+    [Fact]
+    public void InvalidPlateFormatMessage_IncluyeMotocarro() =>
+        PlateRangeRules.InvalidPlateFormatMessage.Should().Be("La placa no cumple el formato esperado. Ej: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).");
 }

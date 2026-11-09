@@ -316,6 +316,7 @@ public sealed class PreflightPreviewHandlerTests
     [InlineData("CAMIÓN GRÚA", "MAQUINARIA")]
     [InlineData("RETROEXCAVADORA", "MAQUINARIA")]
     [InlineData("MOTOCICLETA", "MOTO")]
+    [InlineData("MOTOCARRO", "MOTOCARRO")]
     public async Task HU9_Preview_ExponeGrupoPlacaDeLaClaseConsultada(string clase, string grupo)
     {
         var tenant = Guid.NewGuid();

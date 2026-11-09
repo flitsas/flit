@@ -78,7 +78,7 @@ public sealed class OtClientProcedureResponse
     public string? Clase { get; init; }
 
     /// <summary>
-    /// HU8 (Caso C 2026-11-09) — grupo de placa de <see cref="Clase"/>: <c>CARRO</c> | <c>MOTO</c> |
+    /// HU8 (Caso C 2026-11-09) — grupo de placa de <see cref="Clase"/>: <c>CARRO</c> | <c>MOTO</c> | <c>MOTOCARRO</c> |
     /// <c>REMOLQUE</c> | <c>MAQUINARIA</c> | <c>null</c> (clase vacía, «SIN CLASE» o desconocida ⇒ formatos actuales).
     /// </summary>
     public string? GrupoPlaca { get; init; }

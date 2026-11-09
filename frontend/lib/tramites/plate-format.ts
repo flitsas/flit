@@ -53,18 +53,13 @@ export function normalizarPlacaCarro(valor: string): string {
 /** Grupo de formato de placa. REMOLQUE y MAQUINARIA los define el catálogo del backend. */
 export type GrupoPlaca = OtGrupoPlaca;
 
-const GRUPOS_PLACA: ReadonlySet<string> = new Set(['CARRO', 'MOTO', 'REMOLQUE', 'MAQUINARIA']);
+const GRUPOS_PLACA: ReadonlySet<string> = new Set(['CARRO', 'MOTO', 'MOTOCARRO', 'REMOLQUE', 'MAQUINARIA']);
 
 /** Clases de moto (catálogo 97), ya normalizadas. Igualdad exacta. */
-const CLASES_MOTO: ReadonlySet<string> = new Set([
-  'MOTOCICLETA',
-  'MOTOCARRO',
-  'CUATRIMOTO',
-  'CUADRICICLO',
-  'MOTOTRICICLO',
-  'TRICIMOTO',
-  'CICLOMOTOR',
-]);
+const CLASES_MOTO: ReadonlySet<string> = new Set(['MOTOCICLETA', 'CUATRIMOTO', 'CUADRICICLO', 'CICLOMOTOR']);
+
+/** HU10 (D5) — clases de motocarro: placa 123ABC. Igualdad exacta. */
+const CLASES_MOTOCARRO: ReadonlySet<string> = new Set(['MOTOCARRO', 'MOTOTRICICLO', 'TRICIMOTO']);
 
 /** Clases de remolque conocidas, ya normalizadas. Solo fallback: el catálogo del backend manda. */
 const CLASES_REMOLQUE: ReadonlySet<string> = new Set([
@@ -74,19 +69,24 @@ const CLASES_REMOLQUE: ReadonlySet<string> = new Set([
   'REMOLQUE Y SEMIRREMOLQUE',
 ]);
 
-/** Verdadero solo si la clase normalizada es exactamente una de las clases de moto. */
-export function esClaseMoto(clase: string | null | undefined): boolean {
-  return CLASES_MOTO.has(normalizarClaseVehiculo(clase));
+/**
+ * Verdadero si en esta clase el dígito de preferencia es el PRIMER número de la placa: moto
+ * (ABC52D) y motocarro (523ABC, HU10). En el resto es el último (ABC125).
+ */
+export function digitoEsPrimerNumero(clase: string | null | undefined): boolean {
+  const c = normalizarClaseVehiculo(clase);
+  return CLASES_MOTO.has(c) || CLASES_MOTOCARRO.has(c);
 }
 
 /**
- * Grupo por listas exactas de la clase: CARRO, MOTO o REMOLQUE. Maquinaria no tiene lista en el
+ * Grupo por listas exactas de la clase: CARRO, MOTO, MOTOCARRO o REMOLQUE. Maquinaria no tiene lista en el
  * front (la define el catálogo del backend) → `null`, igual que clase vacía o desconocida.
  */
 export function grupoPlacaDesdeClase(clase: string | null | undefined): GrupoPlaca | null {
   const c = normalizarClaseVehiculo(clase);
   if (CLASES_CARRO.has(c)) return 'CARRO';
   if (CLASES_MOTO.has(c)) return 'MOTO';
+  if (CLASES_MOTOCARRO.has(c)) return 'MOTOCARRO';
   if (CLASES_REMOLQUE.has(c)) return 'REMOLQUE';
   return null;
 }
@@ -124,6 +124,7 @@ export function grupoPlacaPideDigito(grupo: GrupoPlaca | null | undefined): bool
 export const FORMATO_PLACA_POR_GRUPO: Readonly<Record<GrupoPlaca, { pattern: RegExp; maxLength: number }>> = {
   CARRO: { pattern: PLACA_CARRO_PATTERN, maxLength: PLACA_CARRO_MAX_LENGTH },
   MOTO: { pattern: /^[A-Z]{3}\d{2}[A-Z]?$/, maxLength: 6 },
+  MOTOCARRO: { pattern: /^\d{3}[A-Z]{3}$/, maxLength: 6 },
   REMOLQUE: { pattern: /^[RS]\d{5,6}$/, maxLength: 7 },
   MAQUINARIA: { pattern: /^[A-Z]{2}\d{6}$/, maxLength: 8 },
 };

@@ -21,6 +21,8 @@ public sealed class VehiclePlateGroupResolverTests
     [InlineData("Retroexcavadora", "MAQUINARIA")]
     [InlineData("Camioneta", "CARRO")]
     [InlineData("MOTOCICLETA", "MOTO")]
+    [InlineData("Motocarro", "MOTOCARRO")]
+    [InlineData("TRICIMOTO", "MOTOCARRO")]
     [InlineData("SEMIRREMOLQUE", "REMOLQUE")]
     [InlineData("REMOLQUE", "REMOLQUE")]
     public async Task ClaseConGrupo_DevuelveElValorDeContrato(string clase, string esperado)

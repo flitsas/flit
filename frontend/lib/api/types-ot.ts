@@ -51,7 +51,7 @@ export interface UpdateOtFeatureFlagRequest {
 }
 
 /** Grupo de formato de placa de la bandeja OT (registro diferido 2026-11-09). */
-export type OtGrupoPlaca = "CARRO" | "MOTO" | "REMOLQUE" | "MAQUINARIA";
+export type OtGrupoPlaca = "CARRO" | "MOTO" | "MOTOCARRO" | "REMOLQUE" | "MAQUINARIA";
 
 export interface OtClientProcedure {
   id: string;

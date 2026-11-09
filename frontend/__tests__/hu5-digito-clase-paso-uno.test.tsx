@@ -360,3 +360,28 @@ describe('HU9 — grupoPlaca del preview en el paso 1', () => {
     expect(patches.some((i) => i.fieldKey === 'plate_preferred_last_digit' && i.valueText === '7')).toBe(false);
   });
 });
+
+// HU10 — motocarro en el paso 1: etiqueta, nota, opciones y gate.
+describe('HU10 — motocarro en el paso 1', () => {
+  it.each([
+    ['grupoPlaca del preview', 'MOTOCARRO', 'MOTOCARRO'],
+    ['fallback por clase', 'MOTOTRICICLO', undefined],
+  ] as const)('%s — etiqueta, nota, «Primer número N» y gate', async (_n, clase, grupo) => {
+    mocks.runPreflightPreview.mockResolvedValue({ ...previewConClase(clase), grupoPlaca: grupo });
+    const user = userEvent.setup();
+    renderNuevo();
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    const sel = (await screen.findByLabelText('Dígito numérico de preferencia')) as HTMLSelectElement;
+    await waitFor(() => expect(sel).toBeEnabled());
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+    const textos = Array.from(sel.options).filter((o) => !o.hidden).map((o) => o.textContent);
+    expect(textos).toEqual(['Sin preferencia', ...Array.from({ length: 10 }, (_, i) => `Primer número ${i}`)]);
+    await user.selectOptions(sel, '2');
+    expect(
+      screen.getByText(
+        'Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.',
+      ),
+    ).toBeInTheDocument();
+  });
+});
