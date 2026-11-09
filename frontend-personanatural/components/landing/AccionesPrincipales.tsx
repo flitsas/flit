@@ -87,6 +87,7 @@ export function AccionesPrincipales({ tipos, cliente, onIniciar, onConsultar, on
               onChange={setTipo}
               disabled={!tipos.isSuccess || sinTipos}
               marcador={tipos.isPending ? "Cargando..." : "Selecciona"}
+              cargando={tipos.isPending}
             />
             <div aria-live="polite" className="text-xs font-normal">
               {tipos.isError && (

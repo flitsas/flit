@@ -5,6 +5,7 @@ using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Punto;
 using Flit.PersonaNatural.Api.Sesiones;
+using Flit.Tramites.Grpc.V1;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -46,7 +47,9 @@ public sealed class MarcaPuntoTests
         json.GetProperty("logoUrl").GetString().Should().Be($"/api/v1/persona-natural/marca/imagenes/{Logo}");
         json.GetProperty("bannerUrl").ValueKind.Should().Be(JsonValueKind.Null);
         json.GetProperty("version").GetInt32().Should().Be(3);
-        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("origen", "nombre", "colores", "logoUrl", "bannerUrl", "version");
+        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("origen", "nombre", "colores", "logoUrl", "bannerUrl", "version", "carrusel", "banners");
+        json.GetProperty("carrusel").ValueKind.Should().Be(JsonValueKind.Array);
+        json.GetProperty("carrusel").GetArrayLength().Should().Be(0, "sin carrusel publicado el arreglo va vacío, no nulo");
     }
 
     [Fact]
@@ -154,7 +157,8 @@ public sealed class MarcaPuntoTests
         json.GetProperty("logoUrl").GetString().Should().Be($"/api/v1/persona-natural/marca/imagenes/{Logo}");
         json.GetProperty("bannerUrl").ValueKind.Should().Be(JsonValueKind.Null);
         json.GetProperty("version").GetInt32().Should().Be(2);
-        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("origen", "nombre", "colores", "logoUrl", "bannerUrl", "version");
+        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("origen", "nombre", "colores", "logoUrl", "bannerUrl", "version", "carrusel", "banners");
+        json.GetProperty("carrusel").GetArrayLength().Should().Be(0);
     }
 
     [Fact]
@@ -194,6 +198,181 @@ public sealed class MarcaPuntoTests
         (await Origen(punto)).Should().Be("organismo");
         (await Version(punto)).Should().Be(7, "la marca del punto no cambió");
         fachada.LlamadasWeb.Should().Be(3);
+    }
+
+    // Mejora de la Épica #14297 — carrusel de la columna lateral.
+
+    private static readonly Guid ImagenCarrusel = Guid.Parse("0199b7e0-0000-7000-8000-0000000000c1");
+
+    [Fact]
+    public async Task Carrusel_ElPortalRecibeElArregloConUrlPublicaAltYEnlaceONulo()
+    {
+        var basica = DelOrganismo();
+        var marca = new MarcaPuntoRespuesta(basica.Origen, basica.Nombre, basica.Colores, basica.LogoUrl, basica.BannerUrl, basica.Version)
+        {
+            Carrusel =
+            [
+                new CarruselMarcaPunto($"{MarcaPuntoEndpoints.RutaImagenes}{ImagenCarrusel}", "Primera", "https://tramites.example.test/a"),
+                new CarruselMarcaPunto($"{MarcaPuntoEndpoints.RutaImagenes}{Logo}", "Segunda", null),
+            ],
+        };
+        await using var host = new Anfitrion(new FachadaMarca { Marca = marca });
+
+        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+
+        var items = json.GetProperty("carrusel").EnumerateArray().ToList();
+        items.Should().HaveCount(2);
+        items[0].EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("imagenUrl", "alt", "enlace");
+        items[0].GetProperty("imagenUrl").GetString().Should().Be($"/api/v1/persona-natural/marca/imagenes/{ImagenCarrusel}");
+        items[0].GetProperty("alt").GetString().Should().Be("Primera");
+        items[0].GetProperty("enlace").GetString().Should().Be("https://tramites.example.test/a");
+        items[1].GetProperty("enlace").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Carrusel_LaMarcaFlitYLaDeFalloVanConElArregloVacio()
+    {
+        await using var host = new Anfitrion(new FachadaMarca { Marca = MarcaPuntoRespuesta.Flit });
+
+        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+
+        json.GetProperty("carrusel").ValueKind.Should().Be(JsonValueKind.Array);
+        json.GetProperty("carrusel").GetArrayLength().Should().Be(0);
+    }
+
+    private static ObtenerMarcaPuntoResponse RespuestaGrpc(string origen, params CarruselItem[] items)
+    {
+        var r = new ObtenerMarcaPuntoResponse
+        {
+            Origen = origen, Nombre = "Tránsito", ColorPrimario = "#0B3D91", ColorSecundario = "#0F5132", ColorSobrePrimario = "#FFFFFF", Version = 1,
+        };
+        r.Carrusel.AddRange(items);
+        return r;
+    }
+
+    private static CarruselItem Item(string id, string alt, string enlace = "") => new() { ImagenId = id, Alt = alt, Enlace = enlace };
+
+    [Fact]
+    public void Carrusel_ElBffDescartaItemsConIdInvalidoAltVacioOEnlaceQueNoEsHttpOHttps()
+    {
+        var bueno = ImagenCarrusel.ToString();
+        var r = RespuestaGrpc(
+            "organismo",
+            Item(bueno, "Con enlace", "https://example.test/a"),
+            Item("no-es-un-id", "Id inválido"),
+            Item(Guid.NewGuid().ToString(), "   "),
+            Item(Guid.NewGuid().ToString(), "Enlace js", "javascript:alert(1)"),
+            Item(Guid.NewGuid().ToString(), "Enlace ftp", "ftp://example.test/a"),
+            Item(Guid.NewGuid().ToString(), "Enlace relativo", "/interno"),
+            Item(Guid.NewGuid().ToString(), "Enlace largo", "https://example.test/" + new string('a', 490)),
+            Item(Guid.NewGuid().ToString(), "Sin enlace"));
+
+        var marca = MarcaPuntoGrpc.ARespuesta(r, MarcaPuntoRespuesta.OrigenOrganismo);
+
+        marca.Carrusel.Select(i => i.Alt).Should().Equal("Con enlace", "Sin enlace");
+        marca.Carrusel[0].ImagenUrl.Should().Be($"{MarcaPuntoEndpoints.RutaImagenes}{bueno}");
+        marca.Carrusel[0].Enlace.Should().Be("https://example.test/a");
+        marca.Carrusel[1].Enlace.Should().BeNull("enlace vacío = sin enlace");
+    }
+
+    [Fact]
+    public void Carrusel_ElBffNoEntregaMasDeSeisItems()
+    {
+        var items = Enumerable.Range(0, 9).Select(i => Item(Guid.NewGuid().ToString(), $"Imagen {i}")).ToArray();
+
+        MarcaPuntoGrpc.ARespuesta(RespuestaGrpc("organismo", items), MarcaPuntoRespuesta.OrigenOrganismo)
+            .Carrusel.Should().HaveCount(6);
+    }
+
+    [Fact]
+    public void Carrusel_SoloElOrigenOrganismoLoLlena_LaWebYUnaMarcaIncompletaVanVacias()
+    {
+        var item = Item(ImagenCarrusel.ToString(), "Alt");
+
+        MarcaPuntoGrpc.ARespuesta(RespuestaGrpc("web", item), MarcaPuntoRespuesta.OrigenWeb).Carrusel.Should().BeEmpty();
+        var incompleta = RespuestaGrpc("organismo", item);
+        incompleta.Nombre = string.Empty;
+        MarcaPuntoGrpc.ARespuesta(incompleta, MarcaPuntoRespuesta.OrigenOrganismo).Should().Be(MarcaPuntoRespuesta.Flit);
+        MarcaPuntoGrpc.ARespuesta(RespuestaGrpc("flit", item), MarcaPuntoRespuesta.OrigenOrganismo).Carrusel.Should().BeEmpty();
+    }
+
+    // Mejora de la Épica #14297 — lista de banners del portal del organismo.
+
+    private static BannerItem Banner(string id, string alt, string enlace = "") => new() { ImagenId = id, Alt = alt, Enlace = enlace };
+
+    private static ObtenerMarcaPuntoResponse RespuestaBanners(string origen, string bannerId, params BannerItem[] items)
+    {
+        var r = RespuestaGrpc(origen);
+        r.BannerId = bannerId;
+        r.Banners.AddRange(items);
+        return r;
+    }
+
+    [Fact]
+    public async Task Banners_ElPortalRecibeElArregloConUrlPublicaAltYEnlace_YBannerUrlEsElPrimero()
+    {
+        var basica = DelOrganismo();
+        var marca = new MarcaPuntoRespuesta(basica.Origen, basica.Nombre, basica.Colores, basica.LogoUrl, $"{MarcaPuntoEndpoints.RutaImagenes}{ImagenCarrusel}", basica.Version)
+        {
+            Banners =
+            [
+                new CarruselMarcaPunto($"{MarcaPuntoEndpoints.RutaImagenes}{ImagenCarrusel}", "Primero", "https://tramites.example.test/a"),
+                new CarruselMarcaPunto($"{MarcaPuntoEndpoints.RutaImagenes}{Logo}", "Segundo", null),
+            ],
+        };
+        await using var host = new Anfitrion(new FachadaMarca { Marca = marca });
+
+        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+
+        var items = json.GetProperty("banners").EnumerateArray().ToList();
+        items.Should().HaveCount(2);
+        items[0].EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("imagenUrl", "alt", "enlace");
+        items[0].GetProperty("imagenUrl").GetString().Should().Be($"/api/v1/persona-natural/marca/imagenes/{ImagenCarrusel}");
+        items[0].GetProperty("alt").GetString().Should().Be("Primero");
+        items[1].GetProperty("enlace").ValueKind.Should().Be(JsonValueKind.Null);
+        json.GetProperty("bannerUrl").GetString().Should().Be(items[0].GetProperty("imagenUrl").GetString());
+    }
+
+    [Fact]
+    public async Task Banners_LaMarcaFlitVaConElArregloVacio()
+    {
+        await using var host = new Anfitrion(new FachadaMarca { Marca = MarcaPuntoRespuesta.Flit });
+
+        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+
+        json.GetProperty("banners").ValueKind.Should().Be(JsonValueKind.Array);
+        json.GetProperty("banners").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public void Banners_ElBffDescartaItemsInvalidos_ConservaElOrden_Y_ConservaBannerUrl()
+    {
+        var bueno = ImagenCarrusel.ToString();
+        var r = RespuestaBanners(
+            "organismo", bueno,
+            Banner(bueno, "Con enlace", "https://example.test/a"),
+            Banner("no-es-un-id", "Id inválido"),
+            Banner(Guid.NewGuid().ToString(), "   "),
+            Banner(Guid.NewGuid().ToString(), "Enlace js", "javascript:alert(1)"),
+            Banner(Guid.NewGuid().ToString(), "Sin enlace"));
+
+        var marca = MarcaPuntoGrpc.ARespuesta(r, MarcaPuntoRespuesta.OrigenOrganismo);
+
+        marca.Banners.Select(i => i.Alt).Should().Equal("Con enlace", "Sin enlace");
+        marca.Banners[0].ImagenUrl.Should().Be($"{MarcaPuntoEndpoints.RutaImagenes}{bueno}");
+        marca.Banners[0].Enlace.Should().Be("https://example.test/a");
+        marca.Banners[1].Enlace.Should().BeNull();
+        marca.BannerUrl.Should().Be($"{MarcaPuntoEndpoints.RutaImagenes}{bueno}", "compatibilidad: bannerUrl sigue siendo el primero");
+    }
+
+    [Fact]
+    public void Banners_ElBffNoEntregaMasDeSeis_YSoloElOrigenOrganismoLosLlena()
+    {
+        var items = Enumerable.Range(0, 9).Select(i => Banner(Guid.NewGuid().ToString(), $"Banner {i}")).ToArray();
+
+        MarcaPuntoGrpc.ARespuesta(RespuestaBanners("organismo", "", items), MarcaPuntoRespuesta.OrigenOrganismo).Banners.Should().HaveCount(6);
+        MarcaPuntoGrpc.ARespuesta(RespuestaBanners("web", "", items), MarcaPuntoRespuesta.OrigenWeb).Banners.Should().BeEmpty();
+        MarcaPuntoGrpc.ARespuesta(RespuestaBanners("flit", "", items), MarcaPuntoRespuesta.OrigenOrganismo).Banners.Should().BeEmpty();
     }
 
     private sealed class FachadaMarca : IMarcaPunto

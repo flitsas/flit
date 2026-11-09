@@ -8,7 +8,7 @@
 //   - SuperAdmin: edita todos los cargos del organismo del hub (`transitOfficeId`).
 import { useMemo } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { TarifasTab } from "@/components/admin/plataforma/persona-natural/TarifasTab";
+import { TarifasTab, type TarifasTabProps } from "@/components/admin/plataforma/persona-natural/TarifasTab";
 import type {
   TarifasApi,
   TarifasModo,
@@ -20,7 +20,8 @@ import {
   registrarTarifasOt,
 } from "@/lib/api/admin-ot-portal-tarifas";
 
-export interface OtPreciosSectionProps {
+export interface OtPreciosSectionProps
+  extends Pick<TarifasTabProps, "onCambio" | "solicitudPrecio" | "onSolicitudCerrada"> {
   transitOfficeId: string;
 }
 
@@ -41,7 +42,7 @@ const MODO_SUPERADMIN: TarifasModo = {
     "Cuánto paga la persona por cada trámite de este organismo. Si un trámite no tiene precio propio, rige el valor general. Un cambio queda en el historial y se ve en el portal de inmediato.",
 };
 
-export function OtPreciosSection({ transitOfficeId }: OtPreciosSectionProps) {
+export function OtPreciosSection({ transitOfficeId, ...puente }: OtPreciosSectionProps) {
   const { isSuperAdmin } = usePermissions();
 
   const api = useMemo<TarifasApi>(() => {
@@ -58,5 +59,5 @@ export function OtPreciosSection({ transitOfficeId }: OtPreciosSectionProps) {
     };
   }, [isSuperAdmin, transitOfficeId]);
 
-  return <TarifasTab api={api} modo={isSuperAdmin ? MODO_SUPERADMIN : MODO_OT_ADMIN} />;
+  return <TarifasTab api={api} modo={isSuperAdmin ? MODO_SUPERADMIN : MODO_OT_ADMIN} {...puente} />;
 }

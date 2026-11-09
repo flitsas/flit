@@ -13,7 +13,6 @@ import { ParametrosTab } from "./ParametrosTab";
 import { ReportesTab } from "./ReportesTab";
 import { PnEstadoConfiguracion, usePnResumen, type PasoConfiguracion } from "./PnEstadoConfiguracion";
 import { CobroWebSection } from "./CobroWebSection";
-import { TarifasTab } from "./TarifasTab";
 import { TramitesTab } from "./TramitesTab";
 
 type TabId = "tramites" | "organismos" | "tarifas" | "parametros" | "contenido" | "reportes" | "diseno-web";
@@ -67,12 +66,7 @@ export function PersonaNaturalConsole() {
       id: "tarifas",
       label: "Tarifas",
       title: "Cuánto cuesta cada trámite",
-      render: () => (
-        <div className="flex flex-col gap-8">
-          <CobroWebSection onIrAPrecios={() => irAlPaso("tarifas")} />
-          <TarifasTab onCambio={refrescar} />
-        </div>
-      ),
+      render: () => <CobroWebSection onCambio={refrescar} />,
     },
     {
       id: "parametros",

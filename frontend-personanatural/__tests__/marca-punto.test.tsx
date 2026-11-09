@@ -90,7 +90,7 @@ describe("HU #14379 AC3: sin marca el portal se ve como hoy", () => {
     expect(html).not.toContain("data-marca-punto");
     expect(html).not.toContain("--primary:");
     expect(html).toContain('src="/assets/flit/logo-flit.svg"');
-    expect(html).toContain('alt="FLIT"');
+    expect(html).toContain('alt="FLIT 2.0"');
     expect(html).not.toContain("marca/imagenes");
   });
 });
@@ -141,6 +141,31 @@ describe("HU #14379 AC5: lo publicado se ve en la siguiente carga", () => {
   });
 });
 
+describe("Banners principales del organismo en la entrada del punto", () => {
+  it("con lista de banners pinta esos (con su enlace) y no el banner único", async () => {
+    const marca = marcaAplicable({
+      ...BFF,
+      banners: [
+        { imagenUrl: "/api/v1/persona-natural/marca/imagenes/ban-1", alt: "Movilidad Cali", enlace: "https://example.org/cali" },
+        { imagenUrl: "/api/v1/persona-natural/marca/imagenes/ban-2", alt: "SOAT Cali", enlace: null },
+      ],
+    });
+    render(
+      conQuery(
+        <ProveedorMarca marca={marca}>
+          <CanalPunto codigo="CALI" cliente={clienteFalso()} />
+        </ProveedorMarca>,
+      ),
+    );
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    expect(screen.getByRole("img", { name: "Movilidad Cali" })).toHaveAttribute("src", "/api/v1/persona-natural/marca/imagenes/ban-1");
+    // Las diapositivas no activas van con aria-hidden: se buscan por su alt.
+    expect(screen.getByAltText("SOAT Cali")).toBeInTheDocument();
+    expect(screen.queryByAltText("Banner de Tránsito de Cali")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Movilidad Cali \(se abre en una pestaña nueva\)/ })).toHaveAttribute("href", "https://example.org/cali");
+  });
+});
+
 describe("HU #14379 AC2: la misma marca en todos los pasos del punto", () => {
   it("entrada y wizard usan logo y nombre del organismo; el banner solo en la entrada", async () => {
     render(
@@ -156,8 +181,8 @@ describe("HU #14379 AC2: la misma marca en todos los pasos del punto", () => {
     expect(screen.getByTestId("nombre-marca")).toHaveTextContent("Tránsito de Cali");
     expect(screen.getByRole("img", { name: "Banner de Tránsito de Cali" })).toHaveAttribute("src", "/api/v1/persona-natural/marca/imagenes/banner-9");
 
-    fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "ABC123" } });
-    fireEvent.change(screen.getByLabelText("Número de documento"), { target: { value: "1020456789" } });
+    fireEvent.change(screen.getByLabelText("Placa del vehículo"), { target: { value: "ABC123" } });
+    fireEvent.change(screen.getByLabelText("Número de Cédula"), { target: { value: "1020456789" } });
     fireEvent.click(screen.getByRole("button", { name: "Tipo de Trámite" }));
     fireEvent.click(await screen.findByRole("option", { name: "Traspaso" }));
     fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
@@ -189,7 +214,7 @@ describe("HU #14379 AC4: sin cruce con la web de persona ni con otros organismos
   it("fuera de un punto con marca el logo del portal sigue siendo el de FLIT", async () => {
     render(conQuery(<CanalPunto codigo="OTRO" cliente={clienteFalso()} />));
     await screen.findByRole("button", { name: "Iniciar trámite" });
-    expect(screen.getByRole("img", { name: "FLIT" })).toHaveAttribute("src", "/assets/flit/logo-flit.svg");
+    expect(screen.getByRole("img", { name: "FLIT 2.0" })).toHaveAttribute("src", "/assets/flit/logo-flit.svg");
     expect(screen.queryByTestId("nombre-marca")).not.toBeInTheDocument();
   });
 

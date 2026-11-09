@@ -4,6 +4,7 @@
 // el resto de claves del organismo): así el diagnóstico puede esperar a que haya destino antes de consultar. La monta el
 // diagnóstico del portal web y el paso Requisitos del punto (que no tiene diagnóstico propio).
 import { useState } from "react";
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { useWizard } from "@/components/tramite/ContextoWizard";
 import { OrganismoDestinoField } from "@/components/tramite/OrganismoDestinoField";
 import { Card } from "@/components/tramite/piezas";
@@ -53,11 +54,7 @@ export function TarjetaDestino({ intentoAvance }: { intentoAvance: number }) {
           onElegir={(o) => void elegir(o)}
         />
       </div>
-      {guardando && (
-        <p role="status" className="mt-2 text-xs text-muted-foreground">
-          Guardando secretaría de destino...
-        </p>
-      )}
+      {guardando && <MobilityEstado mensaje="Guardando secretaría de destino..." className="mt-2 text-xs text-muted-foreground" />}
     </Card>
   );
 }

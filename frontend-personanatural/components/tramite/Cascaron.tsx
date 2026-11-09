@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Car, Check, Info, LogOut, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type TouchEvent } from "react";
 import { boton } from "@/components/landing/estilos";
@@ -465,7 +466,7 @@ function ElegirOrganismo({ cliente, solicitud }: { cliente: ClientePortal; solic
       {organismos.isSuccess && (
         <SelectorOrganismo organismos={organismos.data ?? []} valor={null} onChange={(organismo) => asignar.mutate(organismo)} disabled={asignar.isPending} />
       )}
-      {organismos.isPending && <p className="text-xs text-muted-foreground">Cargando organismos…</p>}
+      {organismos.isPending && <MobilityEstado mensaje="Cargando organismos…" className="text-xs text-muted-foreground" />}
       {(organismos.isError || asignar.isError) && <p role="alert" className="mt-1 text-xs text-alert">{mensajeDe(organismos.error ?? asignar.error)}</p>}
     </div>
   );

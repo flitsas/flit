@@ -1,26 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { LogoPortal, useMarca } from "@/components/marca/MarcaPunto";
-import { ASSETS } from "@/lib/assets";
+import { LogoInicio, useMarca } from "@/components/marca/MarcaPunto";
 import { NAVEGACION } from "@/lib/landing/contenido";
 
-export function Cabecera() {
+/** `anclas`: el punto de un organismo solo muestra las secciones que dibuja (sin «Nosotros» ni «Servicios»). */
+export function Cabecera({ anclas }: { anclas?: readonly string[] } = {}) {
   // HU #14403: con la marca de la web publicada se dibuja su logo (y nombre); sin marca, el logo FLIT de siempre.
   const marca = useMarca();
   return (
     <header className="dashboard-header flex min-h-16 flex-wrap py-2 shrink-0 items-center justify-between gap-4 border-b border-border">
-      <Link href="/" aria-label={marca?.nombre ? `${marca.nombre} — Ir al inicio` : "FLIT 2.0 — Ir al inicio"}>
-        {marca ? (
-          <LogoPortal alt="FLIT 2.0" />
-        ) : (
-          // SVG propio: no gana nada con el optimizador de imágenes.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={ASSETS.logo} alt="FLIT 2.0" className="h-9 w-auto" />
-        )}
-      </Link>
+      <LogoInicio alt="FLIT 2.0" etiqueta={marca?.nombre ? `${marca.nombre} — Ir al inicio` : "FLIT 2.0 — Ir al inicio"} />
       <nav aria-label="Secciones" className="b2c-nav flex gap-5 text-sm font-medium">
-        {NAVEGACION.map(({ etiqueta, ancla }) => (
+        {NAVEGACION.filter(({ ancla }) => !anclas || anclas.includes(ancla)).map(({ etiqueta, ancla }) => (
           <a key={ancla} href={`#${ancla}`} className="hover:text-primary">{etiqueta}</a>
         ))}
       </nav>
