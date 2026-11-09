@@ -2,6 +2,15 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { Search } from "lucide-react";
+import { MobilityMini } from "@/components/MobilityLoader";
+
+/** Texto del botón mientras se envía una solicitud de validación: el carrito gira junto al mensaje. */
+const EnviandoConCarro = () => (
+  <span className="inline-flex items-center gap-2">
+    <MobilityMini />
+    Enviando...
+  </span>
+);
 import { useEffect, useRef, useState } from "react";
 import { AddressField } from "@/components/tramite/AddressField";
 import { AlertaIdentidadValidada, nombrePropio } from "@/components/tramite/AlertaIdentidadValidada";
@@ -490,7 +499,10 @@ export function PersonaActor({
             />
             {consulta.isPending && (
               <>
-                <span aria-hidden className="mobility-mini absolute right-3 top-1/2 -translate-y-1/2" />
+                {/* El carro va en un contenedor propio: `.mobility-track` es `position: relative` y pisaría un `absolute` puesto sobre él. */}
+                <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 flex -translate-y-1/2 text-primary">
+                  <MobilityMini />
+                </span>
                 <span role="status" className="sr-only">
                   Consultando el documento...
                 </span>
@@ -591,7 +603,14 @@ export function PersonaActor({
       {puedeReconsultar && (
         <div>
           <Btn tone="secondary" onClick={reconsultar} disabled={bloqueoConsulta.bloqueado || consulta.isPending}>
-            {consulta.isPending ? "Consultando..." : "Volver a consultar"}
+            {consulta.isPending ? (
+              <span className="inline-flex items-center gap-2">
+                <MobilityMini />
+                Consultando...
+              </span>
+            ) : (
+              "Volver a consultar"
+            )}
           </Btn>
         </div>
       )}
@@ -618,18 +637,18 @@ export function PersonaActor({
                   onClick={() => void pedirIdentidad(enCurso(estado) ? "reenviar" : "solicitar")}
                   disabled={ocupado || esperaReenvio.bloqueado || !puedeValidarIdentidad}
                 >
-                  {ocupado ? "Enviando..." : "Reenviar validación"}
+                  {ocupado ? <EnviandoConCarro /> : "Reenviar validación"}
                 </Btn>
               ) : enCurso(estado) ? (
                 <Btn
                   onClick={() => void pedirIdentidad("reenviar")}
                   disabled={ocupado || esperaReenvio.bloqueado || reenviosAgotados || !puedeValidarIdentidad || !fila.runt?.inscrito}
                 >
-                  {ocupado ? "Enviando..." : (textoBotonValidar ?? "Reenviar Validación")}
+                  {ocupado ? <EnviandoConCarro /> : (textoBotonValidar ?? "Reenviar Validación")}
                 </Btn>
               ) : envioAutomatico && estado === "sin_solicitar" ? null : (
                 <Btn onClick={() => void pedirIdentidad("solicitar")} disabled={ocupado || !puedeValidarIdentidad || !fila.runt?.inscrito}>
-                  {ocupado ? "Enviando..." : (textoBotonValidar ?? "Reenviar Validación")}
+                  {ocupado ? <EnviandoConCarro /> : (textoBotonValidar ?? "Reenviar Validación")}
                 </Btn>
               )}
             </span>

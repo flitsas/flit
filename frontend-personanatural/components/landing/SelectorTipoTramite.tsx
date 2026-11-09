@@ -3,6 +3,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import { MobilityMini } from "@/components/MobilityLoader";
 import type { TipoTramite } from "@/lib/api/cliente";
 
 interface Props {
@@ -13,10 +14,12 @@ interface Props {
   disabled?: boolean;
   /** Texto del campo cuando no hay nada elegido (p. ej. «Cargando…»). */
   marcador?: string;
+  /** Mientras se piden las opciones, el carrito gira en lugar de la flecha. */
+  cargando?: boolean;
 }
 
 // Mismo aspecto del TransactionSelect del diseño (radix Select), hecho como listbox accesible: teclado completo, Escape y foco de vuelta.
-export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, valor, onChange, disabled = false, marcador = "Selecciona" }: Props) {
+export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, valor, onChange, disabled = false, marcador = "Selecciona", cargando = false }: Props) {
   const idLista = useId();
   const [abierto, setAbierto] = useState(false);
   const [indice, setIndice] = useState(0);
@@ -104,7 +107,7 @@ export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, v
         className="field flex w-full items-center justify-between gap-2 text-left disabled:opacity-60"
       >
         <span className="truncate">{elegido?.name ?? marcador}</span>
-        <ChevronDown aria-hidden className="h-4 w-4 shrink-0 text-primary" />
+        {cargando ? <MobilityMini className="text-primary" /> : <ChevronDown aria-hidden className="h-4 w-4 shrink-0 text-primary" />}
       </button>
       {abierto && destino && posicion && createPortal(
         <ul
