@@ -755,6 +755,21 @@ export interface EstadoPagoPunto {
   pago?: PagoConfirmadoPunto | null;
 }
 
+export type EstadoCierrePunto = "en_registro" | "registrado" | "rechazado";
+
+/** Cierre del canal OT: ID del trámite y dónde recogerlo (los campos nulos no viajan). */
+export interface CierrePuntoRespuesta {
+  estadoCierre: EstadoCierrePunto;
+  codigoPublico: string;
+  radicadoFlit2?: string | null;
+  motivo?: string | null;
+  valorCop: number;
+  medio: string;
+  medioCaja?: string | null;
+  pagadoEn: string;
+  recogeEn: { organismo: string };
+}
+
 export interface CajaHabilitadaPunto {
   codigoCobro: string;
   habilitadoEn: string;
@@ -1002,6 +1017,11 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
         estado: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("GET", "/punto/pago", undefined, o),
         caja: (o?: OpcionesLlamada) => solicitar<CajaHabilitadaPunto>("POST", "/punto/pago/caja", undefined, o),
         confirmar: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("POST", "/punto/pago/confirmar", undefined, o),
+        /** Cierre del trámite pagado (sesión del trámite). */
+        cierre: (o?: OpcionesLlamada) => solicitar<CierrePuntoRespuesta>("GET", "/punto/pago/cierre", undefined, o),
+        /** Consultar del punto: por código público o radicado de FLIT 2.0, dentro del mismo organismo. */
+        cierrePorCodigo: (codigo: string, o?: OpcionesLlamada) =>
+          solicitar<CierrePuntoRespuesta>("GET", `/punto/pago/cierre/${encodeURIComponent(codigo)}`, undefined, o),
       },
       consultas: {
         vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
