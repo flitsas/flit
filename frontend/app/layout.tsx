@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { isOidcSessionMode } from "@flit/auth/request";
+import { THEME_INIT_SCRIPT } from "@flit/shell/theme-script";
 import { SessionExpiredListener } from "@/components/auth/SessionExpiredListener";
 import { BrandProvider } from "@/components/brand/BrandProvider";
 import { BrandStyle } from "@/components/brand/BrandStyle";
@@ -62,6 +63,8 @@ export default async function RootLayout({
     >
       {/* BrandStyle no renderiza nada en host FLIT (AC7): <head> queda igual que hoy. */}
       <head>
+        {/* Tema claro/oscuro antes de pintar, sin destello (HU #14478; mismo script que el hub). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <BrandStyle brand={brand} />
       </head>
       <body suppressHydrationWarning className="h-full font-sans antialiased">

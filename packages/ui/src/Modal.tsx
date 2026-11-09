@@ -6,7 +6,7 @@ import { X, type LucideIcon } from "lucide-react";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
 // contraste legible en dark). Encapsula el overlay (`fixed inset-0` + backdrop
-// blur), el panel (ancho estándar, bordes por token, `dark:bg-[#0B0F14]` y color
+// blur), el panel (ancho estándar, superficie y bordes por token, tema oscuro incluido, y color
 // de texto base legible en dark) y el encabezado (icono opcional + título + botón
 // cerrar). Reemplaza el boilerplate que cada diálogo repetía con z-index, blur y
 // anchos divergentes. El cuerpo (formulario, campos, botones) se pasa como
@@ -68,7 +68,7 @@ export function Modal({
   title,
   icon: Icon,
   iconBg = "var(--color-flit-brand)",
-  titleClassName = "text-base font-bold text-flit-primary dark:text-white",
+  titleClassName = "text-base font-bold text-flit-primary dark:text-foreground",
   description,
   size = "md",
   zClassName = "z-[100]",
@@ -113,7 +113,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
+      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-[var(--overlay)] px-4 py-6 backdrop-blur-md`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -127,7 +127,7 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-flit-primary shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
+        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-border bg-card p-4 text-flit-primary shadow-[var(--shadow-modal)] sm:p-6 dark:text-foreground ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
           <div className="mb-4 shrink-0">{resolvedHeader}</div>
@@ -155,7 +155,7 @@ export function Modal({
               type="button"
               aria-label="Cerrar"
               onClick={requestClose}
-              className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              className="shrink-0 text-muted-foreground transition hover:text-foreground"
             >
               <X className="h-5 w-5" />
             </button>
@@ -163,7 +163,7 @@ export function Modal({
         )}
         <div className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto ${bodyClassName}`}>{children}</div>
         {footer ? (
-          <div className="mt-4 shrink-0 border-t border-[#DFE5ED] pt-4 dark:border-white/10">{footer}</div>
+          <div className="mt-4 shrink-0 border-t border-border pt-4">{footer}</div>
         ) : null}
       </div>
     </div>,

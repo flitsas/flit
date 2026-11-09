@@ -88,13 +88,12 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label="Cambiar tema"
       aria-pressed={dark}
-      className="flex items-center gap-1 rounded-full px-1 py-1 transition"
-      style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
+      className="flex items-center gap-1 rounded-full border border-border bg-secondary px-1 py-1 text-foreground transition hover:border-flit-brand"
     >
-      <span className={`grid h-7 w-7 place-items-center rounded-full ${dark ? "" : "bg-white"}`}>
+      <span className={`grid h-7 w-7 place-items-center rounded-full ${dark ? "" : "bg-card shadow-[var(--shadow-card)]"}`}>
         <Sun className="h-3.5 w-3.5" aria-hidden="true" />
       </span>
-      <span className={`grid h-7 w-7 place-items-center rounded-full ${dark ? "bg-white" : ""}`}>
+      <span className={`grid h-7 w-7 place-items-center rounded-full ${dark ? "bg-card shadow-[var(--shadow-card)]" : ""}`}>
         <Moon className="h-3.5 w-3.5" aria-hidden="true" />
       </span>
     </button>

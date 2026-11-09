@@ -103,7 +103,7 @@ export function PageNav({
                 className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                 style={
                   p === page
-                    ? { background: 'var(--color-flit-brand)', color: '#fff' }
+                    ? { background: 'var(--gradient-action)', color: '#fff' }
                     : { color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }
                 }
               >

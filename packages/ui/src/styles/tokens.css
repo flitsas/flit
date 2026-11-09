@@ -21,8 +21,10 @@
   --color-flit-brand-ink: var(--flit-brand-ink);
   --color-flit-tech: var(--brand-accent, #00dbd5);
   --color-flit-alert: #ff4e00;
-  --color-flit-bg: var(--brand-bg, #eef5ff);
-  --color-flit-gray: #dfe5ed;
+  /* Fondo y gris de marca con respaldo por tema (pedido de S3, HU #14478): iguales en claro; en oscuro, el fondo y el
+   * borde oscuros del kit. En oscuro BrandStyle anula --brand-bg para que no quede el fondo claro del socio. */
+  --color-flit-bg: var(--brand-bg, var(--flit-bg-tema, #eef5ff));
+  --color-flit-gray: var(--flit-gray-tema, #dfe5ed);
   /* Dock inferior — utilities desde tokens §2D (GUIA-DOCK) alineados a flit_design_tokens */
   --color-nav-app: var(--nav-app-bg);
   --color-nav-ink: var(--nav-texto-fuerte);
@@ -168,11 +170,11 @@
 
   /* Dock inferior flotante — Contrato D (GUIA-DOCK-INFERIOR-FLOTANTE) × flit_design_tokens.
      Solo presentación: no cambia catálogo, permisos ni layout de navegación. */
-  --nav-vidrio: rgba(255, 255, 255, 0.94);
+  --nav-vidrio: var(--card);
   --nav-vidrio-dark: rgba(22, 39, 68, 0.9);
   --nav-panel-bg: #ffffff;
   --nav-borde: #dfe5ed;
-  --nav-app-bg: var(--brand-tint, #eef5ff);
+  --nav-app-bg: var(--brand-tint, #e4edfb);
   --nav-texto: #59677d;
   --nav-texto-fuerte: var(--color-flit-primary);
   --nav-texto-tenue: #667085;
@@ -181,7 +183,7 @@
      Marca Blanca, sus colores. */
   --nav-activo: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--brand-accent, #0f6fa8) 100%);
   --nav-radio-pill: 999px;
-  --nav-radio-panel: 18px;
+  --nav-radio-panel: 20px;
   --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
   --nav-sombra-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
   --nav-sombra-activo: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
@@ -205,6 +207,8 @@
   --shadow-modal: 0 24px 60px rgba(22, 39, 68, 0.18);
   --shadow-button: 0 10px 22px color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
   --placa-fondo: #ffd100;
+  /* Velo detrás de diálogos y paneles (pedido de S3): tinta translúcida. */
+  --overlay: rgba(22, 39, 68, 0.45);
   --placa-texto: #111111;
 
   /* Estados del trámite (lib/tramites/estados.ts, pedido de S1): los 10 tonos de siempre, ahora por token.
@@ -310,9 +314,9 @@
   --table-row-hover: #182846;
 
   /* Dock — superficies y texto en tema oscuro (píldoras inactivas legibles). */
-  --nav-vidrio: var(--nav-vidrio-dark);
+  --nav-vidrio: var(--card);
   --nav-borde: #233452;
-  --nav-app-bg: rgba(255, 255, 255, 0.08);
+  --nav-app-bg: #182846;
   --nav-texto: rgba(255, 255, 255, 0.78);
   --nav-texto-fuerte: #ffffff;
   --nav-texto-tenue: rgba(255, 255, 255, 0.55);
@@ -328,9 +332,12 @@
   --gradient-action: linear-gradient(90deg, #8fb0ff 0%, #6fd0f0 55%, #5fe6e1 100%);
   --surface-sunken: #182846;
   --border-strong: #33486e;
+  --overlay: rgba(4, 9, 20, 0.7);
 
   /* Tinta de títulos en oscuro cuando no hay marca de socio (ver --color-flit-primary). */
   --flit-primary-tema: #e6f0ff;
+  --flit-bg-tema: #0a1326;
+  --flit-gray-tema: #233452;
 
   /* Estados del trámite en oscuro: mismo tono, texto aclarado hasta ≥ 5:1 sobre la tarjeta oscura. */
   --estado-borrador-bg: rgba(94,106,123,0.2);

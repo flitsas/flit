@@ -3,6 +3,13 @@ import type { CSSProperties, ReactNode } from "react";
 /** Tones semánticos del estado (HU #10844). Fuente única de color en globals.css. */
 export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral";
 
+/**
+ * Tonos que acepta el chip: los cinco semánticos más `purple` (integraciones/RUNT) y `tinta`, que llegan con el
+ * UI kit «Diseño Inteligente» (HU #14476). Van aparte de {@link StatusTone} para no romper a quien la usa como
+ * enumeración completa (`Record<StatusTone, …>`).
+ */
+export type StatusBadgeTone = StatusTone | "purple" | "tinta";
+
 export interface StatusBadgeStyle {
   /** @deprecated Usa `tone`. Fondo tintado crudo (rgba translúcido). */
   bg?: string;
@@ -15,7 +22,7 @@ export interface StatusBadgeStyle {
 export interface StatusBadgeProps extends StatusBadgeStyle {
   label: ReactNode;
   /** Tone semántico: aplica la paleta unificada (globals.css), theme-aware. */
-  tone?: StatusTone;
+  tone?: StatusBadgeTone;
   /** Nombre accesible; por defecto usa `label` si es texto. */
   ariaLabel?: string;
   className?: string;
@@ -64,7 +71,7 @@ export function StatusBadge({
       // 12px es el piso tipográfico del sistema; estaba en 11 y es texto que el gestor lee para
       // saber en qué estado va cada fila.
       title={title}
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.2px] ${
         wrap ? "min-w-0 max-w-full justify-center whitespace-normal text-center leading-tight" : "whitespace-nowrap"
       } ${className}`}
       style={style}

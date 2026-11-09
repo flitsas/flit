@@ -92,6 +92,7 @@ describe("HU #10492 — AC3: token de borde = gris de marca en claro y borde pro
   });
 
   it("edge: no regresión — el token de marca --color-flit-gray sigue siendo #DFE5ED", () => {
-    expect(css).toMatch(/--color-flit-gray:\s*#dfe5ed/i);
+    // HU #14478: con respaldo por tema (var(--flit-gray-tema, #dfe5ed)); en claro sigue siendo #DFE5ED.
+    expect(css).toMatch(/--color-flit-gray:\s*(?:var\(--flit-gray-tema,\s*)?#dfe5ed/i);
   });
 });
