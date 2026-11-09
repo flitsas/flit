@@ -15051,7 +15051,7 @@ paths:
               required: [file, alt]
               properties:
                 file: { type: string, format: binary }
-                alt: { type: string, minLength: 1, maxLength: 120, description: Texto alternativo, texto plano sin caracteres de control. }
+                alt: { type: string, minLength: 1, maxLength: 120, description: "Texto alternativo, texto plano sin caracteres de control." }
                 linkUrl: { type: string, maxLength: 500, description: "Opcional; solo http o https." }
       responses:
         "200":
@@ -15157,7 +15157,7 @@ paths:
               required: [file, alt]
               properties:
                 file: { type: string, format: binary }
-                alt: { type: string, minLength: 1, maxLength: 120, description: Texto alternativo obligatorio, texto plano sin caracteres de control. }
+                alt: { type: string, minLength: 1, maxLength: 120, description: "Texto alternativo obligatorio, texto plano sin caracteres de control." }
                 linkUrl: { type: string, maxLength: 500, description: "Opcional; solo http o https." }
       responses:
         "200":
@@ -15835,7 +15835,7 @@ components:
             required: [imageId, imageUrl, alt, linkUrl]
             properties:
               imageId: { type: string, format: uuid }
-              imageUrl: { type: string, description: Ruta de la imagen del borrador (solo con sesión), como bannerUrl. }
+              imageUrl: { type: string, description: "Ruta de la imagen del borrador (solo con sesión), como bannerUrl." }
               alt: { type: string }
               linkUrl: { type: string, nullable: true }
         banners:
