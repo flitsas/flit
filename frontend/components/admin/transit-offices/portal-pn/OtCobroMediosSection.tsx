@@ -241,11 +241,11 @@ export function OtCobroMediosSection({
       .flatMap((m) => m.conceptos)
       .find((c) => c.charge === charge)?.montoCop;
     return monto && monto > 0 ? (
-      <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
+      <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-foreground">
         {cop.format(monto)}
       </span>
     ) : (
-      <span className="text-sm text-[#59677D] dark:text-white/70">Sin monto</span>
+      <span className="text-sm text-muted-foreground">Sin monto</span>
     );
   }
 
@@ -275,17 +275,17 @@ export function OtCobroMediosSection({
             onChange={(next) => moverSwitch(tipo, medio, charge, next)}
           />
           <span className="flex flex-col leading-tight">
-            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary dark:text-white">
+            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary dark:text-foreground">
               {NOMBRE_CORTO[charge]}
               {soloSuperAdmin && <Lock className="h-3 w-3" aria-hidden="true" />}
             </span>
-            <span className="text-xs text-[#59677D] dark:text-white/70">
+            <span className="text-xs text-muted-foreground">
               {c.enabled ? "Se cobra" : "No se cobra"}
             </span>
           </span>
         </div>
         {(sinPermiso || avisoFila) && (
-          <p id={motivoId} className="max-w-[14rem] text-xs text-[#59677D] dark:text-white/70">
+          <p id={motivoId} className="max-w-[14rem] text-xs text-muted-foreground">
             {avisoFila?.mensaje ?? MOTIVO_SIN_PERMISO}
             {avisoFila && (
               <>
@@ -306,14 +306,14 @@ export function OtCobroMediosSection({
 
   function celdaMedio(tipo: TipoCobro, method: MedioPago): ReactNode {
     const medio = tipo.medios.find((m) => m.method === method);
-    if (!medio) return <span className="text-xs text-[#59677D] dark:text-white/70">No aplica</span>;
+    if (!medio) return <span className="text-xs text-muted-foreground">No aplica</span>;
     const total = medio.conceptos.filter((c) => c.enabled).reduce((suma, c) => suma + c.montoCop, 0);
     return (
       <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
         {interruptor(tipo, medio, "TRAMITE")}
         {interruptor(tipo, medio, "GESTION")}
         <div className="flex flex-col items-start gap-1 leading-tight">
-          <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
+          <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-foreground">
             {total > 0 ? cop.format(total) : "Sin cobro"}
           </span>
           {medio.ofrecido ? (
@@ -331,7 +331,7 @@ export function OtCobroMediosSection({
       key: "tipo",
       header: "Trámite",
       render: (t) => (
-        <span className="font-semibold text-flit-primary dark:text-white">{t.nombre}</span>
+        <span className="font-semibold text-flit-primary dark:text-foreground">{t.nombre}</span>
       ),
     },
     { key: "TRAMITE", header: NOMBRE_CONCEPTO.TRAMITE, render: (t) => celdaMonto(t, "TRAMITE") },
@@ -351,27 +351,27 @@ export function OtCobroMediosSection({
     return (
       <div
         key={m.method}
-        className="flex flex-wrap items-center gap-4 rounded-[14px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
+        className="flex flex-wrap items-center gap-4 rounded-[14px] border border-border bg-card p-4"
       >
         <span
           aria-hidden="true"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E6EFFC] text-[#557EFF] dark:bg-white/10 dark:text-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E6EFFC] text-[#557EFF] dark:bg-secondary dark:text-foreground"
         >
           <Icono className="h-5 w-5" />
         </span>
         <div className="min-w-[12rem] flex-1">
-          <p className="text-base font-semibold text-flit-primary dark:text-white">
+          <p className="text-base font-semibold text-flit-primary dark:text-foreground">
             {NOMBRE_MEDIO[m.method]}
           </p>
-          <p className="text-sm text-[#59677D] dark:text-white/70">{AYUDA_MEDIO[m.method]}</p>
-          <p className="text-xs font-semibold text-[#59677D] dark:text-white/70">
+          <p className="text-sm text-muted-foreground">{AYUDA_MEDIO[m.method]}</p>
+          <p className="text-xs font-semibold text-muted-foreground">
             {m.enabled
               ? `${ofrecidos} de ${tipos.length} trámites se ofrecen`
               : "La persona no ve este medio. Sus interruptores se aplican cuando lo enciendas."}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-flit-primary dark:text-white">
+          <span className="text-sm font-semibold text-flit-primary dark:text-foreground">
             {m.enabled ? "Activado" : "Desactivado"}
           </span>
           <CobroSwitch
@@ -426,7 +426,7 @@ export function OtCobroMediosSection({
           {gestionBloqueada && (
             <p
               id={idNotaGestion}
-              className="flex items-center gap-1.5 text-xs text-[#59677D] dark:text-white/70"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
             >
               <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               {MOTIVO_GESTION_SOLO_SUPERADMIN}
@@ -447,7 +447,7 @@ export function OtCobroMediosSection({
             }}
           />
 
-          <p className="text-xs text-[#59677D] dark:text-white/70">
+          <p className="text-xs text-muted-foreground">
             El total de cada medio suma lo que se cobra en él. No incluye el envío ni las transformaciones: se suman cuando aplican.
             {!conPin && " Si un trámite no tiene valor general, se muestra el mayor valor por organismo."}
           </p>

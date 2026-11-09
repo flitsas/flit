@@ -29,7 +29,7 @@ export function PortalPnAccess({ children }: { children: ReactNode }) {
       <div
         role="alert"
         data-testid="portal-pn-sin-acceso"
-        className="flex flex-col items-center gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-6 py-14 text-center dark:border-white/10 dark:bg-[#0B0F14]"
+        className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-14 text-center"
       >
         <ShieldAlert className="h-8 w-8" style={{ color: "#C10000" }} aria-hidden />
         <p className="max-w-md text-sm">{PORTAL_PN_NO_ACCESS_MESSAGE}</p>

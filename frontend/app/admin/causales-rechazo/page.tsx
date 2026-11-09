@@ -14,7 +14,7 @@ export default function AdminRejectionReasonsPage() {
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Causales de rechazo</h1>
-        <p className="text-xs text-[#6B7280] dark:text-white/50">
+        <p className="text-xs text-muted-foreground">
           Lista que ve el revisor del organismo al rechazar un trámite. Puede marcar varias en un
           mismo rechazo, y acompañarlas de una observación en texto libre.
         </p>

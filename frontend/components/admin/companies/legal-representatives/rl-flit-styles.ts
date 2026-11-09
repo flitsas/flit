@@ -81,7 +81,7 @@ export const rlDangerGhostStyle = {
  * pasar el mouse, altura fija. Usar para acciones tipo «Agregar», «Ver», «Editar» dentro de tarjetas.
  */
 export const rlOutlinedActionClass =
-  "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent";
+  "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-card px-4 text-[12px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
 
 export const rlOutlinedActionStyle = {
   borderColor: RL_COLOR.brand,
@@ -97,4 +97,4 @@ export const rlTextDangerActionStyle = {
 } as const;
 
 export const RL_INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 border-[#DDE5F0]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 border-border";

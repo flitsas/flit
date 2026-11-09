@@ -61,7 +61,7 @@ export function TipoTramiteBarrera({
             style={{ transform: tipo.wizardEnabled ? 'translateX(1.5rem)' : 'translateX(0.25rem)' }}
           />
         </button>
-        <span className="text-xs font-medium text-flit-primary dark:text-white">
+        <span className="text-xs font-medium text-flit-primary dark:text-foreground">
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -85,7 +85,7 @@ export function TipoTramiteBarrera({
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
             Todavía no se puede habilitar
           </p>
-          <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-white/80">
+          <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-muted-foreground">
             {impedimentos.map((m) => (
               <li key={m}>{m}</li>
             ))}

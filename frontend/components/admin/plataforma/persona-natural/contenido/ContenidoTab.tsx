@@ -104,13 +104,13 @@ export function ContenidoTab() {
     <div className="flex flex-col gap-8">
       <section
         aria-labelledby="pn-publicacion-titulo"
-        className="flex flex-col gap-3 rounded-[18px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
+        className="flex flex-col gap-3 rounded-[18px] border border-border bg-card p-4"
       >
         <div>
-          <h2 id="pn-publicacion-titulo" className="text-base font-bold text-flit-primary dark:text-white">
+          <h2 id="pn-publicacion-titulo" className="text-base font-bold text-flit-primary dark:text-foreground">
             Publicación del contenido
           </h2>
-          <p className="text-sm text-[#59677D] dark:text-white/78">
+          <p className="text-sm text-muted-foreground">
             Lo que cambies aquí no lo ve el ciudadano hasta que lo publiques. Antes de publicar puedes ver cómo quedaría.
           </p>
         </div>
@@ -131,20 +131,20 @@ export function ContenidoTab() {
                     tone={sinPublicar ? "warning" : "success"}
                   />
                 </div>
-                <p className="text-sm font-semibold text-flit-primary dark:text-white">Lo que ve hoy el ciudadano</p>
-                <span className="text-xs text-[#59677D] dark:text-white/70">
+                <p className="text-sm font-semibold text-flit-primary dark:text-foreground">Lo que ve hoy el ciudadano</p>
+                <span className="text-xs text-muted-foreground">
                   {borrador.versionPublicada === null
                     ? "Todavía no has publicado nada: el portal muestra sus preguntas y banners de siempre (contenido por defecto)."
                     : `Contenido publicado por ti${ultimaPublicacion ? ` el ${formatFechaHora(ultimaPublicacion)}` : ""}, que reemplaza el contenido por defecto del portal.`}
                 </span>
                 {sinPublicar && borrador.versionPublicada !== null && (
-                  <span className="text-xs text-[#59677D] dark:text-white/70">
+                  <span className="text-xs text-muted-foreground">
                     Tus cambios nuevos todavía no se ven: el portal sigue con esa publicación.
                   </span>
                 )}
               </>
             ) : (
-              <span className="text-xs text-[#59677D] dark:text-white/70">Consultando el estado de publicación…</span>
+              <span className="text-xs text-muted-foreground">Consultando el estado de publicación…</span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">

@@ -10,8 +10,8 @@ import type {
 } from '@/lib/api/types/procedure-parametrization';
 
 const CAMPO =
-  'w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
-const ETIQUETA = 'text-xs font-semibold text-flit-primary dark:text-white';
+  'w-full rounded-xl border px-3 py-2 text-xs border-border bg-card text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
+const ETIQUETA = 'text-xs font-semibold text-flit-primary dark:text-foreground';
 
 /**
  * Identidad del tipo: nombre, descripción, familia y si está activo.
@@ -133,7 +133,7 @@ export function TipoTramiteIdentidad({
           onChange={(e) => setActivo(e.target.checked)}
           className="h-3.5 w-3.5 accent-flit-brand"
         />
-        <span className="text-xs text-flit-primary dark:text-white">
+        <span className="text-xs text-flit-primary dark:text-foreground">
           Activo en el catálogo
         </span>
       </label>

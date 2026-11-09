@@ -122,7 +122,7 @@ export function BannerListTable({
           </thead>
           <tbody>
             {items.map((b) => (
-              <tr key={b.id} className={`bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              <tr key={b.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}>
                 <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
                   {b.name}
                 </td>
@@ -135,7 +135,7 @@ export function BannerListTable({
                     onClick={() => setPreview(b)}
                     aria-label={`Ver la imagen completa del banner ${b.name}`}
                     title="Ver imagen completa"
-                    className="flex h-14 w-32 items-center justify-center overflow-hidden rounded-lg border bg-[#F4F7FC] transition hover:opacity-80 dark:bg-white/5"
+                    className="flex h-14 w-32 items-center justify-center overflow-hidden rounded-lg border bg-secondary transition hover:opacity-80"
                     style={{ borderColor: "#DFE5ED" }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- preview binaria vía endpoint público streaming, no un asset estático */}

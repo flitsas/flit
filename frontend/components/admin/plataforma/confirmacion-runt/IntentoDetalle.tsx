@@ -145,10 +145,10 @@ export function IntentoDetalle({
   return (
     <div
       id={`intento-detalle-${row.id}`}
-      className="mx-1 rounded-2xl border border-flit-brand/30 bg-white dark:border-white/10 dark:bg-[#0B0F14]"
+      className="mx-1 rounded-2xl border border-flit-brand/30 bg-card dark:border-border"
       data-testid="intento-detalle"
     >
-      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-[#DFE5ED] px-3 dark:border-white/10">
+      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-border px-3">
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
           const deshabilitada = p.id !== "veredicto" && !row.hasRaw;
@@ -170,7 +170,7 @@ export function IntentoDetalle({
         })}
       </div>
 
-      <div className="p-4 text-xs text-flit-primary dark:text-white">
+      <div className="p-4 text-xs text-flit-primary dark:text-foreground">
         {pestana === "veredicto" && (
           <div className="flex flex-col gap-4">
             {/* El veredicto y su porqué, juntos y arriba: es lo que vino a leer quien abrió la fila. */}
@@ -184,14 +184,14 @@ export function IntentoDetalle({
                   <span className="ml-2 font-mono text-[11px] font-medium tabular-nums opacity-55">intento {row.attemptNo}</span>
                 </span>
                 <p className="text-[13px] leading-relaxed" data-testid="intento-motivo">{row.reasonText}</p>
-                <p className="text-[11px] text-[#59677D] dark:text-white/60">
+                <p className="text-[11px] text-muted-foreground">
                   <span className="font-semibold">Siguiente: </span>
                   {siguiente(row, detalle)}
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-[#DFE5ED] bg-[#F4F7FC] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-border bg-secondary px-4 py-3">
               <Dato label="Consultado" value={formatFechaHora(row.queriedAt)} mono />
               <Dato label="Proveedor" value={proveedorLabel(row.providerKey)} />
               <Dato label="Cómo" value={QUERY_KIND_LABEL[row.queryKind] ?? row.queryKind} />
@@ -247,7 +247,7 @@ export function IntentoDetalle({
                     type="button"
                     onClick={() => setConfirmando(false)}
                     disabled={consultando}
-                    className="rounded-full border border-[#DFE5ED] px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50 dark:border-white/10"
+                    className="rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
                   >
                     Cancelar
                   </button>
@@ -312,7 +312,7 @@ function JsonCrudo({ titulo, valor }: { titulo: string; valor: unknown }) {
         tabIndex={0}
         aria-label={titulo}
         data-testid="intento-raw"
-        className="max-h-72 overflow-auto rounded-lg border border-[#DFE5ED] bg-[#F4F7FC] p-3 font-mono text-[11px] leading-relaxed dark:border-white/10 dark:bg-white/[0.03]"
+        className="max-h-72 overflow-auto rounded-lg border border-border bg-secondary p-3 font-mono text-[11px] leading-relaxed"
       >
         {JSON.stringify(valor, null, 2)}
       </pre>
@@ -366,17 +366,17 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
       {conTitulo ? <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">{titulo}</h4> : null}
       <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_2fr]">
         {/* Secciones de negocio, no un volcado JSON (mismo patrón que Trazabilidad ICT → Datos). */}
-        <section className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <section className="flex flex-col gap-2 rounded-xl border border-border p-3">
           <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">Vehículo en el RUNT</h5>
           {vista.vehiculo.map((d) => (
-            <div key={d.etiqueta} className="flex justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10">
+            <div key={d.etiqueta} className="flex justify-between gap-3 border-b border-border pb-1.5 text-[11px] last:border-b-0 last:pb-0">
               <span className="shrink-0 opacity-55">{d.etiqueta}</span>
               <span className="min-w-0 break-words text-right font-medium">{d.valor ?? "—"}</span>
             </div>
           ))}
         </section>
 
-        <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-border p-3">
           <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">
             Solicitudes ante el RUNT
             <span className="ml-2 font-mono font-medium normal-case tracking-normal opacity-55">{vista.solicitudes.length}</span>
@@ -394,10 +394,10 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
       </div>
 
       {vista.garantias.length > 0 ? (
-        <section className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <section className="flex flex-col gap-2 rounded-xl border border-border p-3">
           <h5 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">Garantías inscritas</h5>
           {vista.garantias.map((g) => (
-            <div key={`${g.acreedor}-${g.fechaInscripcion}`} className="flex flex-wrap justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10">
+            <div key={`${g.acreedor}-${g.fechaInscripcion}`} className="flex flex-wrap justify-between gap-3 border-b border-border pb-1.5 text-[11px] last:border-b-0 last:pb-0">
               <span className="font-medium">{g.acreedor}</span>
               <span className="opacity-70">{g.documento}</span>
               <span className="font-mono tabular-nums">{g.fechaInscripcion}</span>

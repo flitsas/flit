@@ -24,7 +24,7 @@ export interface CompanyFiltersPanelProps {
 const EMPTY: CompanyFilters = {};
 
 const INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-[#DFE5ED]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-border";
 
 export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFiltersPanelProps) {
   const [filters, setFilters] = useState<CompanyFilters>(initialValue);
@@ -46,7 +46,7 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
     <form
       onSubmit={handleSubmit}
       aria-label="Filtros de compañías"
-      className="grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 dark:bg-[#0B0F14]"
+      className="grid grid-cols-1 gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
     >
       <Field label="NIT" htmlFor="filter-nit">
         <input

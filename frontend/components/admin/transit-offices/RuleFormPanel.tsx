@@ -139,7 +139,7 @@ export function RuleFormPanel({
     >
       <div className="space-y-4">
         {editing ? (
-          <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
             Lógica y acción de la regla (solo lectura). Para cambiarlas, crea una regla nueva y
             desactiva esta con el toggle de la tabla.
           </p>

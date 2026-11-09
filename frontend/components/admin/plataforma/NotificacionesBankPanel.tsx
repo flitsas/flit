@@ -223,8 +223,8 @@ export function NotificacionesBankPanel() {
       header: "Plantilla",
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-[#162244] dark:text-white">{row.name}</span>
-          <span className="text-[11px] text-[#59677D] dark:text-white/55">
+          <span className="font-semibold text-foreground">{row.name}</span>
+          <span className="text-[11px] text-muted-foreground">
             {row.triggers.join(" · ")}
           </span>
         </div>
@@ -241,7 +241,7 @@ export function NotificacionesBankPanel() {
       key: "remitente",
       header: "Remitente",
       render: (row) => (
-        <span className="inline-flex items-center gap-1.5 text-xs text-[#162244] dark:text-white/80">
+        <span className="inline-flex items-center gap-1.5 text-xs text-foreground dark:text-muted-foreground">
           <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           {senderText(row)}
         </span>
@@ -254,7 +254,7 @@ export function NotificacionesBankPanel() {
       render: (row) => {
         if (row.kind === "kyverum") {
           return (
-            <span className="inline-flex max-w-[220px] items-start justify-end gap-1.5 text-right text-[11px] text-[#59677D] dark:text-white/55">
+            <span className="inline-flex max-w-[220px] items-start justify-end gap-1.5 text-right text-[11px] text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               El correo lo emite el proveedor; FLIT no controla su contenido.
             </span>
@@ -280,20 +280,20 @@ export function NotificacionesBankPanel() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2
             id="notificaciones-tabla-heading"
-            className="text-sm font-semibold text-[#162244] dark:text-white"
+            className="text-sm font-semibold text-foreground"
           >
             Banco de pruebas ({rows.length})
           </h2>
           <label
             htmlFor="notificaciones-red-marca"
-            className="flex flex-col gap-1 text-xs font-semibold text-[#162244] dark:text-white"
+            className="flex flex-col gap-1 text-xs font-semibold text-foreground"
           >
             Red con marca
             <select
               id="notificaciones-red-marca"
               value={selectedNetworkId}
               onChange={(e) => setSelectedNetworkId(e.target.value)}
-              className="rounded-xl border border-[#DFE5ED] bg-white px-3 py-1.5 text-xs font-medium text-[#162244] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+              className="rounded-xl border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground"
             >
               <option value="">FLIT (sin red)</option>
               {networks.map((n) => (

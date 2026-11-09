@@ -24,14 +24,14 @@ export const OT_META = "#5E6A7B";
 
 /** Tarjeta del prototipo: sin relleno propio —cada bloque decide el suyo—. */
 export const OT_CARD =
-  "rounded-xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:border-white/5 dark:bg-[#0B0F14]";
+  "rounded-xl border border-border bg-card shadow-[0_4px_12px_rgba(0,0,0,0.05)]";
 
 /** Marco de las rejillas de datos: recorta las bandas de encabezado a las esquinas redondeadas. */
 export const OT_MARCO =
-  "overflow-hidden rounded-xl border border-[#DFE5ED] dark:border-white/5";
+  "overflow-hidden rounded-xl border border-border";
 
 /** Banda de encabezado de una rejilla. */
-export const OT_BANDA = "bg-[#EEF5FF] dark:bg-white/5";
+export const OT_BANDA = "bg-secondary";
 
 /**
  * Degradado del CTA de aprobación. El detalle del gestor usa el degradado de marca (azul→cian); el
@@ -51,4 +51,4 @@ export const OT_OVERLAY_STYLE = {
  * desplazable. Con los acordeones abiertos, los botones de decidir siguen a la vista.
  */
 export const OT_SHEET_CLASS =
-  "flex w-[900px] max-w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-[#EEF5FF] p-4 shadow-[0_20px_48px_rgba(15,23,20,0.18)] dark:bg-[#05060A]";
+  "flex w-[900px] max-w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-secondary p-4 shadow-[var(--shadow-modal)]";

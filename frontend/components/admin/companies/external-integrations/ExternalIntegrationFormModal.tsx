@@ -11,11 +11,11 @@ import type { NewExternalIntegration } from "@/lib/api/external-integrations";
 import { externalIntegrationErrorMessage } from "./externalIntegrationErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
+  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
-  "dark:border-white/15 dark:bg-[#162744] dark:text-white";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
-const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
+  "dark:text-foreground";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-foreground";
+const HINT_CLS = "text-xs font-normal text-muted-foreground";
 const DISPLAY_NAME_MAX = 120;
 const PURPOSE_MAX = 300;
 

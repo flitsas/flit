@@ -126,7 +126,7 @@ export function TramitesTab({
           onChange={(v) => onChange({ onlyOwnVehiclesTraspaso: v, onlyOwnVehicles: v })}
         />
         {whitelistSlot && (
-          <div className="rounded-[14px] border border-[#DFE5ED] p-4 lg:col-span-2 dark:border-white/10">{whitelistSlot}</div>
+          <div className="rounded-[14px] border border-border p-4 lg:col-span-2">{whitelistSlot}</div>
         )}
       </FamilySection>
 

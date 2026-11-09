@@ -52,7 +52,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="flex items-start gap-2 rounded-xl border bg-white px-4 py-3 text-xs shadow-lg dark:bg-[#0B0F14]"
+            className="flex items-start gap-2 rounded-xl border bg-card px-4 py-3 text-xs shadow-lg"
             style={{ borderColor: toast.type === "success" ? "var(--color-flit-tech)" : "#FF4E00", minWidth: 260 }}
           >
             {toast.type === "success" ? (

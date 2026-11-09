@@ -159,7 +159,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                 const revoked = item.estado === "revocada";
                 const badge = ESTADO_BADGE[item.estado] ?? ESTADO_BADGE.vencida;
                 return (
-                  <tr key={item.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <tr key={item.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                     <td className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
                       {formatDate(registro)}
                     </td>

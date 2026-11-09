@@ -89,7 +89,7 @@ export function OpcionesMigracion({
           {INSTANCIAS.map((instancia) => (
             <label
               key={instancia}
-              className="flex cursor-pointer items-start gap-2 rounded-lg border border-[#DFE5ED] p-2.5 dark:border-white/10"
+              className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5"
             >
               <input
                 type="checkbox"
@@ -230,7 +230,7 @@ function Modo({
       onClick={onClick}
       disabled={deshabilitado}
       className={`flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-colors disabled:opacity-50 ${
-        activo ? clasesActivo : "border-[#DFE5ED] opacity-70 dark:border-white/10"
+        activo ? clasesActivo : "border-border opacity-70"
       }`}
     >
       <span className="text-sm font-semibold">{titulo}</span>

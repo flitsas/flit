@@ -100,7 +100,7 @@ export function TablaLote({
 
             return (
               <Fragment key={clave}>
-                <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                <tr className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                   <td className="rounded-l-xl border-y border-l px-4 py-3" style={cell}>
                     <input
                       type="checkbox"
@@ -167,7 +167,7 @@ export function TablaLote({
                   <tr>
                     <td
                       colSpan={6}
-                      className="rounded-xl border bg-white p-4 dark:bg-[#0B0F14]"
+                      className="rounded-xl border bg-card p-4"
                       style={cell}
                     >
                       <ReporteMigracion respuesta={fila.respuesta} />
@@ -208,7 +208,7 @@ function motivoDelFallo(fila: FilaLote): string | null {
 }
 
 const TONO: Record<EstadoFila, string> = {
-  pendiente: "bg-black/5 dark:bg-white/10 opacity-70",
+  pendiente: "bg-black/5 dark:bg-secondary opacity-70",
   en_curso: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
   // Deliberadamente NO verde: una simulación no migró nada, y el verde es la señal universal de
   // «hecho». Se parece más a un pendiente informado que a un logro.
@@ -216,7 +216,7 @@ const TONO: Record<EstadoFila, string> = {
   migrado: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   con_avisos: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   fallido: "bg-red-500/10 text-red-600 dark:text-red-400",
-  ya_estaba: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  ya_estaba: "bg-slate-500/10 text-muted-foreground",
 };
 
 function Estado({ estado }: { estado: EstadoFila }) {

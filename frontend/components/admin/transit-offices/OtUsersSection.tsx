@@ -725,7 +725,7 @@ function OtInviteUserDialog({
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="Ej. Laura García"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-ring"
             />
           </OtField>
           <OtField label="Correo electrónico" htmlFor="ot-invite-email">
@@ -736,7 +736,7 @@ function OtInviteUserDialog({
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="laura@transito.gov.co"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-ring"
             />
           </OtField>
           {rolesLoading ? (
@@ -774,7 +774,7 @@ function OtInviteUserDialog({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60 text-foreground"
+              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-secondary disabled:opacity-60 text-foreground"
             >
               Cancelar
             </button>

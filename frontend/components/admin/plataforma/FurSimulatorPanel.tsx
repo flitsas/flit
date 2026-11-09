@@ -97,13 +97,13 @@ function SelectField({
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-sm" htmlFor={id}>
-      <span className="font-semibold text-[#162244] dark:text-white">{label}</span>
+      <span className="font-semibold text-foreground">{label}</span>
       <select
         id={id}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+        className="rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
       >
         {children}
       </select>
@@ -125,14 +125,14 @@ function CheckboxField({
   disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white" htmlFor={id}>
+    <label className="flex items-center gap-2 text-sm text-foreground" htmlFor={id}>
       <input
         id={id}
         type="checkbox"
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-4 w-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-60"
       />
       {label}
     </label>
@@ -159,29 +159,29 @@ function FurResultGuide({
   const guide = buildFurGuide({ code, family, prenda, color, carroceria, combustible, blindaje });
   return (
     <section
-      className="md:col-span-2 rounded-2xl border border-[#DFE5ED] bg-[#F7F9FC] p-4 dark:border-white/10 dark:bg-white/5"
+      className="md:col-span-2 rounded-2xl border border-border bg-[#F7F9FC] p-4 dark:bg-secondary"
       aria-labelledby="fur-guide-title"
       data-testid="fur-result-guide"
     >
-      <h2 id="fur-guide-title" className="text-sm font-semibold text-[#162244] dark:text-white">
+      <h2 id="fur-guide-title" className="text-sm font-semibold text-foreground">
         Qué debería llevar este FUR
       </h2>
-      <p className="mt-1 text-xs text-[#5B6475] dark:text-white/60">
+      <p className="mt-1 text-xs text-muted-foreground">
         Guía previa al PDF. Se actualiza al cambiar tipo, prenda o transformaciones.
       </p>
       <div className="mt-3 grid gap-4 md:grid-cols-2">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#59677D] dark:text-white/55">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Numeral 3 — trámite solicitado
           </h3>
           {guide.casillas.length === 0 ? (
-            <p className="mt-2 text-sm text-[#5B6475] dark:text-white/70">Sin casillas en el numeral 3.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Sin casillas en el numeral 3.</p>
           ) : (
             <ul className="mt-2 flex flex-wrap gap-2">
               {guide.casillas.map((c) => (
                 <li
                   key={c.n}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-sm text-[#162244] ring-1 ring-[#DFE5ED] dark:bg-[#0B0F14] dark:text-white dark:ring-white/15"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm text-foreground ring-1 ring-[#DFE5ED] dark:ring-white/15"
                 >
                   <span className="font-semibold tabular-nums">{c.n}</span>
                   <span>{c.label}</span>
@@ -191,15 +191,15 @@ function FurResultGuide({
           )}
         </div>
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#59677D] dark:text-white/55">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Párrafo 23 — observaciones
           </h3>
           {guide.observaciones.length === 0 ? (
-            <p className="mt-2 text-sm text-[#5B6475] dark:text-white/70">
+            <p className="mt-2 text-sm text-muted-foreground">
               Sin texto automático. Solo lo que el gestor escriba, si aplica.
             </p>
           ) : (
-            <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-sm text-[#162244] dark:text-white">
+            <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-sm text-foreground">
               {guide.observaciones.map((o) => (
                 <li key={o} className="leading-snug">
                   {o}
@@ -210,7 +210,7 @@ function FurResultGuide({
         </div>
       </div>
       {guide.notas.length > 0 ? (
-        <ul className="mt-3 space-y-1 text-xs text-[#5B6475] dark:text-white/60">
+        <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
           {guide.notas.map((n) => (
             <li key={n}>{n}</li>
           ))}
@@ -400,7 +400,7 @@ export function FurSimulatorPanel() {
             ))}
           </SelectField>
 
-          <p className="md:col-span-2 text-sm text-[#5B6475] dark:text-white/70">
+          <p className="md:col-span-2 text-sm text-muted-foreground">
             Casillas = tipo + prenda + transformaciones (reglas numeral 3).
           </p>
 
@@ -431,7 +431,7 @@ export function FurSimulatorPanel() {
               ))}
             </SelectField>
             {!canChooseSeller && (
-              <p className="text-xs text-[#59677D] dark:text-white/55" data-testid="fur-seller-hint">
+              <p className="text-xs text-muted-foreground" data-testid="fur-seller-hint">
                 En este tipo el FUR no pinta vendedor: solo el radicador / comprador.
               </p>
             )}
@@ -495,7 +495,7 @@ export function FurSimulatorPanel() {
                 </optgroup>
               ))}
             </SelectField>
-            <p className="text-xs text-[#59677D] dark:text-white/55" data-testid="fur-vehicle-hint">
+            <p className="text-xs text-muted-foreground" data-testid="fur-vehicle-hint">
               Clases tomadas de tramites.vehicle_classification_fur. El grupo define la plantilla
               (automotor, maquinaria o remolques).
             </p>
@@ -515,8 +515,8 @@ export function FurSimulatorPanel() {
             ))}
           </SelectField>
 
-          <fieldset className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
-            <legend className="px-1 text-sm font-semibold text-[#162244] dark:text-white">
+          <fieldset className="md:col-span-2 flex flex-col gap-2 rounded-xl border border-border p-3">
+            <legend className="px-1 text-sm font-semibold text-foreground">
               Transformaciones
             </legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -575,13 +575,13 @@ export function FurSimulatorPanel() {
               disabled={previewLoading}
               aria-busy={previewLoading}
               onClick={() => void simulateFillAll(btn.format)}
-              className="w-full rounded-xl border border-flit-brand bg-white px-4 py-2.5 text-sm font-semibold text-flit-brand disabled:cursor-not-allowed disabled:opacity-50 dark:border-flit-tech dark:bg-transparent dark:text-flit-tech"
+              className="w-full rounded-xl border border-flit-brand bg-card px-4 py-2.5 text-sm font-semibold text-flit-brand disabled:cursor-not-allowed disabled:opacity-50 dark:border-flit-tech dark:text-flit-tech"
             >
               {btn.label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-[#5B6475] dark:text-white/60">
+        <p className="text-xs text-muted-foreground">
           Cada botón pinta todos los campos del manifiesto de esa plantilla (automotor, maquinaria o
           remolques). Omite familia, tipo de trámite y clase.
         </p>

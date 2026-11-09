@@ -49,7 +49,7 @@ export function ChildCompanyStatusDialog({
       size="sm"
       zClassName="z-[90]"
       title={deactivating ? "Desactivar cliente" : "Activar cliente"}
-      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary dark:text-foreground"
     >
       <p className="mt-2 text-sm opacity-80">
         ¿Confirmas {deactivating ? "desactivar" : "activar"} a <strong>{child.razonSocial}</strong> en tu

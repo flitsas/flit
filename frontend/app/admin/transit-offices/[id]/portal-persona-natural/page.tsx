@@ -34,7 +34,7 @@ function OtPortalPersonaNaturalPageInner() {
     >
       <PortalPnAccess>
         <nav aria-label="Miga de pan" className="mb-3 text-xs" style={{ color: "#162744" }}>
-          <Link href="/" className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]">
+          <Link href="/" className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
             Inicio
           </Link>{" "}
           &gt; <span aria-current="page" className="font-semibold">Portal Persona Natural</span>

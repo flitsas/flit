@@ -136,7 +136,7 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
                 const vista = standaloneDocumentStatusView(row.status);
                 const errores = row.validationErrors ?? [];
                 return (
-                  <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                     <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={{ borderColor: "#DFE5ED" }}>
                       {row.rowNumber ?? "—"}
                     </td>

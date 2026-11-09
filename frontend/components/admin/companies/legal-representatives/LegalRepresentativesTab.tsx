@@ -451,7 +451,7 @@ export function LegalRepresentativesTab({
                         return (
                           <tr
                             key={item.id}
-                            className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                            className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                           >
                             <td
                               className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"

@@ -67,7 +67,7 @@ export function PortalPnPreview({
           // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
           <img src={logoSrc} alt={textos.logoAlt} className="h-6 max-w-[96px] object-contain" />
         ) : (
-          <span className="rounded-md bg-[#EEF5FF] px-1.5 py-0.5 text-xs font-bold text-[#162744]">
+          <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-bold text-foreground">
             FLIT
           </span>
         )}
@@ -80,7 +80,7 @@ export function PortalPnPreview({
         </span>
       </div>
 
-      <div className="space-y-3 bg-[#EEF5FF] p-3">
+      <div className="space-y-3 bg-secondary p-3">
         {!conBanner ? null : bannerSrc ? (
           // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
           <img

@@ -91,13 +91,13 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
           {errores.respuesta && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.respuesta}</span>}
         </label>
         {(pregunta.trim() || respuesta.trim()) && (
-          <div className="rounded-xl border border-[#DFE5ED] bg-[#F4F8FF] p-3 dark:border-white/10 dark:bg-white/5" aria-label="Así se verá en el portal" role="group">
-            <p className="mb-1 text-xs font-semibold text-[#59677D] dark:text-white/70">Así se verá en el portal</p>
-            <p className="text-sm font-semibold text-flit-primary dark:text-white">{pregunta.trim() || "Tu pregunta"}</p>
-            <p className="mt-1 whitespace-pre-line text-sm text-[#59677D] dark:text-white/78">{respuesta.trim() || "Tu respuesta"}</p>
+          <div className="rounded-xl border border-border bg-secondary p-3" aria-label="Así se verá en el portal" role="group">
+            <p className="mb-1 text-xs font-semibold text-muted-foreground">Así se verá en el portal</p>
+            <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{pregunta.trim() || "Tu pregunta"}</p>
+            <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{respuesta.trim() || "Tu respuesta"}</p>
           </div>
         )}
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-foreground">
           <input
             type="checkbox"
             checked={activa}

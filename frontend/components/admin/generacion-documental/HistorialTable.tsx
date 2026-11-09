@@ -115,7 +115,7 @@ export function HistorialTable({
             {rows.map((row) => {
               const statusView = standaloneDocumentStatusView(row.status);
               return (
-                <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                 <td className="border-y px-4 py-3 rounded-l-xl border-l font-medium" style={{ borderColor: "#DFE5ED" }}>
                   {generacionDocumentalTypeLabel(row.documentType)}
                 </td>

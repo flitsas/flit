@@ -170,7 +170,7 @@ function Titular({
 
 function Bloque({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+    <section className="rounded-xl border border-border p-3">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">{titulo}</h3>
       {children}
     </section>
@@ -206,9 +206,9 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
  */
 const TONO_ESTADO: Record<string, string> = {
   Simulated: "bg-flit-brand/10 text-flit-brand dark:text-[#8AA6FF]",
-  Skipped: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
-  NotMigrated: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
-  NoAttachments: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  Skipped: "bg-slate-500/10 text-muted-foreground",
+  NotMigrated: "bg-slate-500/10 text-muted-foreground",
+  NoAttachments: "bg-slate-500/10 text-muted-foreground",
   NotFoundInV1: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
 };
 

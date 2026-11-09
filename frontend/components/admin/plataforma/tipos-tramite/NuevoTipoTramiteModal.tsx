@@ -10,7 +10,7 @@ import type {
 } from '@/lib/api/types/procedure-parametrization';
 
 const CAMPO =
-  'w-full rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
+  'w-full rounded-xl border px-3 py-2 text-xs border-border bg-card text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
 
 /**
  * Alta de un tipo de trámite.
@@ -67,8 +67,8 @@ export function NuevoTipoTramiteModal({
       aria-modal="true"
       aria-label="Nuevo tipo de trámite"
     >
-      <div className="w-full max-w-lg rounded-2xl border bg-white p-5 border-[#DFE5ED] dark:border-white/10 dark:bg-[#0B0F14]">
-        <h2 className="text-base font-semibold text-flit-primary dark:text-white">
+      <div className="w-full max-w-lg rounded-2xl border bg-card p-5 border-border">
+        <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">
           Nuevo tipo de trámite
         </h2>
         <p className="mt-1 text-xs opacity-70">
@@ -78,7 +78,7 @@ export function NuevoTipoTramiteModal({
 
         <div className="mt-4 flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-white">Código</span>
+            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">Código</span>
             <input
               className={`${CAMPO} font-mono`}
               value={code}
@@ -103,7 +103,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-white">Nombre</span>
+            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">Nombre</span>
             <input
               className={CAMPO}
               value={name}
@@ -117,7 +117,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-white">Familia</span>
+            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">Familia</span>
             <select
               className={CAMPO}
               value={family}
@@ -133,7 +133,7 @@ export function NuevoTipoTramiteModal({
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-flit-primary dark:text-white">
+            <span className="text-xs font-semibold text-flit-primary dark:text-foreground">
               Descripción <span className="font-normal opacity-60">(opcional)</span>
             </span>
             <input
@@ -165,7 +165,7 @@ export function NuevoTipoTramiteModal({
           <button
             type="button"
             onClick={onCerrar}
-            className="rounded-xl border px-4 py-2 text-xs font-medium border-[#DFE5ED] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="rounded-xl border px-4 py-2 text-xs font-medium border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cancelar
           </button>

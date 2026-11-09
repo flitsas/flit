@@ -103,13 +103,13 @@ export function MandatarioBajaDialog({
       icon={AlertTriangle}
       iconBg={conImpacto || eliminar ? "#FF4E00" : "#F9AC00"}
       title={titulo}
-      titleClassName="text-base font-bold text-flit-primary dark:text-white"
+      titleClassName="text-base font-bold text-flit-primary dark:text-foreground"
       size="md"
       zClassName="z-[110]"
     >
       <div className="space-y-3 text-xs" data-testid="mandatario-baja-dialog">
         {carga.fase === "cargando" && (
-          <p role="status" className="text-[#59677D] dark:text-white/65">
+          <p role="status" className="text-muted-foreground">
             Revisando qué afecta…
           </p>
         )}
@@ -151,7 +151,7 @@ export function MandatarioBajaDialog({
             role="note"
             data-testid="mandatario-baja-impacto"
           >
-            <p className="font-semibold text-flit-primary dark:text-white">
+            <p className="font-semibold text-flit-primary dark:text-foreground">
               {eliminar ? "Eliminar" : "Desactivar"} a {signer.fullName} tiene estos efectos:
             </p>
             {impact.onlyActiveFor.length > 0 && (

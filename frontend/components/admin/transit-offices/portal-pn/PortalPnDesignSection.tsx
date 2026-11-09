@@ -265,7 +265,7 @@ export function PortalPnDesignSection({
   return (
     <div className="flex flex-col gap-6">
       <section
-        className="rounded-2xl border bg-white p-4 dark:bg-[#162744]"
+        className="rounded-2xl border bg-card p-4"
         aria-labelledby="portal-pn-design-title"
       >
         <div className="mb-3">
@@ -304,7 +304,7 @@ export function PortalPnDesignSection({
                     onChange={(e) => setDraftName(e.target.value)}
                     maxLength={40}
                     placeholder={textos.nombrePlaceholder}
-                    className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] w-full max-w-md rounded-lg border px-3 py-2 text-sm"
+                    className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring w-full max-w-md rounded-lg border px-3 py-2 text-sm"
                     style={{ borderColor: "#DFE5ED" }}
                   />
                 </div>
@@ -398,7 +398,7 @@ export function PortalPnDesignSection({
                     <button
                       type="button"
                       onClick={() => void load()}
-                      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] rounded-lg border px-3 py-1 font-semibold"
+                      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-lg border px-3 py-1 font-semibold"
                       style={{ borderColor: "#C10000" }}
                     >
                       Recargar la marca
@@ -422,7 +422,7 @@ export function PortalPnDesignSection({
                   type="button"
                   onClick={() => void handleSaveDraft()}
                   disabled={busy}
-                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "#162744" }}
                 >
                   <Save className="h-3.5 w-3.5" aria-hidden />{" "}
@@ -432,7 +432,7 @@ export function PortalPnDesignSection({
                   type="button"
                   onClick={() => setPublishOpen(true)}
                   disabled={!canPublish || busy}
-                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "#557EFF" }}
                 >
                   <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
@@ -442,7 +442,7 @@ export function PortalPnDesignSection({
                     type="button"
                     onClick={() => setRetireOpen(true)}
                     disabled={busy}
-                    className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] ml-auto inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                    className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ml-auto inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ borderColor: "#C10000", color: "#C10000" }}
                   >
                     <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar marca publicada
@@ -477,7 +477,7 @@ export function PortalPnDesignSection({
               type="button"
               onClick={() => setRetireOpen(false)}
               disabled={retiring}
-              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] flex-1 rounded-full border py-2.5 text-sm font-medium disabled:opacity-60"
+              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring flex-1 rounded-full border py-2.5 text-sm font-medium disabled:opacity-60"
             >
               Cancelar
             </button>
@@ -485,7 +485,7 @@ export function PortalPnDesignSection({
               type="button"
               onClick={() => void handleRetire()}
               disabled={retiring}
-              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               style={{ background: "#C10000" }}
             >
               {retiring ? "Retirando…" : "Retirar"}
@@ -560,7 +560,7 @@ function ImageField({
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
           style={{ borderColor: "#C10000", color: "#C10000" }}
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />

@@ -35,7 +35,7 @@ import {
 } from "@/lib/plataforma/mandato-variables";
 
 const FIELD =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50";
 const BTN_OUTLINE =
   "rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 const BTN_PRIMARY =
@@ -252,7 +252,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
               role="status"
               aria-live="polite"
               data-testid="mandato-formato-loading"
-              className="text-[#59677D]"
+              className="text-muted-foreground"
             >
               Cargando el formato…
             </p>
@@ -271,7 +271,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-1.5" htmlFor={`${uid}-nombre`}>
-                  <span className="font-semibold text-[#162244]">Nombre del formato</span>
+                  <span className="font-semibold text-foreground">Nombre del formato</span>
                   <input
                     id={`${uid}-nombre`}
                     value={name}
@@ -284,7 +284,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   />
                 </label>
                 <label className="block space-y-1.5" htmlFor={`${uid}-tipo`}>
-                  <span className="font-semibold text-[#162244]">Tipo de mandato</span>
+                  <span className="font-semibold text-foreground">Tipo de mandato</span>
                   <select
                     id={`${uid}-tipo`}
                     value={tipo}
@@ -301,16 +301,16 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   </select>
                 </label>
               </div>
-              <p className="text-[11px] text-[#59677D]">
+              <p className="text-[11px] text-muted-foreground">
                 El tipo es el valor por defecto del formato; la regla por compañía y organismo sigue
                 mandando sobre él.
               </p>
 
               {redaction ? (
                 <section aria-labelledby={`${uid}-plantilla`} className="space-y-2">
-                  <h3 id={`${uid}-plantilla`} className="font-semibold text-[#162244]">
+                  <h3 id={`${uid}-plantilla`} className="font-semibold text-foreground">
                     Plantilla del contrato{" "}
-                    <span className="font-normal text-[#59677D]">
+                    <span className="font-normal text-muted-foreground">
                       {format.currentVersion > 0
                         ? `(versión vigente ${format.currentVersion})`
                         : "(redacción de fábrica)"}
@@ -330,7 +330,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                         onClick={() => insertVariable(v.name)}
                         disabled={busy}
                         aria-label={`Insertar variable ${v.name}: ${v.description}`}
-                        className="rounded-full border border-flit-brand/40 px-2.5 py-1 font-mono text-[11px] text-[#162244] hover:bg-flit-brand/10 disabled:opacity-50 dark:text-white"
+                        className="rounded-full border border-flit-brand/40 px-2.5 py-1 font-mono text-[11px] text-foreground hover:bg-flit-brand/10 disabled:opacity-50"
                       >
                         {`{{${v.name}}}`}
                       </button>
@@ -355,7 +355,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   </label>
                 </section>
               ) : (
-                <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-[#59677D]" role="note">
+                <p className="rounded-xl border border-border px-3 py-2 text-muted-foreground" role="note">
                   Este formato no tiene plantilla propia: usa la redacción de cada organismo. Aquí solo
                   puedes cambiar su nombre y su tipo de mandato.
                 </p>
@@ -429,12 +429,12 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                       />
                     </div>
                   ) : (
-                    <p className="text-[#59677D]">Este formato aún no tiene versiones publicadas.</p>
+                    <p className="text-muted-foreground">Este formato aún no tiene versiones publicadas.</p>
                   )
                 ) : null}
                 {oldVersion ? (
                   <div className="space-y-1" data-testid="mandato-formato-version-texto">
-                    <p className="font-semibold text-[#162244]">
+                    <p className="font-semibold text-foreground">
                       Texto de la versión {oldVersion.number} (solo lectura; no se restaura desde aquí)
                     </p>
                     <textarea

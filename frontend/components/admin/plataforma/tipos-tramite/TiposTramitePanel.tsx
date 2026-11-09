@@ -97,7 +97,7 @@ export function TiposTramitePanel() {
         <button
           type="button"
           onClick={() => void recargar()}
-          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold border-[#DFE5ED] dark:border-white/10"
+          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold border-border"
           style={{ color: 'var(--color-flit-brand)' }}
         >
           <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -120,7 +120,7 @@ export function TiposTramitePanel() {
             onChange={(e) => setFiltro(e.target.value)}
             placeholder="Buscar por nombre, código o familia…"
             aria-label="Buscar tipo de trámite"
-            className="w-full max-w-xs rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="w-full max-w-xs rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           />
           <button
             type="button"
@@ -152,7 +152,7 @@ export function TiposTramitePanel() {
                 >
                   <span className="flex items-start justify-between gap-2">
                     <span className="min-w-0">
-                      <span className="block text-xs font-semibold text-flit-primary dark:text-white">
+                      <span className="block text-xs font-semibold text-flit-primary dark:text-foreground">
                         {t.name}
                       </span>
                       <span className="block text-xs opacity-55">{familiaLabel(t.family)}</span>
@@ -180,16 +180,16 @@ export function TiposTramitePanel() {
           )}
         </ul>
 
-        <div className="rounded-2xl border p-4 border-[#DFE5ED] dark:border-white/10">
+        <div className="rounded-2xl border p-4 border-border">
           {!tipo ? (
             <p className="py-10 text-center text-xs opacity-60">
               Elige un tipo de la lista para ver y ajustar su configuración.
             </p>
           ) : (
             <div className="flex flex-col gap-4">
-              <header className="flex flex-col gap-3 border-b pb-4 border-[#DFE5ED] dark:border-white/10">
+              <header className="flex flex-col gap-3 border-b pb-4 border-border">
                 <div>
-                  <h2 className="text-base font-semibold text-flit-primary dark:text-white">
+                  <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">
                     {tipo.name}
                   </h2>
                   <code className="text-xs opacity-55">{tipo.code}</code>
@@ -204,7 +204,7 @@ export function TiposTramitePanel() {
                         setConfirmarRetiro(true);
                         setErrorRetiro(null);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold border-[#DFE5ED] transition hover:border-[#C2410C] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                      className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold border-border transition hover:border-[#C2410C] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                       style={{ color: '#C2410C' }}
                     >
                       <Archive className="h-3.5 w-3.5" aria-hidden="true" />
@@ -333,8 +333,8 @@ function ConfirmarRetiro({
       aria-modal="true"
       aria-label="Retirar tipo de trámite"
     >
-      <div className="w-full max-w-md rounded-2xl border bg-white p-5 border-[#DFE5ED] dark:border-white/10 dark:bg-[#0B0F14]">
-        <h2 className="text-base font-semibold text-flit-primary dark:text-white">
+      <div className="w-full max-w-md rounded-2xl border bg-card p-5 border-border">
+        <h2 className="text-base font-semibold text-flit-primary dark:text-foreground">
           Retirar «{nombre}» del catálogo
         </h2>
         <p className="mt-2 text-xs leading-relaxed opacity-80">
@@ -345,7 +345,7 @@ function ConfirmarRetiro({
           <button
             type="button"
             onClick={onCancelar}
-            className="rounded-xl border px-4 py-2 text-xs font-medium border-[#DFE5ED] dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="rounded-xl border px-4 py-2 text-xs font-medium border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cancelar
           </button>
@@ -383,7 +383,7 @@ function Validacion({ detalle }: { detalle: { validacion: { isValid: boolean; er
         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
         La parametrización tiene {v.errors.length} {v.errors.length === 1 ? 'problema' : 'problemas'}
       </p>
-      <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-white/80">
+      <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-muted-foreground">
         {v.errors.map((e) => (
           <li key={e.message}>{e.message}</li>
         ))}

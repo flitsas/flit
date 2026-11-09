@@ -46,10 +46,10 @@ export function ToggleSwitch({
   onChange,
 }: ToggleSwitchProps) {
   return (
-    <div className="flex h-full min-h-[88px] flex-col gap-1.5 rounded-[14px] border border-[#DFE5ED] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0B0F14]">
+    <div className="flex h-full min-h-[88px] flex-col gap-1.5 rounded-[14px] border border-border bg-card px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <label htmlFor={id} className="cursor-pointer py-1 text-sm font-semibold text-flit-primary dark:text-white">
+          <label htmlFor={id} className="cursor-pointer py-1 text-sm font-semibold text-flit-primary dark:text-foreground">
             {label}
           </label>
           {badge}

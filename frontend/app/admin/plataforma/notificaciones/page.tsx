@@ -32,7 +32,7 @@ export default function AdminNotificacionesPage() {
           subtitle="Banco de pruebas de plantillas de correo por canal y compañía. Solo SuperAdmin · lectura."
         />
 
-        <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
           <NotificacionesBankPanel />
         </div>
       </div>

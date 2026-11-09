@@ -200,7 +200,7 @@ export function MensajesMuertosPanel() {
               role="tab"
               aria-selected={cola === c}
               onClick={() => cambiarCola(c)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${cola === c ? "bg-white text-flit-primary shadow-sm" : "text-[#557089]"}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${cola === c ? "bg-card text-flit-primary shadow-sm" : "text-muted-foreground"}`}
             >
               {etiqueta}
             </button>

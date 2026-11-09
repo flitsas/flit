@@ -18,7 +18,7 @@ import {
 } from "@/lib/api/admin-ot-portal-dominio";
 
 const FOCO =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /**
  * Dominios propios del portal Persona Natural del organismo (Épica #14297, HU #14385). Hasta 10 por organismo, todos
@@ -70,7 +70,7 @@ export function OtPortalDomainSection({ transitOfficeId }: { transitOfficeId: st
 
   return (
     <section
-      className="mt-6 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
+      className="mt-6 rounded-2xl border bg-card p-4"
       aria-labelledby="portal-domain-title"
     >
       <div className="mb-3">

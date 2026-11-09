@@ -30,7 +30,7 @@ export function DocumentAssociationList({
         return (
         <li
           key={item.id}
-          className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+          className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
         >
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"

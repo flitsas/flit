@@ -79,12 +79,12 @@ export function NotificacionBuzonPruebasSection({
   return (
     <section
       aria-labelledby="notificaciones-buzon-heading"
-      className="flex flex-col gap-3 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
       data-testid="notificaciones-buzon-pruebas"
     >
       <h2
         id="notificaciones-buzon-heading"
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#162244] dark:text-white"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground"
       >
         <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
         Buzón de pruebas
@@ -96,7 +96,7 @@ export function NotificacionBuzonPruebasSection({
           aria-busy="true"
           aria-live="polite"
           data-testid="notificaciones-buzon-cargando"
-          className="h-10 w-full animate-pulse rounded-xl border bg-[#F4F7FC] dark:bg-white/5"
+          className="h-10 w-full animate-pulse rounded-xl border bg-secondary"
         >
           <span className="sr-only">Cargando buzón de pruebas…</span>
         </div>
@@ -123,7 +123,7 @@ export function NotificacionBuzonPruebasSection({
           <form onSubmit={handleSubmit} className="flex flex-col gap-2" noValidate>
             <label
               htmlFor="notificaciones-buzon-email"
-              className="text-[11px] font-semibold text-[#59677D] dark:text-white/55"
+              className="text-[11px] font-semibold text-muted-foreground"
             >
               Correo del buzón de pruebas
             </label>
@@ -136,7 +136,7 @@ export function NotificacionBuzonPruebasSection({
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={saving}
                 placeholder="pruebas@flit.com.co"
-                className="flex-1 rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
               />
               <div className="flex gap-2">
                 <button
@@ -150,7 +150,7 @@ export function NotificacionBuzonPruebasSection({
                   type="button"
                   onClick={cancelEditing}
                   disabled={saving}
-                  className="rounded-full border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-[#59677D] disabled:opacity-50 dark:border-white/10 dark:text-white/70"
+                  className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -166,9 +166,9 @@ export function NotificacionBuzonPruebasSection({
         ) : (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {mailbox?.isConfigured && mailbox.testRecipientEmail ? (
-              <p className="text-sm text-[#162244] dark:text-white">
+              <p className="text-sm text-foreground">
                 <span className="font-semibold">{mailbox.testRecipientEmail}</span>
-                <span className="ml-2 text-[11px] text-[#59677D] dark:text-white/55">
+                <span className="ml-2 text-[11px] text-muted-foreground">
                   {mailbox.lastTestSentAt
                     ? `Última prueba enviada: ${formatFechaHora(new Date(mailbox.lastTestSentAt))}`
                     : "Sin envíos de prueba todavía."}
@@ -187,7 +187,7 @@ export function NotificacionBuzonPruebasSection({
             <button
               type="button"
               onClick={startEditing}
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[#DFE5ED] px-3 py-1.5 text-[11px] font-semibold text-[#162244] dark:border-white/10 dark:text-white"
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground"
             >
               <Pencil className="h-3 w-3" aria-hidden="true" />
               {mailbox?.isConfigured ? "Modificar" : "Configurar"}

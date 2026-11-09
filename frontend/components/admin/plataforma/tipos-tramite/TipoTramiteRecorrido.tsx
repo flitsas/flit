@@ -29,7 +29,7 @@ const TIPOS_SECCION: { valor: WizardSectionType; etiqueta: string }[] = [
 ];
 
 const CAMPO =
-  'rounded-lg border px-2 py-1.5 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
+  'rounded-lg border px-2 py-1.5 text-xs border-border bg-card text-flit-primary dark:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
 
 export function TipoTramiteRecorrido({
   procedureTypeId,
@@ -124,7 +124,7 @@ export function TipoTramiteRecorrido({
         {borrador.map((p, i) => (
           <li
             key={`${p.id ?? p.code}-${i}`}
-            className="grid items-center gap-2 rounded-xl border px-3 py-2.5 border-[#DFE5ED] dark:border-white/10 sm:grid-cols-[2rem_1fr_1fr_1.4fr_auto]"
+            className="grid items-center gap-2 rounded-xl border px-3 py-2.5 border-border sm:grid-cols-[2rem_1fr_1fr_1.4fr_auto]"
           >
             <span className="text-xs font-semibold tabular-nums opacity-60">{i + 1}</span>
 
@@ -225,7 +225,7 @@ function IconoBoton({
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className="rounded-lg border p-1.5 border-[#DFE5ED] transition hover:bg-flit-brand/10 disabled:opacity-30 dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+      className="rounded-lg border p-1.5 border-border transition hover:bg-flit-brand/10 disabled:opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
       style={{ color: 'var(--color-flit-brand)' }}
     >
       {children}

@@ -79,7 +79,7 @@ export function DocumentTypeListTable({
           {items.map((d) => {
             const activo = d.estado === "activo";
             return (
-              <tr key={d.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              <tr key={d.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                 <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
                   {d.codigo}
                 </td>

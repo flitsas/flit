@@ -90,7 +90,7 @@ export function SignatureVaultEditPanel({
   return (
     <Modal open onClose={onClose} title="Corregir firma" size="md">
       <div className="space-y-3 text-xs">
-        <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs opacity-80">
+        <p className="rounded-xl border border-border px-3 py-2 text-xs opacity-80">
           Se corrigen los datos de captura. El documento ({item.documentType} {item.documentNumber}) y
           la imagen de la firma no se editan: para cambiarlos, registra una firma nueva de la persona,
           que sustituye a esta y la conserva como histórico.

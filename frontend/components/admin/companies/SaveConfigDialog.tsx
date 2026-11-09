@@ -55,7 +55,7 @@ export function SaveConfigDialog({
       icon={phase === "success" ? CheckCircle2 : undefined}
       iconBg="var(--color-flit-tech)"
       title={phase === "success" ? "Cambios guardados" : "Confirmar guardado"}
-      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary dark:text-foreground"
     >
         {company && <CompanyCallout company={company} />}
         {phase === "success" ? (
@@ -128,7 +128,7 @@ function CompanyCallout({ company }: { company: { razonSocial: string; nit: stri
       data-testid="save-config-company"
     >
       <p className="text-xs font-semibold uppercase tracking-wider opacity-60">Compañía</p>
-      <p className="text-sm font-bold text-flit-primary dark:text-white">{company.razonSocial}</p>
+      <p className="text-sm font-bold text-flit-primary dark:text-foreground">{company.razonSocial}</p>
       <p className="text-xs opacity-70">NIT {company.nit}</p>
     </div>
   );

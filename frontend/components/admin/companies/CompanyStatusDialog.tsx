@@ -41,7 +41,7 @@ export function CompanyStatusDialog({ company, onClose, onConfirmed }: CompanySt
       size="sm"
       zClassName="z-[90]"
       title={deactivating ? "Desactivar compañía" : "Activar compañía"}
-      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary dark:text-foreground"
     >
         <p className="mt-2 text-sm opacity-80">
           ¿Confirmas {deactivating ? "desactivar" : "activar"} la compañía{" "}

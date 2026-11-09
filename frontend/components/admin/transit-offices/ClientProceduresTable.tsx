@@ -186,9 +186,9 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-flit-primary shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-xl dark:text-foreground"
         >
-          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
           </p>
           <div className="p-1.5">
@@ -216,7 +216,7 @@ function SortMenu({
                         className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                           seleccionada
                             ? "border-[#2C6BED] bg-[#2C6BED] text-white"
-                            : "border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                            : "border-border text-muted-foreground hover:bg-secondary"
                         }`}
                       >
                         <Flecha className="h-3 w-3" aria-hidden="true" />
@@ -601,7 +601,7 @@ export function ClientProceduresTable({
             <tr
               key={row.id}
               // Bug #13055 — tabla homologada con el modelo de trámites.
-              className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
+              className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
               onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
               // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
               // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
@@ -622,7 +622,7 @@ export function ClientProceduresTable({
             >
               {conCasillas && onToggle ? (
                 // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
-                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-white/10">
+                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-border">
                   <CasillaFilaLote
                     radicado={row.referenceNumber}
                     seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}

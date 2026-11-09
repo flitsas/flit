@@ -311,7 +311,7 @@ export function CompanyMandatarioForm({
   };
 
   const inputClass =
-    "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 dark:bg-[#0B0F14]";
+    "w-full rounded-xl border bg-card px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30";
 
   // Pasos visibles, numerados de corrido (con Persona jurídica o Formato en blanco hay menos).
   let numero = 0;
@@ -346,8 +346,8 @@ export function CompanyMandatarioForm({
               {error}
             </p>
           )}
-          <p className="text-xs leading-snug text-[#59677D] dark:text-white/65" data-testid="mandatario-resumen">
-            <span className="font-semibold text-flit-primary dark:text-white">Al guardar: </span>
+          <p className="text-xs leading-snug text-muted-foreground" data-testid="mandatario-resumen">
+            <span className="font-semibold text-flit-primary dark:text-foreground">Al guardar: </span>
             {resumen.join(" · ")}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -355,7 +355,7 @@ export function CompanyMandatarioForm({
               type="button"
               onClick={onCancel}
               disabled={saving}
-              className="rounded-full border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-primary disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-white"
+              className="rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-flit-primary disabled:opacity-50 dark:text-foreground"
             >
               Cancelar
             </button>
@@ -574,7 +574,7 @@ export function CompanyMandatarioForm({
           <Paso numero={siguiente()} titulo="Vigencia" id="mandatario-paso-vigencia">
             <div className="space-y-3">
               <div
-                className="inline-flex rounded-full border border-[#DFE5ED] bg-white p-0.5 dark:bg-transparent"
+                className="inline-flex rounded-full border border-border bg-card p-0.5"
                 role="radiogroup"
                 aria-label="Vigencia"
               >
@@ -636,10 +636,10 @@ export function CompanyMandatarioForm({
             <fieldset>
               <legend className="mb-1.5 block text-xs font-semibold">Organismos de tránsito</legend>
               {isHub ? (
-                <p className="text-xs font-semibold text-flit-primary dark:text-white" data-testid="mandatario-organismo-fijo">
+                <p className="text-xs font-semibold text-flit-primary dark:text-foreground" data-testid="mandatario-organismo-fijo">
                   {visibleOffices[0]?.name ?? "Este organismo"}
                   {visibleOffices[0]?.code ? (
-                    <span className="ml-1 font-normal text-[#59677D]">· {visibleOffices[0].code}</span>
+                    <span className="ml-1 font-normal text-muted-foreground">· {visibleOffices[0].code}</span>
                   ) : null}
                 </p>
               ) : (
@@ -711,9 +711,9 @@ function Paso({
   return (
     <section
       aria-labelledby={`${id}-titulo`}
-      className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/15 dark:bg-[#162744]"
+      className="rounded-2xl border border-border bg-card p-4"
     >
-      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
+      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-foreground">
         <span
           aria-hidden="true"
           className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
@@ -764,7 +764,7 @@ function TarjetaOpcion({
       <span className="mt-0.5 shrink-0 text-flit-brand">{icono}</span>
       <span className="min-w-0">
         <span className="block text-xs font-semibold leading-snug text-flit-primary">{label}</span>
-        <span className="mt-0.5 block text-xs text-[#59677D]">{ayuda}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">{ayuda}</span>
       </span>
     </label>
   );

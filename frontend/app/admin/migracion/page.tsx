@@ -44,11 +44,11 @@ export default function AdminMigracionPage() {
 
       <ComoSeUsa />
 
-      <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+      <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
         <div
           role="tablist"
           aria-label="Modo de migración"
-          className="flex gap-1 border-b border-[#DFE5ED] dark:border-white/10"
+          className="flex gap-1 border-b border-border"
         >
           <Pestana
             activa={pestana === "uno"}

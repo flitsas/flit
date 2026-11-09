@@ -244,7 +244,7 @@ export function CompanyConfigTabs({
       {/* Identidad de compañía + «Guardar todo» a la derecha (PUT atómico de settings). */}
       {(company || currentTab?.isConfig) && (
         <header
-          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] border border-[#DFE5ED] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14] ${
+          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] border border-border bg-card px-4 py-3 shadow-[var(--shadow-card)] ${
             currentTab?.isConfig ? "sticky top-0 z-20" : ""
           }`}
           aria-label="Compañía en configuración"
@@ -255,7 +255,7 @@ export function CompanyConfigTabs({
                 <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
                   Configurando
                 </span>
-                <span className="text-sm font-bold text-flit-primary dark:text-white">
+                <span className="text-sm font-bold text-flit-primary dark:text-foreground">
                   {company.razonSocial}
                 </span>
                 <span className="text-xs opacity-70">NIT {company.nit}</span>

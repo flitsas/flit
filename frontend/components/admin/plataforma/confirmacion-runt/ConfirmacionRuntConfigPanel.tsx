@@ -69,7 +69,7 @@ function iguales(a: Borrador, b: Borrador): boolean {
 }
 
 const inputCls =
-  "w-full rounded-xl border bg-white px-3 py-2 text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border bg-card px-3 py-2 text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-foreground";
 
 /**
  * Plataforma → Confirmación RUNT → Configuración (HU #12279). Interruptor + cinco campos que se
@@ -178,10 +178,10 @@ export function ConfirmacionRuntConfigPanel() {
     const error = errores[campo];
     return (
       <div className="flex flex-col gap-1">
-        <label htmlFor={id} className="text-xs font-semibold text-flit-primary dark:text-white">
+        <label htmlFor={id} className="text-xs font-semibold text-flit-primary dark:text-foreground">
           {label}
         </label>
-        <div className={`flex items-center rounded-xl border bg-white dark:bg-[#0B0F14] ${error ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}>
+        <div className={`flex items-center rounded-xl border bg-card ${error ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-border"}`}>
           <input
             id={id}
             type="number"
@@ -193,11 +193,11 @@ export function ConfirmacionRuntConfigPanel() {
             disabled={guardando}
             aria-invalid={error ? true : undefined}
             aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}
-            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-white"
+            className="w-full min-w-0 rounded-xl bg-transparent px-3 py-2 font-mono text-sm text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-foreground"
           />
-          <span className="shrink-0 pr-3 text-[11px] text-[#59677D] dark:text-white/55">{unidad}</span>
+          <span className="shrink-0 pr-3 text-[11px] text-muted-foreground">{unidad}</span>
         </div>
-        <p id={`${id}-hint`} className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
+        <p id={`${id}-hint`} className="text-[11px] leading-snug text-muted-foreground">
           {HINTS[campo]}
         </p>
         {error ? (
@@ -213,12 +213,12 @@ export function ConfirmacionRuntConfigPanel() {
     <div className="flex flex-col gap-5">
       <form onSubmit={(e) => void guardar(e)} className="flex flex-col gap-5" noValidate data-testid="confirmacion-runt-config-form">
         {/* Interruptor */}
-        <div className="flex items-start justify-between gap-4 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
+        <div className="flex items-start justify-between gap-4 rounded-2xl border border-border bg-card p-4">
           <div className="flex flex-col gap-0.5">
-            <label htmlFor="confirmacion-runt-enabled" className="text-sm font-semibold text-flit-primary dark:text-white">
+            <label htmlFor="confirmacion-runt-enabled" className="text-sm font-semibold text-flit-primary dark:text-foreground">
               Consulta programada activa
             </label>
-            <p id="confirmacion-runt-enabled-hint" className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
+            <p id="confirmacion-runt-enabled-hint" className="text-[11px] leading-snug text-muted-foreground">
               Apagada, la corrida diaria no consulta al RUNT y lo deja anotado en el historial. «Consultar ahora» sigue disponible.
             </p>
           </div>
@@ -234,7 +234,7 @@ export function ConfirmacionRuntConfigPanel() {
 
         <div className="grid gap-x-5 gap-y-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
           <div className="flex flex-col gap-1">
-            <label htmlFor="confirmacion-runt-runAtLocal" className="text-xs font-semibold text-flit-primary dark:text-white">
+            <label htmlFor="confirmacion-runt-runAtLocal" className="text-xs font-semibold text-flit-primary dark:text-foreground">
               Hora de ejecución diaria
             </label>
             <input
@@ -245,9 +245,9 @@ export function ConfirmacionRuntConfigPanel() {
               disabled={guardando}
               aria-invalid={errores.runAtLocal ? true : undefined}
               aria-describedby={`confirmacion-runt-runAtLocal-hint${errores.runAtLocal ? " confirmacion-runt-runAtLocal-error" : ""}`}
-              className={`${inputCls} font-mono ${errores.runAtLocal ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}
+              className={`${inputCls} font-mono ${errores.runAtLocal ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-border"}`}
             />
-            <p id="confirmacion-runt-runAtLocal-hint" className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
+            <p id="confirmacion-runt-runAtLocal-hint" className="text-[11px] leading-snug text-muted-foreground">
               {HINTS.runAtLocal}
             </p>
             {errores.runAtLocal ? (
@@ -258,7 +258,7 @@ export function ConfirmacionRuntConfigPanel() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="confirmacion-runt-providerKey" className="text-xs font-semibold text-flit-primary dark:text-white">
+            <label htmlFor="confirmacion-runt-providerKey" className="text-xs font-semibold text-flit-primary dark:text-foreground">
               Proveedor activo
             </label>
             <select
@@ -268,7 +268,7 @@ export function ConfirmacionRuntConfigPanel() {
               disabled={guardando}
               aria-invalid={errores.providerKey ? true : undefined}
               aria-describedby={`confirmacion-runt-providerKey-hint${errores.providerKey ? " confirmacion-runt-providerKey-error" : ""}`}
-              className={`${inputCls} ${errores.providerKey ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-white/10"}`}
+              className={`${inputCls} ${errores.providerKey ? "border-[#FF4E00]" : "border-[#DFE5ED] dark:border-border"}`}
             >
               {RUNT_CONFIRMATION_PROVIDERS.map((p) => (
                 <option key={p.key} value={p.key}>
@@ -276,7 +276,7 @@ export function ConfirmacionRuntConfigPanel() {
                 </option>
               ))}
             </select>
-            <p id="confirmacion-runt-providerKey-hint" className="text-[11px] leading-snug text-[#59677D] dark:text-white/60">
+            <p id="confirmacion-runt-providerKey-hint" className="text-[11px] leading-snug text-muted-foreground">
               {HINTS.providerKey}
             </p>
             {errores.providerKey ? (
@@ -303,12 +303,12 @@ export function ConfirmacionRuntConfigPanel() {
             type="button"
             onClick={descartar}
             disabled={guardando || !sucio}
-            className="rounded-full border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/10 dark:text-white"
+            className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:text-foreground"
           >
             Descartar cambios
           </button>
           {persistido?.updatedAt ? (
-            <span className="text-[11px] text-[#59677D] dark:text-white/60">
+            <span className="text-[11px] text-muted-foreground">
               Última modificación: {formatFechaHora(new Date(persistido.updatedAt))}
             </span>
           ) : null}
@@ -317,7 +317,7 @@ export function ConfirmacionRuntConfigPanel() {
 
       <section className="flex flex-col gap-2" aria-labelledby="confirmacion-runt-ultima-corrida">
         <div className="flex items-center justify-between">
-          <h2 id="confirmacion-runt-ultima-corrida" className="text-sm font-semibold text-flit-primary dark:text-white">
+          <h2 id="confirmacion-runt-ultima-corrida" className="text-sm font-semibold text-flit-primary dark:text-foreground">
             Última corrida
           </h2>
           <button

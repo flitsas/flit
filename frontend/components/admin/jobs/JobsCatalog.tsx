@@ -152,7 +152,7 @@ const JOB_COLUMNS: DataTableColumn<UnifiedJobRow>[] = [
     header: "Proceso",
     render: (row) => (
       <>
-        <span className="block font-semibold text-flit-primary dark:text-white">{row.displayName}</span>
+        <span className="block font-semibold text-flit-primary dark:text-foreground">{row.displayName}</span>
         <span className={`mt-0.5 block ${TABLA_CELDA_SECUNDARIA_CLS}`}>{row.technicalName}</span>
       </>
     ),

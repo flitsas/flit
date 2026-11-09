@@ -111,7 +111,7 @@ export function CompanyListTable({
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
             const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
-            <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+            <tr key={c.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
               <td className="whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
                 {c.code}
               </td>

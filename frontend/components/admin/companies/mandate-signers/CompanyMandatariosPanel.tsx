@@ -395,7 +395,7 @@ export function CompanyMandatariosPanel({
               className="max-w-md flex-1"
             />
             <p
-              className="text-xs text-[#59677D] dark:text-white/70"
+              className="text-xs text-muted-foreground"
               data-testid="mandatarios-resumen"
             >
               {signers.length} {signers.length === 1 ? "mandatario" : "mandatarios"}
@@ -494,7 +494,7 @@ export function CompanyMandatariosPanel({
                       return (
                         <tr
                           key={signer.id}
-                          className={`${candado ? "bg-[#EEF1F5] dark:bg-white/5" : "bg-white dark:bg-[#0B0F14]"} ${TABLA_ROW_HOVER_CLS}`}
+                          className={`${candado ? "bg-secondary" : "bg-card"} ${TABLA_ROW_HOVER_CLS}`}
                           data-candado={candado ? "true" : undefined}
                         >
                           <td

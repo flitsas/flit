@@ -41,9 +41,9 @@ export interface AuditLogTableProps {
 }
 
 const FIELD_CLS =
-  "h-10 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-flit-primary " +
+  "h-10 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-flit-primary " +
   "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 " +
-  "dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
+  "dark:text-foreground";
 
 const ALL_EVENTS = "";
 
@@ -123,7 +123,7 @@ export function AuditLogTable({
       header: titulo("campo", "Campo modificado"),
       render: (entry) => (
         <span
-          className="font-medium text-flit-primary dark:text-white"
+          className="font-medium text-flit-primary dark:text-foreground"
           title={technicalKey(entry.entityName, entry.fieldName)}
         >
           {eventLabel(entry.entityName, entry.fieldName)}
@@ -196,7 +196,7 @@ export function AuditLogTable({
           <button
             type="button"
             onClick={clearFilters}
-            className="h-10 rounded-xl border border-[#DFE5ED] px-4 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:hover:bg-white/5"
+            className="h-10 rounded-xl border border-border px-4 text-xs font-semibold hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Limpiar filtros
           </button>
@@ -317,7 +317,7 @@ function AuditDetailModal({ entry, onClose }: { entry: AuditLogEntry | null; onC
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:hover:bg-white/5"
+            className="rounded-xl border border-border px-4 py-2 text-xs font-semibold hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cerrar
           </button>
@@ -345,7 +345,7 @@ function DetailBlock({ title, parsed }: { title: string; parsed: ParsedAuditValu
     <div>
       <p className="mb-1 font-semibold">{title}</p>
       {parsed.kind === "complex" ? (
-        <pre className="max-h-64 overflow-auto rounded-xl border border-[#DFE5ED] bg-[#F4F7FC] p-3 font-mono text-xs dark:border-white/15 dark:bg-white/5">
+        <pre className="max-h-64 overflow-auto rounded-xl border border-border bg-secondary p-3 font-mono text-xs">
           {parsed.pretty}
         </pre>
       ) : (

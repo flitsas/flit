@@ -45,7 +45,7 @@ function initialValues(row: CompanyOtMandateRuleView): CompanyTipoMandatoValues 
 }
 
 const FIELD =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50";
 
 export function CompanyTipoMandatoModal({
   row,
@@ -151,7 +151,7 @@ export function CompanyTipoMandatoModal({
           Compañía <strong>{row.companyName}</strong>
         </p>
         <label className="block space-y-1.5" htmlFor={`${uid}-tipo`}>
-          <span className="font-semibold text-[#162244]">Tipo de mandato</span>
+          <span className="font-semibold text-foreground">Tipo de mandato</span>
           <select
             id={`${uid}-tipo`}
             value={values.tipo}
@@ -174,7 +174,7 @@ export function CompanyTipoMandatoModal({
         {institucional ? (
           <div className="space-y-3" data-testid="mandato-tipo-entidad">
             <label className="block space-y-1.5" htmlFor={`${uid}-nombre`}>
-              <span className="font-semibold text-[#162244]">Nombre de la entidad</span>
+              <span className="font-semibold text-foreground">Nombre de la entidad</span>
               <input
                 id={`${uid}-nombre`}
                 value={values.institutionalName}
@@ -196,7 +196,7 @@ export function CompanyTipoMandatoModal({
               ) : null}
             </label>
             <label className="block space-y-1.5" htmlFor={`${uid}-nit`}>
-              <span className="font-semibold text-[#162244]">NIT</span>
+              <span className="font-semibold text-foreground">NIT</span>
               <input
                 id={`${uid}-nit`}
                 value={values.institutionalNit}
@@ -207,7 +207,7 @@ export function CompanyTipoMandatoModal({
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5" htmlFor={`${uid}-ciudad`}>
-                <span className="font-semibold text-[#162244]">Ciudad de cámara</span>
+                <span className="font-semibold text-foreground">Ciudad de cámara</span>
                 <input
                   id={`${uid}-ciudad`}
                   value={values.chamberCity}
@@ -217,7 +217,7 @@ export function CompanyTipoMandatoModal({
                 />
               </label>
               <label className="block space-y-1.5" htmlFor={`${uid}-sigla`}>
-                <span className="font-semibold text-[#162244]">Sigla</span>
+                <span className="font-semibold text-foreground">Sigla</span>
                 <input
                   id={`${uid}-sigla`}
                   value={values.sigla}

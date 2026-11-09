@@ -86,7 +86,7 @@ export function DisenoWebTab({ onIrABanners }: { onIrABanners: () => void }) {
           <button
             type="button"
             onClick={onIrABanners}
-            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold"
+            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold"
             style={{ borderColor: "#162744", color: "#162744" }}
           >
             Ir a los banners de Contenido <ArrowRight className="h-3.5 w-3.5" aria-hidden />

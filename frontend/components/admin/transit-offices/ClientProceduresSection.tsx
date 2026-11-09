@@ -1632,7 +1632,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       */}
       <div className="flex min-w-0 flex-col">
         {/* Epic #12686 — pestañas de familia a la izquierda, como en el listado del gestor. */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
           <FamiliaTabs value={familia} onChange={handleFamiliaChange} />
           <div className="flex flex-wrap items-center justify-end gap-2">
             <TramitesFiltrosBar
@@ -1658,7 +1658,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                     <button
                       type="button"
                       onClick={() => setFieldsKey((k) => k + 1)}
-                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-flit-brand transition hover:bg-flit-brand/10"
+                      className="rounded-lg border border-border px-2.5 py-1.5 font-semibold text-flit-brand transition hover:bg-flit-brand/10"
                     >
                       Reintentar
                     </button>
@@ -1767,7 +1767,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         selected={atajoOt}
         onSelect={(key) => handleAtajoOtSelect(key as "" | AtajoOt)}
         storageKey="ot-bandeja.busqueda-rapida"
-        darkBgClassName="dark:bg-[#0B0F14]"
+        darkBgClassName="dark:bg-card"
       />
 
       {/* HU #13393 — fuera del UiStateBoundary: en cargando/vacío/error sigue visible y deshabilitada
@@ -1994,7 +1994,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Asignar placa"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Asignar placa al trámite</h2>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
             {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede escribir una placa
@@ -2041,7 +2041,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Liberar placa"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Liberar placa</h2>
             <p className="mt-1 text-xs opacity-70">
               El trámite vuelve a Preasignación para asignarle otra placa. La placa actual queda liberada en el inventario.
@@ -2072,7 +2072,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Decidir revocatoria"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Decidir revocatoria</h2>
             <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
             <p className="mt-2 text-xs opacity-70">
@@ -2225,7 +2225,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Actualizar placa"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid #DFE5ED" }}>
             <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-brand)" }}>Corregir placa</h2>
             <p className="mt-2 text-sm opacity-80">
               Trámite {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}

@@ -110,7 +110,7 @@ export function ConfiguracionEmpresaTab({
                 className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand ${
                   current
                     ? "border-flit-brand bg-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)] text-flit-brand"
-                    : "border-[#DFE5ED] bg-white text-flit-primary hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:border-white/10 dark:bg-transparent dark:text-white"
+                    : "border-border bg-card text-flit-primary hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:text-foreground"
                 }`}
               >
                 {b.label}
@@ -203,7 +203,7 @@ export function ConfiguracionEmpresaTab({
         </div>
 
         <fieldset>
-          <legend className="text-sm font-semibold text-flit-primary dark:text-white">Destinatarios de avisos de estado</legend>
+          <legend className="text-sm font-semibold text-flit-primary dark:text-foreground">Destinatarios de avisos de estado</legend>
           <ClampedText
             className="mb-3 mt-0.5"
             text="El aviso llega a los perfiles encendidos. Comprador y vendedor/propietario cubren persona natural, jurídica (empresa y representante legal) y locatario si existe. Si hay más de un correo, el comprador va como destinatario principal y el resto en copia oculta."

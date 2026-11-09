@@ -105,15 +105,15 @@ export function PnSeccionHeader({
           </span>
         )}
         <div className="flex max-w-3xl flex-col gap-0.5">
-          <h2 id={id} className="flex flex-wrap items-center gap-2 text-base font-bold text-flit-primary dark:text-white">
+          <h2 id={id} className="flex flex-wrap items-center gap-2 text-base font-bold text-flit-primary dark:text-foreground">
             {titulo}
             {contador && (
-              <span className="rounded-full bg-[#EEF5FF] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--flit-brand-ink)] dark:bg-white/10 dark:text-white">
+              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-[color:var(--flit-brand-ink)] dark:text-foreground">
                 {contador}
               </span>
             )}
           </h2>
-          <p className="text-sm text-[#59677D] dark:text-white/78">{descripcion}</p>
+          <p className="text-sm text-muted-foreground">{descripcion}</p>
         </div>
       </div>
       {accion}
@@ -184,7 +184,7 @@ export function PnConfirmDialog({
         </div>
       }
     >
-      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-white">
+      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-foreground">
         {children}
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
       </div>

@@ -63,7 +63,7 @@ export function MigrarUno() {
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
       <form
         onSubmit={lanzar}
-        className="flex flex-col gap-4 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10"
+        className="flex flex-col gap-4 rounded-2xl border border-border p-4"
       >
         <div className="flex flex-col gap-1.5">
           <label htmlFor="tipo-tramite" className="text-xs font-semibold uppercase tracking-wide opacity-60">
@@ -74,7 +74,7 @@ export function MigrarUno() {
             value={tramite}
             onChange={(e) => setTramite(e.target.value as TipoTramite)}
             disabled={corriendo}
-            className="rounded-lg border border-[#DFE5ED] bg-transparent px-3 py-2 text-sm dark:border-white/10"
+            className="rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
           >
             {TIPOS_TRAMITE.map((t) => (
               <option key={t} value={t}>
@@ -97,7 +97,7 @@ export function MigrarUno() {
             onChange={(e) => setId(e.target.value)}
             disabled={corriendo}
             placeholder="26350"
-            className="rounded-lg border border-[#DFE5ED] bg-transparent px-3 py-2 text-sm tabular-nums dark:border-white/10"
+            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm tabular-nums"
           />
           {id.trim() !== "" && !idValido && (
             <p className="text-xs text-red-500">El id debe ser un número entero positivo.</p>
@@ -147,7 +147,7 @@ export function MigrarUno() {
         vez de un rectángulo de 400 px de alto esperando: la versión anterior dejaba media pantalla
         en blanco y la página parecía a medio cargar.
       */}
-      <div className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
+      <div className="rounded-2xl border border-border p-4">
         {error && <AvisoError error={error} />}
         {!error && respuesta && <ReporteMigracion respuesta={respuesta} />}
         {!error && !respuesta && (

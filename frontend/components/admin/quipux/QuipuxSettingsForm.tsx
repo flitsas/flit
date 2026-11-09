@@ -34,7 +34,7 @@ import { digitsOnly } from "@/lib/format/currency";
 import { formatFechaHora } from "@/lib/format/date";
 const CARD =
 
-  "space-y-4 rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]";
+  "space-y-4 rounded-2xl border border-border bg-card p-5";
 
 // Valores por defecto de una fila nueva (espejan los DEFAULT del DDL y de QuipuxSettings).
 const DEFAULTS = {
@@ -422,7 +422,7 @@ export function QuipuxSettingsForm() {
               {!DOCUMENT_TYPES.some((t) => t.value === form.officerDocumentType) && (
                 <option
                   value={form.officerDocumentType}
-                  className="bg-white text-[#0B0F14] dark:bg-[#0B0F14] dark:text-white"
+                  className="bg-card text-foreground"
                 >
                   Código {form.officerDocumentType}
                 </option>
@@ -431,7 +431,7 @@ export function QuipuxSettingsForm() {
                 <option
                   key={t.value}
                   value={t.value}
-                  className="bg-white text-[#0B0F14] dark:bg-[#0B0F14] dark:text-white"
+                  className="bg-card text-foreground"
                 >
                   {t.value} — {t.label}
                 </option>
@@ -515,7 +515,7 @@ export function QuipuxSettingsForm() {
       {saveError ? <InlineAlert tone="error">{saveError}</InlineAlert> : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
-        <p className="text-xs text-[#59677D] dark:text-white/70">
+        <p className="text-xs text-muted-foreground">
           {updatedAt
             ? `Última actualización: ${formatFechaHora(new Date(updatedAt))}`
             : "Aún no se ha guardado ninguna configuración."}
@@ -533,9 +533,9 @@ export function QuipuxSettingsForm() {
 
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
-    <header className="border-b border-[#DFE5ED] pb-3 dark:border-white/10">
-      <h2 className="text-sm font-semibold text-flit-primary dark:text-white">{title}</h2>
-      <p className="mt-0.5 text-xs leading-snug text-[#59677D] dark:text-white/70">{description}</p>
+    <header className="border-b border-border pb-3">
+      <h2 className="text-sm font-semibold text-flit-primary dark:text-foreground">{title}</h2>
+      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
     </header>
   );
 }

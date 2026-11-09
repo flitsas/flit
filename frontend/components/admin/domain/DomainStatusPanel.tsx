@@ -341,7 +341,7 @@ function DnsInstructions({
 function DnsRow({ type, name, value }: { type: string; name: string; value: string }) {
   const border = { borderColor: "var(--table-row-border)" };
   return (
-    <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+    <tr className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
       <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={border}>{type}</td>
       <td className="max-w-[220px] truncate border-y px-4 py-3 font-mono" style={border}>{name}</td>
       <td className="max-w-[260px] truncate border-y px-4 py-3 font-mono" style={border}>{value}</td>

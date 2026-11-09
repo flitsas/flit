@@ -294,7 +294,7 @@ export function ClientProcedureDetailModal({
             <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
           </button>
         </div>
-        <p className="mt-1 text-[12px] text-slate-600 dark:text-white/60">
+        <p className="mt-1 text-[12px] text-muted-foreground">
           Radicado: <span className="font-mono">{row.referenceNumber}</span> · Tipo de trámite:{" "}
           {row.procedureTypeName ?? row.procedureTypeId} · Placa: {row.placa?.trim() || "—"} · VIN:{" "}
           {row.vin?.trim() || "—"}
@@ -318,7 +318,7 @@ export function ClientProcedureDetailModal({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="rounded-xl border bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
+          className="rounded-xl border bg-card p-2 dark:border-border"
           style={{ borderColor: OT_BORDER, color: OT_NAVY }}
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -474,7 +474,7 @@ export function ClientProcedureDetailModal({
             <OtCargando etiqueta="Cargando la línea de tiempo del trámite" filas={3} />
           ) : detailError && history.length === 0 ? (
             <div
-              className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]"
+              className="rounded-2xl border border-border bg-card p-5"
               role="alert"
             >
               <p className="text-sm font-semibold" style={{ color: OT_NAVY }}>

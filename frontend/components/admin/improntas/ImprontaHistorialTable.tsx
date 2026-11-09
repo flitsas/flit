@@ -85,7 +85,7 @@ export function ImprontaHistorialTable({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+              <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                 <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono font-semibold" style={{ borderColor: "#DFE5ED" }}>
                   {row.radicado}
                 </td>

@@ -250,7 +250,7 @@ export function TarifaFormModal({
         </div>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Valores en pesos colombianos</legend>
+          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-foreground">Valores en pesos colombianos</legend>
           <div className="grid items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             {CONCEPTOS_TARIFA.map((concepto) => {
               const actual = grupo?.porConcepto[concepto];

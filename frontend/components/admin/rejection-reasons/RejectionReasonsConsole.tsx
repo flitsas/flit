@@ -122,7 +122,7 @@ export function RejectionReasonsConsole() {
     <div className="flex flex-col gap-5" data-testid="rejection-reasons-console">
       <fieldset
         ref={editorRef}
-        className="flex flex-wrap items-end gap-3 rounded-xl border border-[#DFE5ED] p-4 dark:border-white/10"
+        className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-4"
       >
         <legend className="px-1 text-xs font-semibold">
           {form.id ? "Editar causal" : "Nueva causal"}
@@ -215,7 +215,7 @@ export function RejectionReasonsConsole() {
           <section key={m.value} className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold">{m.label}</h2>
             {items.length === 0 ? (
-              <p className="text-xs text-[#6B7280] dark:text-white/50">
+              <p className="text-xs text-muted-foreground">
                 Sin causales para esta modalidad.
               </p>
             ) : (
@@ -245,7 +245,7 @@ export function RejectionReasonsConsole() {
 
       {/* No hay borrado a propósito: una causal retirada debe seguir resolviendo el nombre de los
           rechazos históricos que la usaron. */}
-      <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+      <p className="text-[11px] text-muted-foreground">
         Las causales no se borran: se retiran. Así los rechazos históricos conservan el nombre de la
         causal con la que se decidieron.
       </p>
@@ -303,7 +303,7 @@ function ReasonsTable({
             {pg.paginar(items).map((r) => (
               <tr
                 key={r.id}
-                className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
+                className={`bg-card ${TABLA_ROW_HOVER_CLS} ${
                   r.isActive ? "" : "opacity-60"
                 }`}
               >

@@ -16,7 +16,7 @@ export const EMPTY_DOCUMENT_TYPE_FILTERS: DocumentTypeCatalogFilters = {
 };
 
 const INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-[#DFE5ED]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-border";
 
 export function DocumentTypeFiltersBar({
   value,
