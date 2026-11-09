@@ -70,7 +70,9 @@ describe("HU #12420 AC3 — paridad de tokens en globals.css (sin cambio visual 
     "%s sigue resolviendo al hex FLIT %s por defecto (sin marca publicada)",
     (token, hex) => {
       const declarationRegex = new RegExp(
-        `${token.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}:\\s*(?:var\\([^,]+,\\s*${hex}\\)|${hex})`,
+        // HU #14478: --color-flit-primary anida un respaldo por tema (var(--brand-primary, var(--flit-primary-tema, HEX)));
+        // en claro y sin marca de socio sigue resolviendo al mismo hex.
+        `${token.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}:\\s*(?:var\\([^,]+,\\s*(?:var\\([^,]+,\\s*)?${hex}\\)\\)?|${hex})`,
         "i",
       );
       expect(GLOBALS_CSS).toMatch(declarationRegex);
