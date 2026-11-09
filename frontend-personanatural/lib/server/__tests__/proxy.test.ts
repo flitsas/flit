@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { reenviarAlBff, rutaSegura } from "../proxy";
+import { origenPermitido, reenviarAlBff, rutaSegura } from "../proxy";
 
 const ORIGEN = "http://gateway:4002";
 const post = (url: string, cuerpo?: unknown, headers: Record<string, string> = {}) =>
@@ -266,5 +266,49 @@ describe("proxy: imágenes de marca del organismo (HU #14379)", () => {
     expect((init.headers as Headers).get("authorization")).toBeNull();
     expect(r.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(r.headers.get("content-type")).toBe("image/png");
+  });
+});
+
+describe("proxy: CSRF por Origin y Cache-Control", () => {
+  const ok = () => vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json", "cache-control": "public, max-age=60" } }));
+  const URL_PORTAL = "https://portal.ot.gov.co/api/v1/persona-natural/solicitudes/s1";
+
+  it("rechaza con 403 origen_no_permitido un POST de otro origen y no llama al BFF", async () => {
+    const fetchImpl = ok();
+    const r = await reenviarAlBff(post(URL_PORTAL, {}, { origin: "https://malo.example" }), ["solicitudes", "s1"], { apiOrigin: ORIGEN, fetchImpl });
+    expect(r.status).toBe(403);
+    expect(JSON.parse(String(r.cuerpo)).code).toBe("origen_no_permitido");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("acepta el Origin del mismo host, incluidos dominios propios del organismo y X-Forwarded-Host", async () => {
+    const fetchImpl = ok();
+    const a = await reenviarAlBff(post(URL_PORTAL, {}, { origin: "https://portal.ot.gov.co" }), ["solicitudes", "s1"], { apiOrigin: ORIGEN, fetchImpl });
+    const b = await reenviarAlBff(post("http://localhost:3000/api/v1/persona-natural/solicitudes/s1", {}, { origin: "https://tramites.otra.gov.co", "x-forwarded-host": "tramites.otra.gov.co" }), ["solicitudes", "s1"], { apiOrigin: ORIGEN, fetchImpl });
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+  });
+
+  it("sin Origin usa Sec-Fetch-Site: cross-site se rechaza, same-origin pasa", () => {
+    expect(origenPermitido(post(URL_PORTAL, {}, { "sec-fetch-site": "cross-site" }))).toBe(false);
+    expect(origenPermitido(post(URL_PORTAL, {}, { "sec-fetch-site": "same-origin" }))).toBe(true);
+    expect(origenPermitido(post(URL_PORTAL, {}, { origin: "null" }))).toBe(false);
+  });
+
+  it("los GET no se validan por Origin", () => {
+    expect(origenPermitido(new Request(URL_PORTAL, { headers: { origin: "https://malo.example" } }))).toBe(true);
+  });
+
+  it("fuerza no-store en /punto/* y /pago/*, pero no en la configuración pública", async () => {
+    const fetchImpl = ok();
+    const get = (u: string) => new Request(`https://portal.ot.gov.co/api/v1/persona-natural/${u}`);
+    const p = await reenviarAlBff(get("punto/pago/cierre/X"), ["punto", "pago", "cierre", "X"], { apiOrigin: ORIGEN, fetchImpl });
+    const q = await reenviarAlBff(get("pago/estado"), ["pago", "estado"], { apiOrigin: ORIGEN, fetchImpl });
+    const s = await reenviarAlBff(get("solicitudes/s1"), ["solicitudes", "s1"], { apiOrigin: ORIGEN, tokenSesion: "t", fetchImpl });
+    const c = await reenviarAlBff(get("configuracion/banners"), ["configuracion", "banners"], { apiOrigin: ORIGEN, tokenSesion: "t", fetchImpl });
+    expect(p.headers.get("cache-control")).toBe("no-store");
+    expect(q.headers.get("cache-control")).toBe("no-store");
+    expect(s.headers.get("cache-control")).toBe("no-store");
+    expect(c.headers.get("cache-control")).toBe("public, max-age=60");
   });
 });
