@@ -187,3 +187,44 @@ describe('avisoDigitoPlacaOt', () => {
     expect(avisoDigitoPlacaOt({ placa: '', source: 'ot', digito: '5' })).toBeNull();
   });
 });
+
+// HU7 (registro diferido 2026-11-09, corrección del usuario) — el aviso depende de la clase:
+// MOTO (lista exacta) compara el PRIMER dígito numérico (ABC52D → 5); CARRO y sin grupo, el ÚLTIMO
+// dígito numérico (ABC125 → 5). Nunca el último carácter.
+// Uso de ejemplo: avisoDigitoPlacaOt({ placa: 'ABC52D', source: 'ot', digito: '5', clase: 'MOTOCICLETA' }) → tono 'exito'
+describe('avisoDigitoPlacaOt — dígito según la clase (HU7)', () => {
+  it('moto ABC52D con preferencia 5 → coincide con literal de primer número', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC52D', source: 'ot', digito: '5', clase: 'Motocicleta' })).toEqual({
+      tono: 'exito',
+      texto:
+        'La placa ABC52D asignada por el organismo de tránsito tiene como primer número el 5, tu dígito de preferencia.',
+    });
+  });
+  it('moto ABC52 con preferencia 5 → coincide', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC52', source: 'ot', digito: '5', clase: 'CICLOMOTOR' })?.tono).toBe('exito');
+  });
+  it('moto ABC12D con preferencia 2 → NO coincide (no compara el último dígito ni la letra)', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC12D', source: 'ot', digito: '2', clase: 'MOTOCICLETA' })).toEqual({
+      tono: 'info',
+      texto:
+        'La placa ABC12D asignada por el organismo de tránsito no tiene como primer número tu dígito de preferencia (2). El organismo lo toma solo como guía.',
+    });
+  });
+  it('carro ABC125 con 5 → coincide con el literal actual «termina en»', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '5', clase: 'AUTOMOVIL' })).toEqual({
+      tono: 'exito',
+      texto: 'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    });
+  });
+  it('sin clase compara el ÚLTIMO dígito numérico, no el último carácter (ABC12D → 2)', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC12D', source: 'ot', digito: '2' })).toEqual({
+      tono: 'exito',
+      texto: 'La placa ABC12D asignada por el organismo de tránsito termina en 2, tu dígito de preferencia.',
+    });
+    expect(avisoDigitoPlacaOt({ placa: 'ABC12D', source: 'ot', digito: '1', clase: '' })?.tono).toBe('info');
+  });
+  it('placa sin dígitos → sin aviso', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABCDEF', source: 'ot', digito: '5' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: 'ABCDEF', source: 'ot', digito: '5', clase: 'MOTOCICLETA' })).toBeNull();
+  });
+});
