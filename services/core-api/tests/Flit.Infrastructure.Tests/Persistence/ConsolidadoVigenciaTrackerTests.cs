@@ -151,6 +151,38 @@ public sealed class ConsolidadoVigenciaTrackerTests
         (await LeerMarcasAsync(dbName, id)).Should().Be((false, false));
     }
 
+    /// <summary>
+    /// HU #14208 — auditoría: cambio de actor (gestor u OT vía SaveChanges) también baja marcas.
+    /// Misma clase de invalidación que field values / adjuntos; cubre el camino de datos de persona.
+    /// </summary>
+    [Fact]
+    public async Task EditarUnActor_InvalidaAmbosConsolidados()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var id = await SeedAsync(dbName);
+
+        await using (var db = NewDb(dbName))
+        {
+            var instancia = await db.ProcedureInstances.SingleAsync(p => p.Id == id, Ct);
+            var actor = new ProcedureInstanceActor
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = id,
+                ProcedureEntityId = Guid.NewGuid(),
+                ActorType = "propietario",
+                DocumentType = "CC",
+                DocumentNumber = "123",
+                FullName = "Ana Pérez",
+            };
+            instancia.Actors.Add(actor);
+            db.Add(actor);
+            await db.SaveChangesAsync(Ct);
+        }
+
+        (await LeerMarcasAsync(dbName, id)).Should().Be((false, false));
+    }
+
     [Fact]
     public async Task GenerarElConsolidado_NoSeInvalidaASiMismo()
     {
