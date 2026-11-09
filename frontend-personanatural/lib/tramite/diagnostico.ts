@@ -17,8 +17,16 @@ export interface FilaDiagnostico {
  * atención explica el bloqueo.
  */
 export function filasDiagnostico(requisitos: readonly Requisito[]): FilaDiagnostico[] {
+  // Dos fuentes caídas devuelven el mismo requisito: se muestra una vez.
+  const vistos = new Set<string>();
   return requisitos
     .filter((r) => r.estado !== "no_aplica")
+    .filter((r) => {
+      const clave = `${r.codigo}|${r.descripcion}`;
+      if (vistos.has(clave)) return false;
+      vistos.add(clave);
+      return true;
+    })
     .map((r) => (r.estado === "cumple" ? { clave: r.codigo, nombre: r.descripcion, tono: "success", estado: "OK" } : { clave: r.codigo, nombre: etiquetaCorta(r.descripcion), tono: "warning", estado: "POR REVISAR" }));
 }
 
@@ -36,7 +44,7 @@ function etiquetaCorta(descripcion: string): string {
  */
 export function motivosDiagnostico(diagnostico: { puedeContinuar: boolean; requisitos: readonly Requisito[] } | null): string[] {
   if (!diagnostico || diagnostico.puedeContinuar) return [];
-  return diagnostico.requisitos.filter((r) => r.estado !== "cumple" && r.estado !== "no_aplica" && r.descripcion.trim()).map((r) => r.descripcion.trim());
+  return [...new Set(diagnostico.requisitos.filter((r) => r.estado !== "cumple" && r.estado !== "no_aplica" && r.descripcion.trim()).map((r) => r.descripcion.trim()))];
 }
 
 /** Organismo aún no elegido en el paso 1 (el BFF guarda el guid vacío). */

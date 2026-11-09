@@ -191,6 +191,15 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),
       ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", Webhook),
     );
+    // Épica #14297 / HU #14377 — Portal Persona Natural del organismo: solo el ot_admin (por rol, sin permiso delegable).
+    if (ctx.isOtAdmin) {
+      entries.push({
+        key: OT_ADM_DOCK.portalPersonaNatural,
+        label: "Portal Persona Natural",
+        href: otHubModulePath(officeId, "portal-persona-natural"),
+        icon: UserRound,
+      });
+    }
   }
 
   // (La tabla de acceso declara el requisito de rol de «mi-empresa» / «admin-network» —AdminCompany—; aquí se decide con

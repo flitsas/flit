@@ -146,6 +146,8 @@ services:
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
+      # Épica #14297: IP del borde para el registro A del dominio del portal del OT (vacía = no se pide).
+      Domains__EdgeIp: ${FLIT_EDGE_IP:-}
       Cors__AllowedOrigins: ${CORS_ORIGIN}
       # URLs publicas que viajan en los CORREOS (Bug #13194). Este servicio corre con
       # ASPNETCORE_ENVIRONMENT=Development en los tres ambientes, asi que appsettings.QA.json

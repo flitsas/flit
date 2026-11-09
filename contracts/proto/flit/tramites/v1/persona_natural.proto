@@ -41,6 +41,10 @@ service PersonaNaturalService {
   // Tarifas del organismo y del servicio FLIT para el tipo de trámite (cotización y resumen de cobro). [HU B5]
   rpc Cotizar(CotizarRequest) returns (CotizarResponse);
 
+  // Medios de pago que el portal ofrece para un tipo y un organismo (HU #14395): bandera encendida y al menos un concepto
+  // encendido. Sin caché. Cada medio trae el total base (sin adicionales). Errores como Cotizar.
+  rpc ListarMediosPago(ListarMediosPagoRequest) returns (ListarMediosPagoResponse);
+
   // Contenido publicado y parámetros públicos del portal (preguntas frecuentes, banners, enlaces). [HU J3]
   rpc ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest) returns (ObtenerConfiguracionPortalResponse);
 
@@ -53,6 +57,20 @@ service PersonaNaturalService {
   // Canal del punto de atención (HU #14216): resuelve el código público del organismo. No crea trámites ni
   // altera el grant del portal. estado = ok | codigo_desconocido | organismo_no_operable | canal_apagado.
   rpc ResolverCanalPunto(ResolverCanalPuntoRequest) returns (ResolverCanalPuntoResponse);
+
+  // Marca publicada del organismo para el portal del punto (HU #14378). Sin caché: cada llamada lee lo vigente. Ante código
+  // inválido, organismo sin marca o falla responde origen = flit (nunca un error). Sin borradores ni datos internos.
+  rpc ObtenerMarcaPunto(ObtenerMarcaPuntoRequest) returns (ObtenerMarcaPuntoResponse);
+
+  // Imagen de logo o banner PUBLICADA del organismo (bytes y ETag = sha256). Una de borrador responde encontrado = false.
+  rpc ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest) returns (ObtenerImagenMarcaPuntoResponse);
+
+  // Marca publicada de la web de persona natural (HU #14401). Misma respuesta que ObtenerMarcaPunto con origen = web; sin marca
+  // publicada o ante una falla responde origen = flit (nunca un error). Sin banner. Sus imágenes salen por ObtenerImagenMarcaPunto.
+  rpc ObtenerMarcaWeb(ObtenerMarcaWebRequest) returns (ObtenerMarcaWebResponse);
+  // Dominio activo del portal de un organismo (HU #14383). Con host: el codigo del organismo si ese dominio esta activo. Con codigo:
+  // el dominio activo del organismo (para enlace, QR y correos). Sin cache. Pendiente, fallido, retirado, desconocido o falla: activo = false.
+  rpc ObtenerDominioPunto(ObtenerDominioPuntoRequest) returns (ObtenerDominioPuntoResponse);
 
   // HU 10 — organismos operables en FLIT 2 donde se puede trasladar una cuenta (cualquier organismo operable, no solo los
   // del grant del portal). Sin datos sensibles; con `id` valida un destino concreto.
@@ -268,6 +286,11 @@ message CotizarRequest {
   // Conceptos adicionales pedidos: CAMBIO_COLOR | CONVERSION_COMBUSTIBLE | CAMBIO_CARROCERIA | ENVIO_DOCUMENTO. Las
   // transformaciones solo suman si la definición del tipo las permite.
   repeated string adicionales = 3;
+  // HU #14395 — medio de pago (PASARELA | PIN). Vacío = la cotización de siempre, sin cambios. Con medio solo suman los
+  // conceptos (trámite, gestión) con el switch encendido para el tipo y el medio.
+  string medio = 4;
+  // Portal cuya configuración rige. Vacío = la web de persona; con valor, el organismo del punto. Solo se lee con medio.
+  string ambito_organismo_id = 5;
 }
 // Errores estables (ErrorInfo.reason): tipo_no_disponible, organismo_no_habilitado, tipo_no_habilitado, tarifa_no_vigente.
 message CotizarResponse {
@@ -275,6 +298,21 @@ message CotizarResponse {
   int64 total_cop = 2;
   string version_tarifa = 3;             // versiones de tarifa usadas; la solicitud las congela
   repeated string adicionales_no_aplicados = 4;
+  string medio = 5;                    // eco del medio pedido; vacío si no se pidió
+}
+message ListarMediosPagoRequest {
+  string tipo_tramite_codigo = 1;
+  string organismo_id = 2;
+  // Vacío = la web de persona; con valor, el organismo del punto (el PIN solo existe ahí).
+  string ambito_organismo_id = 3;
+}
+message ListarMediosPagoResponse {
+  repeated MedioPago medios = 1;         // solo los ofrecidos, en el orden PASARELA, PIN
+}
+message MedioPago {
+  string medio = 1;                      // PASARELA | PIN
+  int64 total_cop = 2;                   // total base del medio (derechos de tránsito y servicio FLIT encendidos)
+  repeated LineaCobro lineas = 3;
 }
 message LineaCobro {
   string codigo = 1;
@@ -358,4 +396,44 @@ message ResolverCanalPuntoResponse {
   string organismo_id = 2;
   string codigo = 3;
   string nombre = 4;
+}
+
+message ObtenerMarcaWebRequest {}
+message ObtenerMarcaPuntoRequest { string codigo = 1; }
+message ObtenerMarcaPuntoResponse {
+  string origen = 1;                 // organismo | web | flit
+  string nombre = 2;
+  string color_primario = 3;
+  string color_secundario = 4;
+  string color_sobre_primario = 5;
+  string logo_id = 6;                // vacío = imagen de FLIT
+  string banner_id = 7;              // vacío = imagen de FLIT
+  int32 version = 8;                 // versión publicada; 0 si origen = flit
+}
+
+// La marca de la web tiene la misma forma que la del punto, con origen = web o flit.
+message ObtenerMarcaWebResponse {
+  ObtenerMarcaPuntoResponse marca = 1;
+}
+
+message ObtenerDominioPuntoRequest {
+  string host = 1;                   // se resuelve por host si viene; si no, por codigo
+  string codigo = 2;
+}
+message ObtenerDominioPuntoResponse {
+  bool activo = 1;
+  string codigo = 2;                 // codigo del organismo; vacio si activo = false
+  string host = 3;                   // dominio activo; vacio si activo = false
+}
+
+message ObtenerImagenMarcaPuntoRequest {
+  string imagen_id = 1;
+  string if_none_match = 2;          // sha256 que el cliente ya tiene
+}
+message ObtenerImagenMarcaPuntoResponse {
+  bool encontrado = 1;
+  bool no_modificado = 2;
+  string sha256 = 3;
+  string content_type = 4;
+  bytes contenido = 5;
 }

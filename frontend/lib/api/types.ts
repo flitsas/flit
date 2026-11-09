@@ -678,6 +678,12 @@ export interface TenantDomainVerificationInstructions {
   txtValue: string;
   cnameName: string;
   cnameTarget: string;
+  /**
+   * Épica #14297 — solo los dominios del portal del OT: registro A hacia la IP del borde (`Domains:EdgeIp`).
+   * Si viene, el panel pinta la fila A en lugar del CNAME de marca blanca. `aValue` vacío = el ambiente no la tiene.
+   */
+  aName?: string;
+  aValue?: string;
 }
 
 export interface TenantDomainCertificate {

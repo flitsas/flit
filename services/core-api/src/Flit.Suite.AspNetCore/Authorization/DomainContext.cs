@@ -13,7 +13,8 @@ namespace Flit.Api.Authorization;
 /// HU #12968 (contrato v1 §5): <see cref="ProductCode"/> va al final y con valor por defecto, para que los
 /// constructores existentes sigan compilando sin cambios.
 /// </remarks>
-public sealed record DomainContext(DomainKind Kind, string? Host, Guid? HeadTenantId, string ProductCode = ProductCodes.Plataforma)
+public sealed record DomainContext(
+    DomainKind Kind, string? Host, Guid? HeadTenantId, string ProductCode = ProductCodes.Plataforma, Guid? TransitOfficeId = null)
 {
     /// <summary>Sin sello, sello vacío o host reservado de FLIT (AC2, fail-closed).</summary>
     public static DomainContext Flit(string? host, string productCode = ProductCodes.Plataforma) =>
@@ -21,4 +22,8 @@ public sealed record DomainContext(DomainKind Kind, string? Host, Guid? HeadTena
 
     public static DomainContext Network(string host, Guid headTenantId, string productCode = ProductCodes.Plataforma) =>
         new(DomainKind.Network, host, headTenantId, productCode);
+
+    /// <summary>Dominio activo del portal de un organismo (HU #14383): sin red (<c>HeadTenantId</c> nulo) y sin login.</summary>
+    public static DomainContext Portal(string host, Guid transitOfficeId) =>
+        new(DomainKind.Portal, host, null, ProductCodes.Plataforma, transitOfficeId);
 }

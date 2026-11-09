@@ -258,6 +258,8 @@ app.UseRateLimiter();
 // X-Flit-Domain que fija Flit.Gateway. Va ANTES de auth: el login/recuperación (#12422) necesita
 // el dominio de la petición sin depender de un JWT (hoy sin validar — Bug diferido).
 app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
+// HU #14383 (Feature #14380) — un dominio de portal de organismo no abre el login de FLIT.
+app.UseMiddleware<Flit.Api.Middleware.PortalDomainGuardMiddleware>();
 
 app.UseAuthentication();
 
