@@ -260,11 +260,12 @@ describe('HU #12727 — AC5 previsualización FUR independiente de la posición 
 });
 
 describe('HU #12727 — AC6 tema oscuro (tokens de acordeón)', () => {
-  it('happy: WizardAccordion usa tokens dark:bg y borde del design system', () => {
+  it('happy: WizardAccordion usa tokens de superficie y borde del design system', () => {
     const accordion = read('operacion/WizardAccordion.tsx');
-    expect(accordion).toMatch(/dark:bg-\[#162744\]/);
-    expect(accordion).toMatch(/borderColor: '#DFE5ED'/);
-    expect(accordion).toMatch(/bg-white/);
+    // Rediseño UI kit (HU #14482): `bg-card` ya resuelve el oscuro, sin `dark:bg-[hex]`.
+    expect(accordion).toMatch(/bg-card/);
+    expect(accordion).toMatch(/borderColor: 'var\(--border\)'/);
+    expect(accordion).not.toMatch(/dark:bg-\[#/);
   });
 
   it('contrato: fila de dos columnas no introduce colores hardcodeados ajenos al acordeón', () => {

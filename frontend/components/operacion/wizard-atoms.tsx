@@ -144,7 +144,7 @@ export function WizardSegmented<T extends string>({
         aria-label={groupName}
         aria-describedby={describedBy}
         className="inline-flex gap-0.5 rounded-xl border p-1"
-        style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+        style={{ borderColor: 'var(--border)', background: 'var(--surface-sunken)' }}
       >
         {options.map((o) => {
           const active = value === o.value;
@@ -164,11 +164,11 @@ export function WizardSegmented<T extends string>({
               style={
                 active
                   ? {
-                      background: '#FFFFFF',
+                      background: 'var(--card)',
                       color: 'var(--color-flit-brand)',
                       // `shadow.card` del token file. La sombra de la propuesta se apoya en
                       // rgba(15,23,42,…) —slate-900— y no en el navy de marca.
-                      boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)',
+                      boxShadow: 'var(--shadow-card)',
                     }
                   : undefined
               }
@@ -236,8 +236,8 @@ export function WizardSelectCards<T extends string>({
               }
               style={
                 active
-                  ? { borderColor: '#8CC63F', background: 'rgba(140,198,63,0.12)' }
-                  : { borderColor: '#DFE5ED', background: '#FFFFFF' }
+                  ? { borderColor: 'var(--flit-success-ink)', background: 'var(--badge-success-bg)' }
+                  : { borderColor: 'var(--border)', background: 'var(--card)' }
               }
             >
               <input
@@ -306,17 +306,17 @@ export function WizardFieldToggle({
         aria-describedby={hintId}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className="flex h-[42px] w-full items-center justify-between rounded-xl border bg-white px-3 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]"
+        className="flex h-[42px] w-full items-center justify-between rounded-xl border bg-card px-3 text-[13px] font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60"
         style={{
-          borderColor: checked ? 'var(--color-flit-brand)' : '#DFE5ED',
-          color: checked ? 'var(--color-flit-brand)' : '#162744',
+          borderColor: checked ? 'var(--color-flit-brand)' : 'var(--border)',
+          color: checked ? 'var(--color-flit-brand)' : 'var(--foreground)',
         }}
       >
         <span>{checked ? labelOn : labelOff}</span>
         <span
           aria-hidden="true"
           className="relative inline-block h-5 w-9 shrink-0 rounded-full transition"
-          style={{ background: checked ? 'var(--color-flit-brand)' : '#CBD5E1' }}
+          style={{ background: checked ? 'var(--color-flit-brand)' : 'var(--border-strong)' }}
         >
           <span
             className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
@@ -325,7 +325,7 @@ export function WizardFieldToggle({
         </span>
       </button>
       {description ? (
-        <p id={hintId} className="text-[12px] text-[#59677D] dark:text-white/60">
+        <p id={hintId} className="text-[12px] text-muted-foreground">
           {description}
         </p>
       ) : null}
