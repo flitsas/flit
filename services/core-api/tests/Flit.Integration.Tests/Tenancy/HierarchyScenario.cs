@@ -237,12 +237,18 @@ internal static class HierarchyScenario
             CreatedAt = now.AddDays(-1),
         });
 
-        ctx.CompanyDocumentParams.Add(new CompanyDocumentParamEntity
+        // Versión pendiente: no sustituye ningún documento del trámite, solo alimenta la lectura Q11.
+        ctx.CompanyPersonalizedDocuments.Add(new CompanyPersonalizedDocumentEntity
         {
             Id = Id(0x0007, suffix, 1),
             TenantId = tenant,
-            DocumentTypeCode = "SOAT",
-            State = "OBLIGATORIO",
+            DocumentType = "mandato",
+            Version = 1,
+            Status = "pendiente",
+            Filename = $"mandato-{code.ToLowerInvariant()}.pdf",
+            StoragePath = $"it/{code.ToLowerInvariant()}/mandato-v1.pdf",
+            StorageSha256 = new string('a', 64),
+            SizeBytes = 1,
             CreatedAt = now,
         });
 

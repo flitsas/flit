@@ -370,10 +370,6 @@ public static class DependencyInjection
         // Preview informativo de documentos (paso 1 wizard, sin instancia).
         services.AddScoped<PreviewDocumentosInformativosHandler>();
 
-        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
-        services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();
-        services.AddScoped<CompanyDocumentParams.UpsertCompanyDocumentParamHandler>();
-
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();
         services.AddScoped<GetProcedureDocumentRequirementsHandler>();

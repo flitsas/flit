@@ -26,7 +26,6 @@ const settings: TenantSettings = {
 };
 
 const slots = {
-  documentosSlot: <div>panel-documentos</div>,
   auditSlot: <div>panel-historial</div>,
   otSlot: <div>panel-organismos</div>,
 };
@@ -47,13 +46,12 @@ describe("Contenedor de pestañas — modelo de guardado", () => {
     expect(screen.queryByText("Cambios sin guardar")).not.toBeInTheDocument();
   });
 
-  it("«Guardar todo» no aparece fuera del PUT (Productos, Documentos, Historial)", async () => {
+  it("«Guardar todo» no aparece fuera del PUT (Productos, Historial)", async () => {
     const user = userEvent.setup();
     render(<CompanyConfigTabs settings={settings} onSaveSettings={vi.fn()} {...slots} />);
 
     expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Documentos" }));
-    expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Documentos" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /historial/i }));
     expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Trámites" }));
