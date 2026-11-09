@@ -45,7 +45,7 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
     <section className={compacta ? "flex flex-col gap-3" : `${TARJETA_CLS} flex flex-col gap-4`}>
       <fieldset aria-describedby={error ? errorId : undefined} className="flex flex-col gap-4">
         <legend className="mb-1">
-          <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary dark:text-white"}>Alcance</Titulo>
+          <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>Alcance</Titulo>
         </legend>
         {!compacta && <p className={AYUDA_CLS}>Elige qué fuentes consultar por cada vehículo. Solo ves las que tu compañía tiene contratadas.</p>}
         {faltantes.length > 0 && (

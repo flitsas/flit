@@ -92,7 +92,7 @@ function Resultado({ id }: { id: string }) {
             { key: "numero", header: "Comparendo", render: (f) => leerDatosFila(f.datos).numeroComparendo ?? "—" },
             { key: "valor", header: "Valor", align: "right", render: (f) => formatoPesos(leerDatosFila(f.datos).valor) },
             { key: "fecha", header: "Fecha de pago", render: (f) => formatoFecha(leerDatosFila(f.datos).fechaPago) },
-            { key: "errores", header: "Errores", render: (f) => (f.errores.length ? <span className="text-[#B42318]">{f.errores.join("; ")}</span> : "—") },
+            { key: "errores", header: "Errores", render: (f) => (f.errores.length ? <span className="text-destructive">{f.errores.join("; ")}</span> : "—") },
           ]}
           pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
         />

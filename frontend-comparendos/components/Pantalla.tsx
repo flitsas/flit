@@ -13,7 +13,7 @@ export function Encabezado({ titulo, descripcion, acciones }: { titulo: string; 
       <div className="flex flex-col gap-1">
         <h1 className={TITULO_CLS}>{titulo}</h1>
         {/* div y no p: algunas pantallas pasan bloques (chip, barra de progreso) y un div dentro de p rompe la hidratación. */}
-        {descripcion && <div className="text-sm text-[#5B6B82] dark:text-slate-300">{descripcion}</div>}
+        {descripcion && <div className="text-sm text-muted-foreground">{descripcion}</div>}
       </div>
       {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
     </header>

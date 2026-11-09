@@ -9,7 +9,7 @@ import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-p
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+  "w-full bg-card border border-input rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
   const [current, setCurrent] = useState("");
@@ -56,7 +56,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
 
   if (done) {
     return (
-      <p role="status" className="text-sm text-slate-700">
+      <p role="status" className="text-sm text-foreground">
         Tu contraseña fue actualizada correctamente.
       </p>
     );
@@ -89,7 +89,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
           value={next}
           onChange={(e) => setNext(e.target.value)}
         />
-        <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
         <label htmlFor="cp-confirm" className="block text-sm font-medium text-flit-primary mb-1">
@@ -105,15 +105,15 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
         />
       </div>
       {error && (
-        <p role="alert" className="text-sm text-[#ff4e00]">
+        <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--color-flit-brand)" }}
+        className="w-full rounded-xl py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
         {loading ? "Guardando…" : "Cambiar contraseña"}
       </button>

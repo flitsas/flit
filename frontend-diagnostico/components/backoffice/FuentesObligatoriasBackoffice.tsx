@@ -198,7 +198,7 @@ export function FuentesObligatoriasBackoffice() {
   return (
     <>
       <section aria-labelledby="fuentes-obl-titulo" className={TARJETA_CLS}>
-        <h1 id="fuentes-obl-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+        <h1 id="fuentes-obl-titulo" className="text-2xl font-semibold text-flit-primary">
           Fuentes obligatorias
         </h1>
         <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">
@@ -220,7 +220,7 @@ function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlter
 
   return (
     <section aria-labelledby={tituloId} className={`${TARJETA_CLS} flex flex-col gap-4`}>
-      <h2 id={tituloId} className="text-lg font-semibold text-flit-primary dark:text-white">
+      <h2 id={tituloId} className="text-lg font-semibold text-flit-primary">
         {titulo}
       </h2>
       {seleccion.length === 0 && <p className="text-sm text-[var(--nav-texto)]">Definición guardada con la lista vacía.</p>}

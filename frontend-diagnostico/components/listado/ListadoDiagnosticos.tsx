@@ -40,7 +40,7 @@ const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Es
 /** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
 const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
-const TEXTO_SECUNDARIO = "max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300";
+const TEXTO_SECUNDARIO = "max-w-md text-sm text-[var(--nav-texto)]";
 
 function Vacio({ titulo, Icono, children }: { titulo: string; Icono: typeof ClipboardList; children?: ReactNode }) {
   return (
@@ -160,7 +160,7 @@ export function ListadoDiagnosticos() {
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
-        <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table aria-label="Diagnósticos de la compañía" className="w-full min-w-[940px] border-collapse text-sm">
             <thead>
               <tr>
@@ -183,7 +183,7 @@ export function ListadoDiagnosticos() {
                       if ((e.target as HTMLElement).closest("a")) return;
                       router.push(destino);
                     }}
-                    className={`${FILA_TABLA_CLS} cursor-pointer bg-white transition-colors hover:bg-[var(--color-flit-gray)]/40 dark:bg-transparent dark:hover:bg-white/[0.06]`}
+                    className={`${FILA_TABLA_CLS} cursor-pointer bg-card transition-colors hover:bg-[var(--table-row-hover)]`}
                   >
                     <td className={`${CELDA_TABLA_CLS} font-mono tabular-nums`}>
                       <span title={d.id}>{idCorto(d.id)}</span>
@@ -191,7 +191,7 @@ export function ListadoDiagnosticos() {
                     <td className={CELDA_TABLA_CLS}>
                       <Link
                         href={destino}
-                        className={`text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline dark:text-white ${FOCO_CLS}`}
+                        className={`text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`}
                       >
                         {d.nombre}
                       </Link>
@@ -233,7 +233,7 @@ export function ListadoDiagnosticos() {
 
   return (
     <section aria-labelledby="listado-diagnosticos-titulo" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-      <h2 id="listado-diagnosticos-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+      <h2 id="listado-diagnosticos-titulo" className="text-lg font-semibold text-flit-primary">
         Diagnósticos
       </h2>
       <FiltrosListado valor={filtros} error={errorCampo} onCambiar={aplicar} />

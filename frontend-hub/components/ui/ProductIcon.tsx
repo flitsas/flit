@@ -11,7 +11,7 @@ export function ProductIcon({ icon, size = "md", muted = false }: { icon: string
   return (
     <span
       className={`grid shrink-0 place-items-center ${box} ${
-        muted ? "bg-[var(--color-flit-bg)] text-flit-brand dark:bg-white/10" : "text-white shadow-[var(--nav-sombra-activo)]"
+        muted ? "bg-secondary text-flit-brand" : "text-white shadow-[var(--nav-sombra-activo)]"
       }`}
       style={muted ? undefined : { background: BRAND_GRADIENT }}
     >

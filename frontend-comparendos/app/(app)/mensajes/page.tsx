@@ -61,7 +61,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
       {detalle.estado === "error" && <InlineAlert tone="error">{detalle.error}</InlineAlert>}
       {m && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-          <iframe title="Cuerpo del correo" sandbox="" srcDoc={m.html ?? "<p>El cuerpo de este correo no está disponible.</p>"} className="h-[520px] w-full rounded-xl border border-[#DFE5ED] bg-white" />
+          <iframe title="Cuerpo del correo" sandbox="" srcDoc={m.html ?? "<p>El cuerpo de este correo no está disponible.</p>"} className="h-[520px] w-full rounded-xl border border-border bg-card" />
           <aside className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
               <Chip e={estadoComunicacion(m.estado)} title={m.motivoFallo ?? undefined} />

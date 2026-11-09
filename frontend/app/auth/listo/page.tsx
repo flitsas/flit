@@ -24,8 +24,8 @@ export default function SesionLista() {
   }, []);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-flit-bg px-4">
-      <p role={error ? "alert" : "status"} className="text-sm text-slate-600">
+    <main className="flex min-h-screen items-center justify-center bg-flit-bg px-4 dark:bg-background">
+      <p role={error ? "alert" : "status"} className="text-sm text-muted-foreground">
         {error ? (
           <>
             No fue posible abrir la sesión. <a className="text-flit-brand underline" href="/auth/login">Intentar de nuevo</a>

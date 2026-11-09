@@ -17,10 +17,10 @@ import { useCarga } from "@/lib/useCarga";
 
 const COLOR_ACTOR: Record<string, string> = {
   Usuario: "var(--color-flit-brand)",
-  Sistema: "#5B6B82",
-  Scheduler: "#8B5CF6",
-  ApiExterna: "#00A3A3",
-  Conductor: "#D9A400",
+  Sistema: "var(--muted-foreground)",
+  Scheduler: "var(--badge-purple-fg)",
+  ApiExterna: "var(--color-flit-tech)",
+  Conductor: "var(--badge-warning-fg)",
 };
 
 /**
@@ -110,17 +110,17 @@ export function Timeline({
       {eventos.estado === "error" && <InlineAlert tone="error" action={<button type="button" onClick={eventos.recargar}>Reintentar</button>}>{eventos.error}</InlineAlert>}
       {eventos.estado === "ready" && (eventos.datos ?? []).length === 0 && <p className="text-xs opacity-60">Sin eventos para mostrar.</p>}
 
-      <ol className="relative ml-2 border-l-2 border-[#DFE5ED] dark:border-white/10">
+      <ol className="relative ml-2 border-l-2 border-border">
         {(eventos.datos ?? []).map((e) => (
           <li key={e.id} className="relative mb-4 ml-5">
-            <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-white dark:ring-[#0B0F14]" style={{ background: COLOR_ACTOR[e.actorTipo] ?? "#5B6B82" }} aria-hidden />
+            <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-card" style={{ background: COLOR_ACTOR[e.actorTipo] ?? "var(--muted-foreground)" }} aria-hidden />
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-xs font-semibold">{EVENTO_TIMELINE[e.tipo] ?? e.tipo}</span>
               <span className="text-[11px] opacity-60">
                 {formatoFechaHora(e.ocurridoEn)} · {nombreActor(e.actorNombre)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{textoParaGestora(e.descripcion)}</p>
+            <p className="whitespace-pre-wrap text-xs text-foreground">{textoParaGestora(e.descripcion)}</p>
             {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
               <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-flit-brand hover:underline">

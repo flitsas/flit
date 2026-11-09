@@ -26,7 +26,7 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="text-sm font-semibold">{titulo}</legend>
-      <p className="text-[11px] text-[#5B6B82] dark:text-slate-300">{ayuda}</p>
+      <p className="text-[11px] text-muted-foreground">{ayuda}</p>
       {valor.map((c, i) => (
         <div key={i} className="grid grid-cols-1 items-center gap-2 md:grid-cols-[1fr_1fr_auto]">
           <input className={INPUT_CLS} value={c.correo} disabled={soloLectura} aria-label={`${titulo}: correo ${i + 1}`} placeholder="correo@empresa.com"
@@ -38,7 +38,7 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
               onCambio={(tipos) => onCambio(valor.map((x, j) => (j === i ? { ...x, tipos } : x)))} />
           )}
           {!soloLectura && (
-            <button type="button" aria-label="Quitar" className="text-[#B42318] hover:opacity-70" onClick={() => onCambio(valor.filter((_, j) => j !== i))}>
+            <button type="button" aria-label="Quitar" className="text-destructive hover:opacity-70" onClick={() => onCambio(valor.filter((_, j) => j !== i))}>
               <Trash2 className="h-4 w-4" />
             </button>
           )}
@@ -148,7 +148,7 @@ function Configuracion({ empresa }: { empresa: string | null }) {
         {/* HU #13882: el canal sale del «Enrutamiento de notificaciones» de la empresa en la plataforma; aquí solo se ve. */}
         <div className={ETIQUETA_CLS}>
           Canal de correo
-          <p className={`${INPUT_CLS} flex items-center bg-[#F4F6FA] dark:bg-white/5`}>
+          <p className={`${INPUT_CLS} flex items-center bg-secondary`}>
             {c.canalCorreo === "EmpresaApi" ? "Cuenta de correo propia de la empresa" : "Cuenta de FLIT"}
           </p>
           <span className="font-normal opacity-70">

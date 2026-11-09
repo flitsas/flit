@@ -67,7 +67,7 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
     render: (f) =>
       f.contraventorNombre ? (
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[#16A34A]" />
+          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[var(--flit-success-ink)]" />
           <span>{f.contraventorNombre}</span>
           <span className="sr-only">(asignado)</span>
         </span>

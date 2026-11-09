@@ -90,7 +90,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
         </div>
       </div>
 
-      <div className="order-2 flex w-full flex-col justify-center overflow-y-auto bg-white px-6 py-10 sm:px-12 md:w-5/12 lg:px-16">
+      <div className="order-2 flex w-full flex-col justify-center overflow-y-auto bg-card px-6 py-10 sm:px-12 md:w-5/12 lg:px-16">
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center gap-3">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-flit-tech">
@@ -104,7 +104,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
               <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-flit-alert" />
               <div className="text-sm">
                 <p className="font-semibold text-flit-alert">Acceso Restringido</p>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {panel === "blocked"
                     ? "Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso."
                     : "Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema."}
@@ -117,7 +117,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
               <ExternalLink className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" />
               <div className="text-sm">
                 <p className="font-semibold text-flit-brand">Tu red tiene un dominio propio</p>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Ingresa desde <strong>{network.networkDomain}</strong> para acceder a tu cuenta.
                 </p>
                 <a href={network.loginUrl} rel="noopener" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-flit-brand underline hover:opacity-80">
@@ -129,9 +129,9 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
           ) : (
             <form onSubmit={submit} className="space-y-4" aria-label="Iniciar sesión" noValidate>
               <div>
-                <label htmlFor="login-email" className="mb-1.5 block text-xs font-medium text-slate-600">Usuario Corporativo</label>
+                <label htmlFor="login-email" className="mb-1.5 block text-xs font-medium text-muted-foreground">Usuario Corporativo</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                  <Mail className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                   <input
                     id="login-email"
                     type="email"
@@ -140,14 +140,14 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@flit.io"
                     aria-invalid={error ? true : undefined}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
+                    className="w-full rounded-xl border border-input bg-card py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   />
                 </div>
               </div>
               <div>
-                <label htmlFor="login-password" className="mb-1.5 block text-xs font-medium text-slate-600">Contraseña</label>
+                <label htmlFor="login-password" className="mb-1.5 block text-xs font-medium text-muted-foreground">Contraseña</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                  <Lock className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                   <input
                     id="login-password"
                     type="password"
@@ -156,10 +156,10 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
                     onChange={(e) => setPass(e.target.value)}
                     placeholder="••••••••"
                     aria-invalid={error ? true : undefined}
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
+                    className="w-full rounded-xl border border-input bg-card py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   />
                 </div>
-                <Link href="/auth/forgot-password" className="mt-2 inline-block text-xs text-slate-500 transition hover:text-flit-brand">
+                <Link href="/auth/forgot-password" className="mt-2 inline-block text-xs text-muted-foreground transition hover:text-flit-brand">
                   ¿Olvidó su contraseña?
                 </Link>
               </div>

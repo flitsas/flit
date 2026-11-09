@@ -42,7 +42,7 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         {horas.map((h) => (
-          <span key={h} className="inline-flex items-center gap-1 rounded-full bg-[#E7EEFF] px-2 py-0.5 text-xs font-semibold text-[#3B4FD6] dark:bg-white/10 dark:text-white">
+          <span key={h} className="inline-flex items-center gap-1 rounded-full bg-[var(--badge-info-bg)] px-2 py-0.5 text-xs font-semibold text-flit-brand-ink">
             {h}
             <button type="button" aria-label={`Quitar ${h}`} onClick={() => onCambio(horas.filter((x) => x !== h))}>
               <X className="h-3 w-3" />
@@ -66,7 +66,7 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
           Agregar
         </button>
       </div>
-      {error && <span className="text-[11px] text-[#B42318]">{error}</span>}
+      {error && <span className="text-[11px] text-destructive">{error}</span>}
     </div>
   );
 }
@@ -100,7 +100,7 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
   };
 
   return (
-    <fieldset className="flex flex-col gap-3 border-t border-[#E2E8F0] pt-4 first:border-t-0 first:pt-0 dark:border-white/10">
+    <fieldset className="flex flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <legend className="text-sm font-semibold">{canal.etiqueta}</legend>
@@ -304,7 +304,7 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
         <h2 className="text-sm font-semibold">Consultas automáticas de comparendos</h2>
         <StatusBadge label={estado.etiqueta} tone={estado.tono} />
       </div>
-      <p className="text-[11px] text-[#5B6B82] dark:text-slate-300">
+      <p className="text-[11px] text-muted-foreground">
         Cuándo se consultan tus comparendos. La agenda la define FLIT: si necesitas cambiarla, solicítalo a operaciones.
       </p>
       {canales.length === 0 ? (
@@ -313,7 +313,7 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-[#DFE5ED] dark:bg-white/10">
+              <tr className="bg-border">
                 <th className="px-3 py-2 font-semibold">Consulta</th>
                 <th className="px-3 py-2 font-semibold">Agenda</th>
                 <th className="px-3 py-2 font-semibold">Última consulta</th>
@@ -322,7 +322,7 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
             </thead>
             <tbody>
               {canales.map((c) => (
-                <tr key={c.canal} className="border-b border-[#E2E8F0] dark:border-white/10">
+                <tr key={c.canal} className="border-b border-border">
                   <td className="px-3 py-2 font-semibold">{c.etiqueta}</td>
                   <td className="px-3 py-2">{c.encendido ? (c.descripcion ?? "—") : "Apagada"}</td>
                   <td className="px-3 py-2">

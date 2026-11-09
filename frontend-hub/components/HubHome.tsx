@@ -11,8 +11,8 @@ import { productInfo } from "@/lib/products";
 import { hubNav, type HubUser } from "./HubShell";
 
 const card =
-  "rounded-2xl border border-[var(--color-flit-gray)] bg-white shadow-[var(--nav-sombra-dock)] dark:border-white/10 dark:bg-[#0B0F14]";
-const muted = "text-[#59677d] dark:text-white/65";
+  "rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]";
+const muted = "text-muted-foreground";
 
 /** Fecha de hoy en Colombia («jueves, 2 de octubre»), la misma en el servidor y en el navegador. */
 function today(): string {
@@ -127,7 +127,7 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
                     {createElement(item.icon, { className: "h-4 w-4", "aria-hidden": true })}
                   </span>
                   <span className="flex-1">{item.label}</span>
-                  <ArrowUpRight className="h-4 w-4 text-[#59677d] transition group-hover:text-flit-brand dark:text-white/50" aria-hidden="true" />
+                  <ArrowUpRight className="h-4 w-4 text-muted-foreground transition group-hover:text-flit-brand" aria-hidden="true" />
                 </a>
               </li>
             ))}

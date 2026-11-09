@@ -84,11 +84,11 @@ function SubirDocumento({ rl, doc, onSubido }: { rl: Representante; doc: (typeof
   };
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/15">
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2">
       <span className="text-xs font-semibold">{doc.texto}</span>
       <div className="flex items-center gap-2">
         {archivoId ? (
-          <button type="button" className="text-xs text-[#3B4FD6] hover:underline" onClick={() => apiDownload(`/archivos/${archivoId}`, doc.tipo).catch(() => toast.show("No se pudo descargar.", "error"))}>
+          <button type="button" className="text-xs text-flit-brand-ink hover:underline" onClick={() => apiDownload(`/archivos/${archivoId}`, doc.tipo).catch(() => toast.show("No se pudo descargar.", "error"))}>
             Ver
           </button>
         ) : (
@@ -283,7 +283,7 @@ export default function Representantes() {
                 header: "",
                 align: "right",
                 render: (r) => (
-                  <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={(e) => { e.stopPropagation(); setDocumentos(r.id); }}>
+                  <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={(e) => { e.stopPropagation(); setDocumentos(r.id); }}>
                     Documentos
                   </button>
                 ),

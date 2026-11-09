@@ -17,8 +17,8 @@ export default async function Forbidden({ searchParams }: { searchParams: Promis
   const { hubUrl } = diagnosticoConfig();
   return (
     <main className="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <h1 className="text-2xl font-semibold text-flit-primary dark:text-white">No tienes acceso</h1>
-      <p className="max-w-md text-[var(--nav-texto)] dark:text-slate-300">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
+      <h1 className="text-2xl font-semibold text-flit-primary">No tienes acceso</h1>
+      <p className="max-w-md text-[var(--nav-texto)]">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
       <a
         href={`${hubUrl}/?inicio=1`}
         className="font-semibold text-[var(--flit-brand-ink)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]"

@@ -156,11 +156,11 @@ export function DrFlitChatPanel({
           <div className="min-w-0 flex-1">
             <h2
               id={`${panelId}-title`}
-              className="text-base font-bold text-white leading-tight"
+              className="text-base font-bold text-(--dr-flit-text-inverse) leading-tight"
             >
               DR. FLIT
             </h2>
-            <p className="text-xs text-white/85 leading-snug">
+            <p className="text-xs text-(--dr-flit-text-inverse)/85 leading-snug">
               Tu asistente inteligente de FLIT
             </p>
           </div>
@@ -170,7 +170,7 @@ export function DrFlitChatPanel({
             onClick={onClose}
             aria-label="Cerrar DR. FLIT"
             title="Ocultar panel (conserva la conversación)"
-            className="rounded-md p-1.5 text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="rounded-md p-1.5 text-(--dr-flit-text-inverse) hover:bg-(--dr-flit-text-inverse)/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--dr-flit-text-inverse)"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>

@@ -163,7 +163,7 @@ describe("HU #10496 — AC3: página cambiar contraseña con fondo desenfocado",
     expect(src).toMatch(/variant\?:\s*"auth"\s*\|\s*"overlay"/);
     expect(src).toMatch(/app-bg/);
     expect(src).toMatch(/backdrop-blur-md/);
-    expect(src).toMatch(/dark:bg-\[#0B0F14\]/);
+    expect(src).toMatch(/bg-card/);
   });
 
   it("la página de cambiar contraseña usa variant='overlay'", () => {
