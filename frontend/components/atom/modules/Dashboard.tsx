@@ -17,10 +17,6 @@ import {
   ChevronRight,
   Clock,
   ExternalLink,
-  FileText,
-  CheckCircle,
-  Car,
-  Layers,
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -43,7 +39,9 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
-import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { estadoChipClass, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { DateRangePicker } from "@/components/atom/DateRangePicker";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
@@ -85,7 +83,8 @@ const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Se
 const SERIES = [
   { label: "Matrículas", color: "var(--color-flit-brand)", family: "MATRICULAS" },
   { label: "Traspasos", color: "var(--color-flit-tech)", family: "TRASPASO" },
-  { label: "Otros", color: "#F9AC00", family: "OTROS" },
+  // HU #14481 — sin naranja: la tinta de la propuesta (`--di-accent`, que en oscuro pasa a azul claro).
+  { label: "Otros", color: "var(--di-accent)", family: "OTROS" },
 ] as const;
 
 function buildChartData(items: MonthlyTrendPoint[]) {
@@ -168,7 +167,25 @@ function buildWelcomeBody(
 // activos el carrusel solo muestra el slide fijo (AC3).
 
 /** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
+// HU #14481 (propuesta): el slide fijo es el `.page-header` del prototipo, una tarjeta clara de
+// superficie a cielo con texto en tinta, en vez del degradado azul y turquesa con texto blanco.
+const BRAND_GRADIENT = "linear-gradient(120deg,var(--di-surface-elevated) 35%,var(--di-sky) 100%)";
+const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
+
+/**
+ * HU #14481 — los dos filtros de la cabecera (Rango de fechas y Compañía) con el `.control` del
+ * prototipo: 44 px, contorno de control visible, superficie elevada y la etiqueta como `.campo
+ * label` (13 px, 600, sin versalitas). Son átomos compartidos que solo aceptan `className` en la
+ * raíz, así que el aspecto se aplica desde aquí a su campo (`>button` del selector de fechas,
+ * `input` del buscador de compañía) sin tocarlos.
+ */
+const FILTRO_CONTROL_CLS =
+  "[&>label]:text-[0.8125rem] [&>label]:font-semibold [&>label]:normal-case [&>label]:opacity-100 " +
+  "[&>label]:text-[color:var(--di-text-primary)] " +
+  "[&>button]:min-h-11 [&>button]:rounded-xl [&>button]:border-[color:var(--di-border-control)] " +
+  "[&>button]:bg-[var(--di-surface-elevated)] [&>button]:text-[color:var(--di-text-primary)] " +
+  "[&_input]:h-11 [&_input]:rounded-xl [&_input]:border-[color:var(--di-border-control)] " +
+  "[&_input]:bg-[var(--di-surface-elevated)] [&_input]:text-[color:var(--di-text-primary)]";
 
 type WelcomeSlide = {
   type: "welcome";
@@ -519,7 +536,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
         <div
-          className="relative md:col-span-2 rounded-2xl text-white overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)]"
+          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)] ${
+            esBienvenida(s)
+              ? "rounded-[28px] border border-[color:var(--di-border)] text-[color:var(--di-heading)] shadow-[var(--shadow-card)]"
+              : "rounded-2xl text-white"
+          }`}
           data-testid="dashboard-hero-banner"
         >
           {/* Capa de fondo: gradiente de marca fijo en el slide de bienvenida; en un banner, el
@@ -549,23 +570,38 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               imagen de banner; sobre el gradiente del slide fijo es imperceptible. */}
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
+            style={{
+              background: esBienvenida(s)
+                ? "transparent"
+                : "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)",
+            }}
           />
           {s.type === "welcome" && (
-            <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-15 bg-white" />
+            // Círculos del prototipo: el turquesa lleno arriba a la derecha y, con `outline`, el aro
+            // grande de cielo alrededor (`.page-header::before/::after`), sin marcado nuevo.
+            <div
+              className="absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90"
+              style={{
+                background: "var(--di-highlight-decor)",
+                outline: "1.5px solid color-mix(in srgb, var(--di-sky-line) 50%, transparent)",
+                outlineOffset: "95px",
+              }}
+            />
           )}
           {s.type === "welcome" ? (
             <div className="relative flex flex-col gap-2 max-w-[85%] px-6 pt-5 overflow-hidden">
               <div className="flex items-center gap-3 min-w-0">
+                {/* La ilustración de Inicio del prototipo ocupa el lugar del ícono (que sigue en el
+                    DOM, oculto: era decorativo). */}
                 <div
-                  className="h-10 w-10 rounded-xl grid place-items-center shrink-0"
-                  style={{ background: "rgba(255,255,255,0.18)" }}
+                  className="h-16 w-16 shrink-0"
+                  style={{ background: `url("${rutaIlustracion("inicio")}") center / contain no-repeat` }}
                 >
-                  <Activity className="h-5 w-5" />
+                  <Activity className="hidden" aria-hidden="true" />
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
               </div>
-              <p className="text-sm md:text-base opacity-95 leading-snug line-clamp-3">{s.body}</p>
+              <p className="text-sm md:text-base leading-snug line-clamp-3 text-[color:var(--di-text-secondary)]">{s.body}</p>
             </div>
           ) : s.linkUrl ? (
             // Sin título visible (solo el banner): el enlace cubre toda la imagen — al acercarse,
@@ -604,7 +640,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   className="h-1.5 rounded-full transition-all"
                   style={{
                     width: i === slide ? 16 : 5,
-                    background: i === slide ? "#ffffff" : "rgba(255,255,255,0.5)",
+                    background: esBienvenida(s)
+                      ? i === slide
+                        ? "var(--di-action)"
+                        : "var(--di-border-control)"
+                      : i === slide
+                        ? "#ffffff"
+                        : "rgba(255,255,255,0.5)",
                   }}
                 />
               ))}
@@ -614,7 +656,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Anterior"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
+                className={`h-6 w-6 rounded-full grid place-items-center disabled:cursor-not-allowed disabled:opacity-40 ${
+                  esBienvenida(s)
+                    ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
+                    : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
+                }`}
               >
                 <ChevronLeft className="h-3 w-3" />
               </button>
@@ -622,7 +668,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 onClick={() => setSlide((v) => (v + 1) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Siguiente"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
+                className={`h-6 w-6 rounded-full grid place-items-center disabled:cursor-not-allowed disabled:opacity-40 ${
+                  esBienvenida(s)
+                    ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
+                    : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
+                }`}
               >
                 <ChevronRight className="h-3 w-3" />
               </button>
@@ -641,7 +691,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               onChange={setRange}
               disabled={status === "loading"}
               label="Rango de fechas"
-              className="min-w-0"
+              className={`min-w-0 ${FILTRO_CONTROL_CLS}`}
             />
             {isSuper && (
               <CompanySelector
@@ -651,7 +701,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 disabled={status === "loading"}
                 defaultLabel="Todas las compañías"
                 id="dashboard-compania"
-                className="min-w-0"
+                className={`min-w-0 ${FILTRO_CONTROL_CLS}`}
               />
             )}
           </div>
@@ -674,68 +724,54 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             // queda incompleta y alineada a la izquierda.
             <div className="grid grid-cols-3 gap-3 flex-1" data-testid="dashboard-kpi-grid">
               {[
-                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "var(--color-flit-brand)", family: null },
-                { label: "Matrículas", value: matriculas, icon: Car, color: "var(--color-flit-tech)", family: "MATRICULAS" as const },
-                { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00", family: "TRASPASO" as const },
-                { label: "Otros Trámites", value: otros, icon: Layers, color: "var(--color-flit-primary)", family: "OTROS" as const },
-                { label: "Completados", value: completados, icon: CheckCircle, color: "var(--flit-success-ink)", family: null },
+                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, ilustracion: "tramites" as const, family: null },
+                { label: "Matrículas", value: matriculas, ilustracion: "matricula" as const, family: "MATRICULAS" as const },
+                { label: "Traspasos", value: traspasos, ilustracion: "traspaso" as const, family: "TRASPASO" as const },
+                { label: "Otros Trámites", value: otros, ilustracion: "procesos" as const, family: "OTROS" as const },
+                { label: "Completados", value: completados, ilustracion: "documentos" as const, family: null },
               ].filter((k) => k.family === null || showsInAggregates(k.family)).map((k) => {
-                const Icon = k.icon;
                 const isError = status === "error";
+                // HU #14481 (propuesta): `TarjetaMetrica` de @flit/ui —etiqueta, cifra en tinta e
+                // ilustración— en vez del número de color y el ícono en un círculo.
                 return (
-                  // El título ocupa la fila completa y el icono baja a la del número. Antes
-                  // compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
-                  // disponía de `ancho − 48px` y con la rejilla en 3 columnas los rótulos largos se
-                  // cortaban en pantalla («Total Trá…», «Otros Trá…», «Completa…»). Recuperados esos
-                  // 48px, el rótulo más largo cabe y el tamaño sube al piso tipográfico de 12px.
-                  <div
+                  <TarjetaMetrica
                     key={k.label}
-                    className="rounded-2xl p-3 flex flex-col gap-2 bg-card border border-border"
-                  >
-                    <div className="min-w-0">
-                      {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
-                          se parte en dos líneas en vez de perder texto por el borde. */}
-                      <p className="text-xs opacity-70 font-medium leading-tight line-clamp-2">
-                        {k.label}
-                      </p>
-                      {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
-                      {networkActive && (
-                        <NetworkScopeBadge
-                          scope={net.scope}
-                          hijos={net.children}
-                          className="mt-1"
-                          testId={`kpi-red-${k.label}`}
-                        />
-                      )}
-                    </div>
-                    {/* `items-end`: la cifra y el icono se alinean por su base, no por su centro —
-                        con alturas tan distintas (24px vs 36px) centrarlos descuadraba la fila. */}
-                    <div className="flex items-end justify-between gap-2">
-                      {isError ? (
-                        <p
-                          className="text-xl font-bold flex items-center gap-1.5 min-w-0"
-                          style={{ color: "var(--destructive)" }}
+                    className="p-3.5 [&>img]:h-9 [&>img]:w-9 [&>span:nth-child(2)]:text-2xl"
+                    ilustracion={rutaIlustracion(k.ilustracion)}
+                    etiqueta={
+                      <span className="block min-w-0">
+                        {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
+                            se parte en dos líneas en vez de perder texto por el borde. */}
+                        <span className="block text-xs font-medium leading-tight line-clamp-2">{k.label}</span>
+                        {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
+                        {networkActive && (
+                          <NetworkScopeBadge
+                            scope={net.scope}
+                            hijos={net.children}
+                            className="mt-1"
+                            testId={`kpi-red-${k.label}`}
+                          />
+                        )}
+                      </span>
+                    }
+                    cifra={
+                      isError ? (
+                        <span
+                          className="flex items-center gap-1.5 min-w-0 text-xl"
+                          style={{ color: "var(--di-danger)" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
                           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
                           <span>—</span>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
-                        </p>
+                        </span>
+                      ) : status === "loading" ? (
+                        "—"
                       ) : (
-                        // `tabular-nums` y sin truncar: recortar un conteo mostraría una cifra
-                        // falsa. Mismo criterio que la tira de contadores del OT.
-                        <p className="text-2xl font-bold leading-none tabular-nums" style={{ color: k.color }}>
-                          {status === "loading" ? "—" : k.value}
-                        </p>
-                      )}
-                      <div
-                        className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
-                        style={{ background: `color-mix(in srgb, ${isError ? "var(--destructive)" : k.color} 10%, transparent)` }}
-                      >
-                        <Icon className="h-4 w-4" style={{ color: isError ? "var(--destructive)" : k.color }} />
-                      </div>
-                    </div>
-                  </div>
+                        k.value
+                      )
+                    }
+                  />
                 );
               })}
             </div>
@@ -804,22 +840,24 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 ) : (
                   <ul className="space-y-2">
                     {globalFunnel.map((f, i) => {
-                      const color = estadoChipStyle(f.status).accent;
+                      // HU #14481 — lenguaje de estados de la propuesta: el número va en la pastilla del
+                      // estado (--estado-*), el nombre con su marca (check, punto, equis) y la cifra en tinta.
+                      const chip = estadoChipStyle(f.status);
                       return (
                         <li
                           key={f.status}
-                          className="flex items-center gap-3 p-2 rounded-xl bg-secondary"
+                          className="flex items-center gap-3 p-2 rounded-xl bg-[var(--di-sky)]"
                         >
                           <span
-                            className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
-                            style={{ background: color }}
+                            className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold shrink-0 border"
+                            style={{ background: chip.bg, color: chip.color, borderColor: chip.border }}
                           >
                             {i + 1}
                           </span>
-                          <span className="flex-1 text-xs font-medium">
+                          <span className={`flex-1 text-xs font-medium ${estadoChipClass(f.status)}`}>
                             {estadoLabel(f.status)}
                           </span>
-                          <span className="text-base font-bold" style={{ color }}>
+                          <span className="text-base font-bold tabular-nums text-[color:var(--di-text-primary)]">
                             {f.count}
                           </span>
                         </li>
@@ -853,14 +891,19 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               </h2>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: "Total", value: biometricStats?.total ?? 0, color: "var(--color-flit-brand)" },
-                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, color: "var(--flit-success-ink)" },
-                  { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "var(--badge-warning-fg)" },
-                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "var(--badge-danger-fg)" },
+                  { label: "Total", value: biometricStats?.total ?? 0 },
+                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0 },
+                  { label: "En proceso", value: biometricStats?.enProceso ?? 0 },
+                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0 },
                 ].map((k) => (
-                  <div key={k.label} className="rounded-xl border p-2.5">
-                    <p className="text-[10px] opacity-70 font-medium">{k.label}</p>
-                    <p className="text-lg font-bold mt-0.5" style={{ color: k.color }}>
+                  // HU #14481 — receta de `TarjetaMetrica` (etiqueta secundaria, cifra en tinta) sin
+                  // cambiar el marcado de la tarjeta.
+                  <div
+                    key={k.label}
+                    className="rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-3 shadow-[var(--shadow-card)]"
+                  >
+                    <p className="text-xs font-medium text-[color:var(--di-text-secondary)]">{k.label}</p>
+                    <p className="text-2xl font-bold leading-tight mt-0.5 tabular-nums text-[color:var(--di-text-primary)]">
                       {k.value}
                     </p>
                   </div>
@@ -869,9 +912,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               {expiringSoonCount > 0 && (
                 <div
                   className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium"
-                  style={{ background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
+                  // Aviso pendiente de la propuesta: cielo con texto en tinta; el naranja queda en el ícono.
+                  style={{ background: "var(--di-sky)", color: "var(--di-heading)" }}
                 >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--di-alerta-punto)" }} />
                   {expiringSoonCount} validación{expiringSoonCount === 1 ? "" : "es"} próxima
                   {expiringSoonCount === 1 ? "" : "s"} a vencer
                 </div>
