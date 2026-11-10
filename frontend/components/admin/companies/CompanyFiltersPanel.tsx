@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Search, X } from "lucide-react";
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 // Panel de filtros del listado de compañías (HU #10194, AC1). El filtrado es
 // server-side: NIT/Razón Social/fechas se confirman al pulsar "Buscar"; el
@@ -23,8 +25,8 @@ export interface CompanyFiltersPanelProps {
 
 const EMPTY: CompanyFilters = {};
 
-const INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-border";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const INPUT_CLS = `${TRAMITES_INPUT_CLS} w-full`;
 
 export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFiltersPanelProps) {
   const [filters, setFilters] = useState<CompanyFilters>(initialValue);
@@ -114,15 +116,14 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
       <div className="flex items-end gap-2 md:col-span-6">
         <button
           type="submit"
-          className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "var(--gradient-action)" }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           <Search className="h-4 w-4" /> Buscar
         </button>
         <button
           type="button"
           onClick={handleClear}
-          className="flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium"
+          className={buttonClass({ variant: "secondary", size: "sm" })}
         >
           <X className="h-4 w-4" /> Limpiar
         </button>

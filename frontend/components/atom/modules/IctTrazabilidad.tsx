@@ -17,7 +17,6 @@ import {
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
   TipoTramiteSelect,
   agruparPorFamilia,
@@ -47,6 +46,8 @@ import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/cons
 import { DetalleTramiteIct } from "@/components/ict/DetalleTramiteIct";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 const TAMANO_PAGINA = TAMANO_DE_PAGINA_POR_DEFECTO;
 
@@ -69,11 +70,10 @@ const COLUMNAS = [
 
 const tdCls = "border-y px-4 py-3 align-middle";
 
-const inputCls =
-  "rounded-lg border border-border bg-card px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+// HU #14484 — el `.control` del prototipo y los botones `.btn sm`, los mismos de la barra de Trámites.
+const inputCls = TRAMITES_INPUT_CLS;
 
-const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
+const ghostCls = buttonClass({ variant: "secondary", size: "sm" });
 
 interface Filtros {
   desde: string;
@@ -465,8 +465,7 @@ export function IctTrazabilidad() {
         <button
           type="submit"
           disabled={cargando}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ background: WIZARD_CTA_GRADIENT }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Buscar
         </button>

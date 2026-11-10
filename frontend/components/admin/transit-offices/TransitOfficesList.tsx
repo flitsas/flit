@@ -19,6 +19,7 @@ import { departmentName } from "@/lib/co-departments";
 import { matchesOtOfficeSearch, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { TransitOfficeStatusDialog } from "@/components/admin/transit-offices/TransitOfficeStatusDialog";
 import { TransitOfficeQuipuxDialog } from "@/components/admin/transit-offices/TransitOfficeQuipuxDialog";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 /**
  * Listado de organismos de tránsito con estado operativo (RF01) + acciones de ciclo de
@@ -69,11 +70,10 @@ function matchesQuipux(office: TransitOfficeOperationalStatus, filter: QuipuxFil
 }
 
 // Selects de filtro — tokens FLIT (borde soft, foco azul marca).
-const FILTER_SELECT_CLS =
-  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-card px-3 py-2 text-sm text-flit-primary outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-border";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const FILTER_SELECT_CLS = TRAMITES_INPUT_CLS;
 const FILTER_OPTION_CLS = "bg-card text-flit-primary";
-const FILTER_INPUT_CLS =
-  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-card py-2 pl-9 pr-3 text-sm text-flit-primary outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 dark:border-border";
+const FILTER_INPUT_CLS = `${TRAMITES_INPUT_CLS} w-full pl-9`;
 
 export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps = {}) {
   const router = useRouter();

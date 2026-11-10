@@ -54,6 +54,8 @@ import {
   Secretaria,
   secretaria,
 } from "@/lib/logqx/labels";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 /**
  * Módulo "LOG QX" — bandeja (HU #11788, Feature #11784). Reemplaza la pantalla que exigía una
@@ -479,8 +481,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         <button
           type="submit"
           disabled={fetching}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ background: WIZARD_CTA_GRADIENT }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           <Search className="h-3.5 w-3.5" aria-hidden="true" /> Aplicar
         </button>
@@ -569,11 +570,10 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   );
 }
 
-const inputCls =
-  "rounded-lg border border-border bg-card px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+// HU #14484 — el `.control` del prototipo y los botones `.btn sm`, los mismos de la barra de Trámites.
+const inputCls = TRAMITES_INPUT_CLS;
 
-const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
+const ghostCls = buttonClass({ variant: "secondary", size: "sm" });
 
 /** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
 const COLUMNAS = [

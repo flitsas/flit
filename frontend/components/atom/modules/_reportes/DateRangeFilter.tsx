@@ -2,6 +2,7 @@
 
 import { DateRangePicker } from "@/components/atom/DateRangePicker";
 import { esRangoVacio, sinRango, type DateRange } from "./range";
+import { buttonClass } from "@flit/ui/Button";
 
 interface DateRangeFilterProps {
   value: DateRange;
@@ -32,7 +33,7 @@ export function DateRangeFilter({ value, onChange, disabled, permiteSinRango }: 
           </span>
           <button
             type="button"
-            className="h-10 rounded-[10px] border border-border px-3 text-xs font-medium text-flit-primary transition hover:bg-flit-brand/10 disabled:opacity-60"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
             disabled={disabled || vacio}
             aria-pressed={vacio}
             title={
