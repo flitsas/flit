@@ -153,6 +153,12 @@ public sealed class MaestroRadicadoFijoTests
         _storage.Saved.Should().BeEmpty("datos rotos no autorizan a regenerar");
     }
 
+    /// <summary>
+    /// HU #14494 — en estado final, <see cref="EntregarConsolidadoHandler"/> evalúa Quipux
+    /// (<see cref="MaestroRadicadoFijo"/>) antes que la coherencia temporal: no regenera; modo
+    /// <c>radicado_fijo</c> con <c>definitivoPorEstadoFinal=true</c> (antes se esperaba
+    /// <c>definitivo_estado_final</c> sin la excepción radicada).
+    /// </summary>
     [Fact]
     public async Task F1_Entrega_EstadoFinalConRadicacion_SirveElRadicadoComoDefinitivo()
     {
@@ -166,7 +172,9 @@ public sealed class MaestroRadicadoFijoTests
 
         result!.Document.AttachmentId.Should().Be(radicado.Id, "el organismo tuvo a la vista el radicado");
         result.DefinitivoPorEstadoFinal.Should().BeTrue();
-        result.Modo.Should().Be(ConsolidadoEntregaModos.DefinitivoEstadoFinal);
+        result.Modo.Should().Be(ConsolidadoEntregaModos.RadicadoFijo).And.Be("radicado_fijo");
+        result.Regenerado.Should().BeFalse();
+        _storage.Saved.Should().BeEmpty("el maestro radicado no se regenera ni en estado final (HU #14494)");
     }
 
     // ── F1.7 — POST OT consolidado-maestro ──────────────────────────────────────────────────────
