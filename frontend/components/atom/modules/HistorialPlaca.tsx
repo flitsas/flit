@@ -24,6 +24,7 @@
 //     pantalla — que es el criterio del PO.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Search } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -303,7 +304,7 @@ export function HistorialPlaca({
         </div>
         <button
           type="submit"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-flit-brand px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className={buttonClass({ size: "sm" })}
           data-testid="historial-placa-search-btn"
         >
           <Search className="h-3.5 w-3.5" aria-hidden />
