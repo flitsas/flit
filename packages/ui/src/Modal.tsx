@@ -3,6 +3,7 @@
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { X, type LucideIcon } from "lucide-react";
+import { cn } from "./cn";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
 // contraste legible en dark). Encapsula el overlay (`fixed inset-0` + backdrop
@@ -11,6 +12,8 @@ import { X, type LucideIcon } from "lucide-react";
 // cerrar). Reemplaza el boilerplate que cada diálogo repetía con z-index, blur y
 // anchos divergentes. El cuerpo (formulario, campos, botones) se pasa como
 // `children`; el título lo renderiza el propio Modal para garantizar el contraste.
+// HU #14476 — aspecto del `.modal` de la propuesta: radio de 24 px, franja tinta arriba con el ícono, el título y la X
+// en el color sobre acento, círculo turquesa decorativo y pie separado por una línea. Mismas props.
 
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
@@ -39,7 +42,7 @@ export interface ModalProps {
   icon?: LucideIcon;
   /** Fondo del recuadro del icono (por defecto azul de marca). */
   iconBg?: string;
-  /** Clase del título; por defecto navy/blanco legible en ambos temas. */
+  /** Clase del título (tamaño y peso). El color lo fija la franja (`--di-on-accent`) para que siempre se lea. */
   titleClassName?: string;
   /** Subtítulo opcional bajo el título. */
   description?: React.ReactNode;
@@ -68,7 +71,7 @@ export function Modal({
   title,
   icon: Icon,
   iconBg = "var(--color-flit-brand)",
-  titleClassName = "text-base font-bold text-flit-primary dark:text-foreground",
+  titleClassName = "text-base font-semibold",
   description,
   size = "md",
   zClassName = "z-[100]",
@@ -127,43 +130,55 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-border bg-card p-4 text-flit-primary shadow-[var(--shadow-modal)] sm:p-6 dark:text-foreground ${panelClassName}`}
+        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-flit-primary shadow-[var(--shadow-modal)] dark:text-foreground ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
-          <div className="mb-4 shrink-0">{resolvedHeader}</div>
+          <div className="mx-4 mt-4 shrink-0 sm:mx-6 sm:mt-6">{resolvedHeader}</div>
         ) : (
-          <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              {Icon && (
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                  style={{ background: iconBg }}
-                >
-                  <Icon className="h-4.5 w-4.5 text-white" />
-                </span>
-              )}
-              <div className="min-w-0">
-                <h2 id={titleId} className={titleClassName}>
-                  {title}
-                </h2>
-                {description && (
-                  <p className="mt-0.5 text-xs opacity-70">{description}</p>
-                )}
-              </div>
+          // Franja tinta del `.modal__franja` del prototipo: ícono y título en el color sobre acento, y un círculo
+          // turquesa decorativo arriba a la derecha sobre el que queda la X.
+          <div className="relative flex shrink-0 items-center gap-3 overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)] sm:px-6 sm:py-5">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
+            />
+            {Icon && (
+              <span
+                className="relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                style={{ background: iconBg }}
+              >
+                <Icon className="h-4.5 w-4.5 text-white" />
+              </span>
+            )}
+            <div className="relative z-[1] min-w-0 flex-1 leading-tight">
+              <h2
+                id={titleId}
+                className={cn(titleClassName, "text-[color:var(--di-on-accent)] dark:text-[color:var(--di-on-accent)]")}
+              >
+                {title}
+              </h2>
+              {description && <p className="mt-0.5 text-xs opacity-85">{description}</p>}
             </div>
             <button
               type="button"
               aria-label="Cerrar"
               onClick={requestClose}
-              className="shrink-0 text-muted-foreground transition hover:text-foreground"
+              className="relative z-[1] grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
         )}
-        <div className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto ${bodyClassName}`}>{children}</div>
+        {/* Márgenes y no padding: el cuerpo conserva su barra de scroll y el `px-*` que algunos llamadores le pasan. */}
+        <div
+          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 sm:mt-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
+        >
+          {children}
+        </div>
         {footer ? (
-          <div className="mt-4 shrink-0 border-t border-border pt-4">{footer}</div>
+          <div className="mx-4 mb-4 mt-4 shrink-0 border-t border-[color:var(--di-divider)] pt-4 sm:mx-6 sm:mb-6">
+            {footer}
+          </div>
         ) : null}
       </div>
     </div>,
