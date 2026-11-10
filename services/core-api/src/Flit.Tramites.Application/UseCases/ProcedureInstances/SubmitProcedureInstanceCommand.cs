@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Quipux;
+using Flit.Tramites.Domain.Tramites.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -22,8 +23,10 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </para>
 /// <para>
 /// Bug #13912 — canal Quipux activo solo si el tipo tiene <c>external_refs.quipux</c> <b>y</b> la
-/// secretaría destino tiene DIVIPO + bandera de familia (misma regla que el worker). Entonces el
-/// submit NO avanza a <c>entregado</c>/<c>preasignacion</c>: queda en <c>preparado</c> para encolar.
+/// secretaría destino tiene DIVIPO + bandera de familia (misma regla que el worker). El OT se resuelve
+/// con <see cref="OtEfectivaResolver"/> (columna o FUR): si solo está en field_values —habitual en
+/// borrador— igual se detecta Quipux, se promueve la columna (el worker filtra por ella) y el submit
+/// NO avanza a <c>entregado</c>/<c>preasignacion</c>: queda en <c>preparado</c> para encolar.
 /// Si el OT no está integrado (flags off / DIVIPO vacío), se radica por el canal gestor/OT normal.
 /// </para>
 /// <para>
@@ -158,18 +161,34 @@ public sealed class SubmitProcedureInstanceHandler(
 
     /// <summary>
     /// Canal Quipux = tipo parametrizado + OT destino integrado (DIVIPO + bandera de familia).
-    /// Sin <c>TransitOfficeId</c> o sin flags → canal gestor/OT (no atrapa en preparado).
+    /// El OT efectivo es columna <c>TransitOfficeId</c> o, si aún no se promovió, el del FUR
+    /// (<see cref="OtEfectivaResolver"/> — misma regla que <see cref="FirmaGate"/>). Sin OT o sin
+    /// flags → canal gestor/OT (no atrapa en preparado).
     /// </summary>
     private async Task<bool> EsCanalQuipuxActivoAsync(
         Domain.Entities.ProcedureInstance instance,
         CancellationToken ct)
     {
-        if (instance.TransitOfficeId is not { } otId)
+        if (OtEfectivaResolver.Resolve(instance) is not { } otId)
             return false;
 
-        return await QuipuxCanalResolver
+        var activo = await QuipuxCanalResolver
             .EsActivoAsync(_quipuxCanal, instance.ProcedureType?.ExternalRefs, otId, ct)
             .ConfigureAwait(false);
+        if (!activo)
+            return false;
+
+        // El worker Quipux filtra por la columna, no por field_values. Si el canal está activo y la
+        // columna aún va vacía, promover ya: el submit Quipux se queda en preparado sin pasar por
+        // EvaluarEntrega (que es quien promocionaba al radicar al OT).
+        if (instance.TransitOfficeId is null)
+        {
+            instance.TransitOfficeId = otId;
+            instance.UpdatedAt = DateTimeOffset.UtcNow;
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+
+        return true;
     }
 }
 

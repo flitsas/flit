@@ -5,9 +5,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
 /// <summary>
 /// Único sitio donde se decide si un OT con un tipo dado está en el canal Quipux: tipo parametrizado
-/// (<c>external_refs</c>) + OT destino integrado (DIVIPO + bandera de la familia). Lo comparten el
-/// enrutamiento de <c>/submit</c> y la excepción de firma de la matrícula sin placa
-/// (<see cref="FirmaGate.EximidaPorPreasignacionAsync"/>).
+/// (<c>external_refs</c>) + OT destino integrado (DIVIPO + bandera de la familia). Lo usa el
+/// enrutamiento de <c>/submit</c> (y, en ramas más nuevas, la excepción de firma de matrícula sin
+/// placa en <c>FirmaGate</c>).
 /// </summary>
 internal static class QuipuxCanalResolver
 {
