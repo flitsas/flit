@@ -6,6 +6,7 @@ import { useSesion } from "@/components/DiagnosticoShell";
 import { TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CapturaExpress } from "@/components/express/CapturaExpress";
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 /**
  * Pantalla base de Diagnóstico (HU #13732): la tarjeta título con la compañía de la sesión. El shell solo la muestra con
@@ -23,9 +24,10 @@ export default function Inicio() {
 
   return (
     <>
-      <section aria-labelledby="diagnostico-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between`}>
+      <section aria-labelledby="diagnostico-titulo" className={`${CABECERA_CLS} flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between`}>
+        <DecoracionCabecera ilustracion="diagnostico" />
         <div>
-          <h1 id="diagnostico-titulo" className="text-2xl font-semibold text-flit-primary">
+          <h1 id="diagnostico-titulo" className={TITULO_CABECERA_CLS}>
             Diagnóstico vehicular
           </h1>
           {empresa && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{empresa}</p>}

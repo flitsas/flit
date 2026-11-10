@@ -14,6 +14,7 @@ import {
   type DefinicionFuentesObligatorias,
   type FuenteConfigurable,
 } from "@/lib/backoffice/fuentes-obligatorias";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 /**
  * Configurador de fuentes obligatorias (ADR-0078) en /backoffice/fuentes-obligatorias.
@@ -197,8 +198,9 @@ export function FuentesObligatoriasBackoffice() {
 
   return (
     <>
-      <section aria-labelledby="fuentes-obl-titulo" className={TARJETA_CLS}>
-        <h1 id="fuentes-obl-titulo" className="text-2xl font-semibold text-flit-primary">
+      <section aria-labelledby="fuentes-obl-titulo" className={CABECERA_CLS}>
+        <DecoracionCabecera ilustracion="fuentes-oficiales" />
+        <h1 id="fuentes-obl-titulo" className={TITULO_CABECERA_CLS}>
           Fuentes obligatorias
         </h1>
         <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">

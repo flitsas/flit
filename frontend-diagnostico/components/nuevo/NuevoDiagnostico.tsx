@@ -18,6 +18,7 @@ import { CreacionExpress } from "./CreacionExpress";
 import { CreacionMasiva } from "./CreacionMasiva";
 import { DosZonas } from "./DosZonas";
 import { SelectorModo } from "./SelectorModo";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -134,9 +135,10 @@ export function NuevoDiagnostico() {
 
   return (
     <>
-      <section aria-labelledby="nuevo-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between`}>
+      <section aria-labelledby="nuevo-titulo" className={`${CABECERA_CLS} flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between`}>
+        <DecoracionCabecera ilustracion="diagnostico" />
         <div>
-          <h1 id="nuevo-titulo" className="text-2xl font-semibold text-flit-primary">
+          <h1 id="nuevo-titulo" className={TITULO_CABECERA_CLS}>
             Nuevo diagnóstico
           </h1>
           {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}

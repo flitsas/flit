@@ -26,6 +26,7 @@ import { nombreFuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 export interface GrillaBackofficeProps {
   diagnosticoId: string;
@@ -250,9 +251,10 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
 
   return (
     <>
-      <section aria-labelledby="grilla-bo-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
+      <section aria-labelledby="grilla-bo-titulo" className={`${CABECERA_CLS} flex flex-wrap items-start justify-between gap-3`}>
+        <DecoracionCabecera ilustracion="diagnostico" />
         <div className="min-w-0">
-          <h1 id="grilla-bo-titulo" className="text-2xl font-semibold text-flit-primary">
+          <h1 id="grilla-bo-titulo" className={TITULO_CABECERA_CLS}>
             {titulo}
           </h1>
           <p className="mt-1 break-all text-sm font-medium text-[var(--nav-texto)]">{`Backoffice · Compañía ${empresa}`}</p>
