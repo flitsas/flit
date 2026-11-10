@@ -33,6 +33,15 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CERRAR,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -198,35 +207,36 @@ export function PersonIdentityDetailDrawer({
     >
       <button
         type="button"
-        className="absolute inset-0"
-        style={{ background: 'rgba(22, 39, 68, 0.45)', backdropFilter: 'blur(6px)' }}
+        className={`absolute inset-0 ${DIALOGO_VELO}`}
         aria-label="Cerrar panel"
         onClick={onClose}
       />
       <div
-        className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border bg-card shadow-2xl"
-        style={{ borderColor: FLIT.border.soft }}
+        className={`${DIALOGO_PANEL} z-10 flex max-h-[90vh] w-full max-w-5xl flex-col`}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 px-6 py-4">
+        <header className={`${DIALOGO_FRANJA} mb-4 justify-between`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
           <h2
             id="person-identity-process-title"
-            className="min-w-0 truncate text-base font-bold"
-            style={{ color: FLIT.brand.blue }}
+            className={`${DIALOGO_FRANJA_TITULO} truncate`}
           >
             Historial y tracking de identidad
           </h2>
           {mandatario ? (
-            <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+            <span className="relative z-[1] inline-flex rounded-full bg-[var(--di-surface-elevated)]">
+              <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+            </span>
           ) : null}
           {soloConsulta ? (
-            <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+            <span className="relative z-[1] inline-flex rounded-full bg-[var(--di-surface-elevated)]">
+              <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+            </span>
           ) : null}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="relative z-[1] flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => void load()}
-              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              className={buttonClass({ size: 'sm' })}
               aria-label="Actualizar estado"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -236,9 +246,9 @@ export function PersonIdentityDetailDrawer({
               type="button"
               onClick={onClose}
               aria-label="Cerrar proceso"
-              className="grid h-8 w-8 place-items-center rounded-lg hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+              className={DIALOGO_FRANJA_CERRAR}
             >
-              <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
         </header>

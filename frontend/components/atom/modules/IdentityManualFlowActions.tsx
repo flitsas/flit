@@ -17,7 +17,14 @@ import {
   type AccionManual,
 } from '@/lib/identity/manual-flow';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
-import { WIZARD_CTA_GRADIENT } from '@/components/operacion/wizard-field-styles';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
@@ -39,8 +46,6 @@ const BTN_BASE =
 const NAVY_BTN = `${BTN_BASE} bg-[var(--table-header-bg)] text-[var(--table-header-fg)] hover:opacity-90 dark:border dark:border-border`;
 /** Secundario «blanco con borde» del guardián. */
 const GHOST_BTN = `${BTN_BASE} border border-border bg-card text-foreground hover:bg-secondary dark:bg-transparent`;
-/** CTA principal del modal: degradado primario (token gradient.primary), con el mismo valor de WIZARD_CTA_GRADIENT. */
-const CTA_BTN = `${BTN_BASE} text-white hover:opacity-90`;
 const AVISO_CLS = 'flex items-start gap-2 rounded-[10px] border text-xs';
 
 export interface IdentityManualFlowActionsProps {
@@ -259,8 +264,7 @@ function ManualFlowConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${DIALOGO_VELO}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -272,12 +276,16 @@ function ManualFlowConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-md rounded-[18px] border border-border bg-card p-5 text-foreground shadow-2xl"
+        className={`${DIALOGO_PANEL} w-full max-w-md`}
       >
-        <h2 id={titleId} className="text-base font-bold">
-          {titulo}
-        </h2>
-        <div id={descId} className="mt-3 space-y-2 text-sm text-foreground">
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h2 id={titleId} className={DIALOGO_FRANJA_TITULO}>
+            {titulo}
+          </h2>
+        </div>
+        <div className="p-5">
+        <div id={descId} className="space-y-2 text-sm text-foreground">
           <p>{texto}</p>
           {kyverumEnCurso && (
             <p
@@ -308,19 +316,19 @@ function ManualFlowConfirmDialog({
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className={GHOST_BTN} onClick={onClose} disabled={busy}>
+          <button type="button" className={buttonClass({ variant: 'secondary', size: 'sm' })} onClick={onClose} disabled={busy}>
             Cancelar
           </button>
           <button
             type="button"
-            className={CTA_BTN}
-            style={{ background: WIZARD_CTA_GRADIENT }}
+            className={buttonClass({ size: 'sm' })}
             onClick={onConfirm}
             disabled={busy}
             aria-busy={busy}
           >
             {busy ? 'Enviando…' : 'Confirmar'}
           </button>
+        </div>
         </div>
       </div>
     </div>,

@@ -33,6 +33,12 @@ import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CERRAR,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+} from '@/components/operacion/dialogo-propio';
 /**
 
  * Panel lateral derecho de proceso de identidad (CF-06/CF-07), mismo patrón que Reportes /
@@ -140,16 +146,17 @@ export function PrevalidacionDetailDrawer({
       size="lg"
       zClassName="z-50"
       header={({ titleId }) => (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+        // Franja del Modal (homologación #14507): el encabezado propio sale a sangre del margen del panel.
+        <div className={`${DIALOGO_FRANJA} -mx-4 -mt-4 justify-between sm:-mx-6 sm:-mt-6`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <div className="relative z-[1] flex min-w-0 items-center gap-2">
             <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
-              style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)]"
               aria-hidden
             >
               <ScanFace className="h-4 w-4" />
             </span>
-            <h2 id={titleId} className="truncate text-sm font-bold text-flit-primary">
+            <h2 id={titleId} className={`${DIALOGO_FRANJA_TITULO} truncate`}>
               {title}
             </h2>
           </div>
@@ -157,9 +164,9 @@ export function PrevalidacionDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Cerrar proceso"
-            className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+            className={DIALOGO_FRANJA_CERRAR}
           >
-            <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
       )}
