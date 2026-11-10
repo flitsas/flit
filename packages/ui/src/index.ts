@@ -2,6 +2,7 @@
 // visuales. Contrato de plataforma §8. Shell.tsx NO está aquí: el shell común es @flit/shell (B-10).
 export * from "./ActionsMenu";
 export * from "./Button";
+export * from "./CabeceraModulo";
 export * from "./ChipsFiltro";
 export * from "./cn";
 export * from "./tokens";
