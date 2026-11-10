@@ -532,8 +532,8 @@ export function TramiteDetalleModal({
                     borderColor: estadoChipStyle(estadoVigente).border,
                   }}
                 >
-                  {/* La marca de la propuesta (check, punto o equis) la pinta `di-estado`; el icono
-                      sigue en el DOM pero oculto para no repetir la señal. */}
+                  {/* HU #14482: el chip va solo con texto y el color del estado; el icono sigue en
+                      el DOM pero oculto. */}
                   <estadoHdr.Icon className="hidden" aria-hidden="true" />
                   {estadoHdr.label}
                 </button>

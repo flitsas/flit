@@ -1392,6 +1392,29 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       <ModuleTitle
         title="Gestión Integral de trámites"
         subtitle="Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real."
+        action={
+          puedeCrearAlguna ? (
+            <button
+              type="button"
+              onClick={() => onNewTramite?.()}
+              disabled={blockNew.matricula && blockNew.traspaso}
+              title={
+                blockNew.matricula && blockNew.traspaso
+                  ? 'La compañía tiene bloqueada la creación de trámites.'
+                  : undefined
+              }
+              // HU #14482: `.btn` principal en la zona de acciones de la cabecera, como el page-header de la
+              // propuesta (antes, a la derecha de la tira de estados). Rótulo en una línea.
+              className={buttonClass({
+                variant: 'primary',
+                size: 'md',
+                className: 'shrink-0',
+              })}
+            >
+              <span>Nuevo trámite</span>
+            </button>
+          ) : undefined
+        }
       />
 
       <div className="flex min-w-0 flex-col gap-4">
@@ -1530,7 +1553,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           </p>
         ) : null}
 
-        {/* KPIs por estado (filtro) + CTA Nuevo trámite */}
+        {/* KPIs por estado (filtro). HU #14482: «Nuevo trámite» pasó a la cabecera; la tira ocupa todo el ancho. */}
         <div className="flex items-stretch gap-4">
           {!loading && !error ? (
             <div className="min-w-0 flex-1">
@@ -1541,27 +1564,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 onSelect={handleEstadoChange}
               />
             </div>
-          ) : null}
-          {puedeCrearAlguna ? (
-          <button
-            type="button"
-            onClick={() => onNewTramite?.()}
-            disabled={blockNew.matricula && blockNew.traspaso}
-            title={
-              blockNew.matricula && blockNew.traspaso
-                ? 'La compañía tiene bloqueada la creación de trámites.'
-                : undefined
-            }
-            // HU #14482 (propuesta): `.btn` principal en píldora, en el mismo sitio del DOM. El rótulo va en
-            // una línea; antes el <br> lo partía en dos y el nombre accesible salía «Nuevotrámite».
-            className={buttonClass({
-              variant: 'primary',
-              size: 'md',
-              className: 'shrink-0 self-start',
-            })}
-          >
-            <span>Nuevo trámite</span>
-          </button>
           ) : null}
         </div>
 
