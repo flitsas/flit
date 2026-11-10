@@ -87,6 +87,13 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
         <ParticlesCanvas />
         <div className="relative z-10 flex flex-col items-center px-8 text-center">
           <BrandLogo variant="white" className="h-auto w-full max-w-[280px] object-contain md:max-w-[360px]" />
+          {/* Ilustración de ingreso de la propuesta, como en el login de Trámites: decorativa, solo desde tablet. */}
+          <img
+            src="/assets/ilustraciones/heroe-ingreso.webp"
+            alt=""
+            aria-hidden="true"
+            className="mt-8 hidden h-auto w-full max-w-[440px] object-contain md:block"
+          />
         </div>
       </div>
 
