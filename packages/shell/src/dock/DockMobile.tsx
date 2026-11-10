@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { X } from "lucide-react";
 import type { DockEntry, DockGroup } from "../nav";
 import { DockEntryLink } from "./Dock";
+import { DockGlyph } from "./DockGlyph";
 import { useDockHomeMark } from "./DockHomeMark";
 
 // Navegación de la suite en móvil y tableta (<lg), donde el dock horizontal no cabe (HU #10844, GUIA-DOCK §9): un
@@ -71,7 +72,7 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
           aria-modal="true"
           aria-label="Navegación"
         >
-          {/* Mismo lenguaje que el submenú del dock (HU #14479): franja tinta arriba y entradas ilustradas. */}
+          {/* Mismo lenguaje que el submenú del dock (HU #14479): franja tinta arriba, ilustración en el título de cada grupo y entradas con viñeta. */}
           <div id="dock-mobile-sheet" className="dock-menu dock-menu--hoja dock-sheet">
             <div className="dock-menu__cabeza">
               <span className="dock-menu__cabeza-texto">
@@ -87,6 +88,7 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
                 return (
                   <div key={g.id} role="group" aria-labelledby={titleId} className="dock-menu__seccion">
                     <p id={titleId} className="dock-menu__seccion-titulo">
+                      <DockGlyph icon={g.icon} ilustracion={g.ilustracion} className="dock-menu__seccion-glifo" />
                       {g.label}
                     </p>
                     <ul className="dock-menu__entradas">
