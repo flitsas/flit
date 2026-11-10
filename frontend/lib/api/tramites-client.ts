@@ -2375,6 +2375,18 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  // POST reconciliar con el proveedor por `validationId` (con trámite o prevalidación sin trámite). Lo usa
+  // «Actualizar estado» del detalle de persona (módulo Validaciones). Exige `validaciones.manage` en el
+  // backend. Errores Problem: 403, 404, 409 (no es Kyverum), 502, 503, 500 → el `detail` va en el mensaje.
+  reconcileBiometricValidation: (
+    validationId: string,
+    tenantId?: string,
+  ): Promise<ReconcileIdentityResult> =>
+    request<ReconcileIdentityResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/reconcile`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
   // HU #13288 (Épica #13202) — SOLO Super Admin (el backend responde 403 al resto). Cross-tenant: el tenant
   // sale de la fila, no de X-Tenant-Id. Errores: 404, 409 (identidad_aprobada_vigente | tramite_inactivo).
   activateManualIdentity: (validationId: string): Promise<ActivarIdentidadManualResult> =>
