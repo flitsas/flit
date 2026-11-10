@@ -32,6 +32,7 @@ import {
   YAxis,
 } from "recharts";
 import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
@@ -802,7 +803,7 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:border-flit-brand"
+        className={buttonClass({ variant: "secondary", size: "sm" })}
       >
         Reintentar
       </button>

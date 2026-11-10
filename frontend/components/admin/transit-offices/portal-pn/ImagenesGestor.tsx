@@ -75,9 +75,9 @@ export interface GestorImagenesProps {
   onBusyChange: (busy: boolean) => void;
 }
 
-const BORDE = "#DFE5ED";
+const BORDE = "var(--border)";
 const FOCO =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring)]";
 
 /** Lista administrable de imágenes del portal (carrusel y banners): agregar, editar, ordenar y quitar sobre el borrador. */
 export function GestorImagenes({
@@ -157,8 +157,8 @@ export function GestorImagenes({
               onClick={() => setFormFor("new")}
               disabled={bloqueado || lleno}
               aria-describedby={lleno ? fullId : undefined}
-              className={`${FOCO} inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50`}
-              style={{ background: "#162744" }}
+              className={`${FOCO} inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-[color:var(--di-on-accent)] disabled:cursor-not-allowed disabled:opacity-50`}
+              style={{ background: "var(--di-accent)" }}
             >
               <ImagePlus className="h-3.5 w-3.5" aria-hidden /> {config.botonAgregar}
             </button>
@@ -240,7 +240,7 @@ export function GestorImagenes({
       >
         <p className="text-sm opacity-80">{config.confirmarQuitar(removeTarget?.alt ?? "")}</p>
         {removeError && (
-          <p role="alert" className="mt-3 text-xs" style={{ color: "#C10000" }}>
+          <p role="alert" className="mt-3 text-xs" style={{ color: "var(--destructive)" }}>
             {removeError}
           </p>
         )}
@@ -257,8 +257,8 @@ export function GestorImagenes({
             type="button"
             onClick={() => void confirmarQuitar()}
             disabled={pending}
-            className={`${FOCO} flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-60`}
-            style={{ background: "#C10000" }}
+            className={`${FOCO} flex-1 rounded-full py-2.5 text-sm font-semibold text-destructive-foreground disabled:opacity-60`}
+            style={{ background: "var(--destructive)" }}
           >
             {pending ? "Quitando…" : "Quitar"}
           </button>
@@ -288,7 +288,7 @@ function FilaImagen({ config, item, index, total, imagen, readOnly, disabled, on
       <span className="w-5 shrink-0 text-center text-xs font-semibold opacity-70" aria-hidden>
         {index + 1}
       </span>
-      <div className={`${config.miniatura} shrink-0 overflow-hidden rounded-lg border bg-[#EEF5FF]`} style={{ borderColor: BORDE }}>
+      <div className={`${config.miniatura} shrink-0 overflow-hidden rounded-lg border bg-secondary`} style={{ borderColor: BORDE }}>
         {src && (
           // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
           <img src={src} alt={item.alt} className="h-full w-full object-cover" />
@@ -420,23 +420,23 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
                 setArrastrando(false);
                 if (!busy) elegirArchivo(e.dataTransfer.files?.[0] ?? null);
               }}
-              className={`flex cursor-pointer items-center gap-4 rounded-xl border-2 border-dashed p-4 transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#557EFF] ${
-                busy ? "cursor-not-allowed opacity-60" : "hover:bg-[#557EFF]/5"
-              } ${arrastrando ? "bg-[#557EFF]/10" : "bg-white"}`}
-              style={{ borderColor: arrastrando || fileError ? (fileError ? "#C10000" : "#557EFF") : BORDE }}
+              className={`flex cursor-pointer items-center gap-4 rounded-xl border-2 border-dashed p-4 transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring)] ${
+                busy ? "cursor-not-allowed opacity-60" : "hover:bg-[color:var(--di-accent-soft)]"
+              } ${arrastrando ? "bg-[color:var(--di-accent-soft)]" : "bg-card"}`}
+              style={{ borderColor: arrastrando || fileError ? (fileError ? "var(--destructive)" : "var(--di-action)") : BORDE }}
             >
               {vistaPrevia ? (
                 // eslint-disable-next-line @next/next/no-img-element -- vista previa local (blob:) del archivo elegido
-                <img src={vistaPrevia} alt="" className="h-16 w-28 shrink-0 rounded-md border bg-white object-contain" style={{ borderColor: BORDE }} />
+                <img src={vistaPrevia} alt="" className="h-16 w-28 shrink-0 rounded-md border bg-card object-contain" style={{ borderColor: BORDE }} />
               ) : (
-                <span aria-hidden className="grid h-16 w-16 shrink-0 place-items-center rounded-lg" style={{ background: "color-mix(in srgb, #557EFF 12%, white)", color: "#557EFF" }}>
+                <span aria-hidden className="grid h-16 w-16 shrink-0 place-items-center rounded-lg" style={{ background: "var(--di-accent-soft)", color: "var(--di-action)" }}>
                   <ImagePlus className="h-7 w-7" />
                 </span>
               )}
               <div className="flex min-w-0 flex-col items-start gap-1">
                 <span
                   className="inline-flex items-center rounded-full border px-4 py-1.5 text-xs font-semibold"
-                  style={{ borderColor: "#557EFF", color: "#557EFF" }}
+                  style={{ borderColor: "var(--di-action)", color: "var(--di-action)" }}
                 >
                   {file ? "Cambiar imagen" : "Seleccionar imagen"}
                 </span>
@@ -458,12 +458,12 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
               {config.ayudaArchivo}
             </p>
             {(fileError || (submitted && fileMissing)) && (
-              <p role="alert" className="text-xs" style={{ color: "#C10000" }}>
+              <p role="alert" className="text-xs" style={{ color: "var(--destructive)" }}>
                 {fileError || fileMissing}
               </p>
             )}
             {fileWarning && !fileError && (
-              <p role="status" className="text-xs" style={{ color: "#B45309" }}>
+              <p role="status" className="text-xs" style={{ color: "var(--di-warning)" }}>
                 {fileWarning}
               </p>
             )}
@@ -488,7 +488,7 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
             style={{ borderColor: BORDE }}
           />
           {submitted && altError && (
-            <p role="alert" className="text-xs" style={{ color: "#C10000" }}>
+            <p role="alert" className="text-xs" style={{ color: "var(--destructive)" }}>
               {altError}
             </p>
           )}
@@ -511,14 +511,14 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
             style={{ borderColor: BORDE }}
           />
           {linkError && (
-            <p role="alert" className="text-xs" style={{ color: "#C10000" }}>
+            <p role="alert" className="text-xs" style={{ color: "var(--destructive)" }}>
               {linkError}
             </p>
           )}
         </div>
 
         {serverError && (
-          <p role="alert" className="text-xs" style={{ color: "#C10000" }}>
+          <p role="alert" className="text-xs" style={{ color: "var(--destructive)" }}>
             {serverError}
           </p>
         )}
@@ -535,8 +535,8 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
           <button
             type="submit"
             disabled={busy}
-            className={`${FOCO} flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-60`}
-            style={{ background: "#557EFF" }}
+            className={`${FOCO} flex-1 rounded-full py-2.5 text-sm font-semibold text-[color:var(--di-on-action)] disabled:opacity-60`}
+            style={{ background: "var(--di-gradient-action)" }}
           >
             {busy ? "Guardando…" : nueva ? "Agregar" : "Guardar"}
           </button>

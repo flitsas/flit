@@ -78,3 +78,35 @@ Cumplen: success 4,75:1, danger 5,13:1, neutral 6,03:1, purple 7,16:1, texto sec
 4. axe en claro y oscuro.
 5. Un host de marca blanca revisado.
 6. `CHECKLIST.md` actualizado.
+
+## Homologación (Feature #14507, 2026-11-10)
+
+Segunda vuelta, después del PR #831: quitar lo que queda del diseño anterior. Valen las reglas de diff de arriba, más estas:
+
+1. **Lo viejo pasa a token semántico.** No se crean tokens por zona.
+   - `bg-white` (sólido) → `bg-card` o `bg-background`.
+   - Un hex → su `var(--…)` o la clase de token.
+   - Un degradado viejo → `--di-*`.
+   - `var(--nav-texto|borde|focus|…)` fuera de `packages/shell` → `--muted-foreground`, `--border` o `--ring`.
+   - Los velos translúcidos (`bg-white/10` sobre la tinta) y los respaldos dentro de `var(--x, #hex)` no cuentan como restos.
+2. **Excepciones legítimas.** Se dejan como están y se listan en el reporte de cada sesión:
+   - la perilla blanca de los interruptores;
+   - el fondo blanco del QR;
+   - el fondo blanco detrás del logo de un socio;
+   - el papel de la firma y de la vista previa de documentos;
+   - la vista previa del correo;
+   - los colores del organismo en la vista previa del portal y en la marca blanca.
+3. **Diálogos propios: se repintan en su sitio.** Reciben franja, radio, sombra y botones del Modal, pero conservan el mismo componente, foco, tecla Escape y clic afuera. No se migran a `@flit/ui/Modal`.
+4. **Pantallas de cuenta que la propuesta no dibuja:** activar cuenta, recuperar y restablecer contraseña, y `/auth/listo`, tanto en Trámites como en el hub. Van sobre el armazón del Ingreso (`packages/ui/src/Ingreso.tsx`), con los mismos campos, textos y pasos.
+5. **El manual sigue la vista «Ayuda» de la propuesta** (`vAyuda` en `propuesta.js`). Lo que la propuesta no dibuja se arma con las piezas ya homologadas: `ModuleTitle`/`CabeceraModulo`, tarjetas, tablas, estados vacíos con ilustración y la franja del Modal.
+6. **Fuera de alcance:**
+   - el detalle del OT: `components/admin/transit-offices/detalle/**` y `ClientProcedureDetailModal`;
+   - los hallazgos de Comparendos;
+   - `frontend-personanatural`.
+7. **Cada sesión toca solo sus carpetas.** Están en la tabla del prompt que recibe. Lo que necesite de `packages/` va a `PEDIDOS.md`.
+8. **Verificación antes de reportar «Terminó»:**
+   - `tsc --noEmit` y `eslint` de la app;
+   - vitest de los tests que tocan los archivos cambiados (en zsh, `${=t}`);
+   - revisión en navegador en claro y oscuro, siempre en `127.0.0.1`;
+   - el reporte lista las excepciones que quedaron y los tests ajustados.
+9. Commits con el prefijo `HU<id>`. Sin push.

@@ -87,8 +87,8 @@ export function BrandingPreview({
             className="rounded-lg px-3 py-1.5 text-xs font-semibold"
             style={
               tab === t.id
-                ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
-                : { background: "transparent", color: "var(--color-flit-primary)" }
+                ? { background: "var(--di-accent)", color: "var(--di-on-accent)" }
+                : { background: "transparent", color: "var(--di-text-secondary)" }
             }
           >
             {t.label}
@@ -238,8 +238,8 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={
                 emailSource === value
-                  ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
-                  : { background: "transparent", color: "var(--color-flit-primary)" }
+                  ? { background: "var(--di-accent)", color: "var(--di-on-accent)" }
+                  : { background: "transparent", color: "var(--di-text-secondary)" }
               }
             >
               {value === "draft" ? "Borrador" : "Publicada"}

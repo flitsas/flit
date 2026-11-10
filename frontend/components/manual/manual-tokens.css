@@ -1,30 +1,26 @@
-/* Centro de Ayuda FLIT — tokens alineados a flit_design_tokens / globals.css */
+/* Centro de Ayuda FLIT — tokens de la propuesta «Diseño Inteligente» (--di-*, claro y oscuro), homologación HU #14511.
+   Los --di-* ya cambian solos con el tema: no hace falta bloque oscuro. */
 .manual-root {
-  --manual-bg: var(--color-flit-bg);
-  --manual-sidebar-bg: var(--card);
-  --manual-card-bg: var(--card);
-  --manual-border: var(--border);
-  --manual-border-soft: var(--table-row-border);
-  --manual-text: var(--foreground);
-  --manual-text-muted: var(--muted-foreground);
-  --manual-text-soft: var(--muted-foreground);
-  --manual-brand: var(--color-flit-brand);
-  --manual-tech: var(--color-flit-tech);
-  --manual-heading: var(--color-flit-brand);
-  --manual-active-bg: var(--badge-info-bg);
-  --manual-active-text: var(--badge-info-fg);
-  --manual-badge-bg: color-mix(in srgb, var(--color-flit-brand) 10%, transparent);
-  --manual-badge-text: var(--color-flit-brand);
+  --manual-bg: var(--di-surface);
+  --manual-sidebar-bg: var(--di-surface-elevated);
+  --manual-card-bg: var(--di-surface-elevated);
+  --manual-border: var(--di-border);
+  --manual-border-soft: var(--di-divider);
+  --manual-text: var(--di-text-primary);
+  --manual-text-muted: var(--di-text-secondary);
+  --manual-text-soft: var(--di-text-tertiary);
+  --manual-brand: var(--di-action);
+  --manual-tech: var(--di-highlight);
+  --manual-heading: var(--di-heading);
+  --manual-active-bg: var(--di-accent-soft);
+  --manual-active-text: var(--di-action);
+  --manual-badge-bg: var(--di-accent-soft);
+  --manual-badge-text: var(--di-action);
   --manual-shadow: var(--shadow-card);
-  --manual-radius-card: 1.25rem;
+  --manual-radius-card: 20px;
   font-family: var(--font-poppins, "Poppins", ui-sans-serif, system-ui, sans-serif);
 }
 
-/* Oscuro: --color-flit-bg no cambia con el tema; la superficie de la página sí. */
-.dark .manual-root {
-  --manual-bg: var(--background);
-}
-
 .manual-root ::selection {
-  background: color-mix(in srgb, var(--color-flit-tech) 25%, transparent);
+  background: color-mix(in srgb, var(--di-highlight) 25%, transparent);
 }

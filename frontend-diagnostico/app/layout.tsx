@@ -48,7 +48,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <BrandStyle brand={brand} />
       </head>
-      <body suppressHydrationWarning className="h-full font-sans antialiased">
+      <body suppressHydrationWarning className="h-full bg-background font-sans text-foreground antialiased">
         <BrandProvider brand={brand}>{children}</BrandProvider>
       </body>
     </html>

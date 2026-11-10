@@ -23,6 +23,13 @@ import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from './dialogo-propio';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -586,7 +593,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
       <button
         type="button"
         className="inline-flex h-7 w-7 items-center justify-center rounded-full"
-        style={{ background: palette.color, color: '#FFFFFF', boxShadow: 'var(--shadow-card)' }}
+        style={{ background: palette.color, color: 'var(--di-on-accent)', boxShadow: 'var(--shadow-card)' }}
         aria-label={`OCR ${nombre}: ${palette.label}. Ver detalle`}
         aria-describedby={tipOpen ? tipId : undefined}
         aria-expanded={detailOpen}
@@ -630,7 +637,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           // B6 (guardián de diseño) — overlay único del sistema: `rgba(22,39,68,0.45)` +
           // `backdrop-blur-[6px]` (antes `bg-black/40 backdrop-blur-sm`, uno de los cuatro
           // overlays distintos del asistente).
-          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-[6px]"
+          className={`fixed inset-0 z-50 grid place-items-center px-4 ${DIALOGO_VELO}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby={`ocr-detail-title-${tipo}`}
@@ -639,26 +646,24 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           <div
             ref={ocrDialogRef}
             tabIndex={-1}
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-card p-4 shadow-xl outline-none focus:ring-0"
-            style={{ borderColor: palette.border }}
+            className={`${DIALOGO_PANEL} flex max-h-[80vh] w-full max-w-lg flex-col outline-none focus:ring-0`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
+            <div className={`${DIALOGO_FRANJA} justify-between`}>
+              <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+              <div className="relative z-[1] flex min-w-0 items-center gap-2">
                 <span
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full"
-                  style={{ background: palette.color, color: '#FFFFFF' }}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)]"
                   aria-hidden
                 >
                   <Info className="h-4 w-4" strokeWidth={2.5} />
                 </span>
                 <h3
                   id={`ocr-detail-title-${tipo}`}
-                  className="text-sm font-semibold"
-                  style={{ color: 'var(--color-flit-primary)' }}
+                  className={DIALOGO_FRANJA_TITULO}
                 >
                   OCR — {nombre}
-                  <span className="mt-0.5 block text-xs font-bold" style={{ color: palette.color }}>
+                  <span className="mt-0.5 block text-xs font-bold opacity-85">
                     {palette.label}
                   </span>
                 </h3>
@@ -666,11 +671,12 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <button
                 type="button"
                 onClick={() => setDetailOpen(false)}
-                className="rounded-lg px-2 py-1 text-xs font-medium opacity-70 hover:opacity-100"
+                className="relative z-[1] shrink-0 rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] px-3 py-1.5 text-xs font-semibold text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]"
               >
                 Cerrar
               </button>
             </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {ocr.motivo && (
               <p className="mb-2 text-xs font-medium" style={{ color: palette.color }}>
                 {ocr.motivo}
@@ -711,6 +717,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                 ))}
               </dl>
             )}
+            </div>
           </div>
         </div>
       )}

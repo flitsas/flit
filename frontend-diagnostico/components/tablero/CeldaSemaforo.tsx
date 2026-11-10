@@ -1,13 +1,31 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Clock, LoaderCircle, MinusCircle, XCircle, type LucideIcon } from "lucide-react";
+import type { ComponentType, CSSProperties, ReactNode, SVGProps } from "react";
+import { Check, Clock, LoaderCircle, MinusCircle, X } from "lucide-react";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import { BotonReprocesar, type BotonReprocesarProps } from "./BotonReprocesar";
 
 type Tono = "neutral" | "success" | "danger" | "warning" | "na";
+
+type Icono = ComponentType<SVGProps<SVGSVGElement>>;
+
+/** Punto naranja del pendiente de la propuesta (`.badge.warn::before`), como SVG para que el chip siempre lleve icono. */
+function Punto(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 8 8" {...props}>
+      <circle cx="4" cy="4" r="3" fill="var(--di-alerta-punto)" />
+    </svg>
+  );
+}
+
+/** Marca de cada tono, como el `.badge::before` de la propuesta: check cielo, punto naranja, equis naranja. */
+const ICONO_CLS: Partial<Record<Tono, string>> = {
+  success: "h-3.5 w-3.5 text-[var(--di-success-dot)]",
+  danger: "h-3.5 w-3.5 text-[var(--di-alerta-punto)]",
+  warning: "h-2 w-2",
+};
 
 /** Fuente que el lote no pidió (HU #14087): no hay consulta ni celda; solo se muestra en la tabla. */
 export const SIN_SOLICITAR = "SIN_SOLICITAR";
@@ -16,18 +34,18 @@ export const SIN_SOLICITAR = "SIN_SOLICITAR";
 export type EstadoVisible = EstadoCelda | typeof SIN_SOLICITAR;
 
 /**
- * Semáforo por estado con los tokens de @flit/ui (tokens.css), todos AA en claro y oscuro (HU #14087): gris (neutral) «Sin
- * ejecutar» para pendiente o en curso (el en curso conserva el icono animado), verde «Ejecutado (OK)», rojo «Error», ámbar
- * (warning) «Novedad» para la N/A con su motivo, y gris claro con borde punteado «Sin solicitar» para la fuente que el lote no
- * pidió. El texto del rojo usa la tinta `--badge-pending-fg` (4,71:1 sobre el fondo rojo tintado; `--badge-danger-fg` da
- * 4,46:1). El estado nunca depende solo del color: cada chip lleva icono y texto.
+ * Semáforo por estado con los `--badge-*` de @flit/ui (tokens.css), con el aspecto de los estados de la propuesta
+ * (homologación HU #14512): neutral «Sin ejecutar» para pendiente o en curso (el en curso conserva el icono animado), cielo
+ * con check «Ejecutado (OK)», aro con equis naranja «Error», punto naranja (warning) «Novedad» para la N/A con su motivo, y
+ * borde punteado «Sin solicitar» para la fuente que el lote no pidió. El texto del error usa la tinta `--badge-pending-fg`.
+ * El estado nunca depende solo del color: cada chip lleva icono y texto.
  */
-const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: LucideIcon; animado?: boolean }> = {
+const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono; animado?: boolean }> = {
   PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: Clock },
   EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: LoaderCircle, animado: true },
-  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: CheckCircle2 },
-  ERROR: { tono: "danger", texto: "Error", Icono: XCircle },
-  NA: { tono: "warning", texto: "Novedad", Icono: AlertCircle },
+  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: Check },
+  ERROR: { tono: "danger", texto: "Error", Icono: X },
+  NA: { tono: "warning", texto: "Novedad", Icono: Punto },
   SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: MinusCircle },
 };
 
@@ -36,7 +54,7 @@ const ESTILOS: Record<Tono, CSSProperties> = {
   success: { background: "var(--badge-success-bg)", color: "var(--badge-success-fg)", borderColor: "var(--badge-success-border)" },
   danger: { background: "var(--badge-danger-bg)", color: "var(--badge-pending-fg)", borderColor: "var(--badge-danger-border)" },
   warning: { background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)", borderColor: "var(--badge-warning-border)" },
-  na: { background: "var(--surface-sunken)", color: "var(--nav-texto)", borderColor: "var(--nav-borde)", borderStyle: "dashed" },
+  na: { background: "var(--surface-sunken)", color: "var(--muted-foreground)", borderColor: "var(--border)", borderStyle: "dashed" },
 };
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
@@ -87,7 +105,7 @@ export const motivoNaCorto = (motivo: MotivoNa | null) => (motivo ? MOTIVOS_NA[m
 /** Impuesto completado con deuda: ámbar «Con deuda», no verde. El resto de estados no cambia. */
 function vistaDe(estado: EstadoVisible, conDeuda: boolean) {
   if (conDeuda && estado === "COMPLETADO")
-    return { tono: "warning" as const, texto: "Con deuda", Icono: AlertCircle, animado: false };
+    return { tono: "warning" as const, texto: "Con deuda", Icono: Punto, animado: false };
   return ESTADOS[estado];
 }
 
@@ -103,7 +121,11 @@ export function ChipEstadoCelda({ estado, conDeuda = false }: { estado: EstadoVi
       className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold`}
       style={ESTILOS[tono]}
     >
-      <Icono className={`h-3.5 w-3.5 ${animado ? "motion-safe:animate-spin" : ""}`} aria-hidden="true" />
+      <Icono
+        className={`shrink-0 ${ICONO_CLS[tono] ?? "h-3.5 w-3.5"} ${animado ? "motion-safe:animate-spin" : ""}`}
+        aria-hidden="true"
+        strokeWidth={tono === "success" || tono === "danger" ? 3 : undefined}
+      />
       {texto}
     </span>
   );
@@ -181,7 +203,7 @@ export function CeldaSemaforo({
           <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
         )}
         {marca}
-        {nota && <span className="text-xs text-[var(--nav-texto)]">{nota}</span>}
+        {nota && <span className="text-xs text-muted-foreground">{nota}</span>}
         {accion}
         {puedeReprocesar && esReprocesable(celda) && (
           <BotonReprocesar

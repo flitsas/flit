@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useCallback, useEffect, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -174,8 +175,7 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
               type="button"
               onClick={() => void save()}
               disabled={saving}
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "var(--color-flit-brand)" }}
+              className={buttonClass({ size: "sm" })}
             >
               {saving ? "Guardando…" : "Guardar requisitos"}
             </button>

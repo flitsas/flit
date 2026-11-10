@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 export type AssociatedProcedureItem = {
@@ -60,7 +59,7 @@ export function AssociatedProceduresList({
                   ? 'block truncate underline'
                   : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[var(--badge-info-bg)]'
               }
-              style={compact ? { color: FLIT.brand.blue } : { borderColor: FLIT.border.soft }}
+              style={compact ? { color: 'var(--di-action)' } : { borderColor: 'var(--border)' }}
               title={`${p.referenceNumber}${tipo ? ` · ${tipo}` : ''}${p.status ? ` (${p.status})` : ''}`}
             >
               {compact ? (
@@ -70,7 +69,7 @@ export function AssociatedProceduresList({
                 </>
               ) : (
                 <>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                     {linkable ? <ExternalLink className="h-3 w-3 shrink-0" aria-hidden /> : null}
                     {p.referenceNumber}
                     {p.primary ? (
@@ -113,7 +112,7 @@ export function AssociatedProceduresList({
 
   // Barra del mockup de detalle: texto a la izquierda, CTA outlined a la derecha.
   return (
-    <div className="rounded-xl border px-3 py-2.5" style={{ borderColor: FLIT.border.soft }}>
+    <div className="rounded-xl border px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] opacity-70">
           {procedures.length} trámite{procedures.length === 1 ? '' : 's'} asociado
@@ -124,9 +123,9 @@ export function AssociatedProceduresList({
           onClick={() => setOpen((prev) => !prev)}
           className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{
-            borderColor: FLIT.brand.blue,
-            color: FLIT.brand.blue,
-            outlineColor: FLIT.brand.blue,
+            borderColor: 'var(--di-action)',
+            color: 'var(--di-action)',
+            outlineColor: 'var(--di-action)',
           }}
           aria-expanded={open}
           aria-label={`Ver trámites asociados (${procedures.length})`}

@@ -52,7 +52,7 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
         aria-valuenow={terminados}
         className="h-2 w-full overflow-hidden rounded-full bg-secondary"
       >
-        <div className="h-full rounded-full transition-[width]" style={{ width: `${porcentaje}%`, background: "var(--nav-activo)" }} />
+        <div className="h-full rounded-full transition-[width]" style={{ width: `${porcentaje}%`, background: "var(--di-gradient-action)" }} />
       </div>
     </div>
   );

@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { appIcon } from "@flit/shell/apps";
 import { ilustracionDe } from "@flit/ui/ilustraciones";
 
-/** Degradado de marca de Trámites (cian → azul). */
-export const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
+/** Degradado de marca de la propuesta (`--di-gradient-brand`, azul → cian). */
+export const BRAND_GRADIENT = "var(--di-gradient-brand)";
 
 /** Ícono de un producto sobre el degradado de marca; apagado (gris) si todavía no está disponible. */
 export function ProductIcon({ icon, size = "md", muted = false }: { icon: string; size?: "md" | "lg"; muted?: boolean }) {
@@ -12,7 +12,7 @@ export function ProductIcon({ icon, size = "md", muted = false }: { icon: string
   return (
     <span
       className={`grid shrink-0 place-items-center ${box} ${
-        muted ? "bg-secondary text-flit-brand" : "text-white shadow-[var(--nav-sombra-activo)]"
+        muted ? "bg-secondary text-flit-brand" : "text-white shadow-[var(--shadow-button)]"
       }`}
       style={muted ? undefined : { background: BRAND_GRADIENT }}
     >

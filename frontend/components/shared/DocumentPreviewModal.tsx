@@ -209,7 +209,7 @@ export function DocumentPreviewModal({
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 rounded-xl border border-border dark:border-border px-3 py-1.5 text-[11px] font-semibold text-flit-primary dark:text-slate-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-border dark:border-border px-3 py-1.5 text-[11px] font-semibold text-flit-primary dark:text-foreground"
                   aria-label="Descargar documento"
                   onClick={onDownload}
                 >

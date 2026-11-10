@@ -14,18 +14,19 @@
   --dr-flit-text: var(--foreground);
   --dr-flit-text-secondary: var(--muted-foreground);
   --dr-flit-text-muted: var(--muted-foreground);
-  --dr-flit-text-inverse: var(--primary-foreground);
-  --dr-flit-panel-bg: var(--color-flit-bg);
+  --dr-flit-text-inverse: var(--di-on-action);
+  --dr-flit-panel-bg: var(--di-surface);
   --dr-flit-card-bg: var(--card);
   --dr-flit-overlay: var(--overlay);
   --dr-flit-focus: var(--ring);
   --dr-flit-icon-tint: var(--badge-info-bg);
   --dr-flit-code-bg: var(--surface-sunken);
-  /* Con texto encima: el degradado de acción del kit (el turquesa no da contraste con blanco). */
-  --dr-flit-gradient-primary: var(--gradient-action);
-  --dr-flit-gradient-header: var(--gradient-action);
-  --dr-flit-gradient-fab: var(--gradient-action);
-  --dr-flit-radius-widget: 24px;
+  /* Con texto encima: el degradado de acción de la propuesta (botones y lanzador). */
+  --dr-flit-gradient-primary: var(--di-gradient-action);
+  --dr-flit-gradient-fab: var(--di-gradient-action);
+  /* Cabecera del panel: la franja tinta del Modal (homologación, HU #14511); su texto va en --di-on-accent. */
+  --dr-flit-gradient-header: var(--di-accent);
+  --dr-flit-radius-widget: var(--di-radius-modal);
   --dr-flit-radius-chat: 18px;
   --dr-flit-radius-card: 18px;
   --dr-flit-shadow-fab: var(--shadow-button);
@@ -34,10 +35,7 @@
   --dr-flit-font: var(--font-poppins, Inter, system-ui, sans-serif);
 }
 
-/* Oscuro: los tokens del kit ya cambian solos; solo el fondo del panel necesita su valor. */
-.dark .dr-flit {
-  --dr-flit-panel-bg: var(--background);
-}
+/* Oscuro: los tokens de la propuesta (--di-*) ya cambian solos. */
 
 @keyframes drFlitSlideIn {
   from {

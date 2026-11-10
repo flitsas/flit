@@ -87,7 +87,7 @@ function Vacio() {
     <div className="flex flex-col items-center gap-3 py-10 text-center">
       <ClipboardList className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
       <h2 className="text-lg font-semibold">No hay definiciones guardadas</h2>
-      <p className="max-w-md text-sm text-[var(--nav-texto)]">Esta pantalla solo muestra las cabeceras que ya existen.</p>
+      <p className="max-w-md text-sm text-muted-foreground">Esta pantalla solo muestra las cabeceras que ya existen.</p>
     </div>
   );
 }
@@ -231,7 +231,7 @@ function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlter
       <h2 id={tituloId} className="text-lg font-semibold text-flit-primary">
         {titulo}
       </h2>
-      {seleccion.length === 0 && <p className="text-sm text-[var(--nav-texto)]">Definición guardada con la lista vacía.</p>}
+      {seleccion.length === 0 && <p className="text-sm text-muted-foreground">Definición guardada con la lista vacía.</p>}
       <fieldset className="flex flex-col gap-2">
         <legend className={ETIQUETA_CLS}>Fuentes</legend>
         <ul className="flex flex-col gap-2">
@@ -295,7 +295,7 @@ function CasillaFuente({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombreFuente(fuente)}</span>
-        {motivo && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {motivo && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
       </label>
       {motivo && (
         <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>
