@@ -245,6 +245,11 @@ internal sealed class ReaccionCambioContraventor(ComparendosDb db, Timeline time
         ArgumentNullException.ThrowIfNull(comunicacion);
         if (comunicacion.Tipo != TipoComunicacion.CambioContraventorOt || comunicacion.Estado is EstadoComunicacion.Pendiente)
             return;
+        // Bloquea la solicitud antes de leerla (el despachador corre las reacciones en una transacción): dos reacciones
+        // simultáneas al mismo correo no crean dos avisos 4 (bug #14270).
+        await db.Database.SqlQuery<Guid>($"""
+            SELECT id AS "Value" FROM comparendos.cambio_contraventor_solicitud WHERE comunicacion_id = {comunicacion.Id} FOR UPDATE
+            """).ToListAsync(ct).ConfigureAwait(false);
         var s = await db.SolicitudesCambio.FirstOrDefaultAsync(x => x.ComunicacionId == comunicacion.Id && x.Estado == EstadoSolicitudCambio.Solicitado, ct).ConfigureAwait(false);
         if (s is null)
             return;

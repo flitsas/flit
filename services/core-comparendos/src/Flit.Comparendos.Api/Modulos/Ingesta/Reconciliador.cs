@@ -248,7 +248,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         }
 
         if (campos.Contains("secretaria_texto"))
-            c.OrganismoTransitoId = await mapeador.MapearAsync(c.SecretariaTexto, ct).ConfigureAwait(false) ?? c.OrganismoTransitoId;
+            c.OrganismoTransitoId = await mapeador.MapearAsync(c.SecretariaTexto, ct, c.NumeroNormalizado).ConfigureAwait(false) ?? c.OrganismoTransitoId;
 
         if (campos.Contains("estado_fuente"))
         {

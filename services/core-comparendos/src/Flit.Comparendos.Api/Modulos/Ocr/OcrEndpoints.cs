@@ -110,7 +110,11 @@ public static class OcrEndpoints
         var q = db.DocumentosOcr.AsNoTracking().Where(d => d.PaqueteId == id);
         if (Enum.TryParse<EstadoDocumentoOcr>(estado, true, out var e))
             q = q.Where(d => d.Estado == e);
-        var documentos = await q.OrderBy(d => d.Id).Select(d => new
+        // GDC punto 14: el número con aviso que el operador ya corrigió o confirmó deja de bloquear el registro.
+        var numerosRevisados = (await db.DocumentoOcrCampos.AsNoTracking()
+            .Where(c => c.NombreCampo == CamposOcr.Numero && c.ValorCorregido != null && db.DocumentosOcr.Any(d => d.Id == c.DocumentoOcrId && d.PaqueteId == id))
+            .Select(c => c.DocumentoOcrId).ToListAsync(ct).ConfigureAwait(false)).ToHashSet();
+        var filas = await q.OrderBy(d => d.Id).Select(d => new
         {
             d.Id, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, estado = d.Estado.ToString(), d.Intentos, d.NumeroComparendoExtraido, d.CamposFaltantes,
             // El mensaje técnico del fallo es para el SuperAdmin; la gestora ve la etiqueta del tipo de fallo.
@@ -119,7 +123,17 @@ public static class OcrEndpoints
             reprocesable = d.Reprocesos < ServicioOcr.MaximoReprocesos
                 && (d.Estado == EstadoDocumentoOcr.Incompleto || (d.Estado == EstadoDocumentoOcr.Fallido && d.TipoFallo == TipoFalloOcr.Ilegible)),
         }).ToListAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new { paquete = Resumen(p), documentos });
+        var documentos = filas.Select(d => new
+        {
+            d.Id, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, d.estado, d.Intentos, d.NumeroComparendoExtraido, d.CamposFaltantes, d.tipoFallo, d.mensajeError,
+            d.FuenteDuplicado, d.ComparendoId, d.ProcesadoEn, d.MotivoDescarte, d.Reprocesos, d.avisoNumero, d.reprocesable,
+            numeroPorConfirmar = d.avisoNumero is not null && !numerosRevisados.Contains(d.Id),
+        }).ToList();
+        // Los completos que «Registrar los completos» sí registraría: sin número por confirmar (el filtro de estado no los cuenta todos).
+        var completosPorConfirmar = await db.DocumentosOcr.AsNoTracking().Where(d => d.PaqueteId == id && d.Estado == EstadoDocumentoOcr.Completo)
+            .Select(d => new { d.Id, d.NumeroComparendoExtraido }).ToListAsync(ct).ConfigureAwait(false);
+        var porConfirmar = completosPorConfirmar.Count(d => NumeroComparendo.AvisoDeLectura(d.NumeroComparendoExtraido) is not null && !numerosRevisados.Contains(d.Id));
+        return Results.Ok(new { paquete = Resumen(p), documentos, completosPorConfirmar = porConfirmar });
     }
 
     private static async Task<IResult> Iniciar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
@@ -222,6 +236,7 @@ public static class OcrEndpoints
             proveedorModelo = usuario.EsSuperAdmin ? d.ProveedorModelo : null, d.NumeroComparendoExtraido,
             d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), mensajeError = usuario.EsSuperAdmin ? d.MensajeError : null, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
             avisoNumero = NumeroComparendo.AvisoDeLectura(d.NumeroComparendoExtraido),
+            numeroPorConfirmar = ServicioOcr.NumeroPorConfirmar(campos),
             d.Reprocesos, maximoReprocesos = ServicioOcr.MaximoReprocesos, motivoNoReprocesable = ServicioOcr.MotivoNoReprocesable(d), versionPrompt,
             d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, d.FuenteDuplicado, duplicado,
             campos = campos.OrderBy(c => orden.GetValueOrDefault(c.NombreCampo, 99)).Select(c => new
