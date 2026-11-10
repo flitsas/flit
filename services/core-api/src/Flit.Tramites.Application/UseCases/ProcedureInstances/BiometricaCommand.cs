@@ -14,8 +14,12 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 // ── DTOs (contrato congelado, Slice 6) ──────────────────────────────────────
 
-/// <summary>Vista interna (gestor autenticado) de una validación biométrica.</summary>
-public sealed record BiometricValidationDto(
+/// <summary>
+/// Vista interna (gestor autenticado) de una validación biométrica. No es <c>sealed</c> solo para que el
+/// detalle por persona (<see cref="Flit.Tramites.Application.UseCases.Persons.PersonBiometricValidationDto"/>)
+/// la extienda con campos propios sin tocar el contrato de los demás endpoints.
+/// </summary>
+public record BiometricValidationDto(
     Guid Id,
     string? PartyRole,
     string Name,
