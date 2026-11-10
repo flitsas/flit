@@ -19,6 +19,7 @@
     "./ChipsFiltro": "./src/ChipsFiltro.tsx",
     "./DataTable": "./src/DataTable.tsx",
     "./InlineAlert": "./src/InlineAlert.tsx",
+    "./Ingreso": "./src/Ingreso.tsx",
     "./Loader": "./src/Loader.tsx",
     "./Modal": "./src/Modal.tsx",
     "./PageNav": "./src/PageNav.tsx",

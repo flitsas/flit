@@ -287,6 +287,16 @@
   --di-radius-chip: 10px;
   --di-text-cifra: 1.75rem;
   --di-ingreso-fondo: #162744;
+  /* Panel de marca del ingreso: tinta en los dos temas (propuesta, tokens.css --ingreso-*), por eso no se repite en .dark. */
+  --di-ingreso-texto: #ffffff;
+  --di-ingreso-texto-2: #c3cde6;
+  --di-ingreso-acento-1: #8fb0ff;
+  --di-ingreso-acento-2: #00dbd5;
+  --di-ingreso-azul: #557eff;
+  --di-ingreso-tarjeta: #ffffff;
+  --di-ingreso-sombra-escena: 0 30px 40px #00000059;
+  --di-ingreso-tarjeta-texto-2: #4a5878;
+  --di-ingreso-sombra-tarjeta: 0 18px 40px #00000047;
   --di-motion-base: 180ms;
   --di-ease: cubic-bezier(0.2, 0, 0, 1);
 }
@@ -420,4 +430,14 @@
   --di-success-dot: #8fb0ff;
   --di-success-soft: #1c3158;
   --di-success-line: #6f93ff;
+}
+
+/* Ilustración del ingreso flotando (propuesta.css @keyframes flotar); quieta si la persona pidió menos movimiento. */
+@keyframes di-flotar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.di-flotar { animation: di-flotar 7s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .di-flotar { animation: none; }
 }

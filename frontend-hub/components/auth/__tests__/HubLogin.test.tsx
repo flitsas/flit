@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { HubLogin } from "../HubLogin";
 
 // A-06 (HU #12991): el login del hub abre la sesión con POST /connect/login y vuelve a donde lo pidieron.
-vi.mock("../ParticlesCanvas", () => ({ ParticlesCanvas: () => null }));
 
 afterEach(() => {
   cleanup();
