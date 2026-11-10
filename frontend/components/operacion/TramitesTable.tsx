@@ -3203,13 +3203,12 @@ function TramiteRow({
     );
   }
 
-  // `<tr>` conserva el onClick (comodidad de ratón) pero PIERDE role/tabIndex/onKeyDown/aria-label:
-  // un <tr role="button"> rompería la semántica de tabla. El acceso por teclado/lector de pantalla
-  // vive en el botón del radicado (ver cellsByKey.radicado), con el mismo aria-label de antes.
+  // Ajuste 2026-11-10 — la fila ya NO abre el trámite: un clic en cualquier celda (para seleccionar
+  // y copiar una placa, un nombre o un documento) abría el asistente/detalle. Solo el botón del
+  // radicado abre (ver cellsByKey.radicado), además de «Ver»/«Continuar» del menú Acciones.
   return (
     <tr
-      onClick={handleOpen}
-      className={`group cursor-pointer bg-[var(--di-surface-elevated)] text-xs [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
+      className={`group bg-[var(--di-surface-elevated)] text-xs [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}

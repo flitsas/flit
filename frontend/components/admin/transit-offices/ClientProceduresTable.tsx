@@ -334,7 +334,21 @@ function renderCelda(
               aria-label="Trámite prioritario"
             />
           )}
-          {row.referenceNumber}
+          {/* Ajuste 2026-11-10 (D3=b) — el radicado es el ÚNICO control que abre el detalle: la fila
+              ya no lo hace, para poder seleccionar y copiar datos sin abrir nada. Mismo aspecto que
+              el radicado del listado del gestor (TramitesTable): azul de acción, subrayado al pasar. */}
+          {onVerDetalle ? (
+            <button
+              type="button"
+              onClick={() => onVerDetalle(row)}
+              aria-label={`Ver detalle del trámite ${row.referenceNumber}`}
+              className="font-mono font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+            >
+              {row.referenceNumber}
+            </button>
+          ) : (
+            row.referenceNumber
+          )}
         </span>
       );
     case "vin":
@@ -377,7 +391,7 @@ function renderCelda(
       return (
         <div className="flex flex-wrap items-center gap-1.5">
           {/* HU #14157 — clic en Estado abre el detalle con la línea de tiempo (paridad Gestor).
-              stopPropagation: la fila ya abre el detalle genérico; aquí pedimos el panel timeline. */}
+              stopPropagation: se conserva aunque la fila ya no abre el detalle (ajuste 2026-11-10). */}
           {onVerDetalle ? (
             <button
               type="button"
@@ -613,24 +627,9 @@ export function ClientProceduresTable({
             <tr
               key={row.id}
               // Bug #13055 — tabla homologada con el modelo de trámites.
-              className={`bg-[var(--di-surface-elevated)] [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
-              onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
-              // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
-              // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
-              // de acciones sigue siendo el camino accesible de siempre para el resto.
-              tabIndex={onVerDetalle ? 0 : undefined}
-              role={onVerDetalle ? "button" : undefined}
-              aria-label={onVerDetalle ? `Ver el detalle del trámite ${row.referenceNumber}` : undefined}
-              onKeyDown={
-                onVerDetalle
-                  ? (e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onVerDetalle(row);
-                      }
-                    }
-                  : undefined
-              }
+              // Ajuste 2026-11-10 (D3=b) — la fila ya no abre el detalle (ni con clic ni con
+              // teclado): lo abre el botón del radicado, que da además la puerta de teclado.
+              className={`bg-[var(--di-surface-elevated)] [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
             >
               {conCasillas && onToggle ? (
                 // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
