@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 import { ILUSTRACIONES, ilustracionDe, rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 
 /**
- * Cabecera de módulo con el modelo `page-header` de la propuesta «Diseño Inteligente» (rama `propuesta`,
- * propuesta.css): tarjeta con la ilustración del módulo a la izquierda, antetítulo opcional, título con su línea
+ * Cabecera de módulo de Trámites: `CabeceraModulo` de @flit/ui (HU #14476) con la ilustración elegida por esta tabla.
+ * Antes el marcado vivía aquí; el aspecto sigue siendo el modelo `page-header` de la propuesta «Diseño Inteligente»
+ * (rama `propuesta`, propuesta.css): tarjeta con la ilustración del módulo a la izquierda, antetítulo opcional, título con su línea
  * de acento, bajada, y los dos círculos decorativos (turquesa lleno y aro) a la derecha. Las acciones van DENTRO de
  * la cabecera, a la derecha, como en el prototipo (antes, regla R7 de HU #10493, iban fuera de la caja).
  *
@@ -74,52 +76,19 @@ export function ModuleTitle({
   antetitulo?: string;
 }) {
   return (
-    <header
-      className="relative flex shrink-0 flex-wrap items-center gap-6 overflow-clip rounded-[var(--di-radius-header)] border border-[var(--di-border)] py-8 pl-[132px] pr-8 shadow-[var(--shadow-card)] max-md:gap-3.5 max-md:rounded-[20px] max-md:py-5 max-md:pl-[84px] max-md:pr-4"
-      style={{ background: "linear-gradient(120deg, var(--di-surface-elevated) 35%, var(--di-sky) 100%)" }}
-    >
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90 max-md:-right-12 max-md:-top-[60px] max-md:h-[120px] max-md:w-[120px]"
-        style={{ background: "var(--di-highlight-decor)" }}
-      />
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-[150px] -top-[60px] h-[420px] w-[420px] rounded-full border-[1.5px] opacity-50 max-md:hidden"
-        style={{ borderColor: "var(--di-sky-line)" }}
-      />
-      <img
-        src={rutaPara(title, ilustracion)}
-        alt=""
-        aria-hidden="true"
-        className="absolute left-6 top-1/2 h-[92px] w-[92px] -translate-y-1/2 object-contain max-md:left-3.5 max-md:top-5 max-md:h-[58px] max-md:w-[58px] max-md:translate-y-0"
-      />
-      <div className="relative z-[1] min-w-0 flex-[1_1_320px]">
-        {antetitulo && (
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.06em]" style={{ color: "var(--di-highlight)" }}>
-            {antetitulo}
-          </p>
-        )}
-        <h1 className="text-[2rem] font-bold leading-tight max-md:text-2xl" style={{ color: "var(--di-heading)" }}>
-          {title}
-        </h1>
-        <span
-          aria-hidden="true"
-          className="mt-2.5 block h-[5px] w-16 rounded-full"
-          style={{ background: "linear-gradient(90deg, var(--di-sky-line), var(--di-sky))" }}
-        />
-        {subtitle && (
-          <p className="mt-2.5 max-w-[60ch] text-sm max-md:text-[13px]" style={{ color: "var(--di-text-secondary)" }}>
-            {subtitle}
-          </p>
-        )}
-      </div>
-      {(right || action) && (
-        <div className="relative z-[1] flex flex-wrap items-center gap-3">
-          {right}
-          {action}
-        </div>
-      )}
-    </header>
+    <CabeceraModulo
+      titulo={title}
+      descripcion={subtitle}
+      antetitulo={antetitulo}
+      ilustracion={rutaPara(title, ilustracion)}
+      acciones={
+        right || action ? (
+          <>
+            {right}
+            {action}
+          </>
+        ) : undefined
+      }
+    />
   );
 }

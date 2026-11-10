@@ -1,6 +1,6 @@
 // HU #14476 — componentes de @flit/ui con el aspecto del prototipo «Diseño Inteligente» (rama `propuesta`).
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { FileText } from "lucide-react";
 import { StatusBadge } from "@flit/ui/StatusBadge";
 import { Button, buttonClass } from "@flit/ui/Button";
@@ -97,5 +97,40 @@ describe("Modal — franja tinta", () => {
     expect(titulo.className).toContain("text-lg");
     expect(screen.getByRole("dialog", { name: "Nuevo rol" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cerrar" }).className).toContain("rounded-full");
+  });
+});
+
+describe("CabeceraModulo — la cabecera compartida de las 4 apps", () => {
+  it("pinta antetítulo, título con su id, descripción, ilustración decorativa y acciones dentro", async () => {
+    const { CabeceraModulo } = await import("@flit/ui/CabeceraModulo");
+    const { container } = render(
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="t"
+        tituloId="t"
+        antetitulo="Gestión integral"
+        titulo="Trámites"
+        descripcion="Del borrador a la entrega."
+        encima={<nav>migas</nav>}
+        ilustracion="/assets/ilustraciones/tramites.webp"
+        acciones={<button type="button">Nuevo</button>}
+      />,
+    );
+    const region = screen.getByRole("region", { name: "Trámites" });
+    expect(region.tagName).toBe("SECTION");
+    expect(screen.getByRole("heading", { level: 1, name: "Trámites" }).id).toBe("t");
+    expect(region.textContent).toContain("Gestión integral");
+    expect(region.textContent).toContain("Del borrador a la entrega.");
+    expect(within(region).getByRole("button", { name: "Nuevo" })).toBeTruthy();
+    const img = container.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("/assets/ilustraciones/tramites.webp");
+    expect(img?.getAttribute("alt")).toBe("");
+  });
+
+  it("es un header y sin ilustración no pinta imagen", async () => {
+    const { CabeceraModulo } = await import("@flit/ui/CabeceraModulo");
+    const { container } = render(<CabeceraModulo titulo="Solo título" />);
+    expect(container.firstElementChild?.tagName).toBe("HEADER");
+    expect(container.querySelector("img")).toBeNull();
   });
 });

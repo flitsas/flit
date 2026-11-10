@@ -20,7 +20,8 @@ import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
 import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
 import { GrillaSemaforos } from "./GrillaSemaforos";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /** «Cerrar panel» procede con el lote EN_PROCESO, sin celdas abiertas y con alguna en error (si no, la API responde 409). */
 const puedeCerrarPanel = (g: Grilla) =>
@@ -186,28 +187,29 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
 
   return (
     <>
-      <section aria-labelledby="tablero-titulo" className={`${CABECERA_CLS} flex flex-wrap items-start justify-between gap-3`}>
-        <DecoracionCabecera ilustracion="diagnostico" />
-        <div className="flex min-w-0 flex-col gap-2">
-          <Migas migas={[{ texto: "Diagnósticos", href: volver }, { texto: grilla?.nombre ?? "Tablero del diagnóstico" }]} />
-          <h1 id="tablero-titulo" className={TITULO_CABECERA_CLS}>
-            {grilla?.nombre ?? "Tablero del diagnóstico"}
-          </h1>
-          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href={volver} className={BOTON_SECUNDARIO_CLS}>
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            Volver a diagnósticos
-          </Link>
-          {grilla && puedeCerrarPanel(grilla) && (
-            <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
-              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-              Cerrar panel
-            </button>
-          )}
-        </div>
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="tablero-titulo"
+        tituloId="tablero-titulo"
+        titulo={grilla?.nombre ?? "Tablero del diagnóstico"}
+        descripcion={sesion?.empresa.nombre}
+        encima={<Migas migas={[{ texto: "Diagnósticos", href: volver }, { texto: grilla?.nombre ?? "Tablero del diagnóstico" }]} />}
+        ilustracion={rutaIlustracion("diagnostico")}
+        acciones={
+          <>
+            <Link href={volver} className={BOTON_SECUNDARIO_CLS}>
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Volver a diagnósticos
+            </Link>
+            {grilla && puedeCerrarPanel(grilla) && (
+              <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
+                <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                Cerrar panel
+              </button>
+            )}
+          </>
+        }
+      />
       {contenido}
       {dictamen && (
         <PanelDictamen

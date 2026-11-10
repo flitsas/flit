@@ -30,7 +30,8 @@ import { listarLotesBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/b
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { SelectorEmpresa } from "./SelectorEmpresa";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface ListaLotesBackofficeProps {
   /** Valores iniciales tomados de la URL (?empresa=&estado=&con_errores=&pagina=). */
@@ -211,15 +212,14 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
 
   return (
     <>
-      <section aria-labelledby="lotes-bo-titulo" className={CABECERA_CLS}>
-        <DecoracionCabecera ilustracion="diagnostico" />
-        <h1 id="lotes-bo-titulo" className={TITULO_CABECERA_CLS}>
-          Backoffice de diagnósticos
-        </h1>
-        <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">
-          Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error.
-        </p>
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="lotes-bo-titulo"
+        tituloId="lotes-bo-titulo"
+        titulo="Backoffice de diagnósticos"
+        descripcion="Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error."
+        ilustracion={rutaIlustracion("diagnostico")}
+      />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
         <SelectorEmpresa valor={filtros.empresa} onElegir={(empresa) => aplicar({ empresa, pagina: 1 })} />
         {hayEmpresa && (
