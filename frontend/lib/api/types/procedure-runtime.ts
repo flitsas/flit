@@ -2050,6 +2050,8 @@ export interface TenantBiometricPersonFilters {
   name?: string;
   documentType?: string;
   documentNumber?: string;
+  /** Ajuste 2026-11-10 (D1=a) — radicado (FT…), coincidencia parcial en servidor. */
+  referenceNumber?: string;
   status?: BiometricEstado;
   createdFrom?: string;
   createdTo?: string;

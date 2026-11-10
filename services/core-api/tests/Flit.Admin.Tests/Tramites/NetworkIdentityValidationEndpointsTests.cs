@@ -125,6 +125,26 @@ public sealed class NetworkIdentityValidationEndpointsTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Cabeza_busca_por_radicado_en_la_red_y_la_auditoria_registra_el_filtro_sin_su_valor()
+    {
+        var response = await GetAsync(P, "AdminCompany", $"{ByPersonUrl}?referenceNumber=ft1-0001234");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _factory.Repo.Received(1).ListBiometricValidationsGroupedByPersonAsync(
+            Arg.Is<TenantScope>(s => s.IsGroup),
+            Arg.Is(0), Arg.Any<int>(),
+            Arg.Is<BiometricPersonGroupFilter?>(f => f != null && f.ReferenceNumber == "FT1-0001234"),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        // Como el documento y el nombre, el radicado se audita solo por nombre: el texto buscado no se guarda.
+        await _factory.Writer.Received(1).WriteAsync(
+            Arg.Is<NetworkAccessAuditEntry>(e => e.Resource == NetworkAccessVocabulary.Resources.IdentityValidationsSearch
+                && e.FiltersJson != null
+                && e.FiltersJson.Contains("referenceNumber", StringComparison.Ordinal)
+                && !e.FiltersJson.Contains("0001234", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
     // ── AC3 — detalle y bitácora de una persona de una hija ────────────────────────────────────
 
     [Fact]

@@ -799,7 +799,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
     renderValidaciones();
     await screen.findByText('TRM-2026-000001');
     await abrirFiltros(user);
-    const q = screen.getByPlaceholderText('Nombre o número de documento');
+    const q = screen.getByPlaceholderText('Nombre, documento o radicado');
     await user.clear(q);
     await user.type(q, 'Ana');
     await buscar(user);
@@ -822,6 +822,45 @@ describe('Validaciones — filtros (HU #10348)', () => {
       ),
     );
   }, 15_000);
+
+  // Ajuste 2026-11-10 (D1=a) — la caja única también busca por radicado FT.
+  it('un radicado FT en el buscador viaja como referenceNumber, no como documento', async () => {
+    const user = userEvent.setup({ delay: null });
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+
+    renderValidaciones();
+    await screen.findByText('TRM-2026-000001');
+    const q = screen.getByPlaceholderText('Nombre, documento o radicado');
+    await user.clear(q);
+    await user.type(q, 'ft1-0000012');
+
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
+        expect.objectContaining({ referenceNumber: 'FT1-0000012' }),
+        undefined,
+      ),
+    );
+    const lastArg = mocks.listTenantBiometricPersons.mock.calls.at(-1)?.[0];
+    expect(lastArg?.documentNumber).toBeUndefined();
+    expect(lastArg?.name).toBeUndefined();
+  }, 15_000);
+
+  it('un enlace con ?q=FT… llega aplicado como radicado', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+    window.history.pushState({}, '', '/?q=FT1-0000012');
+    try {
+      renderValidaciones();
+      await waitFor(() =>
+        expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
+          expect.objectContaining({ referenceNumber: 'FT1-0000012' }),
+          undefined,
+        ),
+      );
+      expect(screen.getByPlaceholderText('Nombre, documento o radicado')).toHaveValue('FT1-0000012');
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
 
   it('la grilla por persona NO ofrece filtros de una validación concreta', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
