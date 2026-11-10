@@ -1,5 +1,6 @@
 'use client';
 
+import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import {
   useCallback,
   useEffect,
@@ -36,6 +37,14 @@ import {
   transformacionDelTipo,
   type CapacidadesEfectivas,
 } from './wizardCapabilities';
+
+/** HU #14482 — ilustración del encabezado del asistente según la familia del tipo. */
+function ilustracionDeFamilia(familia: string): string {
+  const f = familia.toUpperCase();
+  if (f.startsWith('TRASP')) return 'traspaso';
+  if (f.startsWith('MATR')) return 'matricula';
+  return 'tramites';
+}
 
 /** Rótulo del acordeón cuando el cambio ES el trámite (familia OTROS). */
 const TITULO_CAMBIO_BASE = {
@@ -1796,6 +1805,17 @@ export function TramiteWizard(props: Props) {
           velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
           demora se lea como lo que es —un tercero respondiendo— y no como un cuelgue. */}
       {submitting && <CarLoaderModal mode="radicacion" />}
+      {/* HU #14482 — encabezado de la propuesta (page-header de #traspaso) con el tipo de trámite: el
+          mismo título y la misma frase que antes iban en sr-only. Ocupa las dos columnas de la
+          rejilla, encima de los pasos; va antes del centinela, así la cabecera de pasos se compacta
+          cuando el encabezado ya salió de vista. Sin datos del vehículo hasta que haya consulta. */}
+      <div className="lg:!col-start-1 lg:col-span-2 lg:row-start-1 lg:!mt-0 lg:mb-3">
+        <ModuleTitle
+          title={displayTitle}
+          subtitle={displaySubtitle}
+          ilustracion={ilustracionDeFamilia(familia)}
+        />
+      </div>
       {/* Centinela del colapso: mientras se ve, la cabecera va completa; al salir de cuadro el
           asistente ya está en marcha y el título deja sitio a los pasos. Va FUERA del bloque
           sticky —si estuviera dentro nunca saldría de vista— y mide un píxel: no ocupa hueco. */}
@@ -1804,14 +1824,10 @@ export function TramiteWizard(props: Props) {
       {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
           franja de identidad estaba calculada para la cabecera completa. */}
       <div
-        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none lg:!col-start-1 lg:row-start-1 lg:row-span-[16] lg:!mt-0 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:!space-y-3 lg:!pb-3 ${
+        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none lg:!col-start-1 lg:row-start-2 lg:row-span-[16] lg:!mt-0 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:!space-y-3 lg:!pb-3 ${
           cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
         }`}
       >
-        {/* PDF: sin tarjeta de título arriba. h1 sr-only para a11y; Cancelar junto al stepper. */}
-        <h1 className="sr-only">{displayTitle}</h1>
-        <p className="sr-only">{displaySubtitle}</p>
-
         <div className="flex items-start justify-between gap-3 lg:flex-col lg:items-stretch">
           <div className="min-w-0 flex-1">
             {steps.length === 0 ? (
