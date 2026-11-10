@@ -33,7 +33,7 @@ import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
 import { TramiteDetalleComercial } from './detalle/TramiteDetalleComercial';
 import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
 import { RevocationRequestButton } from './RevocationRequestButton';
-import { DetalleVehiculoSidebar } from './detalle/DetalleVehiculoSidebar';
+import { DetalleResumenAvance } from './detalle/DetalleResumenAvance';
 import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
   mapEventsToTimelineNodes,
@@ -764,6 +764,18 @@ export function TramiteDetalleModal({
               </InlineAlert>
             ) : null}
 
+            {/* HU #14482 — resumen y avance de la propuesta (vehículo, fichas y línea de estados) en
+                vez de la columna del vehículo: se muestra cuando se ve una sección, igual que esa
+                columna, y deja que la sección use todo el ancho. */}
+            {!panelTracking && estadoVigente ? (
+              <DetalleResumenAvance
+                item={item}
+                detalle={detail}
+                estadoVigente={estadoVigente}
+                rejectedFrom={rejectedFromVigente}
+              />
+            ) : null}
+
             <DetalleStepper
               pasos={pasosStepper}
               pasoActivoId={panelTracking ? '' : seccion}
@@ -867,11 +879,7 @@ export function TramiteDetalleModal({
                 </div>
               ) : (
                 <>
-                  <div className="lg:col-span-4">
-                    <DetalleVehiculoSidebar item={item} canal={detail} />
-                  </div>
-
-                  <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
+                  <div className="flex min-w-0 flex-col gap-4 lg:col-span-12">
                     <div className="flex items-center gap-2">
                       <StepIcon className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
                       <h3 className="text-sm font-bold" style={{ color: BLUE }}>

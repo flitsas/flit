@@ -59,9 +59,12 @@
 .di-linea__punto { position: absolute; top: 2px; left: 50%; margin-left: -10px; width: 20px; height: 20px; border-radius: 50%; background: var(--di-surface-elevated); border: 3px solid var(--di-border-control); }
 .di-linea__paso--hecho .di-linea__punto { background: var(--color-flit-tech); border-color: var(--color-flit-tech); }
 .di-linea__paso--actual .di-linea__punto { background: var(--di-action); border-color: var(--di-action); box-shadow: 0 0 0 5px var(--di-accent-soft); }
-.di-linea__texto { font-size: 0.8125rem; font-weight: 600; color: var(--di-text-secondary); }
-.di-linea__paso--hecho .di-linea__texto { color: var(--di-heading); }
-.di-linea__paso--actual .di-linea__texto { color: var(--di-action); font-weight: 700; }
+/* Texto del paso: la primera línea es el nombre y la segunda la fecha o «Pendiente» (un solo elemento). */
+.di-linea__texto { display: block; font-size: 0.6875rem; line-height: 1.5; color: var(--di-text-tertiary); }
+.di-linea__texto::first-line { font-size: 0.8125rem; font-weight: 600; color: var(--paso-color, var(--di-text-secondary)); }
+.di-linea__paso--hecho .di-linea__texto { --paso-color: var(--di-heading); }
+.di-linea__paso--actual .di-linea__texto { --paso-color: var(--di-action); }
+.di-linea__paso--actual .di-linea__texto::first-line { font-weight: 700; }
 @media (max-width: 640px) {
   .di-linea { grid-auto-flow: row; grid-auto-columns: auto; gap: 12px; }
   .di-linea__paso { justify-items: start; text-align: left; padding: 0 0 0 34px; min-height: 24px; }
