@@ -49,8 +49,10 @@ import {
   DOCK_GROUP_LABEL,
   DOCK_GROUP_ORDER,
   DOCK_GROUP_SIDE,
+  DOCK_ITEM_DESCRIPCION,
   DOCK_ITEM_GROUP,
   SPA_DOCK_ITEM_LABEL,
+  dockIlustracion,
 } from "./dockGroups";
 
 /** Lo que el token no dice por sí solo y cambia qué entradas existen. */
@@ -68,9 +70,19 @@ export interface TramitesNavContext {
 
 type Entry = Omit<NavItem, "section" | "children"> & { children?: Entry[] };
 
-/** Los hijos van en la sección del padre; solo el padre necesita grupo en DOCK_ITEM_GROUP. */
+/**
+ * Los hijos van en la sección del padre; solo el padre necesita grupo en DOCK_ITEM_GROUP. Cada entrada lleva además su
+ * ilustración y su descripción corta (HU #14479), solo presentación: ni la ruta ni quién la ve cambian.
+ */
 function withSection(entry: Entry, section: string): NavItem {
-  return { ...entry, section, children: entry.children?.map((c) => withSection(c, section)) };
+  const descripcion = DOCK_ITEM_DESCRIPCION[entry.key];
+  return {
+    ...entry,
+    section,
+    ilustracion: entry.ilustracion ?? dockIlustracion(entry.key),
+    ...(descripcion ? { descripcion } : {}),
+    children: entry.children?.map((c) => withSection(c, section)),
+  };
 }
 
 function inSection(entry: Entry): NavItem {
@@ -250,7 +262,13 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   );
 
   return {
-    sections: DOCK_GROUP_ORDER.map((id) => ({ id, label: DOCK_GROUP_LABEL[id], icon: DOCK_GROUP_ICON[id], side: DOCK_GROUP_SIDE[id] })),
+    sections: DOCK_GROUP_ORDER.map((id) => ({
+      id,
+      label: DOCK_GROUP_LABEL[id],
+      icon: DOCK_GROUP_ICON[id],
+      side: DOCK_GROUP_SIDE[id],
+      ilustracion: dockIlustracion(id),
+    })),
     items: entries.map(inSection),
   };
 }

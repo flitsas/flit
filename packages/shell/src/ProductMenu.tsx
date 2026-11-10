@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useRef, useState } from "react";
-import { ArrowRight, Grid3x3, House } from "lucide-react";
+import { ArrowRight, House } from "lucide-react";
 import { appIcon, appTagline, fetchMyApps, type SuiteApp } from "./apps";
 
 // Menú de productos (▦, B-10/B-11): la única forma de cambiar de producto. Cada producto abre en su host; la sesión
@@ -57,9 +57,11 @@ export function ProductMenu({
         title="Tus productos"
         aria-expanded={open}
         aria-controls="flit-suite-products"
-        className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]"
+        className="suite-icono-btn"
       >
-        <Grid3x3 className="h-5 w-5" aria-hidden="true" />
+        {/* Ilustración de productos del prototipo «Diseño Inteligente» (HU #14479); cada app la sirve desde su public/. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="suite-icono-btn__ilus" src="/assets/ilustraciones/productos.webp" alt="" aria-hidden="true" />
       </button>
       {open && (
         <div

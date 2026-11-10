@@ -118,26 +118,21 @@ export function SuiteShell({
   const shellNav = useMemo(() => ({ groups, homeHref }), [groups, homeHref]);
   const accountUser = useMemo(() => ({ ...user, roleLabel: user.roleLabel ?? suiteRoleLabel(roles ?? []) }), [user, roles]);
 
-  // La barra de siempre de Trámites (logo, tema, rol/empresa/nombre, avatar y ⋮), con lo que agrega la suite: el nombre
-  // del producto junto al logo y el menú de productos (▦).
+  // Barra superior del prototipo «Diseño Inteligente» (HU #14479, `.barra`): marca y producto a la izquierda; a la
+  // derecha el buscador ancho (Ctrl K), el menú de productos, el tema y el bloque de usuario. Sin campana: la suite
+  // todavía no tiene un dato real de avisos que mostrar.
   const header = (
-    <header
-      className={`z-40 flex items-center justify-between border-b border-[var(--color-flit-gray)] px-4 py-3 md:px-6 dark:border-white/[0.08] ${
-        app ? "shrink-0" : "sticky top-0 bg-[var(--color-flit-bg)]/90 backdrop-blur dark:bg-[#05060A]/90"
-      }`}
-    >
-      <Link href={homeHref} className="flex items-center gap-3" aria-label={`${brand.platformName} — ${productName}`}>
-        <BrandLogo variant="dark" className="h-10 w-auto dark:hidden" />
-        <BrandLogo variant="white" className="hidden h-10 w-auto dark:block" />
-        <span className="hidden border-l border-[var(--color-flit-gray)] pl-3 text-sm font-semibold sm:inline dark:border-white/10">
-          {productName}
-        </span>
+    <header className={`suite-barra z-40 ${app ? "shrink-0" : "sticky top-0"}`}>
+      <Link href={homeHref} className="suite-barra__marca" aria-label={`${brand.platformName} — ${productName}`}>
+        <BrandLogo variant="dark" className="suite-barra__logo dark:hidden" />
+        <BrandLogo variant="white" className="suite-barra__logo hidden dark:block" />
+        <span className="suite-barra__producto">{productName}</span>
       </Link>
-      <div className="flex items-center gap-3">
+      <div className="suite-barra__acciones">
         <CommandPalette groups={groups} home={home} actions={searchActions} plate={plateSearch} />
-        {themeToggle && <ThemeToggle />}
         {headerActions}
         <ProductMenu productCode={productCode} apps={apps} loadApps={loadApps} />
+        {themeToggle && <ThemeToggle />}
         <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} />
       </div>
     </header>

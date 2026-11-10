@@ -59,17 +59,18 @@ describe("Dock — ítem seleccionado con el degradado del isotipo central", () 
       /\.dock-pill\[aria-current="page"\],\s*\.dock-pill\[data-ancestor-active="true"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/,
     );
     expect(GLOBALS).toMatch(
-      /\.dock-pill\[aria-current="page"\] svg,\s*\.dock-pill\[data-ancestor-active="true"\] svg\s*\{[^}]*color:\s*#ffffff/,
+      /\.dock-pill\[aria-current="page"\] > svg,\s*\.dock-pill\[data-ancestor-active="true"\] > svg\s*\{[^}]*color:\s*#ffffff/,
     );
+    // HU #14479 (propuesta): la entrada activa del submenú va en el azul suave de acción, no en el degradado.
     expect(GLOBALS).toMatch(
-      /\.dock-panel-item\[aria-current="page"\]\s*\{[^}]*background:\s*var\(--nav-activo\)/,
+      /\.dock-entrada\[aria-current="page"\]\s*\{[^}]*background:\s*var\(--di-accent-soft\)/,
     );
   });
 
-  it("el hover del activo conserva el degradado; .dock-fab usa el mismo token", () => {
+  it("el hover del activo conserva el degradado; .dock-fab activo lleva el aro turquesa de la propuesta", () => {
     expect(GLOBALS).toMatch(
       /\.dock-pill\[aria-current="page"\]:hover[\s\S]*?background:\s*var\(--nav-activo\)/,
     );
-    expect(GLOBALS).toMatch(/\.dock-fab[\s\S]*?--nav-activo|--nav-activo[\s\S]*?\.dock-fab/);
+    expect(GLOBALS).toMatch(/\.dock-fab\[aria-current="page"\]\s*\{[^}]*outline:\s*3px solid var\(--di-highlight-decor\)/);
   });
 });
