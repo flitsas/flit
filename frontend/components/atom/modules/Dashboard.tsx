@@ -198,7 +198,7 @@ type Slide = WelcomeSlide | BannerSlide;
 function buildSlides(displayName: string, welcomeBody: string, banners: ActiveBanner[]): Slide[] {
   const welcome: WelcomeSlide = {
     type: "welcome",
-    title: `${DASHBOARD_HERO_PREFIX} ${displayName} 👋`,
+    title: `${DASHBOARD_HERO_PREFIX} ${displayName}`,
     body: welcomeBody,
   };
 
@@ -529,7 +529,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
         <div
-          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)] ${
+          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)] md:min-h-0 ${
             esBienvenida(s)
               ? "rounded-[28px] border border-[color:var(--di-border)] text-[color:var(--di-heading)] shadow-[var(--shadow-card)]"
               : "rounded-2xl text-white"
@@ -582,18 +582,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             />
           )}
           {s.type === "welcome" ? (
-            <div className="relative flex flex-col gap-2 max-w-[85%] px-6 pt-5 overflow-hidden">
-              <div className="flex items-center gap-3 min-w-0">
-                {/* La ilustración de Inicio del prototipo ocupa el lugar del ícono (que sigue en el
-                    DOM, oculto: era decorativo). */}
-                <div
-                  className="h-16 w-16 shrink-0"
-                  style={{ background: `url("${rutaIlustracion("inicio")}") center / contain no-repeat` }}
-                >
-                  <Activity className="hidden" aria-hidden="true" />
-                </div>
-                <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
+            // `.page-header` del prototipo: la ilustración de Inicio a la izquierda del texto (el ícono sigue
+            // en el DOM, oculto: era decorativo) y el texto en flujo, con el pie reservado para los puntos del
+            // carrusel, así un aviso largo agranda el banner en vez de cortarse o montarse sobre ellos.
+            <div className="relative flex flex-1 flex-col justify-center gap-2 max-w-[85%] pl-[108px] pr-6 pt-5 pb-12 max-sm:pl-[84px]">
+              <div
+                className="absolute left-6 top-5 h-16 w-16 max-sm:left-4 max-sm:h-14 max-sm:w-14"
+                style={{ background: `url("${rutaIlustracion("inicio")}") center / contain no-repeat` }}
+              >
+                <Activity className="hidden" aria-hidden="true" />
               </div>
+              <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
               <p className="text-sm md:text-base leading-snug line-clamp-3 text-[color:var(--di-text-secondary)]">{s.body}</p>
             </div>
           ) : s.linkUrl ? (
@@ -675,7 +674,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
         {/* Columna derecha: filtros en fila + KPIs 2×2 (HU #12725 B.1 / D3). */}
         <div
-          className="flex flex-col gap-3 min-h-[var(--dashboard-hero-h)]"
+          // HU #14481 (referencia de Samuel): la columna fija el alto de la fila y el banner se estira a ella
+          // (`items-stretch`), no al revés; por eso aquí no hay alto mínimo.
+          className="flex flex-col gap-3"
           data-testid="dashboard-hero-column"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end" data-testid="dashboard-filter-row">
@@ -732,7 +733,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                     // rótulo se comía el ancho y la ilustración quedaba en 0 px. Aquí la tarjeta va a
                     // una columna —el rótulo usa todo el ancho y no se parte— y la ilustración se fija
                     // abajo a la derecha, junto a la cifra, con un tamaño que no se encoge.
-                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>img]:absolute [&>img]:bottom-[11px] [&>img]:right-3.5 [&>img]:h-8 [&>img]:w-8 [&>img]:shrink-0 [&>img]:max-w-none [&>span:nth-child(2)]:pr-10 [&>span:nth-child(2)]:text-2xl"
+                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>img]:absolute [&>img]:bottom-3 [&>img]:right-3 [&>img]:h-10 [&>img]:w-10 [&>img]:shrink-0 [&>img]:max-w-none [&>img]:rounded-full [&>img]:bg-[var(--di-accent-soft)] [&>img]:p-1.5 [&>span:nth-child(2)]:pr-12 [&>span:nth-child(2)]:text-2xl"
                     ilustracion={rutaIlustracion(k.ilustracion)}
                     etiqueta={
                       <span className="block min-w-0">
@@ -834,32 +835,34 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 {globalFunnel.length === 0 ? (
                   <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
                 ) : (
-                  <ul className="space-y-2">
+                  // HU #14481 (referencia de Samuel) — lista numerada sin fondos por fila, separada por una línea
+                  // fina: orden, barrita del color del estado, nombre, cantidad y el porcentaje en la pastilla
+                  // tintada del estado (--estado-<x>-bg/-fg). Sin íconos.
+                  <ul className="divide-y divide-[color:var(--di-divider)]">
                     {globalFunnel.map((f, i) => {
-                      // HU #14481 — lista numerada: el número va en la pastilla del estado (--estado-*, color
-                      // propio del estado desde HU #14482), el nombre sin ícono ni marca, la cifra en tinta y
-                      // su porcentaje sobre el total del rango.
                       const chip = estadoChipStyle(f.status);
                       const pct = totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0;
                       return (
-                        <li
-                          key={f.status}
-                          className="flex items-center gap-3 p-2 rounded-xl bg-[var(--di-sky)]"
-                        >
-                          <span
-                            className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold shrink-0 border"
-                            style={{ background: chip.bg, color: chip.color, borderColor: chip.border }}
-                          >
+                        <li key={f.status} className="flex items-center gap-3 py-2.5">
+                          <span className="w-4 shrink-0 text-sm font-bold tabular-nums text-[color:var(--di-heading)]">
                             {i + 1}
                           </span>
-                          <span className="min-w-0 flex-1 text-xs font-medium text-[color:var(--di-text-primary)]">
+                          <span
+                            aria-hidden="true"
+                            className="h-6 w-1 shrink-0 rounded-full"
+                            style={{ background: estadoAcentoVar(f.status) }}
+                          />
+                          <span className="min-w-0 flex-1 text-sm text-[color:var(--di-text-primary)]">
                             {estadoLabel(f.status)}
                           </span>
-                          <span className="text-base font-bold tabular-nums text-[color:var(--di-text-primary)]">
+                          <span className="text-lg font-bold tabular-nums text-[color:var(--di-heading)]">
                             {f.count}
                           </span>
-                          <span className="w-10 shrink-0 text-right text-xs font-medium tabular-nums text-[color:var(--di-text-tertiary)]">
-                            {pct}%
+                          <span
+                            className="min-w-[3.25rem] shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-semibold tabular-nums"
+                            style={{ background: chip.bg, color: chip.color }}
+                          >
+                            {pct}{"\u00a0"}%
                           </span>
                         </li>
                       );
@@ -898,15 +901,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   { label: "En proceso", value: biometricStats?.enProceso ?? 0, punto: estadoAcentoVar("preparado") },
                   { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, punto: estadoAcentoVar("rechazado") },
                 ].map((k) => (
+                  // Referencia de Samuel: tarjetita blanca con todo centrado — punto, nombre y cifra.
                   <div
                     key={k.label}
-                    className="min-w-0 rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-3 shadow-[var(--shadow-card)]"
+                    className="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-2 py-3 text-center shadow-[var(--shadow-card)]"
                   >
-                    <p className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--di-text-secondary)]">
-                      <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ background: k.punto }} />
-                      <span className="min-w-0 leading-tight">{k.label}</span>
-                    </p>
-                    <p className="text-2xl font-bold leading-tight mt-0.5 tabular-nums text-[color:var(--di-text-primary)]">
+                    <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background: k.punto }} />
+                    <p className="text-xs font-medium leading-tight text-[color:var(--di-text-secondary)]">{k.label}</p>
+                    <p className="text-2xl font-bold leading-tight tabular-nums text-[color:var(--di-text-primary)]">
                       {k.value}
                     </p>
                   </div>
