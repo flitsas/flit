@@ -1,6 +1,6 @@
 import { PlayCircle } from "lucide-react";
-import { ASSETS } from "@/lib/assets";
 import { PASOS_TRAMITE } from "@/lib/landing/contenido";
+import { PASOS_SVG } from "@/lib/landing/pasos-svg";
 import { boton } from "./estilos";
 
 export function PasosTramite() {
@@ -10,8 +10,8 @@ export function PasosTramite() {
       <ol className="pasos-grid mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {PASOS_TRAMITE.map(({ clave, titulo }, i) => (
           <li key={clave} className="paso-item paso-card group flex h-full flex-col items-center gap-2 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={ASSETS.pasos[clave]} alt="" aria-hidden className="paso-img h-14 w-auto transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110" />
+            {/* SVG propio en línea: toma los colores de la marca (--paso-claro / --paso-oscuro) y, sin marca, los de FLIT. */}
+            <span aria-hidden className="paso-img inline-flex h-14 items-center transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110 [&>svg]:h-14 [&>svg]:w-auto" dangerouslySetInnerHTML={{ __html: PASOS_SVG[clave] }} />
             <span className="paso-num" aria-hidden>{i + 1}</span>
             <span className="text-sm font-medium">{titulo}</span>
           </li>

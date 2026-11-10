@@ -26,8 +26,31 @@ export interface PortalMarcaSnapshot {
   bannerId: string | null;
 }
 
+/** Imagen del carrusel del portal (borrador, en orden). `imageUrl` exige sesión: se pide con `fetchPortalMarcaImage`. */
+export interface PortalMarcaCarruselItem {
+  imageId: string;
+  imageUrl: string;
+  alt: string;
+  linkUrl: string | null;
+}
+
+/** Máximo de imágenes del carrusel. */
+export const PORTAL_CARRUSEL_MAX = 6;
+
+/** Banner del portal (borrador, en orden): misma forma que una imagen del carrusel. */
+export type PortalMarcaBanner = PortalMarcaCarruselItem;
+
+/** Máximo de banners del portal. */
+export const PORTAL_BANNERS_MAX = 6;
+
 export interface PortalMarca {
   transitOfficeId: string;
+  /** Banners del borrador, en orden (el portal los rota como carrusel). Ausente en marcas que no los llevan. */
+  banners?: PortalMarcaBanner[];
+  /** Carrusel del borrador, en orden. Ausente en marcas que no lo llevan (p. ej. la web de persona). */
+  carousel?: PortalMarcaCarruselItem[];
+  /** Si el servidor lo informa como `false`, la marca es de solo lectura para quien la ve. */
+  canEdit?: boolean;
   draft: PortalMarcaSnapshot;
   published: PortalMarcaSnapshot | null;
   publishedVersion: number;
@@ -52,6 +75,11 @@ export type PortalMarcaErrorCode =
   | "PORTAL_MARCA_CONTRASTE"
   | "PORTAL_MARCA_INCOMPLETA"
   | "PORTAL_MARCA_ARCHIVO_INVALIDO"
+  | "PORTAL_MARCA_DATOS_INVALIDOS"
+  | "PORTAL_MARCA_CARRUSEL_LLENO"
+  | "BANNERS_LLENO"
+  | "PORTAL_MARCA_NO_ENCONTRADA"
+  | "PORTAL_MARCA_PROHIBIDO"
   | "PORTAL_MARCA_CONFLICTO";
 
 const GENERIC = "No se pudo completar la solicitud. Inténtalo de nuevo.";
@@ -137,14 +165,78 @@ export function deletePortalMarcaLogo(scope?: PortalMarcaScope): Promise<PortalM
   return solicitudMarca<PortalMarca>("DELETE", `${base}/logo`, scope);
 }
 
-/** POST /banner — multipart; el banner queda en el borrador. */
+/** @deprecated Banner único; la UI usa la lista `/banners` (`uploadPortalMarcaBannerItem`). El backend lo conserva por compatibilidad. */
 export function uploadPortalMarcaBanner(file: File, scope?: PortalMarcaScope): Promise<PortalMarca> {
   return solicitudMarca<PortalMarca>("POST", `${base}/banner`, scope, { form: imageForm(file) });
 }
 
-/** DELETE /banner — el portal usa el banner FLIT cuando se publique. */
+/** @deprecated Banner único; la UI usa la lista `/banners` (`deletePortalMarcaBannerItem`). */
 export function deletePortalMarcaBanner(scope?: PortalMarcaScope): Promise<PortalMarca> {
   return solicitudMarca<PortalMarca>("DELETE", `${base}/banner`, scope);
+}
+
+/** POST /banners — multipart (`file`, `alt` obligatorio, `linkUrl`); el banner se agrega al final de la lista del borrador. */
+export function uploadPortalMarcaBannerItem(
+  file: File,
+  alt: string,
+  linkUrl: string | null,
+  scope?: PortalMarcaScope,
+): Promise<PortalMarca> {
+  const form = imageForm(file);
+  form.append("alt", alt);
+  if (linkUrl) form.append("linkUrl", linkUrl);
+  return solicitudMarca<PortalMarca>("POST", `${base}/banners`, scope, { form });
+}
+
+/** PUT /banners/{imageId} — edita el texto alternativo y el enlace. */
+export function updatePortalMarcaBannerItem(
+  imageId: string,
+  body: { alt: string; linkUrl: string | null },
+  scope?: PortalMarcaScope,
+): Promise<PortalMarca> {
+  return solicitudMarca<PortalMarca>("PUT", `${base}/banners/${encodeURIComponent(imageId)}`, scope, { json: body });
+}
+
+/** PUT /banners/orden — permutación exacta de los banners actuales. */
+export function reorderPortalMarcaBanners(imageIds: string[], scope?: PortalMarcaScope): Promise<PortalMarca> {
+  return solicitudMarca<PortalMarca>("PUT", `${base}/banners/orden`, scope, { json: { imageIds } });
+}
+
+/** DELETE /banners/{imageId}. */
+export function deletePortalMarcaBannerItem(imageId: string, scope?: PortalMarcaScope): Promise<PortalMarca> {
+  return solicitudMarca<PortalMarca>("DELETE", `${base}/banners/${encodeURIComponent(imageId)}`, scope);
+}
+
+/** POST /carrusel — multipart (`file`, `alt`, `linkUrl`); la imagen se agrega al final del carrusel del borrador. */
+export function uploadPortalMarcaCarrusel(
+  file: File,
+  alt: string,
+  linkUrl: string | null,
+  scope?: PortalMarcaScope,
+): Promise<PortalMarca> {
+  const form = imageForm(file);
+  form.append("alt", alt);
+  if (linkUrl) form.append("linkUrl", linkUrl);
+  return solicitudMarca<PortalMarca>("POST", `${base}/carrusel`, scope, { form });
+}
+
+/** PUT /carrusel/{imageId} — edita el texto alternativo y el enlace. */
+export function updatePortalMarcaCarrusel(
+  imageId: string,
+  body: { alt: string; linkUrl: string | null },
+  scope?: PortalMarcaScope,
+): Promise<PortalMarca> {
+  return solicitudMarca<PortalMarca>("PUT", `${base}/carrusel/${encodeURIComponent(imageId)}`, scope, { json: body });
+}
+
+/** PUT /carrusel/orden — permutación exacta de las imágenes actuales. */
+export function reorderPortalMarcaCarrusel(imageIds: string[], scope?: PortalMarcaScope): Promise<PortalMarca> {
+  return solicitudMarca<PortalMarca>("PUT", `${base}/carrusel/orden`, scope, { json: { imageIds } });
+}
+
+/** DELETE /carrusel/{imageId}. */
+export function deletePortalMarcaCarrusel(imageId: string, scope?: PortalMarcaScope): Promise<PortalMarca> {
+  return solicitudMarca<PortalMarca>("DELETE", `${base}/carrusel/${encodeURIComponent(imageId)}`, scope);
 }
 
 /** POST /publish — el servidor revalida nombre, colores y contraste 4,5:1. */

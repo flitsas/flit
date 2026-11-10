@@ -45,6 +45,14 @@ public enum PlateAssignmentFailure
     /// (<c>plate_updated_at</c> no nulo), aunque la hora siga vigente.
     /// </summary>
     PlateUpdateAlreadyUsed,
+
+    /// <summary>
+    /// Caso C 2026-11-09 + HU8 — la clase del trámite tiene grupo de placa (carro, moto, remolque o
+    /// maquinaria; <c>PlateRangeRules.ResolvePlateClassGroup</c>) y la placa no cumple su formato.
+    /// <c>Detail</c> lleva el literal del grupo. Se detecta antes de reservar en el inventario: el trámite
+    /// sigue en preasignación.
+    /// </summary>
+    InvalidPlateFormatForClass,
 }
 
 /// <summary>

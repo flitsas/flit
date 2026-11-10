@@ -49,6 +49,27 @@ public static class AdminOtPortalMarcaEndpoints
                 [FromServices] IPortalMarcaRepository r, [FromServices] PortalMarcaImagenHandler hd, CancellationToken ct) =>
                 QuitarAsync(h, transitOfficeId, PortalMarcaImagen.KindBanner, b, r, hd, ct))
             .WithName("AdminOtPortalMarcaBannerDelete").WithSummary("Quita el banner del borrador");
+
+        // Carrusel de imágenes de la columna lateral: hasta 6 imágenes del borrador, con texto alternativo y enlace opcional.
+        group.MapPost("/carrusel", CarruselAgregarAsync).WithName("AdminOtPortalMarcaCarruselPost").DisableAntiforgery()
+            .WithSummary("Agrega una imagen al final del carrusel (PNG, JPEG o WebP, hasta 512 KB; máximo 6)");
+        group.MapPut("/carrusel/orden", CarruselOrdenarAsync).WithName("AdminOtPortalMarcaCarruselOrden")
+            .WithSummary("Reordena el carrusel con una permutación exacta de las imágenes actuales");
+        group.MapPut("/carrusel/{imageId:guid}", CarruselActualizarAsync).WithName("AdminOtPortalMarcaCarruselPut")
+            .WithSummary("Cambia el texto alternativo y el enlace de una imagen del carrusel");
+        group.MapDelete("/carrusel/{imageId:guid}", CarruselQuitarAsync).WithName("AdminOtPortalMarcaCarruselDelete")
+            .WithSummary("Quita una imagen del carrusel del borrador");
+
+        // Banners principales del portal: hasta 6 del borrador, con texto alternativo y enlace opcional. El banner único legacy
+        // (POST/DELETE /banner) opera sobre el primero de esta lista.
+        group.MapPost("/banners", BannersAgregarAsync).WithName("AdminOtPortalMarcaBannersPost").DisableAntiforgery()
+            .WithSummary("Agrega un banner al final de la lista (PNG, JPEG o WebP, hasta 2 MB; máximo 6)");
+        group.MapPut("/banners/orden", BannersOrdenarAsync).WithName("AdminOtPortalMarcaBannersOrden")
+            .WithSummary("Reordena los banners con una permutación exacta de los actuales");
+        group.MapPut("/banners/{imageId:guid}", BannersActualizarAsync).WithName("AdminOtPortalMarcaBannersPut")
+            .WithSummary("Cambia el texto alternativo y el enlace de un banner");
+        group.MapDelete("/banners/{imageId:guid}", BannersQuitarAsync).WithName("AdminOtPortalMarcaBannersDelete")
+            .WithSummary("Quita un banner del borrador");
         group.MapGet("/imagenes/{id:guid}", LeerImagenAsync).WithName("AdminOtPortalMarcaImagen")
             .WithSummary("Imagen de la marca, también de borrador, solo con sesión y del organismo propio");
 
@@ -134,6 +155,152 @@ public static class AdminOtPortalMarcaEndpoints
             return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
 
         return Results.Ok(await handler.QuitarAsync(organismo, kind, actor, ct).ConfigureAwait(false));
+    }
+
+    // ── Carrusel ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+    private static async Task<IResult> CarruselAgregarAsync(
+        HttpContext http, IFormFile? file, [FromForm] string? alt, [FromForm] string? linkUrl, [FromQuery] Guid? transitOfficeId,
+        [FromServices] IOtClientProcedureRepository bandeja, [FromServices] IPortalMarcaRepository repo,
+        [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (file is null)
+            return Problema(400, PortalMarcaErrores.ArchivoInvalido, "Falta el archivo de la imagen del carrusel (campo «file»).");
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        var stream = file.OpenReadStream();
+        await using (stream.ConfigureAwait(false))
+            return Resultado(await handler.AgregarCarruselAsync(organismo, file.FileName, stream, alt, linkUrl, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> CarruselActualizarAsync(
+        HttpContext http, Guid imageId, [FromBody] ActualizarCarruselRequest? body, [FromQuery] Guid? transitOfficeId,
+        [FromServices] IOtClientProcedureRepository bandeja, [FromServices] IPortalMarcaRepository repo,
+        [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (body is null)
+            return Problema(400, PortalMarcaErrores.Datos, "Falta el cuerpo de la solicitud.");
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Resultado(await handler.ActualizarCarruselAsync(organismo, imageId, body.Alt, body.LinkUrl, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> CarruselOrdenarAsync(
+        HttpContext http, [FromBody] OrdenCarruselRequest? body, [FromQuery] Guid? transitOfficeId,
+        [FromServices] IOtClientProcedureRepository bandeja, [FromServices] IPortalMarcaRepository repo,
+        [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (body?.ImageIds is not { } textos)
+            return Problema(400, PortalMarcaErrores.Datos, "Falta la lista de imágenes (imageIds).");
+        var ids = new List<Guid>(textos.Count);
+        foreach (var t in textos)
+        {
+            if (!Guid.TryParse(t, out var id))
+                return Problema(400, PortalMarcaErrores.Datos, "Cada elemento de imageIds debe ser un identificador de imagen válido.");
+            ids.Add(id);
+        }
+
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Resultado(await handler.OrdenarCarruselAsync(organismo, ids, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> CarruselQuitarAsync(
+        HttpContext http, Guid imageId, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
+        [FromServices] IPortalMarcaRepository repo, [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Resultado(await handler.QuitarCarruselAsync(organismo, imageId, actor, ct).ConfigureAwait(false));
+    }
+
+    // ── Banners ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    private static async Task<IResult> BannersAgregarAsync(
+        HttpContext http, IFormFile? file, [FromForm] string? alt, [FromForm] string? linkUrl, [FromQuery] Guid? transitOfficeId,
+        [FromServices] IOtClientProcedureRepository bandeja, [FromServices] IPortalMarcaRepository repo,
+        [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (file is null)
+            return Problema(400, PortalMarcaErrores.ArchivoInvalido, "Falta el archivo del banner (campo «file»).");
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        var stream = file.OpenReadStream();
+        await using (stream.ConfigureAwait(false))
+            return Resultado(await handler.AgregarBannerAsync(organismo, file.FileName, stream, alt, linkUrl, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> BannersActualizarAsync(
+        HttpContext http, Guid imageId, [FromBody] ActualizarBannerRequest? body, [FromQuery] Guid? transitOfficeId,
+        [FromServices] IOtClientProcedureRepository bandeja, [FromServices] IPortalMarcaRepository repo,
+        [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (body is null)
+            return Problema(400, PortalMarcaErrores.Datos, "Falta el cuerpo de la solicitud.");
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Resultado(await handler.ActualizarBannerAsync(organismo, imageId, body.Alt, body.LinkUrl, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> BannersOrdenarAsync(
+        HttpContext http, [FromBody] OrdenBannersRequest? body, [FromQuery] Guid? transitOfficeId,
+        [FromServices] IOtClientProcedureRepository bandeja, [FromServices] IPortalMarcaRepository repo,
+        [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (body?.ImageIds is not { } textos)
+            return Problema(400, PortalMarcaErrores.Datos, "Falta la lista de banners (imageIds).");
+        var ids = new List<Guid>(textos.Count);
+        foreach (var t in textos)
+        {
+            if (!Guid.TryParse(t, out var id))
+                return Problema(400, PortalMarcaErrores.Datos, "Cada elemento de imageIds debe ser un identificador de banner válido.");
+            ids.Add(id);
+        }
+
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Resultado(await handler.OrdenarBannersAsync(organismo, ids, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> BannersQuitarAsync(
+        HttpContext http, Guid imageId, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
+        [FromServices] IPortalMarcaRepository repo, [FromServices] PortalMarcaImagenHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, repo, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        return Resultado(await handler.QuitarBannerAsync(organismo, imageId, actor, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> LeerImagenAsync(

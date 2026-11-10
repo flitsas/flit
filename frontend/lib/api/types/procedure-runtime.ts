@@ -1,3 +1,5 @@
+import type { OtGrupoPlaca } from '@/lib/api/types-ot';
+
 import type { QueryCondition } from '@/lib/api/queries';
 // Tipos espejo de los DTOs de instancia de trámite (runtime/operación).
 // La CONFIG dinámica (steps/sections/fields) se reutiliza desde
@@ -193,6 +195,12 @@ export interface PreflightPreviewResult {
    * habilitados de la compañía. `null` en Ruta Larga (lo elige el gestor).
    */
   transitOffice: PreflightPreviewTransitOffice | null;
+  /**
+   * HU9 (registro diferido 2026-11-09) — grupo de formato de placa de la clase consultada, resuelto
+   * por el backend con su catálogo (misma regla de HU8). Opcional: sin él el paso 1 usa las listas
+   * exactas por `vehicle_class` (HU5).
+   */
+  grupoPlaca?: OtGrupoPlaca | null;
 }
 
 export type MatriculaRuta = 'corta' | 'larga';

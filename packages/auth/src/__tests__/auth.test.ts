@@ -188,6 +188,25 @@ describe("renovación y proxy", () => {
     expect(headers.has("cookie")).toBe(false);
   });
 
+  // GDC punto 10: 100 MB de archivos + 1 MB de sobre, igual que el gateway y core-comparendos.
+  it("reenvía un cuerpo dentro del tope y corta con 413 sin llamar a la API por encima", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const proxy = createApiProxy({ productCode: "comparendos", config: () => config, maxBodyBytes: 1024 });
+    const cookie = await sessionCookieHeader({ accessToken: jwt({ exp: now() + 900 }), refreshToken: "r1", expiresAt: now() + 900 });
+    const post = (bytes: number) => proxy(new Request(`${APP}/api/v1/comparendos/ocr/paquetes`, {
+      method: "POST", body: new Uint8Array(bytes), headers: { host: "dev.comparendos.flitsas.online", cookie, "content-length": String(bytes) },
+    }), ["comparendos", "ocr", "paquetes"]);
+
+    expect((await post(1024)).status).toBe(200);
+    expect(((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as ArrayBuffer).byteLength).toBe(1024);
+
+    const grande = await post(1025);
+    expect(grande.status).toBe(413);
+    expect(await grande.json()).toMatchObject({ code: "PAQUETE_DEMASIADO_GRANDE" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("si la API rechaza el token (sesión cerrada en otro producto), borra la sesión de esta app", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ code: "SESSION_EXPIRED" }, { status: 401 })));
     const proxy = createApiProxy({ productCode: "tramites", config: () => config });

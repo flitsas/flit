@@ -56,7 +56,7 @@ public sealed partial class PortalMarcaHandlerTests
         marca.Version.Should().Be(1);
         editado.Draft.PlatformName.Should().Be("Solo borrador");
         typeof(MarcaPuntoDto).GetProperties().Select(p => p.Name).Should()
-            .BeEquivalentTo("Origen", "Nombre", "Colores", "LogoId", "BannerId", "Version");
+            .BeEquivalentTo("Origen", "Nombre", "Colores", "LogoId", "BannerId", "Version", "Carrusel", "Banners");
     }
 
     [Theory]

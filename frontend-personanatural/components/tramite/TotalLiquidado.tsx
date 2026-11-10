@@ -1,5 +1,6 @@
 "use client";
 
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { useCotizacionAutomatica } from "@/components/tramite/useCotizacionAutomatica";
 import { MENSAJE_SIN_TARIFA } from "@/components/tramite/ValorTramite";
 import type { ClientePortal } from "@/lib/api/cliente";
@@ -34,7 +35,7 @@ export function TotalLiquidado({ cliente, organismoId, tipoCodigo, transformacio
         Valor total liquidado: {data ? formatearPesos(data.totalCop) : "—"}
       </p>
       {noAplicados.length > 0 && <p role="status" className="text-xs text-muted-foreground">No aplican en este organismo: {etiquetaNoAplicados}.</p>}
-      {activo && cotizacion.isPending && !cotizacion.sinTarifa && <p role="status" className="text-xs">Calculando...</p>}
+      {activo && cotizacion.isPending && !cotizacion.sinTarifa && <MobilityEstado mensaje="Calculando..." className="text-xs" />}
       {activo && cotizacion.sinTarifa && <p role="alert" className="text-xs text-alert">{MENSAJE_SIN_TARIFA}</p>}
       {activo && error !== null && !cotizacion.sinTarifa && <p role="alert" className="text-xs text-alert">{esperaDe(error) ? mensajeDe(error) : "No pudimos calcular el valor. Intenta de nuevo."}</p>}
       {activo && cotizacion.bloqueo.bloqueado && <p role="status" className="text-xs">Podrás intentarlo de nuevo en {cotizacion.bloqueo.segundosRestantes} s.</p>}

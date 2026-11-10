@@ -362,6 +362,20 @@ public sealed partial class PortalMarcaEndpointTests : IClassFixture<PortalMarca
         public Task<(PortalMarcaImagen Imagen, PortalMarcaRegistro Marca)> AgregarImagenAsync(Guid id, string k, NuevaPortalMarcaImagen i, Guid a, CancellationToken ct = default) =>
             R.AgregarImagenAsync(id, k, i, a, ct);
         public Task<PortalMarcaRegistro> QuitarImagenAsync(Guid id, string k, Guid a, CancellationToken ct = default) => R.QuitarImagenAsync(id, k, a, ct);
+        public Task<(PortalMarcaImagen? Imagen, PortalMarcaRegistro? Marca)> AgregarCarruselAsync(Guid id, NuevaPortalMarcaImagen i, string alt, string? link, int max, Guid a, CancellationToken ct = default) =>
+            R.AgregarCarruselAsync(id, i, alt, link, max, a, ct);
+        public Task<PortalMarcaRegistro?> ActualizarCarruselAsync(Guid id, Guid img, string alt, string? link, Guid a, CancellationToken ct = default) =>
+            R.ActualizarCarruselAsync(id, img, alt, link, a, ct);
+        public Task<PortalMarcaRegistro?> OrdenarCarruselAsync(Guid id, IReadOnlyList<Guid> ids, Guid a, CancellationToken ct = default) =>
+            R.OrdenarCarruselAsync(id, ids, a, ct);
+        public Task<PortalMarcaRegistro?> QuitarCarruselAsync(Guid id, Guid img, Guid a, CancellationToken ct = default) => R.QuitarCarruselAsync(id, img, a, ct);
+        public Task<(PortalMarcaImagen? Imagen, PortalMarcaRegistro? Marca)> AgregarBannerAsync(Guid id, NuevaPortalMarcaImagen i, string alt, string? link, int max, Guid a, CancellationToken ct = default) =>
+            R.AgregarBannerAsync(id, i, alt, link, max, a, ct);
+        public Task<PortalMarcaRegistro?> ActualizarBannerAsync(Guid id, Guid img, string alt, string? link, Guid a, CancellationToken ct = default) =>
+            R.ActualizarBannerAsync(id, img, alt, link, a, ct);
+        public Task<PortalMarcaRegistro?> OrdenarBannersAsync(Guid id, IReadOnlyList<Guid> ids, Guid a, CancellationToken ct = default) =>
+            R.OrdenarBannersAsync(id, ids, a, ct);
+        public Task<PortalMarcaRegistro?> QuitarBannerAsync(Guid id, Guid img, Guid a, CancellationToken ct = default) => R.QuitarBannerAsync(id, img, a, ct);
         public Task<PortalMarcaImagen?> ObtenerImagenAsync(Guid id, CancellationToken ct = default) => R.ObtenerImagenAsync(id, ct);
         public Task<bool> ImagenEstaPublicadaAsync(Guid id, CancellationToken ct = default) => R.ImagenEstaPublicadaAsync(id, ct);
         public Task<Guid?> ResolverOrganismoPorCodigoAsync(string codigo, CancellationToken ct = default) => R.ResolverOrganismoPorCodigoAsync(codigo, ct);
