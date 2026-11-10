@@ -35,6 +35,20 @@ export function nitValido(texto: string): boolean {
   return digitoVerificacion(s.base) === s.dv;
 }
 
+/**
+ * Máscara mientras se escribe (GDC punto 6): puntos de miles en la base y el dígito de verificación después del guion,
+ * «8909039388» → «8.909.039.388», «890903938-8» → «890.903.938-8». Solo deja dígitos y un guion; un guion recién
+ * escrito se conserva para poder teclear el dígito.
+ */
+export function mascaraNit(texto: string): string {
+  const limpio = texto.replace(/[^\d-]/g, "");
+  const guion = limpio.indexOf("-");
+  const base = (guion < 0 ? limpio : limpio.slice(0, guion)).replace(/-/g, "").slice(0, PESOS.length);
+  const conPuntos = base.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  if (guion < 0 || !base) return conPuntos;
+  return `${conPuntos}-${limpio.slice(guion + 1).replace(/-/g, "").slice(0, 1)}`;
+}
+
 /** Mensaje de error inline, o null si está vacío o válido. */
 export function errorNit(texto: string): string | null {
   const t = texto.trim();
@@ -42,7 +56,7 @@ export function errorNit(texto: string): string | null {
   const s = separarNit(t);
   if (!s) return "Usa el formato 900.123.456-7 (el dígito de verificación es opcional).";
   if (s.dv !== null && digitoVerificacion(s.base) !== s.dv) {
-    return `El dígito de verificación debería ser ${digitoVerificacion(s.base)}.`;
+    return `El dígito de verificación debería ser ${digitoVerificacion(s.base)}. Puedes guardar el borrador, pero no se registra hasta corregirlo.`;
   }
   return null;
 }

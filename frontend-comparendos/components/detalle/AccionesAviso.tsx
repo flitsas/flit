@@ -7,14 +7,22 @@ import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
-import { motivoSinAviso, siguienteAviso, TIPOS_AVISO, type TipoAvisoManual } from "@/lib/avisos";
+import { avisoPorDefecto, motivoSinAviso, opcionesAviso, type AvisosPermitidos, type TipoAvisoManual } from "@/lib/avisos";
 import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
+import { useCarga } from "@/lib/useCarga";
 
 function ModalAviso({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => void }) {
   const toast = useToast();
   const d = ctx.detalle;
-  const [tipo, setTipo] = useState<TipoAvisoManual>(siguienteAviso(d.estadoNotificacionConductor));
+  // Bug #14270 (AV-03): solo se ofrecen los avisos que la API dejaría enviar hoy (misma regla de secuencia).
+  const permitidos = useCarga(`avisos-permitidos:${d.id}`, (signal) => apiFetch<AvisosPermitidos>(`/comparendos/${d.id}/avisos/permitidos`, { signal }));
+  const lista = permitidos.datos?.permitidos ?? [];
+  const opciones = opcionesAviso(lista, d.estadoNotificacionConductor);
+  const [elegido, setElegido] = useState<TipoAvisoManual | null>(null);
+  const tipo = elegido && lista.includes(elegido) ? elegido : avisoPorDefecto(lista);
+  // Por qué no salen los demás (sin repetir: si el comparendo no es elegible, los tres comparten motivo).
+  const motivos = [...new Set((permitidos.datos?.avisos ?? []).flatMap((a) => (a.motivo ? [a.motivo] : [])))];
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +30,7 @@ function ModalAviso({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => v
     setOcupado(true);
     setError(null);
     try {
+      if (!tipo) return;
       const r = await apiFetch<{ estado: string }>(`/comparendos/${d.id}/avisos`, { method: "POST", body: { tipo } });
       toast.show(r.estado === "Enviado" ? "Aviso enviado al conductor." : `Aviso registrado (${r.estado.toLowerCase()}): lo verás en el Centro de Mensajes.`, "success");
       ctx.recargar();
@@ -46,23 +55,37 @@ function ModalAviso({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => v
           <button type="button" className={controlCls(false)} onClick={onCerrar} disabled={ocupado}>
             Cancelar
           </button>
-          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={enviar}>
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !tipo} onClick={enviar}>
             {ocupado ? "Enviando…" : "Enviar aviso"}
           </button>
         </div>
       }
     >
       <div className="flex flex-col gap-3">
-        <label className={ETIQUETA_CLS}>
-          Aviso
-          <select className={INPUT_CLS} value={tipo} onChange={(e) => setTipo(e.target.value as TipoAvisoManual)}>
-            {TIPOS_AVISO.map((t) => (
-              <option key={t.valor} value={t.valor}>
-                {t.etiqueta}
-              </option>
+        {permitidos.estado === "loading" && <p className="text-xs opacity-70">Revisando qué aviso corresponde…</p>}
+        {permitidos.error && <InlineAlert tone="error">{permitidos.error}</InlineAlert>}
+        {permitidos.estado === "ready" && opciones.length === 0 && (
+          <InlineAlert tone="warning">Hoy no corresponde enviar ningún aviso a este conductor.</InlineAlert>
+        )}
+        {opciones.length > 0 && tipo && (
+          <label className={ETIQUETA_CLS}>
+            Aviso
+            <select className={INPUT_CLS} value={tipo} onChange={(e) => setElegido(e.target.value as TipoAvisoManual)}>
+              {opciones.map((t) => (
+                <option key={t.valor} value={t.valor}>
+                  {t.etiqueta}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {motivos.length > 0 && (
+          <ul className="text-xs opacity-70">
+            {motivos.map((m) => (
+              <li key={m}>{m}</li>
             ))}
-          </select>
-        </label>
+          </ul>
+        )}
         <p className="text-xs opacity-70">El aviso 4 sale con la solicitud de cambio de contraventor y no se envía desde aquí.</p>
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
       </div>

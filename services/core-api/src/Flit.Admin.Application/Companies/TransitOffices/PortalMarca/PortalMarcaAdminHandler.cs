@@ -7,7 +7,16 @@ namespace Flit.Admin.Application.Companies.TransitOffices.PortalMarca;
 
 public sealed record PortalMarcaColoresDto(string Primary, string Secondary, string OnPrimary);
 
-public sealed record PortalMarcaSnapshotDto(string? PlatformName, PortalMarcaColoresDto? Colors, Guid? LogoId, Guid? BannerId);
+/// <summary>Elemento del carrusel dentro del borrador o del publicado (sin URL: esa solo la lleva el <c>carousel</c> de primer nivel).</summary>
+public sealed record PortalMarcaCarruselSnapshotItemDto(Guid ImageId, string Alt, string? LinkUrl);
+
+public sealed record PortalMarcaSnapshotDto(
+    string? PlatformName, PortalMarcaColoresDto? Colors, Guid? LogoId, Guid? BannerId,
+    IReadOnlyList<PortalMarcaCarruselSnapshotItemDto> Carousel,
+    IReadOnlyList<PortalMarcaCarruselSnapshotItemDto> Banners);
+
+/// <summary>Imagen del carrusel del borrador, con la URL administrativa de la imagen (como <c>bannerUrl</c>).</summary>
+public sealed record PortalMarcaCarruselItemDto(Guid ImageId, string ImageUrl, string Alt, string? LinkUrl);
 
 public sealed record PortalMarcaCompletitudDto(bool IsComplete, IReadOnlyList<string> Missing);
 
@@ -25,11 +34,25 @@ public sealed record PortalMarcaDto(
     string? LogoUrl,
     string? BannerUrl,
     PortalMarcaCompletitudDto Completeness,
-    long RowVersion);
+    long RowVersion,
+    IReadOnlyList<PortalMarcaCarruselItemDto> Carousel,
+    IReadOnlyList<PortalMarcaCarruselItemDto> Banners);
 
 public sealed record GuardarPortalMarcaRequest(string? PlatformName, PortalMarcaColoresDto? Colors, long RowVersion);
 
 public sealed record VersionPortalMarcaRequest(long RowVersion);
+
+/// <summary>Cuerpo de <c>PUT /carrusel/{imageId}</c>.</summary>
+public sealed record ActualizarCarruselRequest(string? Alt, string? LinkUrl);
+
+/// <summary>Cuerpo de <c>PUT /banners/{imageId}</c>.</summary>
+public sealed record ActualizarBannerRequest(string? Alt, string? LinkUrl);
+
+/// <summary>Cuerpo de <c>PUT /banners/orden</c>: ids de banner en el nuevo orden (permutación exacta de los actuales).</summary>
+public sealed record OrdenBannersRequest(IReadOnlyList<string>? ImageIds);
+
+/// <summary>Cuerpo de <c>PUT /carrusel/orden</c>: ids de imagen en el nuevo orden (permutación exacta de las actuales).</summary>
+public sealed record OrdenCarruselRequest(IReadOnlyList<string>? ImageIds);
 
 /// <summary>
 /// HU #14375 — leer, guardar el borrador, publicar y retirar la marca del portal de un organismo. El alcance (organismo propio o
@@ -120,7 +143,9 @@ public sealed class PortalMarcaAdminHandler(IPortalMarcaRepository repo, IAdminA
             r.Draft.LogoId is { } logo ? RutaImagenes + logo : null,
             r.Draft.BannerId is { } banner ? RutaImagenes + banner : null,
             new PortalMarcaCompletitudDto(faltan.Count == 0, faltan),
-            r.RowVersion);
+            r.RowVersion,
+            [.. r.Draft.Carousel.Select(i => new PortalMarcaCarruselItemDto(i.ImageId, RutaImagenes + i.ImageId, i.Alt, i.LinkUrl))],
+            [.. r.Draft.Banners.Select(i => new PortalMarcaCarruselItemDto(i.ImageId, RutaImagenes + i.ImageId, i.Alt, i.LinkUrl))]);
     }
 
     internal static PortalMarcaResultado<PortalMarcaDto> Falla(PortalMarcaError e) =>
@@ -158,8 +183,12 @@ public sealed class PortalMarcaAdminHandler(IPortalMarcaRepository repo, IAdminA
         ("onPrimary", s.Colors?.OnPrimary),
         ("logoId", s.LogoId),
         ("bannerId", s.BannerId),
+        ("bannerImageIds", s.Banners.Count == 0 ? null : string.Join(",", s.Banners.Select(i => i.ImageId))),
+        ("carouselImageIds", s.Carousel.Count == 0 ? null : string.Join(",", s.Carousel.Select(i => i.ImageId))),
         ("version", version));
 
     private static PortalMarcaSnapshotDto ADto(PortalMarcaSnapshot s) =>
-        new(s.PlatformName, s.Colors is null ? null : new PortalMarcaColoresDto(s.Colors.Primary, s.Colors.Secondary, s.Colors.OnPrimary), s.LogoId, s.BannerId);
+        new(s.PlatformName, s.Colors is null ? null : new PortalMarcaColoresDto(s.Colors.Primary, s.Colors.Secondary, s.Colors.OnPrimary), s.LogoId, s.BannerId,
+            [.. s.Carousel.Select(i => new PortalMarcaCarruselSnapshotItemDto(i.ImageId, i.Alt, i.LinkUrl))],
+            [.. s.Banners.Select(i => new PortalMarcaCarruselSnapshotItemDto(i.ImageId, i.Alt, i.LinkUrl))]);
 }

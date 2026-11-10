@@ -154,8 +154,10 @@
 .carousel-dots { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); border-radius: var(--radius); background: color-mix(in oklab, var(--card) 85%, transparent); padding: 2px 6px; }
 .banner-cta { position: absolute; bottom: 36px; left: 20px; max-width: calc(100% - 40px); white-space: normal; }
 .chat-launcher { position: fixed; right: 20px; bottom: 20px; width: 64px; height: 64px; z-index: 40; }
-.chat-widget { position: fixed; right: 20px; bottom: 96px; width: min(420px, calc(100vw - 24px)); height: min(720px, calc(100dvh - 120px)); z-index: 40; }
+/* La altura descuenta lo que el panel se separa del borde inferior (--chat-bottom): así su encabezado nunca queda fuera de la pantalla. */
+.chat-widget { --chat-bottom: 96px; position: fixed; right: 20px; bottom: var(--chat-bottom); width: min(420px, calc(100vw - 24px)); height: min(720px, calc(100dvh - var(--chat-bottom) - 16px)); z-index: 40; }
 .chat-widget .chat-questions { max-height: 180px; overflow-y: auto; }
+@media (max-height: 700px) { .chat-widget .chat-questions { max-height: 96px; } }
 .timeline-connector { left: calc(50% + 20px); width: calc(100% - 32px); }
 .dashboard-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .dashboard-card { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
@@ -175,6 +177,11 @@
 .mobility-track { position: relative; width: 84px; height: 84px; border: 2px solid var(--primary); border-radius: 50%; box-shadow: 0 0 2px var(--primary); }
 .mobility-orbit { position: absolute; inset: -2px; animation: mobility-loop 1.8s linear infinite; }
 .mobility-orbit svg { position: absolute; left: calc(50% - 12px); top: -12px; }
+/* Mismo carrito en pequeño: `sm` para huecos de bloque (36 px) y `xs` para botones, campos y avisos de una línea (20 px). */
+.mobility-track-sm { width: 36px; height: 36px; flex-shrink: 0; }
+.mobility-track-sm .mobility-orbit svg { left: calc(50% - 8px); top: -8px; }
+.mobility-track-xs { display: inline-block; width: 20px; height: 20px; flex-shrink: 0; border-width: 1.5px; border-color: color-mix(in oklch, currentColor 45%, transparent); box-shadow: none; }
+.mobility-track-xs .mobility-orbit svg { left: calc(50% - 6px); top: -6px; }
 @keyframes mobility-loop { to { transform: rotate(360deg); } }
 @media (max-height: 740px) and (min-width: 761px) {
   .dashboard-layout { padding-top: 8px; padding-bottom: 10px; gap: 12px; }
@@ -246,7 +253,6 @@
   .banner-cta:hover, .how-step:hover, .how-step:hover svg { transform: none; }
 }
 @keyframes flit-spin { to { transform: rotate(360deg); } }
-.mobility-mini { width: 14px; height: 14px; border-radius: 9999px; border: 2px solid color-mix(in oklch, var(--primary-foreground) 40%, transparent); border-top-color: var(--accent); animation: flit-spin 1.8s linear infinite; }
 
 /* Wizard margins unified with Dashboard */
 .wizard-header { padding-inline: 50px; }
@@ -412,7 +418,7 @@ html::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 6px; 
 .trust-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; font-size: 12px; color: var(--color-text-secondary); }
 .trust-row .iso-badge { height: 40px; }
 .chat-launcher { bottom: 72px; right: 24px; background: var(--gradient-flit); }
-.chat-widget { bottom: 176px; }
+.chat-widget { --chat-bottom: 176px; }
 html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background); }
 [id] { scroll-margin-top: 24px; }
 @media (min-width: 901px) {
@@ -422,7 +428,7 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
  .dashboard-two-col .ot-module { grid-row: 2; }
 }
 @media (max-width: 1200px) { .b2c-nav { margin-left: auto; justify-content: flex-end; padding-block: 4px; } }
-@media (max-width: 640px) { .b2c-header-actions button { padding-inline: 10px; font-size: 12px; } .b2c-nav { flex-wrap: wrap; gap: 12px; } .dashboard-registration-fields { grid-template-columns: 1fr; gap: 12px; } .chat-launcher { bottom: 104px; } .chat-widget { bottom: 208px; height: min(600px, calc(100dvh - 230px)); } }
+@media (max-width: 640px) { .b2c-header-actions button { padding-inline: 10px; font-size: 12px; } .b2c-nav { flex-wrap: wrap; gap: 12px; } .dashboard-registration-fields { grid-template-columns: 1fr; gap: 12px; } .chat-launcher { bottom: 104px; } .chat-widget { --chat-bottom: 208px; height: min(600px, calc(100dvh - var(--chat-bottom) - 16px)); } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 .action-top-icon img { width: 40px; height: 40px; object-fit: contain; }
@@ -560,6 +566,8 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 /* "Servicios Adicionales": mismo ancho que "Organismos", sin desbordar la columna. */
 .dashboard-side .servicios-slide { width: 100%; max-width: 100%; min-width: 0; overflow: hidden; }
 .dashboard-side .servicios-slide > .relative { min-width: 0; }
+/* «Consulta el valor de tu trámite» (punto del OT): mismo ancho que «Servicios Adicionales» en cualquier tamaño de pantalla. */
+.dashboard-side .ot-module { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; justify-self: stretch; }
 
 /* Organismos: base alineada con el final de Somos FLIT (escritorio). */
 @media (min-width: 901px) {

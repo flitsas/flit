@@ -11,6 +11,62 @@ public sealed record PortalMarcaSnapshot(string? PlatformName, BrandColors? Colo
 {
     public static readonly PortalMarcaSnapshot Empty = new(null, null, null, null);
 
+    /// <summary>Máximo de imágenes del carrusel de la columna lateral.</summary>
+    public const int CarruselMaximo = 6;
+
+    /// <summary>Máximo de banners principales del portal del organismo.</summary>
+    public const int BannersMaximo = 6;
+
+    /// <summary>Texto alternativo del banner único legacy al migrarlo a la lista de banners.</summary>
+    public const string BannerAltPorDefecto = "Banner del organismo";
+
+    private IReadOnlyList<PortalMarcaCarruselItem> _carousel = [];
+    private IReadOnlyList<PortalMarcaCarruselItem> _banners = [];
+
+    /// <summary>
+    /// Banners principales del portal del organismo, en orden (hasta <see cref="BannersMaximo"/>; mismo tipo de elemento que el
+    /// carrusel). <see cref="BannerId"/> es siempre el primero (compatibilidad con el banner único). Nunca es nulo.
+    /// </summary>
+    public IReadOnlyList<PortalMarcaCarruselItem> Banners
+    {
+        get => _banners;
+        init => _banners = value ?? [];
+    }
+
+    /// <summary>
+    /// Carrusel de imágenes de la columna lateral, en orden (ausente en el documento = vacío; no cambia <c>schemaVersion</c>).
+    /// Nunca es nulo. La igualdad del snapshot compara sus elementos, no la referencia de la lista.
+    /// </summary>
+    public IReadOnlyList<PortalMarcaCarruselItem> Carousel
+    {
+        get => _carousel;
+        init => _carousel = value ?? [];
+    }
+
+    /// <summary>Igualdad estructural: los records con listas comparan por referencia, así que el carrusel se compara por elementos.</summary>
+    public bool Equals(PortalMarcaSnapshot? other) =>
+        other is not null
+        && PlatformName == other.PlatformName
+        && Equals(Colors, other.Colors)
+        && LogoId == other.LogoId
+        && BannerId == other.BannerId
+        && Carousel.SequenceEqual(other.Carousel)
+        && Banners.SequenceEqual(other.Banners);
+
+    public override int GetHashCode()
+    {
+        var h = new HashCode();
+        h.Add(PlatformName);
+        h.Add(Colors);
+        h.Add(LogoId);
+        h.Add(BannerId);
+        foreach (var item in Carousel)
+            h.Add(item);
+        foreach (var item in Banners)
+            h.Add(item);
+        return h.ToHashCode();
+    }
+
     /// <summary>
     /// Campos obligatorios que faltan para publicar: nombre y los tres colores. Logo y banner son opcionales
     /// (sin ellos el portal usa la imagen de FLIT). Vocabulario igual al de marca blanca.
@@ -25,6 +81,9 @@ public sealed record PortalMarcaSnapshot(string? PlatformName, BrandColors? Colo
         return missing;
     }
 }
+
+/// <summary>Imagen del carrusel: id de la versión de imagen (kind <c>carousel</c>), texto alternativo y enlace http/https opcional.</summary>
+public sealed record PortalMarcaCarruselItem(Guid ImageId, string Alt, string? LinkUrl);
 
 /// <summary>
 /// Ámbito de la marca de la web de persona natural (HU #14401). Reutiliza el modelo del organismo con un identificador reservado:
@@ -65,6 +124,7 @@ public sealed record PortalMarcaImagen(
 {
     public const string KindLogo = "logo";
     public const string KindBanner = "banner";
+    public const string KindCarousel = "carousel";
 }
 
 /// <summary>Imagen ya guardada en el almacenamiento, lista para registrarse en el borrador.</summary>
@@ -84,6 +144,8 @@ public static class PortalMarcaErrores
     public const string OrganismoNoExiste = "PORTAL_MARCA_ORGANISMO_NO_EXISTE";
     public const string Prohibido = "PORTAL_MARCA_PROHIBIDO";
     public const string NoEncontrada = "PORTAL_MARCA_NO_ENCONTRADA";
+    public const string CarruselLleno = "PORTAL_MARCA_CARRUSEL_LLENO";
+    public const string BannersLleno = "BANNERS_LLENO";
 }
 
 /// <summary>Puerto de persistencia de la marca del portal por organismo (SQL propio, sin tablas de marca blanca).</summary>
@@ -108,12 +170,48 @@ public interface IPortalMarcaRepository
     Task<(PortalMarcaImagen Imagen, PortalMarcaRegistro Marca)> AgregarImagenAsync(
         Guid transitOfficeId, string kind, NuevaPortalMarcaImagen imagen, Guid actor, CancellationToken ct = default);
 
+    /// <summary>
+    /// Registra la imagen y la agrega AL FINAL del carrusel del borrador, de forma atómica. <c>Marca = null</c> = el carrusel ya
+    /// tiene <paramref name="maximo"/> imágenes (no se registra nada).
+    /// </summary>
+    Task<(PortalMarcaImagen? Imagen, PortalMarcaRegistro? Marca)> AgregarCarruselAsync(
+        Guid transitOfficeId, NuevaPortalMarcaImagen imagen, string alt, string? linkUrl, int maximo, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Cambia texto alternativo y enlace de una imagen del carrusel del borrador. <c>null</c> = la imagen no está en el carrusel.</summary>
+    Task<PortalMarcaRegistro?> ActualizarCarruselAsync(
+        Guid transitOfficeId, Guid imageId, string alt, string? linkUrl, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Reordena el carrusel del borrador. <c>null</c> = <paramref name="imageIds"/> no es una permutación exacta de las actuales.</summary>
+    Task<PortalMarcaRegistro?> OrdenarCarruselAsync(
+        Guid transitOfficeId, IReadOnlyList<Guid> imageIds, Guid actor, CancellationToken ct = default);
+
+    /// <summary>
+    /// Registra la imagen (tipo banner) y la agrega AL FINAL de los banners del borrador, de forma atómica. <c>Marca = null</c> =
+    /// ya hay <paramref name="maximo"/> banners. Solo organismos.
+    /// </summary>
+    Task<(PortalMarcaImagen? Imagen, PortalMarcaRegistro? Marca)> AgregarBannerAsync(
+        Guid transitOfficeId, NuevaPortalMarcaImagen imagen, string alt, string? linkUrl, int maximo, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Cambia texto alternativo y enlace de un banner del borrador. <c>null</c> = el banner no está en la lista.</summary>
+    Task<PortalMarcaRegistro?> ActualizarBannerAsync(
+        Guid transitOfficeId, Guid imageId, string alt, string? linkUrl, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Reordena los banners del borrador. <c>null</c> = <paramref name="imageIds"/> no es una permutación exacta de los actuales.</summary>
+    Task<PortalMarcaRegistro?> OrdenarBannersAsync(
+        Guid transitOfficeId, IReadOnlyList<Guid> imageIds, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Quita un banner del borrador (las versiones del binario se conservan). <c>null</c> = no estaba.</summary>
+    Task<PortalMarcaRegistro?> QuitarBannerAsync(Guid transitOfficeId, Guid imageId, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Quita una imagen del carrusel del borrador (las versiones del binario se conservan). <c>null</c> = no estaba.</summary>
+    Task<PortalMarcaRegistro?> QuitarCarruselAsync(Guid transitOfficeId, Guid imageId, Guid actor, CancellationToken ct = default);
+
     /// <summary>Quita la referencia de la imagen del borrador (las versiones se conservan).</summary>
     Task<PortalMarcaRegistro> QuitarImagenAsync(Guid transitOfficeId, string kind, Guid actor, CancellationToken ct = default);
 
     Task<PortalMarcaImagen?> ObtenerImagenAsync(Guid imagenId, CancellationToken ct = default);
 
-    /// <summary>La imagen es la de logo o banner del publicado vigente de su organismo.</summary>
+    /// <summary>La imagen es la de logo, banner o carrusel del publicado vigente de su organismo.</summary>
     Task<bool> ImagenEstaPublicadaAsync(Guid imagenId, CancellationToken ct = default);
 
     /// <summary>Organismo activo con ese código (sin distinguir mayúsculas) o <c>null</c>.</summary>

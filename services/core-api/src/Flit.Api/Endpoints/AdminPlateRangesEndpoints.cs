@@ -168,6 +168,9 @@ public static class AdminPlateRangesEndpoints
                     "El trámite no está en Preasignación: no admite asignación de placa en su estado actual.",
                 PlateAssignmentFailure.ProcedureNotAccessible =>
                     "El trámite no existe o el organismo de tránsito no tiene acceso vigente a él.",
+                // Caso C 2026-11-09 + HU8 — el repo trae el literal del grupo (carro / moto / remolque /
+                // maquinaria) en Detail; sin Detail no se sabe el grupo: unión de formatos, nunca «obligatoria».
+                PlateAssignmentFailure.InvalidPlateFormatForClass => PlateRangeRules.InvalidPlateFormatMessage,
                 _ => "La placa es obligatoria.",
             };
 
@@ -177,6 +180,7 @@ public static class AdminPlateRangesEndpoints
                 PlateAssignmentFailure.PlateNotAvailable => 409,
                 PlateAssignmentFailure.PlateInUseByAnotherProcedure => 409,
                 PlateAssignmentFailure.ProcedureNotAccessible => 404,
+                PlateAssignmentFailure.InvalidPlateFormatForClass => 422,
                 _ => 422,
             };
             var title = statusCode switch
@@ -374,6 +378,8 @@ public static class AdminPlateRangesEndpoints
                     "Pasó más de 1 hora desde la asignación de la placa: ya no se puede corregir por este medio.",
                 PlateAssignmentFailure.PlateUpdateAlreadyUsed =>
                     "Este trámite ya usó su única oportunidad de corregir la placa.",
+                // Caso C 2026-11-09 (tanda 2) + HU8 — mismo criterio que la asignación (Detail del repo o unión).
+                PlateAssignmentFailure.InvalidPlateFormatForClass => PlateRangeRules.InvalidPlateFormatMessage,
                 _ => "La placa es obligatoria.",
             };
 
@@ -383,6 +389,7 @@ public static class AdminPlateRangesEndpoints
                 PlateAssignmentFailure.ProcedureNotAccessible => 404,
                 PlateAssignmentFailure.PlateUpdateWindowExpired => 409,
                 PlateAssignmentFailure.PlateUpdateAlreadyUsed => 409,
+                PlateAssignmentFailure.InvalidPlateFormatForClass => 422,
                 _ => 422,
             };
             var title = statusCode switch

@@ -1013,3 +1013,37 @@ describe('FirmaFurStep — estado del paquete de documentos (Bug #11145)', () =>
     expect(mocks.generarFur).toHaveBeenCalled();
   }, 15_000);
 });
+
+// HU5 (registro diferido 2026-11-09) — el FUR resuelve el grupo con el formato de plantilla del
+// backend (GET /fur/template-format: catálogo MAQUINARIA/REMOLQUES) y la clase (MOTO por lista).
+describe('FirmaFurStep — dígito de preferencia según la clase (HU5)', () => {
+  const conClase = (clase: string) => ({
+    ...INSTANCE_DETAIL,
+    fieldValues: [
+      { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'aaaaaaaa-0001-4000-8000-000000000010', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_code', valueText: '05001000', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría de Movilidad de Medellín', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_origen', valueText: 'paso_1', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'vehicle_class', valueText: clase, valueJson: null, source: 'consultation' },
+    ],
+  });
+
+  it('formato MAQUINARIA del backend → sin selector de dígito', async () => {
+    mocks.getInstance.mockResolvedValue(conClase('CAMION GRUA'));
+    mocks.getFurTemplateFormat.mockResolvedValue({ format: 'MAQUINARIA', vehicleClass: 'CAMION GRUA' });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByTestId('fur-placa-ruta-larga');
+    await waitFor(() => expect(mocks.getFurTemplateFormat).toHaveBeenCalledWith(INSTANCE));
+    await waitFor(() =>
+      expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument(),
+    );
+  });
+
+  it('moto (lista exacta) con formato AUTOMOTOR → texto del primer número', async () => {
+    mocks.getInstance.mockResolvedValue(conClase('MOTOCICLETA'));
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    expect(await screen.findByTestId('fur-placa-ruta-larga')).toHaveTextContent(
+      /Dígito numérico de preferencia \(opcional\):/,
+    );
+  });
+});

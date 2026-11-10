@@ -29,7 +29,10 @@ import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_L
 import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
 
-export type TarifaFormMode = { kind: "create" } | { kind: "version"; grupo: GrupoTarifa };
+export type TarifaFormMode =
+  // `tipoTramiteId`: trámite que llega preseleccionado (p. ej. desde «Definir precio» en Medios de pago).
+  | { kind: "create"; tipoTramiteId?: string }
+  | { kind: "version"; grupo: GrupoTarifa };
 
 export interface TarifaFormModalProps {
   mode: TarifaFormMode;
@@ -60,7 +63,7 @@ export function TarifaFormModal({
   const grupo = versionando ? mode.grupo : null;
   const hoy = useMemo(() => hoyColombiaIso(), []);
 
-  const [tipoId, setTipoId] = useState(grupo?.tipoTramiteId ?? "");
+  const [tipoId, setTipoId] = useState(grupo?.tipoTramiteId ?? (mode.kind === "create" ? (mode.tipoTramiteId ?? "") : ""));
   const [organismoId, setOrganismoId] = useState(grupo?.organismoId ?? "");
   const [fecha, setFecha] = useState(hoy);
   const [valores, setValores] = useState<Record<ConceptoTarifa, string>>(() => {
