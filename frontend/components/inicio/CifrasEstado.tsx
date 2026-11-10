@@ -17,7 +17,7 @@ const ILUSTRACION_ESTADO: Record<EstadoTramite, Ilustracion> = {
   anulado: "vencidos",
   preparado: "procesos",
   preasignacion: "preasignacion",
-  asignado: "placa-colombia",
+  asignado: "consulta-placa",
   entregado: "organismos",
   aprobado: "trazabilidad",
   rechazado: "causales",
