@@ -1,7 +1,6 @@
 "use client";
 
-import type { MouseEvent } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { TarjetaMetrica, METRICAS_GRID_CLS } from "@flit/ui/TarjetaMetrica";
 import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import { ESTADO_LABELS, ESTADOS_TRAMITE, type EstadoTramite } from "@/lib/tramites/estados";
@@ -61,20 +60,11 @@ export function CifrasEstado({ conteos }: { conteos: ConteosEstado }) {
 }
 
 function Cifra({ estado, total }: { estado: EstadoTramite; total: number }) {
-  const router = useRouter();
   const etiqueta = ESTADO_LABELS[estado];
-  const href = tramitesPorEstado(estado);
-  // TarjetaMetrica pinta un <a> normal: un clic simple navega dentro de la app, como el <Link> de antes; con Ctrl,
-  // ⌘, Mayús o el botón del medio el navegador hace lo suyo (pestaña nueva).
-  const navegar = (e: MouseEvent<HTMLElement>) => {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    router.push(href);
-  };
   return (
     <TarjetaMetrica
-      href={href}
-      onClick={navegar}
+      href={tramitesPorEstado(estado)}
+      enlace={Link}
       etiqueta={etiqueta}
       cifra={total.toLocaleString("es-CO")}
       ilustracion={rutaIlustracion(ILUSTRACION_ESTADO[estado])}

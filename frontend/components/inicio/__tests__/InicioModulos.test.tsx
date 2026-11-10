@@ -5,12 +5,12 @@ import { BarChart3, FileStack, Landmark, Lock, Network } from "lucide-react";
 import { buildDock, type NavCatalog, type NavViewer } from "@flit/shell/nav";
 import { ShellNavProvider } from "@flit/shell/nav-context";
 
-const mocks = vi.hoisted(() => ({ searchEstadoCounts: vi.fn(), push: vi.fn(), search: "" }));
+const mocks = vi.hoisted(() => ({ searchEstadoCounts: vi.fn(), search: "" }));
 vi.mock("@/lib/api/tramites-client", () => ({ tramitesClient: { searchEstadoCounts: mocks.searchEstadoCounts } }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mocks.search), useRouter: () => ({ push: mocks.push }) }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(mocks.search) }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; children: ReactNode }) => (
-    <a href={href} {...rest}>
+    <a href={href} data-next-link="true" {...rest}>
       {children}
     </a>
   ),
@@ -130,16 +130,13 @@ describe("Inicio: cifras que filtran (HU #14481 AC2)", () => {
     expect(mocks.searchEstadoCounts).toHaveBeenCalledWith({});
   });
 
-  it("un clic simple en la tarjeta navega dentro de la app; con Ctrl lo deja al navegador", async () => {
-    mocks.push.mockReset();
+  it("la tarjeta de cifra es un Link de next: navega dentro de la app, como antes del rediseño", async () => {
     mocks.searchEstadoCounts.mockResolvedValue({ subsanacion: 1 });
     renderInicio(gestor);
 
     const tarjeta = await screen.findByRole("link", { name: "En subsanación: 1 trámite" });
-    fireEvent.click(tarjeta);
-    expect(mocks.push).toHaveBeenCalledWith("/tramites?estado=subsanacion");
-    fireEvent.click(tarjeta, { ctrlKey: true });
-    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(tarjeta).toHaveAttribute("data-next-link", "true");
+    expect(tarjeta).toHaveAttribute("href", "/tramites?estado=subsanacion");
   });
 
   it("sin respuesta del servidor no se inventan ceros", async () => {

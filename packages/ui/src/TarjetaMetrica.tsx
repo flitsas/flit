@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
+import type { CSSProperties, ElementType, MouseEventHandler, ReactNode } from "react";
 import { cn } from "./cn";
 
 /**
@@ -19,6 +19,8 @@ export interface TarjetaMetricaProps {
   /** Pie de la tarjeta: la acción («Ver el detalle») o una línea secundaria (variación, aclaración). */
   pie?: ReactNode;
   href?: string;
+  /** Componente de enlace para `href` (p. ej. `Link` de next, para navegar sin recargar). Por defecto `<a>`. */
+  enlace?: ElementType;
   onClick?: MouseEventHandler<HTMLElement>;
   /** Resalta la tarjeta con el borde turquesa del prototipo (`.metrica--pendiente`): algo espera atención. */
   pendiente?: boolean;
@@ -50,6 +52,7 @@ export function TarjetaMetrica({
   ilustracion,
   pie,
   href,
+  enlace: Enlace = "a",
   onClick,
   pendiente = false,
   colorCifra,
@@ -103,9 +106,9 @@ export function TarjetaMetrica({
 
   if (href !== undefined) {
     return (
-      <a href={href} onClick={onClick} {...comunes}>
+      <Enlace href={href} onClick={onClick} {...comunes}>
         {contenido}
-      </a>
+      </Enlace>
     );
   }
   if (onClick !== undefined) {
