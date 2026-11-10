@@ -7,7 +7,8 @@ import { AppsSessionError, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
 import { buildDock } from "@flit/shell/nav";
 import { ProductIcon } from "@/components/ui/ProductIcon";
 import { StatusChip } from "@/components/ui/StatusChip";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/ui/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { productInfo } from "@/lib/products";
 import { hubNav, type HubUser } from "./HubShell";
 
@@ -52,17 +53,20 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-10 py-2">
-      {/* Cabecera de módulo de la propuesta (HU #14487), con la ilustración de Inicio. */}
-      <section className={CABECERA_CLS}>
-        <DecoracionCabecera ilustracion="inicio" />
-        <p className="text-xs font-bold uppercase tracking-[0.06em] text-[color:var(--di-highlight)]">{today()}</p>
-        <h1 className={`mt-1 ${TITULO_CABECERA_CLS}`}>Hola, {user.email}</h1>
-        <p className="mt-2.5 max-w-[60ch] text-sm text-[color:var(--di-text-secondary)]">
-          {user.tenantName}
-          {user.tenantName && " · "}
-          Elige el producto con el que quieres trabajar hoy.
-        </p>
-      </section>
+      {/* Cabecera de módulo de la propuesta (HU #14487), con la ilustración de Inicio y la fecha como antetítulo. */}
+      <CabeceraModulo
+        as="section"
+        antetitulo={today()}
+        titulo={<>Hola, {user.email}</>}
+        descripcion={
+          <>
+            {user.tenantName}
+            {user.tenantName && " · "}
+            Elige el producto con el que quieres trabajar hoy.
+          </>
+        }
+        ilustracion={rutaIlustracion("inicio")}
+      />
 
       <section aria-labelledby="hub-productos">
         <h2 id="hub-productos" className="text-lg font-semibold">

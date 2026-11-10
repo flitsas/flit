@@ -14,7 +14,8 @@ import {
   type DefinicionFuentesObligatorias,
   type FuenteConfigurable,
 } from "@/lib/backoffice/fuentes-obligatorias";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Configurador de fuentes obligatorias (ADR-0078) en /backoffice/fuentes-obligatorias.
@@ -198,16 +199,21 @@ export function FuentesObligatoriasBackoffice() {
 
   return (
     <>
-      <section aria-labelledby="fuentes-obl-titulo" className={CABECERA_CLS}>
-        <DecoracionCabecera ilustracion="fuentes-oficiales" />
-        <h1 id="fuentes-obl-titulo" className={TITULO_CABECERA_CLS}>
-          Fuentes obligatorias
-        </h1>
-        <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">
-          Define las fuentes que el alta exige, por familia o por tipo de trámite. La lista es de FLIT y es la misma para todas las compañías.
-        </p>
-        <p className="mt-2 text-sm text-[var(--nav-texto)]">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="fuentes-obl-titulo"
+        tituloId="fuentes-obl-titulo"
+        titulo="Fuentes obligatorias"
+        descripcion={
+          <>
+            <p>
+              Define las fuentes que el alta exige, por familia o por tipo de trámite. La lista es de FLIT y es la misma para todas las compañías.
+            </p>
+            <p className="mt-2">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
+          </>
+        }
+        ilustracion={rutaIlustracion("fuentes-oficiales")}
+      />
       {cuerpo}
     </>
   );

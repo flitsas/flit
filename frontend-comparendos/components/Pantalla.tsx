@@ -3,8 +3,8 @@
 import type { ReactNode } from "react";
 import { InlineAlert } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/ui/CabeceraModulo";
-import type { Ilustracion } from "@flit/ui/ilustraciones";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import { tienePermiso } from "@/lib/sesion";
 
 /** Ilustración de la cabecera según el título, como `ModuleTitle` de Trámites; sin coincidencia, la de Comparendos. */
@@ -43,15 +43,12 @@ export function Encabezado({
   ilustracion?: Ilustracion;
 }) {
   return (
-    <header className={`${CABECERA_CLS} flex flex-wrap items-center justify-between gap-6 max-md:gap-3.5`}>
-      <DecoracionCabecera ilustracion={ilustracion ?? ilustracionPara(titulo)} />
-      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
-        <h1 className={TITULO_CABECERA_CLS}>{titulo}</h1>
-        {/* div y no p: algunas pantallas pasan bloques (chip, barra de progreso) y un div dentro de p rompe la hidratación. */}
-        {descripcion && <div className="mt-1.5 max-w-[60ch] text-sm text-[color:var(--di-text-secondary)]">{descripcion}</div>}
-      </div>
-      {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
-    </header>
+    <CabeceraModulo
+      titulo={titulo}
+      descripcion={descripcion}
+      ilustracion={rutaIlustracion(ilustracion ?? ilustracionPara(titulo))}
+      acciones={acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
+    />
   );
 }
 

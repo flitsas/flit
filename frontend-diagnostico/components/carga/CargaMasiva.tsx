@@ -19,7 +19,8 @@ import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/compo
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface Analisis {
   /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
@@ -193,13 +194,14 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
 
   return (
     <>
-      <section aria-labelledby="carga-titulo" className={CABECERA_CLS}>
-        <DecoracionCabecera ilustracion="documentos" />
-        <h1 id="carga-titulo" className={TITULO_CABECERA_CLS}>
-          Cargar vehículos
-        </h1>
-        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="carga-titulo"
+        tituloId="carga-titulo"
+        titulo="Cargar vehículos"
+        descripcion={sesion?.empresa.nombre}
+        ilustracion={rutaIlustracion("documentos")}
+      />
       {contenido}
     </>
   );

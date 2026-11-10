@@ -18,7 +18,8 @@ import { CreacionExpress } from "./CreacionExpress";
 import { CreacionMasiva } from "./CreacionMasiva";
 import { DosZonas } from "./DosZonas";
 import { SelectorModo } from "./SelectorModo";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -135,18 +136,19 @@ export function NuevoDiagnostico() {
 
   return (
     <>
-      <section aria-labelledby="nuevo-titulo" className={`${CABECERA_CLS} flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between`}>
-        <DecoracionCabecera ilustracion="diagnostico" />
-        <div>
-          <h1 id="nuevo-titulo" className={TITULO_CABECERA_CLS}>
-            Nuevo diagnóstico
-          </h1>
-          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
-        </div>
-        {puedeCrear && (
-          <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
-        )}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="nuevo-titulo"
+        tituloId="nuevo-titulo"
+        titulo="Nuevo diagnóstico"
+        descripcion={sesion?.empresa.nombre}
+        ilustracion={rutaIlustracion("diagnostico")}
+        acciones={
+          puedeCrear && (
+            <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
+          )
+        }
+      />
       {contenido}
     </>
   );

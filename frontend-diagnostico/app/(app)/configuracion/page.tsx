@@ -10,7 +10,8 @@ import { PestanaContrato } from "@/components/configuracion/PestanaContrato";
 import { PestanaOperacion } from "@/components/configuracion/PestanaOperacion";
 import { BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
-import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -97,13 +98,14 @@ export default function ConfiguracionPagina() {
 
   return (
     <>
-      <section aria-labelledby="configuracion-titulo" className={CABECERA_CLS}>
-        <DecoracionCabecera ilustracion="configuracion" />
-        <h1 id="configuracion-titulo" className={TITULO_CABECERA_CLS}>
-          Configuración
-        </h1>
-        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="configuracion-titulo"
+        tituloId="configuracion-titulo"
+        titulo="Configuración"
+        descripcion={sesion?.empresa.nombre}
+        ilustracion={rutaIlustracion("configuracion")}
+      />
       {contenido}
     </>
   );
