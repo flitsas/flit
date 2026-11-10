@@ -35,12 +35,10 @@ export function ModulosAcordeon({ conteos = {} }: { conteos?: ConteosModulo }) {
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
-  const mitad = Math.ceil(groups.length / 2);
-  const columnas = [groups.slice(0, mitad), groups.slice(mitad)].filter((c) => c.length > 0);
-
   return (
-    // Tarjeta «Módulos» del prototipo (`.card` con `.acordeones`): dos columnas independientes; abrir un grupo solo
-    // empuja su columna. Una columna desde 900 px hacia abajo.
+    // Tarjeta «Módulos» del prototipo (`.card` con `.acordeones`). HU #14481 (referencia de Samuel): 3 columnas en
+    // escritorio, 2 en tableta y 1 en celular. Son columnas CSS (no filas de rejilla): abrir un grupo solo empuja los
+    // de su columna, como antes.
     <section
       aria-labelledby="inicio-modulos-titulo"
       className="flex flex-col gap-4 rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-5 shadow-[var(--shadow-card)] md:p-6"
@@ -51,13 +49,9 @@ export function ModulosAcordeon({ conteos = {} }: { conteos?: ConteosModulo }) {
         </h2>
         <p className="mt-0.5 text-xs text-[color:var(--di-text-tertiary)]">Todo lo que puedes hacer en la plataforma, agrupado como en el menú.</p>
       </div>
-      <div className="grid items-start gap-x-4 gap-y-3 min-[901px]:grid-cols-2">
-        {columnas.map((col, c) => (
-          <div key={c} className="grid min-w-0 gap-3 [&>*]:min-w-0">
-            {col.map((g) => (
-              <Grupo key={g.id} grupo={g} abierto={abierto === g.id} onAlternar={() => alternar(g.id)} conteos={conteos} />
-            ))}
-          </div>
+      <div className="gap-x-4 sm:columns-2 lg:columns-3 [&>*]:mb-3 [&>*]:break-inside-avoid">
+        {groups.map((g) => (
+          <Grupo key={g.id} grupo={g} abierto={abierto === g.id} onAlternar={() => alternar(g.id)} conteos={conteos} />
         ))}
       </div>
     </section>
@@ -93,8 +87,8 @@ function Grupo({ grupo, abierto, onAlternar, conteos }: { grupo: DockGroup; abie
   const total = conCifra.reduce((s, x) => s + x.total, 0);
   const panelId = `inicio-grupo-${grupo.id}`;
 
-  // `.acordeon` del prototipo: contador a la izquierda, ilustración y nombre del grupo, a la derecha lo pendiente y
-  // la flecha.
+  // Tarjeta del grupo (referencia de Samuel): ilustración, nombre en negrita con cuántos módulos tiene debajo, a la
+  // derecha lo pendiente y la flecha.
   return (
     <div className="overflow-clip rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-card)]">
       <h3 className="m-0">
@@ -107,12 +101,13 @@ function Grupo({ grupo, abierto, onAlternar, conteos }: { grupo: DockGroup; abie
             abierto ? "border-b border-[color:var(--di-divider)] bg-[var(--di-sky)]" : ""
           }`}
         >
-          <span className="inline-grid h-8 min-w-8 shrink-0 place-items-center rounded-[var(--di-radius-chip)] bg-[var(--di-accent-soft)] px-2 font-bold tabular-nums text-[color:var(--di-action)] max-sm:hidden">
-            {lista.length}
-            <span className="sr-only">{lista.length === 1 ? " módulo" : " módulos"}</span>
-          </span>
           <Glifo entry={grupo} size="grupo" />
-          <span className="min-w-0 flex-1 truncate font-semibold text-[color:var(--di-heading)]">{grupo.label}</span>
+          <span className="grid min-w-0 flex-1 leading-[1.3]">
+            <span className="truncate font-bold text-[color:var(--di-heading)]">{grupo.label}</span>
+            <span className="truncate text-xs text-[color:var(--di-text-tertiary)]">
+              {lista.length} {lista.length === 1 ? "módulo" : "módulos"}
+            </span>
+          </span>
           {conCifra.length > 0 && (
             <span
               // Sobre el cielo de la fila abierta o con el puntero encima, la insignia pasa a blanco (como `.badge.warn`).
