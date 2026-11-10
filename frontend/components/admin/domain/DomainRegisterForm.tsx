@@ -113,7 +113,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           placeholder="app.tudominio.com"
           maxLength={253}
           className="w-full max-w-md rounded-lg border px-3 py-2 font-mono text-sm"
-          style={{ borderColor: fieldError ? "#FF4E00" : "#DFE5ED" }}
+          style={{ borderColor: fieldError ? "var(--destructive)" : "var(--border)" }}
           aria-describedby={isChange ? `${inputId}-hint` : undefined}
           aria-invalid={Boolean(fieldError)}
         />
@@ -123,7 +123,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           </p>
         )}
         {fieldError && (
-          <p role="alert" className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="mt-1 text-[10px] font-medium" style={{ color: "var(--destructive)" }}>
             {fieldError}
           </p>
         )}
@@ -133,7 +133,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
       {!mostrarCampo && <p className="text-xs">Para usar otro dominio, retira primero este.</p>}
 
       {formError && (
-        <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {formError}
         </p>
       )}
@@ -144,7 +144,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           type="submit"
           disabled={saving || removing}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           <Save className="h-3.5 w-3.5" aria-hidden />
           {saving ? "Guardando…" : isChange ? "Cambiar dominio" : "Registrar dominio"}
@@ -157,7 +157,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
             onClick={() => setConfirmingRemove(true)}
             disabled={saving || removing}
             className="ml-auto inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
             <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar dominio
           </button>
@@ -167,7 +167,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
       {confirmingRemove && (
         <div
           className="rounded-xl border p-3 text-xs"
-          style={{ borderColor: "#FF4E00" }}
+          style={{ borderColor: "var(--destructive)" }}
           role="alertdialog"
           aria-label="Confirmar retiro del dominio"
         >
@@ -189,7 +189,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
               onClick={() => void handleRemove()}
               disabled={removing}
               className="rounded-lg px-3 py-1.5 font-semibold text-white disabled:opacity-60"
-              style={{ background: "#FF4E00" }}
+              style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
             >
               {removing ? "Retirando…" : "Retirar"}
             </button>

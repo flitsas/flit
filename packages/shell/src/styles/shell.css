@@ -1,34 +1,546 @@
-/* @flit/shell (B-10) — estilos del dock inferior y de la barra común. Los tokens --nav-* vienen de @flit/ui
-   (tokens.css). La app los importa después de @flit/ui/tokens.css y agrega @source hacia packages/shell/src. */
+/* @flit/shell (B-10) — estilos del dock inferior y de la barra común. Los tokens vienen de @flit/ui (tokens.css). La
+   app los importa después de @flit/ui/tokens.css y agrega @source hacia packages/shell/src.
+   HU #14479: el aspecto es el del prototipo «Diseño Inteligente» (rama `propuesta`, propuesta.css: .barra, .buscar,
+   .icono-btn, .usuario, .menu-usuario, .dock y .dock__menu), con var(--color-x) → var(--di-x). */
 @layer components {
-  .dock-capsula {
-    background: var(--nav-vidrio);
-    border: 1px solid var(--nav-borde);
-    box-shadow: var(--nav-sombra-dock);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-radius: var(--nav-radio-pill);
+  /* ---------- Barra superior (.barra) ---------- */
+  .suite-barra {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px clamp(16px, 4vw, 40px);
+    background: color-mix(in srgb, var(--di-surface) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--di-border);
+    color: var(--di-text-primary);
   }
 
-  .dock-pill {
-    color: var(--nav-texto);
+  .suite-barra__marca {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
   }
 
-  .dock-pill:hover {
-    background: var(--nav-app-bg);
-    color: var(--nav-texto-fuerte);
+  .suite-barra__logo {
+    height: 34px;
+    width: auto;
   }
 
-  .dock-pill[aria-current="page"],
-  .dock-pill[data-ancestor-active="true"] {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
-    color: #ffffff;
+  .suite-barra__producto {
+    font-weight: 600;
+    color: var(--di-text-secondary);
+    padding-left: 12px;
+    border-left: 1px solid var(--di-border-strong);
+  }
+
+  .suite-barra__acciones {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Buscador ancho que abre Ctrl K (.buscar) */
+  .suite-buscar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    min-width: 240px;
+    padding: 0 16px;
+    border-radius: 9999px;
+    border: 1px solid var(--di-border-control);
+    background: var(--di-surface-elevated);
+    color: var(--di-text-tertiary);
+    font-size: 0.875rem;
+    cursor: pointer;
+  }
+
+  .suite-buscar:hover {
+    background: var(--di-accent-soft);
+  }
+
+  .suite-buscar kbd {
+    margin-left: auto;
+    font-family: inherit;
+    font-size: 0.75rem;
+    padding: 1px 8px;
+    border-radius: 9999px;
+    background: var(--di-surface-sunken);
+    color: var(--di-text-secondary);
+  }
+
+  /* Botón redondo con ilustración: tema y productos (.icono-btn) */
+  .suite-icono-btn {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border-radius: 9999px;
+    border: 1px solid var(--di-border);
+    background: var(--di-surface-elevated);
+    color: var(--di-accent);
+    cursor: pointer;
+  }
+
+  .suite-icono-btn:hover {
+    background: var(--di-accent-soft);
+  }
+
+  .suite-icono-btn[aria-pressed="true"],
+  .suite-icono-btn[aria-expanded="true"] {
+    background: var(--di-sky);
+    border-color: var(--di-border-control);
+  }
+
+  .suite-icono-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .suite-icono-btn__ilus {
+    width: 30px;
+    height: 30px;
+    transition: transform 120ms var(--di-ease);
+  }
+
+  .suite-icono-btn:hover .suite-icono-btn__ilus {
+    transform: scale(1.08);
+  }
+
+  /* Bloque de usuario: avatar, nombre y rol; todo es el botón del menú (button.usuario) */
+  .suite-usuario {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 2px 10px 2px 2px;
+    border: 0;
+    border-radius: 9999px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .suite-usuario:hover,
+  .suite-usuario[aria-expanded="true"] {
+    background: var(--di-accent-soft);
+  }
+
+  .suite-usuario__avatar {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--di-gradient-brand);
+    color: var(--di-on-accent);
+    font-weight: 700;
+    font-size: 0.75rem;
+  }
+
+  .dark .suite-usuario__avatar {
+    color: #0b182d;
+  }
+
+  .suite-usuario__texto {
+    display: grid;
+    line-height: 1.2;
+    min-width: 0;
+  }
+
+  .suite-usuario__texto strong {
+    font-size: 0.875rem;
     font-weight: 600;
   }
 
-  .dock-pill[aria-current="page"] svg,
-  .dock-pill[data-ancestor-active="true"] svg {
+  .suite-usuario__texto small {
+    color: var(--di-text-tertiary);
+    font-size: 0.75rem;
+  }
+
+  .suite-usuario:hover .suite-usuario__texto small,
+  .suite-usuario[aria-expanded="true"] .suite-usuario__texto small {
+    color: var(--di-text-secondary);
+  }
+
+  /* Menú de usuario como los submenús del dock (.menu-usuario) */
+  .suite-menu-usuario {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    z-index: 50;
+    width: 300px;
+    max-width: calc(100vw - 16px);
+    border-radius: var(--di-radius-modal);
+    overflow: clip;
+    background: var(--di-surface-elevated);
+    border: 1px solid var(--di-border);
+    box-shadow: var(--shadow-modal);
+    color: var(--di-text-primary);
+  }
+
+  .suite-menu-usuario__cabeza {
+    position: relative;
+    overflow: clip;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    background: var(--di-accent);
+    color: var(--di-on-accent);
+  }
+
+  .suite-menu-usuario__cabeza::after,
+  .dock-menu__cabeza::after {
+    content: "";
+    position: absolute;
+    width: 90px;
+    height: 90px;
+    right: -24px;
+    top: -46px;
+    border-radius: 50%;
+    background: var(--di-highlight-decor);
+  }
+
+  .suite-menu-usuario__cabeza > span:last-child {
+    display: grid;
+    line-height: 1.3;
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+  }
+
+  .suite-menu-usuario__cabeza small {
+    opacity: 0.85;
+    font-size: 0.75rem;
+  }
+
+  .suite-menu-usuario__avatar {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--di-surface-elevated);
+    color: var(--di-heading);
+    font-weight: 700;
+    font-size: 0.75rem;
+  }
+
+  .suite-menu-usuario ul {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    display: grid;
+    gap: 2px;
+  }
+
+  .suite-menu-usuario__entrada {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    color: var(--di-text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .suite-menu-usuario__entrada:hover {
+    background: var(--di-accent-soft);
+    color: var(--di-action);
+  }
+
+  .suite-menu-usuario__pie {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 16px 14px;
+    border-top: 1px solid var(--di-divider);
+  }
+
+  .suite-menu-usuario__salir {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 18px;
+    border: 1px solid var(--di-border-control);
+    border-radius: 9999px;
+    background: var(--di-surface-elevated);
+    color: var(--di-action);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .suite-menu-usuario__salir:hover {
+    background: var(--di-accent-soft);
+  }
+
+  /* Menú de productos (`.menu-flotante--productos` de la propuesta, HU #14479) */
+  .suite-menu-productos {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    z-index: 50;
+    width: 340px;
+    max-width: calc(100vw - 16px);
+    border-radius: var(--di-radius-modal);
+    overflow: clip;
+    background: var(--di-surface-elevated);
+    border: 1px solid var(--di-border);
+    box-shadow: var(--shadow-modal);
+    color: var(--di-text-primary);
+  }
+
+  .suite-menu-productos__cabeza {
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--di-divider);
+  }
+
+  .suite-menu-productos__titulo {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: var(--di-heading);
+  }
+
+  .suite-menu-productos__bajada {
+    margin: 2px 0 0;
+    font-size: 0.75rem;
+    color: var(--di-text-tertiary);
+  }
+
+  .suite-menu-productos__aviso {
+    margin: 0;
+    padding: 24px 16px;
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--di-text-tertiary);
+  }
+
+  .suite-menu-productos ul {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+    display: grid;
+    gap: 2px;
+  }
+
+  .suite-menu-productos__entrada {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    color: var(--di-text-primary);
+    text-decoration: none;
+  }
+
+  .suite-menu-productos__entrada:hover,
+  .suite-menu-productos__entrada[aria-current="page"] {
+    background: var(--di-accent-soft);
+  }
+
+  .suite-menu-productos__entrada:hover {
+    color: var(--di-action);
+  }
+
+  .suite-menu-productos__entrada:focus-visible,
+  .suite-menu-productos__pie:focus-visible {
+    outline: 2px solid var(--di-action);
+    outline-offset: -2px;
+  }
+
+  .suite-menu-productos__ilus {
+    flex: none;
+    width: 36px;
+    height: 36px;
+  }
+
+  .suite-menu-productos__ilus--icono {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--di-sky);
+    color: var(--di-accent);
+  }
+
+  /* «Próximamente»: la ilustración apagada, no un ícono gris. */
+  .suite-menu-productos__entrada--pronto .suite-menu-productos__ilus {
+    opacity: 0.45;
+    filter: grayscale(0.4);
+  }
+
+  .suite-menu-productos__texto {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    line-height: 1.3;
+  }
+
+  .suite-menu-productos__texto strong {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: var(--di-heading);
+  }
+
+  .suite-menu-productos__entrada:hover .suite-menu-productos__texto strong {
+    color: var(--di-action);
+  }
+
+  .suite-menu-productos__texto small {
+    font-size: 0.75rem;
+    color: var(--di-text-tertiary);
+  }
+
+  .suite-menu-productos__pastilla {
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    background: var(--di-surface-sunken);
+    color: var(--di-text-secondary);
+  }
+
+  .suite-menu-productos__pastilla--aqui {
+    background: var(--di-sky);
+    color: var(--di-action);
+  }
+
+  .suite-menu-productos__pie {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--di-divider);
+    color: var(--di-action);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .suite-menu-productos__pie:hover {
+    background: var(--di-accent-soft);
+  }
+
+  @media (max-width: 960px) {
+    .suite-usuario__texto,
+    .suite-barra__producto {
+      display: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .suite-barra {
+      gap: 8px;
+    }
+
+    .suite-barra__logo {
+      height: 28px;
+    }
+
+    .suite-buscar {
+      min-width: 0;
+      width: 44px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    .suite-buscar > span,
+    .suite-buscar kbd {
+      display: none;
+    }
+  }
+
+  /* ---------- Dock inferior flotante (.dock) ---------- */
+  .dock-capsula {
+    gap: 4px;
+    padding: 6px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--di-surface-elevated) 94%, transparent);
+    border: 1px solid var(--di-border);
+    box-shadow: var(--shadow-modal);
+    backdrop-filter: blur(8px);
+  }
+
+  .dock-glifo {
+    flex: none;
+    border-radius: 50%;
+  }
+
+  .dock-glifo--icono {
+    display: grid;
+    place-items: center;
+    background: var(--di-sky);
+    color: var(--di-accent);
+  }
+
+  .dock-pill {
+    position: relative;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 14px 0 8px;
+    border: 0;
+    border-radius: 9999px;
+    background: transparent;
+    color: var(--di-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color 120ms var(--di-ease),
+      color 120ms var(--di-ease);
+  }
+
+  .dock-pill--compacta {
+    padding: 0 10px;
+  }
+
+  .dock-pill:hover,
+  .dock-pill[aria-expanded="true"] {
+    background: var(--di-sky);
+    color: var(--di-accent);
+  }
+
+  .dock-pill__glifo {
+    width: 28px;
+    height: 28px;
+  }
+
+  .dock-pill--compacta .dock-pill__glifo {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Activo: el degradado de acción en --nav-activo, que es el que cierra en el --brand-accent de una Marca Blanca
+     (--di-gradient-action en oscuro ya no lleva los --brand-*). Texto blanco, como el prototipo. */
+  .dock-pill[aria-current="page"],
+  .dock-pill[data-ancestor-active="true"] {
+    background: var(--nav-activo);
     color: #ffffff;
   }
 
@@ -38,25 +550,262 @@
     color: #ffffff;
   }
 
-  .dock-panel-item[aria-current="page"] {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
-    color: #ffffff;
-    font-weight: 600;
-  }
-
-  .dock-panel-item[aria-current="page"] > svg:first-of-type {
+  .dock-pill[aria-current="page"] > svg,
+  .dock-pill[data-ancestor-active="true"] > svg {
     color: #ffffff;
   }
 
-  .dock-panel-item[aria-current="page"]:hover {
-    background: var(--nav-activo);
-    color: #ffffff;
+  .dock-pill[aria-current="page"] .dock-pill__glifo,
+  .dock-pill[data-ancestor-active="true"] .dock-pill__glifo {
+    background: var(--di-surface-elevated);
+    padding: 2px;
   }
 
+  .dock-flecha {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    transition: transform 120ms var(--di-ease);
+  }
+
+  .dock-pill[aria-expanded="true"] .dock-flecha {
+    transform: rotate(180deg);
+  }
+
+  .dock-pill:focus-visible,
+  .dock-fab:focus-visible,
+  .dock-entrada:focus-visible,
+  .suite-buscar:focus-visible,
+  .suite-icono-btn:focus-visible,
+  .suite-usuario:focus-visible,
+  .dock-menu__cerrar:focus-visible {
+    outline: 2px solid var(--di-action);
+    outline-offset: 2px;
+  }
+
+  /* Botón central de Inicio (.dock__fab) */
   .dock-fab {
-    background: var(--nav-activo);
-    box-shadow: var(--nav-sombra-activo);
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 60px;
+    height: 60px;
+    margin: -14px 6px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--di-surface-elevated);
+    border: 3px solid var(--di-surface-elevated);
+    box-shadow: var(--shadow-button);
+  }
+
+  /* Marca Blanca con logo horizontal: pastilla a la altura del botón, con un ancho máximo. */
+  .dock-fab--pastilla {
+    width: auto;
+    max-width: 150px;
+    padding: 0 14px;
+    border-radius: 9999px;
+    background: #ffffff;
+  }
+
+  .dock-fab[aria-current="page"] {
+    outline: 3px solid var(--di-highlight-decor);
+    outline-offset: 1px;
+  }
+
+  .dock-fab--lanzador {
+    margin: 0;
+    width: 56px;
+    height: 56px;
+  }
+
+  .dock-fab--lanzador.dock-fab--pastilla {
+    width: auto;
+  }
+
+  /* Submenú (.dock__menu): centrado sobre su píldora; `translate` aparte para no chocar con la animación. */
+  .dock-menu {
+    position: absolute;
+    bottom: calc(100% + 14px);
+    left: 50%;
+    translate: -50% 0;
+    z-index: 30;
+    width: 320px;
+    padding: 0 0 8px;
+    border-radius: var(--di-radius-modal);
+    background: var(--di-surface-elevated);
+    border: 1px solid var(--di-border);
+    box-shadow: var(--shadow-modal);
+    color: var(--di-text-primary);
+    overflow: clip;
+  }
+
+  .dock-menu--ancho {
+    width: min(760px, calc(100vw - 24px));
+  }
+
+  .dock-menu--hoja {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    translate: none;
+    width: 100%;
+    max-width: 28rem;
+    max-height: min(78vh, 40rem);
+    overflow-y: auto;
+  }
+
+  .dock-menu__cabeza {
+    position: relative;
+    overflow: clip;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+    background: var(--di-accent);
+    color: var(--di-on-accent);
+  }
+
+  .dock-menu__cabeza-glifo {
+    position: relative;
+    z-index: 1;
+    width: 34px;
+    height: 34px;
+  }
+
+  .dock-menu__cabeza-texto {
+    display: grid;
+    line-height: 1.25;
+    position: relative;
+    z-index: 1;
+    font-size: 0.875rem;
+  }
+
+  .dock-menu__cabeza-texto small {
+    opacity: 0.85;
+    font-size: 0.75rem;
+  }
+
+  .dock-menu__cerrar {
+    position: relative;
+    z-index: 1;
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--di-on-accent) 16%, transparent);
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .dock-menu__lista {
+    display: grid;
+    gap: 6px;
+    padding: 0 8px;
+    max-height: min(62vh, 560px);
+    overflow-y: auto;
+  }
+
+  .dock-menu--hoja .dock-menu__lista {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dock-menu__secciones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+    padding: 0 10px;
+    max-height: min(62vh, 560px);
+    overflow-y: auto;
+  }
+
+  .dock-menu__seccion-titulo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 4px;
+    padding: 0 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--di-highlight);
+  }
+
+  .dock-menu__entradas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .dock-entrada {
+    display: flex;
+    /* Arriba, no al centro: la viñeta se alinea con la primera línea del nombre aunque haya descripción. */
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    color: var(--di-text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-align: left;
+    text-decoration: none;
+  }
+
+  .dock-entrada:hover {
+    background: var(--di-accent-soft);
+    color: var(--di-action);
+  }
+
+  .dock-entrada[aria-current="page"] {
+    background: var(--di-accent-soft);
+    color: var(--di-action);
+    font-weight: 650;
+  }
+
+  .dock-menu__seccion-glifo {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Viñeta antes del nombre (HU #14479): las entradas no llevan ilustración, solo el título de su sección. */
+  .dock-entrada__vineta {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    /* Centrada en la primera línea del nombre (0.875rem × 1.25 de interlineado). */
+    margin-top: calc(0.875rem * 1.25 / 2 - 3px);
+    border-radius: 999px;
+    background: var(--di-highlight);
+  }
+
+  .dock-entrada:hover .dock-entrada__vineta,
+  .dock-entrada[aria-current="page"] .dock-entrada__vineta {
+    background: var(--di-action);
+  }
+
+  .dock-entrada__texto {
+    display: grid;
+    line-height: 1.25;
+    min-width: 0;
+  }
+
+  .dock-entrada__texto strong {
+    font-weight: inherit;
+  }
+
+  .dock-entrada__texto small {
+    color: var(--di-text-tertiary);
+    font-size: 0.75rem;
+    font-weight: 400;
   }
 
   @keyframes panel-up {
@@ -76,9 +825,9 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .dock-capsula,
     .dock-pill,
-    .dock-fab {
+    .dock-flecha,
+    .suite-icono-btn__ilus {
       transition: none !important;
     }
 

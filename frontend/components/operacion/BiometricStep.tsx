@@ -577,8 +577,8 @@ function BiometricSkeleton({
     >
       {partes.map((parte) => (
         <div key={parte} className={WIZARD_CARD} aria-hidden="true">
-          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-          <div className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-muted" />
+          <div className="h-12 w-full animate-pulse rounded-xl bg-muted" />
         </div>
       ))}
     </div>
@@ -641,8 +641,8 @@ function ParteBlock({
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-            <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+            <p className="mb-3 text-xs font-bold" style={{ color: 'var(--foreground)' }}>
               Método de Firma
             </p>
             <VaultCoveredView />
@@ -650,18 +650,18 @@ function ParteBlock({
           </div>
           <div
             className="flex items-center justify-center rounded-xl border p-5 text-center"
-            style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-sunken)' }}
           >
             <div>
               <p
                 className="text-[11px] font-medium uppercase tracking-wide"
-                style={{ color: '#59677D' }}
+                style={{ color: 'var(--muted-foreground)' }}
               >
                 Firma electrónica
               </p>
               <p
                 className="mt-2 select-none text-2xl font-semibold italic"
-                style={{ color: '#1A2B4C' }}
+                style={{ color: 'var(--foreground)' }}
               >
                 {sigNombre}
               </p>
@@ -725,13 +725,13 @@ function ParteBlock({
   return (
     <div className="space-y-3">
       <div className={`grid grid-cols-1 gap-4 ${showCaptureSide ? 'md:grid-cols-2' : ''}`}>
-        <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-          <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+        <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--foreground)' }}>
             Datos de Identificación
           </p>
           {info && (
             <>
-              <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+              <p className="mt-2 text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
                 {info.nombre} — {PARTE_LABEL[parte]}
                 {multipleOwners ? ` ${ordinal}` : ''}
               </p>
@@ -741,7 +741,7 @@ function ParteBlock({
           <div className="mt-4">
             <p
               className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: '#59677D' }}
+              style={{ color: 'var(--muted-foreground)' }}
             >
               Estado Biométrico
             </p>
@@ -752,7 +752,7 @@ function ParteBlock({
           <div className="mt-3">{actionView}</div>
         </div>
         {showCaptureSide && validation ? (
-          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
             <KyverumCapturePanel validation={validation} />
           </div>
         ) : null}
@@ -1079,7 +1079,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="rounded-xl border bg-white p-2 dark:bg-[#162744]">
+      <div className="rounded-xl border bg-card p-2">
         <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
       </div>
       <a

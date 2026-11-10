@@ -148,7 +148,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-reports-console">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#DFE5ED] dark:border-white/10">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border">
         <div role="tablist" aria-label="Reportes del organismo" className="flex flex-wrap gap-1">
           {OT_REPORTES_TABS.map((item) => {
             const active = tab === item.id;
@@ -163,7 +163,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
                 className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold transition ${
                   active
                     ? "border-flit-brand text-flit-brand"
-                    : "border-transparent text-[#6B7280] hover:text-flit-primary dark:text-white/50 dark:hover:text-white"
+                    : "border-transparent text-muted-foreground hover:text-flit-primary dark:hover:text-foreground"
                 }`}
               >
                 {item.label}
@@ -174,7 +174,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
         <button
           type="button"
           onClick={() => setSchedulingOpen(true)}
-          className="mb-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          className="mb-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-secondary"
           data-testid="ot-reportes-abrir-programacion"
         >
           <CalendarClock className="h-4 w-4" aria-hidden="true" />

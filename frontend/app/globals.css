@@ -6,6 +6,8 @@
 @import "@flit/ui/cursor.css";
 /* Dock y barra común de la suite (B-13): los estilos del dock salieron de aquí a @flit/shell. */
 @import "@flit/shell/shell.css";
+/* Piezas de Trámites en el lenguaje de la propuesta (HU #14482): chips con marca, línea de avance, placa. */
+@import "../styles/tramites-propuesta.css";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -219,8 +219,8 @@ export function InviteUserModal({
   const ProfileIcon = PROFILE_ICON[profile];
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/40 px-4 py-6 backdrop-blur-sm">
-      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border bg-white p-6 dark:bg-[#0B0F14]">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-[var(--overlay)] px-4 py-6 backdrop-blur-sm">
+      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border bg-card p-6">
         <div className="mb-4 flex items-start justify-between">
           <div>
             <h3 className="text-lg font-bold">Invitar usuario</h3>
@@ -244,7 +244,7 @@ export function InviteUserModal({
                 Se enviaron instrucciones de activación a <strong>{invitedEmail}</strong>.
               </p>
               {status === "done_no_email" && (
-                <p className="mt-1.5 text-xs font-medium" style={{ color: "#F9AC00" }}>
+                <p className="mt-1.5 text-xs font-medium" style={{ color: "var(--badge-warning-fg)" }}>
                   El correo no pudo entregarse. El administrador puede reintentar más tarde.
                 </p>
               )}
@@ -254,7 +254,7 @@ export function InviteUserModal({
               type="button"
               onClick={onClose}
               className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               Cerrar
             </button>
@@ -274,7 +274,7 @@ export function InviteUserModal({
                         key={p}
                         className="flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-xs transition"
                         style={{
-                          borderColor: active ? "var(--color-flit-brand)" : "#DFE5ED",
+                          borderColor: active ? "var(--color-flit-brand)" : "var(--border)",
                           background: active ? "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" : undefined,
                         }}
                       >
@@ -301,7 +301,7 @@ export function InviteUserModal({
             )}
 
             {isSuperAdmin && fixedTarget && (
-              <div className="rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: "#DFE5ED" }}>
+              <div className="rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: "var(--border)" }}>
                 <p className="text-[10px] font-semibold uppercase opacity-60">Destino</p>
                 <p className="mt-0.5 flex items-center gap-1.5 font-semibold">
                   <ProfileIcon className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
@@ -376,7 +376,7 @@ export function InviteUserModal({
                 aria-invalid={emailInUse || undefined}
                 aria-describedby={emailInUse ? "invite-error" : undefined}
                 className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
-                style={emailInUse ? { borderColor: "#FF4E00" } : undefined}
+                style={emailInUse ? { borderColor: "var(--destructive)" } : undefined}
               />
             </div>
 
@@ -408,7 +408,7 @@ export function InviteUserModal({
                   <p
                     className="mt-1 text-[10px]"
                     style={{
-                      color: rolesRequiredAndMissing ? "#FF4E00" : undefined,
+                      color: rolesRequiredAndMissing ? "var(--destructive)" : undefined,
                       opacity: rolesRequiredAndMissing ? 1 : 0.6,
                     }}
                   >
@@ -423,7 +423,7 @@ export function InviteUserModal({
                 <p
                   role="alert"
                   className="rounded-xl px-3 py-2 text-xs font-medium"
-                  style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}
+                  style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
                 >
                   No hay roles configurados para este perfil. Contacta al Super Admin.
                 </p>
@@ -434,7 +434,7 @@ export function InviteUserModal({
                 id="invite-error"
                 role="alert"
                 className="rounded-xl px-3 py-2 text-xs font-medium"
-                style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}
+                style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
               >
                 {error}
               </p>
@@ -448,7 +448,7 @@ export function InviteUserModal({
                 status === "loading" || (needsTenant && !selectedTenantId) || rolesRequiredAndMissing
               }
               className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               {status === "loading" ? "Enviando…" : "Enviar Instrucciones"}
             </button>
@@ -500,8 +500,8 @@ function OnboardingSteps() {
             <span
               className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold"
               style={{
-                background: i === 0 ? "var(--color-flit-tech)" : "#DFE5ED",
-                color: i === 0 ? "#fff" : "#162744",
+                background: i === 0 ? "var(--color-flit-tech)" : "var(--border)",
+                color: i === 0 ? "#fff" : "var(--color-flit-primary)",
               }}
             >
               {i + 1}

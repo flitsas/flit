@@ -45,7 +45,7 @@ function initialValues(row: CompanyOtMandateRuleView): CompanyTipoMandatoValues 
 }
 
 const FIELD =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50";
 
 export function CompanyTipoMandatoModal({
   row,
@@ -92,7 +92,7 @@ export function CompanyTipoMandatoModal({
         onClose={() => setConfirming(false)}
         busy={busy}
         icon={AlertTriangle}
-        iconBg="#F9AC00"
+        iconBg="var(--color-flit-alert)"
         title="Confirmar mandato Abierto (sin mandatario)"
         titleClassName="text-base font-bold text-flit-primary"
         size="md"
@@ -100,14 +100,14 @@ export function CompanyTipoMandatoModal({
         <div className="space-y-3 text-xs" data-testid="mandato-abierto-confirm">
           <p
             className="rounded-xl border px-3 py-2 leading-relaxed"
-            style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+            style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
             role="alert"
           >
             <strong>{row.companyName}</strong> dejará de exigir firma de mandatario en este
             organismo.
           </p>
           {error ? (
-            <p role="alert" className="text-[11px] text-[#FF4E00]">
+            <p role="alert" className="text-[11px] text-destructive">
               {error}
             </p>
           ) : null}
@@ -125,7 +125,7 @@ export function CompanyTipoMandatoModal({
               onClick={() => onSave(values)}
               disabled={busy}
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               Confirmar cambio
             </button>
@@ -151,7 +151,7 @@ export function CompanyTipoMandatoModal({
           Compañía <strong>{row.companyName}</strong>
         </p>
         <label className="block space-y-1.5" htmlFor={`${uid}-tipo`}>
-          <span className="font-semibold text-[#162244]">Tipo de mandato</span>
+          <span className="font-semibold text-foreground">Tipo de mandato</span>
           <select
             id={`${uid}-tipo`}
             value={values.tipo}
@@ -174,7 +174,7 @@ export function CompanyTipoMandatoModal({
         {institucional ? (
           <div className="space-y-3" data-testid="mandato-tipo-entidad">
             <label className="block space-y-1.5" htmlFor={`${uid}-nombre`}>
-              <span className="font-semibold text-[#162244]">Nombre de la entidad</span>
+              <span className="font-semibold text-foreground">Nombre de la entidad</span>
               <input
                 id={`${uid}-nombre`}
                 value={values.institutionalName}
@@ -190,13 +190,13 @@ export function CompanyTipoMandatoModal({
                 className={FIELD}
               />
               {nameError ? (
-                <span id={`${uid}-nombre-err`} role="alert" className="block text-[11px] text-[#FF4E00]">
+                <span id={`${uid}-nombre-err`} role="alert" className="block text-[11px] text-destructive">
                   El nombre de la entidad es obligatorio.
                 </span>
               ) : null}
             </label>
             <label className="block space-y-1.5" htmlFor={`${uid}-nit`}>
-              <span className="font-semibold text-[#162244]">NIT</span>
+              <span className="font-semibold text-foreground">NIT</span>
               <input
                 id={`${uid}-nit`}
                 value={values.institutionalNit}
@@ -207,7 +207,7 @@ export function CompanyTipoMandatoModal({
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5" htmlFor={`${uid}-ciudad`}>
-                <span className="font-semibold text-[#162244]">Ciudad de cámara</span>
+                <span className="font-semibold text-foreground">Ciudad de cámara</span>
                 <input
                   id={`${uid}-ciudad`}
                   value={values.chamberCity}
@@ -217,7 +217,7 @@ export function CompanyTipoMandatoModal({
                 />
               </label>
               <label className="block space-y-1.5" htmlFor={`${uid}-sigla`}>
-                <span className="font-semibold text-[#162244]">Sigla</span>
+                <span className="font-semibold text-foreground">Sigla</span>
                 <input
                   id={`${uid}-sigla`}
                   value={values.sigla}
@@ -231,7 +231,7 @@ export function CompanyTipoMandatoModal({
         ) : null}
 
         {error ? (
-          <div role="alert" className="space-y-1 text-[11px] text-[#FF4E00]" data-testid="mandato-tipo-error">
+          <div role="alert" className="space-y-1 text-[11px] text-destructive" data-testid="mandato-tipo-error">
             <p>{error}</p>
             {conflict ? (
               <button
@@ -260,7 +260,7 @@ export function CompanyTipoMandatoModal({
             onClick={handleSave}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Guardar
           </button>
@@ -292,7 +292,7 @@ export function CompanyVolverDefaultModal({
       onClose={onCancel}
       busy={busy}
       icon={AlertTriangle}
-      iconBg="#F9AC00"
+      iconBg="var(--color-flit-alert)"
       title="Volver al default"
       titleClassName="text-base font-bold text-flit-primary"
       size="md"
@@ -303,7 +303,7 @@ export function CompanyVolverDefaultModal({
           (Default) en este organismo.
         </p>
         {error ? (
-          <p role="alert" className="text-[11px] text-[#FF4E00]">
+          <p role="alert" className="text-[11px] text-destructive">
             {error}
           </p>
         ) : null}
@@ -321,7 +321,7 @@ export function CompanyVolverDefaultModal({
             onClick={onConfirm}
             disabled={busy}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Volver al default
           </button>

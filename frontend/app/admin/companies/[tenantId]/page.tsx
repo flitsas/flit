@@ -255,7 +255,7 @@ function CompanyDetail() {
               {isNew && (
                 <div
                   className="mb-3 rounded-xl border px-3 py-2 text-xs"
-                  style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+                  style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
                   role="status"
                 >
                   Esta compañía aún no tiene configuración. Define los valores y pulsa

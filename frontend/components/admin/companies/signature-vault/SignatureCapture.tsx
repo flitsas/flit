@@ -134,7 +134,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
 
       {/* El canvas se mantiene montado para conservar el trazo; se oculta en modo carga. */}
       <div className={mode === "draw" ? "space-y-2" : "hidden"}>
-        <div className="overflow-hidden rounded-xl border-2 border-dashed" style={{ borderColor: "#DFE5ED" }}>
+        <div className="overflow-hidden rounded-xl border-2 border-dashed" style={{ borderColor: "var(--border)" }}>
           <canvas
             ref={canvasRef}
             width={760}
@@ -159,7 +159,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
             <Eraser className="h-3.5 w-3.5" /> Limpiar
           </button>
           {value && mode === "draw" && (
-            <span className="text-xs font-semibold" style={{ color: "#0a8f8b" }}>
+            <span className="text-xs font-semibold" style={{ color: "var(--flit-success-ink)" }}>
               ✓ Firma capturada
             </span>
           )}
@@ -197,7 +197,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
       </div>
 
       {(uploadError || error) && (
-        <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {uploadError ?? error}
         </p>
       )}

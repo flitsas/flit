@@ -199,7 +199,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
     <div className={`flex flex-col gap-4 ${embedded ? "" : "p-1"}`}>
       {!embedded && (
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-flit-primary dark:text-white flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-bold text-flit-primary flex flex-wrap items-center gap-2">
             Reportes Detallados
             {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="detallado-red-badge" />}
           </h2>

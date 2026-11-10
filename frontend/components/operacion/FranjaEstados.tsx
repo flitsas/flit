@@ -18,19 +18,26 @@ export interface FranjaItem {
   /** Fondo de la tarjeta elegida y color de su subrayado. */
   activeBg: string;
   activeColor: string;
+  /** HU #14482 — color propio del estado para la barra del pie (`var(--estado-<x>-acento)`). */
+  acento: string;
 }
 
+/**
+ * HU #14482 — tira de baldosas: franja blanca con una baldosa por estado (nombre arriba, cifra
+ * grande y una barra corta con el color del estado al pie). El color va solo en la barra; el texto
+ * queda en tinta. En anchos menores las baldosas pasan a varias filas.
+ */
+const FRANJA_CLS =
+  'flex flex-wrap gap-2 rounded-2xl bg-[var(--di-surface-elevated)] p-2 shadow-[var(--shadow-card)]';
+
+const BALDOSA_CLS =
+  'flex min-w-[7.5rem] flex-1 cursor-pointer flex-col items-center justify-start gap-1 rounded-xl border ' +
+  'border-transparent bg-[var(--di-surface-elevated)] px-3 pb-2.5 pt-3 text-center transition-colors ' +
+  'hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
+  'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ' +
+  'aria-pressed:border-[color:color-mix(in_srgb,var(--di-action)_35%,transparent)] aria-pressed:bg-[var(--di-accent-soft)]';
+
 // Columnas en pantalla ancha: una por tarjeta. Clases literales para que Tailwind las genere.
-const XL_COLS: Record<number, string> = {
-  4: 'xl:grid-cols-4',
-  5: 'xl:grid-cols-5',
-  6: 'xl:grid-cols-6',
-  7: 'xl:grid-cols-7',
-  8: 'xl:grid-cols-8',
-  9: 'xl:grid-cols-9',
-  10: 'xl:grid-cols-10',
-  11: 'xl:grid-cols-11',
-};
 
 export interface FranjaEstadosProps {
   items: readonly FranjaItem[];
@@ -49,13 +56,15 @@ export function FranjaEstados({
   onSelect,
   ariaLabel,
   disabled = false,
-  darkBgClassName = 'dark:bg-[#162744]',
+  darkBgClassName = '',
 }: FranjaEstadosProps) {
   return (
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`grid grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.04)] sm:grid-cols-4 sm:divide-x lg:grid-cols-6 ${XL_COLS[items.length] ?? 'xl:grid-cols-11'} dark:divide-white/5 dark:border-white/10 ${darkBgClassName}`}
+      // HU #14482: franja de baldosas con el color de cada estado en la barra. Mismo grupo, mismos
+      // botones y mismo filtro; solo cambia el aspecto.
+      className={`${FRANJA_CLS} ${darkBgClassName}`}
     >
       {items.map((item) => {
         const activo = selected === item.key;
@@ -68,8 +77,7 @@ export function FranjaEstados({
             title={item.title}
             disabled={disabled}
             onClick={() => onSelect?.(activo ? '' : item.key)}
-            className="flex flex-col items-center gap-1 px-2 py-2 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60"
-            style={activo ? { background: item.activeBg } : undefined}
+            className={BALDOSA_CLS}
           >
             {/* Decorativo: el nombre accesible del botón ya dice la tarjeta y el conteo. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -79,22 +87,22 @@ export function FranjaEstados({
               aria-hidden="true"
               width={28}
               height={28}
-              className="h-7 w-7 shrink-0"
+              className="hidden"
             />
             {/* Hasta dos líneas: «Solicitud de revocatoria» no cabe en una y truncarla la
                 confundía con la tarjeta de al lado. */}
-            <span className="line-clamp-2 max-w-full text-center text-xs font-medium leading-tight opacity-70 text-flit-primary dark:text-white/70">
+            <span className="max-w-full text-[0.8125rem] font-medium leading-tight text-[color:var(--di-text-primary)]">
               {item.label}
             </span>
             <span
-              className="text-lg font-bold leading-none tabular-nums text-[#1E293B] dark:text-white"
+              className="text-[1.375rem] font-bold leading-none tabular-nums text-[color:var(--di-heading)]"
               aria-hidden="true"
             >
               {item.count ?? '—'}
             </span>
             <span
-              className="h-0.5 w-6 rounded-full"
-              style={{ background: activo ? item.activeColor : 'transparent' }}
+              className="mt-1.5 h-1 w-3/5 rounded-full"
+              style={{ background: item.acento }}
               aria-hidden="true"
             />
           </button>

@@ -76,7 +76,7 @@ export function BrandingPreview({
 
   return (
     <Modal open={open} onClose={onClose} size="lg" icon={Eye} title="Previsualización de la marca">
-      <div className="flex gap-2 border-b pb-2" style={{ borderColor: "#DFE5ED" }} role="tablist" aria-label="Superficies de previsualización">
+      <div className="flex gap-2 border-b pb-2" style={{ borderColor: "var(--border)" }} role="tablist" aria-label="Superficies de previsualización">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -225,7 +225,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
       {source === "company" && (
         <div
           className="inline-flex w-fit gap-1 rounded-full border p-0.5"
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
           role="group"
           aria-label="Fuente de la muestra de correo"
         >
@@ -272,7 +272,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               </p>
             )}
             {theme?.kind === "draft-partial" && (
-              <p role="status" className="text-[11px] font-semibold" style={{ color: "#F9AC00" }}>
+              <p role="status" className="text-[11px] font-semibold" style={{ color: "var(--badge-warning-fg)" }}>
                 Borrador incompleto: se completa con la identidad de FLIT.
               </p>
             )}
@@ -284,7 +284,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               srcDoc={sample.html}
               sandbox=""
               className="h-[420px] w-full rounded-xl border"
-              style={{ borderColor: "#DFE5ED" }}
+              style={{ borderColor: "var(--border)" }}
               data-testid="branding-preview-email-iframe"
             />
           </div>

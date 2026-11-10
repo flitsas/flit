@@ -262,7 +262,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
       <div className="flex flex-wrap items-center gap-2">
         {puedeAsignar && (
           <button type="button" className={controlCls(false)} onClick={() => setModal(true)}>

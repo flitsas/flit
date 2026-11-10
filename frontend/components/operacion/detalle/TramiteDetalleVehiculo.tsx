@@ -234,12 +234,12 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
               const message = check.message?.trim() ?? '';
               const inline = message.length > 0 && message.length <= MENSAJE_CORTO_MAX;
               return (
-                <li key={check.key} className="rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10">
+                <li key={check.key} className="rounded-xl border px-3 py-2 border-border">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 text-xs font-medium text-flit-primary dark:text-white">
+                    <span className="min-w-0 text-xs font-medium text-foreground">
                       {check.label}
                       {inline && (
-                        <span className="font-normal text-flit-primary/70 dark:text-white/70"> — {message}</span>
+                        <span className="font-normal text-muted-foreground"> — {message}</span>
                       )}
                     </span>
                     <StatusBadge
@@ -250,7 +250,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
                     />
                   </div>
                   {!inline && message && (
-                    <p className="mt-1 text-xs text-flit-primary/70 dark:text-white/70">{message}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{message}</p>
                   )}
                   {check.details && check.details.length > 0 && <FineDetailList details={check.details} />}
                 </li>

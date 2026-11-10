@@ -11,6 +11,7 @@ import { CompanyNotice } from "../CompanyNotice";
 import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatHours, formatInt, formatNumber, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -26,7 +27,7 @@ const RANKING_COLUMNS: DataTableColumn<OfficeRankingItem>[] = [
     key: "rank",
     header: "#",
     cellClassName: "font-bold",
-    render: (o) => <span style={{ color: o.rank <= 3 ? "#8CC63F" : undefined }}>{o.rank}</span>,
+    render: (o) => <span style={{ color: o.rank <= 3 ? "var(--flit-success-ink)" : undefined }}>{o.rank}</span>,
   },
   { key: "organismo", header: "Organismo", cellClassName: "font-medium", render: (o) => o.transitOfficeName },
   { key: "p50", header: "p50", render: (o) => formatHours(o.p50Hours) },
@@ -63,17 +64,19 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
     >
       {metrics.data && summary && (
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Tasa de rechazo"
+              ilustracion={rutaIlustracion("causales")}
               value={formatPct(summary.rejectionRatePct)}
               tooltip="Rechazados / (aprobados + rechazados) × 100 en el rango."
               variation={kpiVariation("rejectionRatePct")}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             <KpiCard
               label="Aprobación p50"
+              ilustracion={rutaIlustracion("calendario")}
               value={formatHours(summary.p50ApprovalHours)}
               tooltip="Mediana de horas entre la última entrega y la decisión (aprobado/rechazado)."
               variation={kpiVariation("p50ApprovalHours")}
@@ -82,26 +85,28 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             />
             <KpiCard
               label="Aprobación p90"
+              ilustracion={rutaIlustracion("calendario")}
               value={formatHours(summary.p90ApprovalHours)}
               tooltip="Percentil 90 de horas entre la última entrega y la decisión: el 90% de los trámites se decide en este tiempo o menos."
               variation={kpiVariation("p90ApprovalHours")}
               invertVariationColor
-              color="#9B8AFB"
+              color="var(--badge-purple-fg)"
             />
             <KpiCard
               label="Reincidencia"
+              ilustracion={rutaIlustracion("revocatorias")}
               value={formatPct(summary.reincidencePct)}
               tooltip="% de trámites rechazados que se reintentaron: reapertura a borrador, re-radicación tras subsanar, o subsanación abierta."
               variation={kpiVariation("reincidencePct")}
               invertVariationColor
-              color="#F9AC00"
+              color="var(--badge-warning-fg)"
             />
           </div>
 
           {/* Partición del ciclo. Hasta ahora solo se medía el tramo del organismo, así que se
               podía señalar al lento pero no corregirse uno mismo. */}
           <section
-            className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
+            className="rounded-2xl p-5 bg-card border"
             aria-labelledby="ciclo-interno-title"
           >
             <h2
@@ -130,13 +135,13 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               emptyMessage="Sin trámites entregados en el periodo."
               testId="ciclo-interno-vs-ot"
             />
-            <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+            <p className="mt-3 text-[11px] text-muted-foreground">
               Medianas del periodo. La primera barra es la que podemos corregir nosotros.
             </p>
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="rechazo-ot-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="rechazo-ot-title">
               <h2 id="rechazo-ot-title" className="text-sm font-bold mb-3" title="Tasa de rechazo (rechazados / decididos × 100) de cada organismo en el rango.">
                 Tasa de rechazo por organismo
               </h2>
@@ -149,7 +154,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
                   hint: `${formatInt(o.rechazados)} de ${formatInt(o.aprobados + o.rechazados)} decididos`,
                 }))}
                 max={100}
-                color="#FF4E00"
+                color="var(--destructive)"
                 emptyMessage="Sin decisiones por organismo en el periodo."
                 testId="rechazo-por-ot"
               />
@@ -158,7 +163,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             {/* Causales del catálogo si las hay; si no, el texto libre de siempre. La lista
                 tipificada es la única agregable: el texto libre devuelve decenas de motivos
                 distintos con un caso cada uno porque cada revisor escribe a su manera. */}
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="rechazo-causal-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="rechazo-causal-title">
               {metrics.data.current.rejectionByReasonCatalog?.length ? (
                 <>
                   <h2 id="rechazo-causal-title" className="text-sm font-bold mb-3" title="Causales del catálogo marcadas por el organismo al rechazar, dentro del rango.">
@@ -176,12 +181,12 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
                           : `${formatInt(r.rechazos)} rechazos la incluyen`,
                     }))}
                     max={100}
-                    color="#F9AC00"
+                    color="var(--badge-warning-fg)"
                     emptyMessage="Sin causales de rechazo registradas en el periodo."
                     testId="rechazo-por-causal"
                   />
                   {/* Un rechazo puede llevar varias causales: leído como reparto, el % engaña. */}
-                  <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+                  <p className="mt-3 text-[11px] text-muted-foreground">
                     % de rechazos que incluyen cada causal; como un rechazo puede tener varias, la
                     suma puede pasar del 100 %. Promedio de{" "}
                     {metrics.data.current.avgReasonsPerRejection} causales por rechazo.
@@ -199,11 +204,11 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
                       value: r.count,
                       hint: `${formatPct(r.pct)} de los rechazos`,
                     }))}
-                    color="#F9AC00"
+                    color="var(--badge-warning-fg)"
                     emptyMessage="Sin causales de rechazo registradas en el periodo."
                     testId="rechazo-por-causal"
                   />
-                  <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+                  <p className="mt-3 text-[11px] text-muted-foreground">
                     Motivos escritos a mano: no son agrupables. Se verán agrupados a medida que los
                     organismos rechacen con las causales del catálogo.
                   </p>
@@ -212,7 +217,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             </section>
           </div>
 
-          <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="tiempos-ot-title">
+          <section className="rounded-2xl p-5 bg-card border" aria-labelledby="tiempos-ot-title">
             <h2 id="tiempos-ot-title" className="text-sm font-bold mb-3" title="Mediana (p50) y percentil 90 (p90) de horas hasta la decisión, por organismo.">
               Tiempos de aprobación por organismo (p50 / p90)
             </h2>
@@ -222,16 +227,16 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               <div className="h-64" data-testid="tiempos-aprobacion-chart">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={[...metrics.data.current.approvalTimesByOffice]} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                     <XAxis dataKey="transitOfficeName" tick={{ fontSize: 10 }} interval={0} />
                     <YAxis tick={{ fontSize: 11 }} width={40} unit=" h" />
                     <Tooltip
                       formatter={(value: number, name: string) => [formatHours(value), name]}
-                      contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
+                      contentStyle={{ background: "var(--primary)", border: "none", borderRadius: 10, color: "var(--primary-foreground)", fontSize: 11 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Bar dataKey="p50Hours" name="p50 (mediana)" fill="var(--color-flit-brand)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-                    <Bar dataKey="p90Hours" name="p90" fill="#9B8AFB" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                    <Bar dataKey="p90Hours" name="p90" fill="var(--badge-purple-fg)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -240,7 +245,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <section aria-labelledby="ranking-title">
-              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+              {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
               <h2 id="ranking-title" className="text-sm font-bold mb-3" title="Orden por mediana de tiempo de decisión ascendente; desempata la tasa de rechazo.">
                 Ranking de agilidad
               </h2>
@@ -263,15 +268,15 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               </div>
             </section>
 
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="reincidencia-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="reincidencia-title">
               <h2 id="reincidencia-title" className="text-sm font-bold mb-3" title="Trámites rechazados que volvieron a borrador; ciclos = veces que pasaron por 'rechazado'.">
                 Reincidencia
               </h2>
               <div className="grid grid-cols-2 gap-3" data-testid="reincidencia-bloque">
-                <Stat label="Rechazadas" value={formatInt(metrics.data.current.reincidence.rechazadas)} color="#FF4E00" tooltip="Instancias con al menos un rechazo en el rango." />
+                <Stat label="Rechazadas" value={formatInt(metrics.data.current.reincidence.rechazadas)} color="var(--destructive)" tooltip="Instancias con al menos un rechazo en el rango." />
                 <Stat label="Reintentadas" value={formatInt(metrics.data.current.reincidence.reintentadas)} color="var(--color-flit-brand)" tooltip="Rechazadas que volvieron a borrador para corregirse." />
-                <Stat label="Ciclos promedio" value={formatNumber(metrics.data.current.reincidence.avgCiclos)} color="#F9AC00" tooltip="Promedio de veces que una instancia pasó por 'rechazado'." />
-                <Stat label="Ciclos máximo" value={formatInt(metrics.data.current.reincidence.maxCiclos)} color="#9B8AFB" tooltip="Máximo de pasadas por 'rechazado' de una misma instancia." />
+                <Stat label="Ciclos promedio" value={formatNumber(metrics.data.current.reincidence.avgCiclos)} color="var(--badge-warning-fg)" tooltip="Promedio de veces que una instancia pasó por 'rechazado'." />
+                <Stat label="Ciclos máximo" value={formatInt(metrics.data.current.reincidence.maxCiclos)} color="var(--badge-purple-fg)" tooltip="Máximo de pasadas por 'rechazado' de una misma instancia." />
               </div>
             </section>
           </div>

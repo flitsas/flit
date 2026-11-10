@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { isOidcSessionMode } from "@flit/auth/request";
+import { THEME_INIT_SCRIPT } from "@flit/shell/theme-script";
 import { SessionExpiredListener } from "@/components/auth/SessionExpiredListener";
 import { BrandProvider } from "@/components/brand/BrandProvider";
 import { BrandStyle } from "@/components/brand/BrandStyle";
@@ -16,6 +17,14 @@ const poppins = localFont({
     { path: "./fonts/Poppins-600-latin.woff2", weight: "600", style: "normal" },
     { path: "./fonts/Poppins-700-latin.woff2", weight: "700", style: "normal" },
   ],
+});
+
+// Placa colombiana (UI kit «Diseño Inteligente», HU #14475): local, como Poppins.
+const barlowCondensed = localFont({
+  variable: "--font-barlow-condensed",
+  src: "./fonts/BarlowCondensed-700-latin.woff2",
+  weight: "700",
+  style: "normal",
 });
 
 const jetbrainsMono = localFont({
@@ -50,10 +59,12 @@ export default async function RootLayout({
       // A-10 (HU #13001): modo de sesión en runtime (FLIT_SESSION_MODE), leído por lib/auth/session-mode.ts.
       data-session-mode={isOidcSessionMode() ? "oidc" : "legacy"}
       suppressHydrationWarning
-      className={`${poppins.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${poppins.variable} ${barlowCondensed.variable} ${jetbrainsMono.variable} h-full`}
     >
       {/* BrandStyle no renderiza nada en host FLIT (AC7): <head> queda igual que hoy. */}
       <head>
+        {/* Tema claro/oscuro antes de pintar, sin destello (HU #14478; mismo script que el hub). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <BrandStyle brand={brand} />
       </head>
       <body suppressHydrationWarning className="h-full font-sans antialiased">

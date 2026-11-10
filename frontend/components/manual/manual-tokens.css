@@ -1,23 +1,28 @@
 /* Centro de Ayuda FLIT — tokens alineados a flit_design_tokens / globals.css */
 .manual-root {
   --manual-bg: var(--color-flit-bg);
-  --manual-sidebar-bg: #ffffff;
-  --manual-card-bg: #ffffff;
-  --manual-border: #dfe5ed;
-  --manual-border-soft: #e8edf4;
-  --manual-text: #162744;
-  --manual-text-muted: #5b6b7c;
-  --manual-text-soft: #7a8796;
+  --manual-sidebar-bg: var(--card);
+  --manual-card-bg: var(--card);
+  --manual-border: var(--border);
+  --manual-border-soft: var(--table-row-border);
+  --manual-text: var(--foreground);
+  --manual-text-muted: var(--muted-foreground);
+  --manual-text-soft: var(--muted-foreground);
   --manual-brand: var(--color-flit-brand);
   --manual-tech: var(--color-flit-tech);
   --manual-heading: var(--color-flit-brand);
-  --manual-active-bg: color-mix(in srgb, var(--color-flit-tech) 12%, transparent);
-  --manual-active-text: #0a6b68;
+  --manual-active-bg: var(--badge-info-bg);
+  --manual-active-text: var(--badge-info-fg);
   --manual-badge-bg: color-mix(in srgb, var(--color-flit-brand) 10%, transparent);
   --manual-badge-text: var(--color-flit-brand);
-  --manual-shadow: 0 4px 24px rgba(22, 39, 68, 0.08);
+  --manual-shadow: var(--shadow-card);
   --manual-radius-card: 1.25rem;
   font-family: var(--font-poppins, "Poppins", ui-sans-serif, system-ui, sans-serif);
+}
+
+/* Oscuro: --color-flit-bg no cambia con el tema; la superficie de la página sí. */
+.dark .manual-root {
+  --manual-bg: var(--background);
 }
 
 .manual-root ::selection {

@@ -4,6 +4,7 @@ import {
   ESTADO_CHIP_STYLES,
   ESTADO_ICONO,
   ESTADO_LABELS,
+  estadoAcentoVar,
   FILTRO_RECHAZADO_PREASIGNACION,
   RECHAZADO_PREASIGNACION_LABEL,
   type EstadoFiltro,
@@ -86,6 +87,9 @@ export function EstadoFunnel({
       ariaLabel: `${label}: ${count} trámite${count === 1 ? '' : 's'}`,
       activeBg: style.bg,
       activeColor: style.color,
+      acento: estadoAcentoVar(
+        estado === FILTRO_RECHAZADO_PREASIGNACION ? 'rechazado' : estado,
+      ),
     };
   });
 

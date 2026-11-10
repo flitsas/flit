@@ -57,7 +57,7 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
       <h4 className="text-xs font-semibold">Generar derecho de petición</h4>
       {tipologias.estado === "loading" && <p className="text-xs opacity-60">Cargando tipologías…</p>}
       {tipologias.estado === "error" && <InlineAlert tone="error">{tipologias.error}</InlineAlert>}
@@ -208,7 +208,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
           <input className={INPUT_CLS} type="date" max={hoy} min={dp.fechaRadicacion?.slice(0, 10)} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
         <fieldset className="flex flex-col gap-1 md:col-span-2">
-          <legend className="text-[11px] font-semibold text-[#5B6B82] dark:text-slate-300">Sentido</legend>
+          <legend className="text-[11px] font-semibold text-muted-foreground">Sentido</legend>
           <div className="flex gap-4 text-xs">
             {(["Favorable", "Desfavorable"] as const).map((s) => (
               <label key={s} className="flex items-center gap-1.5">
@@ -271,7 +271,7 @@ export function AccionesDp({ ctx }: { ctx: ContextoDetalle }) {
   if (!puedeReintentar && !puedeResponder) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-wrap gap-2 border-t border-border pt-3">
       {puedeReintentar && (
         <button type="button" className={controlCls(false)} disabled={reintentando} onClick={reintentar}>
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />

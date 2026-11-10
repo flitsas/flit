@@ -11,6 +11,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import type { TenantUser } from "@/lib/api/security";
 import {
@@ -239,7 +240,7 @@ export function PermissionAuditView({ mode, users, initialUserId }: PermissionAu
 
       {data && data.items.length > 0 && (
         <>
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
             <table
               aria-label="Auditoría de permisos individuales"
               style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 760 }}

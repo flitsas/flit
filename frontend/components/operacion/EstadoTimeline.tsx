@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipClass, estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { LogQxLink } from './LogQxLink';
 
 
@@ -63,13 +63,13 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
 
   if (loading && items.length === 0) {
     return (
-      <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>Cargando historial…</p>
+      <p style={{ color: 'var(--muted-foreground)', fontSize: 13, margin: 0 }}>Cargando historial…</p>
     );
   }
 
   if (error) {
     return (
-      <p role="alert" style={{ color: '#c2410c', fontSize: 13, margin: 0 }}>
+      <p role="alert" style={{ color: 'var(--destructive)', fontSize: 13, margin: 0 }}>
         {error}
       </p>
     );
@@ -77,7 +77,7 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
 
   if (items.length === 0) {
     return (
-      <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>
+      <p style={{ color: 'var(--muted-foreground)', fontSize: 13, margin: 0 }}>
         Este trámite aún no tiene cambios de estado.
       </p>
     );
@@ -96,7 +96,7 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
                 position: 'relative',
                 paddingLeft: 22,
                 paddingBottom: isLast ? 0 : 16,
-                borderLeft: isLast ? '2px solid transparent' : '2px solid #e2e8f0',
+                borderLeft: isLast ? '2px solid transparent' : '2px solid var(--di-divider)',
                 marginLeft: 6,
               }}
             >
@@ -109,11 +109,14 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  background: chip.color,
+                  // Propuesta: el carril va en azul de acción con halo; el estado lo dice el chip.
+                  background: 'var(--di-action)',
+                  boxShadow: '0 0 0 3px var(--di-accent-soft)',
                 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span
+                  className={estadoChipClass(item.toStatus)}
                   style={{
                     background: chip.bg,
                     color: chip.color,
@@ -127,18 +130,18 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
                   {estadoLabel(item.toStatus)}
                 </span>
                 {item.fromStatus ? (
-                  <span style={{ color: '#94a3b8', fontSize: 12 }}>
+                  <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
                     desde {estadoLabel(item.fromStatus)}
                   </span>
                 ) : (
-                  <span style={{ color: '#94a3b8', fontSize: 12 }}>estado inicial</span>
+                  <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>estado inicial</span>
                 )}
               </div>
-              <div style={{ color: '#475569', fontSize: 12, marginTop: 4 }}>
+              <div style={{ color: 'var(--muted-foreground)', fontSize: 12, marginTop: 4 }}>
                 {formatFecha(item.changedAt)} · {item.changedByName ?? '—'}
               </div>
               {item.reason ? (
-                <div style={{ color: '#334155', fontSize: 12, marginTop: 2, fontStyle: 'italic' }}>
+                <div style={{ color: 'var(--foreground)', fontSize: 12, marginTop: 2, fontStyle: 'italic' }}>
                   Motivo: {item.reason}
                 </div>
               ) : null}
@@ -154,11 +157,11 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
           style={{
             marginTop: 12,
             background: 'transparent',
-            border: '1px solid #cbd5e1',
+            border: '1px solid var(--border)',
             borderRadius: 8,
             padding: '4px 12px',
             fontSize: 12,
-            color: '#475569',
+            color: 'var(--muted-foreground)',
             cursor: 'pointer',
           }}
         >
@@ -192,7 +195,7 @@ export function EstadoTimelinePanel({ instanceId }: { instanceId: string }) {
           style={{
             background: 'transparent',
             border: 'none',
-            color: '#475569',
+            color: 'var(--muted-foreground)',
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
@@ -209,8 +212,8 @@ export function EstadoTimelinePanel({ instanceId }: { instanceId: string }) {
         <div
           style={{
             marginTop: 12,
-            background: '#fff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
             borderRadius: 12,
             padding: 16,
           }}

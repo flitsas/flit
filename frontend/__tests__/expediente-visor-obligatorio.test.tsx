@@ -86,7 +86,7 @@ describe('ExpedienteVisor — obligatorio vs opcional en «Documentos cargados»
     expect(barra(ficha('compraventa')).getAttribute('style')).toContain('badge-warning-fg');
     // El opcional que falta va en gris neutro, no en ámbar.
     expect(barra(ficha('paz_salvo_rnmc')).getAttribute('style')).not.toContain('badge-warning-fg');
-    // Y lo cargado, en el verde de marca (`#8CC63F`, que jsdom normaliza a rgb).
-    expect(barra(ficha('soat')).getAttribute('style')).toContain('rgb(140, 198, 63)');
+    // Y lo cargado, en el verde de éxito del kit (token `--flit-success-ink`).
+    expect(barra(ficha('soat')).getAttribute('style')).toContain('var(--flit-success-ink)');
   });
 });

@@ -106,7 +106,7 @@ export function DrFlitSupportPanel({
             <button
               type="button"
               onClick={onOpenCaseForm}
-              className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+              className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-(--dr-flit-text-inverse) transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
               style={{ background: "var(--dr-flit-gradient-primary)" }}
             >
               Generar un caso de soporte
@@ -126,7 +126,7 @@ export function DrFlitSupportPanel({
             <button
               type="button"
               onClick={() => onOpenCase(DR_FLIT_SUPPORT_CASE_URL)}
-              className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+              className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-(--dr-flit-text-inverse) transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
               style={{ background: "var(--dr-flit-gradient-primary)" }}
             >
               Generar un caso de soporte

@@ -29,7 +29,7 @@ import {
 const ICT_JOBS_REPORT_HREF = "/?m=ict-reportes&ictReportesTab=jobs";
 
 const CARD =
-  "space-y-4 rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]";
+  "space-y-4 rounded-2xl border border-border bg-card p-5";
 
 export function IctJobSettingsForm() {
   const { show } = useToast();
@@ -341,9 +341,9 @@ export function IctJobSettingsForm() {
 
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
-    <header className="border-b border-[#DFE5ED] pb-3 dark:border-white/10">
-      <h2 className="text-sm font-semibold text-flit-primary dark:text-white">{title}</h2>
-      <p className="mt-0.5 text-xs leading-snug text-[#59677D] dark:text-white/70">{description}</p>
+    <header className="border-b border-border pb-3">
+      <h2 className="text-sm font-semibold text-flit-primary">{title}</h2>
+      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
     </header>
   );
 }
@@ -392,7 +392,7 @@ function NumberField({
         className={`mt-1 ${WIZARD_INPUT}`}
       />
       {error ? (
-        <p id={`${id}-error`} className={WIZARD_HINT} style={{ color: "#FF4E00" }}>
+        <p id={`${id}-error`} className={WIZARD_HINT} style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       ) : hint ? (

@@ -89,7 +89,7 @@ export function TrazabilidadScreen({
   const espera = formatEspera(r?.horasEsperando);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 text-flit-primary">
       <Link
         href={volverHref}
         className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium opacity-70 hover:text-flit-brand hover:opacity-100"
@@ -108,7 +108,7 @@ export function TrazabilidadScreen({
         {data && r && (
           <>
             {/* Cabecera fija: la identificación no se pierde al desplazar la línea de tiempo. */}
-            <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-[#DFE5ED] bg-white shadow-sm dark:border-white/10 dark:bg-[#0B0F14]">
+            <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-border bg-card shadow-sm">
               <div className="flex flex-wrap items-start gap-5 px-5 py-4">
                 <div className="min-w-[300px] flex-1">
                   <h1 className="font-mono text-[19px] font-bold tracking-tight">
@@ -116,7 +116,7 @@ export function TrazabilidadScreen({
                   </h1>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px] opacity-75">
                     {r.plate && (
-                      <span className="rounded border border-[#D9DEE8] bg-[#F4F6FA] px-1.5 py-0.5 font-mono text-xs font-bold dark:border-white/15 dark:bg-white/5">
+                      <span className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-xs font-bold dark:bg-secondary">
                         {r.plate}
                       </span>
                     )}
@@ -149,7 +149,7 @@ export function TrazabilidadScreen({
                       ? `/tramites/${r.procedureInstanceId}?t=${encodeURIComponent(r.clientTenantId)}`
                       : `/tramites/${r.procedureInstanceId}`
                   }
-                  className="inline-flex items-center self-center rounded-lg border border-[#DFE5ED] px-3.5 py-2 text-[12.5px] font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15"
+                  className="inline-flex items-center self-center rounded-lg border border-border px-3.5 py-2 text-[12.5px] font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                 >
                   Ver trámite
                 </Link>
@@ -157,8 +157,8 @@ export function TrazabilidadScreen({
 
               {/* Tira de intentos: solo cuando el trámite acumuló más de una radicación. */}
               {r.totalIntentos > 1 && (
-                <div className="flex flex-wrap items-center gap-2 border-t border-[#DFE5ED] bg-[#FF4E00]/[0.08] px-5 py-2.5 text-[12.5px] dark:border-white/10">
-                  <span className="font-semibold text-[#C2410C]">
+                <div className="flex flex-wrap items-center gap-2 border-t border-border bg-[var(--badge-danger-bg)] px-5 py-2.5 text-[12.5px]">
+                  <span className="font-semibold text-destructive">
                     Este trámite tuvo {r.totalIntentos} radicaciones.
                   </span>
                   <span className="opacity-70">Viendo:</span>
@@ -174,7 +174,7 @@ export function TrazabilidadScreen({
                       className={`rounded-full border px-2.5 py-1 font-mono text-[11.5px] ${
                         h.id === r.id
                           ? "border-flit-brand bg-flit-brand/[0.1] font-bold text-flit-brand"
-                          : "border-[#D9DEE8] opacity-70 hover:opacity-100 dark:border-white/15"
+                          : "border-border opacity-70 hover:opacity-100"
                       }`}
                     >
                       Intento {h.intento}
@@ -184,7 +184,7 @@ export function TrazabilidadScreen({
               )}
 
               <div
-                className="flex flex-wrap items-center gap-1 border-t border-[#DFE5ED] px-5 dark:border-white/10"
+                className="flex flex-wrap items-center gap-1 border-t border-border px-5"
                 role="tablist"
                 aria-label="Vista de la trazabilidad"
               >
@@ -197,10 +197,10 @@ export function TrazabilidadScreen({
               </div>
             </header>
 
-            <div className="rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#0B0F14]">
+            <div className="rounded-2xl border border-border bg-card">
               {pestana === "hitos" ? (
                 <>
-                  <div className="border-b border-[#DFE5ED] px-6 py-4 dark:border-white/10">
+                  <div className="border-b border-border px-6 py-4">
                     <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-flit-brand">
                       Qué pasó
                     </p>
@@ -270,7 +270,7 @@ function Dato({
       <dt className="text-[10px] font-bold uppercase tracking-wider opacity-55">{label}</dt>
       <dd
         className={`m-0 text-[13px] ${mono ? "font-mono tabular-nums" : ""} ${
-          destacado ? "font-bold text-[#C2410C]" : "font-medium"
+          destacado ? "font-bold text-destructive" : "font-medium"
         }`}
         title={valor}
       >

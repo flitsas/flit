@@ -28,6 +28,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
@@ -370,7 +371,7 @@ export function Usuarios() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
@@ -390,7 +391,7 @@ export function Usuarios() {
                 <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
                 Importar Excel
               </button>
-              <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
+              <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "var(--gradient-action)" }}>
                 Invitar usuario
               </button>
             </div>
@@ -398,7 +399,7 @@ export function Usuarios() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
+      <div className="flex flex-wrap items-center gap-1 border-b border-border shrink-0">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -486,7 +487,7 @@ export function Usuarios() {
         <div className="flex flex-col gap-3">
           {deletedLoading && <CarLoaderModal label="Cargando usuarios eliminados…" />}
           {!deletedLoading && deletedError && (
-            <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+            <div role="alert" className="py-12 text-center text-sm" style={{ color: "var(--destructive)" }}>{deletedError}</div>
           )}
           {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
             <div className="py-12 text-center text-sm opacity-60">
@@ -495,7 +496,7 @@ export function Usuarios() {
           )}
           {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
             <>
-              <div className="overflow-x-auto">
+              <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
                 <table
                   aria-label="Usuarios eliminados"
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
@@ -521,19 +522,19 @@ export function Usuarios() {
                         // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
                         // key cuando el JOIN produce N filas por usuario con N roles.
                         key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                        className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                       >
-                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <p className="font-semibold">{u.fullName}</p>
                           <p className="text-[10px] opacity-60">{u.email}</p>
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <span className="block truncate opacity-70">{u.tenantName ?? "—"}</span>
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <span className="opacity-70">{formatDateTime(u.deletedAt)}</span>
                         </td>
-                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <RowActions
                             actions={[
                               {
@@ -582,7 +583,7 @@ export function Usuarios() {
           <Link
             href="/?m=rbac"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Ir a Roles y permisos (RBAC)
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

@@ -77,7 +77,7 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
             type="button"
             onClick={resolve}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             <Eye className="h-3.5 w-3.5" /> Ver matriz resuelta
           </button>

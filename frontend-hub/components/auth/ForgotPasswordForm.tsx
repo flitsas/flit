@@ -32,7 +32,7 @@ export function ForgotPasswordForm() {
 
   if (sent) {
     return (
-      <p role="status" className="text-sm text-slate-700">
+      <p role="status" className="text-sm text-foreground">
         Si el correo está registrado, enviaremos instrucciones de recuperación.
       </p>
     );

@@ -109,7 +109,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
         )}
       </div>
       {conAutomatica && (
-        <p className="text-[11px] text-[#5B6B82] dark:text-slate-300">
+        <p className="text-[11px] text-muted-foreground">
           Conductor «Automático»: el sistema busca quién tenía el vehículo en la fecha de la infracción. «Manual»: el
           conductor se asigna a mano. Si necesitas cambiarlo, solicítalo a FLIT.
         </p>
@@ -145,7 +145,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
             key: "historial",
             header: "",
             render: (n) => (
-              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setHistorial(n)}>
+              <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setHistorial(n)}>
                 Historial
               </button>
             ),
@@ -156,7 +156,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
             align: "right",
             render: (n) =>
               puedeGestionar ? (
-                <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setCambiar(n)}>
+                <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setCambiar(n)}>
                   {n.activo ? "Desactivar" : "Activar"}
                 </button>
               ) : null,
@@ -323,7 +323,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
             key: "historial",
             header: "",
             render: (p) => (
-              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setHistorial(p)}>
+              <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setHistorial(p)}>
                 Historial
               </button>
             ),
@@ -334,7 +334,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
             align: "right",
             render: (p) =>
               puedeGestionar ? (
-                <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setCambiar(p)}>
+                <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setCambiar(p)}>
                   {p.activo ? "Desactivar" : "Activar"}
                 </button>
               ) : null,
@@ -379,7 +379,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
               <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden />
               Cargar Excel
             </button>
-            <button type="button" className="font-semibold text-[#3B4FD6] underline-offset-2 hover:underline dark:text-[#8FA9FF]" onClick={plantilla}>
+            <button type="button" className="font-semibold text-flit-brand-ink underline-offset-2 hover:underline" onClick={plantilla}>
               Descargar plantilla
             </button>
           </div>

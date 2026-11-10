@@ -35,6 +35,7 @@ function DetalleCifra({ sel, periodo, onCerrar, onVer }: { sel: Seleccion; perio
   return (
     <Modal open onClose={onCerrar} title={`${titulo} · ${sel.usuario}`} description={`Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}.`} size="xl">
       <DataTable
+        tarjeta={false}
         ariaLabel="Comparendos de la cifra"
         rows={pg.paginar(filas)}
         getRowKey={(c) => c.id}
@@ -87,7 +88,7 @@ function Contenido() {
       />
       <FiltrosPeriodo valor={periodo} onAplicar={setPeriodo} />
       {filas.length > 0 && (
-        <p className="text-xs text-[#5B6B82] dark:text-slate-300">
+        <p className="text-xs text-muted-foreground">
           Total del periodo: <b>{totales.gestionados.toLocaleString("es-CO")}</b> comparendos gestionados, <b>{totales.dpEnviados.toLocaleString("es-CO")}</b> DPs enviados y{" "}
           <b>{totales.pagos.toLocaleString("es-CO")}</b> pagos registrados.
         </p>
@@ -111,7 +112,7 @@ function Contenido() {
               f[m.clave] > 0 ? (
                 <button
                   type="button"
-                  className="font-semibold text-[#3B4FD6] hover:underline dark:text-[#9FB3FF]"
+                  className="font-semibold text-flit-brand-ink hover:underline"
                   onClick={() => setSel({ usuarioId: f.usuarioId, usuario: f.usuario, metrica: m.clave })}
                 >
                   {f[m.clave].toLocaleString("es-CO")}

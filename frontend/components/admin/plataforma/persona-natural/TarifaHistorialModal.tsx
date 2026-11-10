@@ -126,7 +126,7 @@ export function TarifaHistorialModal({
           </label>
         )}
         {conceptos.length === 1 && (
-          <p className="text-sm font-semibold text-flit-primary dark:text-white">{CONCEPTO_LABEL[concepto]}</p>
+          <p className="text-sm font-semibold text-flit-primary">{CONCEPTO_LABEL[concepto]}</p>
         )}
 
         {status === "loading" ? (
@@ -143,6 +143,7 @@ export function TarifaHistorialModal({
               columns={columnas}
               rows={pg.paginar(versiones)}
               getRowKey={(v) => v.id}
+              tarjeta={false}
               pagination={{
                 page: pg.page,
                 pageSize: pg.pageSize,

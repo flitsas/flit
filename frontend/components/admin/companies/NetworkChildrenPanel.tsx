@@ -32,7 +32,15 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 const COLUMNAS = columnasHijas("Cliente");
 const ACCESORES: AccesoresFiltro<CompanyChildListItem> = {
@@ -170,7 +178,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
               className="mt-3 rounded-xl px-4 py-2 text-xs font-semibold text-white"
               style={{
                 background:
-                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+                  "var(--gradient-action)",
               }}
             >
               Agregar cliente a la red
@@ -180,15 +188,15 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
           skeletonRows={4}
         >
           {(
-            <>
+            <div className={TABLA_TARJETA_CLS}>
               <div className="overflow-x-auto">
                 {/* Bug #13055 — tabla homologada con el modelo de trámites */}
                 <table
                   aria-label="Red de clientes"
-                  className="min-w-[720px] text-xs"
+                  className={`min-w-[720px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
                 >
-                  <thead>
+                  <thead className={TABLA_MOVIL_THEAD_CLS}>
                     <tr>
                       <th
                         scope="col"
@@ -244,10 +252,10 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className={TABLA_MOVIL_TBODY_CLS}>
                     {visibles.length === 0 && filtros.hayFiltros ? (
-                      <tr>
-                        <td colSpan={6}>
+                      <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+                        <td colSpan={6} className={TABLA_MOVIL_FILA_ANCHA_CLS}>
                           <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
                         </td>
                       </tr>
@@ -255,24 +263,26 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                     {pg.paginar(visibles).map((child) => (
                       <tr
                         key={child.id}
-                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                        className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
                       >
                         <td
-                          className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-                          style={{ borderColor: "#DFE5ED" }}
+                          data-label="Cliente"
+                          className={`rounded-l-xl border-y border-l px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {child.razonSocial}
                         </td>
                         <td
-                          className="border-y px-4 py-3 font-mono"
-                          style={{ borderColor: "#DFE5ED" }}
+                          data-label="NIT"
+                          className={`border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {child.nit}
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td data-label="Tipo" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                           {tenantTypeLabel(child.tenantType)}
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                           {child.estadoActivo ? (
                             <StatusBadge label="Activo" tone="success" />
                           ) : (
@@ -280,14 +290,16 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                           )}
                         </td>
                         <td
-                          className="border-y px-4 py-3 opacity-70"
-                          style={{ borderColor: "#DFE5ED" }}
+                          data-label="Vinculación"
+                          className={`border-y px-4 py-3 opacity-70 ${TABLA_MOVIL_CELL_CLS}`}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           {formatDate(child.fechaVinculacion)}
                         </td>
                         <td
-                          className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                          style={{ borderColor: "#DFE5ED" }}
+                          data-label="Acciones"
+                          className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`}
+                          style={{ borderColor: "var(--border)" }}
                         >
                           <RowActions
                             actions={[
@@ -333,7 +345,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                   noun="clientes"
                 />
               )}
-            </>
+            </div>
           )}
         </UiStateBoundary>
       )}

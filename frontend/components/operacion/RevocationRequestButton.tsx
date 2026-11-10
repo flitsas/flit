@@ -102,13 +102,13 @@ export function RevocationRequestButton({
         onClick={enabled ? () => setModalOpen(true) : undefined}
         title={disabledReason ?? 'Solicitar revocatoria de este trámite'}
         className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
-        style={{ background: enabled ? WIZARD_CTA_GRADIENT : '#94A3B8' }}
+        style={{ background: enabled ? WIZARD_CTA_GRADIENT : 'var(--input)' }}
       >
         <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
         Solicitar revocatoria
       </button>
       {disabledReason ? (
-        <p id={reasonId} className="mt-1.5 text-[11px]" style={{ color: '#59677D' }}>
+        <p id={reasonId} className="mt-1.5 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
           {disabledReason}
         </p>
       ) : null}

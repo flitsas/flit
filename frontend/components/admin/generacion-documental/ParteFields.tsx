@@ -136,13 +136,13 @@ export function ParteFields({
         <div
           role="alert"
           data-testid={`tf-${parte}-prefill-error`}
-          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-800"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           <span>No se pudo consultar esta parte. {prefill.error}</span>
           <button
             type="button"
             onClick={() => void prefill.ejecutar()}
-            className="flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="flex items-center gap-1 rounded-lg border border-[var(--badge-danger-border)] px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             Reintentar la consulta
@@ -227,7 +227,7 @@ export function ParteFields({
               key={`${issue.code}-${issue.field}`}
               id={`${campoId("numerodoc")}-error`}
               role="alert"
-              className="mt-1 text-[11px] text-red-700"
+              className="mt-1 text-[11px] text-destructive"
             >
               <span className="font-semibold">{issue.code}</span> — {issue.message}
             </p>

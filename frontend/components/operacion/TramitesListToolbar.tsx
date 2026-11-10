@@ -48,7 +48,7 @@ export function TramitesListToolbar({
 
   return (
     <div className="flex min-w-0 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
         <FamiliaTabs value={modalidad} onChange={onModalidadChange} familias={familias} />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -67,8 +67,8 @@ export function TramitesListToolbar({
               className="h-4 w-4"
               style={
                 soloPrioritarios
-                  ? { color: '#F9AC00', fill: '#F9AC00' }
-                  : { color: '#94A3B8', fill: 'transparent' }
+                  ? { color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }
+                  : { color: 'var(--muted-foreground)', fill: 'transparent' }
               }
               aria-hidden="true"
             />

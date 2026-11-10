@@ -119,7 +119,7 @@ export function SignaturePad({
   useImperativeHandle(ref, () => ({ clear }));
 
   return (
-    <div className="overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-white">
+    <div className="overflow-hidden rounded-2xl border-2 border-dashed border-[var(--border-strong)] bg-white">
       <canvas
         ref={canvasRef}
         width={W}

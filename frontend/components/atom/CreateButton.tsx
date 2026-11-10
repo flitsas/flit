@@ -1,6 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
 
 // HU #10844 — Botón de "crear / agregar" unificado. Centraliza el patrón que cada
 // pantalla repetía a mano (mismo gradiente de marca + texto + icono), con tamaño y
@@ -12,11 +13,13 @@ import type { LucideIcon } from "lucide-react";
 
 export type CreateButtonSize = "sm" | "md";
 
+// HU #14476: el botón es el `.btn` principal de la propuesta (píldora con degradado de acción, `Button` de @flit/ui).
+// Se conservan las dos densidades de siempre: `sm` para barras densas y `md` (36 px, `.btn.sm`) en cabeceras.
 const SIZE_CLASS: Record<CreateButtonSize, string> = {
   // Compacto (toolbars densas: scheduling, filtros)
-  sm: "gap-1.5 px-3 py-1.5 text-[11px]",
+  sm: "min-h-8 gap-1.5 px-3 py-1.5 text-[11px]",
   // Estándar (headers de módulo: compañías, documentos, OT)
-  md: "gap-1.5 px-4 py-2 text-xs",
+  md: "gap-1.5",
 };
 
 const ICON_SIZE: Record<CreateButtonSize, string> = {
@@ -53,8 +56,7 @@ export function CreateButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className={`inline-flex items-center justify-center rounded-xl font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${SIZE_CLASS[size]} ${className}`}
-      style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+      className={buttonClass({ size: "sm", className: `${SIZE_CLASS[size]} ${className}` })}
     >
       {Icon && <Icon className={ICON_SIZE[size]} aria-hidden="true" />}
       <span>{label}</span>

@@ -1,8 +1,15 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
-import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import {
+  DETALLE_BLUE,
+  DETALLE_CARD,
+  DETALLE_GOLD,
+  DETALLE_GREEN,
+  DETALLE_NAVY,
+  DETALLE_RED,
+} from './detalle-visual';
 
 export { DETALLE_CARD } from './detalle-visual';
 
@@ -35,12 +42,47 @@ export interface SeccionDetalleProps {
 const NAVY = DETALLE_NAVY;
 const AZUL = DETALLE_BLUE;
 
-/** Badge soft del mockup detalle (`{color}22` fondo). */
-export function DetalleBadgeSoft({ text, color }: { text: string; color: string }) {
+/**
+ * Pastilla del detalle en el lenguaje de la propuesta (HU #14482): los tres tonos semánticos del
+ * detalle (hecho, pendiente, rechazado) dejan el verde, el dorado y el rojo y pasan a cielo con
+ * check, cielo con punto naranja y blanco con aro y equis naranja. Cualquier otro color conserva
+ * el tinte suave de antes.
+ */
+const BADGE_PROPUESTA: Record<string, { clase: string; style: CSSProperties }> = {
+  [DETALLE_GREEN]: {
+    clase: 'di-estado di-estado--check',
+    style: { background: 'var(--di-success-soft)', color: 'var(--di-success)' },
+  },
+  [DETALLE_GOLD]: {
+    clase: 'di-estado di-estado--punto',
+    style: { background: 'var(--di-sky)', color: 'var(--di-heading)' },
+  },
+  [DETALLE_RED]: {
+    clase: 'di-estado di-estado--equis',
+    style: {
+      background: 'var(--di-surface-elevated)',
+      color: 'var(--di-heading)',
+      boxShadow: 'inset 0 0 0 1px var(--di-alerta-punto)',
+    },
+  },
+};
+
+export function DetalleBadgeSoft({
+  text,
+  color,
+  sinMarca = false,
+}: {
+  text: string;
+  color: string;
+  /** El texto ya trae su propia marca (p. ej. «✓ Adjunto»): se pinta el tono sin sumar el check. */
+  sinMarca?: boolean;
+}) {
+  const propuesta = BADGE_PROPUESTA[color];
+  const clase = propuesta && !sinMarca ? propuesta.clase : '';
   return (
     <span
-      className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `${color}22`, color }}
+      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${clase}`}
+      style={propuesta?.style ?? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
     >
       {text}
     </span>
@@ -69,7 +111,7 @@ export function TarjetaDetalle({
           className="text-sm font-semibold"
           style={{ color: tituloAzul ? AZUL : NAVY }}
         >
-          <span className="dark:text-white">{titulo}</span>
+          <span>{titulo}</span>
         </h4>
         {accion ?? null}
       </div>
@@ -85,8 +127,8 @@ export function TarjetaDetalle({
 export function CampoValor({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
-      <dt className="text-xs text-flit-primary/70 dark:text-white/70">{campo}</dt>
-      <dd className="text-xs font-medium break-words text-flit-primary dark:text-white">
+      <dt className="text-xs text-muted-foreground">{campo}</dt>
+      <dd className="text-xs font-medium break-words text-foreground">
         {valor === null || valor === undefined || valor === '' ? '—' : valor}
       </dd>
     </>
@@ -125,8 +167,8 @@ export function SeccionCargando({ etiqueta, filas = 3 }: { etiqueta: string; fil
       {Array.from({ length: filas }).map((_, i) => (
         <div
           key={i}
-          className="h-10 animate-pulse rounded-xl dark:bg-white/5"
-          style={{ background: 'rgba(223,229,237,0.5)' }}
+          className="h-10 animate-pulse rounded-xl"
+          style={{ background: 'var(--surface-sunken)' }}
         />
       ))}
     </div>
@@ -158,14 +200,14 @@ export function SeccionError({
 }) {
   if (sinReintento) {
     return (
-      <p className="text-xs text-flit-primary/70 dark:text-white/70" role="status">
+      <p className="text-xs text-muted-foreground" role="status">
         {mensaje}
       </p>
     );
   }
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
-      <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>
+      <p className="text-xs text-muted-foreground">{mensaje}</p>
       <button
         type="button"
         onClick={onReintentar}
@@ -181,5 +223,5 @@ export function SeccionError({
 
 /** Estado "vacío" de una sección: se dice qué falta, nunca se deja el hueco mudo. */
 export function SeccionVacia({ mensaje }: { mensaje: string }) {
-  return <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>;
+  return <p className="text-xs text-muted-foreground">{mensaje}</p>;
 }

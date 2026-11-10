@@ -31,7 +31,7 @@ export default function AdminConfiguracionIaPage() {
           subtitle="Proveedores de OCR y DR. FLIT: prioridad, activo, historial de cambios y alertas de failover. Solo SuperAdmin · secretos solo en el entorno."
         />
 
-        <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
           <ConfiguracionIaPanel />
         </div>
       </div>

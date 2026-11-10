@@ -109,21 +109,21 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
       {/* Stepper Sidebar */}
       <div className="glass rounded-2xl p-4 flex flex-col min-h-0 lg:max-h-[calc(100vh-120px)]">
         <div className="flex items-center justify-between mb-4 shrink-0">
-          <h3 className="font-bold text-slate-800 text-sm">Asistente Transaccional</h3>
-          <button onClick={onExit} className="p-1 rounded-lg hover:bg-white/70"><X className="h-4 w-4 text-slate-500" /></button>
+          <h3 className="font-bold text-foreground text-sm">Asistente Transaccional</h3>
+          <button onClick={onExit} className="p-1 rounded-lg hover:bg-white/70"><X className="h-4 w-4 text-muted-foreground" /></button>
         </div>
         <ol className="space-y-2 flex-1 min-h-0 overflow-y-auto">
           {STEPS.map((label, i) => {
             const n = i + 1;
             const done = n < step; const active = n === step;
             return (
-              <li key={n} className={`flex items-start gap-3 p-2.5 rounded-xl transition ${active ? "bg-white/80 scale-[1.02]" : done ? "" : "opacity-40"}`} style={active ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
-                <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0" style={{ background: done ? "var(--color-flit-tech)" : active ? "var(--color-flit-brand)" : "rgba(100,116,139,0.15)", color: done || active ? "white" : "#475569" }}>
+              <li key={n} className={`flex items-start gap-3 p-2.5 rounded-xl transition ${active ? "bg-card/80 scale-[1.02]" : done ? "" : "opacity-40"}`} style={active ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
+                <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0" style={{ background: done ? "var(--color-flit-tech)" : active ? "var(--color-flit-brand)" : "var(--badge-neutral-bg)", color: done || active ? "white" : "var(--badge-neutral-fg)" }}>
                   {done ? <Check className="h-4 w-4" /> : n}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-mono text-slate-400">PASO {String(n).padStart(2, "0")}</p>
-                  <p className="text-xs font-medium text-slate-700">{label}</p>
+                  <p className="text-[10px] font-mono text-muted-foreground">PASO {String(n).padStart(2, "0")}</p>
+                  <p className="text-xs font-medium text-foreground">{label}</p>
                 </div>
               </li>
             );
@@ -136,30 +136,30 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
         <div className="glass rounded-2xl p-6 sm:p-8 min-h-[500px]">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "var(--color-flit-brand)" }}>PASO {step}/10</span>
-            <span className="text-[10px] font-mono text-slate-400">TRASP-02_FLIT-DRAFT</span>
+            <span className="text-[10px] font-mono text-muted-foreground">TRASP-02_FLIT-DRAFT</span>
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mt-2">{STEPS[step - 1]}</h2>
+          <h2 className="text-2xl font-bold text-foreground mt-2">{STEPS[step - 1]}</h2>
 
           <div className="mt-6">
             {step === 1 && (
               <div className="space-y-4">
-                <p className="text-sm text-slate-500">Digite la placa del vehículo. El sistema validará colisiones de transacciones concurrentes.</p>
+                <p className="text-sm text-muted-foreground">Digite la placa del vehículo. El sistema validará colisiones de transacciones concurrentes.</p>
                 <input
                   value={placa}
                   onChange={(e) => setPlaca(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
                   placeholder="ABC123"
-                  className="w-full font-mono text-4xl tracking-[0.3em] text-center bg-white/70 border-2 border-slate-200 rounded-2xl py-6 outline-none focus:border-flit-brand transition"
+                  className="w-full font-mono text-4xl tracking-[0.3em] text-center bg-card/70 border-2 border-border rounded-2xl py-6 outline-none focus:border-flit-brand transition"
                 />
                 {collision && (
-                  <div className="rounded-xl p-4" style={{ background: "rgba(255,78,0,0.08)", border: "1px solid #ff4e00" }}>
+                  <div className="rounded-xl p-4" style={{ background: "var(--badge-pending-bg)", border: "1px solid var(--badge-pending-border)" }}>
                     <div className="flex items-start gap-3">
-                      <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "#ff4e00" }} />
+                      <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--badge-pending-fg)" }} />
                       <div>
-                        <p className="font-bold text-sm" style={{ color: "#ff4e00" }}>BLOQUEO POR COLISIÓN DE TRANSACCIÓN</p>
-                        <p className="text-xs text-slate-600 mt-1 font-mono">La placa <b>{placa}</b> ya existe en trámite activo con estado ∈ &#123;Borrador(1), Preparado(3), Enviado(4)&#125;.</p>
+                        <p className="font-bold text-sm" style={{ color: "var(--badge-pending-fg)" }}>BLOQUEO POR COLISIÓN DE TRANSACCIÓN</p>
+                        <p className="text-xs text-muted-foreground mt-1 font-mono">La placa <b>{placa}</b> ya existe en trámite activo con estado ∈ &#123;Borrador(1), Preparado(3), Enviado(4)&#125;.</p>
                         <label className="flex items-center gap-2 mt-3 text-xs">
                           <input type="checkbox" checked={forceDev} onChange={(e) => setForceDev(e.target.checked)} />
-                          <span className="text-slate-700">Forzar ambiente de desarrollo (DEV)</span>
+                          <span className="text-foreground">Forzar ambiente de desarrollo (DEV)</span>
                         </label>
                       </div>
                     </div>
@@ -173,21 +173,21 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 <div className="grid sm:grid-cols-2 gap-3">
                   {!pazSalvo ? (
                     <>
-                      <div className="rounded-xl p-4" style={{ background: "rgba(255,78,0,0.08)", border: "1px solid #ff4e00" }}>
-                        <p className="text-xs font-mono text-slate-500">transitTaxes.paceAndSafe</p>
-                        <p className="font-bold mt-1" style={{ color: "#ff4e00" }}>NO · Multas activas</p>
-                        <p className="text-xs text-slate-600 mt-2">Deuda detectada: <span className="font-mono">$2,340,500 COP</span></p>
+                      <div className="rounded-xl p-4" style={{ background: "var(--badge-pending-bg)", border: "1px solid var(--badge-pending-border)" }}>
+                        <p className="text-xs font-mono text-muted-foreground">transitTaxes.paceAndSafe</p>
+                        <p className="font-bold mt-1" style={{ color: "var(--badge-pending-fg)" }}>NO · Multas activas</p>
+                        <p className="text-xs text-muted-foreground mt-2">Deuda detectada: <span className="font-mono">$2,340,500 COP</span></p>
                       </div>
-                      <div className="rounded-xl p-4" style={{ background: "rgba(255,78,0,0.08)", border: "1px solid #ff4e00" }}>
-                        <p className="text-xs font-mono text-slate-500">RNMC.status</p>
-                        <p className="font-bold mt-1" style={{ color: "#ff4e00" }}>2 medidas correctivas</p>
-                        <p className="text-xs text-slate-600 mt-2">Bloqueo activo en Registro Nacional</p>
+                      <div className="rounded-xl p-4" style={{ background: "var(--badge-pending-bg)", border: "1px solid var(--badge-pending-border)" }}>
+                        <p className="text-xs font-mono text-muted-foreground">RNMC.status</p>
+                        <p className="font-bold mt-1" style={{ color: "var(--badge-pending-fg)" }}>2 medidas correctivas</p>
+                        <p className="text-xs text-muted-foreground mt-2">Bloqueo activo en Registro Nacional</p>
                       </div>
                     </>
                   ) : (
                     <div className="sm:col-span-2 rounded-xl p-4" style={{ background: "color-mix(in srgb, var(--color-flit-tech) 10%, transparent)", border: "1px solid var(--color-flit-tech)" }}>
                       <Check className="inline h-5 w-5 mr-2" style={{ color: "var(--color-flit-tech)" }} />
-                      <span className="font-semibold" style={{ color: "#00a39f" }}>Paz y Salvo Corporativo adjunto · Validación RUNT/RNMC superada</span>
+                      <span className="font-semibold" style={{ color: "var(--badge-success-fg)" }}>Paz y Salvo Corporativo adjunto · Validación RUNT/RNMC superada</span>
                     </div>
                   )}
                 </div>
@@ -201,15 +201,15 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
             {step === 3 && (
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="glass rounded-xl p-4">
-                  <p className="text-xs text-slate-500">SOAT</p>
-                  <p className="text-lg font-bold mt-1" style={{ color: "#00a39f" }}>VIGENTE</p>
-                  <p className="text-xs font-mono text-slate-500 mt-2">Expira: 2026-11-12</p>
+                  <p className="text-xs text-muted-foreground">SOAT</p>
+                  <p className="text-lg font-bold mt-1" style={{ color: "var(--badge-success-fg)" }}>VIGENTE</p>
+                  <p className="text-xs font-mono text-muted-foreground mt-2">Expira: 2026-11-12</p>
                 </div>
                 <div className="rounded-xl p-4" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.4)" }}>
-                  <p className="text-xs text-slate-500">RTM (Revisión Tecnicomecánica)</p>
-                  <p className="text-lg font-bold mt-1" style={{ color: "#b45309" }}>ADVERTENCIA</p>
-                  <p className="text-xs text-slate-600 mt-2">Vehículo matriculado posterior a 19/05/2019. Vigencia máxima: <b>5 años</b>.</p>
-                  <p className="text-[10px] font-mono text-slate-400 mt-1">RTM.maxValidity = {yearAfter2019 ? "5y" : "6y"}</p>
+                  <p className="text-xs text-muted-foreground">RTM (Revisión Tecnicomecánica)</p>
+                  <p className="text-lg font-bold mt-1" style={{ color: "var(--badge-warning-fg)" }}>ADVERTENCIA</p>
+                  <p className="text-xs text-muted-foreground mt-2">Vehículo matriculado posterior a 19/05/2019. Vigencia máxima: <b>5 años</b>.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground mt-1">RTM.maxValidity = {yearAfter2019 ? "5y" : "6y"}</p>
                 </div>
               </div>
             )}
@@ -224,10 +224,10 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   return (
                     <button key={m.id} onClick={() => setModalidad(m.id)} className={`text-left rounded-2xl p-5 glass ${sel ? "" : "opacity-80"}`} style={sel ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
                       <div className="flex items-center justify-between">
-                        <p className="font-bold text-slate-800">{m.title}</p>
+                        <p className="font-bold text-foreground">{m.title}</p>
                         {sel && <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-brand)" }}><Check className="h-4 w-4 text-white" /></div>}
                       </div>
-                      <p className="text-xs text-slate-500 mt-2">{m.desc}</p>
+                      <p className="text-xs text-muted-foreground mt-2">{m.desc}</p>
                     </button>
                   );
                 })}
@@ -237,35 +237,35 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
             {step === 5 && (
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-3">
-                  <p className="text-xs font-mono text-slate-400 uppercase">Vendedor</p>
+                  <p className="text-xs font-mono text-muted-foreground uppercase">Vendedor</p>
                   <div className="flex gap-2">
                     {(["PN", "PJ"] as const).map((t) => (
-                      <button key={t} onClick={() => setVendedorTipo(t)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${vendedorTipo === t ? "text-white" : "text-slate-600 bg-white/60"}`} style={vendedorTipo === t ? { background: "var(--color-flit-brand)" } : {}}>
+                      <button key={t} onClick={() => setVendedorTipo(t)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${vendedorTipo === t ? "text-white" : "text-muted-foreground bg-card/60"}`} style={vendedorTipo === t ? { background: "var(--color-flit-brand)" } : {}}>
                         {t === "PN" ? "Persona Natural" : "Persona Jurídica (NIT)"}
                       </button>
                     ))}
                   </div>
-                  <input placeholder={vendedorTipo === "PN" ? "Nombres y apellidos" : "Razón social"} className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand" />
-                  <input placeholder={vendedorTipo === "PN" ? "Cédula" : "NIT"} className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-flit-brand" />
+                  <input placeholder={vendedorTipo === "PN" ? "Nombres y apellidos" : "Razón social"} className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand" />
+                  <input placeholder={vendedorTipo === "PN" ? "Cédula" : "NIT"} className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-flit-brand" />
                   {vendedorTipo === "PJ" && (
-                    <select className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm">
+                    <select className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm">
                       <option>Representante Legal: María Restrepo</option>
                       <option>Representante Legal: Juan P. López</option>
                     </select>
                   )}
                 </div>
                 <div className="space-y-3">
-                  <p className="text-xs font-mono text-slate-400 uppercase">Comprador {modalidad === "leasing" && "(Locatario)"}</p>
-                  <input placeholder="Nombre completo" className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand" />
-                  <input placeholder="Identificación" className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-flit-brand" />
+                  <p className="text-xs font-mono text-muted-foreground uppercase">Comprador {modalidad === "leasing" && "(Locatario)"}</p>
+                  <input placeholder="Nombre completo" className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand" />
+                  <input placeholder="Identificación" className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-flit-brand" />
                   <div>
                     <input
                       placeholder="Correo electrónico"
                       onPaste={(e) => !allowCopyEmail && e.preventDefault()}
                       onCopy={(e) => !allowCopyEmail && e.preventDefault()}
-                      className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
+                      className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
                     />
-                    {!allowCopyEmail && <p className="text-[10px] font-mono text-slate-400 mt-1">transferAllowsCopyEmail = false · copy/paste deshabilitado</p>}
+                    {!allowCopyEmail && <p className="text-[10px] font-mono text-muted-foreground mt-1">transferAllowsCopyEmail = false · copy/paste deshabilitado</p>}
                   </div>
                 </div>
               </div>
@@ -275,10 +275,10 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {["Motor", "Chasis", "Serie", "VIN"].map((l) => (
-                    <div key={l} className="rounded-xl bg-white/70 border border-dashed border-slate-300 p-4 text-center">
-                      <Upload className="h-5 w-5 mx-auto text-slate-400" />
-                      <p className="text-xs font-mono mt-2 text-slate-600">{l}</p>
-                      {ocrPct > 30 && <p className="text-[10px]" style={{ color: "#00a39f" }}>✓ Capturado</p>}
+                    <div key={l} className="rounded-xl bg-card/70 border border-dashed border-border p-4 text-center">
+                      <Upload className="h-5 w-5 mx-auto text-muted-foreground" />
+                      <p className="text-xs font-mono mt-2 text-muted-foreground">{l}</p>
+                      {ocrPct > 30 && <p className="text-[10px]" style={{ color: "var(--badge-success-fg)" }}>✓ Capturado</p>}
                     </div>
                   ))}
                 </div>
@@ -288,15 +288,15 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                       <circle cx="50" cy="50" r="42" stroke="rgba(100,116,139,0.15)" strokeWidth="8" fill="none" />
                       <circle cx="50" cy="50" r="42" stroke="var(--color-flit-tech)" strokeWidth="8" fill="none" strokeLinecap="round" strokeDasharray={`${(ocrPct / 100) * 264} 264`} />
                     </svg>
-                    <div className="absolute inset-0 flex items-center justify-center font-mono font-bold text-slate-800">{ocrPct}%</div>
+                    <div className="absolute inset-0 flex items-center justify-center font-mono font-bold text-foreground">{ocrPct}%</div>
                   </div>
                   <div className="flex-1">
                     <button onClick={() => { setOcrPct(0); setOcrRunning(true); }} disabled={ocrRunning} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center gap-2" style={{ background: "var(--color-flit-brand)" }}>
                       {ocrRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Simular Procesamiento OCR (IA)
                     </button>
-                    {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "#00a39f" }}>✓ Coincidencia ≥90% · Aprobación automática</p>}
-                    {ocrPct >= 70 && ocrPct < 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "#b45309" }}>⚠ Coincidencia 70-89% · Advertencia ámbar inyectada</p>}
-                    {ocrPct > 0 && ocrPct < 70 && <p className="text-xs mt-2 font-semibold" style={{ color: "#ff4e00" }}>✕ &lt;70% · Improntas deficientes, recargar</p>}
+                    {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-success-fg)" }}>✓ Coincidencia ≥90% · Aprobación automática</p>}
+                    {ocrPct >= 70 && ocrPct < 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-warning-fg)" }}>⚠ Coincidencia 70-89% · Advertencia ámbar inyectada</p>}
+                    {ocrPct > 0 && ocrPct < 70 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-pending-fg)" }}>✕ &lt;70% · Improntas deficientes, recargar</p>}
                   </div>
                 </div>
               </div>
@@ -306,46 +306,46 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {["UNICUS Digital", "Firma en Pantalla", "Baúl Corporativo"].map((m, i) => (
-                    <span key={m} className={`text-xs px-3 py-1.5 rounded-full ${i === 1 ? "text-white" : "bg-white/70 text-slate-600"}`} style={i === 1 ? { background: "var(--color-flit-brand)" } : {}}>{m}</span>
+                    <span key={m} className={`text-xs px-3 py-1.5 rounded-full ${i === 1 ? "text-white" : "bg-card/70 text-muted-foreground"}`} style={i === 1 ? { background: "var(--color-flit-brand)" } : {}}>{m}</span>
                   ))}
                 </div>
-                <div className="rounded-xl bg-white border-2 border-slate-200 overflow-hidden">
+                <div className="rounded-xl bg-card border-2 border-border overflow-hidden">
                   <canvas ref={canvasRef} width={800} height={220} className="w-full h-[220px] cursor-crosshair" onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw} />
                 </div>
                 <div className="flex justify-between items-center">
-                  <button onClick={clearCanvas} className="text-xs px-3 py-1.5 rounded-lg bg-white/70 text-slate-600 hover:bg-white">Limpiar Canvas</button>
-                  {signedVendor && <span className="text-xs" style={{ color: "#00a39f" }}>✓ Firma capturada</span>}
+                  <button onClick={clearCanvas} className="text-xs px-3 py-1.5 rounded-lg bg-card/70 text-muted-foreground hover:bg-white">Limpiar Canvas</button>
+                  {signedVendor && <span className="text-xs" style={{ color: "var(--badge-success-fg)" }}>✓ Firma capturada</span>}
                 </div>
-                <pre className="text-[10px] bg-slate-100 text-slate-500 rounded-lg p-2 font-mono overflow-x-auto">[IP: 192.168.1.45 | UA: Mozilla/5.0 (Windows NT 10.0; Win64) | RequestPath: /api/v2/tramites/sign]</pre>
+                <pre className="text-[10px] bg-secondary text-muted-foreground rounded-lg p-2 font-mono overflow-x-auto">[IP: 192.168.1.45 | UA: Mozilla/5.0 (Windows NT 10.0; Win64) | RequestPath: /api/v2/tramites/sign]</pre>
               </div>
             )}
 
             {step === 8 && (
               modalidad === "leasing" ? (
                 <div className="rounded-2xl p-8 text-center opacity-80" style={{ background: "rgba(100,116,139,0.08)", border: "1px dashed rgba(100,116,139,0.3)" }}>
-                  <Lock className="h-10 w-10 mx-auto text-slate-400" />
-                  <p className="font-bold text-slate-700 mt-3">Firma del comprador no requerida por ley bajo modalidad de leasing corporativo</p>
-                  <p className="text-xs text-slate-500 mt-2 font-mono">auto-skip → step 9</p>
+                  <Lock className="h-10 w-10 mx-auto text-muted-foreground" />
+                  <p className="font-bold text-foreground mt-3">Firma del comprador no requerida por ley bajo modalidad de leasing corporativo</p>
+                  <p className="text-xs text-muted-foreground mt-2 font-mono">auto-skip → step 9</p>
                 </div>
               ) : (
-                <div className="rounded-xl bg-white border-2 border-slate-200 p-6 text-center">
-                  <FileSignature className="h-8 w-8 mx-auto text-slate-400" />
-                  <p className="text-sm text-slate-600 mt-2">Repetir captura de firma para el comprador (mismas opciones).</p>
+                <div className="rounded-xl bg-card border-2 border-border p-6 text-center">
+                  <FileSignature className="h-8 w-8 mx-auto text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground mt-2">Repetir captura de firma para el comprador (mismas opciones).</p>
                 </div>
               )
             )}
 
             {step === 9 && (
               <div className="space-y-4">
-                <label className="flex items-start gap-3 p-4 rounded-xl bg-white/70 border border-slate-200 cursor-pointer">
+                <label className="flex items-start gap-3 p-4 rounded-xl bg-card/70 border border-border cursor-pointer">
                   <input type="checkbox" checked={isPaused} onChange={(e) => setIsPaused(e.target.checked)} className="mt-1" />
                   <div>
-                    <p className="font-semibold text-slate-800 flex items-center gap-2"><Pause className="h-4 w-4" /> Activar flag de pausa global <span className="font-mono text-xs text-slate-500">isPaused: true</span></p>
-                    <p className="text-xs text-slate-500 mt-1">Blindará el registro y deshabilitará cualquier transición de estado superior.</p>
+                    <p className="font-semibold text-foreground flex items-center gap-2"><Pause className="h-4 w-4" /> Activar flag de pausa global <span className="font-mono text-xs text-muted-foreground">isPaused: true</span></p>
+                    <p className="text-xs text-muted-foreground mt-1">Blindará el registro y deshabilitará cualquier transición de estado superior.</p>
                   </div>
                 </label>
                 {isPaused && (
-                  <textarea value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} placeholder="Justificación obligatoria de la pausa (mín. 6 caracteres)..." className="w-full bg-white/70 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand min-h-[120px]" />
+                  <textarea value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} placeholder="Justificación obligatoria de la pausa (mín. 6 caracteres)..." className="w-full bg-card/70 border border-border rounded-xl px-3 py-2.5 text-sm outline-none focus:border-flit-brand min-h-[120px]" />
                 )}
               </div>
             )}
@@ -359,15 +359,15 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-slate-800">Transacción Emitida</h3>
-                  <p className="text-sm text-slate-500 mt-1">Expediente blindado e inmutable en el holding.</p>
+                  <h3 className="text-2xl font-bold text-foreground">Transacción Emitida</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Expediente blindado e inmutable en el holding.</p>
                 </div>
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono text-xs" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "var(--color-flit-brand)" }}>
                   <ShieldCheck className="h-4 w-4" /> Estado: 4 (Submitted) · Bus QX OK
                 </div>
                 <div className="glass rounded-xl p-4 text-left mx-auto max-w-xl">
-                  <p className="text-[10px] font-mono text-slate-400 uppercase">SHA-256 Inmutable</p>
-                  <p className="font-mono text-[11px] break-all text-slate-700 mt-1">{hash}</p>
+                  <p className="text-[10px] font-mono text-muted-foreground uppercase">SHA-256 Inmutable</p>
+                  <p className="font-mono text-[11px] break-all text-foreground mt-1">{hash}</p>
                 </div>
                 <button onClick={onExit} className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: "var(--color-flit-brand)" }}>Volver a la Grilla Maestra</button>
               </div>
@@ -378,8 +378,8 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
         {/* Footer nav */}
         {step < 10 && (
           <div className="flex justify-between items-center">
-            <button onClick={prev} disabled={step === 1} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm text-slate-700 disabled:opacity-40"><ArrowLeft className="h-4 w-4" /> Anterior</button>
-            <p className="text-xs font-mono text-slate-400 hidden sm:block">Paso {step} de 10</p>
+            <button onClick={prev} disabled={step === 1} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm text-foreground disabled:opacity-40"><ArrowLeft className="h-4 w-4" /> Anterior</button>
+            <p className="text-xs font-mono text-muted-foreground hidden sm:block">Paso {step} de 10</p>
             <button onClick={next} disabled={!canAdvance()} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed" style={{ background: "var(--color-flit-brand)" }}>
               Continuar <ArrowRight className="h-4 w-4" />
             </button>

@@ -349,7 +349,8 @@ describe("LOG QX — bandeja (HU #11788)", () => {
     const { container } = render(<LogQx />);
     await screen.findByText("TRM-2026-000271");
 
-    expect(container.querySelector(".dark\\:text-white")).not.toBeNull();
+    // HU #14484: el tema oscuro lo resuelven los tokens (text-flit-primary cambia solo), no un dark: fijo.
+    expect(container.querySelector(".text-flit-primary")).not.toBeNull();
     // El body nunca desplaza en horizontal: lo hace el contenedor de la tabla.
     expect(container.querySelector(".overflow-x-auto")).not.toBeNull();
   });

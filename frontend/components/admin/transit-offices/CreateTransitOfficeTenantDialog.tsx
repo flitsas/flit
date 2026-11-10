@@ -177,7 +177,7 @@ export function CreateTransitOfficeTenantDialog({
             {officesLoading ? (
               <p className="text-xs opacity-60">Cargando oficinas disponibles…</p>
             ) : officesError ? (
-              <p className="text-xs" style={{ color: "#FF4E00" }}>
+              <p className="text-xs" style={{ color: "var(--destructive)" }}>
                 No se pudo cargar el catálogo de oficinas.
               </p>
             ) : availableOffices.length === 0 ? (
@@ -190,7 +190,7 @@ export function CreateTransitOfficeTenantDialog({
                 value={transitOfficeId}
                 onChange={(e) => setTransitOfficeId(e.target.value)}
                 className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-                style={{ borderColor: errors.transitOfficeId ? "#FF4E00" : undefined }}
+                style={{ borderColor: errors.transitOfficeId ? "var(--destructive)" : undefined }}
               >
                 <option value="">Selecciona una oficina…</option>
                 {availableOffices.map((office) => (
@@ -210,7 +210,7 @@ export function CreateTransitOfficeTenantDialog({
               onChange={(e) => setLegalName(sanitizeName(e.target.value))}
               maxLength={255}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-              style={{ borderColor: errors.legalName ? "#FF4E00" : undefined }}
+              style={{ borderColor: errors.legalName ? "var(--destructive)" : undefined }}
             />
           </Field>
 
@@ -223,12 +223,12 @@ export function CreateTransitOfficeTenantDialog({
               maxLength={20}
               placeholder="900123456-1"
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-              style={{ borderColor: errors.taxId ? "#FF4E00" : undefined }}
+              style={{ borderColor: errors.taxId ? "var(--destructive)" : undefined }}
             />
           </Field>
 
           {errors.general && (
-            <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
               {errors.general}
             </p>
           )}
@@ -247,7 +247,7 @@ export function CreateTransitOfficeTenantDialog({
               onClick={submit}
               disabled={submitting || officesLoading}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {submitting ? "Activando…" : "Activar Organismo de Tránsito"}
@@ -279,7 +279,7 @@ function Field({
       {children}
       {hint && !error && <p className="mt-1 text-[10px] opacity-60">{hint}</p>}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-[10px] font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

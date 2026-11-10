@@ -131,8 +131,8 @@ export function WizardAccordion({
       // (p. ej. Secretaría de tránsito en radicación). Cerrado no hay hijos visibles (con
       // `keepMounted` siguen montados pero con `hidden`), el clip solo
       // redondea el hover de la cabecera.
-      className={`${open ? 'overflow-visible' : 'overflow-hidden'} rounded-2xl border bg-white dark:bg-[#162744] ${className}`}
-      style={{ borderColor: '#DFE5ED' }}
+      className={`${open ? 'overflow-visible' : 'overflow-hidden'} rounded-2xl border bg-[var(--di-surface-elevated)] shadow-[var(--shadow-card)] ${className}`}
+      style={{ borderColor: 'var(--di-border)' }}
     >
       {/* Cabecera al estilo Lovable Card+AccordionRow:
           [ título (+ subtítulo) ] ………… [ badge ] [ chevron ]
@@ -145,11 +145,11 @@ export function WizardAccordion({
             onClick={toggle}
             aria-expanded={open}
             aria-controls={panelId}
-            className="w-full rounded-xl text-left transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
+            className="w-full rounded-xl text-left transition hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
           >
             <span className="flex min-w-0 items-center gap-2">
               {icon}
-              <span className="truncate text-sm font-bold" style={{ color: 'var(--color-flit-brand)' }}>
+              <span className="truncate text-base font-bold" style={{ color: 'var(--di-heading)' }}>
                 {title}
               </span>
             </span>
@@ -168,7 +168,7 @@ export function WizardAccordion({
             aria-expanded={open}
             aria-controls={panelId}
             aria-label={open ? `Contraer ${title}` : `Expandir ${title}`}
-            className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <ChevronDown
               className={`h-4 w-4 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -184,7 +184,7 @@ export function WizardAccordion({
           aria-label={regionLabel ?? title}
           hidden={!open}
           className="border-t px-4 pb-4 pt-3"
-          style={{ borderColor: '#DFE5ED' }}
+          style={{ borderColor: 'var(--di-divider)' }}
         >
           {children}
         </div>

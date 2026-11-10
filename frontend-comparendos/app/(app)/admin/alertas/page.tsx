@@ -37,7 +37,7 @@ function Configuracion({ inicial, onGuardado }: { inicial: ConfigAlertas; onGuar
   };
 
   return (
-    <div className="grid grid-cols-1 gap-3 rounded-2xl border border-[#DFE5ED] p-4 sm:grid-cols-2 dark:border-white/10">
+    <div className="grid grid-cols-1 gap-3 rounded-2xl border border-border p-4 sm:grid-cols-2">
       <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
         <input type="checkbox" checked={c.alertasHabilitadas} onChange={(e) => setC({ ...c, alertasHabilitadas: e.target.checked })} />
         Enviar alertas (interruptor general)
@@ -61,7 +61,7 @@ function Configuracion({ inicial, onGuardado }: { inicial: ConfigAlertas; onGuar
         <input className={INPUT_CLS} value={internos} placeholder="cuentas@flit.com.co, gerencia@flit.com.co" onChange={(e) => setInternos(e.target.value)} />
         <span className="font-normal opacity-70">
           Reciben en copia oculta los cierres semanal y mensual de todas las empresas con reportes. Separa con coma.
-          {listaInternos.invalidos.length > 0 && <b className="text-[#B42318]"> Inválidos: {listaInternos.invalidos.join(", ")}</b>}
+          {listaInternos.invalidos.length > 0 && <b className="text-destructive"> Inválidos: {listaInternos.invalidos.join(", ")}</b>}
         </span>
       </label>
       <div className="sm:col-span-2">
@@ -168,7 +168,7 @@ export default function Alertas() {
               header: "",
               align: "right",
               render: (d) => (
-                <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => cambiar(d, { activo: !d.activo })}>
+                <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => cambiar(d, { activo: !d.activo })}>
                   {d.activo ? "Desactivar" : "Activar"}
                 </button>
               ),

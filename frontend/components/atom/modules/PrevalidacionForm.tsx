@@ -236,7 +236,7 @@ export function PrevalidacionForm({
 
   const fieldClass = (field: keyof FormValues) =>
     `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-50 ${
-      touched[field] && errors[field] ? 'border-[#FF4E00]' : 'border-[#DDE5F0]'
+      touched[field] && errors[field] ? 'border-destructive' : 'border-border'
     }`;
 
   return (
@@ -248,7 +248,7 @@ export function PrevalidacionForm({
       aria-modal="true"
       aria-labelledby="prevalidacion-form-title"
     >
-      <div className="relative w-full max-w-lg rounded-2xl border border-[#DFE5ED] bg-white shadow-xl dark:bg-[#162744]">
+      <div className="relative w-full max-w-lg rounded-2xl border border-border bg-card shadow-xl">
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-5">
           <h2 id="prevalidacion-form-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
@@ -258,7 +258,7 @@ export function PrevalidacionForm({
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario"
-            className="rounded-lg p-1 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:hover:bg-white/10"
+            className="rounded-lg p-1 hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand "
           >
             <X className="h-5 w-5 opacity-60" aria-hidden="true" />
           </button>
@@ -268,8 +268,8 @@ export function PrevalidacionForm({
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
           <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
             <div>
-              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Tipo de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-foreground">
+                Tipo de documento <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <select
                 id="pv-docType"
@@ -294,14 +294,14 @@ export function PrevalidacionForm({
                 ))}
               </select>
               {touched.documentType && errors.documentType && (
-                <p id="pv-docType-err" className="mt-1 text-xs text-[#FF4E00]" role="alert">
+                <p id="pv-docType-err" className="mt-1 text-xs text-destructive" role="alert">
                   {errors.documentType}
                 </p>
               )}
             </div>
             <div>
-              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Número de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-foreground">
+                Número de documento <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <input
                 id="pv-docNum"
@@ -319,7 +319,7 @@ export function PrevalidacionForm({
                 aria-invalid={!!(touched.documentNumber && errors.documentNumber)}
               />
               {touched.documentNumber && errors.documentNumber && (
-                <p id="pv-docNum-err" className="mt-1 text-xs text-[#FF4E00]" role="alert">
+                <p id="pv-docNum-err" className="mt-1 text-xs text-destructive" role="alert">
                   {errors.documentNumber}
                 </p>
               )}
@@ -327,8 +327,8 @@ export function PrevalidacionForm({
 
             {/* Nombre */}
             <div>
-              <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Nombre completo <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-foreground">
+                Nombre completo <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <input
                 id="pv-name"
@@ -342,7 +342,7 @@ export function PrevalidacionForm({
                 aria-invalid={!!(touched.name && errors.name)}
               />
               {touched.name && errors.name && (
-                <p id="pv-name-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
+                <p id="pv-name-err" className="mt-1 text-[11px] text-destructive" role="alert">
                   {errors.name}
                 </p>
               )}
@@ -350,8 +350,8 @@ export function PrevalidacionForm({
 
             {/* Correo */}
             <div>
-              <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Correo electrónico <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-foreground">
+                Correo electrónico <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <input
                 id="pv-email"
@@ -369,7 +369,7 @@ export function PrevalidacionForm({
                 A este correo se enviará el enlace de captura biométrica.
               </p>
               {touched.email && errors.email && (
-                <p id="pv-email-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
+                <p id="pv-email-err" className="mt-1 text-[11px] text-destructive" role="alert">
                   {errors.email}
                 </p>
               )}
@@ -379,7 +379,7 @@ export function PrevalidacionForm({
             {existingConflict && (
               <div
                 className="space-y-2 rounded-xl border p-3 text-xs"
-                style={{ borderColor: '#5B8A1F', background: 'rgba(91,138,31,0.08)', color: '#3F5F14' }}
+                style={{ borderColor: 'var(--badge-success-border)', background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
                 role="status"
                 aria-live="polite"
               >
@@ -404,7 +404,7 @@ export function PrevalidacionForm({
                     type="button"
                     onClick={onClose}
                     className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                    style={{ background: '#5B8A1F' }}
+                    style={{ background: 'var(--flit-success-ink)' }}
                   >
                     Ver el proceso existente
                   </button>
@@ -416,7 +416,7 @@ export function PrevalidacionForm({
             {apiError && (
               <div
                 className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-                style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+                style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
                 role="alert"
                 aria-live="polite"
               >
@@ -432,7 +432,7 @@ export function PrevalidacionForm({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+              className="rounded-xl border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 "
             >
               Cancelar
             </button>
@@ -441,7 +441,7 @@ export function PrevalidacionForm({
                 type="submit"
                 disabled={submitting}
                 className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-                style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
+                style={{ background: 'var(--gradient-action)' }}
               >
                 Crear prevalidación
               </button>
@@ -457,7 +457,7 @@ export function PrevalidacionForm({
             aria-modal="true"
             aria-labelledby="pv-confirm-title"
           >
-            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg dark:bg-[#0B0F14]">
+            <div className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-lg">
               <h3 id="pv-confirm-title" className="text-sm font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                 Confirmar envío de prevalidación
               </h3>
@@ -525,13 +525,13 @@ export function PrevalidacionSuccessPanel({
       aria-modal="true"
       aria-labelledby="pv-success-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl dark:bg-[#0B0F14] text-center">
+      <div className="w-full max-w-md rounded-2xl bg-card p-8 shadow-xl text-center">
         <CheckCircle2
           className="mx-auto h-12 w-12"
-          style={{ color: '#5B8A1F' }}
+          style={{ color: 'var(--flit-success-ink)' }}
           aria-hidden="true"
         />
-        <h2 id="pv-success-title" className="mt-3 text-base font-semibold text-flit-primary dark:text-white">
+        <h2 id="pv-success-title" className="mt-3 text-base font-semibold text-flit-primary">
           Prevalidación creada
         </h2>
         {result.enqueued ? (
@@ -575,7 +575,7 @@ export function PrevalidacionSuccessPanel({
           <button
             type="button"
             onClick={onNew}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:text-white dark:hover:bg-white/10"
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand "
           >
             Crear otra
           </button>
@@ -583,7 +583,7 @@ export function PrevalidacionSuccessPanel({
             type="button"
             onClick={onClose}
             className="rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+            style={{ background: 'var(--gradient-action)' }}
           >
             Ver listado
           </button>

@@ -181,7 +181,7 @@ export function SearchableSelect({
         className={
           hideLabel
             ? "sr-only"
-            : "text-[10px] font-semibold uppercase opacity-60 text-flit-primary dark:text-white"
+            : "text-[10px] font-semibold uppercase opacity-60 text-flit-primary dark:text-foreground"
         }
       >
         {label}
@@ -214,7 +214,7 @@ export function SearchableSelect({
           // esto un segundo clic no reabría la lista (el `focus` ya no vuelve a dispararse).
           onClick={abrir}
           onKeyDown={alTeclear}
-          className="h-10 w-full rounded-[10px] border bg-white pl-9 pr-14 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white"
+          className="h-10 w-full rounded-xl border border-input bg-[var(--surface-sunken)] pl-9 pr-14 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand focus:bg-card disabled:opacity-60 dark:text-foreground"
         />
 
         <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
@@ -262,7 +262,7 @@ export function SearchableSelect({
             id={listId}
             role="listbox"
             aria-label={label}
-            className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-white py-1 shadow-lg dark:bg-[#0B0F14]"
+            className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-card py-1 shadow-[var(--shadow-modal)]"
           >
             {filtradas.length === 0 && (
               <li className="px-3 py-2 text-xs opacity-60">Sin coincidencias</li>
@@ -284,7 +284,7 @@ export function SearchableSelect({
                   }`}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-flit-primary dark:text-white">{o.label}</span>
+                    <span className="block truncate text-flit-primary dark:text-foreground">{o.label}</span>
                     {o.hint && <span className="block truncate text-[10px] opacity-60">{o.hint}</span>}
                   </span>
                   {elegida && (

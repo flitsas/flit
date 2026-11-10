@@ -98,7 +98,7 @@ export function EstadoComposition({ resumen }: { resumen: OtReportSummary }) {
                 style={{ background: meta.color }}
               />
               <span className="font-semibold">{meta.label}</span>
-              <span className="tabular-nums text-[#6B7280] dark:text-white/50">
+              <span className="tabular-nums text-muted-foreground">
                 {formatInt(slice.value)} · {pct.toFixed(1)} %
               </span>
             </li>
@@ -304,7 +304,7 @@ export function TrendChart({
             </ResponsiveContainer>
           </div>
 
-          <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+          <p className="text-[11px] text-muted-foreground">
             Agrupado {granularidadLabel(granularidad)}. La línea es el pendiente acumulado dentro del
             rango: si sube, entra más de lo que sale.
             {onZoom ? " Haz clic en un periodo para acotar el informe a esos días." : ""}
@@ -330,6 +330,7 @@ export function TrendChart({
             getRowKey={(point) => point.bucket}
             ariaLabel="Valores periodo a periodo"
             minWidth={448}
+            tarjeta={false}
             pagination={{
               page: pg.page,
               pageSize: pg.pageSize,
@@ -416,7 +417,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
             className="grid grid-cols-[minmax(7rem,9rem)_1fr_auto] items-center gap-3 text-xs"
           >
             <span>{bucket.label}</span>
-            <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+            <span className="h-2 overflow-hidden rounded bg-secondary">
               <span
                 className="block h-full rounded"
                 style={{
@@ -427,7 +428,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
             </span>
             <span className="tabular-nums font-semibold">
               {formatInt(bucket.tramites)}{" "}
-              <span className="font-normal text-[#6B7280] dark:text-white/50">
+              <span className="font-normal text-muted-foreground">
                 ({pct.toFixed(0)} %)
               </span>
             </span>

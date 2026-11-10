@@ -14,23 +14,32 @@ import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 
 const FE_ROOT = path.resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(path.join(FE_ROOT, rel), "utf8");
-const cardOf = (heading: HTMLElement) => heading.closest("div.rounded-2xl");
 
-describe("HU #10493 — AC2: la acción primaria se renderiza FUERA de la caja del título", () => {
-  it("happy path: el botón de `action` NO está dentro de la caja del título", () => {
+describe("HU #10493 / HU #14474 — AC2: cabecera page-header de la propuesta (acciones dentro, a la derecha)", () => {
+  // La propuesta «Diseño Inteligente» (rama `propuesta`) pone las acciones DENTRO de la cabecera, a la derecha del
+  // texto; reemplaza la regla R7 de HU #10493, que las sacaba fuera de la caja.
+  it("happy path: el botón de `action` va dentro de la cabecera, después del título", () => {
     render(<ModuleTitle title="Administración" action={<button>Crear</button>} />);
     const heading = screen.getByRole("heading", { name: "Administración" });
-    const card = cardOf(heading);
+    const cabecera = heading.closest("header");
     const btn = screen.getByRole("button", { name: "Crear" });
-    expect(card).not.toBeNull();
-    expect(card!.contains(btn)).toBe(false);
+    expect(cabecera).not.toBeNull();
+    expect(cabecera!.contains(btn)).toBe(true);
+    expect(heading.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("contrato: `right` sí se renderiza DENTRO de la caja (indicador de estado)", () => {
+  it("contrato: `right` también vive dentro de la cabecera (indicador de estado)", () => {
     render(<ModuleTitle title="Validaciones" right={<span>En vivo</span>} />);
-    const card = cardOf(screen.getByRole("heading", { name: "Validaciones" }));
-    expect(card).not.toBeNull();
-    expect(card!.textContent).toContain("En vivo");
+    const cabecera = screen.getByRole("heading", { name: "Validaciones" }).closest("header");
+    expect(cabecera).not.toBeNull();
+    expect(cabecera!.textContent).toContain("En vivo");
+  });
+
+  it("muestra la ilustración del módulo (decorativa) elegida por el título", () => {
+    const { container } = render(<ModuleTitle title="Validaciones de identidad" />);
+    const img = container.querySelector("header img");
+    expect(img?.getAttribute("src")).toBe("/assets/ilustraciones/identidad.webp");
+    expect(img?.getAttribute("alt")).toBe("");
   });
 
   it("edge: sin action ni right renderiza el título sin romper", () => {

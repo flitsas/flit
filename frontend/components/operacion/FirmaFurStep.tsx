@@ -78,11 +78,11 @@ interface Props {
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
 const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
-  ok: { dot: '#8CC63F', text: 'var(--flit-success-ink)' },
-  warn: { dot: '#F9AC00', text: 'var(--badge-warning-fg)' },
-  fail: { dot: '#FF4E00', text: '#FF4E00' },
-  unknown: { dot: '#59677D', text: '#59677D' },
-  error: { dot: '#FF4E00', text: '#FF4E00' },
+  ok: { dot: 'var(--flit-success-ink)', text: 'var(--flit-success-ink)' },
+  warn: { dot: 'var(--badge-warning-fg)', text: 'var(--badge-warning-fg)' },
+  fail: { dot: 'var(--destructive)', text: 'var(--destructive)' },
+  unknown: { dot: 'var(--muted-foreground)', text: 'var(--muted-foreground)' },
+  error: { dot: 'var(--destructive)', text: 'var(--destructive)' },
 };
 
 /**
@@ -950,7 +950,7 @@ export function PlacaPreasignadaSection({
   // Registro diferido 2026-11-09 (HU 3) — placa que asignó el organismo en Preasignación
   // (`source: 'ot'`, o placa con source vacío de las asignadas antes de marcar el origen). Se ve en
   // el asistente en solo lectura (enlace directo a /tramites/{id}); desde el listado, un trámite ya
-  // asignado abre el detalle, donde `DetalleVehiculoSidebar` pinta el mismo aviso.
+  // asignado abre el detalle, donde `DetalleResumen` pinta el mismo aviso.
   const placaAsignadaPorOt = esPlacaAsignadaPorOt(placa, plateSource);
   // HU10 — moto y motocarro: el dígito es el primer número de la placa.
   const digitoPrimerNumero = grupoPlaca === 'MOTO' || grupoPlaca === 'MOTOCARRO';
@@ -1026,7 +1026,7 @@ export function PlacaPreasignadaSection({
           Desde ahora la placa la asigna el organismo de tránsito en Preasignación.
         </p>
         {error && (
-          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -1062,7 +1062,7 @@ export function PlacaPreasignadaSection({
         El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.
       </p>
       {error && (
-        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}
@@ -1198,7 +1198,7 @@ function OrganismoModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
+        className="bg-card rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
       >
         <WizardCardHeader
           title="Organismo de tránsito"
@@ -1242,7 +1242,7 @@ function OrganismoModal({
         </div>
 
         {error && (
-          <p className="text-xs font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium mb-2" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -1369,7 +1369,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
       {error && (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
           role="alert"
           aria-live="polite"
         >
@@ -1440,7 +1440,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
         </div>
 
         {formError && (
-          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
             {formError}
           </p>
         )}
@@ -1557,7 +1557,7 @@ function ParticipantRow({
         )}
       </div>
       {error && (
-        <p className="text-xs font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium mt-1.5" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}

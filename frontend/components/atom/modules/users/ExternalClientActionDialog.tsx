@@ -105,7 +105,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
       busy={busy}
       title={copy.title}
       icon={copy.icon}
-      iconBg={copy.danger ? "#FF4E00" : "var(--color-flit-brand)"}
+      iconBg={copy.danger ? "var(--destructive)" : "var(--color-flit-brand)"}
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
@@ -113,7 +113,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
+            className="rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
           >
             Cancelar
           </button>
@@ -124,8 +124,9 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
             className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
             style={{
               background: copy.danger
-                ? "linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)"
-                : "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)",
+                ? "var(--destructive)"
+                : "var(--gradient-action)",
+              color: "var(--destructive-foreground)",
             }}
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
@@ -134,19 +135,19 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
         </div>
       }
     >
-      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-white">
+      <div className="flex flex-col gap-3 text-sm text-flit-primary">
         <p>{copy.body}</p>
         {action === "regenerate" && (
-          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] p-3 focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 dark:border-white/15">
+          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-border p-3 focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2">
             <input
               type="checkbox"
               checked={revocarAnterior}
               onChange={(e) => setRevocarAnterior(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#FF4E00] focus-visible:outline-none"
+              className="mt-0.5 h-4 w-4 accent-destructive focus-visible:outline-none"
             />
             <span>
               <span className="font-semibold">Revocar el secreto anterior de inmediato</span>
-              <span className="block text-xs text-[#59677D] dark:text-white/70">
+              <span className="block text-xs text-muted-foreground">
                 Úselo si el secreto se filtró. Si no lo marca, el anterior sigue valiendo 24 horas para que el sistema
                 externo alcance a cambiarlo.
               </span>
@@ -166,7 +167,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
           </p>
         )}
         {error && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
+          <p role="alert" className="text-sm font-semibold text-destructive">
             {error}
           </p>
         )}

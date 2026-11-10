@@ -90,7 +90,7 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
       </div>
 
       {error && (
-        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "#FF4E00" }}>
+        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

@@ -42,7 +42,7 @@ export function DrilldownPanel({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={label}
@@ -51,23 +51,23 @@ export function DrilldownPanel({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14]">
+      <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-card p-4 shadow-2xl sm:p-6">
         <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
           <h3 className="text-sm font-semibold">{label}</h3>
           <button
             type="button"
             aria-label="Cerrar"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            className="text-muted-foreground hover:text-muted-foreground dark:hover:text-foreground"
           >
             ✕
           </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading && <p className="text-xs text-[#6B7280] dark:text-white/50">Cargando…</p>}
+          {loading && <p className="text-xs text-muted-foreground">Cargando…</p>}
           {error && (
-            <p className="rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+            <p className="rounded-xl bg-[var(--di-danger-soft)] px-4 py-3 text-xs text-[color:var(--di-danger)]">
               {error}
             </p>
           )}
@@ -80,18 +80,18 @@ export function DrilldownPanel({
                 {data.items.map((item) => (
                   <li
                     key={item.procedureInstanceId}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs dark:border-white/10"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-xs"
                   >
                     <div className="min-w-0">
                       <p className="font-semibold">
                         {item.referenceNumber}
                         {item.prioritario && (
-                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                          <span className="ml-2 rounded-full bg-[var(--di-warning-soft)] text-[color:var(--di-warning)] px-2 py-0.5 text-[10px] font-semibold">
                             Prioritario
                           </span>
                         )}
                       </p>
-                      <p className="truncate text-[11px] text-[#6B7280] dark:text-white/50">
+                      <p className="truncate text-[11px] text-muted-foreground">
                         {item.clientTenantName}
                         {(item.placa || item.vin) && ` · ${item.placa ?? item.vin}`}
                         {item.diasEsperando !== null && ` · ${item.diasEsperando} días esperando`}
@@ -106,7 +106,7 @@ export function DrilldownPanel({
                       rel="noopener noreferrer"
                       title="Se abre en una pestaña nueva"
                       className="shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white"
-                      style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+                      style={{ background: "var(--gradient-action)" }}
                     >
                       Ir a gestionar ↗
                     </Link>
@@ -114,7 +114,7 @@ export function DrilldownPanel({
                 ))}
               </ul>
               {data.omitidos > 0 && (
-                <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+                <p className="mt-3 text-[11px] text-muted-foreground">
                   Se muestran {data.items.length} de {data.total}: {data.omitidos} quedaron fuera por
                   el tope de filas.
                 </p>

@@ -44,10 +44,10 @@ export interface ColumnSelectorProps {
 /** Neutro y con la misma geometría que cualquier otro control: 36px de alto, 12px semibold. */
 const DEFAULT_BUTTON_CLS =
   'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border ' +
-  'border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition ' +
-  'hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
+  'border-border bg-card px-3 text-xs font-semibold text-foreground transition ' +
+  'hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
   'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ' +
-  'dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
+  'dark:border-border dark:bg-card dark:text-foreground';
 
 export function ColumnSelector({
   columns,
@@ -129,7 +129,7 @@ export function ColumnSelector({
           role="dialog"
           aria-label={`Elegir columnas visibles de ${label.toLowerCase()}`}
           aria-describedby={hintId}
-          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
+          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-card shadow-lg dark:bg-secondary"
         >
           {/* Cabecera y aviso quedan FIJOS; solo scrollea la lista. El scroll va en un `div`, no
               en el `<fieldset>`: fieldset no funciona como contenedor flex con overflow y la

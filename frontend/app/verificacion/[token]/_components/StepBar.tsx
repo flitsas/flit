@@ -26,7 +26,7 @@ export function StepBar({ state }: { state: StepsState }) {
                 <span
                   aria-hidden="true"
                   data-testid="step-line"
-                  className={"absolute left-1/2 top-4 h-0.5 w-full -translate-y-1/2 " + (status === "done" ? "bg-flit-brand" : "bg-flit-gray")}
+                  className={"absolute left-1/2 top-4 h-0.5 w-full -translate-y-1/2 " + (status === "done" ? "bg-flit-brand" : "bg-border")}
                 />
               ) : null}
               <span
@@ -35,8 +35,8 @@ export function StepBar({ state }: { state: StepsState }) {
                   (status === "done"
                     ? "bg-flit-brand text-white"
                     : status === "active"
-                      ? "border-2 border-flit-brand bg-white text-flit-brand ring-4 ring-flit-brand/20"
-                      : "bg-flit-gray text-muted-foreground")
+                      ? "border-2 border-flit-brand bg-card text-flit-brand ring-4 ring-flit-brand/20"
+                      : "bg-secondary text-muted-foreground")
                 }
               >
                 {status === "done" ? (
