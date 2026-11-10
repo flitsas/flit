@@ -149,6 +149,7 @@ import {
   toPlateDigitFieldValues,
   toPlateDigitUiValue,
 } from '@/lib/tramites/plate-digit-preference';
+import { grupoPlacaPideDigito, resolverGrupoPlaca } from '@/lib/tramites/plate-format';
 import {
   sanitizeVin,
   validateVin,
@@ -3448,6 +3449,8 @@ function ConsultaStep({
    * `plate_route_active` que la acompañaba.
    */
   const [digitoPlaca, setDigitoPlaca] = useState('');
+  /** HU9 — `grupoPlaca` de la última consulta del paso 1 (null sin consulta o si no vino). */
+  const [grupoPlacaPreview, setGrupoPlacaPreview] = useState<string | null>(null);
 
   /**
    * Epic #12550 — ruta de la matrícula que decidió el RUNT en la consulta del paso 1, con el
@@ -3470,6 +3473,23 @@ function ConsultaStep({
     (f) => f.fieldKey === 'plate' && f.source === 'consultation',
   )?.valueText?.trim() ?? '';
   const vehiculoConPlacaRunt = placaRunt !== '';
+
+  /**
+   * HU5 (registro diferido 2026-11-09) — grupo de placa de la clase consultada, por listas exactas
+   * (MOTO, REMOLQUE). Remolque no lleva dígito (decisión D2): sin selector y sin el gate de la HU
+   * #11628. Maquinaria la define el catálogo del backend y aquí todavía no hay trámite creado para
+   * pedirla (`/fur/template-format` lee el expediente), así que en el paso 1 se comporta como hoy y
+   * el paso del FUR la corrige. Antes de consultar no hay clase → comportamiento actual.
+   */
+  // HU9 — el preview trae `grupoPlaca` (catálogo del backend, cubre maquinaria); si viene y es
+  // válido manda, si no (versión anterior, borrador rehidratado) quedan las listas exactas de HU5.
+  const grupoPlacaPaso1 = resolverGrupoPlaca(
+    grupoPlacaPreview,
+    fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText,
+  );
+  const muestraSelectorDigito = muestraDigitoPlaca && grupoPlacaPideDigito(grupoPlacaPaso1);
+  // HU10 — moto y motocarro: el dígito es el primer número de la placa.
+  const digitoPrimerNumeroPaso1 = grupoPlacaPaso1 === 'MOTO' || grupoPlacaPaso1 === 'MOTOCARRO';
 
   /**
    * Epic #12550 (ADR-0059 §Ruta Corta) — Ruta Corta: el vehículo ya tiene placa según el RUNT y el
@@ -3509,7 +3529,7 @@ function ConsultaStep({
    * bloquearlo ahí dejaría trámites imposibles de continuar (AC4).
    */
   const digitoPlacaSinDecidir = isPlateDigitUndecided({
-    muestraDigitoPlaca,
+    muestraDigitoPlaca: muestraSelectorDigito,
     vehiculoConPlacaRunt,
     transitOfficeId,
     // Epic #12550 — la preasignación está siempre disponible en la Ruta Larga (decisión B).
@@ -3763,6 +3783,11 @@ function ConsultaStep({
         // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
         // para la creación): en Ruta Corta no hay dígito que guiar.
         if (result.route === 'corta' && digitoPlaca) handleDigitoPlaca('');
+        // HU5/HU9 — remolque y maquinaria no llevan dígito: si se había elegido para otro vehículo, se borra.
+        setGrupoPlacaPreview(result.grupoPlaca ?? null);
+        const claseConsultada = result.vehicleFields.find((f) => f.fieldKey === 'vehicle_class')?.valueText;
+        if (digitoPlaca && !grupoPlacaPideDigito(resolverGrupoPlaca(result.grupoPlaca, claseConsultada)))
+          handleDigitoPlaca('');
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
@@ -3871,6 +3896,7 @@ function ConsultaStep({
     setPreviewSnapshot(null);
     setPendingPreview(null);
     setFieldValues([]);
+    setGrupoPlacaPreview(null);
     onPreviewDone?.(null);
   };
 
@@ -4238,7 +4264,7 @@ function ConsultaStep({
           {/* Tres columnas en matrícula (secretaría · dígito · prioridad); una sola donde el trámite
               solo escoge organismo, para no dejar dos huecos con el campo estirado a un tercio. */}
           <div
-            className={`mt-4 grid grid-cols-1 gap-4 ${muestraDigitoPlaca ? 'lg:grid-cols-2' : ''}`}
+            className={`mt-4 grid grid-cols-1 gap-4 ${muestraSelectorDigito ? 'lg:grid-cols-2' : ''}`}
           >
           <div className="min-w-0">
             <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
@@ -4295,10 +4321,10 @@ function ConsultaStep({
               elegido tiene la ruta de preasignación activa para la compañía (HU #10806): con ella
               apagada el OT no asigna placa desde un rango y el dígito no tendría a quién guiar.
               Y solo en los tipos que PIDEN placa: en un radicado de cuenta el vehículo ya la tiene. */}
-          {muestraDigitoPlaca && (
+          {muestraSelectorDigito && (
           <div className="min-w-0">
             <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
-              Dígito de preasignación de placa
+              {digitoPrimerNumeroPaso1 ? 'Dígito numérico de preferencia' : 'Dígito de preferencia'}
             </label>
             {/* AC2 (HU #10799) — con placa del RUNT no hay nada que preasignar: se dice, con la
                 placa delante, en vez de dejar un selector apagado que parece un fallo. Es la misma
@@ -4325,7 +4351,7 @@ function ConsultaStep({
                   onChange={(e) => handleDigitoPlaca(e.target.value)}
                   disabled={readOnly || !transitOfficeId}
                   required={isPlateDigitDecisionRequired({
-                    muestraDigitoPlaca,
+                    muestraDigitoPlaca: muestraSelectorDigito,
                     vehiculoConPlacaRunt,
                     transitOfficeId,
                     preasignacionActiva: true,
@@ -4339,7 +4365,10 @@ function ConsultaStep({
                   </option>
                   <option value="none">Sin preferencia</option>
                   {Array.from({ length: 10 }, (_, i) => (
-                    <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
+                    <option key={i} value={String(i)}>
+                      {/* D4 — en motos el dígito es el primer número de la placa. */}
+                      {digitoPrimerNumeroPaso1 ? `Primer número ${i}` : `Termina en ${i}`}
+                    </option>
                   ))}
                 </select>
                 {/* Tres estados, porque un selector apagado (o sin decidir) sin explicación se lee
@@ -4356,7 +4385,11 @@ function ConsultaStep({
                     ? 'Elige primero la secretaría: es el organismo que asignará la placa.'
                     : digitoPlacaSinDecidir
                       ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
-                      : 'Indica el número en el que prefieres que termine la placa. El organismo lo toma como guía al asignarla en Preasignación; podrás cambiarlo en el paso final.'}
+                      : grupoPlacaPaso1 === 'MOTOCARRO'
+                        ? 'Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.'
+                        : grupoPlacaPaso1 === 'MOTO'
+                        ? 'Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.'
+                        : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
                 </p>
               </>
             )}

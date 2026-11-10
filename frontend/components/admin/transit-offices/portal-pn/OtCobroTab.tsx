@@ -1,14 +1,13 @@
 "use client";
 
-// HU #14394 (Feature #14392) — contenido de la subpestaña Cobro del hub del OT: los medios de pago y, debajo, la
-// sección de Precios tal como estaba. El acceso «Ir a Precios» lleva el foco a su título.
-import { useCallback, useMemo } from "react";
+// HU #14394 (Feature #14392) — contenido de la subpestaña Cobro del hub del OT, en dos pasos: 1) Precios y 2) Medios de
+// pago (mejora sobre la marcha: antes eran dos tablas apiladas). «Definir precio» y «Ir a Precios» llevan al paso 1.
+import { useMemo } from "react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { CobroEnPasos } from "@/components/admin/plataforma/persona-natural/CobroEnPasos";
 import { crearCobroApiOt } from "@/lib/api/admin-ot-portal-cobro";
 import { OtCobroMediosSection } from "./OtCobroMediosSection";
 import { OtPreciosSection } from "./OtPreciosSection";
-
-const ANCLA_PRECIOS = "portal-pn-precios";
 
 export function OtCobroTab({ transitOfficeId }: { transitOfficeId: string }) {
   const { isSuperAdmin } = usePermissions();
@@ -18,19 +17,11 @@ export function OtCobroTab({ transitOfficeId }: { transitOfficeId: string }) {
     [isSuperAdmin, transitOfficeId],
   );
 
-  const irAPrecios = useCallback(() => {
-    const seccion = document.getElementById(ANCLA_PRECIOS);
-    if (!seccion) return;
-    seccion.scrollIntoView?.({ block: "start" });
-    seccion.focus({ preventScroll: true });
-  }, []);
-
   return (
-    <div className="flex flex-col gap-8">
-      <OtCobroMediosSection api={api} onIrAPrecios={irAPrecios} tarjeta={false} />
-      <div id={ANCLA_PRECIOS} tabIndex={-1} className="focus:outline-none">
-        <OtPreciosSection transitOfficeId={transitOfficeId} />
-      </div>
-    </div>
+    <CobroEnPasos
+      nombrePrecios="Precios"
+      precios={(p) => <OtPreciosSection transitOfficeId={transitOfficeId} {...p} />}
+      medios={(m) => <OtCobroMediosSection api={api} {...m} />}
+    />
   );
 }

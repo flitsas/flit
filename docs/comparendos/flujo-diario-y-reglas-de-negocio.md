@@ -35,7 +35,7 @@ Horas de la empresa de prueba. Cada empresa tiene su propia agenda de consultas 
 
 06:00
 
-[Programado] **Reintento de la consulta automática del conductor** Solo los comparendos que quedaron pendientes o con error, con menos de 3 intentos. Ver la respuesta 2.
+[Programado] **Reintento de la consulta automática del conductor** Solo los comparendos que quedaron pendientes o con error, con menos de 3 intentos y sin intento ese día. Ver la respuesta 2.
 
 07:00
 
@@ -100,13 +100,19 @@ stateDiagram-v2
   [*] --> Pendiente: nuevo comparendo de un NIT con consulta automática
   Pendiente --> Encontrado: hay contrato · conductor asignado solo
   Pendiente --> NoEncontrado: no hay contrato · queda para asignación manual
+  Pendiente --> SinHora: sin hora, el conductor de las 00:00 y el de las 23:59 no coinciden
   Pendiente --> Error: falla técnica (suma 1 intento)
-  Error --> Encontrado: reintento 06:00
-  Error --> NoEncontrado: reintento 06:00
-  Error --> Error: reintento 06:00 (hasta 3 intentos)
+  Error --> Encontrado: reintento (un intento por día)
+  Error --> NoEncontrado: reintento (un intento por día)
+  Error --> Error: reintento (un intento por día)
+  Error --> Agotada: tercer intento fallido
   Pendiente --> NoAplica: faltan placa o fecha, o el organismo está bloqueado
   NoAplica --> Pendiente: se enciende la consulta para ese NIT
+  SinHora --> NoAplica: se apaga la consulta para ese NIT
+  Agotada --> NoAplica: se apaga la consulta para ese NIT
   NoEncontrado --> [*]: la gestora asigna el conductor
+  SinHora --> [*]: la gestora revisa y asigna el conductor
+  Agotada --> [*]: la gestora asigna el conductor
   Encontrado --> [*]
 ```
 
@@ -174,6 +180,10 @@ Funcionan, pero tienen una consecuencia: como los avisos salen a las 7:00, antes
 
 **Reintento:** es a las **06:00** (no a las 00:00). Toma los comparendos activos sin conductor que estén pendientes o con error y tengan menos de 3 intentos, hasta 2.000 por corrida. Solo los errores técnicos suman intento; «no se encontró contrato» es un resultado final y no se reintenta.
 
+**Un intento por día y tope de 3:** cada consulta, manual o automática, guarda el día en que se hizo. El reintento de las 06:00 y la consulta que lanza cada ciclo de ingesta solo toman los comparendos que no se consultaron ese día, así que cada comparendo gasta como máximo un intento automático por día. Los intentos fallidos se cuentan juntos, manuales y automáticos: al tercero la consulta queda **agotada** y desde ahí ni el reintento ni el botón «Consultar conductor» la vuelven a intentar. Se asigna a mano.
+
+**¿Con qué hora se consulta el contrato?** Con la hora de la infracción tal como la trae el comparendo, sin convertirla a otra zona horaria. Renting compara esa hora con la de sus contratos tal cual. La hora solo se usa junto con la fecha de imposición. Si el comparendo no trae hora, o la fecha es la de notificación, se consulta a las 00:00 y a las 23:59 de ese día. Si las dos consultas dan el mismo conductor, se asigna. Si no coinciden (el vehículo cambió de contrato ese día, o en una de las dos no hay contrato), no se asigna: queda **«Sin hora: revisar conductor»**, sin avisos, hasta que la gestora lo asigne a mano. Las dos consultas cuentan como un solo intento.
+
 **¿A las 07:00 se consulta SIMIT por NIT? ¿Antes se consultan placas y municipales?**
 
 Sí, a las 07:00 corre SIMIT por NIT. No hay orden entre fuentes: cada fuente (SIMIT por NIT, SIMIT por placa, municipal por NIT, municipal por placa) tiene su propia agenda por empresa y corre por separado. Pueden ser horas fijas o cada cierto intervalo dentro de una ventana, y solo en días hábiles si así se configura. Cada NIT se consulta con y sin dígito de verificación.
@@ -227,17 +237,19 @@ En esta versión sí: cada elemento lleva su marca (programado, evento o gestora
 
 **¿Cuál es el flujo desde el comparendo hasta la asignación?**
 
-No hay un estado «control de contrato». La consulta del conductor tiene cinco estados (diagrama 2):
+No hay un estado «control de contrato». La consulta del conductor tiene siete estados (diagrama 2):
 
 - **No aplica:** la empresa o el NIT no usan consulta automática. La gestora asigna.
 - **Pendiente:** se va a consultar el contrato.
 - **Encontrado:** se encontró el contrato por placa y fecha, y el conductor quedó asignado solo.
 - **No encontrado:** no hay contrato para esa placa y fecha, o no trae el nombre. Queda «pendiente de asignación manual».
-- **Error:** falla técnica. Se reintenta a las 06:00, hasta 3 intentos.
+- **Sin hora:** el comparendo no trae hora y ese día el vehículo no tuvo el mismo conductor. No se asigna: la gestora revisa quién conducía y lo asigna a mano. No gasta intentos.
+- **Error:** falla técnica temporal. Se reintenta a las 06:00, un intento por día.
+- **Consulta agotada:** falló 3 veces. Ya no se reintenta: se asigna a mano.
 
 **¿Qué decide que pase a asignación manual?**
 
-Que no se encuentre el contrato, que se agoten los intentos por error o que no aplique la consulta. También pasa a «no aplica» si al consultar falta la placa o la fecha, o si la empresa bloqueó la consulta para ese organismo. Todos estos casos aparecen en la bandeja con el atajo «Sin contraventor».
+Que no se encuentre el contrato, que la consulta quede agotada tras 3 intentos con error, que el comparendo quede «sin hora» o que no aplique la consulta. También pasa a «no aplica» si al consultar falta la placa o la fecha, o si la empresa bloqueó la consulta para ese organismo. Todos estos casos aparecen en la bandeja con el atajo «Sin contraventor».
 
 **¿Cómo se relaciona con la gestión posterior?**
 

@@ -7,7 +7,7 @@ import { boton } from "@/components/landing/estilos";
 import { SelectorOrganismo } from "@/components/landing/SelectorOrganismo";
 import { SelectorTipoTramite } from "@/components/landing/SelectorTipoTramite";
 import { useOrganismos } from "@/components/landing/useCatalogos";
-import { MobilityLoader } from "@/components/MobilityLoader";
+import { MobilityEstado, MobilityLoader, MobilityMini } from "@/components/MobilityLoader";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { portal, type ClientePortal, type Cotizacion, type Organismo, type TipoTramite } from "@/lib/api/cliente";
 import { useBloqueo } from "@/lib/api/useBloqueo";
@@ -23,6 +23,10 @@ interface Props {
   cliente?: ClientePortal;
   /** Organismo ya elegido (el enlace «Ver tarifas» de la columna de organismos). */
   organismoInicial?: Organismo | null;
+  /** Punto de un organismo: el organismo viene dado, se muestra como texto y no se puede cambiar. */
+  organismoFijo?: boolean;
+  /** Tipo de trámite ya elegido (p. ej. «Ver valor» de un trámite en la columna del punto). */
+  tipoInicial?: string;
 }
 
 export const MENSAJE_COTIZACION_FALLIDA = "No pudimos calcular la cotización. Intenta de nuevo.";
@@ -36,18 +40,18 @@ export function mensajeDeCotizacion(error: unknown): string {
 }
 
 /** Modal «Cotizar mi trámite»: organismo + tipo disponible → tabla de dos líneas y total, y envío por correo. */
-export function CotizarModal({ abierto, onCerrar, cliente = portal, organismoInicial = null }: Props) {
+export function CotizarModal({ abierto, onCerrar, cliente = portal, organismoInicial = null, organismoFijo = false, tipoInicial = "" }: Props) {
   return (
     <ModalFlit abierto={abierto} onCerrar={onCerrar} titulo="Cotizar mi trámite" icono={CircleDollarSign} desborde>
-      <ContenidoCotizar cliente={cliente} organismoInicial={organismoInicial} />
+      <ContenidoCotizar cliente={cliente} organismoInicial={organismoInicial} organismoFijo={organismoFijo && organismoInicial !== null} tipoInicial={tipoInicial} />
     </ModalFlit>
   );
 }
 
-function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePortal; organismoInicial: Organismo | null }) {
+function ContenidoCotizar({ cliente, organismoInicial, organismoFijo, tipoInicial }: { cliente: ClientePortal; organismoInicial: Organismo | null; organismoFijo: boolean; tipoInicial: string }) {
   const organismos = useOrganismos(cliente);
   const [organismo, setOrganismo] = useState<Organismo | null>(organismoInicial);
-  const [tipo, setTipo] = useState("");
+  const [tipo, setTipo] = useState(organismoInicial ? tipoInicial : "");
   const bloqueo = useBloqueo();
 
   const tipos = useQuery({
@@ -82,6 +86,12 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
         }}
       >
         <div className="dashboard-registration-fields !grid-cols-1 sm:!grid-cols-2">
+          {organismoFijo && organismo ? (
+            <div className="dashboard-label">
+              Organismo de tránsito
+              <p className="field flex items-center" data-testid="organismo-fijo">{organismo.nombre}</p>
+            </div>
+          ) : (
           <div className="dashboard-label" aria-busy={organismos.isPending}>
             Organismo de tránsito
             {organismos.isPending && <MobilityLoader />}
@@ -103,6 +113,7 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
               />
             )}
           </div>
+          )}
           <div className="dashboard-label" aria-busy={tipos.isFetching && organismo !== null}>
             Tipo de trámite
             <SelectorTipoTramite
@@ -115,6 +126,7 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
               }}
               disabled={organismo === null || !tipos.isSuccess || sinTarifas}
               marcador={organismo === null ? "Primero elige un organismo" : tipos.isPending ? "Cargando..." : "Selecciona"}
+              cargando={organismo !== null && tipos.isPending}
             />
             <div aria-live="polite" className="text-xs font-normal">
               {tipos.isError && (
@@ -131,11 +143,11 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
         {!calculo.isSuccess && (
           <div className="mt-4 flex flex-col items-center gap-2">
             <button type="submit" className={boton("flit", "h-11 px-10", "none")} disabled={!lista || calculo.isPending || bloqueo.bloqueado}>
-              {calculo.isPending && <span aria-hidden className="mobility-mini" />}
+              {calculo.isPending && <MobilityMini />}
               Calcular
             </button>
             <div aria-live="polite" aria-busy={calculo.isPending}>
-              {calculo.isPending && <p role="status" className="text-xs text-foreground/70">Calculando...</p>}
+              {calculo.isPending && <MobilityEstado mensaje="Calculando..." className="text-xs text-foreground/70" />}
               {calculo.isError && <p role="alert" className="text-center text-sm text-alert">{mensajeDeCotizacion(calculo.error)}</p>}
               {bloqueo.bloqueado && <p role="status" className="text-center text-xs text-foreground/70">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}
             </div>
@@ -232,12 +244,12 @@ function ResultadoCotizacion({ cotizacion, cliente, organismoId, tipoCodigo }: R
           }}
         />
         <button type="submit" className={boton("back", "h-11 px-6", "none")} disabled={!puedeEnviar}>
-          {envio.isPending && <span aria-hidden className="mobility-mini" />}
+          {envio.isPending && <MobilityMini />}
           Enviar al correo
         </button>
       </form>
       <div aria-live="polite" className="mt-2 text-center text-xs">
-        {envio.isPending && <p role="status" className="text-foreground/70">Enviando...</p>}
+        {envio.isPending && <MobilityEstado mensaje="Enviando..." className="text-foreground/70" />}
         {envio.isSuccess && <p role="status" className="text-foreground/70">Te enviamos la cotización a tu correo</p>}
         {envio.isError && <p role="alert" className="text-alert">{mensajeDe(envio.error)}</p>}
       </div>

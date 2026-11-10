@@ -237,10 +237,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
     <>
       {omitirIdentidad && hayIdentidad && <AvisoModoPruebas id={`actores-modo-pruebas-${seccion.clave}`} />}
       {cargando && (
-        <div role="status" className="flex items-center gap-3 text-sm text-muted-foreground">
-          <MobilityLoader />
-          <span>Consultando el estado de las validaciones...</span>
-        </div>
+        <MobilityLoader mensaje="Consultando el estado de las validaciones..." compacto />
       )}
       {errorEstado !== null && (
         <div role="alert" className="flex flex-col items-start gap-2 rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert">

@@ -544,28 +544,49 @@ export function ActoresPunto({
               {!radicanteOk && (
                 <div className="mt-4 space-y-3" id="punto-actores-estado-identidad">
                   {enCursoIdentidad && (
-                    <div className="flex flex-wrap items-center gap-3" role="status">
-                      <Badge tone="warning">Validación: en curso</Badge>
-                      <span className="text-sm text-muted-foreground">Completa la validación en la ventana que se abrió.</span>
+                    // Aviso aparte del bloque de etiquetas: estado y texto a la izquierda, acción a la derecha (debajo en móvil).
+                    <div
+                      className="mt-2 flex flex-col gap-3 rounded-[9px] border border-warning/40 bg-warning/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      role="status"
+                    >
+                      <div className="flex min-w-0 flex-col items-start gap-2">
+                        <Badge tone="warning">Validación: en curso</Badge>
+                        <span className="text-sm text-foreground">Completa la validación en la ventana que se abrió.</span>
+                      </div>
                       {fase.capturaUrlVendedor ? (
-                        <a className={boton("flit", "min-h-11 px-6", "none")} href={fase.capturaUrlVendedor} target="_blank" rel="noreferrer">
+                        <a
+                          className={boton("flit", "min-h-11 w-full shrink-0 px-6 sm:w-auto", "none")}
+                          href={fase.capturaUrlVendedor}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
                           Abrir validación
                         </a>
                       ) : (
                         // Al reanudar un borrador el enlace no se conoce: se vuelve a pedir con el mismo flujo del lanzamiento inicial.
-                        <button type="button" className={boton("flit", "min-h-11 px-6", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
+                        <button
+                          type="button"
+                          className={boton("flit", "min-h-11 w-full shrink-0 px-6 sm:w-auto", "none")}
+                          disabled={lanzando}
+                          onClick={() => void lanzarIdentidad()}
+                        >
                           Abrir validación
                         </button>
                       )}
                     </div>
                   )}
                   {falloVisible && (
-                    <div role="alert" className="flex flex-col gap-3 rounded-[9px] p-4" style={{ backgroundColor: `${COLOR_ERROR}18` }} id="punto-actores-identidad-fallo">
-                      <p className="flex gap-2 font-medium" style={{ color: COLOR_ERROR }}>
+                    <div
+                      role="alert"
+                      className="flex flex-col gap-3 rounded-[9px] p-4 sm:flex-row sm:items-center sm:justify-between"
+                      style={{ backgroundColor: `${COLOR_ERROR}18` }}
+                      id="punto-actores-identidad-fallo"
+                    >
+                      <p className="flex min-w-0 gap-2 font-medium" style={{ color: COLOR_ERROR }}>
                         <AlertTriangle aria-hidden className="h-5 w-5 shrink-0" />
                         <span>{falloVisible}</span>
                       </p>
-                      <button type="button" className={boton("flit", "min-h-11 px-6", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
+                      <button type="button" className={boton("flit", "min-h-11 w-full shrink-0 px-6 sm:w-auto", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
                         Reintentar
                       </button>
                     </div>

@@ -3,17 +3,24 @@
 import { useMemo, type CSSProperties } from "react";
 import { isValidHexColor } from "@/lib/brand/contrast";
 import type { BrandColors } from "@/lib/api/branding";
-import { TEXTOS_VISTA_PREVIA_OT, type TextosVistaPrevia } from "./textos-diseno";
+import { TEXTOS_VISTA_PREVIA_OT, textoSegunImagenes, type TextosVistaPrevia } from "./textos-diseno";
 
 export interface PortalPnPreviewProps {
   colors: BrandColors;
   platformName: string;
   logoSrc: string | null;
+  /** Primer banner del portal. */
   bannerSrc: string | null;
+  /** Cantidad de banners; `undefined` si la marca no lleva banners (la web de persona): no se dibuja ese recuadro. */
+  bannerCount?: number;
+  /** Si el borrador tiene logo propio (para el texto del pie). Sin indicarlo, se deduce de `logoSrc`. */
+  tieneLogo?: boolean;
   /** Textos propios (los del organismo por defecto). */
   textos?: TextosVistaPrevia;
-  /** `false` cuando la marca no lleva banner (la web de persona): no se dibuja ese recuadro. */
-  conBanner?: boolean;
+  /** Primera imagen del carrusel. */
+  carouselSrc?: string | null;
+  /** Cantidad de imágenes del carrusel; `undefined` si la marca no lleva carrusel (no se dibuja nada). */
+  carouselCount?: number;
 }
 
 /**
@@ -26,8 +33,11 @@ export function PortalPnPreview({
   platformName,
   logoSrc,
   bannerSrc,
+  bannerCount,
+  tieneLogo,
   textos = TEXTOS_VISTA_PREVIA_OT,
-  conBanner = true,
+  carouselSrc = null,
+  carouselCount,
 }: PortalPnPreviewProps) {
   const scope = useMemo<CSSProperties | null>(() => {
     if (![colors.primary, colors.secondary, colors.onPrimary].every(isValidHexColor)) return null;
@@ -81,21 +91,26 @@ export function PortalPnPreview({
       </div>
 
       <div className="space-y-3 bg-secondary p-3">
-        {!conBanner ? null : bannerSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
-          <img
-            src={bannerSrc}
-            alt="Banner del organismo"
-            className="h-20 w-full rounded-xl border bg-white object-contain"
-            style={{ borderColor: "#DFE5ED" }}
-          />
-        ) : (
+        {bannerCount === undefined ? null : bannerCount === 0 ? (
           <p
             className="rounded-xl border border-dashed px-3 py-2 text-center text-xs opacity-70"
             style={{ borderColor: "#DFE5ED" }}
           >
             {textos.sinBanner ?? ""}
           </p>
+        ) : (
+          <div data-testid="portal-pn-preview-banner">
+            {bannerSrc && (
+              // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
+              <img
+                src={bannerSrc}
+                alt="Primer banner del portal"
+                className="aspect-[22/5] w-full rounded-xl border bg-white object-cover"
+                style={{ borderColor: "#DFE5ED" }}
+              />
+            )}
+            <p className="mt-1 text-center text-xs opacity-70">Banners: {bannerCount}</p>
+          </div>
         )}
 
         <div
@@ -128,12 +143,38 @@ export function PortalPnPreview({
             1
           </span>
         </div>
+        {carouselCount === undefined ? null : carouselCount === 0 ? (
+          <p
+            className="rounded-xl border border-dashed px-3 py-2 text-center text-xs opacity-70"
+            style={{ borderColor: "#DFE5ED" }}
+          >
+            Sin carrusel: el portal muestra los servicios de siempre.
+          </p>
+        ) : (
+          <div data-testid="portal-pn-preview-carousel">
+            {carouselSrc && (
+              // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
+              <img
+                src={carouselSrc}
+                alt="Primera imagen del carrusel"
+                className="aspect-[3/2] w-full rounded-xl border bg-white object-cover"
+                style={{ borderColor: "#DFE5ED" }}
+              />
+            )}
+            <p className="mt-1 text-center text-xs opacity-70">
+              Carrusel: {carouselCount} {carouselCount === 1 ? "imagen" : "imágenes"}
+            </p>
+          </div>
+        )}
       </div>
       <figcaption
         className="border-t px-3 py-1.5 text-xs opacity-70"
         style={{ borderColor: "#DFE5ED" }}
       >
-        {textos.pie}
+        {textoSegunImagenes(textos.pie, {
+          tieneLogo: tieneLogo ?? Boolean(logoSrc),
+          tieneBanners: Boolean(bannerCount),
+        })}
       </figcaption>
     </figure>
   );

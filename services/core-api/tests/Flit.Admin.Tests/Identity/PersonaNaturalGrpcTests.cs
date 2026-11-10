@@ -15,6 +15,7 @@ using Grpc.Core.Interceptors;
 using Grpc.Net.Client;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Cliente = Flit.Tramites.Grpc.V1.PersonaNaturalService.PersonaNaturalServiceClient;
@@ -176,6 +177,8 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
         marca.LogoId.Should().BeEmpty();
         marca.BannerId.Should().BeEmpty();
         marca.Version.Should().Be(0);
+        marca.Carrusel.Should().BeEmpty();
+        marca.Banners.Should().BeEmpty();
 
         // Una imagen que no es de un publicado no se entrega.
         (await bueno.ObtenerImagenMarcaPuntoAsync(new ObtenerImagenMarcaPuntoRequest { ImagenId = Guid.NewGuid().ToString() }, cancellationToken: ct))
@@ -186,6 +189,56 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
         var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerMarcaPuntoAsync(new ObtenerMarcaPuntoRequest { Codigo = "AB1" }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
         PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant");
     }
+
+    [Fact]
+    public async Task ObtenerMarcaPunto_EntregaLosBannersPublicadosEnOrden_ElPrimeroEsBannerId_Y_UnaImagenDeBorradorNoSeEncuentra()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host(habilitada: true);
+        var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
+        var sufijo = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        var (organismo, actor, codigo) = (Guid.NewGuid(), Guid.NewGuid(), $"GB{sufijo}");
+        var (b1, b2, soloBorrador) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+        try
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO identity.users (id, email, display_name, status, created_at) VALUES ({actor}, {$"gb-{sufijo.ToLowerInvariant()}@example.test"}, {"Actor"}, 'active', now())", ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, city_name, department_name)
+                VALUES ({organismo}, {codigo}, {"Organismo " + codigo}, '99', '999', 'Municipio de prueba', 'Departamento de prueba')
+                """, ct);
+            var publicado = $$"""
+                {"schemaVersion":1,"platformName":"Con banners","colors":{"primary":"#0B3D91","secondary":"#0F5132","onPrimary":"#FFFFFF"},
+                 "banners":[{"imageId":"{{b1}}","alt":"Primero","linkUrl":"https://example.test/a"},{"imageId":"{{b2}}","alt":"Segundo"}]}
+                """;
+            var borrador = publicado.Replace("\"banners\":[", $"\"banners\":[{{\"imageId\":\"{soloBorrador}\",\"alt\":\"Borrador\"}},", StringComparison.Ordinal);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO admin.transit_office_portal_brandings
+                    (scope, transit_office_id, draft, published, published_version, published_at, published_by, created_by, updated_by, row_version)
+                VALUES ('organismo', {organismo}, CAST({borrador} AS jsonb), CAST({publicado} AS jsonb), 3, now(), {actor}, {actor}, {actor}, 1)
+                """, ct);
+
+            var marca = await bueno.ObtenerMarcaPuntoAsync(new ObtenerMarcaPuntoRequest { Codigo = codigo }, cancellationToken: ct);
+
+            marca.Origen.Should().Be("organismo");
+            marca.Version.Should().Be(3);
+            marca.Banners.Select(b => b.ImagenId).Should().Equal(b1.ToString(), b2.ToString());
+            marca.Banners.Select(b => b.Alt).Should().Equal("Primero", "Segundo");
+            marca.Banners.Select(b => b.Enlace).Should().Equal("https://example.test/a", string.Empty);
+            marca.BannerId.Should().Be(b1.ToString(), "bannerId = el primer banner publicado");
+            (await bueno.ObtenerImagenMarcaPuntoAsync(new ObtenerImagenMarcaPuntoRequest { ImagenId = soloBorrador.ToString() }, cancellationToken: ct))
+                .Encontrado.Should().BeFalse("una imagen que no está en el publicado no se entrega");
+        }
+        finally
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_config_audit_logs WHERE target_entity_id = {organismo}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.transit_office_portal_brandings WHERE transit_office_id = {organismo}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM catalogs.transit_offices WHERE id = {organismo}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.users WHERE id = {actor}");
+        }
+    }
+
 
     [Fact]
     public async Task ObtenerMarcaWeb_NuncaRespondeErrorParaElPortal_YOtraEmpresaNoLaLee()

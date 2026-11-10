@@ -17,11 +17,20 @@ public sealed record MarcaPuntoRespuesta(
     public const string OrigenOrganismo = "organismo";
     public const string OrigenWeb = "web";
 
+    /// <summary>Imágenes del carrusel de la columna lateral, en orden. Solo el origen organismo las trae; siempre un arreglo (vacío si no hay).</summary>
+    public IReadOnlyList<CarruselMarcaPunto> Carrusel { get; init; } = [];
+
+    /// <summary>Banners principales, en orden (hasta 6). Solo el origen organismo los trae; siempre un arreglo. El primero coincide con <c>BannerUrl</c>.</summary>
+    public IReadOnlyList<CarruselMarcaPunto> Banners { get; init; } = [];
+
     /// <summary>Marca FLIT: lo que recibe el portal ante un código inválido, un organismo sin marca o una falla.</summary>
     public static readonly MarcaPuntoRespuesta Flit = new(OrigenFlit, null, null, null, null, 0);
 }
 
 public sealed record ColoresMarcaPunto(string Primario, string Secundario, string SobrePrimario);
+
+/// <summary>Imagen del carrusel tal como la ve el portal: URL pública de la imagen, texto alternativo y enlace http/https opcional.</summary>
+public sealed record CarruselMarcaPunto(string ImagenUrl, string Alt, string? Enlace);
 
 /// <summary>Imagen publicada con su ETag (sha256). <c>Contenido</c> nulo con <c>NoModificada</c> = el cliente ya la tiene.</summary>
 public sealed record ImagenMarcaPunto(bool NoModificada, string Sha256, string ContentType, byte[]? Contenido);
@@ -67,7 +76,7 @@ internal sealed class MarcaPuntoGrpc(PersonaNaturalService.PersonaNaturalService
     }
 
     /// <summary>Solo una marca completa y del origen esperado llega al portal; cualquier otra cosa es la marca FLIT.</summary>
-    private static MarcaPuntoRespuesta ARespuesta(ObtenerMarcaPuntoResponse r, string origenEsperado)
+    internal static MarcaPuntoRespuesta ARespuesta(ObtenerMarcaPuntoResponse r, string origenEsperado)
     {
         if (!string.Equals(r.Origen, origenEsperado, StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(r.Nombre)
@@ -80,8 +89,60 @@ internal sealed class MarcaPuntoGrpc(PersonaNaturalService.PersonaNaturalService
             new ColoresMarcaPunto(r.ColorPrimario, r.ColorSecundario, r.ColorSobrePrimario),
             UrlImagen(r.LogoId),
             UrlImagen(r.BannerId),
-            r.Version);
+            r.Version)
+        {
+            Carrusel = origenEsperado == MarcaPuntoRespuesta.OrigenOrganismo ? ACarrusel(r) : [],
+            Banners = origenEsperado == MarcaPuntoRespuesta.OrigenOrganismo ? ABanners(r) : [],
+        };
     }
+
+    private const int CarruselMaximo = 6;
+    private const int BannersMaximo = 6;
+    private const int EnlaceMaxLargo = 500;
+
+    /// <summary>Descarta ítems con id inválido, texto alternativo vacío o enlace que no sea http/https (enlace vacío = sin enlace).</summary>
+    private static List<CarruselMarcaPunto> ACarrusel(ObtenerMarcaPuntoResponse r)
+    {
+        var items = new List<CarruselMarcaPunto>();
+        foreach (var i in r.Carrusel)
+        {
+            if (items.Count >= CarruselMaximo)
+                break;
+            if (UrlImagen(i.ImagenId) is not { } url || string.IsNullOrWhiteSpace(i.Alt))
+                continue;
+            var enlace = string.IsNullOrWhiteSpace(i.Enlace) ? null : EnlaceValido(i.Enlace);
+            if (enlace is null && !string.IsNullOrWhiteSpace(i.Enlace))
+                continue;
+            items.Add(new CarruselMarcaPunto(url, i.Alt.Trim(), enlace));
+        }
+
+        return items;
+    }
+
+    /// <summary>Mismas reglas que el carrusel (id válido, alt no vacío, enlace http/https o vacío), tope 6.</summary>
+    private static List<CarruselMarcaPunto> ABanners(ObtenerMarcaPuntoResponse r)
+    {
+        var items = new List<CarruselMarcaPunto>();
+        foreach (var i in r.Banners)
+        {
+            if (items.Count >= BannersMaximo)
+                break;
+            if (UrlImagen(i.ImagenId) is not { } url || string.IsNullOrWhiteSpace(i.Alt))
+                continue;
+            var enlace = string.IsNullOrWhiteSpace(i.Enlace) ? null : EnlaceValido(i.Enlace);
+            if (enlace is null && !string.IsNullOrWhiteSpace(i.Enlace))
+                continue;
+            items.Add(new CarruselMarcaPunto(url, i.Alt.Trim(), enlace));
+        }
+
+        return items;
+    }
+
+    private static string? EnlaceValido(string? enlace) =>
+        !string.IsNullOrWhiteSpace(enlace) && enlace.Trim() is { } e && e.Length <= EnlaceMaxLargo
+        && Uri.TryCreate(e, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && !string.IsNullOrEmpty(uri.Host)
+            ? e
+            : null;
 
     public async Task<ImagenMarcaPunto?> ObtenerImagenAsync(string imagenId, string? ifNoneMatch, CancellationToken ct)
     {

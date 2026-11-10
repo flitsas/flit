@@ -10,6 +10,8 @@
 // el backend NO consume: `plate_preferred_last_digit_declared` ('true' | 'false'). Solo sirve para
 // rehidratar correctamente el selector entre sesiones.
 
+import { digitoEsPrimerNumero } from './plate-format';
+
 /** Valor vacío en el `<select>`: placeholder "todavía no decidido". */
 export const DIGITO_PLACA_NO_DECIDIDO = '';
 /** Valor explícito de "sin preferencia" — distinto del placeholder de arriba. */
@@ -88,4 +90,70 @@ export function toPlateDigitUiValue(params: {
 }): string {
   if (params.rawDigit) return params.rawDigit;
   return params.declared ? DIGITO_PLACA_SIN_PREFERENCIA : DIGITO_PLACA_NO_DECIDIDO;
+}
+
+// ── Aviso al gestor: placa asignada por el OT vs dígito de preferencia (registro diferido 2026-11-09, HU 3)
+
+/** `source` del field_value `plate` cuando la escribió el organismo de tránsito al asignar. */
+export const PLATE_SOURCE_OT = 'ot';
+
+/**
+ * Verdadero cuando la placa la asignó el organismo de tránsito: `source === 'ot'`, o una placa no
+ * vacía con source vacío/nulo (las asignadas antes de que el backend marcara el origen). La del RUNT
+ * (`consultation`) y la elegida por el gestor en borradores antiguos (`user`) no cuentan.
+ */
+export function esPlacaAsignadaPorOt(
+  placa: string | null | undefined,
+  source: string | null | undefined,
+): boolean {
+  if (!(placa ?? '').trim()) return false;
+  const origen = (source ?? '').trim();
+  return origen === PLATE_SOURCE_OT || origen === '';
+}
+
+export type AvisoDigitoPlacaOt = { tono: 'exito' | 'info'; texto: string };
+
+/**
+ * Aviso para el gestor sobre la placa que asignó el OT frente a su dígito de preferencia. `null`
+ * cuando no hay preferencia (vacía o `'none'`), la placa no la asignó el OT o no tiene dígitos.
+ *
+ * HU7 (registro diferido 2026-11-09, corrección del usuario) — qué dígito se compara depende de la
+ * clase: en MOTO y MOTOCARRO (listas exactas, `digitoEsPrimerNumero`) es el PRIMER dígito numérico (ABC52D → 5), porque la
+ * serie numérica de la moto empieza en la posición 4; en carro y sin grupo, el ÚLTIMO dígito numérico
+ * (ABC125 → 5). Nunca el último carácter: en ABC12D sería la letra.
+ */
+export function avisoDigitoPlacaOt(params: {
+  placa: string | null | undefined;
+  source: string | null | undefined;
+  digito: string | null | undefined;
+  /** `vehicle_class` del trámite; decide si es moto. */
+  clase?: string | null;
+}): AvisoDigitoPlacaOt | null {
+  const digito = (params.digito ?? '').trim();
+  if (!digito || digito === DIGITO_PLACA_SIN_PREFERENCIA) return null;
+  if (!esPlacaAsignadaPorOt(params.placa, params.source)) return null;
+  const placa = (params.placa ?? '').trim().toUpperCase();
+  const digitos = placa.replace(/\D/g, '');
+  if (!digitos) return null;
+  if (digitoEsPrimerNumero(params.clase)) {
+    return digitos[0] === digito
+      ? {
+          tono: 'exito',
+          texto: `La placa ${placa} asignada por el organismo de tránsito tiene como primer número el ${digito}, tu dígito de preferencia.`,
+        }
+      : {
+          tono: 'info',
+          texto: `La placa ${placa} asignada por el organismo de tránsito no tiene como primer número tu dígito de preferencia (${digito}). El organismo lo toma solo como guía.`,
+        };
+  }
+  if (digitos[digitos.length - 1] === digito) {
+    return {
+      tono: 'exito',
+      texto: `La placa ${placa} asignada por el organismo de tránsito termina en ${digito}, tu dígito de preferencia.`,
+    };
+  }
+  return {
+    tono: 'info',
+    texto: `La placa ${placa} asignada por el organismo de tránsito no termina en tu dígito de preferencia (${digito}). El organismo lo toma solo como guía.`,
+  };
 }

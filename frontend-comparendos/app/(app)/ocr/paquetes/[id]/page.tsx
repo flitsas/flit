@@ -16,7 +16,7 @@ import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { type DocumentoPaquete, ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, hayEnCurso, hojaPaquete, motivoDocumento, TIPO_FALLO } from "@/lib/ocr";
+import { type DocumentoPaquete, ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, hayEnCurso, hojaPaquete, motivoDocumento, registroEnLote, TIPO_FALLO } from "@/lib/ocr";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
 import { buildXlsx, XLSX_MIME } from "@/lib/xlsx";
@@ -66,7 +66,7 @@ function Detalle({ id }: { id: string }) {
   const [reprocesando, setReprocesando] = useState(false);
   const pg = usePaginacion(25);
   const carga = useCarga(`ocr-paquete:${id}:${estado}`, (signal) =>
-    apiFetch<{ paquete: Paquete; documentos: DocumentoFila[] }>(`/ocr/paquetes/${id}`, { signal, query: { estado } }),
+    apiFetch<{ paquete: Paquete; documentos: DocumentoFila[]; completosPorConfirmar?: number }>(`/ocr/paquetes/${id}`, { signal, query: { estado } }),
   );
   const p = carga.datos?.paquete;
   const docs = carga.datos?.documentos ?? [];
@@ -132,6 +132,8 @@ function Detalle({ id }: { id: string }) {
   if (!p) return <p className="text-sm opacity-60">Cargando paquete…</p>;
   const cerrado = p.estado === "Cerrado";
   // Con el filtro puesto la lista puede no traer los incompletos: el botón se guía por el contador del paquete.
+  // GDC punto 14: los completos con el número por verificar no entran en el registro en lote.
+  const lote = registroEnLote(p.cantidadCompletos, carga.datos?.completosPorConfirmar ?? 0);
   const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
 
   return (
@@ -178,10 +180,10 @@ function Detalle({ id }: { id: string }) {
                 Descartar fallidos
               </button>
             )}
-            {opera && !cerrado && p.cantidadCompletos > 0 && (
+            {opera && !cerrado && lote.registrables > 0 && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={registrarCompletos}>
                 <CheckCheck className="h-3.5 w-3.5" aria-hidden />
-                {ocupado ? "Registrando…" : `Registrar los ${p.cantidadCompletos} completos`}
+                {ocupado ? "Registrando…" : lote.registrables === 1 ? "Registrar el completo" : `Registrar los ${lote.registrables} completos`}
               </button>
             )}
           </>
@@ -198,6 +200,12 @@ function Detalle({ id }: { id: string }) {
         <Contador etiqueta="Registrados" valor={p.cantidadRegistrados} />
         <Contador etiqueta="Descartados" valor={p.cantidadDescartados} />
       </div>
+
+      {opera && !cerrado && lote.aviso && (
+        <InlineAlert tone="warning" title="Hay números por verificar">
+          {lote.aviso}
+        </InlineAlert>
+      )}
 
       {resultado && (
         <div className="flex flex-col gap-2">
@@ -252,7 +260,7 @@ function Detalle({ id }: { id: string }) {
               render: (d) => (
                 <span className="flex flex-col">
                   {d.numeroComparendoExtraido ?? "—"}
-                  {d.avisoNumero && (
+                  {d.avisoNumero && d.numeroPorConfirmar !== false && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--badge-warning-fg)]" title={d.avisoNumero}>
                       <AlertTriangle className="h-3 w-3" aria-hidden />
                       Verificar número

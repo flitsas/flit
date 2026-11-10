@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react';
 import { Placa } from '@flit/ui/Placa';
 import { formatFechaHora } from '@/lib/format/date';
+import { AvisoDigitoPlacaOt } from '@/components/operacion/AvisoDigitoPlacaOt';
+import { PLATE_PREFERRED_LAST_DIGIT_KEY } from '@/lib/tramites/plate-digit-preference';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
 import { DETALLE_CARD } from './detalle-visual';
 
@@ -13,6 +15,10 @@ import { DETALLE_CARD } from './detalle-visual';
  * `DetalleVehiculoSidebar` (4/12) para que la sección activa use todo el ancho del popup. Solo datos
  * que el detalle ya tenía: nada del prototipo que nuestro modelo no traiga (color, «Sin multas»,
  * pastillas de SOAT/revisión). El estado lo dice el chip de la cabecera.
+ *
+ * Registro diferido 2026-11-09 (HU 3, traído de develop desde la antigua columna del vehículo) — de
+ * `detalle.fieldValues` salen la placa que asignó el OT (`plate`), el dígito de preferencia del gestor y la
+ * clase (en motos se compara el primer número): con ellos se pinta el aviso de coincidencia bajo el vehículo.
  */
 
 function Ficha({ dt, children, testId }: { dt: string; children: ReactNode; testId?: string }) {
@@ -34,11 +40,20 @@ export function DetalleResumen({
 }: {
   item: InstanceSummary;
   /** Detalle cargado; `null` mientras carga o con error (sin OT del punto). */
-  detalle?: Pick<ProcedureInstanceDetail, 'channel' | 'channelTransitOfficeName'> | null;
+  detalle?:
+    | (Pick<ProcedureInstanceDetail, 'channel' | 'channelTransitOfficeName'> & {
+        fieldValues?: ProcedureInstanceDetail['fieldValues'];
+      })
+    | null;
   /** Navegador de pasos de sección, debajo de la línea divisoria. */
   pasos?: ReactNode;
 }) {
   const nombre = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
+  const fieldValues = detalle?.fieldValues ?? [];
+  const plateField = fieldValues.find((f) => f.fieldKey === 'plate');
+  const preferredDigit =
+    fieldValues.find((f) => f.fieldKey === PLATE_PREFERRED_LAST_DIGIT_KEY)?.valueText ?? '';
+  const vehicleClass = fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText ?? '';
 
   return (
     <section className={`${DETALLE_CARD} p-5 max-sm:p-4`} aria-label="Resumen del trámite">
@@ -58,6 +73,16 @@ export function DetalleResumen({
             <p className="di-antetitulo">Vehículo</p>
             <p className="di-vehiculo__nombre">{nombre}</p>
             <p className="di-vehiculo__meta font-mono">VIN: {item.vin ?? '—'}</p>
+            {plateField && (
+              <AvisoDigitoPlacaOt
+                placa={plateField.valueText}
+                source={plateField.source}
+                digito={preferredDigit}
+                clase={vehicleClass}
+                testId="detalle-aviso-digito-placa"
+                className="mt-2"
+              />
+            )}
           </div>
         </div>
 

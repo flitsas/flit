@@ -307,7 +307,9 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
                     || !db.ConfiguracionesEmpresa.Any(e => e.TenantId == c.TenantId)
                     || c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica
                     || c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoEncontrado
-                    || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error)),
+                    || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error
+                    || c.EstadoConsultaContraventor == EstadoConsultaContraventor.SinHora
+                    || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada)),
             "RechazadosOt" => q.Where(c => c.Activo && c.EstadoCambioContraventor == EstadoCambioContraventor.RechazadoOt),
             // El mismo criterio que ServicioReportes.Radar: sin DP ni pago y la gestión vence en los próximos 7 días hábiles.
             "Radar" => q.Where(c => c.Activo && !c.Pagado && !c.TieneDp && c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion && c.FechaLimiteGestion <= h.Mas7Habiles),
