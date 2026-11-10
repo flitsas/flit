@@ -1013,6 +1013,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "NIT" => "NIT",
         "PA" or "PAS" => "Pasaporte",
         "TI" => "Tarjeta de Identidad",
+        "PPT" => "Permiso por Protección Temporal",
         null or "" => "documento",
         _ => code!.Trim(),
     };

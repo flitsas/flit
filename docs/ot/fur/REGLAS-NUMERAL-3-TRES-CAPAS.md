@@ -59,12 +59,17 @@ Orden:
 
 1. Bloque del tipo — `FurTramiteObservation`: trámite de locatario (`MATRICULA_LEASING` y `TRASPASO_UNILATERAL` de tabla 1; `CAMBIO_LOCATARIO` de tabla 4) y **causal de cancelación** (`CANCELACION_MATRICULA`, ver tabla 5)
 2. Copropiedad (2+ actores en un lado) — `FurCopropiedadObservation`: `{NOMBRE} es el propietario del {n}%.` por cada actor del lado, en orden de ordinal. No se emite si el lado tiene un solo actor.
-3. Gravamen (tabla 2 o tipo prenda) — `FurPrendaObservation`
-4. Transformaciones (tabla 3 o tipo cambio) — `FurTransformationObservations`
-5. Servicio + empresa vinculadora, **solo si hay razón social** — `FurServicioVinculadoraObservation`
-6. Texto libre del gestor (`fur_observations`) — se recorta si no cabe (presupuesto 500 caracteres)
+3. Identidad PPT — `FurPptObservation` (Feature #14497 / ADR-0082): si alguna parte o su representante legal tiene tipo de documento `PPT`, concatenar **una sola vez** el literal exacto `tipo de documento (PPT) Permiso por Protección Temporal`. **No marcar** ninguna casilla `*_document_type_*` del Anexo 46 para PPT (no hay casilla tipológica; el mapper debe devolver `null`, nunca caer al fallback `c`/`p`).
+4. Gravamen (tabla 2 o tipo prenda) — `FurPrendaObservation`
+5. Transformaciones (tabla 3 o tipo cambio) — `FurTransformationObservations`
+6. Servicio + empresa vinculadora, **solo si hay razón social** — `FurServicioVinculadoraObservation`
+7. Texto libre del gestor (`fur_observations`) — se recorta si no cabe (presupuesto 500 caracteres)
 
 Bloques automáticos separados por `, `. Si faltan datos (nombre del locatario o del acreedor), **sí casilla / sí tipo, no se inventa el texto** de ese bloque.
+
+### Identidad — tipo PPT
+
+Si alguna parte del FUR tiene tipo de documento `PPT` (Permiso por Protección Temporal): **no marcar** ninguna casilla `*_document_type_*`. En OBSERVACIONES concatenar una sola vez el literal: `tipo de documento (PPT) Permiso por Protección Temporal`. El número de documento de la parte se imprime en los campos de identificación habituales; la casilla tipológica queda vacía a propósito.
 
 ---
 
