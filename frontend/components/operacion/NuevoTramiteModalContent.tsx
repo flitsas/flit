@@ -383,10 +383,10 @@ export function NuevoTramiteModalContent({
                 opacity: inhabilitada ? 0.55 : 1,
               }}
             >
-              {/* Aro claro detrás del icono: el círculo azul macizo ya viene dentro del SVG. */}
-              <div className="mx-auto grid h-[120px] w-[120px] place-items-center rounded-full bg-[var(--badge-info-bg)]">
+              {/* HU #14482: ilustración de la propuesta (`.tarjeta__ilus`: 56 px, 44 px en celular), sin aro de fondo. */}
+              <div className="mx-auto grid place-items-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={t.icon} alt="" aria-hidden="true" className="h-[72px] w-[72px]" />
+                <img src={t.icon} alt="" aria-hidden="true" className="h-14 w-14 object-contain max-sm:h-11 max-sm:w-11" />
               </div>
 
               <h3 className="mt-4 text-center text-[15px] font-bold text-foreground">
