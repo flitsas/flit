@@ -38,7 +38,13 @@ export interface SearchResult {
   description: string;
   href: string;
   icon?: NavIcon;
+  /** Ilustración de la propuesta (la misma del dock); sin ella se pinta el ícono de línea. */
+  ilustracion?: string;
 }
+
+/** Ilustraciones fijas del buscador (`public/assets/ilustraciones` existe en las 4 apps). */
+const ILUS_INICIO = "/assets/ilustraciones/inicio.webp";
+const ILUS_PLACA = "/assets/ilustraciones/consulta-placa.webp";
 
 /** Placa colombiana: carro (ABC123) o moto (ABC12D). Se compara sin espacios ni guiones y en mayúsculas. */
 const PLACA = /^[A-Z]{3}\d{2}[A-Z0-9]$/;
@@ -74,9 +80,9 @@ export function visibleKeys(groups: DockGroup[]): Set<string> {
 /** Secciones navegables: Inicio y cada entrada del dock con ruta (un contenedor `href: ""` aporta solo sus hijos). */
 export function sectionResults(groups: DockGroup[], home?: { href: string; label: string }): SearchResult[] {
   const out: SearchResult[] = [];
-  if (home) out.push({ id: "sec:inicio", group: "secciones", label: "Inicio", description: home.label, href: home.href });
+  if (home) out.push({ id: "sec:inicio", group: "secciones", label: "Inicio", description: home.label, href: home.href, ilustracion: ILUS_INICIO });
   const add = (e: DockEntry, trail: string) => {
-    if (e.href) out.push({ id: `sec:${e.key}`, group: "secciones", label: e.label, description: trail, href: e.href, icon: e.icon });
+    if (e.href) out.push({ id: `sec:${e.key}`, group: "secciones", label: e.label, description: trail, href: e.href, icon: e.icon, ilustracion: e.ilustracion });
     e.children?.forEach((c) => add(c, `${trail} · ${e.label}`));
   };
   groups.forEach((g) => g.items.forEach((e) => add(e, g.label)));
@@ -89,20 +95,27 @@ export function buildSearchResults(
   options: { home?: { href: string; label: string }; actions?: SearchAction[]; plate?: PlateSearch } = {},
 ): SearchResult[] {
   const keys = visibleKeys(groups);
+  // La acción toma la ilustración de la sección que la habilita (p. ej. «Nuevo trámite» → la de Trámites).
+  const ilusPorClave = new Map<string, string>();
+  const guardar = (e: DockEntry) => {
+    if (e.ilustracion) ilusPorClave.set(e.key, e.ilustracion);
+    e.children?.forEach(guardar);
+  };
+  groups.forEach((g) => g.items.forEach(guardar));
   const q = normalizeText(query);
   const matches = (r: SearchResult) => !q || normalizeText(`${r.label} ${r.description}`).includes(q);
 
   const sections = sectionResults(groups, options.home).filter(matches);
   const actions = (options.actions ?? [])
     .filter((a) => keys.has(a.requires))
-    .map<SearchResult>((a) => ({ id: `acc:${a.key}`, group: "acciones", label: a.label, description: a.hint ?? "", href: a.href }))
+    .map<SearchResult>((a) => ({ id: `acc:${a.key}`, group: "acciones", label: a.label, description: a.hint ?? "", href: a.href, ilustracion: ilusPorClave.get(a.requires) }))
     .filter(matches);
 
   const plates: SearchResult[] = [];
   const plate = options.plate;
   if (plate && keys.has(plate.requires) && looksLikePlate(query)) {
     const placa = normalizePlate(query);
-    plates.push({ id: `pla:${placa}`, group: "placas", label: placa, description: plate.hint, href: plate.href(placa) });
+    plates.push({ id: `pla:${placa}`, group: "placas", label: placa, description: plate.hint, href: plate.href(placa), ilustracion: ILUS_PLACA });
   }
 
   // Con una placa escrita, la placa va primero: es lo que se buscaba.

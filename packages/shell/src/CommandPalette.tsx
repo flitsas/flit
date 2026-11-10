@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { CornerDownLeft, Hash, Search } from "lucide-react";
 import type { DockGroup } from "./nav";
 import { buildSearchResults, SEARCH_GROUP_LABEL, type PlateSearch, type SearchAction, type SearchResult } from "./search";
@@ -114,7 +115,7 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
 
   const optionClass = (selected: boolean) =>
     `flex min-h-12 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2 text-left no-underline transition-colors ${
-      selected ? "bg-[var(--accent)]" : "hover:bg-[var(--accent)]"
+      selected ? "bg-[var(--di-accent-soft)]" : "hover:bg-[var(--di-accent-soft)]"
     }`;
 
   return (
@@ -132,8 +133,10 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
         <kbd aria-hidden="true">Ctrl K</kbd>
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--overlay)] px-4 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      {/* Portal al <body>: la barra tiene backdrop-filter, que vuelve «fixed» relativo a ella; sin portal el velo
+          solo cubría la franja de la barra (la «sombra negra» de arriba) en vez de toda la pantalla. */}
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--overlay)] px-4 pt-[12vh] backdrop-blur-[4px]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <div
             role="dialog"
             aria-modal="true"
@@ -172,7 +175,7 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
                 const labelId = `${baseId}-grupo-${s.group}`;
                 return (
                   <div key={s.group} role="group" aria-labelledby={labelId} className="pb-1">
-                    <p id={labelId} className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
+                    <p id={labelId} className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-[var(--di-highlight)]">
                       {SEARCH_GROUP_LABEL[s.group]}
                     </p>
                     {s.items.map(({ r, i }) => {
@@ -180,11 +183,16 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
                       const Icon = r.icon ?? (r.group === "placas" ? Hash : CornerDownLeft);
                       const body = (
                         <>
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[var(--nav-app-bg)] text-[var(--flit-brand-ink)]">
-                            <Icon className="h-4 w-4" aria-hidden="true" />
-                          </span>
+                          {r.ilustracion ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa de la propuesta (`.resultado img`)
+                            <img src={r.ilustracion} alt="" aria-hidden="true" className="h-8 w-8 shrink-0" />
+                          ) : (
+                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[var(--di-accent-soft)] text-[var(--di-action)]">
+                              <Icon className="h-4 w-4" aria-hidden="true" />
+                            </span>
+                          )}
                           <span className="grid min-w-0 flex-1 leading-tight">
-                            <span id={`${optionId(i)}-n`} className={`truncate text-sm font-semibold ${selected ? "text-[var(--flit-brand-ink)]" : "text-[var(--foreground)]"}`}>
+                            <span id={`${optionId(i)}-n`} className={`truncate text-sm font-semibold ${selected ? "text-[var(--di-action)]" : "text-[var(--foreground)]"}`}>
                               {r.label}
                             </span>
                             {r.description && <span id={`${optionId(i)}-d`} className="truncate text-xs text-[var(--muted-foreground)]">{r.description}</span>}
@@ -226,7 +234,8 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
