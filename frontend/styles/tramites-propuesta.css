@@ -9,6 +9,8 @@
 /* ── Chip de estado: la marca va en ::before; color y fondo los ponen los tokens --estado-* ── */
 .di-estado { display: inline-flex; align-items: center; gap: 6px; }
 .di-estado::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* Un StatusBadge con la marca del estado ya trae su propia marca genérica (por tono): manda la del estado. */
+.di-estado > [data-marca] { display: none; }
 .di-estado--check::before {
   width: 9px; height: 5px; border-radius: 0; background: none;
   border-left: 2px solid var(--di-success-dot); border-bottom: 2px solid var(--di-success-dot);
