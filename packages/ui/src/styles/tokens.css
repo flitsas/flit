@@ -288,6 +288,15 @@
   --di-border: #dfe5ed;
   --di-border-strong: #c9d3e3;
   --di-border-control: #74839f;
+  /* Series de gráfica (reportes del OT, homologación HU #14510): nombres neutros sobre los tonos que ya usaban; en
+     oscuro siguen solos porque apuntan a tokens que cambian de tema. */
+  --serie-verde: var(--estado-aprobado-acento);
+  --serie-ambar: var(--estado-solicitud-revocatoria-acento);
+  --serie-naranja: var(--color-flit-alert);
+  --serie-violeta: var(--estado-revocado-acento);
+  --serie-gris: var(--estado-borrador-acento);
+  --serie-gris-control: var(--di-border-control);
+  --serie-gris-claro: var(--di-border-strong);
   --di-divider: #e9eef6;
   --di-warning: #c23c00;
   --di-warning-soft: #ff4e001a;
