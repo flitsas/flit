@@ -42,7 +42,7 @@ const FLOTANTES: ReadonlyArray<{
     detalle: "KLM 482 · hace 2 min",
     Icono: Check,
     icono: "bg-[color:var(--di-ingreso-acento-2)] text-[color:var(--di-ingreso-fondo)]",
-    lugar: "left-0 top-[12%] flex",
+    lugar: "-left-[6%] top-[12%] flex",
     duracion: "6s",
     retraso: "0s",
   },
@@ -51,7 +51,7 @@ const FLOTANTES: ReadonlyArray<{
     detalle: "Comprador · en línea",
     Icono: Lock,
     icono: "bg-[color:var(--di-ingreso-azul)] text-[color:var(--di-ingreso-tarjeta)]",
-    lugar: "right-0 top-[40%] hidden lg:flex",
+    lugar: "-right-[6%] top-[40%] hidden lg:flex",
     duracion: "7.5s",
     retraso: "0.8s",
   },
@@ -60,7 +60,7 @@ const FLOTANTES: ReadonlyArray<{
     detalle: "Medellín · hoy",
     Icono: Mail,
     icono: "bg-[color:var(--di-alerta-punto)] text-[color:var(--di-ingreso-tarjeta)]",
-    lugar: "bottom-[4%] left-[8%] flex",
+    lugar: "bottom-[4%] left-[2%] flex",
     duracion: "6.8s",
     retraso: "1.6s",
   },
@@ -133,12 +133,16 @@ export function IngresoLayout({
         </div>
         <figure aria-hidden="true" className="relative z-[1] m-0 hidden min-h-[260px] flex-1 place-items-center md:grid">
           {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
+          {/* Las tarjetas se anclan a la escena (este marco del tamaño de la imagen) y no a la figura: la figura crece con
+              el panel y, en monitores grandes, las tarjetas se iban a las esquinas, lejos del carro. Así quedan pegadas a
+              la ilustración en cualquier ancho y alto de pantalla. */}
+          <div className="relative w-[min(560px,100%)] 2xl:w-[min(680px,100%)]">
           <img
             src={rutaIlustracion("heroe-ingreso")}
             alt=""
             width={1100}
             height={821}
-            className="di-flotar h-auto w-[min(560px,100%)]"
+            className="di-flotar h-auto w-full"
             style={{ filter: "drop-shadow(var(--di-ingreso-sombra-escena))" }}
           />
           {FLOTANTES.map(({ titulo, detalle, Icono, icono, lugar, duracion, retraso }) => (
@@ -157,6 +161,7 @@ export function IngresoLayout({
               </span>
             </div>
           ))}
+          </div>
         </figure>
         <ul aria-label="Productos de FLIT" className="relative z-[1] m-0 flex list-none flex-wrap gap-2.5 p-0">
           {PRODUCTOS.map(([nombre, ilus]) => (
