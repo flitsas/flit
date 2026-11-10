@@ -40,3 +40,35 @@ export const TABLA_ROW_HOVER_CLS =
 
 /** Línea secundaria dentro de una celda (fechas bajo el radicado, gestor bajo la empresa…). */
 export const TABLA_CELDA_SECUNDARIA_CLS = 'text-[10px] opacity-55';
+
+/*
+ * HU #14477 — la tabla como tarjetas por debajo de 900px (tableta y celular), como la media query de tabla del
+ * prototipo «Diseño Inteligente». Solo CSS: la cabecera queda para lectores de pantalla, cada fila es una tarjeta
+ * en una rejilla de 300px, la primera celda hace de título y las demás muestran su columna con `data-label`.
+ * Las usan `DataTable` y las tablas escritas a mano; ninguna reordena el DOM.
+ */
+/** En la `<table>`: deja de ser tabla y anula cualquier ancho mínimo (también el de un `style`). */
+export const TABLA_MOVIL_TABLE_CLS = 'max-[900px]:block max-[900px]:min-w-0! max-[900px]:w-full!';
+/** En el `<thead>`: solo para lectores de pantalla. */
+export const TABLA_MOVIL_THEAD_CLS = 'max-[900px]:sr-only';
+/** En el `<tbody>`: rejilla de tarjetas de 300px. */
+export const TABLA_MOVIL_TBODY_CLS =
+  'max-[900px]:grid max-[900px]:grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] max-[900px]:gap-2.5';
+/** En el `<tr>` de datos: la tarjeta; su borde es el que cambia al pasar el puntero. */
+export const TABLA_MOVIL_ROW_CLS =
+  'max-[900px]:block max-[900px]:rounded-xl max-[900px]:border max-[900px]:border-[color:var(--di-border)] ' +
+  'max-[900px]:bg-[var(--di-surface-elevated)] max-[900px]:px-3.5 max-[900px]:pt-1 max-[900px]:pb-2 ' +
+  'max-[900px]:hover:border-[color:var(--di-border-control)]';
+/** En cada `<td>` (con `data-label`): etiqueta de la columna a la izquierda, valor a la derecha. */
+export const TABLA_MOVIL_CELL_CLS =
+  'max-[900px]:flex max-[900px]:items-center max-[900px]:justify-between max-[900px]:gap-3 ' +
+  'max-[900px]:rounded-none max-[900px]:border-0 max-[900px]:px-0 max-[900px]:py-[5px] max-[900px]:text-right ' +
+  'max-[900px]:text-[0.8125rem] max-[900px]:bg-transparent max-[900px]:before:shrink-0 max-[900px]:before:text-left ' +
+  'max-[900px]:before:text-xs max-[900px]:before:font-medium max-[900px]:before:text-[color:var(--di-text-tertiary)] ' +
+  'max-[900px]:before:content-[attr(data-label)]';
+/** Además, en la primera `<td>`: hace de título de la tarjeta, con un divisor debajo. */
+export const TABLA_MOVIL_CELL_TITULO_CLS =
+  'max-[900px]:mb-1 max-[900px]:border-b max-[900px]:border-[color:var(--di-divider)] max-[900px]:py-2.5 ' +
+  'max-[900px]:text-sm max-[900px]:font-semibold';
+/** En una fila a todo el ancho (vacío, expandida, `colSpan`) y en su `<td>`: ocupa la rejilla entera. */
+export const TABLA_MOVIL_FILA_ANCHA_CLS = 'max-[900px]:col-span-full max-[900px]:block';
