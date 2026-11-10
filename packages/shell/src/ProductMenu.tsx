@@ -64,24 +64,21 @@ export function ProductMenu({
         <img className="suite-icono-btn__ilus" src="/assets/ilustraciones/productos.webp" alt="" aria-hidden="true" />
       </button>
       {open && (
-        <div
-          id="flit-suite-products"
-          role="region"
-          aria-label="Productos"
-          className="absolute right-0 top-full z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[var(--nav-radio-panel)] border border-[var(--nav-borde)] bg-white shadow-[var(--nav-sombra-panel)] dark:border-white/10 dark:bg-[#0B0F14]"
-        >
-          <div className="border-b border-[var(--nav-borde)] px-4 pb-3 pt-4 dark:border-white/10">
-            <p className="text-sm font-semibold text-[var(--nav-texto-fuerte)] dark:text-white">¿En qué quieres trabajar hoy?</p>
-            <p className="mt-0.5 text-xs text-[var(--nav-texto)] dark:text-white/60">Tus productos FLIT, con tu misma cuenta.</p>
+        // `.menu-flotante--productos` de la propuesta (HU #14479): mismo panel que el menú de usuario y el submenú del
+        // dock; cada producto con su ilustración, nombre en negrita y para qué sirve debajo.
+        <div id="flit-suite-products" role="region" aria-label="Productos" className="suite-menu-productos">
+          <div className="suite-menu-productos__cabeza">
+            <p className="suite-menu-productos__titulo">¿En qué quieres trabajar hoy?</p>
+            <p className="suite-menu-productos__bajada">Tus productos FLIT, con tu misma cuenta.</p>
           </div>
           {failed ? (
-            <p className="px-4 py-6 text-center text-sm text-[var(--nav-texto)] dark:text-white/60">No pudimos cargar los productos.</p>
+            <p className="suite-menu-productos__aviso">No pudimos cargar los productos.</p>
           ) : apps === null ? (
-            <p className="px-4 py-6 text-center text-sm text-[var(--nav-texto)] dark:text-white/60">Cargando…</p>
+            <p className="suite-menu-productos__aviso">Cargando…</p>
           ) : products.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-[var(--nav-texto)] dark:text-white/60">Tu empresa todavía no tiene productos habilitados.</p>
+            <p className="suite-menu-productos__aviso">Tu empresa todavía no tiene productos habilitados.</p>
           ) : (
-            <ul className="p-2">
+            <ul>
               {products.map((app) => {
                 const current = app.code === productCode;
                 const tagline = appTagline(app.code);
@@ -90,34 +87,23 @@ export function ProductMenu({
                     <a
                       href={app.url}
                       aria-current={current ? "page" : undefined}
-                      className={`group flex items-center gap-3 rounded-xl px-2.5 py-2.5 transition-colors hover:bg-[var(--nav-app-bg)] ${
-                        current ? "bg-[var(--nav-app-bg)]" : ""
-                      }`}
+                      className={`group suite-menu-productos__entrada ${app.comingSoon ? "suite-menu-productos__entrada--pronto" : ""}`}
                     >
-                      <span
-                        className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                          app.comingSoon ? "bg-[var(--nav-app-bg)] text-flit-brand" : "text-white"
-                        }`}
-                        style={app.comingSoon ? undefined : { background: "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)" }}
-                      >
-                        {createElement(appIcon(app.icon), { className: "h-5 w-5", "aria-hidden": true })}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2 text-sm font-semibold text-[var(--nav-texto-fuerte)] dark:text-white">
+                      <ProductGlyph app={app} />
+                      <span className="suite-menu-productos__texto">
+                        <strong>
                           {app.name}
                           {current ? (
-                            <span className="rounded-full bg-flit-brand/10 px-2 py-0.5 text-[10px] font-semibold text-flit-brand">Estás aquí</span>
+                            <span className="suite-menu-productos__pastilla suite-menu-productos__pastilla--aqui">Estás aquí</span>
                           ) : app.comingSoon ? (
-                            <span className="rounded-full bg-[var(--nav-app-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--nav-texto)] dark:text-white/60">
-                              Próximamente
-                            </span>
+                            <span className="suite-menu-productos__pastilla">Próximamente</span>
                           ) : null}
-                        </span>
-                        {tagline && <span className="mt-0.5 block text-xs leading-snug text-[var(--nav-texto)] dark:text-white/60">{tagline}</span>}
+                        </strong>
+                        {tagline && <small>{tagline}</small>}
                       </span>
                       {!current && (
                         <ArrowRight
-                          className="h-4 w-4 shrink-0 text-[var(--nav-texto)] opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100"
+                          className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100"
                           aria-hidden="true"
                         />
                       )}
@@ -133,7 +119,7 @@ export function ProductMenu({
               // (B-11, opción 4) y no podría volver al hub.
               href={withHomeFlag(home.url)}
               aria-current={home.code === productCode ? "page" : undefined}
-              className="flex items-center gap-2 border-t border-[var(--nav-borde)] px-4 py-3 text-sm font-medium text-flit-brand transition-colors hover:bg-[var(--nav-app-bg)] dark:border-white/10"
+              className="suite-menu-productos__pie"
             >
               <House className="h-4 w-4" aria-hidden="true" />
               Ir al inicio
@@ -142,6 +128,22 @@ export function ProductMenu({
         </div>
       )}
     </div>
+  );
+}
+
+/** Productos con ilustración propia en `public/assets/ilustraciones` de cada app (las de `@flit/ui/ilustraciones`). */
+const ILUSTRADOS = new Set(["tramites", "comparendos", "diagnostico"]);
+
+/** Ilustración del producto; un código nuevo sin ilustración cae en su ícono de línea dentro de un círculo cielo. */
+function ProductGlyph({ app }: { app: SuiteApp }) {
+  if (ILUSTRADOS.has(app.code)) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img className="suite-menu-productos__ilus" src={`/assets/ilustraciones/${app.code}.webp`} alt="" aria-hidden="true" />;
+  }
+  return (
+    <span className="suite-menu-productos__ilus suite-menu-productos__ilus--icono" aria-hidden="true">
+      {createElement(appIcon(app.icon), { className: "h-5 w-5", "aria-hidden": true })}
+    </span>
   );
 }
 
