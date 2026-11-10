@@ -62,14 +62,15 @@ jobs:
           fi
 
   # La suite se reparte en carriles que corren en paralelo, cada uno en su runner (antes era un solo
-  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (~22 min) hasta que se aligere su
-  # arnés. Reparto y detalles en .github/scripts/ci-core-api-pruebas.sh.
+  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (histórico ~22–30 min; en runners
+  # lentos llega a ~40). Timeout 55 evita cancelaciones espurias (HU #14494 / PR #830).
+  # Reparto y detalles en .github/scripts/ci-core-api-pruebas.sh.
   pruebas:
     name: pruebas (${{ matrix.nombre }})
     needs: cambios
     if: needs.cambios.outputs.core == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:

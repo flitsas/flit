@@ -101,7 +101,7 @@ public sealed class EntregarConsolidadoHandlerTests
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
-    // ── AC3 — estado final no regenera ──────────────────────────────────────────────────────────
+    // ── HU #14494 — coherencia temporal en estado final ─────────────────────────────────────────
 
     public static TheoryData<string, ConsolidadoEntregaTipo> FinalesPorPdf()
     {
@@ -117,13 +117,42 @@ public sealed class EntregarConsolidadoHandlerTests
 
     [Theory]
     [MemberData(nameof(FinalesPorPdf))]
-    public async Task AC3_EstadoFinal_BanderaAbajo_DevuelveExistente_SinRegenerar_MarcadoDefinitivo(string estado, ConsolidadoEntregaTipo tipo)
+    public async Task HU14494_AC1_EstadoFinal_PdfStale_RegeneraYEntregaDefinitivo(string estado, ConsolidadoEntregaTipo tipo)
     {
         var ct = TestContext.Current.CancellationToken;
+        var tCambio = DateTimeOffset.UtcNow;
+        var tPdf = tCambio.AddHours(-2);
         var instance = Instancia(estado);
-        var existente = AddAttachment(instance, TipoAdjunto(tipo), "definitivo.pdf", "system");
+        var existente = AddAttachment(instance, TipoAdjunto(tipo), "stale.pdf", "system");
+        existente.UploadedAt = tPdf;
+        SelloGenerado(instance, tipo, tPdf);
         SetBandera(instance, tipo, false);
-        Wire(instance);
+        Wire(instance, ultimoCambioEstado: tCambio);
+
+        var (result, error) = await _handler.HandleAsync(new EntregarConsolidadoRequest(instance.Id, instance.TenantId, tipo), ct);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        result.DefinitivoPorEstadoFinal.Should().BeTrue();
+        result.Modo.Should().Be(ConsolidadoEntregaModos.DefinitivoEstadoFinal);
+        result.Document.AttachmentId.Should().NotBe(existente.Id);
+        Bandera(instance, tipo).Should().BeTrue();
+        _storage.Saved.Should().ContainSingle();
+    }
+
+    [Theory]
+    [MemberData(nameof(FinalesPorPdf))]
+    public async Task HU14494_AC2_EstadoFinal_PdfFresco_NoRegenera(string estado, ConsolidadoEntregaTipo tipo)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tCambio = DateTimeOffset.UtcNow.AddHours(-1);
+        var tPdf = DateTimeOffset.UtcNow;
+        var instance = Instancia(estado);
+        var existente = AddAttachment(instance, TipoAdjunto(tipo), "fresco.pdf", "system");
+        existente.UploadedAt = tPdf;
+        SelloGenerado(instance, tipo, tPdf);
+        SetBandera(instance, tipo, true);
+        Wire(instance, ultimoCambioEstado: tCambio);
 
         var (result, error) = await _handler.HandleAsync(new EntregarConsolidadoRequest(instance.Id, instance.TenantId, tipo), ct);
 
@@ -132,30 +161,30 @@ public sealed class EntregarConsolidadoHandlerTests
         result.DefinitivoPorEstadoFinal.Should().BeTrue();
         result.Modo.Should().Be(ConsolidadoEntregaModos.DefinitivoEstadoFinal);
         result.Document.AttachmentId.Should().Be(existente.Id);
-        Bandera(instance, tipo).Should().BeFalse("la entrega en estado final no toca la bandera");
         _storage.Saved.Should().BeEmpty();
-        _storage.Deleted.Should().BeEmpty();
-        await _repo.DidNotReceive().GetByIdWithChecklistGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task AC3_EstadoFinal_ConForce_TampocoRegenera()
+    public async Task HU14494_AC3_EstadoFinal_SourceUser_NoRegeneraPorCoherenciaTemporal()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Instancia(TramiteEstado.Aprobado);
-        var existente = AddAttachment(instance, "consolidado_maestro", "definitivo.pdf", "system");
-        Wire(instance);
+        var cargado = AddAttachment(instance, "consolidado", "admin.pdf", "user");
+        instance.ConsolidadoWizardGeneradoEn = DateTimeOffset.UtcNow.AddDays(-30);
+        SetBandera(instance, ConsolidadoEntregaTipo.Wizard, false);
+        Wire(instance, ultimoCambioEstado: DateTimeOffset.UtcNow);
 
-        var (result, _) = await _handler.HandleAsync(
-            new EntregarConsolidadoRequest(instance.Id, instance.TenantId, ConsolidadoEntregaTipo.Maestro, Force: true), ct);
+        var (result, error) = await _handler.HandleAsync(
+            new EntregarConsolidadoRequest(instance.Id, instance.TenantId, ConsolidadoEntregaTipo.Wizard, Force: true), ct);
 
-        result!.Document.AttachmentId.Should().Be(existente.Id);
-        result.DefinitivoPorEstadoFinal.Should().BeTrue();
+        error.Should().BeNull();
+        result!.Document.AttachmentId.Should().Be(cargado.Id);
+        result.Modo.Should().Be(ConsolidadoEntregaModos.CargadoPorUsuario);
         _storage.Saved.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task AC3_EstadoFinal_SinPdf_ConsolidadoNoGenerado_SinGenerarUnoNuevo()
+    public async Task HU14494_EstadoFinal_SinPdf_RegeneraComoNoFinal()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Instancia(TramiteEstado.Aprobado);
@@ -164,9 +193,11 @@ public sealed class EntregarConsolidadoHandlerTests
         var (result, error) = await _handler.HandleAsync(
             new EntregarConsolidadoRequest(instance.Id, instance.TenantId, ConsolidadoEntregaTipo.Wizard), ct);
 
-        result.Should().BeNull();
-        error.Should().Be(EntregarConsolidadoHandler.ConsolidadoNoGenerado);
-        _storage.Saved.Should().BeEmpty();
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        result.DefinitivoPorEstadoFinal.Should().BeTrue();
+        result.Modo.Should().Be(ConsolidadoEntregaModos.DefinitivoEstadoFinal);
+        _storage.Saved.Should().ContainSingle();
     }
 
     [Fact]
@@ -348,10 +379,20 @@ public sealed class EntregarConsolidadoHandlerTests
     private static bool Bandera(ProcedureInstance instance, ConsolidadoEntregaTipo tipo) =>
         tipo == ConsolidadoEntregaTipo.Maestro ? instance.ConsolidadoMaestroVigente : instance.ConsolidadoWizardVigente;
 
-    private void Wire(ProcedureInstance instance)
+    private void Wire(ProcedureInstance instance, DateTimeOffset? ultimoCambioEstado = null)
     {
         _repo.GetByIdWithAttachmentsAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.GetByIdWithChecklistGraphAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetUltimoCambioEstadoCreatedAtAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>())
+            .Returns(ultimoCambioEstado);
+    }
+
+    private static void SelloGenerado(ProcedureInstance instance, ConsolidadoEntregaTipo tipo, DateTimeOffset t)
+    {
+        if (tipo == ConsolidadoEntregaTipo.Maestro)
+            instance.ConsolidadoMaestroGeneradoEn = t;
+        else
+            instance.ConsolidadoWizardGeneradoEn = t;
     }
 
     private ProcedureInstance Instancia(string estado, bool conFur = true)
