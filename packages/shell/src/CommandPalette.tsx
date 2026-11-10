@@ -143,6 +143,18 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
             aria-label="Buscador"
             className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--popover)] text-[var(--foreground)] shadow-[var(--shadow-modal)]"
           >
+            {/* Franja tinta del `dialog.modal#buscador` de la propuesta (mismo aspecto que el Modal de @flit/ui). Sin X:
+                el diálogo conserva su teclado (el foco no sale del campo y Esc cierra); el nombre accesible sigue siendo
+                «Buscador» por el aria-label. */}
+            <div className="relative flex shrink-0 items-center gap-3 overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)]">
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa de la propuesta */}
+              <img src="/assets/ilustraciones/consulta-placa.webp" alt="" aria-hidden="true" className="relative z-[1] h-9 w-9 shrink-0" />
+              <p className="relative z-[1] m-0 flex-1 text-lg font-semibold text-[color:var(--di-on-accent)]">Buscar en la plataforma</p>
+            </div>
             <div className="flex items-center gap-3 border-b border-[var(--border)] px-4">
               <Search className="h-5 w-5 shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
               <input
