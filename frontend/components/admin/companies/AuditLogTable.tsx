@@ -20,6 +20,8 @@ import {
   technicalKey,
   type ParsedAuditValue,
 } from "./auditLogLabels";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 // Tabla del historial de auditoría (HU #10194, AC5). Columnas: Fecha, Campo modificado, Valor
 // anterior, Valor nuevo, Operador. El orden DESC por fecha lo garantiza el backend; la tabla
@@ -40,9 +42,8 @@ export interface AuditLogTableProps {
   filtros?: TablaFiltrosEstado;
 }
 
-const FIELD_CLS =
-  "h-10 rounded-[10px] border border-border bg-background px-3 text-xs font-medium text-flit-primary " +
-  "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const FIELD_CLS = `${TRAMITES_INPUT_CLS} font-medium`;
 
 const ALL_EVENTS = "";
 
@@ -189,13 +190,13 @@ export function AuditLogTable({
           onChange={setQuery}
           label="Buscar en el historial"
           placeholder="Buscar cambio, valor u operador"
-          className="h-10 flex-1"
+          className="h-9 flex-1"
         />
         {filtersActive ? (
           <button
             type="button"
             onClick={clearFilters}
-            className="h-10 rounded-xl border border-border px-4 text-xs font-semibold hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             Limpiar filtros
           </button>

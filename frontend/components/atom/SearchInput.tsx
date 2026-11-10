@@ -22,15 +22,15 @@ export function SearchInput({
 }) {
   return (
     <div
-      className={`flex min-w-[200px] items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5 focus-within:border-flit-brand focus-within:ring-2 focus-within:ring-flit-brand/30 dark:border-border dark:bg-card ${className}`}
+      className={`flex h-9 min-w-[200px] items-center gap-2 rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 text-[color:var(--di-text-primary)] transition focus-within:border-[color:var(--di-action)] focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 ${className}`}
     >
-      <Search className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+      <Search className="h-4 w-4 shrink-0 text-[color:var(--di-text-tertiary)]" aria-hidden />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={label}
-        className="min-w-0 flex-1 bg-transparent py-1 text-xs outline-none"
+        className="min-w-0 flex-1 bg-transparent py-1 text-xs outline-none placeholder:text-[color:var(--di-text-tertiary)]"
       />
     </div>
   );
