@@ -1,6 +1,6 @@
 -- =============================================================================
 -- HU #14469 (Feature FLIT2 OT, Épica #14297) — pago del portal registrado en el trámite.
--- Migración: 20261109120000_HU14469_PagoPortalTramite. Idempotente y aditiva: no altera ninguna tabla existente.
+-- Migración: 20261110100000_HU14469_PagoPortalTramite. Idempotente y aditiva: no altera ninguna tabla existente.
 --
 -- El punto de atención (canal pn_punto) solo radica cuando el pago está confirmado en caja. El portal manda el pago en el RPC
 -- ObtenerSolicitudParaRadicar y core-api lo guarda ligado al trámite creado. El trámite sigue en borrador.

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Infrastructure.Persistence.Repositories;
 
 /// <summary>
-/// HU #14469 — pago del portal ligado al trámite (<c>tramites.procedure_instance_portal_payments</c>, DDL 187). SQL
+/// HU #14469 — pago del portal ligado al trámite (<c>tramites.procedure_instance_portal_payments</c>, DDL 189). SQL
 /// parametrizado (la tabla no es una entidad EF) y dentro de una transacción corta con el GUC de tenant para la política RLS.
 /// </summary>
 internal sealed partial class ProcedureInstanceRepository
