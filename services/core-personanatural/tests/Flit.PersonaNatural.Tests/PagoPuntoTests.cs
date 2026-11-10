@@ -58,7 +58,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
             await _host.DisposeAsync();
     }
 
-    private async Task IniciarAsync(bool compuertaConmutable = false)
+    private async Task IniciarAsync(bool compuertaConmutable = false, (string Clave, string Valor)[]? extras = null)
     {
         _host = await PortalHost.IniciarAsync("pnpago", (servicios, _) =>
         {
@@ -67,7 +67,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
             if (compuertaConmutable)
                 servicios.AddSingleton<ICompuertaDeRadicacion>(_compuerta);
             // Varias pruebas avanzan el reloj un día: la sesión del trámite no debe vencer por eso.
-        }, ("Sesion:VigenciaMinutos", "100000"), ("Sesion:TopeAbsolutoHoras", "1000"));
+        }, [("Sesion:VigenciaMinutos", "100000"), ("Sesion:TopeAbsolutoHoras", "1000"), .. extras ?? []]);
         _iniciado = true;
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
         var entrada = await _host.EnviarAsync(HttpMethod.Post, $"{Punto}/entrada", new { codigo = CanalPuntoDePrueba.Codigo });
@@ -450,7 +450,13 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         resultados.Where(r => r.Pago is null).Should().OnlyContain(r => r.Error == "ya_pagado");
         await using var db = _host.NuevaDb();
         (await db.Set<CobroSolicitud>().CountAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).Should().Be(1);
-        (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1, "solo se radica una vez");
+        (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0, "el cobro en caja espera la ventana de anulación antes de radicarse");
+
+        // Vencida la ventana, varias réplicas radicando a la vez: la solicitud se bloquea y solo se radica una vez.
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(16));
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Radicacion.RadicacionDePagadasService>().RadicarVencidasAsync(TestContext.Current.CancellationToken))));
+        await using var db2 = _host.NuevaDb();
+        (await db2.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1, "solo se radica una vez");
     }
 
     // ── HU #14450: confirmar un trámite en $0 ─────────────────────────────────────────────────────────────────────────
@@ -533,7 +539,9 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         var pagado = await PagarCajaAsync(id);
         _host.Medios.Derechos = 999_000; // un cambio posterior de tarifa no altera lo que se pagó
 
-        pagado.EstadoSolicitud.Should().Be("en_cola");
+        pagado.EstadoSolicitud.Should().Be("pagada", "el cobro en caja espera la ventana de anulación");
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(16));
+        (await _host.EnScopeAsync(async sp => await sp.GetRequiredService<Flit.PersonaNatural.Api.Radicacion.RadicacionDePagadasService>().RadicarVencidasAsync(TestContext.Current.CancellationToken))).Should().Be(1);
         await using var db = _host.NuevaDb();
         var s = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
         s.Estado.Should().Be("en_cola");
@@ -561,11 +569,188 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         pagado.EstadoSolicitud.Should().Be("pagada");
         (await EstadoDeAsync(id)).Should().Be("pagada");
         _compuerta.Permite = true;
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(16)); // vencida la ventana de anulación, la consulta del estado radica
         var estado = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement;
         estado.GetProperty("estado").GetString().Should().Be("en_cola");
         estado.GetProperty("pago").GetProperty("valorCop").GetInt64().Should().Be(366_000);
         await using var db = _host.NuevaDb();
         (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
+    }
+
+    // ── Feature #14453: ventana de anulación del cobro en caja ───────────────────────────────────────────────────────
+
+    private Task<int> RadicarVencidasAsync() =>
+        _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Radicacion.RadicacionDePagadasService>().RadicarVencidasAsync(TestContext.Current.CancellationToken));
+
+    private async Task<Guid> CobroPagadoAsync(Guid solicitudId)
+    {
+        await using var db = _host.NuevaDb();
+        return await db.Set<CobroSolicitud>().Where(c => c.SolicitudId == solicitudId && c.Estado == "pagado").Select(c => c.Id).SingleAsync(TestContext.Current.CancellationToken);
+    }
+
+    private Task<CobroSolicitud> AnularAsync(Guid cobroId, string? motivo = "El cliente pagó por error en la caja", Guid? organismo = null, long rowVersion = 0) =>
+        _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Caja.CajaAnulacionService>().AnularAsync(
+            organismo ?? Guid.Parse(PortalHost.Organismo), cobroId, motivo, Guid.Parse("00000000-0000-0000-0000-0000000000a1"), "Admin del OT", rowVersion, TestContext.Current.CancellationToken));
+
+    [Fact]
+    public async Task HU14453_UnCobroEnCaja_NoSeRadicaAntesDeLos15Minutos_YSiAlVencerLaVentana()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        var pagado = await PagarCajaAsync(id);
+
+        pagado.EstadoSolicitud.Should().Be("pagada");
+        pagado.RadicaEn.Should().Be(pagado.PagadoEn.AddMinutes(15));
+        var enRegistro = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement;
+        enRegistro.GetProperty("estado").GetString().Should().Be("pagada");
+        enRegistro.GetProperty("pago").GetProperty("enRegistro").GetBoolean().Should().BeTrue();
+        enRegistro.GetProperty("pago").GetProperty("radicaEn").GetDateTimeOffset().Should().Be(pagado.PagadoEn.AddMinutes(15));
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(14) + TimeSpan.FromSeconds(59));
+        (await RadicarVencidasAsync()).Should().Be(0);
+        (await EstadoDeAsync(id)).Should().Be("pagada");
+        await using (var db = _host.NuevaDb())
+            (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(1));
+        (await RadicarVencidasAsync()).Should().Be(1);
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        await using (var db = _host.NuevaDb())
+            (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
+        (await RadicarVencidasAsync()).Should().Be(0, "es idempotente");
+    }
+
+    [Fact]
+    public async Task HU14453_ElTrabajoDeFondo_RadicaSoloLosCobrosCuyaVentanaVencio()
+    {
+        await IniciarAsync(extras: [("Caja:RadicacionArranqueSegundos", "0"), ("Caja:RadicacionIntervaloSegundos", "1")]);
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        await Task.Delay(TimeSpan.FromSeconds(2.5), TestContext.Current.CancellationToken);
+        (await EstadoDeAsync(id)).Should().Be("pagada", "la ventana sigue abierta");
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15));
+        var limite = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < limite && await EstadoDeAsync(id) != "en_cola")
+            await Task.Delay(500, TestContext.Current.CancellationToken);
+
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        await using var db = _host.NuevaDb();
+        (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task HU14453_LaConsultaDelEstadoDePago_RadicaSoloCuandoLaVentanaYaVencio()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(10));
+        (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("estado").GetString().Should().Be("pagada");
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(5));
+        (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("estado").GetString().Should().Be("en_cola");
+    }
+
+    [Fact]
+    public async Task HU14453_UnTotalEnCero_SeRadicaDeInmediato_SinEsperarLaVentana()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        TotalCero();
+
+        var r = await Pago(HttpMethod.Post, "/confirmar", token);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+    }
+
+    [Fact]
+    public async Task HU14461_AnularDentroDeLaVentana_DejaElCobroAnulado_ConAuditoria_YLaSolicitudVuelveAPendientePago()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(14));
+
+        var anulado = await AnularAsync(cobroId);
+
+        anulado.Estado.Should().Be("anulado");
+        (await EstadoDeAsync(id)).Should().Be("pendiente_pago");
+        await using var db = _host.NuevaDb();
+        var c = await db.Set<CobroSolicitud>().SingleAsync(x => x.Id == cobroId, TestContext.Current.CancellationToken);
+        (c.AnuladoPorNombre, c.AnulacionMotivo, c.AnuladoEn).Should().Be(("Admin del OT", "El cliente pagó por error en la caja", _host.Reloj.GetUtcNow()));
+        c.AnuladoPorId.Should().Be(Guid.Parse("00000000-0000-0000-0000-0000000000a1"));
+        (await db.Set<HistorialEstado>().CountAsync(h => h.SolicitudId == id && h.Motivo == "pago_anulado", TestContext.Current.CancellationToken)).Should().Be(1);
+
+        // La solicitud puede volver a cobrarse (nuevo código) y el vencimiento corre desde el nuevo pago.
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(1));
+        (await Pago(HttpMethod.Post, "/caja", token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var segundo = await PagarCajaAsync(id);
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(14));
+        (await RadicarVencidasAsync()).Should().Be(0);
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(1));
+        (await RadicarVencidasAsync()).Should().Be(1);
+        segundo.CobroId.Should().NotBe(cobroId);
+    }
+
+    [Fact]
+    public async Task HU14461_AnularFueraDeLaVentana_OYaEnCola_ResponderYaEnFlit2_YNoCambiaNada()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15)); // la ventana venció pero el trabajo aún no radicó
+        await FluentActions.Awaiting(() => AnularAsync(cobroId)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable" && e.Estado == 409);
+        (await EstadoDeAsync(id)).Should().Be("pagada");
+
+        await RadicarVencidasAsync();
+        await FluentActions.Awaiting(() => AnularAsync(cobroId)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable");
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().SingleAsync(c => c.Id == cobroId, TestContext.Current.CancellationToken)).Estado.Should().Be("pagado");
+    }
+
+    [Fact]
+    public async Task HU14461_AnularExigeMotivo_ElCobroDelOrganismo_YDosAnulacionesAlMismoTiempoSoloUnaGana()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+
+        await FluentActions.Awaiting(() => AnularAsync(cobroId, motivo: "  corto ")).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "motivo_invalido" && e.Estado == 400);
+        await FluentActions.Awaiting(() => AnularAsync(cobroId, motivo: null)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "motivo_invalido");
+        await FluentActions.Awaiting(() => AnularAsync(cobroId, organismo: Guid.NewGuid())).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_encontrado" && e.Estado == 404);
+        await FluentActions.Awaiting(() => AnularAsync(cobroId, rowVersion: 999)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable");
+        (await EstadoDeAsync(id)).Should().Be("pagada");
+
+        var resultados = await Task.WhenAll(Enumerable.Range(0, 4).Select(async Task<string> (_) =>
+        {
+            try
+            {
+                await AnularAsync(cobroId);
+                return "ok";
+            }
+            catch (ReglaDeNegocioException ex)
+            {
+                return ex.Codigo;
+            }
+        }));
+        resultados.Count(r => r == "ok").Should().Be(1);
+        resultados.Where(r => r != "ok").Should().OnlyContain(r => r == "cobro_no_anulable");
     }
 
     // ── Vigencia a medianoche (hora de Colombia) ──────────────────────────────────────────────────────────────────────

@@ -225,6 +225,7 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
                 t.HasCheckConstraint("ck_payment_charge_cash_method", "cash_method IS NULL OR cash_method IN (" + string.Join(", ", MedioDeCaja.Todos.Select(s => $"'{s}'")) + ")");
                 t.HasCheckConstraint("ck_payment_charge_amount", "amount_cop IS NULL OR amount_cop >= 0");
                 t.HasCheckConstraint("ck_payment_charge_paid", "status = 'habilitado' OR (amount_cop IS NOT NULL AND method IS NOT NULL AND paid_at IS NOT NULL)");
+                t.HasCheckConstraint("ck_payment_charge_cancelled_reason", "status <> 'anulado' OR (cancellation_reason IS NOT NULL AND cancelled_by_id IS NOT NULL)");
             });
             e.HasKey(c => c.Id).HasName("pk_payment_charge");
             e.Property(c => c.Id).HasColumnName("id").ValueGeneratedNever();
@@ -243,7 +244,13 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(c => c.PagadoEn).HasColumnName("paid_at");
             e.Property(c => c.Lineas).HasColumnName("lines").HasColumnType("jsonb");
             e.Property(c => c.VersionTarifa).HasColumnName("tariff_version").HasMaxLength(1000);
+            e.Property(c => c.PagadoPorId).HasColumnName("paid_by_id");
+            e.Property(c => c.PagadoPorNombre).HasColumnName("paid_by_name").HasMaxLength(160);
+            e.Property(c => c.PagadoEnDia).HasColumnName("paid_on_date");
+            e.Property(c => c.LlaveConfirmacion).HasColumnName("confirm_idempotency_key").HasMaxLength(100);
             e.Property(c => c.AnuladoPor).HasColumnName("cancelled_by").HasMaxLength(120);
+            e.Property(c => c.AnuladoPorId).HasColumnName("cancelled_by_id");
+            e.Property(c => c.AnuladoPorNombre).HasColumnName("cancelled_by_name").HasMaxLength(160);
             e.Property(c => c.AnuladoEn).HasColumnName("cancelled_at");
             e.Property(c => c.AnulacionMotivo).HasColumnName("cancellation_reason").HasMaxLength(500);
             e.Property(c => c.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
@@ -256,6 +263,24 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.HasIndex(c => c.PrefacturaAdjuntoId).HasDatabaseName("ix_payment_charge_invoice_attachment");
             e.HasIndex(c => new { c.OrganismoId, c.PagadoEn }).HasDatabaseName("ix_payment_charge_office_paid_at");
             e.HasIndex(c => c.Codigo).HasDatabaseName("ix_payment_charge_code");
+            e.HasIndex(c => new { c.OrganismoId, c.PagadoEnDia }).HasDatabaseName("ix_payment_charge_office_paid_day");
+        });
+
+        // Feature #14453: auditoría de la caja del organismo, sin llaves foráneas y sin datos personales (la IP va en huella HMAC).
+        modelBuilder.Entity<EventoCaja>(e =>
+        {
+            e.ToTable("cashier_event", t => t.HasComment("Auditoría de la caja del organismo: búsquedas, confirmaciones y anulaciones. Sin datos personales; solo inserción. Alimenta el tope de búsquedas fallidas."));
+            e.HasKey(x => x.Id).HasName("pk_cashier_event");
+            e.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(x => x.OrganismoId).HasColumnName("transit_office_id");
+            e.Property(x => x.UsuarioId).HasColumnName("user_id");
+            e.Property(x => x.Accion).HasColumnName("action").HasMaxLength(30).IsRequired();
+            e.Property(x => x.Codigo).HasColumnName("code").HasMaxLength(20);
+            e.Property(x => x.Resultado).HasColumnName("result").HasMaxLength(30).IsRequired();
+            e.Property(x => x.IpHuella).HasColumnName("ip_hash").HasMaxLength(64).HasComment("@pii:medium Huella HMAC de la IP (no es la IP).");
+            e.Property(x => x.CreadoEn).HasColumnName("created_at").HasDefaultValueSql("now()");
+            e.HasIndex(x => new { x.OrganismoId, x.CreadoEn }).HasDatabaseName("ix_cashier_event_office_created");
+            e.HasIndex(x => new { x.UsuarioId, x.CreadoEn }).HasDatabaseName("ix_cashier_event_user_created");
         });
 
         // Intentos fallidos de reanudar, por radicado (HU #14035): sin llaves foráneas, porque también cuentan los radicados que no existen.

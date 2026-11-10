@@ -20,6 +20,9 @@ public static class VigenciaDelCobro
     public static bool EstaVigente(DateTimeOffset? venceEn, DateTimeOffset ahora) =>
         venceEn is { } vence && ahora < vence.AddSeconds(1);
 
+    /// <summary>La fecha (día calendario) en Colombia del instante dado.</summary>
+    public static DateOnly DiaColombia(DateTimeOffset ahora) => DateOnly.FromDateTime(ahora.ToOffset(Colombia).DateTime);
+
     /// <summary>Inicio del día de Colombia que contiene <paramref name="ahora"/>; sirve para listar «lo cobrado hoy».</summary>
     public static DateTimeOffset InicioDelDia(DateTimeOffset ahora)
     {

@@ -707,7 +707,14 @@ public sealed class RadicacionTests : IAsyncLifetime
         var pedido = enCaja
             ? new Flit.PersonaNatural.Api.Pagos.PedidoDePago(id, "caja", "efectivo", null, null, "caja-1")
             : new Flit.PersonaNatural.Api.Pagos.PedidoDePago(id, "sin_cobro");
-        return await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Pagos.IRegistroDePagos>().RegistrarPagoAsync(pedido, TestContext.Current.CancellationToken));
+        var pagado = await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Pagos.IRegistroDePagos>().RegistrarPagoAsync(pedido, TestContext.Current.CancellationToken));
+        if (!enCaja)
+            return pagado;
+
+        // Un cobro en caja se radica al vencer la ventana de anulación (Feature #14453): se deja correr y se intenta, como lo haría el trabajo de fondo.
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(16));
+        var radicada = await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Radicacion.RadicacionDePagadasService>().IntentarRadicarSiVencioAsync(id, TestContext.Current.CancellationToken));
+        return radicada ? pagado with { EstadoSolicitud = "en_cola" } : pagado;
     }
 
     private Task<HttpResponseMessage> RadicarConCobro(Guid id, string? token, string llave, object cuerpo) =>

@@ -62,7 +62,7 @@ internal sealed class RadicacionGrpcService(PersonaNaturalDb db, PersonaService 
         var partesClaro = await personas.LeerAsync(id, Actor, ct, PersonaService.AccionLecturaParaRadicar).ConfigureAwait(false);
         var validaciones = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == id)
             .Select(p => new { p.Parte, p.Ordinal, p.ValidacionId, p.ValidacionEstado }).ToListAsync(ct).ConfigureAwait(false);
-        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == id).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == id && a.Tipo != Flit.PersonaNatural.Api.Adjuntos.AdjuntosService.TipoPrefacturaCaja).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
 
         var respuesta = new ObtenerSolicitudParaRadicarResponse
         {

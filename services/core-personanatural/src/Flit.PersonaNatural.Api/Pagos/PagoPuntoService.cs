@@ -19,7 +19,8 @@ public sealed record BloqueoDePago(string Code, string Message);
 public sealed record CobroEnCaja(string Codigo, string Estado, DateTimeOffset HabilitadoEn, DateTimeOffset VenceEn);
 
 /// <summary>Pago confirmado: lo que queda cuando la solicitud ya está pagada.</summary>
-public sealed record PagoConfirmado(long ValorCop, string Medio, string? MedioCaja, DateTimeOffset PagadoEn);
+public sealed record PagoConfirmado(
+    long ValorCop, string Medio, string? MedioCaja, DateTimeOffset PagadoEn, bool EnRegistro = false, DateTimeOffset? RadicaEn = null);
 
 /// <summary>
 /// Lo que el front consulta cada pocos segundos en el paso Pago: estado de la solicitud, identidades que faltan, desglose y
@@ -55,7 +56,7 @@ public sealed class PagoPuntoService(
     SolicitudesService solicitudes,
     CotizadorDelPunto cotizador,
     IRegistroDePagos registro,
-    RadicacionService radicacion,
+    RadicacionDePagadasService radicacionDiferida,
     TimeProvider reloj)
 {
     public const string CodigoIdentidadPendiente = "identity_pending";
@@ -139,8 +140,9 @@ public sealed class PagoPuntoService(
     {
         var s = await ResolverAsync(sesion, token, rastrear: false, ct).ConfigureAwait(false);
 
-        // Pagada pero sin radicar (FLIT 2 no respondió cuando se pagó): cada consulta lo reintenta hasta que quede en cola.
-        if (s.Estado == EstadoSolicitud.Pagada && await radicacion.IntentarRadicarPagadaAsync(s.Id, ct).ConfigureAwait(false))
+        // Pagada pero sin radicar (FLIT 2 no respondió cuando se pagó, o el cobro en caja aún está en su ventana de anulación): cada
+        // consulta lo reintenta cuando la ventana ya venció, hasta que quede en cola.
+        if (s.Estado == EstadoSolicitud.Pagada && await radicacionDiferida.IntentarRadicarSiVencioAsync(s.Id, ct).ConfigureAwait(false))
             s = await ResolverAsync(sesion, token, rastrear: false, ct).ConfigureAwait(false);
 
         switch (s.Estado)
@@ -152,7 +154,7 @@ public sealed class PagoPuntoService(
                 return await EstadoPendientePagoAsync(s, ct).ConfigureAwait(false);
             default:
                 var pagado = await db.Set<CobroSolicitud>().AsNoTracking().FirstOrDefaultAsync(c => c.SolicitudId == s.Id && c.Estado == EstadoCobro.Pagado, ct).ConfigureAwait(false);
-                return Armar(s, puedePagar: false, null, [], null, null, cobro: null, pago: pagado is null ? null : PagoDe(pagado));
+                return Armar(s, puedePagar: false, null, [], null, null, cobro: null, pago: pagado is null ? null : PagoDe(pagado, s.Estado));
         }
     }
 
@@ -180,7 +182,13 @@ public sealed class PagoPuntoService(
             ? new CobroEnCaja(c.Codigo, VigenciaDelCobro.EstaVigente(vence, reloj.GetUtcNow()) ? "vigente" : "vencido", habilitado, vence)
             : null;
 
-    private static PagoConfirmado PagoDe(CobroSolicitud c) => new(c.ValorCop ?? 0, c.Medio ?? string.Empty, c.MedioCaja, c.PagadoEn ?? c.UpdatedAt);
+    /// <summary>
+    /// <c>EnRegistro</c>: pagado en caja y todavía no enviado a FLIT 2.0 (ventana de anulación abierta); <c>RadicaEn</c> es cuándo se envía.
+    /// </summary>
+    private PagoConfirmado PagoDe(CobroSolicitud c, string estadoSolicitud) => new(
+        c.ValorCop ?? 0, c.Medio ?? string.Empty, c.MedioCaja, c.PagadoEn ?? c.UpdatedAt,
+        EnRegistro: estadoSolicitud == EstadoSolicitud.Pagada,
+        RadicaEn: RadicacionDePagadasService.RadicaEn(c.Medio, c.PagadoEn, radicacionDiferida.Ventana));
 
     // ── Habilitar el cobro en caja ───────────────────────────────────────────────────────────────────────────────────
 

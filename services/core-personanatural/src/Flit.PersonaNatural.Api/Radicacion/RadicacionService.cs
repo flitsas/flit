@@ -78,7 +78,8 @@ public sealed class RadicacionService(
 
     private async Task<RadicacionAceptada> RadicarEnTransaccionAsync(Guid id, string llave, CobroAlRadicar? cobro, CancellationToken ct)
     {
-        var s = await db.Set<SolicitudTramite>().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw SolicitudesService.NoEncontrada();
+        // FOR UPDATE: dos radicaciones de la misma solicitud (dos réplicas, o el trabajo de fondo y una consulta) se serializan; la segunda encuentra la llave ya usada.
+        var s = await Pagos.Transaccion.BloquearSolicitudAsync(db, id, ct).ConfigureAwait(false) ?? throw SolicitudesService.NoEncontrada();
 
         // Misma llave sobre la misma solicitud ya aceptada: el mismo resultado y ningún evento nuevo.
         if (s.IdempotencyKey == llave && !SolicitudesService.EsEditable(s.Estado))
@@ -185,7 +186,7 @@ public sealed class RadicacionService(
     /// </summary>
     private async Task<RadicacionSolicitada> ArmarEventoAsync(SolicitudTramite s, SolicitudDto borrador, string llave, CancellationToken ct)
     {
-        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id && a.Tipo != Flit.PersonaNatural.Api.Adjuntos.AdjuntosService.TipoPrefacturaCaja).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
         var comprobante = adjuntos.LastOrDefault(a => a.Tipo == SolicitudesService.TipoComprobantePago);
         return new RadicacionSolicitada(
             s.Id, s.CodigoPublico, s.TipoTramiteCodigo, s.DefinicionVersion, borrador.DefinicionHuella, s.OrganismoId,

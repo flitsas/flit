@@ -220,6 +220,15 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("cancelled_by");
 
+                    b.Property<Guid?>("AnuladoPorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by_id");
+
+                    b.Property<string>("AnuladoPorNombre")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("cancelled_by_name");
+
                     b.Property<string>("Codigo")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -246,6 +255,11 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("lines");
 
+                    b.Property<string>("LlaveConfirmacion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("confirm_idempotency_key");
+
                     b.Property<string>("Medio")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
@@ -269,10 +283,23 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("paid_at");
 
+                    b.Property<DateOnly?>("PagadoEnDia")
+                        .HasColumnType("date")
+                        .HasColumnName("paid_on_date");
+
                     b.Property<string>("PagadoPor")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("paid_by");
+
+                    b.Property<Guid?>("PagadoPorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("paid_by_id");
+
+                    b.Property<string>("PagadoPorNombre")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("paid_by_name");
 
                     b.Property<Guid?>("PrefacturaAdjuntoId")
                         .HasColumnType("uuid")
@@ -320,6 +347,9 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.HasIndex("OrganismoId", "PagadoEn")
                         .HasDatabaseName("ix_payment_charge_office_paid_at");
 
+                    b.HasIndex("OrganismoId", "PagadoEnDia")
+                        .HasDatabaseName("ix_payment_charge_office_paid_day");
+
                     b.HasIndex(new[] { "SolicitudId" }, "uq_payment_charge_enabled_per_request")
                         .IsUnique()
                         .HasFilter("status = 'habilitado'");
@@ -333,6 +363,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                             t.HasComment("Cobro de una solicitud del punto: código de cobro, vigencia, valor, medio y quién lo confirmó o anuló. Un solo cobro pagado por solicitud. Sin datos personales.");
 
                             t.HasCheckConstraint("ck_payment_charge_amount", "amount_cop IS NULL OR amount_cop >= 0");
+
+                            t.HasCheckConstraint("ck_payment_charge_cancelled_reason", "status <> 'anulado' OR (cancellation_reason IS NOT NULL AND cancelled_by_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_payment_charge_cash_method", "cash_method IS NULL OR cash_method IN ('efectivo', 'datafono', 'transferencia', 'otro')");
 
@@ -509,6 +541,64 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.ToTable("query_quota", "personanatural", t =>
                         {
                             t.HasComment("Contador diario para los límites por documento, IP y global; persistente para sobrevivir a los reinicios.");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.EventoCaja", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Accion")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("Codigo")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("IpHuella")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("ip_hash")
+                        .HasComment("@pii:medium Huella HMAC de la IP (no es la IP).");
+
+                    b.Property<Guid>("OrganismoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("result");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cashier_event");
+
+                    b.HasIndex("OrganismoId", "CreadoEn")
+                        .HasDatabaseName("ix_cashier_event_office_created");
+
+                    b.HasIndex("UsuarioId", "CreadoEn")
+                        .HasDatabaseName("ix_cashier_event_user_created");
+
+                    b.ToTable("cashier_event", "personanatural", t =>
+                        {
+                            t.HasComment("Auditoría de la caja del organismo: búsquedas, confirmaciones y anulaciones. Sin datos personales; solo inserción. Alimenta el tope de búsquedas fallidas.");
                         });
                 });
 

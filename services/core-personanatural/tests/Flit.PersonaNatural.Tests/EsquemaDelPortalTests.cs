@@ -16,7 +16,7 @@ public sealed class EsquemaDelPortalTests : IAsyncLifetime
     private static readonly string[] TablasDelPortal =
     [
         "procedure_request", "requester_person", "attachment", "procedure_session", "query_quota",
-        "consent", "status_history", "pii_access_log", "resume_attempt", "retention_config", "identity_audit", "frozen_quote", "outbox", "inbox",
+        "consent", "status_history", "pii_access_log", "resume_attempt", "retention_config", "identity_audit", "frozen_quote", "payment_charge", "cashier_event", "outbox", "inbox",
     ];
 
     private string _database = string.Empty;

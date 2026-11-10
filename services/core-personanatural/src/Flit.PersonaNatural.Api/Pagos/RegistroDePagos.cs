@@ -1,8 +1,10 @@
+using Flit.PersonaNatural.Api.Caja;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Radicacion;
 using Flit.PersonaNatural.Api.Solicitudes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Flit.PersonaNatural.Api.Pagos;
@@ -18,11 +20,15 @@ public sealed record PedidoDePago(
     string? MedioDetalle = null,
     Guid? PrefacturaAdjuntoId = null,
     string? PagadoPor = null,
-    Guid? OrganismoEsperado = null);
+    Guid? OrganismoEsperado = null,
+    Guid? PagadoPorId = null,
+    string? PagadoPorNombre = null,
+    string? LlaveConfirmacion = null,
+    long? TotalVistoCop = null);
 
 /// <summary>Resultado de un pago confirmado. <see cref="EstadoSolicitud"/> es <c>en_cola</c> si la radicación ya se disparó.</summary>
 public sealed record PagoRegistrado(
-    Guid CobroId, Guid SolicitudId, string CodigoPublico, long ValorCop, string Medio, DateTimeOffset PagadoEn, string EstadoSolicitud);
+    Guid CobroId, Guid SolicitudId, string CodigoPublico, long ValorCop, string Medio, DateTimeOffset PagadoEn, string EstadoSolicitud, DateTimeOffset? RadicaEn = null);
 
 /// <summary>
 /// Transición única a «pagada» (Feature #14447). La usan el pago en caja y la confirmación en $0, y la usará toda forma de pago
@@ -50,7 +56,7 @@ public interface IRegistroDePagos
 /// </list>
 /// </summary>
 public sealed class RegistroDePagos(
-    PersonaNaturalDb db, CotizadorDelPunto cotizador, RadicacionService radicacion, TimeProvider reloj) : IRegistroDePagos
+    PersonaNaturalDb db, CotizadorDelPunto cotizador, RadicacionService radicacion, TimeProvider reloj, IOptions<CajaOptions> caja) : IRegistroDePagos
 {
     public const string IndicePagado = "uq_payment_charge_paid_per_request";
     public const int MaxDetalle = 200;
@@ -75,7 +81,12 @@ public sealed class RegistroDePagos(
 
         var pagado = await ConfirmarEnTransaccionAsync(pedido, previa.TipoTramiteCodigo, ct).ConfigureAwait(false);
 
-        // El pago ya está firme. Radicar es lo siguiente; si no se logra ahora, la solicitud queda «pagada» y se reintenta.
+        // El pago ya está firme. Un cobro en caja espera la ventana de anulación (Feature #14453) y lo radica el trabajo de fondo; un
+        // total $0 (o la ventana en cero) se radica ya. Si no se logra ahora, la solicitud queda «pagada» y se reintenta.
+        var ventana = caja.Value.Ventana;
+        if (pedido.Medio == MedioDePago.Caja && ventana > TimeSpan.Zero)
+            return pagado with { RadicaEn = pagado.PagadoEn + ventana };
+
         var radicada = await radicacion.IntentarRadicarPagadaAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
         return radicada ? pagado with { EstadoSolicitud = EstadoSolicitud.EnCola } : pagado;
     }
@@ -100,6 +111,12 @@ public sealed class RegistroDePagos(
                     throw Regla(StatusCodes.Status409Conflict, "total_mayor_cero", "El trámite tiene un valor a pagar; debe pagarse en caja.");
                 if (pedido.Medio == MedioDePago.Caja && cotizacion.TotalCop == 0)
                     throw Regla(StatusCodes.Status409Conflict, "total_cero", "El trámite no tiene valor a pagar; se confirma sin pasar por caja.");
+                if (pedido.TotalVistoCop is { } visto && visto != cotizacion.TotalCop)
+                {
+                    throw new ReglaDeNegocioException(
+                        StatusCodes.Status409Conflict, "total_cambio", "El total cambió", "El total cambió; revise el nuevo valor.",
+                        new Dictionary<string, object?> { ["totalActualCop"] = cotizacion.TotalCop });
+                }
 
                 var ahora = reloj.GetUtcNow();
                 var habilitado = cobros.FirstOrDefault(c => c.Estado == EstadoCobro.Habilitado);
@@ -119,7 +136,11 @@ public sealed class RegistroDePagos(
                 cobro.MedioDetalle = pedido.Medio == MedioDePago.Caja && pedido.MedioCaja == MedioDeCaja.Otro ? pedido.MedioDetalle!.Trim() : null;
                 cobro.PrefacturaAdjuntoId = pedido.PrefacturaAdjuntoId;
                 cobro.PagadoPor = pedido.PagadoPor;
+                cobro.PagadoPorId = pedido.PagadoPorId;
+                cobro.PagadoPorNombre = pedido.PagadoPorNombre;
+                cobro.LlaveConfirmacion = pedido.LlaveConfirmacion;
                 cobro.PagadoEn = ahora;
+                cobro.PagadoEnDia = VigenciaDelCobro.DiaColombia(ahora);
                 cobro.Lineas = CotizadorDelPunto.SerializarLineas(cotizacion.Lineas);
                 cobro.VersionTarifa = cotizacion.VersionTarifa;
                 cobro.UpdatedAt = ahora;

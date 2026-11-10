@@ -16,6 +16,7 @@ public static class PagoPuntoEndpoints
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddScoped<CotizadorDelPunto>();
         services.TryAddScoped<IRegistroDePagos, RegistroDePagos>();
+        services.TryAddScoped<Radicacion.RadicacionDePagadasService>();
         services.TryAddScoped<PagoPuntoService>();
         return services;
     }

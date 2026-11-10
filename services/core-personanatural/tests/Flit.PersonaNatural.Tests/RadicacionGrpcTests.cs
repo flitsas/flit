@@ -38,6 +38,8 @@ internal sealed class EsquemaDeAutenticacionDePrueba(IOptionsMonitor<Authenticat
         claims.AddRange(Request.Headers["x-test-aud"].Select(a => new Claim("aud", a!)));
         if (Request.Headers.TryGetValue("x-test-scope", out var scope))
             claims.Add(new Claim("scope", scope.ToString()));
+        // Feature #14453: claims arbitrarios (tipo=valor) para ejercitar la autorización del portal de caja (product, role, tenant_id, iat).
+        claims.AddRange(Request.Headers["x-test-claim"].Select(c => c!.Split('=', 2)).Where(p => p.Length == 2).Select(p => new Claim(p[0], p[1])));
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Nombre)), Nombre);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }

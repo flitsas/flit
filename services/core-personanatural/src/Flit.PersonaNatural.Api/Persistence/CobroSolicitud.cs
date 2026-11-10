@@ -67,14 +67,52 @@ public sealed class CobroSolicitud
     public string? PagadoPor { get; set; }
     public DateTimeOffset? PagadoEn { get; set; }
 
+    /// <summary>Portal de caja (Feature #14453): usuario de caja que cobró (id y nombre del empleado, dato de auditoría).</summary>
+    public Guid? PagadoPorId { get; set; }
+
+    public string? PagadoPorNombre { get; set; }
+
+    /// <summary>Día de Colombia de <see cref="PagadoEn"/>: sirve a la lista de cobros del día de la caja y del hub del organismo.</summary>
+    public DateOnly? PagadoEnDia { get; set; }
+
+    /// <summary><c>Idempotency-Key</c> de la confirmación en caja: repetir la misma confirmación devuelve el mismo resultado.</summary>
+    public string? LlaveConfirmacion { get; set; }
+
     /// <summary>Líneas (JSON) y versión de tarifa con las que se calculó el total pagado: es lo que se congela al radicar.</summary>
     public string? Lineas { get; set; }
 
     public string? VersionTarifa { get; set; }
     public string? AnuladoPor { get; set; }
+    public Guid? AnuladoPorId { get; set; }
+    public string? AnuladoPorNombre { get; set; }
     public DateTimeOffset? AnuladoEn { get; set; }
     public string? AnulacionMotivo { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public long RowVersion { get; set; } = 1;
+}
+
+/// <summary>
+/// Auditoría de la caja del organismo (Feature #14453): búsquedas, confirmaciones y anulaciones, sin datos personales. De aquí
+/// sale también el conteo de búsquedas fallidas por usuario (el tope sirve con varias réplicas porque no hay estado en memoria).
+/// </summary>
+public sealed class EventoCaja
+{
+    public const string AccionBusquedaOk = "busqueda_ok";
+    public const string AccionBusquedaFallida = "busqueda_fallida";
+    public const string AccionConfirmar = "confirmar";
+    public const string AccionAnular = "anular";
+    public const string AccionSesion = "sesion";
+
+    public Guid Id { get; set; }
+    public Guid OrganismoId { get; set; }
+    public Guid UsuarioId { get; set; }
+    public string Accion { get; set; } = string.Empty;
+    public string? Codigo { get; set; }
+    public string Resultado { get; set; } = string.Empty;
+
+    /// <summary>Huella HMAC de la IP (no es la IP).</summary>
+    public string? IpHuella { get; set; }
+
+    public DateTimeOffset CreadoEn { get; set; }
 }
