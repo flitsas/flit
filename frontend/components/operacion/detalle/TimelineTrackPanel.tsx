@@ -1,7 +1,7 @@
 'use client';
 
 import { CampoValorInline } from './primitivos';
-import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import { DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
 
 const CARD = `${DETALLE_CARD} flex h-full flex-col p-5`;
 
@@ -61,7 +61,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
   if (nodes.length === 0) {
     return (
       <div className={CARD}>
-        <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
+        <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: 'var(--di-heading)' }}>
           {title}
         </h4>
         <p className="text-xs opacity-70">{emptyMessage ?? 'Sin eventos registrados todavía.'}</p>
@@ -71,7 +71,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
 
   return (
     <div className={CARD}>
-      <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
+      <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: 'var(--di-heading)' }}>
         {title}
       </h4>
       <ol aria-label={title} className="relative space-y-4 py-1 pl-5">
@@ -82,23 +82,32 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                 se dice con texto, no solo con el punto, para no depender solo de color. */}
             <span
               className="absolute -left-5 top-1.5 h-3 w-3 rounded-full"
-              style={{ background: n.color, boxShadow: `0 0 0 4px color-mix(in srgb, ${n.color} 12%, transparent)` }}
+              // Propuesta: el carril de actividad lleva un solo color (azul de acción con halo) y el
+              // hito vigente en turquesa; el estado ya lo dice el texto de cada tarjeta.
+              style={
+                n.isActive
+                  ? {
+                      background: 'var(--color-flit-tech)',
+                      boxShadow: '0 0 0 4px color-mix(in srgb, var(--color-flit-tech) 25%, transparent)',
+                    }
+                  : { background: 'var(--di-action)', boxShadow: '0 0 0 4px var(--di-accent-soft)' }
+              }
               aria-hidden="true"
             />
             {i < nodes.length - 1 ? (
               <span
-                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-border"
+                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-[var(--di-divider)]"
                 aria-hidden="true"
               />
             ) : null}
 
-            <div className="rounded-lg border border-border p-3">
+            <div className="rounded-xl border border-[var(--di-border)] bg-[var(--di-surface-elevated)] p-3">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="text-xs font-bold" style={{ color: DETALLE_NAVY }}>
                   {n.label}
                 </p>
                 {n.isActive ? (
-                  <span className="rounded-full bg-[color-mix(in_srgb,var(--color-flit-tech)_15%,transparent)] px-2 py-0.5 text-xs font-semibold text-[#0F766E] dark:bg-[color-mix(in_srgb,var(--color-flit-tech)_18%,transparent)] dark:text-[#5EEAD4]">
+                  <span className="di-estado di-estado--check rounded-full bg-[var(--di-success-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--di-success)]">
                     Vigente
                   </span>
                 ) : null}

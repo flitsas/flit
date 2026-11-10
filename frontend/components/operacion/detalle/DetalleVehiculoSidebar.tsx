@@ -3,7 +3,7 @@
 import { formatFechaHora } from '@/lib/format/date';
 import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
-import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
+import { DETALLE_CARD } from './detalle-visual';
 
 /**
  * Columna vehículo 4/12 — card con imagen placeholder (spec flit-detalle-tramite).
@@ -26,23 +26,36 @@ export function DetalleVehiculoSidebar({
 
   return (
     <aside className={`${DETALLE_CARD} h-full`} aria-label="Datos del vehículo">
+      {/* Propuesta: panel cielo con la ilustración del trámite y la placa amarilla en grande. Sigue
+          siendo un `role="img"` con el mismo nombre accesible: lo de dentro es presentación. */}
       <div
-        className="aspect-[4/3] w-full rounded-xl bg-gradient-to-br from-border/60 to-border/20"
+        className="relative grid aspect-[4/3] w-full place-items-center overflow-hidden rounded-xl"
+        style={{
+          background:
+            'url("/assets/ilustraciones/traspaso.webp") right 8% top 10% / 34% auto no-repeat, var(--di-sky)',
+        }}
         role="img"
         aria-label={`Vehículo con placa ${item.placa ?? 'sin placa'}`}
-      />
-      <div className="mt-3 text-center">
-        <p className="text-sm font-semibold" style={{ color: DETALLE_NAVY }}>
+      >
+        <span className={`di-placa di-placa--grande ${item.placa ? '' : 'di-placa--vacia'}`} aria-hidden="true">
+          <span className="di-placa__num">{item.placa || 'Sin placa'}</span>
+        </span>
+      </div>
+      <div className="mt-3 grid gap-1">
+        <p className="di-antetitulo text-center">Vehículo</p>
+        <p className="text-center text-sm font-semibold" style={{ color: 'var(--di-heading)' }}>
           Placa:{' '}
           <span className="font-bold uppercase tracking-wider">{item.placa || '—'}</span>
           <span className="mx-2 opacity-40">|</span>
           Modelo: <span className="font-bold">{modelo}</span>
         </p>
-        <p className="mt-1 font-mono text-[11px] opacity-70">VIN: {item.vin ?? '—'}</p>
+        <p className="text-center font-mono text-[11px]" style={{ color: 'var(--di-text-secondary)' }}>
+          VIN: {item.vin ?? '—'}
+        </p>
       </div>
       <div
-        className="mt-3 border-t pt-3 text-[11px] border-border"
-        style={{ color: DETALLE_META }}
+        className="mt-3 grid gap-1 rounded-xl px-3.5 py-3 text-[12px]"
+        style={{ color: 'var(--di-text-secondary)', background: 'var(--di-sky)' }}
       >
         <p>Creado: {formatFechaHora(item.createdAt)}</p>
         <p>Actualizado: {item.updatedAt ? formatFechaHora(item.updatedAt) : '—'}</p>
