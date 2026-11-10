@@ -94,7 +94,7 @@ export function PlacaOtField({
         </span>
       )}
       {invalida && grupo && (
-        <span id={avisoId} role="alert" className="mt-1 block text-[11px] font-medium" style={{ color: "#B45309" }}>
+        <span id={avisoId} role="alert" className="mt-1 block text-[11px] font-medium" style={{ color: "var(--di-warning)" }}>
           {AVISO_PLACA_POR_GRUPO[grupo]}
         </span>
       )}
