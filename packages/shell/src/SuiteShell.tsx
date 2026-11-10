@@ -186,7 +186,7 @@ export function SuiteShell({
 
   return (
     <ShellNavProvider value={shellNav}>
-    <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white">
+    <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:text-white">
       {header}
       {/* Colchón para que el dock fijo no tape el final del contenido (guía §4.3). */}
       <main className="mx-auto max-w-screen-2xl px-4 pb-28 pt-6">{children}</main>
