@@ -12,6 +12,7 @@ export * from "./Pagination";
 export * from "./usePaginacion";
 export * from "./SearchableSelect";
 export * from "./StatusBadge";
+export * from "./ilustraciones";
 export * from "./statusTones";
 export * from "./table-styles";
 export * from "./UiStateBoundary";

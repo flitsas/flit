@@ -88,9 +88,9 @@ describe("HU #10492 — AC3: token de borde = gris de marca en claro y borde pro
     expect(css).toMatch(/--border:\s*#dfe5ed/i);
   });
 
-  it("contrato: .dark redefine --border con el borde oscuro del kit (#233452)", () => {
+  it("contrato: .dark redefine --border con el borde oscuro de la propuesta (#22375c)", () => {
     const darkBlock = css.slice(css.indexOf(".dark"));
-    expect(darkBlock).toMatch(/--border:\s*#233452/i);
+    expect(darkBlock).toMatch(/--border:\s*#22375c/i);
   });
 
   it("edge: no regresión — el token de marca --color-flit-gray sigue siendo #DFE5ED", () => {

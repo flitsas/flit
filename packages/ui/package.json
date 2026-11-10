@@ -23,6 +23,7 @@
     "./usePaginacion": "./src/usePaginacion.ts",
     "./SearchableSelect": "./src/SearchableSelect.tsx",
     "./StatusBadge": "./src/StatusBadge.tsx",
+    "./ilustraciones": "./src/ilustraciones.ts",
     "./statusTones": "./src/statusTones.ts",
     "./table-styles": "./src/table-styles.ts",
     "./UiStateBoundary": "./src/UiStateBoundary.tsx"

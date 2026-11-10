@@ -2,7 +2,9 @@
 
 Toda sesión que trabaje en este rediseño lee este archivo antes de tocar código.
 
-Fuente de diseño: `~/Downloads/ui-kit-flit 2/` (`tokens.css`, `components.css`, `index.html`, assets). Donde el kit no dice nada se consulta el prototipo de la rama `propuesta` (`docs/design/propuesta-diseno-inteligente/`). **En colores y componentes manda el kit.**
+> **Cambio de rumbo (2026-11-09, decisión de Samuel): MANDA LA PROPUESTA.** El aspecto final es el del prototipo de la rama `propuesta` (`docs/design/propuesta-diseno-inteligente/`: `tokens.css`, `propuesta.css`, `propuesta.js`, `datos.js`, `assets/`): paleta (sin verde ni rojo; completo en cielo con check, pendiente con punto naranja, error con aro y equis naranja), componentes, ilustraciones, dock y barra superior. Los textos cortos del prototipo (antetítulos, descripciones del submenú) se toman tal cual. Los tokens del prototipo están en `packages/ui/src/styles/tokens.css` con prefijo `--di-*` (claro y oscuro): al portar `propuesta.css`, `var(--color-x)` → `var(--di-x)`. Ilustraciones: `public/assets/ilustraciones/*.webp` en las 4 apps y la tabla `ilustracionDe(clave)` en `@flit/ui/ilustraciones`. Prototipo navegable: `python3 -m http.server 8731` dentro de esa carpeta (en local corre en http://127.0.0.1:8731). Lo que sigue de este documento sobre el kit queda como historia.
+
+Fuente de diseño (primera vuelta): `~/Downloads/ui-kit-flit 2/` (`tokens.css`, `components.css`, `index.html`, assets). Donde el kit no dice nada se consulta el prototipo de la rama `propuesta` (`docs/design/propuesta-diseno-inteligente/`). **En colores y componentes manda el kit.**
 
 ## Alcance
 
