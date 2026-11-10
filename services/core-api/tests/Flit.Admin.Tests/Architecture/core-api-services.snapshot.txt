@@ -593,6 +593,7 @@ Flit.Modules.Security.Domain.Auth.IAuthUserRepository => Flit.Infrastructure.Per
 Flit.Modules.Security.Domain.Auth.IEmailSender => Flit.Infrastructure.Notifications.Bus.CorreoPorBusEmailSender (Scoped)
 Flit.Modules.Security.Domain.Auth.IEmailThemeResolver => Flit.Infrastructure.Notifications.Theme.DbEmailThemeResolver (Scoped)
 Flit.Modules.Security.Domain.Auth.IInvitationRepository => Flit.Infrastructure.Persistence.Repositories.InvitationRepository (Scoped)
+Flit.Modules.Security.Domain.Auth.IInvitationTargetDirectory => Flit.Infrastructure.Persistence.Repositories.InvitationTargetDirectory (Scoped)
 Flit.Modules.Security.Domain.Auth.IJwtTokenIssuer => Flit.Infrastructure.Security.RsaJwtTokenIssuer (Singleton)
 Flit.Modules.Security.Domain.Auth.IPasswordHasher => Flit.Infrastructure.Security.Argon2PasswordHasher (Singleton)
 Flit.Modules.Security.Domain.Auth.IPasswordResetTokenRepository => Flit.Infrastructure.Persistence.Repositories.PasswordResetTokenRepository (Scoped)
