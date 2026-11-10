@@ -456,18 +456,36 @@ internal static class BiometricaEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, validationId, ct);
-            return error switch
-            {
-                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
-                "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
-                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
-                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
-                "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),
-                _ => Results.Ok(result),
-            };
+            return ReconcileResponse(result, error);
         })
         .WithName("ReconciliarProcedureInstanceIdentity")
         .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK);
+
+        // POST reconciliar con Kyverum por validationId, sin trámite en la ruta: sirve para la validación ligada a un
+        // trámite y para la prevalidación standalone. La usa «Actualizar estado» del detalle de la persona (módulo
+        // Validaciones). Escribe el estado y puede disparar la firma automática → exige validaciones.manage (D1).
+        // Mismas respuestas que la ruta del wizard.
+        group.MapPost("/biometric-validations/{id:guid}/reconcile", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ReconciliarIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleByValidationAsync(tenantId.Value, id, ct);
+            return ReconcileResponse(result, error);
+        })
+        .RequireIdentityModuleManage()
+        .WithName("ReconciliarBiometricValidation")
+        .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status502BadGateway)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         // POST crear prevalidación standalone (HU #10866, CF-01): crea una validación biométrica sin
         // trámite previo. Hace upsert de la entidad Person por (tenant, docType, docNum) y delega
@@ -852,6 +870,17 @@ internal static class BiometricaEndpoints
 
         return app;
     }
+
+    /// <summary>Respuesta HTTP común de las dos rutas de reconciliación con Kyverum (wizard y por validationId).</summary>
+    private static IResult ReconcileResponse(ReconciliarIdentidadResult? result, string? error) => error switch
+    {
+        "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+        "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
+        "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
+        "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+        "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),
+        _ => Results.Ok(result),
+    };
 
     /// <summary>
     /// HU #12706 — alcance de las LECTURAS transversales de identidad (listado plano, por persona y
