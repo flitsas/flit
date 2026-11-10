@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Flit.Integration.Tests.Tramites;
@@ -15,7 +16,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// PostgreSQL real. La grilla es SQL crudo (<c>GroupedByPersonCteSql</c>, parámetros posicionales) que
 /// InMemory no ejecuta: esta prueba es la que demuestra que el filtro <c>ILIKE '%x%' ESCAPE</c> sobre
 /// <c>procedure_instances.reference_number</c> va en el CTE <c>base</c> y que la página y los KPIs hablan
-/// del mismo conjunto. Uso: <c>new BiometricPersonGroupFilter { ReferenceNumber = "0001234" }</c>.
+/// del mismo conjunto. Uso: <c>new BiometricPersonGroupFilter { ReferenceNumber = "0001234" }</c> (el
+/// radicado real lo compone el trigger de la BD; la prueba lee el guardado antes de buscar).
 /// </summary>
 public sealed class BiometricPersonReferenceNumberFilterTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
@@ -26,7 +28,15 @@ public sealed class BiometricPersonReferenceNumberFilterTests(PostgresDatabaseFi
     [PostgresFact]
     public async Task Radicado_parcial_sin_distinguir_mayusculas_filtra_filas_y_KPIs_del_mismo_conjunto()
     {
-        await SeedAsync();
+        var (radicadoA, radicadoB) = await SeedAsync();
+
+        // El radicado lo compone el trigger de la BD (FT[1-9]-consecutivo, prefijo por familia del tipo): los
+        // términos de búsqueda salen de lo que quedó guardado, no de lo que se sembró.
+        var prefijoA = radicadoA[..(radicadoA.IndexOf('-') + 1)];
+        var prefijoB = radicadoB[..(radicadoB.IndexOf('-') + 1)];
+        prefijoA.Should().Be(prefijoB, "los dos trámites son del mismo tipo, luego de la misma familia");
+        var consecutivoA = radicadoA[prefijoA.Length..];
+        var terminoA = radicadoB.Contains(consecutivoA, StringComparison.OrdinalIgnoreCase) ? radicadoA : consecutivoA;
 
         await using var ctx = NewContext();
         var repo = new ProcedureInstanceRepository(ctx);
@@ -34,18 +44,18 @@ public sealed class BiometricPersonReferenceNumberFilterTests(PostgresDatabaseFi
         var now = DateTimeOffset.UtcNow;
         var scope = TenantScope.Single(Tenant);
 
-        var uno = new BiometricPersonGroupFilter { ReferenceNumber = "0001234" };
+        var uno = new BiometricPersonGroupFilter { ReferenceNumber = terminoA };
         var (rows, total) = await repo.ListBiometricValidationsGroupedByPersonAsync(scope, 0, 50, uno, now, ct);
         var counts = await repo.CountBiometricPersonsByEstadoAsync(scope, uno, now, ct);
 
         total.Should().Be(1);
         var fila = rows.Should().ContainSingle().Which;
         fila.DocumentNumberNorm.Should().Be("9001");
-        fila.ReferenceNumber.Should().Be("FT1-0001234");
+        fila.ReferenceNumber.Should().Be(radicadoA);
         counts.Values.Sum().Should().Be(1);
 
         // Minúsculas: encuentra los dos trámites; la prevalidación standalone (sin trámite) queda fuera.
-        var ambos = new BiometricPersonGroupFilter { ReferenceNumber = "ft1-" };
+        var ambos = new BiometricPersonGroupFilter { ReferenceNumber = prefijoA.ToLowerInvariant() };
         var (rowsAmbos, totalAmbos) = await repo.ListBiometricValidationsGroupedByPersonAsync(scope, 0, 50, ambos, now, ct);
         totalAmbos.Should().Be(2);
         rowsAmbos.Select(r => r.DocumentNumberNorm).Should().BeEquivalentTo(["9001", "9002"]);
@@ -58,21 +68,32 @@ public sealed class BiometricPersonReferenceNumberFilterTests(PostgresDatabaseFi
 
         // Combinado con otro filtro del CTE (documento) y con la paginación: los parámetros posicionales no se cruzan.
         var (combinado, totalCombinado) = await repo.ListBiometricValidationsGroupedByPersonAsync(
-            scope, 0, 1, new BiometricPersonGroupFilter { ReferenceNumber = "FT1-", DocumentNumber = "9002" }, now, ct);
+            scope, 0, 1, new BiometricPersonGroupFilter { ReferenceNumber = prefijoA.ToUpperInvariant(), DocumentNumber = "9002" }, now, ct);
         totalCombinado.Should().Be(1);
         combinado.Should().ContainSingle().Which.DocumentNumberNorm.Should().Be("9002");
     }
 
-    private async Task SeedAsync()
+    /// <summary>Siembra y devuelve los radicados que la BD dejó guardados para TramiteA y TramiteB.</summary>
+    private async Task<(string RadicadoA, string RadicadoB)> SeedAsync()
     {
         var tipo = await HierarchyScenario.SeedAsync(Fixture);
 
         await using (var ctx = NewContext())
         {
             ctx.ProcedureInstances.AddRange(
-                Tramite(TramiteA, "FT1-0001234", tipo.Id),
-                Tramite(TramiteB, "FT1-0005678", tipo.Id));
+                Tramite(TramiteA, "FT1-0001234", "234", tipo.Id),
+                Tramite(TramiteB, "FT1-0005678", "678", tipo.Id));
             await ctx.SaveChangesAsync();
+        }
+
+        string radicadoA, radicadoB;
+        await using (var ctx = NewContext())
+        {
+            var radicados = await ctx.ProcedureInstances.AsNoTracking()
+                .Where(p => p.Id == TramiteA || p.Id == TramiteB)
+                .ToDictionaryAsync(p => p.Id, p => p.ReferenceNumber, TestContext.Current.CancellationToken);
+            radicadoA = radicados[TramiteA];
+            radicadoB = radicados[TramiteB];
         }
 
         await using (var ctx = NewContext())
@@ -98,16 +119,18 @@ public sealed class BiometricPersonReferenceNumberFilterTests(PostgresDatabaseFi
                 Validacion("9003", null, personId: new Guid("88888888-8888-4888-8888-000000000103")));
             await ctx.SaveChangesAsync();
         }
+
+        return (radicadoA, radicadoB);
     }
 
-    private static ProcedureInstance Tramite(Guid id, string radicado, Guid tipoId) => new()
+    private static ProcedureInstance Tramite(Guid id, string radicado, string placa, Guid tipoId) => new()
     {
         Id = id,
         TenantId = Tenant,
         ProcedureTypeId = tipoId,
         ReferenceNumber = radicado,
         Status = TramiteEstado.Borrador,
-        Plate = radicado[^3..],
+        Plate = placa,
         CreatedByUserId = HierarchyScenario.UserOf(Tenant),
         CreatedAt = DateTimeOffset.UtcNow,
     };
