@@ -368,10 +368,10 @@ export function ValidacionesFiltrosBar({
         />
         <input
           type="search"
-          aria-label="Buscar validaciones por nombre o documento"
+          aria-label="Buscar validaciones por nombre, documento o radicado"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Nombre o número de documento"
+          placeholder="Nombre, documento o radicado"
           maxLength={SEARCH_TEXT_MAX_LENGTH}
           className={`${INPUT_CLS} w-full pl-9`}
         />

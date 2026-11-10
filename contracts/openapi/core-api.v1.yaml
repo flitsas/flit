@@ -7512,9 +7512,9 @@ paths:
       description: >
         Endpoint PROPIO de la vista agrupada: una fila por (tenant, documento Trim+Upper) con el estado
         de la validación más reciente, contador y peor alerta. No altera GET /biometric-validations
-        (Dashboard y Prevalidaciones). Los KPI (`stats`) siguen contando VALIDACIONES. Filtros de
-        semántica de validación (referenceNumber, modalidad, partyRole, provider, score, motivoRechazo)
-        no aplican.
+        (Dashboard y Prevalidaciones). Los KPI (`stats`) siguen contando VALIDACIONES. `referenceNumber`
+        filtra las validaciones por el radicado del trámite ligado antes de agrupar; el resto de filtros de
+        semántica de validación (modalidad, partyRole, provider, score, motivoRechazo) no aplican.
       security:
         - bearerAuth: []
       parameters:
@@ -7561,6 +7561,16 @@ paths:
         - name: standalone
           in: query
           schema: { type: boolean }
+        - name: referenceNumber
+          in: query
+          required: false
+          description: >
+            Número de radicado del trámite ligado a la validación (p. ej. FT1-0001234), por coincidencia
+            parcial e insensible a mayúsculas; los comodines `%` y `_` se tratan como texto literal. Una
+            prevalidación standalone no tiene radicado y no coincide. La fila muestra la validación ligada
+            a ese trámite y el contador y los KPI solo cuentan las validaciones que coinciden. El término
+            se recorta (trim) y se trunca a 100 caracteres.
+          schema: { type: string }
       responses:
         "200":
           description: Personas del tenant + KPIs de validaciones.

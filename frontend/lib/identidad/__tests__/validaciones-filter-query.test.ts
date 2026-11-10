@@ -3,13 +3,15 @@ import { splitPersonaODocumentoQuery } from '@/lib/identidad/validaciones-filtro
 
 describe('splitPersonaODocumentoQuery', () => {
   it('vacío no filtra', () => {
-    expect(splitPersonaODocumentoQuery('  ')).toEqual({ name: '', documentNumber: '' });
+    expect(splitPersonaODocumentoQuery('  ')).toEqual({ name: '', documentNumber: '', referenceNumber: '' });
   });
 
   it('nombre va a name', () => {
     expect(splitPersonaODocumentoQuery('Ana Compradora')).toEqual({
       name: 'Ana Compradora',
       documentNumber: '',
+      // Ajuste 2026-11-10 (D1=a) — la caja también busca por radicado: la forma lleva la tercera clave.
+      referenceNumber: '',
     });
   });
 
@@ -17,6 +19,7 @@ describe('splitPersonaODocumentoQuery', () => {
     expect(splitPersonaODocumentoQuery('1020304050')).toEqual({
       name: '',
       documentNumber: '1020304050',
+      referenceNumber: '',
     });
   });
 });
