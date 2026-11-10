@@ -21355,13 +21355,29 @@ components:
         validations:
           type: array
           items:
-            $ref: "#/components/schemas/BiometricValidationDto"
+            $ref: "#/components/schemas/PersonBiometricValidationDto"
         page: { type: integer }
         pageSize: { type: integer }
         total: { type: integer }
         allTerminal:
           type: boolean
           description: True si no hay validaciones no terminales; la UI puede detener el polling.
+    PersonBiometricValidationDto:
+      description: >
+        Validación del detalle por persona (compañía y red): los mismos campos de BiometricValidationDto
+        más el id de Kyverum Verify, que solo expone este detalle.
+      allOf:
+        - $ref: "#/components/schemas/BiometricValidationDto"
+        - type: object
+          required: [kyverumVerificationId]
+          properties:
+            kyverumVerificationId:
+              type: string
+              nullable: true
+              maxLength: 200
+              description: >
+                Id de la verificación en Kyverum Verify. null si el proveedor no es Kyverum, si aún no se
+                envió o si la validación se canceló.
     IdentityAuditEventDto:
       type: object
       required: [occurredAt, stage, outcome]

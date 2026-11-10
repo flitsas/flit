@@ -1706,6 +1706,11 @@ export interface BiometricValidation {
    * manual aprobada = «certificado en preparación». No aplica a Kyverum (su certificado no cambia).
    */
   cartaDisponible?: boolean;
+  /**
+   * Ajustes 2026-11-10 — id de la verificación en Kyverum Verify (soporte con el proveedor).
+   * `null`/ausente si la validación no llegó a Verify (manual, simulada) o la respuesta es anterior al campo.
+   */
+  kyverumVerificationId?: string | null;
 }
 
 /**
