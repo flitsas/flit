@@ -19,7 +19,6 @@ public sealed class KyverumRuntDocTypeTests
     [InlineData("NIT", "N")]
     [InlineData("N", "N")]
     [InlineData("PAS", "P")]
-    [InlineData("PPT", "P")]
     [InlineData(" ce ", "E")]
     public void Normalize_MapeaCodigosConocidos(string input, string expected) =>
         KyverumRuntDocType.Normalize(input).Should().Be(expected);
@@ -29,6 +28,7 @@ public sealed class KyverumRuntDocTypeTests
     [InlineData("")]
     [InlineData("XX")]
     [InlineData("DESCONOCIDO")]
+    [InlineData("PPT")] // HU #14501 / ADR-0082 — PPT nativo no colapsa a pasaporte
     public void Normalize_DesconocidoOVacio_DevuelveNull(string? input) =>
         KyverumRuntDocType.Normalize(input).Should().BeNull();
 }

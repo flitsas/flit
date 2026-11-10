@@ -67,6 +67,12 @@ describe('Número de documento por tipo', () => {
     expect(validateDocNumber('AB 12', 'PAS')).not.toBeNull(); // espacio fuera
   });
 
+  it('PPT: admite letras y números (HU #14499)', () => {
+    expect(validateDocNumber('V12345678', 'PPT')).toBeNull();
+    expect(validateDocNumber('V12-345', 'PPT')).not.toBeNull();
+    expect(sanitizeDocNumber('V12-345', 'PPT')).toBe('V12345');
+  });
+
   it('sanea según el tipo', () => {
     expect(sanitizeDocNumber('12a.34', 'CC')).toBe('1234');
     expect(sanitizeDocNumber('ab-12', 'PAS')).toBe('ab12');
