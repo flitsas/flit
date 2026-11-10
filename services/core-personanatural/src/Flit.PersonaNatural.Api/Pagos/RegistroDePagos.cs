@@ -88,7 +88,11 @@ public sealed class RegistroDePagos(
         // total $0 (o la ventana en cero) se radica ya. Si no se logra ahora, la solicitud queda «pagada» y se reintenta.
         var ventana = caja.Value.Ventana;
         if (pedido.Medio == MedioDePago.Caja && ventana > TimeSpan.Zero)
+        {
+            // El correo de cierre sale al quedar pagada, no al radicar.
+            await EnviarCorreoAcotadoAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
             return pagado with { RadicaEn = pagado.PagadoEn + ventana };
+        }
 
         var radicada = await radicacion.IntentarRadicarPagadaAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
 

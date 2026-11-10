@@ -47,7 +47,7 @@ public sealed record CierrePunto(
 /// Sin pago confirmado responde 409 <c>pago_pendiente</c>.
 /// </summary>
 public sealed class CierrePuntoService(
-    PersonaNaturalDb db, SesionService sesiones, RadicacionService radicacion, ICorreoDeCierre correo, BloqueoConsultaCierre bloqueo)
+    PersonaNaturalDb db, SesionService sesiones, RadicacionDePagadasService radicacion, ICorreoDeCierre correo, BloqueoConsultaCierre bloqueo)
 {
     public const string CodigoPagoPendiente = "pago_pendiente";
     public const string CodigoNoEncontrado = "no_encontrado";
@@ -118,7 +118,7 @@ public sealed class CierrePuntoService(
         if (reintentar)
         {
             // Pagada sin radicar (FLIT 2.0 no respondió) y correo que no salió: cada consulta lo reintenta; nada de esto bloquea el cierre.
-            if (s.Estado == EstadoSolicitud.Pagada && await radicacion.IntentarRadicarPagadaAsync(s.Id, ct).ConfigureAwait(false))
+            if (s.Estado == EstadoSolicitud.Pagada && await radicacion.IntentarRadicarSiVencioAsync(s.Id, ct).ConfigureAwait(false))
                 s = await db.Set<SolicitudTramite>().AsNoTracking().FirstAsync(x => x.Id == s.Id, ct).ConfigureAwait(false);
             if (cobro.CorreoCierreEnviadoEn is null)
                 await correo.EnviarSiCorrespondeAsync(s.Id, ct).ConfigureAwait(false);

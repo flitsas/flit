@@ -4,6 +4,7 @@ using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Pagos;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
+using Flit.Platform.Sdk.Messaging;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -250,7 +251,7 @@ public sealed partial class PagoPuntoTests
 
         pagado.Should().NotBeNull();
         reloj.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
-        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        (await EstadoDeAsync(id)).Should().Be("pagada", "en caja espera la ventana de anulación");
         await using (var db = _host.NuevaDb())
             (await db.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull("el reclamo se libera para reintentar");
 
@@ -378,7 +379,7 @@ public sealed partial class PagoPuntoTests
         var pagado = await PagarCajaAsync(id);
 
         pagado.Should().NotBeNull();
-        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        (await EstadoDeAsync(id)).Should().Be("pagada", "en caja espera la ventana de anulación");
         await using (var db = _host.NuevaDb())
             (await db.Set<CobroSolicitud>().SingleAsync(TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull("se libera para reintentar");
 
@@ -402,9 +403,51 @@ public sealed partial class PagoPuntoTests
         var pagado = await PagarCajaAsync(id);
 
         pagado.ValorCop.Should().Be(366_000);
-        (await EstadoDeAsync(id)).Should().Be("en_cola");
+        (await EstadoDeAsync(id)).Should().Be("pagada", "en caja espera la ventana de anulación");
         await using var db = _host.NuevaDb();
         (await db.Set<CobroSolicitud>().SingleAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).CorreoCierreEnviadoEn.Should().BeNull();
+    }
+
+    // ── Cierre y ventana de anulación de la caja (Feature #14453) ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14464_CobroEnCaja_DentroDeLaVentana_ElCierreEsEnRegistro_SinRadicar_YAlVencerRadica()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(14));
+        var dentro = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement;
+        dentro.GetProperty("estadoCierre").GetString().Should().Be("en_registro");
+        (await EstadoDeAsync(id)).Should().Be("pagada", "la ventana sigue abierta: no se radica");
+        await using (var db = _host.NuevaDb())
+            (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(2));
+        (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement.GetProperty("estadoCierre").GetString().Should().Be("en_registro");
+        (await EstadoDeAsync(id)).Should().Be("en_cola", "al vencer la ventana el cierre radica");
+    }
+
+    [Fact]
+    public async Task HU14464_CobroAnuladoEnLaVentana_ElCierrePorTokenEs409_YPorCodigoEs404Uniforme()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        var codigo = await CodigoPublicoAsync(id);
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(5));
+        await AnularAsync(cobroId);
+
+        var porToken = await Pago(HttpMethod.Get, "/cierre", token);
+        porToken.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await PortalHost.JsonAsync(porToken)).RootElement.GetProperty("code").GetString().Should().Be("pago_pendiente");
+        var porCodigo = await Pago(HttpMethod.Get, $"/cierre/{codigo}", null);
+        porCodigo.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await PortalHost.JsonAsync(porCodigo)).RootElement.GetProperty("code").GetString().Should().Be("no_encontrado");
     }
 
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
