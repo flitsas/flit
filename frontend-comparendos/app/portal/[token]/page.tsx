@@ -50,6 +50,23 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null | un
   );
 }
 
+/**
+ * Marca de la ventana de descuento, como el `.badge::before` de la propuesta (acuerdo de UI/UX, HU #14512): check cielo
+ * mientras el descuento sigue vigente (50 % o 25 %) y punto naranja cuando el plazo terminó (es un aviso, no un error).
+ * Sale del campo `ventana`, nunca del texto. Sin fecha base no lleva marca. Decorativa: el texto ya lo dice.
+ */
+function MarcaVentana({ ventana }: { ventana: string }) {
+  if (ventana === "Descuento50" || ventana === "Descuento25")
+    return (
+      <svg aria-hidden="true" data-marca="check" viewBox="0 0 10 8" className="h-2 w-2.5 shrink-0 self-center" fill="none">
+        <path d="M1 4.2 3.7 6.8 9 1.2" stroke="var(--di-success-dot)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  if (ventana === "SinDescuento")
+    return <span aria-hidden="true" data-marca="punto" className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-[var(--di-alerta-punto)]" />;
+  return null;
+}
+
 export default async function PortalConductor({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const portal = await cargar(token);
@@ -94,8 +111,9 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
         </header>
 
         <section className="rounded-xl border-l-4 bg-card p-4 shadow-sm" style={{ borderColor: color }}>
-          <p className="text-sm font-semibold" style={{ color }}>
-            {portal.descuento.texto}
+          <p className="flex items-baseline gap-2 text-sm font-semibold" style={{ color }}>
+            <MarcaVentana ventana={portal.descuento.ventana} />
+            <span>{portal.descuento.texto}</span>
           </p>
           <p className="mt-2 text-sm text-muted-foreground">{portal.dondePagar}</p>
         </section>
