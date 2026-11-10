@@ -87,7 +87,7 @@ function Cell({ children, first, last }: { children: React.ReactNode; first?: bo
   return (
     <td
       className={`border-y px-4 py-3 align-top ${first ? "rounded-l-xl border-l" : ""} ${last ? "rounded-r-xl border-r" : ""}`}
-      style={{ borderColor: "#DFE5ED" }}
+      style={{ borderColor: "var(--border)" }}
     >
       {children}
     </td>
@@ -265,7 +265,7 @@ export function PermissionAuditView({ mode, users, initialUserId }: PermissionAu
                   const actor = person(r.actorName, r.actorEmail);
                   const target = person(r.targetName, r.targetEmail);
                   return (
-                    <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                    <tr key={r.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
                       <Cell first>
                         <span className="whitespace-nowrap">{formatFechaHora(r.createdAt)}</span>
                       </Cell>
