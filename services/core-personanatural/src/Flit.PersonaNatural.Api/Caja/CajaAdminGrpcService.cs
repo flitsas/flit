@@ -85,7 +85,7 @@ internal sealed class CajaAdminGrpcService(CajaListaService lista, CajaAnulacion
             // El mensaje (en español, sin datos del trámite) es lo que el hub le muestra al administrador.
             throw PlatformRpcErrors.ToRpcException(ReasonNoAnulable, ex.Message, StatusCode.FailedPrecondition);
         }
-        catch (ReglaDeNegocioException ex) when (ex.Codigo is CajaAnulacionService.CodigoMotivoInvalido or "actor_invalido")
+        catch (ReglaDeNegocioException ex) when (ex.Codigo is CajaAnulacionService.CodigoMotivoInvalido or CajaAnulacionService.CodigoVersionRequerida or "actor_invalido")
         {
             throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
         }

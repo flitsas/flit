@@ -69,7 +69,7 @@ public sealed class CajaTests : IAsyncLifetime
         foreach (var c in new[] { Ana, Beto, Carla })
             _resolver.Activos[c.UsuarioId] = c;
         (string, string)[] todos = [("Caja:Habilitado", habilitado ? "true" : "false"), .. ajustes];
-        _host = await PortalHost.IniciarAsync("pncaja", (servicios, _) =>
+        _host = await PortalHost.IniciarAsync("pncajafix", (servicios, _) =>
         {
             servicios.AddSingleton<IResolverCajero>(_resolver);
             servicios.AddSingleton<IAlmacenAdjuntos>(_almacen);
@@ -728,7 +728,7 @@ public sealed class CajaTests : IAsyncLifetime
         (await Confirmar(a2, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
         var cobro = await CobroIdAsync(a1);
 
-        await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaAnulacionService>().AnularAsync(OrganismoA, cobro, "Cobro duplicado por el cajero", Guid.NewGuid(), "Admin OT", 0, TestContext.Current.CancellationToken));
+        await AnularComoAdminAsync(cobro);
         var json = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy", Ana))).RootElement;
 
         json.GetProperty("total").GetInt32().Should().Be(2);
@@ -744,7 +744,7 @@ public sealed class CajaTests : IAsyncLifetime
         var codigo = await CrearAsync();
         (await Confirmar(codigo, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
         var cobro = await CobroIdAsync(codigo);
-        await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaAnulacionService>().AnularAsync(OrganismoA, cobro, "Cobro duplicado por el cajero", Guid.NewGuid(), "Admin OT", 0, TestContext.Current.CancellationToken));
+        await AnularComoAdminAsync(cobro);
 
         // Anulado: la solicitud está en pendiente_pago pero sin cobro habilitado hasta que la persona lo genere otra vez.
         var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
@@ -788,7 +788,7 @@ public sealed class CajaTests : IAsyncLifetime
         var actor = Guid.NewGuid();
 
         var r = await Cliente().AnularCobroAsync(
-            new AnularCobroRequest { OrganismoId = OrganismoA.ToString(), CobroId = cobro.ToString(), Motivo = "El cliente se arrepintió del trámite", ActorUserId = actor.ToString(), ActorNombre = "Admin OT" },
+            new AnularCobroRequest { OrganismoId = OrganismoA.ToString(), CobroId = cobro.ToString(), Motivo = "El cliente se arrepintió del trámite", ActorUserId = actor.ToString(), ActorNombre = "Admin OT", RowVersion = await RowVersionAsync(cobro) },
             CabecerasServicio(), cancellationToken: TestContext.Current.CancellationToken);
 
         r.Estado.Should().Be("anulado");
@@ -865,6 +865,250 @@ public sealed class CajaTests : IAsyncLifetime
         ex.Which.StatusCode.Should().Be(StatusCode.Unimplemented);
     }
 
+    // ── Revisiones de seguridad y de código de la Feature #14453 ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Sesion_SinAuthTime_AunqueTengaUnIatReciente_Responde401SinSesion_FailClosed()
+    {
+        await IniciarAsync();
+
+        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await PortalHost.CodigoAsync(r)).Should().Be("sin_sesion");
+        _resolver.Llamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Sesion_ElIatRenovadoPorUnRefreshNoEstiraElTope_MandaElAuthTime()
+    {
+        await IniciarAsync();
+        var inicio = _host.Reloj.GetUtcNow().AddHours(-13).ToUnixTimeSeconds();
+
+        // iat reciente (como el de un refresh) pero la sesión empezó hace 13 h.
+        var vencida = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={inicio}")]);
+        var vigente = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={_host.Reloj.GetUtcNow().AddHours(-11).ToUnixTimeSeconds()}")]);
+
+        vencida.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        vigente.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Theory]
+    [InlineData("no-es-numero")]
+    [InlineData("0")]
+    [InlineData("-5")]
+    public async Task Sesion_ConUnAuthTimeInvalido_Responde401(string valor)
+    {
+        await IniciarAsync();
+
+        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={valor}")]);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Sesion_ConUnAuthTimeEnElFuturoLejano_Responde401()
+    {
+        await IniciarAsync();
+
+        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={_host.Reloj.GetUtcNow().AddHours(2).ToUnixTimeSeconds()}")]);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Confirmar_ConCodigosQueNoExisten_ComparteElTopeDeBusquedasFallidas_Responde429()
+    {
+        await IniciarAsync();
+        for (var i = 0; i < 10; i++)
+        {
+            var r = await Confirmar($"PN-2026-9000{i:D2}", Ana, "efectivo");
+            r.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await PortalHost.CodigoAsync(r)).Should().Be("no_encontrado");
+        }
+
+        var bloqueada = await Confirmar("PN-2026-900099", Ana, "efectivo");
+
+        bloqueada.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await PortalHost.CodigoAsync(bloqueada)).Should().Be("demasiados_intentos");
+        int.Parse(bloqueada.Headers.GetValues("Retry-After").Single()).Should().BeInRange(1, 300);
+        // El tope es el mismo que el de GET: un trámite real tampoco se encuentra mientras dure el bloqueo.
+        var existente = await CrearAsync();
+        (await Enviar(HttpMethod.Get, $"/tramites/{existente}", Ana)).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await Confirmar(existente, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await Confirmar(existente, Beto, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK, "el tope es por usuario");
+    }
+
+    [Fact]
+    public async Task Confirmar_ConTramitesDeOtroOrganismo_TambienCuentaContraElTope()
+    {
+        await IniciarAsync();
+        var ajeno = await CrearAsync(organismo: OrganismoB);
+        for (var i = 0; i < 10; i++)
+            (await Confirmar(ajeno, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await Confirmar(ajeno, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
+    public async Task Confirmar_LosCobrosLegitimos_NoConsumenElTope()
+    {
+        await IniciarAsync();
+        var pagado = await CrearAsync();
+        (await Confirmar(pagado, Ana, "efectivo", llave: "k-ok")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        for (var i = 0; i < 15; i++)
+            (await Confirmar(pagado, Ana, "efectivo", llave: $"k-otra-{i}")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        await using var db = _host.NuevaDb();
+        (await db.Set<EventoCaja>().CountAsync(e => e.Accion == "busqueda_fallida", TestContext.Current.CancellationToken)).Should().Be(0, "ningún cupo queda ocupado");
+    }
+
+    [Fact]
+    public async Task Tope_TreintaBusquedasEnParalelo_NoSuperanElTopeDe10_ConElBloqueoPorUsuario()
+    {
+        await IniciarAsync();
+
+        var respuestas = await Task.WhenAll(Enumerable.Range(0, 30).Select(i => Enviar(HttpMethod.Get, $"/tramites/PN-2026-9{i:D5}", Ana)));
+
+        respuestas.Count(r => r.StatusCode == HttpStatusCode.NotFound).Should().Be(10, "el tope se aplica aunque lleguen todas a la vez");
+        respuestas.Count(r => r.StatusCode == HttpStatusCode.TooManyRequests).Should().Be(20);
+        await using var db = _host.NuevaDb();
+        (await db.Set<EventoCaja>().CountAsync(e => e.UsuarioId == Ana.UsuarioId && e.Accion == "busqueda_fallida", TestContext.Current.CancellationToken)).Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Tope_PorIp_VariosUsuariosDeLaMismaIpLlegaAlTopeDeLaIp_YOtraIpSigueLibre()
+    {
+        await IniciarAsync(ajustes: ("Caja:BusquedasFallidasMaxPorIp", "12"));
+        var usuarios = Enumerable.Range(0, 5).Select(i => new Cajero(Guid.NewGuid(), $"U{i}", OrganismoA, "AB1", "Tránsito de Prueba")).ToList();
+
+        // 12 búsquedas sin resultado desde la misma IP repartidas en 4 usuarios (3 cada uno): ninguno llega a su tope de 10.
+        for (var i = 0; i < 12; i++)
+        {
+            var u = usuarios[i % 4];
+            await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaTopeBusquedas>().ReservarAsync(u, "203.0.113.9", TestContext.Current.CancellationToken));
+        }
+
+        var ex = await FluentActions.Awaiting(() => _host.EnScopeAsync(sp => sp.GetRequiredService<CajaTopeBusquedas>().ReservarAsync(usuarios[4], "203.0.113.9", TestContext.Current.CancellationToken)))
+            .Should().ThrowAsync<Flit.PersonaNatural.Api.Solicitudes.ReglaDeNegocioException>();
+        ex.Which.Estado.Should().Be(429);
+        ex.Which.Codigo.Should().Be("demasiados_intentos");
+        await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaTopeBusquedas>().ReservarAsync(usuarios[4], "198.51.100.7", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Confirmar_UnaPrefacturaQueDesbordaElCuerpo_Responde413_SinLlegarAlAlmacen()
+    {
+        await IniciarAsync(ajustes: ("Caja:PrefacturaMaxBytes", "2048"));
+        var codigo = await CrearAsync();
+
+        var r = await Confirmar(codigo, Ana, "efectivo", prefactura: ("grande.pdf", Archivos.Pdf(3 * 1024 * 1024)));
+
+        r.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+        (await PortalHost.CodigoAsync(r)).Should().Be("prefactura_invalida");
+        _almacen.Archivos.Should().BeEmpty();
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().CountAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Confirmar_ConElCobroVencidoONoHabilitado_NoGuardaLaPrefactura()
+    {
+        await IniciarAsync();
+        var vencido = await CrearAsync();
+        var sinCobro = await CrearAsync(habilitado: false);
+        _host.Reloj.Avanzar(TimeSpan.FromDays(1));
+
+        var r1 = await Confirmar(vencido, Ana, "efectivo", prefactura: ("p.pdf", Archivos.Pdf(10)));
+        var r2 = await Confirmar(sinCobro, Ana, "efectivo", prefactura: ("p.pdf", Archivos.Pdf(10)));
+
+        r1.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await PortalHost.CodigoAsync(r1)).Should().Be("cobro_vencido");
+        r2.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await PortalHost.CodigoAsync(r2)).Should().Be("no_habilitado");
+        _almacen.Archivos.Should().BeEmpty("la validación va antes de guardar el archivo");
+        await using var db = _host.NuevaDb();
+        (await db.Set<Adjunto>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Retencion_BarreLasPrefacturasSinCobro_YRespetaLasLigadasYLasRecientes()
+    {
+        await IniciarAsync();
+        var conCobro = await CrearAsync();
+        (await Confirmar(conCobro, Ana, "efectivo", prefactura: ("p.pdf", Archivos.Pdf(10)))).StatusCode.Should().Be(HttpStatusCode.OK);
+        var otro = await CrearAsync();
+        Guid solicitud;
+        await using (var db = _host.NuevaDb())
+            solicitud = await db.Set<SolicitudTramite>().Where(s => s.CodigoPublico == otro).Select(s => s.Id).SingleAsync(TestContext.Current.CancellationToken);
+        var vieja = await _host.EnScopeAsync(sp => sp.GetRequiredService<AdjuntosService>().GuardarPrefacturaAsync(solicitud, "vieja.pdf", Archivos.Pdf(20), 5 * 1024 * 1024, TestContext.Current.CancellationToken));
+        _host.Reloj.Avanzar(TimeSpan.FromHours(25));
+        var reciente = await _host.EnScopeAsync(sp => sp.GetRequiredService<AdjuntosService>().GuardarPrefacturaAsync(solicitud, "nueva.pdf", Archivos.Pdf(30), 5 * 1024 * 1024, TestContext.Current.CancellationToken));
+
+        var barridas = await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Pii.RetencionService>().PurgarPrefacturasHuerfanasAsync(TestContext.Current.CancellationToken));
+
+        barridas.Should().Be(1);
+        await using var db2 = _host.NuevaDb();
+        var ids = await db2.Set<Adjunto>().Where(a => a.Tipo == "prefactura_caja").Select(a => a.Id).ToListAsync(TestContext.Current.CancellationToken);
+        ids.Should().HaveCount(2).And.NotContain(vieja).And.Contain(reciente);
+        _almacen.Eliminados.Should().HaveCount(1);
+        (await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Pii.RetencionService>().PurgarPrefacturasHuerfanasAsync(TestContext.Current.CancellationToken))).Should().Be(0, "es idempotente");
+    }
+
+    [Fact]
+    public async Task Idempotencia_LaMismaClaveConOtroMedioOOtroTotalVisto_Responde409_YLaMismaPeticionDevuelveElResultado()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+        var original = await Confirmar(codigo, Ana, "efectivo", llave: "k-igual");
+        original.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var repetida = await Confirmar(codigo, Ana, "efectivo", llave: "k-igual");
+        var otroMedio = await Confirmar(codigo, Ana, "datafono", llave: "k-igual");
+        var otroTotal = await Confirmar(codigo, Ana, "efectivo", totalVisto: 100_000, llave: "k-igual");
+        var sinTotal = await Confirmar(codigo, Ana, "efectivo", totalVisto: null, llave: "k-igual");
+
+        repetida.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PortalHost.JsonAsync(repetida)).RootElement.GetProperty("valorCop").GetInt64().Should().Be(366_000);
+        sinTotal.StatusCode.Should().Be(HttpStatusCode.OK, "sin total visto no hay nada que contradecir");
+        foreach (var r in new[] { otroMedio, otroTotal })
+        {
+            r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            (await PortalHost.CodigoAsync(r)).Should().Be("idempotency_key_reutilizada");
+        }
+
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().CountAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task HU14461_Grpc_AnularSinRowVersion_EsInvalidArgument_YNoCambiaNada()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+        (await Confirmar(codigo, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
+        var cobro = await CobroIdAsync(codigo);
+
+        var ex = await FalloEn(OrganismoA, cobro, "Se cobró dos veces el mismo trámite", rowVersion: 0);
+
+        ex.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().SingleAsync(x => x.Id == cobro, TestContext.Current.CancellationToken)).Estado.Should().Be("pagado");
+    }
+
+    private async Task<long> RowVersionAsync(Guid cobro)
+    {
+        await using var db = _host.NuevaDb();
+        return await db.Set<CobroSolicitud>().Where(c => c.Id == cobro).Select(c => c.RowVersion).SingleAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task AnularComoAdminAsync(Guid cobro)
+    {
+        var version = await RowVersionAsync(cobro);
+        await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaAnulacionService>().AnularAsync(OrganismoA, cobro, "Cobro duplicado por el cajero", Guid.NewGuid(), "Admin OT", version, TestContext.Current.CancellationToken));
+    }
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static Metadata CabecerasServicio(string? sub = "svc-tramites", string? aud = "personanatural", string? scope = "platform.personanatural.caja")
@@ -884,10 +1128,10 @@ public sealed class CajaTests : IAsyncLifetime
 
     private Task<RpcException> Fallo(Guid cobro, string motivo) => FalloEn(OrganismoA, cobro, motivo);
 
-    private async Task<RpcException> FalloEn(Guid organismo, Guid cobro, string motivo)
+    private async Task<RpcException> FalloEn(Guid organismo, Guid cobro, string motivo, long rowVersion = 1)
     {
         var llamada = () => Cliente().AnularCobroAsync(
-            new AnularCobroRequest { OrganismoId = organismo.ToString(), CobroId = cobro.ToString(), Motivo = motivo, ActorUserId = Guid.NewGuid().ToString(), ActorNombre = "Admin OT" },
+            new AnularCobroRequest { OrganismoId = organismo.ToString(), CobroId = cobro.ToString(), Motivo = motivo, ActorUserId = Guid.NewGuid().ToString(), ActorNombre = "Admin OT", RowVersion = rowVersion },
             CabecerasServicio(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync;
         return (await FluentActions.Awaiting(llamada).Should().ThrowAsync<RpcException>()).Which;
     }
@@ -927,7 +1171,7 @@ public sealed class CajaTests : IAsyncLifetime
     /// <summary>Una petición de caja con el principal de prueba (producto, rol, audiencia, empresa y <c>iat</c> de hace un minuto).</summary>
     private async Task<HttpResponseMessage> Enviar(
         HttpMethod metodo, string ruta, Cajero usuario, HttpContent? contenido = null, string? llave = null, string producto = "caja", string rol = "ot_caja",
-        string audiencia = "caja", string? sub = null, DateTimeOffset? iat = null, (string Nombre, string Valor)[]? extra = null)
+        string audiencia = "caja", string? sub = null, DateTimeOffset? iat = null, (string Nombre, string Valor)[]? extra = null, bool soloIat = false)
     {
         using var peticion = new HttpRequestMessage(metodo, Ruta + ruta) { Content = contenido };
         peticion.Headers.Add("x-test-sub", sub ?? usuario.UsuarioId.ToString());
@@ -935,7 +1179,11 @@ public sealed class CajaTests : IAsyncLifetime
         peticion.Headers.Add("x-test-claim", $"product={producto}");
         peticion.Headers.Add("x-test-claim", $"role={rol}");
         peticion.Headers.Add("x-test-claim", $"tenant_id={Empresa}");
-        peticion.Headers.Add("x-test-claim", $"iat={(iat ?? _host.Reloj.GetUtcNow().AddMinutes(-1)).ToUnixTimeSeconds()}");
+        // Inicio de sesión: auth_time (el BFF NO acepta iat, que se renueva en cada refresh). soloIat simula un token que solo trae iat.
+        var inicio = (iat ?? _host.Reloj.GetUtcNow().AddMinutes(-1)).ToUnixTimeSeconds();
+        peticion.Headers.Add("x-test-claim", $"iat={inicio}");
+        if (!soloIat)
+            peticion.Headers.Add("x-test-claim", $"auth_time={inicio}");
         if (llave is not null && llave.Length > 0)
             peticion.Headers.Add("Idempotency-Key", llave);
         foreach (var (nombre, valor) in extra ?? [])

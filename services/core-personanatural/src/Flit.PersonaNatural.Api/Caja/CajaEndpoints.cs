@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.Features;
 using System.Globalization;
 using System.Security.Claims;
 using Flit.PersonaNatural.Api.Adjuntos;
@@ -30,6 +31,7 @@ public static class CajaEndpoints
     public const string CodigoSinPermiso = "sin_permiso";
 
     private const string ItemCajero = "flit.pn.cajero";
+    private const long SobrecargaMultipart = 1024 * 1024;
 
     private static readonly string[] AudienciasBase = [];
 
@@ -92,7 +94,8 @@ public static class CajaEndpoints
         grupo.MapGet("/sesion", (HttpContext http) =>
         {
             var c = Cajero(http);
-            var inicio = InicioDeSesion(http.User) ?? http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+            // El filtro ya garantizó que hay auth_time válido (fail-closed).
+            var inicio = InicioDeSesion(http.User) ?? throw new InvalidOperationException("El token no trae auth_time.");
             var expira = inicio.AddHours(http.RequestServices.GetRequiredService<IOptions<CajaOptions>>().Value.SesionTopeHoras);
             return Results.Json(new
             {
@@ -121,17 +124,20 @@ public static class CajaEndpoints
     internal static Cajero Cajero(HttpContext http) =>
         http.Items[ItemCajero] as Cajero ?? throw new InvalidOperationException("El cajero no está en la petición.");
 
-    /// <summary>Inicio de la autenticación del usuario: <c>auth_time</c> si el token lo trae, si no <c>iat</c>.</summary>
+    /// <summary>
+    /// Inicio de la autenticación del usuario: SOLO <c>auth_time</c>. <c>iat</c> no sirve: se renueva en cada refresh y estiraría el tope
+    /// absoluto de la sesión. Sin <c>auth_time</c> válido devuelve <c>null</c> y la petición se rechaza (fail-closed).
+    /// </summary>
     internal static DateTimeOffset? InicioDeSesion(ClaimsPrincipal user)
     {
-        foreach (var tipo in new[] { "auth_time", "iat" })
-        {
-            if (long.TryParse(user.FindFirstValue(tipo), NumberStyles.Integer, CultureInfo.InvariantCulture, out var segundos))
-                return DateTimeOffset.FromUnixTimeSeconds(segundos);
-        }
-
+        if (long.TryParse(user.FindFirstValue("auth_time"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var segundos) && segundos > 0
+            && segundos < 32_503_680_000L) // año 3000: descarta valores absurdos
+            return DateTimeOffset.FromUnixTimeSeconds(segundos);
         return null;
     }
+
+    /// <summary>Holgura de reloj entre Identidad y el BFF: un <c>auth_time</c> más allá de esto en el futuro no es creíble.</summary>
+    private static readonly TimeSpan HolguraDeReloj = TimeSpan.FromMinutes(5);
 
     private static string? Ip(HttpContext http) => http.Connection.RemoteIpAddress?.ToString();
 
@@ -152,7 +158,8 @@ public static class CajaEndpoints
 
         var reloj = http.RequestServices.GetRequiredService<TimeProvider>();
         var tope = TimeSpan.FromHours(http.RequestServices.GetRequiredService<IOptions<CajaOptions>>().Value.SesionTopeHoras);
-        if (InicioDeSesion(http.User) is { } inicio && reloj.GetUtcNow() - inicio > tope)
+        var ahora = reloj.GetUtcNow();
+        if (InicioDeSesion(http.User) is not { } inicio || ahora - inicio > tope || inicio - ahora > HolguraDeReloj)
             return Error(StatusCodes.Status401Unauthorized, CodigoSinSesion, "Inicie sesión para continuar.");
 
         if (!Guid.TryParse(http.User.FindFirstValue("sub"), out var usuario) || !Guid.TryParse(http.User.FindFirstValue("tenant_id"), out var empresa))
@@ -179,7 +186,28 @@ public static class CajaEndpoints
         if (!http.Request.HasFormContentType)
             throw new ReglaDeNegocioException(StatusCodes.Status400BadRequest, CajaConfirmacionService.CodigoMedioInvalido, "Solicitud no válida", "Indique cómo se cobró.");
 
-        var form = await http.Request.ReadFormAsync(ct).ConfigureAwait(false);
+        // El tope del cuerpo se fija ANTES de leerlo: un archivo enorme no llega a la memoria del servicio (igual que /adjuntos).
+        var tope = opciones.PrefacturaMaxBytes + SobrecargaMultipart;
+        var limite = http.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (limite is { IsReadOnly: false })
+            limite.MaxRequestBodySize = tope;
+        if (http.Request.ContentLength > tope)
+        {
+            throw new ReglaDeNegocioException(
+                StatusCodes.Status413PayloadTooLarge, AdjuntosService.CodigoPrefacturaInvalida, "Prefactura no válida", $"La prefactura supera los {opciones.PrefacturaMaxBytes / (1024 * 1024)} MB permitidos.");
+        }
+
+        IFormCollection form;
+        try
+        {
+            form = await http.Request.ReadFormAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } or InvalidDataException or IOException)
+        {
+            throw new ReglaDeNegocioException(
+                StatusCodes.Status413PayloadTooLarge, AdjuntosService.CodigoPrefacturaInvalida, "Prefactura no válida", $"La prefactura supera los {opciones.PrefacturaMaxBytes / (1024 * 1024)} MB permitidos.");
+        }
+
         long? visto = long.TryParse(form["totalVistoCop"].ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) ? v : null;
         string? nombre = null;
         byte[]? bytes = null;

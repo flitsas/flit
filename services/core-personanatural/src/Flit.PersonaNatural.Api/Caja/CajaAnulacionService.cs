@@ -18,6 +18,7 @@ public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptio
     public const string CodigoNoAnulable = "cobro_no_anulable";
     public const string CodigoNoEncontrado = "cobro_no_encontrado";
     public const string CodigoMotivoInvalido = "motivo_invalido";
+    public const string CodigoVersionRequerida = "row_version_requerido";
     public const string MotivoYaEnFlit2 = "ya_en_flit2";
     public const int MotivoMin = 10;
     public const int MotivoMax = 300;
@@ -28,6 +29,8 @@ public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptio
         motivo = motivo?.Trim();
         if (string.IsNullOrEmpty(motivo) || motivo.Length < MotivoMin || motivo.Length > MotivoMax)
             throw Regla(400, CodigoMotivoInvalido, $"El motivo debe tener entre {MotivoMin} y {MotivoMax} caracteres.");
+        if (rowVersion <= 0)
+            throw Regla(400, CodigoVersionRequerida, "Falta la versión del cobro que está revisando. Actualice la lista.");
         if (actorId == Guid.Empty)
             throw Regla(400, "actor_invalido", "Falta quién anula.");
         var nombre = (actorNombre ?? string.Empty).Trim();
@@ -50,7 +53,7 @@ public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptio
                 var (anulable, razon) = CajaListaService.Evaluar(cobro.Estado, s.Estado, cobro.PagadoEn, ahora, opciones.Value.Ventana);
                 if (!anulable || cobro.Medio != MedioDePago.Caja)
                     throw NoAnulable(razon ?? CajaListaService.MotivoYaEnFlit2);
-                if (rowVersion != 0 && rowVersion != cobro.RowVersion)
+                if (rowVersion != cobro.RowVersion)
                     throw NoAnulable("El cobro cambió mientras lo revisaba. Actualice la lista.");
 
                 cobro.Estado = EstadoCobro.Anulado;

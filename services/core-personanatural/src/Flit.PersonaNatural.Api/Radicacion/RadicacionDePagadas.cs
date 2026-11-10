@@ -20,6 +20,8 @@ public sealed class RadicacionDePagadasService(
 
     public TimeSpan Ventana => _o.Ventana;
 
+    private TimeSpan ConGracia(TimeSpan ventana) => ventana > TimeSpan.Zero ? ventana + _o.Gracia : ventana;
+
     /// <summary>La ventana de un cobro en caja sigue abierta: aún se puede anular y todavía no se radica.</summary>
     public static bool EnVentana(string? medio, DateTimeOffset? pagadoEn, DateTimeOffset ahora, TimeSpan ventana) =>
         medio == MedioDePago.Caja && pagadoEn is { } pagado && ventana > TimeSpan.Zero && ahora < pagado + ventana;
@@ -37,7 +39,7 @@ public sealed class RadicacionDePagadasService(
         var cobro = await db.Set<CobroSolicitud>().AsNoTracking()
             .Where(c => c.SolicitudId == solicitudId && c.Estado == EstadoCobro.Pagado)
             .Select(c => new { c.Medio, c.PagadoEn }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (cobro is not null && EnVentana(cobro.Medio, cobro.PagadoEn, reloj.GetUtcNow(), _o.Ventana))
+        if (cobro is not null && EnVentana(cobro.Medio, cobro.PagadoEn, reloj.GetUtcNow(), ConGracia(_o.Ventana)))
             return false;
         return await radicacion.IntentarRadicarPagadaAsync(solicitudId, ct).ConfigureAwait(false);
     }
@@ -45,7 +47,8 @@ public sealed class RadicacionDePagadasService(
     /// <summary>Radica un lote de solicitudes pagadas cuya ventana venció (o sin ventana). Devuelve cuántas quedaron en cola.</summary>
     public async Task<int> RadicarVencidasAsync(CancellationToken ct)
     {
-        var limite = reloj.GetUtcNow() - _o.Ventana;
+        // La anulación usa el límite exacto de la ventana; la radicación espera además la gracia, así en el borde gana la anulación.
+        var limite = reloj.GetUtcNow() - ConGracia(_o.Ventana);
         var ids = await (
             from c in db.Set<CobroSolicitud>().AsNoTracking()
             join s in db.Set<SolicitudTramite>().AsNoTracking() on c.SolicitudId equals s.Id

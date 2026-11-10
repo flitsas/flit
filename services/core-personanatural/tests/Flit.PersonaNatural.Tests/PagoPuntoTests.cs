@@ -67,7 +67,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
             if (compuertaConmutable)
                 servicios.AddSingleton<ICompuertaDeRadicacion>(_compuerta);
             // Varias pruebas avanzan el reloj un día: la sesión del trámite no debe vencer por eso.
-        }, [("Sesion:VigenciaMinutos", "100000"), ("Sesion:TopeAbsolutoHoras", "1000"), .. extras ?? []]);
+        }, [("Sesion:VigenciaMinutos", "100000"), ("Sesion:TopeAbsolutoHoras", "1000"), ("Caja:Habilitado", "true"), .. extras ?? []]);
         _iniciado = true;
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
         var entrada = await _host.EnviarAsync(HttpMethod.Post, $"{Punto}/entrada", new { codigo = CanalPuntoDePrueba.Codigo });
@@ -588,9 +588,23 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         return await db.Set<CobroSolicitud>().Where(c => c.SolicitudId == solicitudId && c.Estado == "pagado").Select(c => c.Id).SingleAsync(TestContext.Current.CancellationToken);
     }
 
-    private Task<CobroSolicitud> AnularAsync(Guid cobroId, string? motivo = "El cliente pagó por error en la caja", Guid? organismo = null, long rowVersion = 0) =>
-        _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Caja.CajaAnulacionService>().AnularAsync(
-            organismo ?? Guid.Parse(PortalHost.Organismo), cobroId, motivo, Guid.Parse("00000000-0000-0000-0000-0000000000a1"), "Admin del OT", rowVersion, TestContext.Current.CancellationToken));
+    /// <summary>Anula con la versión VIGENTE del cobro (la que mostraría la lista) salvo que se indique otra: <c>rowVersion</c> es obligatorio (&gt; 0).</summary>
+    private async Task<CobroSolicitud> AnularAsync(Guid cobroId, string? motivo = "El cliente pagó por error en la caja", Guid? organismo = null, long? rowVersion = null)
+    {
+        long version;
+        if (rowVersion is { } dada)
+        {
+            version = dada;
+        }
+        else
+        {
+            await using var db = _host.NuevaDb();
+            version = await db.Set<CobroSolicitud>().Where(c => c.Id == cobroId).Select(c => c.RowVersion).SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        return await _host.EnScopeAsync(sp => sp.GetRequiredService<Flit.PersonaNatural.Api.Caja.CajaAnulacionService>().AnularAsync(
+            organismo ?? Guid.Parse(PortalHost.Organismo), cobroId, motivo, Guid.Parse("00000000-0000-0000-0000-0000000000a1"), "Admin del OT", version, TestContext.Current.CancellationToken));
+    }
 
     [Fact]
     public async Task HU14453_UnCobroEnCaja_NoSeRadicaAntesDeLos15Minutos_YSiAlVencerLaVentana()
@@ -614,7 +628,11 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         await using (var db = _host.NuevaDb())
             (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
 
+        // Ventana vencida (15:00) pero dentro de la gracia de 5 s: en el borde gana la anulación, la radicación todavía no.
         _host.Reloj.Avanzar(TimeSpan.FromSeconds(1));
+        (await RadicarVencidasAsync()).Should().Be(0);
+        (await EstadoDeAsync(id)).Should().Be("pagada");
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(5));
         (await RadicarVencidasAsync()).Should().Be(1);
         (await EstadoDeAsync(id)).Should().Be("en_cola");
         await using (var db = _host.NuevaDb())
@@ -633,7 +651,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         await Task.Delay(TimeSpan.FromSeconds(2.5), TestContext.Current.CancellationToken);
         (await EstadoDeAsync(id)).Should().Be("pagada", "la ventana sigue abierta");
 
-        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15));
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15) + TimeSpan.FromSeconds(6)); // ventana + gracia
         var limite = DateTime.UtcNow.AddSeconds(20);
         while (DateTime.UtcNow < limite && await EstadoDeAsync(id) != "en_cola")
             await Task.Delay(500, TestContext.Current.CancellationToken);
@@ -654,7 +672,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         _host.Reloj.Avanzar(TimeSpan.FromMinutes(10));
         (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("estado").GetString().Should().Be("pagada");
 
-        _host.Reloj.Avanzar(TimeSpan.FromMinutes(5));
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(6));
         (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("estado").GetString().Should().Be("en_cola");
     }
 
@@ -697,7 +715,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         var segundo = await PagarCajaAsync(id);
         _host.Reloj.Avanzar(TimeSpan.FromMinutes(14));
         (await RadicarVencidasAsync()).Should().Be(0);
-        _host.Reloj.Avanzar(TimeSpan.FromMinutes(1));
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(1) + TimeSpan.FromSeconds(5));
         (await RadicarVencidasAsync()).Should().Be(1);
         segundo.CobroId.Should().NotBe(cobroId);
     }
@@ -714,6 +732,7 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         _host.Reloj.Avanzar(TimeSpan.FromMinutes(15)); // la ventana venció pero el trabajo aún no radicó
         await FluentActions.Awaiting(() => AnularAsync(cobroId)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable" && e.Estado == 409);
         (await EstadoDeAsync(id)).Should().Be("pagada");
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(6)); // la gracia de la radicación (5 s) también venció
 
         await RadicarVencidasAsync();
         await FluentActions.Awaiting(() => AnularAsync(cobroId)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable");
@@ -751,6 +770,105 @@ public sealed class PagoPuntoTests : IAsyncLifetime
         }));
         resultados.Count(r => r == "ok").Should().Be(1);
         resultados.Where(r => r != "ok").Should().OnlyContain(r => r == "cobro_no_anulable");
+    }
+
+    [Fact]
+    public async Task HU14453_ConLaCajaApagada_LaVentanaEsCero_ElPagoEnCajaSeRadicaDeInmediato()
+    {
+        await IniciarAsync(extras: [("Caja:Habilitado", "false")]);
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        var pagado = await PagarCajaAsync(id);
+
+        pagado.RadicaEn.Should().BeNull("sin caja no hay ventana de anulación");
+        pagado.EstadoSolicitud.Should().Be("en_cola");
+        (await RadicarVencidasAsync()).Should().Be(0);
+        new Flit.PersonaNatural.Api.Caja.CajaOptions { Habilitado = false, VentanaAnulacionMinutos = 15 }.Ventana.Should().Be(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public async Task HU14453_RadicarVencidas_AntesDeLos15MinutosNoRadica_YDespuesDeLaVentanaMasLaGraciaSi()
+    {
+        await IniciarAsync(extras: [("Caja:RadicacionGraciaSegundos", "5")]);
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(14) + TimeSpan.FromSeconds(59));
+        (await RadicarVencidasAsync()).Should().Be(0, "antes de 15 minutos");
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(1)); // exactamente 15:00
+        (await RadicarVencidasAsync()).Should().Be(0, "el borde exacto es de la anulación: la radicación espera la gracia");
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(4)); // 15:04
+        (await RadicarVencidasAsync()).Should().Be(0);
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(1)); // 15:05
+        (await RadicarVencidasAsync()).Should().Be(1);
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+    }
+
+    [Fact]
+    public async Task HU14453_LaGraciaEsConfigurable_YEnCeroLaRadicacionEsAlSegundoExacto()
+    {
+        await IniciarAsync(extras: [("Caja:RadicacionGraciaSegundos", "0")]);
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15));
+
+        (await RadicarVencidasAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task HU14453_ElBordeDeLaVentana_SoloUnoGana_YElEstadoQuedaCoherente()
+    {
+        // 14:59 — la anulación llega a tiempo y el trabajo de radicación no puede ganarle.
+        await IniciarAsync();
+        var (idA, tokenA) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", tokenA);
+        await PagarCajaAsync(idA);
+        var cobroA = await CobroPagadoAsync(idA);
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(14) + TimeSpan.FromSeconds(59));
+
+        var antes = await Task.WhenAll(
+            AnularEnCarreraAsync(cobroA),
+            RadicarVencidasAsync().ContinueWith(t => t.Result == 0 ? "sin_radicar" : "radico", TaskScheduler.Default));
+
+        antes[0].Should().Be("anulado");
+        antes[1].Should().Be("sin_radicar");
+        (await EstadoDeAsync(idA)).Should().Be("pendiente_pago");
+        await using (var db = _host.NuevaDb())
+            (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+
+        // 15:06 — ya venció la ventana y la gracia: gana la radicación y la anulación recibe cobro_no_anulable.
+        var (idB, tokenB) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", tokenB);
+        await PagarCajaAsync(idB);
+        var cobroB = await CobroPagadoAsync(idB);
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15) + TimeSpan.FromSeconds(6));
+
+        var despues = await Task.WhenAll(
+            AnularEnCarreraAsync(cobroB),
+            RadicarVencidasAsync().ContinueWith(t => t.Result == 0 ? "sin_radicar" : "radico", TaskScheduler.Default));
+
+        despues[0].Should().Be("cobro_no_anulable");
+        despues[1].Should().Be("radico");
+        (await EstadoDeAsync(idB)).Should().Be("en_cola");
+        await using var db2 = _host.NuevaDb();
+        (await db2.Set<CobroSolicitud>().SingleAsync(c => c.Id == cobroB, TestContext.Current.CancellationToken)).Estado.Should().Be("pagado");
+    }
+
+    private async Task<string> AnularEnCarreraAsync(Guid cobroId)
+    {
+        try
+        {
+            await AnularAsync(cobroId);
+            return "anulado";
+        }
+        catch (ReglaDeNegocioException ex)
+        {
+            return ex.Codigo;
+        }
     }
 
     // ── Vigencia a medianoche (hora de Colombia) ──────────────────────────────────────────────────────────────────────

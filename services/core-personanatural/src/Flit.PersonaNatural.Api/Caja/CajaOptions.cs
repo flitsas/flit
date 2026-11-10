@@ -25,6 +25,18 @@ public sealed class CajaOptions
 
     public int BusquedasFallidasVentanaMin { get; set; } = 5;
 
+    /// <summary>Búsquedas sin resultado desde la misma IP (huella) dentro del organismo en la misma ventana. Nunca menor que el tope por usuario: varias cajas pueden compartir una IP.</summary>
+    public int BusquedasFallidasMaxPorIp { get; set; } = 30;
+
+    /// <summary>
+    /// Margen, en segundos, que el trabajo de radicación espera DESPUÉS de vencida la ventana de anulación antes de radicar: en el
+    /// borde exacto gana la anulación (que usa el límite sin margen), no la radicación.
+    /// </summary>
+    public int RadicacionGraciaSegundos { get; set; } = 5;
+
+    /// <summary>Edad mínima, en horas, de una prefactura sin cobro pagado para que la retención la barra como huérfana.</summary>
+    public int PrefacturaHuerfanaHoras { get; set; } = 24;
+
     /// <summary>Tope de la prefactura (PDF, JPG o PNG).</summary>
     public long PrefacturaMaxBytes { get; set; } = 5L * 1024 * 1024;
 
@@ -40,7 +52,11 @@ public sealed class CajaOptions
     /// <summary>Solicitudes que un ciclo intenta radicar como máximo.</summary>
     public int RadicacionLote { get; set; } = 50;
 
-    public TimeSpan Ventana => TimeSpan.FromMinutes(Math.Max(0, VentanaAnulacionMinutos));
+    /// <summary>Ventana de anulación efectiva. Con la caja apagada (<c>Caja:Habilitado=false</c>) es 0: todo se radica de inmediato, como antes de la caja.</summary>
+    public TimeSpan Ventana => Habilitado ? TimeSpan.FromMinutes(Math.Max(0, VentanaAnulacionMinutos)) : TimeSpan.Zero;
+
+    /// <summary>Margen configurable (<see cref="RadicacionGraciaSegundos"/>) que el trabajo de radicación suma a la ventana: en el borde exacto gana la anulación.</summary>
+    public TimeSpan Gracia => TimeSpan.FromSeconds(Math.Max(0, RadicacionGraciaSegundos));
 
     public static CajaOptions Leer(IConfiguration configuration)
     {
