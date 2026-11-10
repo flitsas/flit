@@ -31,6 +31,7 @@ import {
 } from '@/lib/tramites/useAperturaConsolidado';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
+import { EditarSeccionButton, type DestinoEdicion } from './EditarSeccionButton';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
   ChecklistItemView,
@@ -71,6 +72,11 @@ interface Props {
    * «reconstrucción en curso» sin bloquear la UI.
    */
   consolidadoWizard?: ConsolidadoVigencia | null;
+  /**
+   * Botón «Editar» de «Documentos cargados»: lleva al paso donde se cargan (Requisitos). Solo llega
+   * en un borrador editable; sin él la tarjeta queda en solo lectura, como siempre.
+   */
+  editarDocumentos?: DestinoEdicion | null;
 }
 
 const BLUE = 'var(--color-flit-brand)';
@@ -186,6 +192,7 @@ export default function ExpedienteVisor({
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
   consolidadoWizard,
+  editarDocumentos = null,
 }: Props) {
   const subtitle =
     modalidad === 'traspaso'
@@ -194,7 +201,12 @@ export default function ExpedienteVisor({
 
   return (
     <section aria-label="Expediente digital" className="space-y-3">
-      <DocumentosCargadosCard instanceId={instanceId} attachments={attachments} checklist={checklist} />
+      <DocumentosCargadosCard
+        instanceId={instanceId}
+        attachments={attachments}
+        checklist={checklist}
+        editar={editarDocumentos}
+      />
       <WizardAccordion
         title="Expediente consolidado"
         subtitle={subtitle}
@@ -255,23 +267,28 @@ function DocumentosCargadosCard({
   instanceId,
   attachments,
   checklist,
+  editar,
 }: {
   instanceId: string | null;
   attachments: ProcedureAttachment[];
   checklist: ChecklistItemView[];
+  editar: DestinoEdicion | null;
 }) {
   const items = [...checklist, ...certificadosDelActor(attachments, checklist)];
   return (
     <VisorCard
       title="Documentos cargados"
       action={
-        // Distintivo del bloque (propuesta, WizardTramite.tsx:701). `aria-hidden`: cada documento ya
-        // anuncia su propio "SHA-256 <hash>" como texto accesible; sin ocultarlo, el nombre accesible
-        // de la tarjeta pasaría de "Documentos cargados" a "Documentos cargados SHA-256" para cada
-        // lector de pantalla que la recorra, un dato redundante con lo que ya lee en cada ficha.
-        <span className="text-xs font-semibold" style={{ color: BLUE }} aria-hidden="true">
-          SHA-256
-        </span>
+        <div className="flex items-center gap-3">
+          {/* Distintivo del bloque (propuesta, WizardTramite.tsx:701). `aria-hidden`: cada documento
+              ya anuncia su propio "SHA-256 <hash>" como texto accesible; sin ocultarlo, el nombre
+              accesible de la tarjeta pasaría de "Documentos cargados" a "Documentos cargados
+              SHA-256" para cada lector de pantalla que la recorra. */}
+          <span className="text-xs font-semibold" style={{ color: BLUE }} aria-hidden="true">
+            SHA-256
+          </span>
+          {editar ? <EditarSeccionButton title="Documentos cargados" destino={editar} /> : null}
+        </div>
       }
     >
       {items.length > 0 ? (
