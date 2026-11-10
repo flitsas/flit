@@ -59,16 +59,19 @@ export const TABLA_MOVIL_ROW_CLS =
   'max-[900px]:block max-[900px]:rounded-xl max-[900px]:border max-[900px]:border-[color:var(--di-border)] ' +
   'max-[900px]:bg-[var(--di-surface-elevated)] max-[900px]:px-3.5 max-[900px]:pt-1 max-[900px]:pb-2 ' +
   'max-[900px]:hover:border-[color:var(--di-border-control)]';
-/** En cada `<td>` (con `data-label`): etiqueta de la columna a la izquierda, valor a la derecha. */
+/**
+ * En cada `<td>` (con `data-label`): etiqueta de la columna a la izquierda, valor a la derecha. El borde y el
+ * redondeo van con `!` porque las recetas de escritorio los ponen con `first:`/`last:`, que pesan más.
+ */
 export const TABLA_MOVIL_CELL_CLS =
   'max-[900px]:flex max-[900px]:items-center max-[900px]:justify-between max-[900px]:gap-3 ' +
-  'max-[900px]:rounded-none max-[900px]:border-0 max-[900px]:px-0 max-[900px]:py-[5px] max-[900px]:text-right ' +
+  'max-[900px]:rounded-none! max-[900px]:border-0! max-[900px]:px-0 max-[900px]:py-[5px] max-[900px]:text-right ' +
   'max-[900px]:text-[0.8125rem] max-[900px]:bg-transparent max-[900px]:before:shrink-0 max-[900px]:before:text-left ' +
   'max-[900px]:before:text-xs max-[900px]:before:font-medium max-[900px]:before:text-[color:var(--di-text-tertiary)] ' +
   'max-[900px]:before:content-[attr(data-label)]';
-/** Además, en la primera `<td>`: hace de título de la tarjeta, con un divisor debajo. */
+/** Además, en la primera `<td>`: hace de título de la tarjeta, con un divisor debajo (sombra interior: el borde está anulado). */
 export const TABLA_MOVIL_CELL_TITULO_CLS =
-  'max-[900px]:mb-1 max-[900px]:border-b max-[900px]:border-[color:var(--di-divider)] max-[900px]:py-2.5 ' +
+  'max-[900px]:mb-1 max-[900px]:shadow-[inset_0_-1px_0_var(--di-divider)] max-[900px]:py-2.5 ' +
   'max-[900px]:text-sm max-[900px]:font-semibold';
 /** En una fila a todo el ancho (vacío, expandida, `colSpan`) y en su `<td>`: ocupa la rejilla entera. */
 export const TABLA_MOVIL_FILA_ANCHA_CLS = 'max-[900px]:col-span-full max-[900px]:block';

@@ -58,6 +58,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 
 const COLUMNS_STORAGE_KEY = "flit-ot-revisores-columnas";
 
@@ -383,8 +391,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         ) : (
           <>
           <div className={CARDLIST_SCROLL}>
-            <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-reviewers-table">
-              <thead>
+            <table className={`min-w-[40rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} data-testid="ot-reviewers-table">
+              <thead className={TABLA_MOVIL_THEAD_CLS}>
                 <tr className={CARDLIST_HEAD_ROW}>
                   {columns.map((column) => (
                     <th key={column.id} scope="col" className={CARDLIST_TH}>
@@ -405,13 +413,14 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className={TABLA_MOVIL_TBODY_CLS}>
                 {pg.paginar(report!.filas).map((row) => (
-                  <tr key={row.userId} className={CARDLIST_ROW}>
-                    {columns.map((column) => (
+                  <tr key={row.userId} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                    {columns.map((column, i) => (
                       <td
                         key={column.id}
-                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
+                        data-label={column.label}
+                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""} ${TABLA_MOVIL_CELL_CLS} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
                       >
                         {column.value(row)}
                       </td>

@@ -12,6 +12,12 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 import { bannerImageUrl, type Banner, type BannerEstado } from "@/lib/api/admin-banners";
 import { formatFechaHora } from "@/lib/format/date";
@@ -63,11 +69,11 @@ export function BannerListTable({
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
-        <table
+        <table className={TABLA_MOVIL_TABLE_CLS}
           aria-label="Banners promocionales"
           style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
         >
-          <thead>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr>
               <th
                 scope="col"
@@ -120,13 +126,13 @@ export function BannerListTable({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {items.map((b) => (
-              <tr key={b.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "var(--border)" }}>
+              <tr key={b.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                <td className={`rounded-l-xl border-y border-l px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-label="Nombre" style={{ borderColor: "var(--border)" }}>
                   {b.name}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Imagen" style={{ borderColor: "var(--border)" }}>
                   {/* AC1 mejora: la miniatura no recorta (object-contain) y, al hacer clic, abre
                       la imagen completa en un visualizador — la miniatura sigue siendo chica para
                       no romper el alto de la fila, pero nada del banner queda oculto. */}
@@ -146,7 +152,7 @@ export function BannerListTable({
                     />
                   </button>
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Tiene enlace" style={{ borderColor: "var(--border)" }}>
                   {b.linkUrl ? (
                     <span className="inline-flex items-center gap-1">
                       <StatusBadge label="SÍ" tone="info" ariaLabel={`${b.name} tiene enlace`} />
@@ -166,16 +172,16 @@ export function BannerListTable({
                     <StatusBadge label="NO" tone="neutral" ariaLabel={`${b.name} no tiene enlace`} />
                   )}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Estado" style={{ borderColor: "var(--border)" }}>
                   <StatusBadge label={ESTADO_LABEL[b.estado]} tone={bannerEstadoTone(b.estado)} />
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Fecha inicio" style={{ borderColor: "var(--border)" }}>
                   {formatFechaHora(b.validFrom, "Sin fecha programada")}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Fecha fin" style={{ borderColor: "var(--border)" }}>
                   {formatFechaHora(b.validUntil, "Sin fecha programada")}
                 </td>
-                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "var(--border)" }}>
+                <td className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`} data-label="Acciones" style={{ borderColor: "var(--border)" }}>
                   <RowActions
                     actions={[
                       {

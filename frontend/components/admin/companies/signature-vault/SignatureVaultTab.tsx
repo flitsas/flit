@@ -25,6 +25,12 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 
@@ -126,9 +132,9 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
       >
         {/* Bug #13055 — tabla homologada con el modelo de trámites */}
         <div className="overflow-x-auto">
-          <table className="min-w-[820px] text-xs" style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}>
+          <table className={`min-w-[820px] text-xs ${TABLA_MOVIL_TABLE_CLS}`} style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}>
             <caption className="sr-only">Firmas de apoderados registradas en el baúl</caption>
-            <thead>
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
                 <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   Registro
@@ -153,31 +159,31 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {pg.paginar(items).map((item) => {
                 const registro = item.fechaRegistro ?? item.createdAt ?? null;
                 const revoked = item.estado === "revocada";
                 const badge = ESTADO_BADGE[item.estado] ?? ESTADO_BADGE.vencida;
                 return (
-                  <tr key={item.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-                    <td className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
+                  <tr key={item.id} className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                    <td data-label="Registro" className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""} ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={{ borderColor: "var(--border)" }}>
                       {formatDate(registro)}
                     </td>
-                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
+                    <td data-label="Documento" className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""} ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       <span className="font-mono">
                         {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </span>
                     </td>
-                    <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
+                    <td data-label="Código hash" className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""} ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       {item.codigoHash ?? "—"}
                     </td>
-                    <td className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
+                    <td data-label="Apoderado" className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""} ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       {item.fullName}
                     </td>
-                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "var(--border)" }}>
+                    <td data-label="Vigencia" className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""} ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       {formatDate(item.vigenciaDesde)} — {formatDate(item.vigenciaHasta)}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                    <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       <span
                         className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
                         style={{ color: badge.color, borderColor: badge.border, background: badge.bg }}
@@ -185,7 +191,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                         {ESTADO_LABELS[item.estado] ?? item.estado}
                       </span>
                     </td>
-                    <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "var(--border)" }}>
+                    <td data-label="Acciones" className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       {/* Corregir/Anular solo sobre firmas activas: el contenido de una revocada es
                           histórico. Sin Corregir, arreglar un código hash mal digitado obligaba a
                           anular la firma y volver a registrarla. */}

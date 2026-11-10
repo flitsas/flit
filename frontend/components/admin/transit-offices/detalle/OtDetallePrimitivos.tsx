@@ -7,6 +7,11 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 import { OT_BANDA, OT_BLUE, OT_CARD, OT_MARCO, OT_NAVY } from "./ot-detalle-visual";
 
@@ -154,10 +159,10 @@ export function OtRejilla({
 
   if (!ficha) {
     return (
-      <div role="table" aria-label={etiqueta} className="flex flex-col gap-2">
+      <div role="table" aria-label={etiqueta} className={`flex flex-col gap-2 ${TABLA_MOVIL_TBODY_CLS}`}>
         <div
           role="row"
-          className="grid rounded-xl"
+          className={`grid rounded-xl ${TABLA_MOVIL_THEAD_CLS}`}
           style={{ ...estilo, background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
         >
           {columnas.map((c) => (
@@ -174,14 +179,15 @@ export function OtRejilla({
           <div
             key={i}
             role="row"
-            className={`grid rounded-xl border bg-card ${TABLA_ROW_HOVER_CLS}`}
+            className={`grid rounded-xl border bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
             style={{ ...estilo, borderColor: "var(--table-row-border)" }}
           >
             {fila.map((celda, j) => (
               <div
                 key={j}
                 role="cell"
-                className="self-center break-words px-4 py-3 text-xs font-semibold"
+                className={`self-center break-words px-4 py-3 text-xs font-semibold ${TABLA_MOVIL_CELL_CLS} ${j === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
+                data-label={columnas[j]}
                 style={{ color: OT_NAVY }}
               >
                 <span className="dark:text-foreground">{celda}</span>

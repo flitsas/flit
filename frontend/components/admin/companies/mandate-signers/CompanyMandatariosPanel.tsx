@@ -15,6 +15,12 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 import {
@@ -407,11 +413,11 @@ export function CompanyMandatariosPanel({
             <>
               <div className="overflow-x-auto">
                 <table
-                  className="text-xs"
+                  className={`text-xs ${TABLA_MOVIL_TABLE_CLS}`}
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
                 >
                   <caption className="sr-only">Mandatarios de la compañía</caption>
-                  <thead>
+                  <thead className={TABLA_MOVIL_THEAD_CLS}>
                     <tr>
                       <th
                         scope="col"
@@ -476,7 +482,7 @@ export function CompanyMandatariosPanel({
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className={TABLA_MOVIL_TBODY_CLS}>
                     {filtrados.length === 0 ? (
                       <FilaVaciaFiltros
                         columnas={7}
@@ -494,33 +500,37 @@ export function CompanyMandatariosPanel({
                       return (
                         <tr
                           key={signer.id}
-                          className={`${candado ? "bg-secondary" : "bg-card"} ${TABLA_ROW_HOVER_CLS}`}
+                          className={`${candado ? "bg-secondary" : "bg-card"} ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
                           data-candado={candado ? "true" : undefined}
                         >
                           <td
-                            className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
+                            data-label="Mandatario"
+                            className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
                             style={{ borderColor: "var(--border)" }}
                           >
                             <span className="font-semibold">{signer.fullName}</span>
                             {candado && <MandatarioCandado />}
                           </td>
                           <td
-                            className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}
+                            data-label="Documento"
+                            className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: "var(--border)" }}
                           >
                             {formatDocumentWithType(signer.documentType, signer.documentNumber)}
                           </td>
                           <td
-                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
+                            data-label="Modelo"
+                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: "var(--border)" }}
                           >
                             {etiquetaModelo(signer)}
                           </td>
-                          <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                          <td data-label="Vigencia" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                             <MandatarioVigenciaBadge signer={signer} />
                           </td>
                           <td
-                            className="border-y px-4 py-3"
+                            data-label="Validación"
+                            className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: "var(--border)" }}
                             data-testid="mandatario-validacion-celda"
                           >
@@ -535,7 +545,8 @@ export function CompanyMandatariosPanel({
                             )}
                           </td>
                           <td
-                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
+                            data-label="Organismos"
+                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: "var(--border)" }}
                           >
                             <MandatarioOrganismos
@@ -547,7 +558,8 @@ export function CompanyMandatariosPanel({
                             />
                           </td>
                           <td
-                            className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                            data-label="Acciones"
+                            className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: "var(--border)" }}
                           >
                             <RowActions
