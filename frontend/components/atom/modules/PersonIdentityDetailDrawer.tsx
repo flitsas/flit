@@ -24,7 +24,6 @@ import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityMan
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import type {
   BiometricEstado,
@@ -266,7 +265,7 @@ export function PersonIdentityDetailDrawer({
           {error && !data && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: FLIT.state.danger, background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -288,13 +287,13 @@ export function PersonIdentityDetailDrawer({
             <div className="space-y-4 text-xs">
               <div
                 className="rounded-xl border bg-card px-4 py-3"
-                style={{ borderColor: FLIT.border.soft }}
+                style={{ borderColor: 'var(--border)' }}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   {awaiting ? (
                     <div className="flex min-w-0 items-center gap-2">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
-                      <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} aria-hidden />
+                      <p className="text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                         Esperando validación de {personName}
                       </p>
                     </div>
@@ -305,7 +304,7 @@ export function PersonIdentityDetailDrawer({
                   )}
                   <span
                     className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold"
-                    style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
+                    style={{ background: 'var(--di-info-soft)', color: 'var(--di-action)' }}
                   >
                     {latest.documentType} {latest.documentNumber}
                   </span>
@@ -316,7 +315,7 @@ export function PersonIdentityDetailDrawer({
                     wrap
                   />
                 </div>
-                <p className="mt-1 text-[12px]" style={{ color: FLIT.text.secondary }}>
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
                   {latest.email || '—'}
                 </p>
               </div>
@@ -392,7 +391,7 @@ function ValidationAccordionItem({
   });
 
   return (
-    <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: FLIT.border.soft }}>
+    <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: 'var(--border)' }}>
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
@@ -403,16 +402,16 @@ function ValidationAccordionItem({
         <span className="text-[13px] font-semibold text-foreground">{title}</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: FLIT.brand.blue }}
+          style={{ color: 'var(--di-action)' }}
           aria-hidden
         />
       </button>
 
       {open && (
-        <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: FLIT.border.soft }}>
+        <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: 'var(--border)' }}>
           <div
             className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-3"
-            style={{ borderColor: FLIT.border.soft }}
+            style={{ borderColor: 'var(--border)' }}
           >
             <SessionStat
               label="Asociado a trámite"
@@ -463,7 +462,7 @@ function ValidationAccordionItem({
           {v.status === 'rechazado' && motivoRechazo && (
             <p
               className="rounded-xl px-3 py-2 text-[11px]"
-              style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
             >
               Motivo del rechazo: {motivoRechazo}
             </p>
@@ -473,9 +472,9 @@ function ValidationAccordionItem({
             <div
               className="rounded-xl p-3 text-[11px]"
               style={{
-                background: FLIT.warningAlpha(0.08),
-                border: `1px solid ${FLIT.warningAlpha(0.3)}`,
-                color: FLIT.state.warning,
+                background: 'var(--di-warning-soft)',
+                border: '1px solid color-mix(in srgb, var(--di-warning) 30%, transparent)',
+                color: 'var(--di-warning)',
               }}
               role="status"
               aria-live="polite"
@@ -492,11 +491,11 @@ function ValidationAccordionItem({
 
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
-          <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
             <p className="mb-1 text-[13px] font-semibold text-foreground">
               Tracking de auditoría y proceso (tiempo real)
             </p>
-            <p className="mb-2 text-[11px]" style={{ color: FLIT.text.secondary }}>
+            <p className="mb-2 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
               Historial cronológico de eventos, cifrado y respuestas del proveedor.
             </p>
             <IdentityValidationTrackingPanel
@@ -535,7 +534,7 @@ function SessionStat({
       ) : (
         <p
           className={`mt-0.5 truncate text-[12px] font-semibold ${accent ? 'font-mono' : ''}`}
-          style={{ color: accent ? FLIT.brand.blue : FLIT.text.primary }}
+          style={{ color: accent ? 'var(--di-action)' : 'var(--foreground)' }}
         >
           {value}
         </p>

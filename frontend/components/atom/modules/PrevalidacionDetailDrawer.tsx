@@ -29,7 +29,6 @@ import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
-import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
@@ -183,7 +182,7 @@ export function PrevalidacionDetailDrawer({
           {error && !detail && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: FLIT.state.danger, background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -199,8 +198,8 @@ export function PrevalidacionDetailDrawer({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {awaiting ? (
                   <div className="flex items-center gap-2">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
-                    <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} aria-hidden />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                       Esperando validación de {detail.name}
                     </p>
                   </div>
@@ -263,7 +262,7 @@ export function PrevalidacionDetailDrawer({
               {detail.status === 'rechazado' && detail.rejectionReason && (
                 <p
                   className="rounded-xl px-3 py-2 text-[11px]"
-                  style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+                  style={{ background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
                 >
                   Motivo del rechazo: {detail.rejectionReason}
                 </p>
@@ -273,9 +272,9 @@ export function PrevalidacionDetailDrawer({
                 <div
                   className="rounded-xl p-3 text-[11px]"
                   style={{
-                    background: FLIT.warningAlpha(0.08),
-                    border: `1px solid ${FLIT.warningAlpha(0.3)}`,
-                    color: FLIT.state.warning,
+                    background: 'var(--di-warning-soft)',
+                    border: '1px solid color-mix(in srgb, var(--di-warning) 30%, transparent)',
+                    color: 'var(--di-warning)',
                   }}
                   role="status"
                   aria-live="polite"

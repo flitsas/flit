@@ -89,8 +89,9 @@ describe('Guardián de diseño FLIT · administración de la identidad manual', 
     expect(acciones).toContain('WIZARD_CTA_GRADIENT_DANGER');
     expect(acciones).toContain('rounded-full');
     const estilos = codigo('components/operacion/wizard-field-styles.ts');
-    // Homologación #14507: los dos tramos son tokens (peligro de la propuesta → alerta), sin hex.
-    expect(estilos).toContain("'linear-gradient(135deg, var(--di-danger) 0%, var(--color-flit-alert) 100%)'");
+    // Homologación #14507: fondo sólido --destructive y texto --destructive-foreground (contraste AA en los dos temas).
+    expect(estilos).toContain("WIZARD_CTA_GRADIENT_DANGER = 'var(--destructive)'");
+    expect(acciones).toContain("color: 'var(--destructive-foreground)'");
   });
 
   it('el detalle de Identidad (porción de la épica) mantiene el piso de 12px en «Origen de la aprobación»', () => {

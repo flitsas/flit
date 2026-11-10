@@ -117,7 +117,8 @@ export const WIZARD_CTA_GRADIENT = 'var(--gradient-action)';
 export const WIZARD_CTA_GRADIENT_DONE = 'var(--di-gradient-action)';
 
 /**
- * Degradado del CTA de acción destructiva o de rechazo: token FLIT `gradient.danger` (naranja de alerta → rojo),
- * en pastilla con texto blanco. Sustituye al rojo plano `#C1272D`, que no es un token de la línea base.
+ * Fondo del CTA de acción destructiva o de rechazo (homologación #14507): sólido `--destructive`, con el texto en
+ * `--destructive-foreground` (blanco sobre #c23c00 en claro, ≈5,3:1; tinta sobre #ff8a50 en oscuro, ≈7:1). El
+ * degradado naranja anterior con texto blanco fijo daba ≈2,2:1 en oscuro. Conserva el nombre por compatibilidad.
  */
-export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, var(--di-danger) 0%, var(--color-flit-alert) 100%)';
+export const WIZARD_CTA_GRADIENT_DANGER = 'var(--destructive)';
