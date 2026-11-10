@@ -518,6 +518,11 @@ public static class FurFieldMapper
 
     private static string? ResolveDocTypeCheckbox(string tipo, string doc)
     {
+        // HU #14500 / ADR-0082 — PPT no tiene casilla en Anexo 46; no caer al fallback c/p.
+        if (tipo is "PPT" || tipo.Contains("PROTECCION TEMPORAL", StringComparison.Ordinal)
+            || tipo.Contains("PROTECCIÓN TEMPORAL", StringComparison.Ordinal))
+            return null;
+
         if (tipo is "CC" or "CEDULA" or "C" || tipo.Contains("CIUDADANIA", StringComparison.Ordinal))
             return "c";
         if (tipo.Contains("NIT", StringComparison.Ordinal))
