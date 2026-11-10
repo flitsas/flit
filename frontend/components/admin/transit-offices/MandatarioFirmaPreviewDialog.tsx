@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useEffect, useState } from "react";
 import { FileSignature } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
@@ -64,7 +65,7 @@ export function MandatarioFirmaPreviewDialog({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-flit-brand"
+          className={buttonClass()}
         >
           Cerrar
         </button>

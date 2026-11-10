@@ -56,8 +56,7 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
           <span
             key={email}
             data-testid="recipient-chip"
-            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium text-white"
-            style={{ background: "var(--color-flit-brand)" }}
+            className="flex items-center gap-1 rounded-full bg-[var(--badge-info-bg)] px-2.5 py-1 text-xs font-medium text-[color:var(--badge-info-fg)]"
           >
             {email}
             {!disabled && (
@@ -65,7 +64,7 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
                 type="button"
                 aria-label={`Quitar ${email}`}
                 onClick={() => onChange(value.filter((r) => r !== email))}
-                className="rounded-full hover:bg-white/20"
+                className="rounded-full hover:bg-[color:var(--di-accent-soft)]"
               >
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>

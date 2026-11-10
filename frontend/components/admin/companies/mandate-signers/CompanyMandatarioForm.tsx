@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useState, type ReactNode } from "react";
 import { Building2, FileText, ShieldCheck, User, Vault } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
@@ -355,7 +356,7 @@ export function CompanyMandatarioForm({
               type="button"
               onClick={onCancel}
               disabled={saving}
-              className="rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-flit-primary disabled:opacity-50"
+              className={buttonClass({ variant: "secondary", size: "sm" })}
             >
               Cancelar
             </button>
@@ -363,8 +364,7 @@ export function CompanyMandatarioForm({
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "var(--gradient-action)" }}
+              className={buttonClass({ size: "sm" })}
             >
               {saving ? "Guardando…" : "Guardar"}
             </button>
@@ -716,8 +716,8 @@ function Paso({
       <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-flit-primary">
         <span
           aria-hidden="true"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
-          style={{ background: "var(--color-flit-brand)" }}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-[color:var(--di-on-accent)]"
+          style={{ background: "var(--di-accent)" }}
         >
           {numero}
         </span>
@@ -785,7 +785,7 @@ function Segmento({
   return (
     <label
       className="relative cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand"
-      style={checked ? { background: "var(--color-flit-brand)", color: "#FFFFFF" } : { color: "var(--muted-foreground)" }}
+      style={checked ? { background: "var(--di-accent)", color: "var(--di-on-accent)" } : { color: "var(--muted-foreground)" }}
       // El radio está oculto con position:absolute. Si toma el foco, el modal (overlay con
       // desenfoque) lo lleva al inicio del scroll. El clic sigue cambiando la opción.
       onMouseDown={(e) => e.preventDefault()}

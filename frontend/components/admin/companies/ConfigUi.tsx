@@ -294,7 +294,7 @@ export function OptionCard({
       <span
         aria-hidden
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center border-2 ${mark}`}
-        style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--flit-success-ink)", color: "#FFFFFF" } : { borderColor: "var(--muted-foreground)", background: "var(--card)" }}
+        style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--flit-success-ink)", color: "var(--di-on-accent)" } : { borderColor: "var(--muted-foreground)", background: "var(--card)" }}
       >
         {checked && <Check className="h-3 w-3" strokeWidth={3} />}
       </span>
