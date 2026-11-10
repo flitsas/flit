@@ -1551,19 +1551,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 ? 'La compañía tiene bloqueada la creación de trámites.'
                 : undefined
             }
-            // HU #14482 (propuesta): `.btn` principal en píldora, en el mismo sitio del DOM. El salto
-            // de línea del rótulo se oculta por CSS para que quepa en una sola línea.
+            // HU #14482 (propuesta): `.btn` principal en píldora, en el mismo sitio del DOM. El rótulo va en
+            // una línea; antes el <br> lo partía en dos y el nombre accesible salía «Nuevotrámite».
             className={buttonClass({
               variant: 'primary',
               size: 'md',
-              className: 'shrink-0 self-start [&_br]:hidden',
+              className: 'shrink-0 self-start',
             })}
           >
-            <span>
-              Nuevo
-              <br />
-              trámite
-            </span>
+            <span>Nuevo trámite</span>
           </button>
           ) : null}
         </div>
