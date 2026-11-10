@@ -58,8 +58,10 @@ public static class ConsolidadoEntregaModos
 
 /// <summary>Petición a la ruta de entrega del consolidado (HU #12785).</summary>
 /// <param name="Force">
-/// Reconstruye saltando la caché de vigencia. Nunca aplica en estado final, sobre un PDF
-/// <c>Source="user"</c> ni en modo <paramref name="SoloLectura"/>.
+/// Reconstruye saltando la caché de vigencia cuando el llamador lo pide explícitamente. No aplica sobre un PDF
+/// <c>Source="user"</c> ni en modo <paramref name="SoloLectura"/>; en estado final el cliente no usa
+/// <c>force</c> (p. ej. GET de entrega lo rechaza), pero el handler puede aplicar regeneración JIT por
+/// obsolescencia temporal (<c>forceEfectivo</c>, HU #14494) salvo excepciones (migrado, maestro Quipux radicado).
 /// </param>
 /// <param name="SoloLectura">
 /// Devuelve el adjunto existente tal cual, sin mirar la bandera y sin escribir nada. Es la vía de la
