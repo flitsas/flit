@@ -15,13 +15,12 @@ import {
   type ModalidadTraspasoUi,
   type NuevoTramiteTipoUi,
 } from '@/lib/tramites/nuevo-tramite-resolver';
-import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { buttonClass } from '@flit/ui/Button';
 import { OperacionLoadingState } from './states';
 import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
 
 const BLUE = 'var(--color-flit-brand)';
 const BORDER = 'var(--border)';
-const ALERT = 'var(--color-flit-alert)';
 
 export type { FamiliasBloqueadasResolver as FamiliasBloqueadas };
 
@@ -456,8 +455,7 @@ export function NuevoTramiteModalContent({
             type="button"
             onClick={onCancelar}
             disabled={registrandoTerminos}
-            className="min-w-[160px] rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-alert focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ background: ALERT }}
+            className={buttonClass({ variant: 'secondary', className: 'min-w-[160px]' })}
           >
             Cancelar
           </button>
@@ -466,8 +464,7 @@ export function NuevoTramiteModalContent({
           type="button"
           onClick={() => void iniciar()}
           disabled={!puedeIniciar}
-          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: WIZARD_CTA_GRADIENT }}
+          className={buttonClass({ className: 'min-w-[160px]' })}
         >
           {registrandoTerminos ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {registrandoTerminos ? 'Registrando…' : 'Iniciar trámite'}

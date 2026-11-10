@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { CalendarDays, ChevronDown } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
 import {
   DayPicker,
   DayButton,
@@ -282,7 +283,7 @@ export function DateRangePicker({
             <button
               type="button"
               data-testid="date-range-clear"
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary dark:border-border dark:text-muted-foreground dark:hover:bg-white/5"
+              className={buttonClass({ variant: "ghost", size: "sm" })}
               onClick={handleClear}
             >
               Limpiar
@@ -290,7 +291,7 @@ export function DateRangePicker({
             <button
               type="button"
               data-testid="date-range-apply"
-              className="rounded-lg bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              className={buttonClass({ size: "sm" })}
               onClick={handleApply}
             >
               Aplicar
