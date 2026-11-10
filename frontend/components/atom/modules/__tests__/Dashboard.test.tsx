@@ -648,13 +648,15 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it("AC1 — banner y columna derecha comparten min-height del token --dashboard-hero-h", async () => {
+  it("AC1 (HU #14481) — el banner toma el alto de la columna derecha; el token solo rige apilado", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     const banner = await screen.findByTestId("dashboard-hero-banner");
     const column = screen.getByTestId("dashboard-hero-column");
+    // Apilado (celular) el banner conserva el alto del token; a partir de md se estira a la columna.
     expect(banner.className).toContain("min-h-[var(--dashboard-hero-h)]");
-    expect(column.className).toContain("min-h-[var(--dashboard-hero-h)]");
+    expect(banner.className).toContain("md:min-h-0");
+    expect(column.className).not.toContain("min-h-");
     expect(banner.style.minHeight).toBe("");
   });
 
