@@ -28,6 +28,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
@@ -288,7 +289,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
           errorMessage="No se pudieron cargar los clientes ICT."
           onRetry={() => void load()}
         >
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
             <table
               aria-label="Clientes ICT"
               className="text-xs"

@@ -159,6 +159,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         )}
         {resultado?.exitoso && (
           <DataTable
+            tarjeta={false}
             ariaLabel="Campos extraídos"
             rows={campos}
             getRowKey={([k]) => k}
@@ -217,6 +218,7 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
         ))}
         {e?.estado === "Terminada" && (
           <DataTable
+            tarjeta={false}
             ariaLabel="Campos que no coincidieron"
             rows={filas}
             getRowKey={(f) => f.clave}

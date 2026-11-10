@@ -400,7 +400,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                         <button
                           type="button"
                           onClick={() => toggleSort(column.sort!)}
-                          className="flex items-center gap-1 uppercase transition hover:text-flit-brand"
+                          className="flex items-center gap-1 normal-case text-inherit transition hover:opacity-80"
                           aria-label={`Ordenar por ${column.label}`}
                         >
                           {column.label}

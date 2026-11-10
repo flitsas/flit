@@ -55,6 +55,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { SearchableSelect } from '@/components/atom/SearchableSelect';
@@ -1287,7 +1288,7 @@ function ValidacionesLista({
       )}
 
       {!initialLoading && !isEmpty && persons !== null && (
-        <div className="flex flex-col">
+        <div className={`flex flex-col ${TABLA_TARJETA_CLS}`}>
           <PersonasTable
             rows={persons}
             columns={tableColumns}

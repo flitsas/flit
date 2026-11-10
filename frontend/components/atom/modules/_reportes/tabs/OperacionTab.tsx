@@ -177,7 +177,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
         {metrics.data && (
           <div className="flex flex-col gap-4">
             <section aria-labelledby="stuck-title">
-              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+              {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
               <h2
                 id="stuck-title"
                 className="text-sm font-bold mb-3"

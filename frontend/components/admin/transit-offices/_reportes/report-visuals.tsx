@@ -330,6 +330,7 @@ export function TrendChart({
             getRowKey={(point) => point.bucket}
             ariaLabel="Valores periodo a periodo"
             minWidth={448}
+            tarjeta={false}
             pagination={{
               page: pg.page,
               pageSize: pg.pageSize,

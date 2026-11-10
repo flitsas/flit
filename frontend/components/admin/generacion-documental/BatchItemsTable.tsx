@@ -8,6 +8,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
   TABLA_MOVIL_ROW_CLS,
@@ -99,6 +100,7 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
         errorMessage="No se pudieron cargar las filas del lote. Intenta nuevamente."
       >
         {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
+        <div className={TABLA_TARJETA_CLS}>
         <div className="overflow-x-auto">
           <table
             className={`min-w-[720px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
@@ -188,6 +190,7 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />
+        </div>
       </UiStateBoundary>
     </section>
   );

@@ -484,6 +484,7 @@ function PersonalizedDocumentSection({
           </h4>
           {/* HU #13918 — historial con DataTable y paginación estándar en cliente. */}
           <DataTable<PersonalizedDocumentVersion>
+            tarjeta={false}
             ariaLabel={`Historial de ${meta.title}`}
             rows={pg.paginar(sortedHistory)}
             getRowKey={(v) => v.id}

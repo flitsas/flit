@@ -34,6 +34,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
@@ -386,7 +387,7 @@ export function LegalRepresentativesTab({
             </div>
 
             {
-              <>
+              <div className={TABLA_TARJETA_CLS}>
                 <div className="overflow-x-auto">
                   <table
                     className={`min-w-[820px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
@@ -552,7 +553,7 @@ export function LegalRepresentativesTab({
                     noun="representantes"
                   />
                 ) : null}
-              </>
+              </div>
             }
           </div>
         </UiStateBoundary>

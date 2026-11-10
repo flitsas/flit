@@ -24,6 +24,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 
 // Consola SuperAdmin del catálogo de causales de rechazo.
@@ -279,7 +280,7 @@ function ReasonsTable({
   const cell = { borderColor: "var(--border)" } as const;
 
   return (
-    <div className="flex flex-col">
+    <div className={`flex flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
         <table
           className={`min-w-[36rem] text-xs ${TABLA_MOVIL_TABLE_CLS}`}

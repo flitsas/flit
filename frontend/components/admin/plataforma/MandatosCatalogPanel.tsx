@@ -329,6 +329,7 @@ export function MandatosCatalogPanel() {
         </div>
 
         <DataTable
+          tarjeta={false}
           columns={columns}
           rows={pageRows}
           getRowKey={(row) => row.officeId}

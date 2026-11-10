@@ -330,6 +330,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
           {d.ciclo.mensajeError && <InlineAlert tone="error" compact>{d.ciclo.mensajeError}</InlineAlert>}
           <h3 className="text-sm font-semibold">Por empresa y clave</h3>
           <DataTable
+            tarjeta={false}
             ariaLabel="Resultado por empresa"
             rows={d.logs}
             getRowKey={(l) => l.id}
@@ -350,6 +351,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
           />
           <h3 className="text-sm font-semibold">Consultas a la fuente</h3>
           <DataTable
+            tarjeta={false}
             ariaLabel="Consultas a la fuente"
             rows={d.consultas}
             getRowKey={(c) => c.id}

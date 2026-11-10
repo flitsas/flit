@@ -91,6 +91,7 @@ function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
             </button>
           </div>
           <DataTable
+            tarjeta={false}
             ariaLabel="Comparendos del lote"
             rows={pg.paginar(items)}
             getRowKey={(i) => i.comparendoId}

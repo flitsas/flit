@@ -94,6 +94,7 @@ export function AiTransitionsTable({
         Historial de cambios — {toolLabel}
       </h3>
       <DataTable<AiProviderTransitionView>
+        tarjeta={false}
         columns={columns}
         rows={items}
         getRowKey={(row) => row.id}

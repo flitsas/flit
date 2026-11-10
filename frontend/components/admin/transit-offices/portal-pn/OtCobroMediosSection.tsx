@@ -70,6 +70,8 @@ export interface OtCobroMediosSectionProps {
   onIrAPrecios: () => void;
   /** Cómo se llama ese lugar en esta pantalla: «Precios» en el OT, «Tarifas» en Plataforma. */
   nombrePrecios?: string;
+  /** HU #14477 — `false` cuando se monta dentro de un panel que ya es tarjeta (el hub del OT), para no apilar dos. */
+  tarjeta?: boolean;
 }
 
 /** Interruptor accesible: nombre y estado también en texto, colores de la épica. */
@@ -122,6 +124,7 @@ export function OtCobroMediosSection({
   conPin = true,
   onIrAPrecios,
   nombrePrecios = "Precios",
+  tarjeta = true,
 }: OtCobroMediosSectionProps) {
   const baseId = useId();
   const { show } = useToast();
@@ -434,6 +437,7 @@ export function OtCobroMediosSection({
           )}
 
           <DataTable<TipoCobro>
+            tarjeta={tarjeta}
             ariaLabel="Valores por trámite y si se cobran en cada medio de pago"
             columns={columnas}
             rows={pg.paginar(tipos)}

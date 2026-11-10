@@ -101,27 +101,27 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
       {pestana === "fuentes" && (
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left text-[11px] opacity-60">
-              <th className="py-1">Canal</th>
-              <th>Municipio</th>
-              <th>Estado</th>
-              <th>Primera vez</th>
-              <th>Última vez visto</th>
+            <tr className="text-left text-[11px]">
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Canal</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Municipio</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Estado</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Primera vez</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Última vez visto</th>
             </tr>
           </thead>
           <tbody>
             {d.fuentes.map((f, i) => (
               <tr key={i} className="border-t border-border">
-                <td className="py-1.5">{canal(f.canal).texto}</td>
-                <td>{f.municipioCodigo ?? "—"}</td>
-                <td>{f.presente ? <StatusBadge label="Presente" tone="success" /> : <StatusBadge label={`Ausente desde ${formatoFecha(f.ausenteDesde)}`} tone="neutral" />}</td>
-                <td>{formatoFechaHora(f.primeraVezEn)}</td>
-                <td>{formatoFechaHora(f.ultimaVezVistaEn)}</td>
+                <td className="px-2 py-1.5">{canal(f.canal).texto}</td>
+                <td className="px-2">{f.municipioCodigo ?? "—"}</td>
+                <td className="px-2">{f.presente ? <StatusBadge label="Presente" tone="success" /> : <StatusBadge label={`Ausente desde ${formatoFecha(f.ausenteDesde)}`} tone="neutral" />}</td>
+                <td className="px-2">{formatoFechaHora(f.primeraVezEn)}</td>
+                <td className="px-2">{formatoFechaHora(f.ultimaVezVistaEn)}</td>
               </tr>
             ))}
             {d.fuentes.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-2 opacity-60">
+                <td colSpan={5} className="px-2 py-2 opacity-60">
                   Solo existe por carga OCR.
                 </td>
               </tr>
@@ -138,22 +138,22 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
           {(cambios.datos ?? []).length > 0 && (
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[11px] opacity-60">
-                  <th className="py-1">Fecha</th>
-                  <th>Fuente</th>
-                  <th>Campo</th>
-                  <th>Antes</th>
-                  <th>Ahora</th>
+                <tr className="text-left text-[11px]">
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Fecha</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Fuente</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Campo</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Antes</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Ahora</th>
                 </tr>
               </thead>
               <tbody>
                 {(cambios.datos ?? []).map((c, i) => (
                   <tr key={i} className="border-t border-border">
-                    <td className="py-1.5 whitespace-nowrap">{formatoFechaHora(c.registradoEn)}</td>
-                    <td>{canal(c.canal).texto}</td>
-                    <td>{c.campo.replaceAll("_", " ")}</td>
-                    <td className="opacity-70">{c.valorAnterior ?? "—"}</td>
-                    <td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{formatoFechaHora(c.registradoEn)}</td>
+                    <td className="px-2">{canal(c.canal).texto}</td>
+                    <td className="px-2">{c.campo.replaceAll("_", " ")}</td>
+                    <td className="px-2 opacity-70">{c.valorAnterior ?? "—"}</td>
+                    <td className="px-2">
                       {c.valorNuevo ?? "—"}
                       {!c.aplicadoAMaestro && <span className="ml-1 text-[10px] opacity-60">(no es la fuente principal)</span>}
                     </td>

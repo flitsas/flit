@@ -305,6 +305,7 @@ export function NotificacionesBankPanel() {
           </label>
         </div>
         <DataTable
+          tarjeta={false}
           columns={columns}
           rows={pg.paginar(rows)}
           getRowKey={(row) => row.id}

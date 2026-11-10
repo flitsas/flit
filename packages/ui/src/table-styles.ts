@@ -11,15 +11,17 @@
  */
 
 /**
- * Fondo de la barra de cabecera y color de su texto. Salen de los tokens (`--table-header-*`): en el prototipo
- * «Diseño Inteligente» (HU #14477) la cabecera es la superficie hundida con texto secundario, y en oscuro se adapta sola.
+ * Fondo de la barra de cabecera y color de su texto. Salen de los tokens (`--table-header-*`): desde la HU #14477 la
+ * cabecera es la tinta del UI kit (`.table th`: #162744 con texto blanco), por decisión de producto sobre la cabecera
+ * clara del prototipo; en oscuro se adapta sola. Toda `<th>` lleva LOS DOS (fondo y texto): con solo el fondo, el
+ * texto heredado queda oscuro sobre tinta.
  */
 export const TABLA_HEADER_BG = 'var(--table-header-bg)';
 export const TABLA_HEADER_FG = 'var(--table-header-fg)';
 
 /**
- * Celda de cabecera, como el `th` del prototipo «Diseño Inteligente» (HU #14477): superficie hundida, texto
- * secundario de 13px en peso 600, sin versalitas, y extremos de 8px. La barra queda FIJA al hacer scroll.
+ * Celda de cabecera (HU #14477): tinta del UI kit con texto blanco de 13px en peso 600, sin versalitas (producto
+ * pidió solo el color del kit, no sus mayúsculas), y extremos de 8px. La barra queda FIJA al hacer scroll.
  *
  * El `sticky` no es un adorno: en una lista larga —el OT pagina de 20 en 20— al bajar se pierde de
  * vista qué columna se está mirando, y en una tabla de diez columnas eso obliga a subir a releer.
@@ -30,6 +32,29 @@ export const TABLA_HEADER_FG = 'var(--table-header-fg)';
 export const TABLA_HEADER_CELL_CLS =
   'sticky top-0 z-10 px-3.5 py-2.5 text-left text-[0.8125rem] font-semibold normal-case tracking-normal ' +
   'first:rounded-l-lg last:rounded-r-lg';
+
+/**
+ * Tarjeta detrás de la tabla, como la `.card` del prototipo (HU #14477): superficie elevada, borde, radio de 20px y
+ * sombra suave. Va en el envoltorio de la tabla (el de scroll o el que la junta con su paginador), nunca dentro de otra
+ * tarjeta. Anula la regla anterior de «tabla sin tarjeta ni fondo detrás», por decisión de producto.
+ *
+ * Por debajo de 900px desaparece: allí cada fila ya es una tarjeta, y una tarjeta grande alrededor de tarjetas
+ * pequeñas sería ruido y le restaría ancho a la rejilla. El relleno vertical es menor que el lateral porque la
+ * separación de 6px entre filas (`border-spacing-y-1.5`) ya deja aire arriba y abajo.
+ */
+export const TABLA_TARJETA_SUPERFICIE_CLS =
+  'rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-4 py-2.5 ' +
+  'shadow-[var(--shadow-card)]';
+export const TABLA_TARJETA_CLS =
+  `${TABLA_TARJETA_SUPERFICIE_CLS} ` +
+  'max-[900px]:rounded-none max-[900px]:border-0 max-[900px]:bg-transparent max-[900px]:p-0 max-[900px]:shadow-none';
+/**
+ * Variante para el listado de /tramites, cuyas filas pasan a tarjeta a 640px (`tramites-propuesta.css`) y no a 900px:
+ * la tarjeta grande se mantiene hasta ese mismo corte, para no dejar un tramo sin ninguna de las dos.
+ */
+export const TABLA_TARJETA_640_CLS =
+  `${TABLA_TARJETA_SUPERFICIE_CLS} ` +
+  'max-[640px]:rounded-none max-[640px]:border-0 max-[640px]:bg-transparent max-[640px]:p-0 max-[640px]:shadow-none';
 
 /**
  * Fila de listado: al pasar el puntero cambia el BORDE de sus celdas (`--di-border-control`), no el fondo,

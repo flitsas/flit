@@ -161,7 +161,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
           <thead>
             <tr style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               {["Fila", "Identificador", "Tipo de documento", "Documento del locatario", "Estado"].map((t) => (
-                <th key={t} scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG }}>
+                <th key={t} scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                   {t}
                 </th>
               ))}

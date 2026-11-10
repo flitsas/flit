@@ -143,6 +143,7 @@ export function TarifaHistorialModal({
               columns={columnas}
               rows={pg.paginar(versiones)}
               getRowKey={(v) => v.id}
+              tarjeta={false}
               pagination={{
                 page: pg.page,
                 pageSize: pg.pageSize,

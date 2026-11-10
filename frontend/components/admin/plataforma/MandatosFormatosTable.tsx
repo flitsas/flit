@@ -111,6 +111,7 @@ export function MandatosFormatosTable({
 
   return (
     <DataTable
+      tarjeta={false}
       columns={columns}
       rows={pageRows}
       getRowKey={(row) => row.code}

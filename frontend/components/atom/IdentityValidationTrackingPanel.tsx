@@ -350,6 +350,7 @@ export function IdentityValidationTrackingPanel({
               getRowKey={({ i }) => String(i)}
               minWidth={520}
               ariaLabel="Bitácora de la validación"
+              tarjeta={false}
               pagination={{
                 page: pg.page,
                 pageSize: pg.pageSize,

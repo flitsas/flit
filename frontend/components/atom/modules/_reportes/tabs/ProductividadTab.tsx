@@ -149,7 +149,7 @@ export function ProductividadTab({ filters, networkScope, networkChildren = [] }
             >
               Detalle por operador ({formatInt(items.length)})
             </h2>
-            {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+            {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
             <div data-testid="operadores-table">
               <DataTable
                 columns={OPERADOR_COLUMNS}

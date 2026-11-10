@@ -18,6 +18,7 @@ import {
   TABLA_MOVIL_TABLE_CLS,
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -171,6 +172,7 @@ export function WebhooksSection() {
             errorMessage="Error al cargar webhooks."
             onRetry={() => void loadWebhooks()}
           >
+            <div className={TABLA_TARJETA_CLS}>
             <div className="overflow-x-auto">
             <table
               className={`text-xs ${TABLA_MOVIL_TABLE_CLS}`}
@@ -246,6 +248,7 @@ export function WebhooksSection() {
               ariaLabel="Paginación de webhooks"
               noun="webhooks"
             />
+            </div>
           </UiStateBoundary>
           )}
         </div>
@@ -324,6 +327,7 @@ export function WebhooksSection() {
             onRetry={() => void loadLogs()}
             skeletonRows={5}
           >
+            <div className={TABLA_TARJETA_CLS}>
             <div className="overflow-x-auto">
             <table
               className={`min-w-[720px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
@@ -391,6 +395,7 @@ export function WebhooksSection() {
               ariaLabel="Paginación de la bitácora"
               noun="registros"
             />
+            </div>
           </UiStateBoundary>
           )}
         </div>

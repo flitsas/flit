@@ -245,7 +245,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <section aria-labelledby="ranking-title">
-              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+              {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
               <h2 id="ranking-title" className="text-sm font-bold mb-3" title="Orden por mediana de tiempo de decisión ascendente; desempata la tasa de rechazo.">
                 Ranking de agilidad
               </h2>

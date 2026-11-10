@@ -40,6 +40,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 const COLUMNAS = columnasHijas("Cliente");
 const ACCESORES: AccesoresFiltro<CompanyChildListItem> = {
@@ -187,7 +188,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
           skeletonRows={4}
         >
           {(
-            <>
+            <div className={TABLA_TARJETA_CLS}>
               <div className="overflow-x-auto">
                 {/* Bug #13055 — tabla homologada con el modelo de trámites */}
                 <table
@@ -344,7 +345,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                   noun="clientes"
                 />
               )}
-            </>
+            </div>
           )}
         </UiStateBoundary>
       )}

@@ -172,8 +172,8 @@ export function SuiteShell({
             className="absolute inset-0 overflow-y-auto pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
             data-shell-scroll
           >
-            {/* Contenido centrado como en la propuesta (`main { width: min(1240px, 100%) }`). */}
-            <div className="mx-auto w-full max-w-[1240px]">{children}</div>
+            {/* Sin contenedor centrado: cada página conserva su propio ancho y relleno (decisión de producto, HU #14479). */}
+            {children}
           </div>
           {dock}
           {overlay}

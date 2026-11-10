@@ -27,6 +27,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
@@ -481,7 +482,7 @@ export function Usuarios() {
           )}
           {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
             <>
-              <div className="overflow-x-auto">
+              <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
                 <table
                   aria-label="Usuarios eliminados"
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}

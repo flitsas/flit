@@ -228,7 +228,8 @@ describe("EncabezadoFiltrable", () => {
     expect(filas().map((l) => l.textContent)).toEqual(["Beta"]);
     expect(embudo("Nombre")).toHaveAttribute("data-activo", "true");
     expect(embudo("Nombre")).toHaveAccessibleName(/Nombre: filtro activo/);
-    expect(embudo("Nombre").className).toMatch(/text-flit-brand-ink/);
+    // HU #14477 — sobre la cabecera en tinta, el embudo activo va en turquesa (el azul no se ve encima).
+    expect(embudo("Nombre").className).toMatch(/text-\[color:var\(--di-highlight-decor\)\]/);
     expect(embudo("Creación")).not.toHaveAttribute("data-activo");
   });
 

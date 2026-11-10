@@ -9,6 +9,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import { formatFechaHora } from '@/lib/format/date';
 import { revocationRequestListLabel, revocationRequestListTone } from '@/lib/tramites/estados';
@@ -49,7 +50,7 @@ export function RevocationRequestsTable({
   const page = Math.floor(skip / take) + 1;
 
   return (
-    <div className="flex flex-1 flex-col gap-3">
+    <div className={`flex flex-1 flex-col gap-3 ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
         <table
           aria-label="Solicitudes de revocatoria"

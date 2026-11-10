@@ -29,6 +29,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
@@ -496,7 +497,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         emptyMessage="Ningún trámite con integración Quipux coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {entries && entries.length > 0 && (
-          <>
+          <div className={TABLA_TARJETA_CLS}>
             {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
                 bordes. */}
@@ -563,7 +564,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 setPageSize(n);
               }}
             />
-          </>
+          </div>
         )}
       </UiStateBoundary>
     </div>
