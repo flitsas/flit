@@ -77,6 +77,7 @@ import {
   applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+  TRAMITES_COLUMNS_RESHOWN_ONCE,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   buildTramitesGridLayout,
   buildTramitesColWidths,
@@ -410,6 +411,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
     catalog: TRAMITES_COLUMN_KEYS,
     addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+    reshowOnce: TRAMITES_COLUMNS_RESHOWN_ONCE,
   });
   // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
   // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
