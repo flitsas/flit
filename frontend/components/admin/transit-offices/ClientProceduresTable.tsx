@@ -32,6 +32,7 @@ import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
+  estadoChipClass,
   esRevocationRequestStatus,
   revocationRequestListColor,
   revocationRequestListLabel,
@@ -173,7 +174,7 @@ function SortMenu({
             ? `Ordenar ${label}. Ahora: ${activa.label} ${sortDir === "asc" ? "ascendente" : "descendente"}`
             : `Ordenar ${label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:opacity-80 ${
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 normal-case transition-colors hover:opacity-80 ${
           activa ? "underline underline-offset-4" : ""
         }`}
       >
@@ -289,7 +290,7 @@ function SortableTh({
     <th className={cls} style={style}>
       <button
         type="button"
-        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        className="inline-flex items-center gap-1 normal-case hover:opacity-80"
         aria-label={`Ordenar por ${sortLabel ?? label}${active ? ` (${sortDir === "asc" ? "ascendente" : "descendente"})` : ""}`}
         onClick={() => onSortChange(apiKey, nextDir)}
       >
@@ -337,7 +338,14 @@ function renderCelda(
     case "vin":
       return row.vin?.trim() || "—";
     case "placa":
-      return row.placa?.trim() || "—";
+      // Propuesta: placa amarilla (`.di-placa`), con el texto tal cual viene; sin placa, el guion.
+      return row.placa?.trim() ? (
+        <span className="di-placa">
+          <span className="di-placa__num">{row.placa.trim()}</span>
+        </span>
+      ) : (
+        "—"
+      );
     case "vendedor":
       return row.vendedorNombre?.trim() || "—";
     case "comprador":
@@ -360,7 +368,11 @@ function renderCelda(
     case "estado": {
       const estadoLabel = formatOtProcedureStatus(row.status);
       const chip = (
-        <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+        <StatusBadge
+          className={estadoChipClass(row.status)}
+          label={estadoLabel}
+          {...procedureStatusChip(row.status)}
+        />
       );
       return (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -565,7 +577,7 @@ export function ClientProceduresTable({
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
+      <table className="di-tabla-tarjetas w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr>
             {conCasillas ? (
@@ -601,7 +613,7 @@ export function ClientProceduresTable({
             <tr
               key={row.id}
               // Bug #13055 — tabla homologada con el modelo de trámites.
-              className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
+              className={`bg-[var(--di-surface-elevated)] [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
               onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
               // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
               // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
@@ -622,7 +634,7 @@ export function ClientProceduresTable({
             >
               {conCasillas && onToggle ? (
                 // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
-                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle">
+                <td className="w-10 rounded-l-xl border-y border-l border-[color:var(--di-border)] px-4 py-3 align-middle">
                   <CasillaFilaLote
                     radicado={row.referenceNumber}
                     seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}
@@ -633,8 +645,10 @@ export function ClientProceduresTable({
               {columnasVisibles.map((columna, indice) => (
                 <td
                   key={columna.key}
+                  // Excepción aprobada: en celular la fila es tarjeta y la celda dice su columna.
+                  data-label={columna.label}
                   className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
-                  style={{ borderColor: "var(--border)" }}
+                  style={{ borderColor: "var(--di-border)" }}
                 >
                   {renderCelda(columna.key, row, onVerDetalle)}
                 </td>
@@ -651,7 +665,7 @@ export function ClientProceduresTable({
               {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                style={{ borderColor: "var(--border)" }}
+                style={{ borderColor: "var(--di-border)" }}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -660,12 +674,12 @@ export function ClientProceduresTable({
                   {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
-                        <span className="rounded-full bg-[var(--badge-success-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--flit-success-ink)]">
+                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-success-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-success)]">
                           SOAT
                         </span>
                       )}
                       {row.impuestoDepartamentalPagado && (
-                        <span className="rounded-full bg-[var(--badge-info-bg)] px-2 py-0.5 text-[10px] font-semibold text-flit-brand-ink">
+                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-action)]">
                           Impuesto
                         </span>
                       )}

@@ -117,6 +117,7 @@ function RequisitoRow({
         <DetalleBadgeSoft
           text={item.satisfied ? '✓ Adjunto' : 'Sin adjuntar'}
           color={item.satisfied ? DETALLE_GREEN : DETALLE_GOLD}
+          sinMarca={item.satisfied}
         />
         {attachment ? (
           <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />

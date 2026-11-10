@@ -91,17 +91,22 @@ describe('EstadoFunnel', () => {
       'Anulado: 0 trámites',
     ]);
     expect(screen.queryByLabelText(/^Preparado:/)).not.toBeInTheDocument();
-    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-4');
+    // HU #14482 (propuesta): la franja es una fila de chips segmentados, sin rejilla por columnas.
+    expect(screen.getByRole('group')).toHaveClass('flex', 'flex-wrap');
   });
 
-  it('Epic #12686 — una columna por tarjeta en pantalla ancha', () => {
+  it('HU #14482 — cada tarjeta es un chip de la propuesta que lleva aria-pressed', () => {
     render(
       <EstadoFunnel
         counts={counts}
+        selected="aprobado"
         estados={['borrador', 'preasignacion', 'asignado', 'entregado', 'aprobado', 'rechazado', 'revocado', 'anulado']}
       />,
     );
-    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-8');
+    const botones = screen.getAllByRole('button');
+    expect(botones).toHaveLength(8);
+    for (const b of botones) expect(b.className).toMatch(/rounded-\[10px\]/);
+    expect(screen.getByLabelText(/^Aprobado:/)).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('Epic #12686 — «Rechazado desde preasignación» sin tarjeta propia resalta Rechazado', async () => {

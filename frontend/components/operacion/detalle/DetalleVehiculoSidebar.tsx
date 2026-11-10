@@ -1,5 +1,6 @@
 'use client';
 
+import { Placa } from '@flit/ui/Placa';
 import { formatFechaHora } from '@/lib/format/date';
 import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
@@ -37,9 +38,13 @@ export function DetalleVehiculoSidebar({
         role="img"
         aria-label={`Vehículo con placa ${item.placa ?? 'sin placa'}`}
       >
-        <span className={`di-placa di-placa--grande ${item.placa ? '' : 'di-placa--vacia'}`} aria-hidden="true">
-          <span className="di-placa__num">{item.placa || 'Sin placa'}</span>
-        </span>
+        {item.placa ? (
+          <Placa placa={item.placa} size="lg" aria-hidden="true" />
+        ) : (
+          <span className="di-placa di-placa--grande di-placa--vacia" aria-hidden="true">
+            <span className="di-placa__num">Sin placa</span>
+          </span>
+        )}
       </div>
       <div className="mt-3 grid gap-1">
         <p className="di-antetitulo text-center">Vehículo</p>

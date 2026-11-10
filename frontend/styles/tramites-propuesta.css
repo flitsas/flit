@@ -101,3 +101,24 @@
 .di-carga { border-radius: 12px; border: 2px dashed var(--di-sky-line); background: var(--di-surface-elevated); color: var(--di-action); }
 .di-carga:hover { background: var(--di-accent-soft); }
 .di-carga--lista { border-style: solid; border-color: var(--di-success-line); background: var(--di-success-soft); color: var(--di-success); }
+
+/* ── Listado como tarjetas en celular (excepción de UX aprobada). Cada <td> trae su `data-label`;
+   la cabecera se oculta a la vista pero sigue en el DOM. El orden de las celdas no cambia. ── */
+@media (max-width: 640px) {
+  .di-tabla-tarjetas { min-width: 0 !important; table-layout: auto !important; border-spacing: 0 12px !important; }
+  .di-tabla-tarjetas colgroup { display: none; }
+  .di-tabla-tarjetas thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .di-tabla-tarjetas, .di-tabla-tarjetas tbody { display: block; width: 100%; }
+  .di-tabla-tarjetas tbody > tr {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; margin-bottom: 12px; padding: 14px 16px;
+    border: 1px solid var(--di-border); border-radius: 20px; box-shadow: var(--shadow-card);
+  }
+  .di-tabla-tarjetas tbody > tr > td { display: block; padding: 0 !important; border: 0 !important; border-radius: 0 !important; grid-column: 1 / -1; }
+  .di-tabla-tarjetas tbody > tr > td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 2px;
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--di-text-tertiary);
+  }
+  /* Acciones arriba a la derecha de la tarjeta, junto a la primera celda. */
+  .di-tabla-tarjetas tbody > tr > td:last-of-type { grid-column: 2; grid-row: 1; align-self: start; }
+  .di-tabla-tarjetas tbody > tr > td:first-of-type { grid-column: 1; grid-row: 1; }
+}

@@ -67,11 +67,21 @@ const BADGE_PROPUESTA: Record<string, { clase: string; style: CSSProperties }> =
   },
 };
 
-export function DetalleBadgeSoft({ text, color }: { text: string; color: string }) {
+export function DetalleBadgeSoft({
+  text,
+  color,
+  sinMarca = false,
+}: {
+  text: string;
+  color: string;
+  /** El texto ya trae su propia marca (p. ej. «✓ Adjunto»): se pinta el tono sin sumar el check. */
+  sinMarca?: boolean;
+}) {
   const propuesta = BADGE_PROPUESTA[color];
+  const clase = propuesta && !sinMarca ? propuesta.clase : '';
   return (
     <span
-      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${propuesta?.clase ?? ''}`}
+      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${clase}`}
       style={propuesta?.style ?? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
     >
       {text}
