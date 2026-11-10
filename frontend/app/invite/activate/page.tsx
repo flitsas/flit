@@ -3,7 +3,7 @@ import { ActivateAccountForm } from "@/components/auth/ActivateAccountForm";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { brandDisplayName } from "@/lib/brand/types";
 import { resolveBrand } from "@/lib/brand/resolve-brand.server";
-import { INGRESO_MARCA_TEXTO_CLS, INGRESO_MARCA_TITULO_CLS } from "@flit/ui/Ingreso";
+import { INGRESO_MARCA_TEXTO_CLS, INGRESO_MARCA_TITULO_CLS } from "@flit/ui/ingreso-clases";
 
 export const metadata = { title: "Activar cuenta — FLIT" };
 
