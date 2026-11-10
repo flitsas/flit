@@ -679,7 +679,7 @@ export interface FieldValueInput {
  */
 export type ActorRol = 'comprador' | 'vendedor' | 'locatario';
 
-export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
+export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI' | 'PPT';
 
 /**
  * Tipo de persona del actor (HU #10542/#10543). Para persona natural, el documento de
