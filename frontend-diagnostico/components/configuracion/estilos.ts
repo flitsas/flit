@@ -1,3 +1,5 @@
+import { buttonClass } from "@flit/ui/Button";
+
 // Clases compartidas de la pantalla 10 (HU #13744). Todo valor visual sale de los tokens de @flit/ui (tokens.css):
 // tarjeta blanca con borde gris de marca, CTA en pastilla con la tinta AA del azul de marca y foco visible del dock.
 export const TARJETA_CLS =
@@ -5,9 +7,10 @@ export const TARJETA_CLS =
 
 export const FOCO_CLS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]";
 
-export const BOTON_PRIMARIO_CLS = `inline-flex items-center justify-center gap-1.5 rounded-full bg-[var(--flit-brand-ink)] px-5 py-2 text-sm font-semibold text-primary-foreground transition disabled:cursor-not-allowed disabled:opacity-50 ${FOCO_CLS}`;
+// Botones de la propuesta (HU #14487): la familia `.btn` de @flit/ui/Button, en la densidad de 36 px de esta app.
+export const BOTON_PRIMARIO_CLS = buttonClass({ size: "sm", className: "gap-1.5 text-sm" });
 
-export const BOTON_SECUNDARIO_CLS = `inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-flit-primary transition disabled:cursor-not-allowed disabled:opacity-50 ${FOCO_CLS}`;
+export const BOTON_SECUNDARIO_CLS = buttonClass({ variant: "secondary", size: "sm", className: "gap-1.5 text-sm" });
 
 export const BOTON_REINTENTAR_CLS = `rounded-full border border-current px-3 py-1 text-xs font-semibold ${FOCO_CLS}`;
 

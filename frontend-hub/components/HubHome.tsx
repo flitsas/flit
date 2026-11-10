@@ -5,8 +5,9 @@ import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { reauthenticate } from "@flit/auth/client";
 import { AppsSessionError, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
 import { buildDock } from "@flit/shell/nav";
-import { BRAND_GRADIENT, ProductIcon } from "@/components/ui/ProductIcon";
+import { ProductIcon } from "@/components/ui/ProductIcon";
 import { StatusChip } from "@/components/ui/StatusChip";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/ui/CabeceraModulo";
 import { productInfo } from "@/lib/products";
 import { hubNav, type HubUser } from "./HubShell";
 
@@ -51,12 +52,12 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-10 py-2">
-      <section className="relative overflow-hidden rounded-3xl px-6 py-8 text-white md:px-10 md:py-10" style={{ background: BRAND_GRADIENT }}>
-        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 right-40 h-56 w-56 rounded-full bg-white/10" />
-        <p className="relative text-sm font-medium text-white/85">{today()}</p>
-        <h1 className="relative mt-2 text-2xl font-semibold md:text-3xl">Hola, {user.email}</h1>
-        <p className="relative mt-2 text-sm text-white/90">
+      {/* Cabecera de módulo de la propuesta (HU #14487), con la ilustración de Inicio. */}
+      <section className={CABECERA_CLS}>
+        <DecoracionCabecera ilustracion="inicio" />
+        <p className="text-xs font-bold uppercase tracking-[0.06em] text-[color:var(--di-highlight)]">{today()}</p>
+        <h1 className={`mt-1 ${TITULO_CABECERA_CLS}`}>Hola, {user.email}</h1>
+        <p className="mt-2.5 max-w-[60ch] text-sm text-[color:var(--di-text-secondary)]">
           {user.tenantName}
           {user.tenantName && " · "}
           Elige el producto con el que quieres trabajar hoy.

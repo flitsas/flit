@@ -17,6 +17,7 @@ import { etiquetaMes, formatoTasa, nombreMes, SERIES, valorSerie, type Dashboard
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 
 const AZUL = "var(--color-flit-brand)";
 const AZUL_CLARO = "color-mix(in srgb, var(--color-flit-brand) 35%, transparent)";
@@ -26,22 +27,9 @@ const PAGOS = [
   { nombre: "BC · banco / empresa", color: "var(--color-flit-alert)", clave: "pagosBc" },
 ] as const;
 
+/** Cifra del tablero con la tarjeta de la propuesta (HU #14486, `TarjetaMetrica` de @flit/ui). */
 function Kpi({ titulo, valor, detalle, onClick }: { titulo: string; valor: string; detalle?: string; onClick?: () => void }) {
-  const contenido = (
-    <>
-      <span className="text-xs font-semibold text-muted-foreground">{titulo}</span>
-      <span className="text-2xl font-semibold text-flit-primary">{valor}</span>
-      {detalle && <span className="text-xs text-muted-foreground">{detalle}</span>}
-    </>
-  );
-  const cls = "flex flex-col gap-1 rounded-2xl border border-border p-4 text-left";
-  return onClick ? (
-    <button type="button" className={`${cls} transition hover:border-flit-brand focus:outline-none focus:ring-2 focus:ring-flit-brand/30`} onClick={onClick}>
-      {contenido}
-    </button>
-  ) : (
-    <div className={cls}>{contenido}</div>
-  );
+  return <TarjetaMetrica etiqueta={titulo} cifra={valor} pie={detalle} onClick={onClick} />;
 }
 
 function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; valor: string | null; onCambio: (id: string | null) => void }) {

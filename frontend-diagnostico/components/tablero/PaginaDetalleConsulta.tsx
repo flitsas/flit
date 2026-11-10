@@ -21,6 +21,7 @@ import {
   type ErrorDetalle,
 } from "@/lib/tablero/detalle";
 import { VistaDetalleCelda } from "./DetalleCelda";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle; causa: unknown } | { tipo: "listo"; detalle: Detalle };
 
@@ -143,7 +144,8 @@ export function PaginaDetalleConsulta({
 
   return (
     <>
-      <section aria-labelledby="detalle-consulta-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
+      <section aria-labelledby="detalle-consulta-titulo" className={`${CABECERA_CLS} flex flex-wrap items-start justify-between gap-3`}>
+        <DecoracionCabecera ilustracion="diagnostico" />
         <div className="flex min-w-0 flex-col gap-2">
           <Migas
             migas={[
@@ -152,7 +154,7 @@ export function PaginaDetalleConsulta({
               { texto: titulo },
             ]}
           />
-          <h1 id="detalle-consulta-titulo" className="break-all text-2xl font-semibold text-flit-primary">
+          <h1 id="detalle-consulta-titulo" className={`break-all ${TITULO_CABECERA_CLS}`}>
             {titulo}
           </h1>
           {detalle && nota?.(detalle)}

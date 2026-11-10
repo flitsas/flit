@@ -19,6 +19,7 @@ import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/compo
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 export interface Analisis {
   /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
@@ -192,8 +193,9 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
 
   return (
     <>
-      <section aria-labelledby="carga-titulo" className={TARJETA_CLS}>
-        <h1 id="carga-titulo" className="text-2xl font-semibold text-flit-primary">
+      <section aria-labelledby="carga-titulo" className={CABECERA_CLS}>
+        <DecoracionCabecera ilustracion="documentos" />
+        <h1 id="carga-titulo" className={TITULO_CABECERA_CLS}>
           Cargar vehículos
         </h1>
         {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">{sesion.empresa.nombre}</p>}

@@ -30,6 +30,7 @@ import { listarLotesBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/b
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { SelectorEmpresa } from "./SelectorEmpresa";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/comun/CabeceraModulo";
 
 export interface ListaLotesBackofficeProps {
   /** Valores iniciales tomados de la URL (?empresa=&estado=&con_errores=&pagina=). */
@@ -210,8 +211,9 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
 
   return (
     <>
-      <section aria-labelledby="lotes-bo-titulo" className={TARJETA_CLS}>
-        <h1 id="lotes-bo-titulo" className="text-2xl font-semibold text-flit-primary">
+      <section aria-labelledby="lotes-bo-titulo" className={CABECERA_CLS}>
+        <DecoracionCabecera ilustracion="diagnostico" />
+        <h1 id="lotes-bo-titulo" className={TITULO_CABECERA_CLS}>
           Backoffice de diagnósticos
         </h1>
         <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">

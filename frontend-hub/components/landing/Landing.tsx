@@ -7,6 +7,7 @@ import { LandingNav } from "./LandingNav";
 import { BRAND_GRADIENT as GRADIENT, ProductIcon } from "@/components/ui/ProductIcon";
 import { FLIT_PRIVACY_POLICY_URL } from "@flit/brand/types";
 import { StatusChip } from "@/components/ui/StatusChip";
+import { buttonClass } from "@flit/ui/Button";
 
 // Landing de FLIT en la raíz del hub, sin sesión (B-11): qué es FLIT, sus productos, cómo empezar y contacto. Sigue
 // la paleta y el lenguaje de Trámites (degradado cian → azul, tarjetas blancas con borde suave, Poppins) y tiene modo
@@ -74,7 +75,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
           </h1>
           <p className={`mt-6 max-w-xl text-lg leading-relaxed ${muted}`}>{COMPANY.summary}</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href={loginUrl} className="inline-flex items-center gap-2 rounded-full bg-flit-brand px-6 py-3 text-sm font-semibold text-white shadow-[var(--nav-sombra-activo)] transition hover:opacity-90">
+            <a href={loginUrl} className={buttonClass({ className: "px-6" })}>
               Iniciar sesión <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
             <a
@@ -171,18 +172,18 @@ function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInf
           <p className={`mt-3 leading-relaxed ${muted}`}>{p.description}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             {available ? (
-              <a href={loginUrl} className="inline-flex items-center gap-2 rounded-full bg-flit-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">
+              <a href={loginUrl} className={buttonClass()}>
                 Entrar a {p.name} <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </a>
             ) : (
               <a
                 href={`mailto:${CONTACT.email}?subject=${encodeURIComponent(`Quiero saber cuándo llega ${p.name}`)}`}
-                className="inline-flex items-center gap-2 rounded-full bg-flit-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                className={buttonClass()}
               >
                 Quiero saber cuándo llega <Mail className="h-4 w-4" aria-hidden="true" />
               </a>
             )}
-            <a href={demoMailto()} className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-flit-brand transition hover:bg-flit-brand/10">
+            <a href={demoMailto()} className={buttonClass({ variant: "ghost" })}>
               Hablar con un asesor
             </a>
           </div>

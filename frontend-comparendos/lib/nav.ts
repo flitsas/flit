@@ -27,7 +27,8 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import type { NavCatalog, NavItem } from "@flit/shell/nav";
+import type { NavCatalog, NavItem, NavSection } from "@flit/shell/nav";
+import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import type { Capacidades } from "@/lib/sesion";
 
 export const P = {
@@ -61,6 +62,50 @@ export const P = {
   reportesVer: "comparendos.reportes.ver",
   productividadVer: "comparendos.productividad.ver",
 } as const;
+
+/**
+ * Ilustración de cada grupo y entrada del dock (HU #14486, como `tramitesNav`): solo presentación, ni la ruta ni quién
+ * la ve cambian. Una clave sin ilustración se queda con su ícono de línea.
+ */
+const ILUSTRACION: Record<string, Ilustracion> = {
+  operacion: "comparendos",
+  reportes: "reportes",
+  configuracion: "configuracion",
+  administracion: "empresas",
+  bandeja: "comparendos",
+  ocr: "documentos",
+  "dp-lotes": "notificaciones",
+  pagos: "fur",
+  mensajes: "notificaciones",
+  dashboard: "reportes",
+  productividad: "colaboradores",
+  monitoreo: "consulta-placa",
+  representantes: "firmas",
+  ots: "organismos",
+  correo: "empresas",
+  plantillas: "generacion-documental",
+  flit: "configuracion",
+  "adm-empresas": "empresas",
+  "adm-tipologias": "causales",
+  "adm-plantillas": "generacion-documental",
+  "adm-ingesta": "integraciones",
+  "adm-log": "auditoria",
+  "adm-organismos": "organismos",
+  "adm-municipios": "fuentes-oficiales",
+  "adm-alertas": "notificaciones",
+  "adm-scheduler": "calendario",
+  "adm-ocr": "documentos",
+  "adm-calendario": "calendario",
+};
+
+function ilustracionDe(key: string): string | undefined {
+  const nombre = ILUSTRACION[key];
+  return nombre ? rutaIlustracion(nombre) : undefined;
+}
+
+function conIlustracion(item: NavItem): NavItem {
+  return { ...item, ilustracion: ilustracionDe(item.key), children: item.children?.map(conIlustracion) };
+}
 
 export function comparendosNav(caps: Capacidades): NavCatalog {
   const items: NavItem[] = [
@@ -106,12 +151,14 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
   ];
 
   return {
-    sections: [
-      { id: "operacion", label: "Operación", icon: Inbox, side: "left" },
-      { id: "reportes", label: "Reportes", icon: Gauge, side: "left" },
-      { id: "configuracion", label: "Configuración", icon: Settings, side: "right" },
-      { id: "administracion", label: "Administración FLIT", icon: Cog, side: "right" },
-    ],
-    items,
+    sections: (
+      [
+        { id: "operacion", label: "Operación", icon: Inbox, side: "left" },
+        { id: "reportes", label: "Reportes", icon: Gauge, side: "left" },
+        { id: "configuracion", label: "Configuración", icon: Settings, side: "right" },
+        { id: "administracion", label: "Administración FLIT", icon: Cog, side: "right" },
+      ] satisfies NavSection[]
+    ).map((sec) => ({ ...sec, ilustracion: ilustracionDe(sec.id) })),
+    items: items.map(conIlustracion),
   };
 }
