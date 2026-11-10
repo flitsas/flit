@@ -71,7 +71,7 @@ jobs:
           - { contrato: consultas-administracion, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/administracion.proto, version: 1.0.0 }
           - { contrato: consultas-certificaciones, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/certificaciones.proto, version: 1.0.0 }
           - { contrato: consultas, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/consultas.proto, version: 1.0.0 }
-          - { contrato: consultas-fuentes-comparendos, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/fuentes_comparendos.proto, version: 1.0.0 }
+          - { contrato: consultas-fuentes-comparendos, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/fuentes_comparendos.proto, version: 1.1.0 }
           - { contrato: consultas-resultado, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/resultado.proto, version: 1.0.0 }
           - { contrato: consultas-validacion-identidad, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/validacion_identidad.proto, version: 1.0.0 }
           - { contrato: identidad, aplicativo: flit2-core-identity, tipo: proto, ruta: contracts/proto/flit/identidad/v1/identidad.proto, version: 1.0.0 }

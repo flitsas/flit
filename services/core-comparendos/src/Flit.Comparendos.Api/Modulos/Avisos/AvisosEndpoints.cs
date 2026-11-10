@@ -19,12 +19,16 @@ public static class AvisosEndpoints
 
     public sealed record PedidoMasivo(IReadOnlyList<Guid> ComparendoIds, string Tipo);
 
+    public sealed record PedidoSeleccion(IReadOnlyList<Guid> ComparendoIds);
+
     public sealed record HorarioAviso(string HoraEnvio, bool Activo);
 
     public static void Map(RouteGroupBuilder api)
     {
         api.MapPost("/comparendos/{id:guid}/avisos", Enviar).RequirePermiso(Permisos.AvisosEnviar);
+        api.MapGet("/comparendos/{id:guid}/avisos/permitidos", Permitidos).RequirePermiso(Permisos.AvisosEnviar);
         api.MapPost("/avisos/masivo", EnviarMasivo).RequirePermiso(Permisos.AvisosEnviar);
+        api.MapPost("/avisos/masivo/permitidos", PermitidosMasivo).RequirePermiso(Permisos.AvisosEnviar);
         var admin = api.MapGroup("/admin/scheduler-avisos").RequireAuthorization(AutorizacionExtensions.PoliticaSuperAdmin);
         admin.MapGet("", Horarios);
         admin.MapPut("/{tipo}", GuardarHorario);
@@ -41,6 +45,50 @@ public static class AvisosEndpoints
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         var estado = await despachador.DespacharAsync(aviso.ComunicacionId, ct).ConfigureAwait(false);
         return Results.Ok(new { aviso.Id, comunicacion = aviso.ComunicacionId, estado = estado.ToString() });
+    }
+
+    /// <summary>
+    /// Qué avisos se pueden enviar hoy a este comparendo (la misma regla que aplica el envío) y, para los demás, por qué
+    /// no: la pantalla solo ofrece los que proceden.
+    /// </summary>
+    private static async Task<IResult> Permitidos(Guid id, AccesoComparendo acceso, ServicioAvisos avisos, CancellationToken ct)
+    {
+        var c = await acceso.ParaLeerAsync(id, ct).ConfigureAwait(false);
+        var ventana = await avisos.VentanaAsync(c, ct).ConfigureAwait(false);
+        var noElegible = await avisos.NoElegibleAsync(c, ct).ConfigureAwait(false);
+        var tipos = new[] { TipoAviso.Aviso1, TipoAviso.Aviso2, TipoAviso.Aviso3 }.Select(t => new
+        {
+            tipo = t.ToString(),
+            motivo = noElegible ?? ServicioAvisos.FueraDeSecuencia(t, c.EstadoNotificacionConductor, ventana),
+        }).ToList();
+        return Results.Ok(new
+        {
+            estadoNotificacion = c.EstadoNotificacionConductor.ToString(),
+            ventana = ventana.ToString(),
+            permitidos = tipos.Where(t => t.motivo is null).Select(t => t.tipo),
+            avisos = tipos,
+        });
+    }
+
+    /// <summary>Para el envío masivo: a cuántos comparendos de la selección les procede cada aviso hoy.</summary>
+    private static async Task<IResult> PermitidosMasivo(PedidoSeleccion pedido, UsuarioActual usuario, ComparendosDb db, ServicioAvisos avisos, CancellationToken ct)
+    {
+        var tenant = usuario.EmpresaOperacion();
+        if (pedido.ComparendoIds is not { Count: > 0 and <= 500 })
+            throw new ReglaException("SELECCION_INVALIDA", "Selecciona entre 1 y 500 comparendos.");
+        var ids = pedido.ComparendoIds.Distinct().ToList();
+        var comparendos = await db.Comparendos.AsNoTracking().Include(x => x.Contraventor).Where(x => ids.Contains(x.Id) && x.TenantId == tenant).ToListAsync(ct).ConfigureAwait(false);
+        var cuenta = new Dictionary<TipoAviso, int> { [TipoAviso.Aviso1] = 0, [TipoAviso.Aviso2] = 0, [TipoAviso.Aviso3] = 0 };
+        foreach (var c in comparendos)
+        {
+            if (await avisos.NoElegibleAsync(c, ct).ConfigureAwait(false) is not null)
+                continue;
+            var ventana = await avisos.VentanaAsync(c, ct).ConfigureAwait(false);
+            foreach (var t in ServicioAvisos.Permitidos(c.EstadoNotificacionConductor, ventana))
+                cuenta[t]++;
+        }
+
+        return Results.Ok(cuenta.Select(k => new { tipo = k.Key.ToString(), aplica = k.Value }));
     }
 
     private static async Task<IResult> EnviarMasivo(PedidoMasivo pedido, UsuarioActual usuario, ComparendosDb db, ServicioAvisos avisos, CancellationToken ct)

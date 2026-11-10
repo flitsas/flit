@@ -48,23 +48,35 @@ public class ApiConFuente : ApiDePrueba
     /// <summary>La API de contratos simulada, salvo las placas con respuesta propia (HU #13712: Renting sin documento).</summary>
     public ConcurrentDictionary<string, Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> Contratos { get; } = new();
 
+    /// <summary>
+    /// GDC puntos 19 y «sin hora»: respuesta por placa y hora («PLACA HH:mm»), que gana sobre <see cref="Contratos"/>, y
+    /// cada consulta recibida (placa, fecha, hora) para verificar lo que se envía.
+    /// </summary>
+    public ConcurrentDictionary<string, Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ContratosPorHora { get; } = new();
+
+    public ConcurrentQueue<(string Placa, DateOnly Fecha, TimeOnly? Hora)> ConsultasContratos { get; } = new();
+
     /// <summary>Lo que responde «Probar conexión» (HU #13843).</summary>
     public Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos Prueba { get; set; } = new(true, null, null, 120, true, "buzon.pruebas@flitsas.com", false);
 
     protected override void Reemplazar(IServiceCollection services)
     {
         services.AddSingleton<IFuenteComparendos>(Fuente);
-        services.AddScoped<Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos>(_ => new ContratosDePrueba(Contratos, () => Prueba));
+        services.AddScoped<Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos>(_ => new ContratosDePrueba(this));
     }
 
-    private sealed class ContratosDePrueba(ConcurrentDictionary<string, Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> propias,
-        Func<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> prueba)
-        : Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos
+    private sealed class ContratosDePrueba(ApiConFuente api) : Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos
     {
-        public Task<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> ProbarAsync(CancellationToken ct) => Task.FromResult(prueba());
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> ProbarAsync(CancellationToken ct) => Task.FromResult(api.Prueba);
 
-        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct) =>
-            propias.TryGetValue(placa, out var r) ? Task.FromResult(r) : new Flit.Comparendos.Api.Modulos.Contraventor.ApiContratosSimulada().ConsultarAsync(tenantId, placa, fecha, ct);
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct)
+        {
+            api.ConsultasContratos.Enqueue((placa, fecha, hora));
+            if (hora is { } h && api.ContratosPorHora.TryGetValue($"{placa} {h:HH:mm}", out var porHora))
+                return Task.FromResult(porHora);
+            return api.Contratos.TryGetValue(placa, out var r) ? Task.FromResult(r)
+                : new Flit.Comparendos.Api.Modulos.Contraventor.ApiContratosSimulada().ConsultarAsync(tenantId, placa, fecha, hora, ct);
+        }
     }
 
     public async Task<Guid> CicloAsync(CanalIngesta canal, Guid? empresa = null)
