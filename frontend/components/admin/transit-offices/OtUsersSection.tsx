@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { Ban, Clock, FileSpreadsheet, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -27,6 +27,8 @@ import {
   normalizeEmail,
 } from "@/lib/users/emailConflict";
 import { usePermissions } from "@/hooks/usePermissions";
+import { createOtBulkInvitationsClient } from "@/lib/api/bulk-invitations-client";
+import { BulkInviteModal } from "@/components/atom/modules/users/BulkInviteModal";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
@@ -74,6 +76,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
+  // HU #14428 (Feature #14420) — invitación masiva por Excel con el destino fijo en este organismo.
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const bulkClient = useMemo(() => createOtBulkInvitationsClient({ transitOfficeId }), [transitOfficeId]);
   const [suspendTarget, setSuspendTarget] = useState<{ user: OtUserItem; mode: SuspendMode } | null>(null);
   const [editTarget, setEditTarget] = useState<OtUserItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OtUserItem | null>(null);
@@ -447,6 +452,18 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             </button>
           )}
           {/* «Invitar usuario» solo en la pestaña Usuarios. */}
+          {/* HU #14428: «Importar Excel» comparte el gate de «Invitar usuario»; el destino es este organismo. */}
+          {showingUsers && (
+            <button
+              type="button"
+              onClick={() => setBulkOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
+              style={{ color: "var(--color-flit-brand)" }}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              Importar Excel
+            </button>
+          )}
           {showingUsers && (
             <button
               type="button"
@@ -486,6 +503,15 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         usersTable
       )}
 
+      {bulkOpen && (
+        <BulkInviteModal
+          client={bulkClient}
+          contextKey={transitOfficeId}
+          contextSummary="Organismo de Tránsito · este organismo"
+          onClose={() => setBulkOpen(false)}
+          onCompleted={() => void load()}
+        />
+      )}
       {inviteOpen && (
         <OtInviteUserDialog
           onConfirm={handleInvite}
