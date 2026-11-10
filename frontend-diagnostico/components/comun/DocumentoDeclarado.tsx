@@ -25,7 +25,7 @@ export function DocumentoDeclarado({
   const visible = completo ? documento : enmascararDocumento(documento);
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
-      <span className="font-mono text-xs font-medium text-flit-primary dark:text-white">{tipo ? `${tipo} ${visible}` : visible}</span>
+      <span className="font-mono text-xs font-medium text-flit-primary">{tipo ? `${tipo} ${visible}` : visible}</span>
       <span className={INSIGNIA_CLS}>Declarado por el cliente</span>
     </span>
   );

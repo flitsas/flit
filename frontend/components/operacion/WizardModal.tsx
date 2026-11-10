@@ -47,7 +47,7 @@ export function WizardModal({
         aria-label={title}
         className={`relative max-h-[85vh] w-full ${
           wide ? 'max-w-2xl' : 'max-w-md'
-        } overflow-y-auto rounded-2xl border bg-white p-6 outline-none focus:ring-0 dark:bg-[#162744]`}
+        } overflow-y-auto rounded-2xl border bg-card p-6 outline-none focus:ring-0`}
         style={{ boxShadow: '0 8px 40px -8px color-mix(in srgb, var(--color-flit-brand) 28%, transparent)' }}
       >
         <button

@@ -309,6 +309,31 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
         (consumo.Proveedor, consumo.Resultado, consumo.TenantId).Should().Be(("renting", "con_datos", _empresa));
     }
 
+    [Fact]
+    public async Task GDC19_ContratoRenting_PorGrpc_LlevaLaHoraSinConvertir()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        await Cliente("platform.consultas").ConsultarContratoConductorAsync(
+            new ConsultarContratoConductorRequest { Proveedor = "renting", Placa = "LZO227", Fecha = "2026-10-18", Hora = "06:17" },
+            new Metadata { { "x-flit-tenant-id", _empresa.ToString() } }, cancellationToken: TestContext.Current.CancellationToken);
+        _renting.Pedidos[^1].Url.Should().EndWith("offenseDate=2026-10-18T06%3A17%3A00.000Z");
+    }
+
+    [Theory]
+    [InlineData("6:17")]
+    [InlineData("25:00")]
+    [InlineData("06:17:00")]
+    public async Task GDC19_ContratoRenting_HoraInvalida_NoSaleALaRed(string hora)
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var antes = _renting.Pedidos.Count;
+        (await FluentActions.Awaiting(() => Cliente("platform.consultas").ConsultarContratoConductorAsync(
+                new ConsultarContratoConductorRequest { Proveedor = "renting", Placa = "LZO227", Fecha = "2026-10-18", Hora = hora },
+                new Metadata { { "x-flit-tenant-id", _empresa.ToString() } }, cancellationToken: TestContext.Current.CancellationToken).ResponseAsync)
+            .Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        _renting.Pedidos.Count.Should().Be(antes);
+    }
+
     [Theory]
     [InlineData("otro", "LZO227", "2026-10-18", StatusCode.FailedPrecondition)]
     [InlineData("renting", "", "2026-10-18", StatusCode.InvalidArgument)]

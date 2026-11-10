@@ -239,7 +239,7 @@ export function CameraViewer({
 
   if (status === "denied" || status === "no-camera" || status === "unsupported" || status === "error") {
     return (
-      <div role="alert" className="flex flex-col items-center gap-3 rounded-2xl border border-flit-gray bg-flit-bg p-5 text-center">
+      <div role="alert" className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-secondary p-5 text-center">
         {status === "denied" ? <AlertTriangle aria-hidden="true" className="size-8 text-flit-alert" /> : <CameraOff aria-hidden="true" className="size-8 text-flit-alert" />}
         <p className="text-base font-semibold text-flit-primary">{TITLES[status]}</p>
         <p className="text-base text-muted-foreground">{BODIES[status]}</p>

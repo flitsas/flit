@@ -113,7 +113,7 @@ export function ConfiguracionIaPanel() {
   return (
     <div className="space-y-6" data-testid="ai-config-ready">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-[#5A6A85]">
+        <p className="text-xs text-muted-foreground">
           Prioridad y proveedor activo por herramienta. Las API keys viven solo en variables de entorno;
           aquí ves presencia y máscara.
         </p>

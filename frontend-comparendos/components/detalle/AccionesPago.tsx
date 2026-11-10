@@ -117,7 +117,7 @@ export function AccionesPago({ ctx }: { ctx: ContextoDetalle }) {
   const [abierto, setAbierto] = useState(false);
   if (ctx.detalle.pago || ctx.detalle.pagado || !tienePermiso(ctx.sesion, P.pagosRegistrar)) return null;
   return (
-    <div className="border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="border-t border-border pt-3">
       <button type="button" className={controlCls(false)} onClick={() => setAbierto(true)}>
         <Wallet className="h-3.5 w-3.5" aria-hidden />
         Registrar pago

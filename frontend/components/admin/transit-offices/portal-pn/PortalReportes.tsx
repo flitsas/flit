@@ -45,6 +45,8 @@ export interface PortalReportesProps {
   api: ReportePortalApi;
   /** `true` solo para el SuperAdmin en Plataforma; el OT no ve el filtro de organismo. */
   incluirFiltroOrganismo?: boolean;
+  /** HU #14477 — `false` cuando se monta dentro de un panel que ya es tarjeta (el hub del OT), para no apilar dos. */
+  tarjeta?: boolean;
 }
 
 function motivo(err: unknown): string {
@@ -55,7 +57,7 @@ const texto = (v: string | null | undefined) => (v && v.trim() ? v : "");
 const pesos = (v: number | null | undefined) =>
   v === null || v === undefined ? "" : formatPesos(v);
 
-export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalReportesProps) {
+export function PortalReportes({ api, incluirFiltroOrganismo = false, tarjeta = true }: PortalReportesProps) {
   const [tipos, setTipos] = useState<Opcion[]>([]);
   const [organismos, setOrganismos] = useState<Opcion[]>([]);
   const [pagina, setPagina] = useState<PaginaReportePortal | null>(null);
@@ -231,11 +233,11 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
       <div>
         <h2
           id="portal-reportes-titulo"
-          className="text-base font-bold text-flit-primary dark:text-white"
+          className="text-base font-bold text-flit-primary"
         >
           Reportes
         </h2>
-        <p className="text-xs text-[#59677D] dark:text-white/70">
+        <p className="text-xs text-muted-foreground">
           Trámites que llegaron por el portal Persona Natural y por la aplicación. Los valores
           aparecen cuando el trámite ya tiene pago.
         </p>
@@ -269,6 +271,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
           onRetry={() => setRecarga((n) => n + 1)}
         >
           <DataTable<Fila>
+            tarjeta={tarjeta}
             ariaLabel="Trámites del portal Persona Natural"
             columns={columns}
             rows={filas}
@@ -279,7 +282,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
               ) : (
                 <p
                   role="status"
-                  className="px-4 py-10 text-center text-sm font-semibold text-flit-primary dark:text-white"
+                  className="px-4 py-10 text-center text-sm font-semibold text-flit-primary"
                 >
                   {REPORTE_PORTAL_VACIO}
                 </p>

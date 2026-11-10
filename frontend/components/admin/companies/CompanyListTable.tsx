@@ -14,7 +14,15 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
@@ -62,15 +70,15 @@ export function CompanyListTable({
       titulo
     );
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
       {/* Bug #13055 — tabla homologada con el modelo de trámites */}
       <table
         aria-label="Compañías"
-        className="min-w-[760px] text-xs"
+        className={`min-w-[760px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
         style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
       >
-        <thead>
+        <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               {enc("codigo", "Código")}
@@ -95,10 +103,10 @@ export function CompanyListTable({
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {items.length === 0 && onLimpiarFiltros ? (
-            <tr>
-              <td colSpan={7}>
+            <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+              <td colSpan={7} className={TABLA_MOVIL_FILA_ANCHA_CLS}>
                 <TablaFiltrosVacio
                   onLimpiar={onLimpiarFiltros}
                   mensaje="Ninguna compañía coincide con los filtros"
@@ -111,17 +119,17 @@ export function CompanyListTable({
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
             const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
-            <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-              <td className="whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
+            <tr key={c.id} className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+              <td data-label="Código" className={`whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.code}
               </td>
-              <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="NIT" className={`border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.nit}
               </td>
-              <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Razón Social" className={`border-y px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.razonSocial}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Tipo" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.isTransitOffice ? (
                   <StatusBadge label="OT" tone="info" ariaLabel="Tipo: Organismo de Tránsito" />
                 ) : (
@@ -132,17 +140,17 @@ export function CompanyListTable({
                   />
                 )}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.estadoActivo ? (
                   <StatusBadge label="Activa" tone="success" />
                 ) : (
                   <StatusBadge label="Inactiva" tone="danger" />
                 )}
               </td>
-              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Fecha creación" className={`border-y px-4 py-3 opacity-70 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {formatDate(c.fechaCreacion)}
               </td>
-              <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Acciones" className={`border-y border-r px-4 py-3 text-right rounded-r-xl ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center justify-end gap-1">
                   <RowActions
                     actions={[

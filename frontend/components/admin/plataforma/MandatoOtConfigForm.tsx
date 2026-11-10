@@ -533,16 +533,16 @@ export function MandatoOtConfigForm({
           const rowBusy = savingCompanyId === row.companyTenantId;
           return (
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-[#162244] dark:text-white">
+              <p className="truncate text-sm font-medium text-foreground">
                 {row.companyName}
               </p>
               {row.companyTaxId ? (
-                <p className="truncate font-mono text-[11px] text-[#59677D] dark:text-white/50">
+                <p className="truncate font-mono text-[11px] text-muted-foreground">
                   {row.companyTaxId}
                 </p>
               ) : null}
               {rowBusy ? (
-                <p className="text-[11px] text-[#59677D] dark:text-white/50">Guardando…</p>
+                <p className="text-[11px] text-muted-foreground">Guardando…</p>
               ) : null}
             </div>
           );
@@ -557,7 +557,7 @@ export function MandatoOtConfigForm({
         render: (row) => (
           <div className="flex flex-col items-start gap-1">
             <span
-              className="text-sm text-[#162244] dark:text-white"
+              className="text-sm text-foreground"
               data-testid={`mandato-company-tipo-${row.companyTenantId}`}
             >
               {tipoNegocioLabel(resolveTipoNegocio(row.assignmentMode))}
@@ -568,7 +568,7 @@ export function MandatoOtConfigForm({
               </span>
             )}
             {row.hasExplicitRule ? null : (
-              <span className="text-[11px] text-[#59677D] dark:text-white/50">
+              <span className="text-[11px] text-muted-foreground">
                 Sin configuración propia: usa el del organismo.
               </span>
             )}
@@ -594,7 +594,7 @@ export function MandatoOtConfigForm({
                 value={defaultValue}
                 disabled={busy || rowBusy || (mandatariosDelOt.length === 0 && !heredado)}
                 onChange={(e) => void handleDefaultSignerChange(row, e.target.value)}
-                className="w-full max-w-full rounded-lg border border-[#DFE5ED] bg-white px-1.5 py-1.5 text-xs text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                className="w-full max-w-full rounded-lg border border-input bg-background px-1.5 py-1.5 text-xs text-foreground disabled:opacity-50"
                 aria-label={`Mandatario del organismo para ${row.companyName}`}
                 data-testid={`mandato-company-default-signer-${row.companyTenantId}`}
               >
@@ -686,7 +686,7 @@ export function MandatoOtConfigForm({
                 type="button"
                 disabled={busy}
                 onClick={() => void handlePreview()}
-                className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#162244] disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-white"
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground disabled:opacity-50"
               >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                 {previewing ? "Abriendo…" : "Vista previa"}
@@ -695,7 +695,7 @@ export function MandatoOtConfigForm({
                 type="button"
                 disabled={busy}
                 onClick={onClose}
-                className="rounded-full px-4 py-2 text-xs font-semibold text-[#59677D] disabled:opacity-50"
+                className="rounded-full px-4 py-2 text-xs font-semibold text-muted-foreground disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -704,7 +704,7 @@ export function MandatoOtConfigForm({
                 disabled={busy}
                 onClick={() => void handleSaveMeta()}
                 className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 {saving ? "Guardando…" : "Guardar plantilla"}
               </button>
@@ -717,7 +717,7 @@ export function MandatoOtConfigForm({
                   disabled={busy}
                   onClick={() => void handleSaveOtDefaultSigner()}
                   className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                  style={{ background: "var(--gradient-action)" }}
                 >
                   {saving ? "Guardando…" : "Guardar mandatario general"}
                 </button>
@@ -727,7 +727,7 @@ export function MandatoOtConfigForm({
                 disabled={busy}
                 onClick={onClose}
                 className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 Cerrar
               </button>
@@ -737,10 +737,10 @@ export function MandatoOtConfigForm({
       }
     >
       <div className="space-y-4" data-testid="mandato-ot-config-form" data-mode={mode}>
-        <p className="text-xs text-[#59677D] dark:text-white/65">
+        <p className="text-xs text-muted-foreground">
           {office.name} · <span className="font-mono">{office.code}</span>
         </p>
-        <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
           {mode === "mandato"
             ? "La redacción del mandato de este organismo solo se asigna aquí (Super Admin). Elegir un mandatario no la cambia."
             : "Aquí eliges quién firma por defecto en este organismo: una persona general y, si quieres, otra distinta para cada compañía. No cambia la redacción del mandato."}
@@ -749,7 +749,7 @@ export function MandatoOtConfigForm({
         {error ? (
           <p
             role="alert"
-            className="rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+            className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
           >
             {error}
           </p>
@@ -760,7 +760,7 @@ export function MandatoOtConfigForm({
         <section className="space-y-3" aria-labelledby="mandato-plantilla-heading">
             <h3
               id="mandato-plantilla-heading"
-              className="text-xs font-semibold text-[#162244] dark:text-white"
+              className="text-xs font-semibold text-foreground"
             >
               Plantilla del mandato (por OT)
             </h3>
@@ -770,7 +770,7 @@ export function MandatoOtConfigForm({
                 role="status"
                 aria-live="polite"
                 data-testid="mandato-formatos-loading"
-                className="text-xs text-[#59677D] dark:text-white/65"
+                className="text-xs text-muted-foreground"
               >
                 Cargando formatos de contrato…
               </p>
@@ -778,20 +778,20 @@ export function MandatoOtConfigForm({
               <div
                 role="alert"
                 data-testid="mandato-formatos-error"
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
               >
                 <span>No se pudo cargar la lista de formatos de contrato.</span>
                 <button
                   type="button"
                   onClick={formatos.reload}
-                  className="rounded-full border border-[#FF4E00]/40 px-3 py-1 font-semibold"
+                  className="rounded-full border border-[var(--badge-danger-border)] px-3 py-1 font-semibold"
                 >
                   Reintentar
                 </button>
               </div>
             ) : (
               <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                <span className="text-xs font-semibold text-foreground">
                   Redacción que aplica este OT
                 </span>
                 <select
@@ -799,7 +799,7 @@ export function MandatoOtConfigForm({
                   onChange={(e) => setTemplateCode(e.target.value)}
                   disabled={busy}
                   data-testid="mandato-template-select"
-                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
                 >
                   {savedCodeUnknown ? (
                     <option value={templateCode}>{templateCode} (ya no está en el catálogo)</option>
@@ -810,7 +810,7 @@ export function MandatoOtConfigForm({
                     </option>
                   ))}
                 </select>
-                <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                <span className="block text-[11px] leading-relaxed text-muted-foreground">
                   {selectedFormat?.delegatesToOfficeTemplate
                     ? "El organismo usa la redacción que el sistema tiene asignada a su código. Si no tiene ninguna, usa el Genérico."
                     : selectedFormat
@@ -827,14 +827,14 @@ export function MandatoOtConfigForm({
             {terceroAjeno ? (
               <div
                 className="rounded-2xl border px-4 py-3"
-                style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
+                style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)" }}
                 data-testid="mandato-template-ajena-warning"
                 role="alert"
               >
-                <p className="text-[11px] font-semibold leading-relaxed text-[#8a6000]">
+                <p className="text-[11px] font-semibold leading-relaxed text-[var(--badge-warning-fg)]">
                   Esta redacción es de otro organismo.
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-[#8a6000]">
+                <p className="mt-1 text-[11px] leading-relaxed text-[var(--badge-warning-fg)]">
                   El contrato de {office.name} quedaría nombrando a{" "}
                   <span className="font-semibold">{terceroAjeno}</span>, que no interviene en sus
                   trámites. Puedes guardarlo igual si es lo que quieres.
@@ -844,21 +844,21 @@ export function MandatoOtConfigForm({
 
             {templateCode === "auto" ? (
               <div
-                className="relative overflow-hidden rounded-2xl border border-[#DFE5ED] bg-gradient-to-br from-[#F4F7FC] via-white to-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)] px-4 py-3 dark:border-white/10 dark:from-white/5 dark:via-[#0B0F14] dark:to-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)]"
+                className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-secondary via-card to-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)] px-4 py-3 dark:to-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)]"
                 data-testid="mandato-system-template-badge"
                 role="status"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-[#162244] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-flit-brand">
+                  <span className="inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">
                     Sistema
                   </span>
-                  <span className="inline-flex items-center rounded-full border border-flit-brand/35 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-[#162244] dark:border-flit-tech/40 dark:bg-white/10 dark:text-white">
+                  <span className="inline-flex items-center rounded-full border border-flit-brand/35 bg-card/80 px-2.5 py-0.5 text-[11px] font-semibold text-foreground dark:border-flit-tech/40">
                     {effectiveTemplateName}
                   </span>
                 </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                   En automática, este OT emite hoy la redacción{" "}
-                  <span className="font-semibold text-[#162244] dark:text-white">
+                  <span className="font-semibold text-foreground">
                     {effectiveTemplateName}
                   </span>{" "}
                   para todas las compañías.
@@ -872,17 +872,17 @@ export function MandatoOtConfigForm({
                 data-testid="mandato-custom-template-banner"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-gradient-to-r from-flit-brand to-flit-tech px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  <span className="inline-flex items-center rounded-full bg-[image:var(--gradient-action)] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                     Propia
                   </span>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#162244] dark:text-white">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
                     <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden="true" />
                     {view.customTemplateKind === "pdf"
                       ? (view.customTemplateFileName ?? "plantilla.pdf")
                       : "Editor rellenable"}
                   </span>
                 </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                   Este OT tiene un documento propio cargado y es el que se usa en el trámite, por
                   encima de la redacción seleccionada arriba. Las firmas van al pie con layout FLIT.
                 </p>
@@ -890,7 +890,7 @@ export function MandatoOtConfigForm({
                   type="button"
                   disabled={busy}
                   onClick={() => void handleRemoveCustom()}
-                  className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF4E00] disabled:opacity-50"
+                  className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-destructive disabled:opacity-50"
                 >
                   <Trash2 className="h-3 w-3" aria-hidden="true" />
                   Quitar y volver a {effectiveTemplateName}
@@ -899,8 +899,8 @@ export function MandatoOtConfigForm({
             ) : null}
 
             {MOSTRAR_PLANTILLA_PROPIA ? (
-            <div className="space-y-3 rounded-xl border border-dashed border-[#DFE5ED] p-3 dark:border-white/15">
-              <p className="text-[11px] text-[#59677D] dark:text-white/65">
+            <div className="space-y-3 rounded-xl border border-dashed border-border p-3">
+              <p className="text-[11px] text-muted-foreground">
                 {hasCustom
                   ? "Puedes reemplazar el documento subiendo otro PDF o editando el cuerpo."
                   : "PDF blank o editor rellenable. Al guardar, reemplaza la redacción del sistema."}
@@ -921,7 +921,7 @@ export function MandatoOtConfigForm({
                   type="button"
                   disabled={busy}
                   onClick={() => pdfRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] px-3 py-1.5 text-[11px] font-semibold text-[#162244] hover:bg-[#F4F7FC] disabled:opacity-50 dark:border-white/15 dark:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
                 >
                   <Upload className="h-3.5 w-3.5" aria-hidden="true" />
                   {uploading ? "Subiendo…" : hasCustom ? "Reemplazar PDF" : "Subir PDF"}
@@ -930,7 +930,7 @@ export function MandatoOtConfigForm({
                   type="button"
                   disabled={busy}
                   onClick={() => setShowEditor((v) => !v)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] px-3 py-1.5 text-[11px] font-semibold text-[#162244] hover:bg-[#F4F7FC] disabled:opacity-50 dark:border-white/15 dark:text-white"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
                   data-testid="mandato-open-editor"
                 >
                   <FileText className="h-3.5 w-3.5" aria-hidden="true" />
@@ -945,10 +945,10 @@ export function MandatoOtConfigForm({
                     onChange={(e) => setEditorBody(e.target.value)}
                     disabled={busy}
                     rows={8}
-                    className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-[11px] text-[#162244] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-[11px] text-foreground"
                     aria-label="Cuerpo de la plantilla del editor"
                   />
-                  <p className="text-[10px] text-[#59677D] dark:text-white/55">
+                  <p className="text-[10px] text-muted-foreground">
                     Las firmas no se editan aquí: siempre se agregan al pie.
                   </p>
                   <button
@@ -956,7 +956,7 @@ export function MandatoOtConfigForm({
                     disabled={busy}
                     onClick={() => void handleSaveEditor()}
                     className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
-                    style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+                    style={{ background: "var(--gradient-action)" }}
                   >
                     {saving ? "Guardando editor…" : "Guardar plantilla del editor"}
                   </button>
@@ -967,49 +967,49 @@ export function MandatoOtConfigForm({
           </section>
 
           {showInstitutionalMeta ? (
-            <div className="space-y-3 rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3 dark:border-white/10 dark:bg-white/5">
-              <p className="text-[11px] text-[#59677D] dark:text-white/65">
+            <div className="space-y-3 rounded-xl border border-border bg-secondary p-3">
+              <p className="text-[11px] text-muted-foreground">
                 Datos de texto para la plantilla del OT (no definen el tipo por compañía).
               </p>
               <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                <span className="text-xs font-semibold text-foreground">
                   Mandatario institucional / UT
                 </span>
                 <input
                   value={instName}
                   onChange={(e) => setInstName(e.target.value)}
                   disabled={busy}
-                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm dark:text-foreground"
                 />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#162244] dark:text-white">NIT</span>
+                <span className="text-xs font-semibold text-foreground">NIT</span>
                 <input
                   value={instNit}
                   onChange={(e) => setInstNit(e.target.value)}
                   disabled={busy}
-                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-sm dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-sm dark:text-foreground"
                 />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-1.5">
-                  <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                  <span className="text-xs font-semibold text-foreground">
                     Ciudad cámara
                   </span>
                   <input
                     value={chamberCity}
                     onChange={(e) => setChamberCity(e.target.value)}
                     disabled={busy}
-                    className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm dark:text-foreground"
                   />
                 </label>
                 <label className="block space-y-1.5">
-                  <span className="text-xs font-semibold text-[#162244] dark:text-white">Sigla</span>
+                  <span className="text-xs font-semibold text-foreground">Sigla</span>
                   <input
                     value={sigla}
                     onChange={(e) => setSigla(e.target.value)}
                     disabled={busy}
-                    className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 font-mono text-sm dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                    className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-sm dark:text-foreground"
                   />
                 </label>
               </div>
@@ -1025,7 +1025,7 @@ export function MandatoOtConfigForm({
             />
             {!lockToCompanyId ? (
               <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                <span className="text-xs font-semibold text-foreground">
                   Mandatario general de este OT
                 </span>
                 <select
@@ -1033,7 +1033,7 @@ export function MandatoOtConfigForm({
                   onChange={(e) => setOtDefaultSignerId(e.target.value)}
                   disabled={busy}
                   data-testid="mandato-ot-default-signer"
-                  className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
                 >
                   <option value="">
                     {mandatariosDelOt.length === 0 ? "El organismo no tiene mandatarios" : "Sin mandatario general"}
@@ -1044,7 +1044,7 @@ export function MandatoOtConfigForm({
                     </option>
                   ))}
                 </select>
-                <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                <span className="block text-[11px] leading-relaxed text-muted-foreground">
                   Es quien firma cuando la compañía no tiene asignado un mandatario del organismo ni uno propio. Si no
                   hay ninguno, el mandato sale con los datos en blanco.
                 </span>
@@ -1070,16 +1070,16 @@ export function MandatoOtConfigForm({
               <div className="min-w-0">
                 <h3
                   id="mandato-company-rules-heading"
-                  className="text-xs font-semibold text-[#162244] dark:text-white"
+                  className="text-xs font-semibold text-foreground"
                 >
                   Tipo de mandatario por compañía
                 </h3>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                   Si una compañía no tiene configuración propia, usa la del organismo. En «Mandatario del organismo»
                   le asignas a la compañía uno de tus mandatarios: firma sus trámites antes que el mandatario propio de
                   la compañía.{" "}
                   {rulesStatus === "ready" ? (
-                    <span className="font-medium text-[#162244] dark:text-white/80">
+                    <span className="font-medium text-foreground dark:text-muted-foreground">
                       {companyRules.length} compañía{companyRules.length === 1 ? "" : "s"}
                       {explicitRulesCount > 0 ? ` · ${explicitRulesCount} con regla` : ""}
                     </span>
@@ -1090,14 +1090,14 @@ export function MandatoOtConfigForm({
 
             {rulesStatus === "loading" ? (
               <>
-                <p className="text-[11px] text-[#59677D]" role="status">
+                <p className="text-[11px] text-muted-foreground" role="status">
                   Cargando compañías…
                 </p>
                 <CarLoaderModal label="Cargando compañías…" />
               </>
             ) : null}
             {rulesStatus === "error" ? (
-              <p role="alert" className="text-[11px] text-[#FF4E00]">
+              <p role="alert" className="text-[11px] text-destructive">
                 {error?.includes("compañías") || error?.includes("API") || error?.includes("migración")
                   ? error
                   : "No se pudieron cargar las compañías."}{" "}
@@ -1112,7 +1112,7 @@ export function MandatoOtConfigForm({
             ) : null}
             {rulesStatus === "ready" && companyRules.length === 0 ? (
               <p
-                className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-2 text-[11px] text-[#59677D] dark:border-white/15"
+                className="rounded-xl border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground"
                 data-testid="mandato-company-rules-empty"
               >
                 No hay compañías con grant habilitado en este OT.
@@ -1126,7 +1126,7 @@ export function MandatoOtConfigForm({
                   <label className="relative min-w-[10rem] flex-1">
                     <span className="sr-only">Buscar compañía</span>
                     <Search
-                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#59677D]"
+                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
                       aria-hidden="true"
                     />
                     <input
@@ -1137,7 +1137,7 @@ export function MandatoOtConfigForm({
                       }}
                       placeholder="Buscar compañía…"
                       disabled={busy}
-                      className="w-full rounded-lg border border-[#DFE5ED] bg-white py-1.5 pl-8 pr-2 text-[11px] text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                      className="w-full rounded-lg border border-border bg-card py-1.5 pl-8 pr-2 text-[11px] text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                       data-testid="mandato-company-search"
                     />
                   </label>
@@ -1145,6 +1145,7 @@ export function MandatoOtConfigForm({
                 ) : null}
 
                 <DataTable
+                  tarjeta={false}
                   columns={companyColumns}
                   rows={companyPageRows}
                   getRowKey={(row) => row.companyTenantId}
@@ -1259,31 +1260,31 @@ function MandatarioActualReadOnly({
 
   return (
     <section
-      className="rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3 dark:border-white/10 dark:bg-white/5"
+      className="rounded-xl border border-border bg-secondary p-3"
       aria-labelledby="mandatario-actual-heading"
       data-testid="mandatario-actual-readonly"
     >
       <h3
         id="mandatario-actual-heading"
-        className="text-xs font-semibold text-[#162244] dark:text-white"
+        className="text-xs font-semibold text-foreground"
       >
         Mandatario actual
       </h3>
       <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
         <div>
-          <dt className="font-medium text-[#59677D] dark:text-white/65">Nombre</dt>
-          <dd className="font-semibold text-[#162244] dark:text-white">{name?.trim() || "Sin definir"}</dd>
+          <dt className="font-medium text-muted-foreground">Nombre</dt>
+          <dd className="font-semibold text-foreground">{name?.trim() || "Sin definir"}</dd>
         </div>
         <div>
-          <dt className="font-medium text-[#59677D] dark:text-white/65">Tipo documento</dt>
+          <dt className="font-medium text-muted-foreground">Tipo documento</dt>
           <dd className="font-mono">{docType?.trim() || "—"}</dd>
         </div>
         <div>
-          <dt className="font-medium text-[#59677D] dark:text-white/65">N.º documento</dt>
+          <dt className="font-medium text-muted-foreground">N.º documento</dt>
           <dd className="font-mono">{docNumber?.trim() || "—"}</dd>
         </div>
         <div>
-          <dt className="font-medium text-[#59677D] dark:text-white/65">Huella de integridad</dt>
+          <dt className="font-medium text-muted-foreground">Huella de integridad</dt>
           <dd className="flex items-center gap-2 font-mono">
             {hash?.trim() ? (
               <>
@@ -1292,7 +1293,7 @@ function MandatarioActualReadOnly({
                 </span>
                 <button
                   type="button"
-                  className="shrink-0 rounded-lg p-1 text-flit-brand hover:bg-[#EFF6FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                  className="shrink-0 rounded-lg p-1 text-flit-brand hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                   aria-label="Copiar huella de integridad"
                   onClick={() => void copyHash()}
                 >

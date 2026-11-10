@@ -16,9 +16,9 @@ export interface RowAction {
 // desaparecía; en dark pasa a un neutro claro. `primary`/`danger` son colores de marca que
 // ya contrastan en ambos temas.
 const TONE: Record<NonNullable<RowAction["tone"]>, string> = {
-  default: "text-flit-primary dark:text-slate-200",
+  default: "text-flit-primary dark:text-foreground",
   primary: "text-flit-brand",
-  danger: "text-[#FF4E00]",
+  danger: "text-[var(--badge-warning-fg)]",
 };
 
 /**

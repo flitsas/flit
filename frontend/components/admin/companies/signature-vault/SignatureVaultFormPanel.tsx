@@ -154,7 +154,7 @@ export function SignatureVaultFormPanel({
   );
 
   const errStyle = (field: string) =>
-    fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
+    fieldErrors[field] ? { borderColor: "var(--destructive)" } : undefined;
 
   return (
     <Modal
@@ -170,7 +170,7 @@ export function SignatureVaultFormPanel({
           <p
             role="alert"
             className="rounded-xl border px-3 py-2 text-xs font-medium"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
             {banner}
           </p>
@@ -280,7 +280,7 @@ export function SignatureVaultFormPanel({
               min={form.vigenciaDesde || undefined}
               onChange={(e) => patch({ vigenciaHasta: e.target.value })}
               className={OT_INPUT_CLS}
-              style={vigenciaInvalida || fieldErrors.vigenciaHasta ? { borderColor: "#FF4E00" } : undefined}
+              style={vigenciaInvalida || fieldErrors.vigenciaHasta ? { borderColor: "var(--destructive)" } : undefined}
               aria-invalid={vigenciaInvalida || Boolean(fieldErrors.vigenciaHasta)}
             />
             <FieldError
@@ -310,7 +310,7 @@ export function SignatureVaultFormPanel({
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+    <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
       {message}
     </p>
   );

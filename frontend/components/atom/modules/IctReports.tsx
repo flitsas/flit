@@ -26,6 +26,15 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+  TABLA_TARJETA_CLS,
+} from "@/components/atom/table-styles";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { variationPct } from "@/lib/api/analytics-v2";
@@ -53,6 +62,7 @@ import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { formatDurationMs, formatInt, formatNumber, formatPct } from "./_reportes/format";
 import { KpiCard } from "./_reportes/KpiCard";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 import { useAnalyticsQuery } from "./_reportes/useAnalyticsQuery";
@@ -99,9 +109,9 @@ const RANGE_TABS: ReadonlyArray<TabId> = ["novedades", "jobs", "webhooks"];
 const CAUSA_COLOR: Record<string, string> = {
   SOAT: "var(--color-flit-brand)",
   RTM: "var(--color-flit-tech)",
-  RNMC: "#9B8AFB",
-  "Documento faltante": "#F9AC00",
-  "Otra/sin clasificar": "#162744",
+  RNMC: "var(--badge-purple-fg)",
+  "Documento faltante": "var(--badge-warning-fg)",
+  "Otra/sin clasificar": "var(--color-flit-primary)",
 };
 
 /**
@@ -109,9 +119,9 @@ const CAUSA_COLOR: Record<string, string> = {
  * usa para "bien"/"falló". Los tres estados los define el backend (`EstadoWebhook`).
  */
 const ESTADO_WEBHOOK_COLOR: Record<string, string> = {
-  Entregado: "#8CC63F",
-  Fallido: "#FF4E00",
-  Pendiente: "#F9AC00",
+  Entregado: "var(--flit-success-ink)",
+  Fallido: "var(--destructive)",
+  Pendiente: "var(--badge-warning-fg)",
 };
 
 /** La pestaña activa vive en la dirección, igual que en empresa (`reportesTab`) y OT (`tab`). */
@@ -275,7 +285,7 @@ export function IctReports() {
   const nothingToExport = tabTotals[activeTab] === 0;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Reportes de Integración con Terceros"
         subtitle="Novedades, atascados y entregas de ICT, con consultas propias y envío programado."
@@ -303,7 +313,7 @@ export function IctReports() {
         <button
           type="button"
           onClick={() => setSchedulingOpen(true)}
-          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-secondary"
           data-testid="ict-reportes-abrir-programacion"
         >
           <CalendarClock className="h-4 w-4" aria-hidden="true" />
@@ -322,7 +332,7 @@ export function IctReports() {
       ) : usesRange && !rangeValid ? (
         <div
           role="alert"
-          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-card"
         >
           <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
           <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar el reporte.</p>
@@ -418,7 +428,7 @@ function ExcelExportButton({
         {busy ? "Exportando…" : "Exportar Excel"}
       </button>
       {error && (
-        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "#FF4E00" }}>
+        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -435,7 +445,7 @@ function describeExportError(error: unknown): string {
   return "No se pudo generar la exportación. Inténtalo de nuevo.";
 }
 
-/** Sección de contenido: título y tabla de detalle, sin tarjeta que las envuelva. */
+/** Sección de contenido: título y tabla de detalle; la tarjeta la lleva la tabla (HU #14477), no la sección. */
 function ReportSection({
   title,
   hint,
@@ -448,7 +458,7 @@ function ReportSection({
   testId?: string;
 }) {
   return (
-    // HU #13919 — sin tarjeta blanca envolvente: la tabla va directa sobre el fondo, como la de trámites.
+    // HU #13919 — la sección no pinta tarjeta; desde la HU #14477 la pone la tabla (`TABLA_TARJETA_CLS`).
     <section data-testid={testId}>
       <h2 className="text-sm font-bold mb-3" title={hint}>
         {title}
@@ -467,9 +477,9 @@ function DetailTable({
   rows: { key: string; cells: string[] }[];
 }) {
   return (
-    <div className={CARDLIST_SCROLL}>
-      <table className={CARDLIST_TABLE}>
-        <thead>
+    <div className={`${CARDLIST_SCROLL} ${TABLA_TARJETA_CLS}`}>
+      <table className={`${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`}>
+        <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr className={CARDLIST_HEAD_ROW}>
             {headers.map((h) => (
               <th key={h} className={CARDLIST_TH}>
@@ -478,11 +488,15 @@ function DetailTable({
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {rows.map((row) => (
-            <tr key={row.key} className={CARDLIST_ROW}>
+            <tr key={row.key} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
               {row.cells.map((cell, i) => (
-                <td key={headers[i]} className={CARDLIST_CELL}>
+                <td
+                  key={headers[i]}
+                  data-label={headers[i]}
+                  className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
+                >
                   {cell}
                 </td>
               ))}
@@ -611,16 +625,17 @@ function NovedadesTab({
               tres primeras y en dev eso enseñaba tres ceros mientras el 100% de las novedades
               estaba en "Otra/sin clasificar", sin nada en pantalla que dijera dónde estaba el
               resto. Con las cinco visibles, las causas suman exactamente el total. */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             {/* La cifra que duele va en el naranja de "rechazado" del resto de Reportes: una
                 novedad es trabajo que vuelve, no un indicador neutro. */}
             <KpiCard
               label="Novedades en el periodo"
+              ilustracion={rutaIlustracion("notificaciones")}
               value={formatInt(report.total)}
               tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             {report.resumenPorCausa.map((c) => (
               <KpiCard
@@ -628,7 +643,7 @@ function NovedadesTab({
                 label={c.causa}
                 value={`${formatInt(c.cantidad)} · ${withPct(c.porcentajeTexto)}`}
                 tooltip="Novedades de esta causa y su peso sobre el total del periodo. Las causas cubren el 100% de las novedades: lo que no se puede clasificar cuenta en «Otra/sin clasificar»."
-                color={CAUSA_COLOR[c.causa] ?? "#162744"}
+                color={CAUSA_COLOR[c.causa] ?? "var(--color-flit-primary)"}
               />
             ))}
           </div>
@@ -700,9 +715,10 @@ function AtascadosTab({
             {/* Ámbar de "esperando": un atascado no es un fallo, es algo detenido. */}
             <KpiCard
               label="Atascados ahora"
+              ilustracion={rutaIlustracion("vencidos")}
               value={formatInt(report.total)}
               tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
-              color="#F9AC00"
+              color="var(--badge-warning-fg)"
             />
           </div>
 
@@ -769,9 +785,10 @@ function JobsTab({
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-jobs-tab">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Corridas en el periodo"
+              ilustracion={rutaIlustracion("procesos")}
               value={formatInt(report.total)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -782,9 +799,10 @@ function JobsTab({
             {/* `totalFueraDeSla` y no `corridasFueraDeSla.length`: la lista es una página. */}
             <KpiCard
               label="Corridas fuera de SLA"
+              ilustracion={rutaIlustracion("vencidos")}
               value={formatInt(report.totalFueraDeSla)}
               tooltip="Corridas que superaron el tiempo esperado para su job, en todo el periodo."
-              color={report.totalFueraDeSla > 0 ? "#FF4E00" : "#8CC63F"}
+              color={report.totalFueraDeSla > 0 ? "var(--destructive)" : "var(--flit-success-ink)"}
             />
           </div>
 
@@ -881,9 +899,10 @@ function WebhooksTab({
           {/* El conteo total no dice lo único que importa de un webhook: si llegó. Los tres
               estados son del PERIODO COMPLETO (no de la página) y suman exactamente el total, así
               que la fila se lee entera: cuántas se intentaron y en qué acabaron. */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Webhooks en el periodo"
+              ilustracion={rutaIlustracion("integraciones")}
               value={formatInt(report.total)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -891,18 +910,21 @@ function WebhooksTab({
             />
             <KpiCard
               label="Entregados"
+              ilustracion={rutaIlustracion("trazabilidad")}
               value={estadoValor(report.totalEntregados, report.total)}
               tooltip="Entregas que el sistema del cliente confirmó en el periodo. Entregados + fallidos + pendientes suman el total."
               color={ESTADO_WEBHOOK_COLOR.Entregado}
             />
             <KpiCard
               label="Fallidos"
+              ilustracion={rutaIlustracion("causales")}
               value={estadoValor(report.totalFallidos, report.total)}
               tooltip="Entregas que se intentaron y el sistema del cliente rechazó o no respondió, en el periodo."
               color={ESTADO_WEBHOOK_COLOR.Fallido}
             />
             <KpiCard
               label="Pendientes"
+              ilustracion={rutaIlustracion("pendientes")}
               value={estadoValor(report.totalPendientes, report.total)}
               tooltip="Notificaciones que todavía no se han intentado entregar, en el periodo."
               color={ESTADO_WEBHOOK_COLOR.Pendiente}

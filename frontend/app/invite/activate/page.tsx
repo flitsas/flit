@@ -51,7 +51,7 @@ export default async function ActivateAccountPage({ searchParams }: PageProps) {
       </div>
 
       {/* Right panel — form */}
-      <div className="w-full md:w-5/12 bg-white flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-10">
+      <div className="w-full md:w-5/12 bg-card flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-10">
         {/* Mobile logo */}
         <div
           className="md:hidden w-12 h-12 rounded-2xl flex items-center justify-center mb-6"
@@ -67,8 +67,8 @@ export default async function ActivateAccountPage({ searchParams }: PageProps) {
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold mb-1" style={{ color: "var(--color-flit-primary)" }}>Activa tu cuenta</h1>
-        <p className="text-sm mb-8 opacity-60" style={{ color: "var(--color-flit-primary)" }}>
+        <h1 className="text-2xl font-bold mb-1 text-flit-primary">Activa tu cuenta</h1>
+        <p className="text-sm mb-8 opacity-60 text-flit-primary">
           Define tu contraseña para completar el registro.
         </p>
 

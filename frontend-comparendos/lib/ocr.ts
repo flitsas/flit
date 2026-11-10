@@ -79,14 +79,14 @@ export const ESTADOS_PAQUETE = Object.keys(ESTADO_PAQUETE);
 
 /** Estados de documento con su color de §7.6 (el morado de DUPLICADO no existe en los tonos de @flit/ui). */
 export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> = {
-  Pendiente: { texto: "Pendiente", clase: "bg-[#EEF1F6] text-[#475569] dark:bg-white/10 dark:text-slate-300" },
-  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[#E8EEFF] text-[#3B4FD6] dark:bg-flit-brand/20 dark:text-[#8FA8FF]" },
-  Completo: { texto: "Completo", clase: "bg-[#E7F6EC] text-[#1E7B3C] dark:bg-emerald-500/15 dark:text-emerald-300" },
-  Incompleto: { texto: "Incompleto", clase: "bg-[#FFF1E5] text-[#B45309] dark:bg-orange-500/15 dark:text-orange-300" },
-  Fallido: { texto: "Fallido", clase: "bg-[#FDECEC] text-[#B42318] dark:bg-red-500/15 dark:text-red-300" },
-  Duplicado: { texto: "Duplicado", clase: "bg-[#F1EAFE] text-[#6D28D9] dark:bg-violet-500/15 dark:text-violet-300" },
-  Registrado: { texto: "Registrado", clase: "bg-[#E7F6EC] text-[#14532D] dark:bg-emerald-500/25 dark:text-emerald-200" },
-  Descartado: { texto: "Descartado", clase: "bg-[#F4F5F7] text-[#94A3B8] dark:bg-white/5 dark:text-slate-500" },
+  Pendiente: { texto: "Pendiente", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]" },
+  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]" },
+  Completo: { texto: "Completo", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]" },
+  Incompleto: { texto: "Incompleto", clase: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]" },
+  Fallido: { texto: "Fallido", clase: "bg-[var(--badge-danger-bg)] text-[var(--badge-danger-fg)]" },
+  Duplicado: { texto: "Duplicado", clase: "bg-[var(--badge-purple-bg)] text-[var(--badge-purple-fg)]" },
+  Registrado: { texto: "Registrado", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)] font-semibold" },
+  Descartado: { texto: "Descartado", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] opacity-70" },
 };
 
 export const ESTADOS_DOCUMENTO = Object.keys(ESTADO_DOCUMENTO);
@@ -239,12 +239,14 @@ export function marcasRevision(d: {
   campos: { nombreCampo: string; confianza: number | null; valorFinal: string | null; valorCorregido: string | null }[];
   camposFaltantes: string[];
   avisoNumero?: string | null;
+  numeroPorConfirmar?: boolean;
 }): Record<string, string> {
   const marcas: Record<string, string> = {};
   for (const c of d.campos) {
     // El aviso del número vale también si lo escribió el operador: se calcula sobre el valor que quedó.
     if (d.camposFaltantes.includes(c.nombreCampo)) marcas[c.nombreCampo] = "Falta o no es válido.";
-    else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero) marcas[c.nombreCampo] = d.avisoNumero;
+    // GDC punto 14: una vez corregido o confirmado por el operador, el número deja de marcarse.
+    else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero && d.numeroPorConfirmar !== false) marcas[c.nombreCampo] = d.avisoNumero;
     else if (c.valorCorregido !== null) continue;
     else if (c.nombreCampo === "fecha_notificacion" && c.valorFinal) marcas[c.nombreCampo] = "Confírmala: de ella cuentan los plazos.";
     else if (c.valorFinal && c.confianza !== null && c.confianza < CONFIANZA_DUDOSA) marcas[c.nombreCampo] = "La lectura de este campo es dudosa.";
@@ -264,7 +266,22 @@ export interface DocumentoPaquete {
   motivoDescarte?: string | null;
   comparendoId: string | null;
   avisoNumero?: string | null;
+  /** GDC punto 14: el número tiene aviso y nadie lo ha corregido ni confirmado; no se registra. */
+  numeroPorConfirmar?: boolean;
   reprocesos?: number;
+}
+
+/**
+ * GDC punto 14: «Registrar los N completos» no cuenta los completos con el número por confirmar (el servidor los omite).
+ * Devuelve cuántos sí se registran y, si hay retenidos, qué tiene que hacer el operador.
+ */
+export function registroEnLote(completos: number, porConfirmar: number): { registrables: number; aviso: string | null } {
+  const retenidos = Math.min(Math.max(porConfirmar, 0), completos);
+  const aviso =
+    retenidos === 0
+      ? null
+      : `${retenidos === 1 ? "1 documento completo tiene" : `${retenidos} documentos completos tienen`} el número por verificar y no se ${retenidos === 1 ? "registra" : "registran"} en lote. Ábrelo desde la tabla («Verificar número»), compara el número con el documento y corrígelo o confirma que está bien.`;
+  return { registrables: completos - retenidos, aviso };
 }
 
 /** Fallo, duplicado, descarte o faltantes: lo que explica el estado de un documento, en una frase. */
@@ -295,7 +312,7 @@ export function hojaPaquete(p: { nombre: string; creadoEn: string }, docs: Docum
       d.nombreArchivo,
       ESTADO_DOCUMENTO[d.estado]?.texto ?? d.estado,
       d.numeroComparendoExtraido,
-      d.avisoNumero ?? null,
+      d.avisoNumero ? (d.numeroPorConfirmar === false ? "Revisado por el operador" : d.avisoNumero) : null,
       motivoDocumento(d) || null,
       d.reprocesos ?? 0,
       d.comparendoId ? "Sí" : "No",

@@ -144,7 +144,7 @@ export function EnlaceQrDialog({
             ref={qrRef}
             role="img"
             aria-label={`Código QR de ${direccion}`}
-            className="shrink-0 rounded-xl border border-[#DFE5ED] bg-white p-2"
+            className="shrink-0 rounded-xl border border-border bg-white p-2"
           >
             <QRCodeSVG value={direccion} size={160} aria-hidden />
           </div>

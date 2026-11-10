@@ -43,8 +43,8 @@ async function cargar(token: string): Promise<Portal | null> {
 
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null | undefined }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-[#EEF1F6] py-2 last:border-0">
-      <dt className="text-xs uppercase tracking-wide text-slate-500">{etiqueta}</dt>
+    <div className="flex flex-col gap-0.5 border-b border-border py-2 last:border-0">
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{etiqueta}</dt>
       <dd className="text-sm font-medium text-flit-primary">{valor || "—"}</dd>
     </div>
   );
@@ -58,7 +58,7 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
     return (
       <main className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-3 px-6 py-16 text-center">
         <h1 className="text-xl font-semibold text-flit-primary">Este enlace no está disponible</h1>
-        <p className="text-sm text-slate-600">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
+        <p className="text-sm text-muted-foreground">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
       </main>
     );
   }
@@ -68,11 +68,11 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
   const marcaFlit = portal.conjunto !== "Renting";
   const fondoEncabezado = marcaFlit ? "#162744" : "#3A4250";
   const color =
-    portal.descuento.ventana === "Descuento50" ? "#00A86B" : portal.descuento.ventana === "Descuento25" ? "#D98A00" : "#C2410C";
+    portal.descuento.ventana === "Descuento50" ? "var(--flit-success-ink)" : portal.descuento.ventana === "Descuento25" ? "var(--badge-warning-fg)" : "var(--badge-danger-fg)";
   // B7-3: el gris ocupa toda la pantalla (en escritorio la columna quedaba sobre fondo blanco) y la marca FLIT lleva su
   // logo; Renting no lleva nada de FLIT (D9) y todavía no hay logo de Renting en el repositorio: solo su nombre.
   return (
-    <div className="min-h-screen bg-[#F4F6FA]">
+    <div className="min-h-screen bg-secondary">
       <main className="mx-auto flex min-h-full max-w-lg flex-col gap-4 px-4 py-6">
         <header className="flex flex-col gap-1 rounded-xl px-4 py-4 text-white" style={{ background: fondoEncabezado }}>
           {marcaFlit && (
@@ -88,14 +88,14 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
           )}
         </header>
 
-        <section className="rounded-xl border-l-4 bg-white p-4 shadow-sm" style={{ borderColor: color }}>
+        <section className="rounded-xl border-l-4 bg-card p-4 shadow-sm" style={{ borderColor: color }}>
           <p className="text-sm font-semibold" style={{ color }}>
             {portal.descuento.texto}
           </p>
-          <p className="mt-2 text-sm text-slate-600">{portal.dondePagar}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{portal.dondePagar}</p>
         </section>
 
-        <section className="rounded-xl bg-white p-4 shadow-sm">
+        <section className="rounded-xl bg-card p-4 shadow-sm">
           <dl>
             <Dato etiqueta="Placa" valor={c.placa} />
             <Dato etiqueta="Fecha de la infracción" valor={`${formatoFecha(c.fechaImposicion)}${c.hora ? `, ${c.hora.slice(0, 5)}` : ""}`} />
@@ -108,20 +108,20 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
         </section>
 
         {(portal.evidencia.foto || portal.evidencia.documento) && (
-          <section className="rounded-xl bg-white p-4 shadow-sm">
+          <section className="rounded-xl bg-card p-4 shadow-sm">
             <h2 className="mb-2 text-sm font-semibold text-flit-primary">Evidencia</h2>
             {portal.evidencia.foto ? (
               // eslint-disable-next-line @next/next/no-img-element -- la foto viene de la fuente con su propia URL
               <img src={portal.evidencia.foto} alt="Evidencia del comparendo" className="w-full rounded-lg" />
             ) : (
-              <a className="text-sm text-[#3B4FD6] underline" href={`/publico/portal/${encodeURIComponent(token)}/evidencia`} target="_blank" rel="noreferrer">
+              <a className="text-sm text-flit-brand-ink underline" href={`/publico/portal/${encodeURIComponent(token)}/evidencia`} target="_blank" rel="noreferrer">
                 Ver el documento del comparendo
               </a>
             )}
           </section>
         )}
 
-        <footer className="flex flex-col gap-1 pb-6 text-center text-xs text-slate-500">
+        <footer className="flex flex-col gap-1 pb-6 text-center text-xs text-muted-foreground">
           <span>Este enlace es personal y está disponible hasta el {formatoFecha(portal.vence)}.</span>
           <span>{marcaFlit ? "FLIT · Gestión de Comparendos" : (portal.empresa ?? "")}</span>
         </footer>

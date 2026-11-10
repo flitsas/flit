@@ -25,7 +25,7 @@ const SOURCE_LABELS: Record<string, string> = {
  */
 const LABEL = `${WIZARD_LABEL} mb-1.5`;
 const FIELD_BOX =
-  'flex h-9 items-center rounded-xl border border-[#DFE5ED] px-3 dark:border-white/10';
+  'flex h-9 items-center rounded-xl border border-border px-3';
 
 interface Props {
   instanceId: string | null;
@@ -94,10 +94,10 @@ export function AvaluoComercialCard({
       {loading ? (
         <div className="sm:col-span-2">
           <span className={LABEL}>Avalúo sugerido</span>
-          <div className={cn(FIELD_BOX, 'animate-pulse bg-black/5 dark:bg-white/5')} aria-hidden="true" />
+          <div className={cn(FIELD_BOX, 'animate-pulse bg-muted')} aria-hidden="true" />
         </div>
       ) : error ? (
-        <p className="text-xs text-[#59677D] sm:col-span-2" role="status">
+        <p className="text-xs text-muted-foreground sm:col-span-2" role="status">
           {error} Puedes ingresar el valor manualmente.
         </p>
       ) : (
@@ -106,15 +106,15 @@ export function AvaluoComercialCard({
             <span className={LABEL}>
               Avalúo sugerido <span className="font-normal opacity-70">({fuenteLabel})</span>
             </span>
-            <div className={cn(FIELD_BOX, 'justify-between gap-3 bg-[#F8FAFC] dark:bg-white/5')}>
+            <div className={cn(FIELD_BOX, 'justify-between gap-3 bg-secondary')}>
               <span className="truncate text-sm font-bold text-flit-primary dark:text-white">
                 {sugerido != null ? formatCOP(sugerido) : '—'}
               </span>
 
               {sugerido != null && accepted && (
                 <span
-                  className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
-                  style={{ background: '#8CC63F' }}
+                  className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
                   role="status"
                   aria-live="polite"
                 >

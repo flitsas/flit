@@ -99,7 +99,7 @@ export function TransitGrantsPicker({
   if (loadError) {
     return (
       <div className="space-y-2">
-        <p className="text-xs" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs" style={{ color: "var(--destructive)" }} role="alert">
           {loadError}
         </p>
         <button
@@ -137,12 +137,12 @@ export function TransitGrantsPicker({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre, código o municipio…"
           className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
         />
       </div>
       <div
         className="max-h-48 overflow-y-auto rounded-xl border p-2"
-        style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: error ? "var(--destructive)" : "var(--border)" }}
         role="group"
         aria-label="Organismos de tránsito disponibles"
       >
@@ -178,7 +178,7 @@ export function TransitGrantsPicker({
         )}
       </div>
       {error && (
-        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}

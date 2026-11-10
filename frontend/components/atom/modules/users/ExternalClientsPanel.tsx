@@ -140,14 +140,14 @@ export function ExternalClientsPanel() {
       render: (c) => (
         <>
           <span className="block font-mono text-sm font-semibold">{c.clientId}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">{c.displayName}</span>
+          <span className="block text-xs text-muted-foreground">{c.displayName}</span>
         </>
       ),
     },
     {
       key: "finalidad",
       header: "Finalidad",
-      cellClassName: "max-w-[280px] text-xs text-[#59677D] dark:text-white/78",
+      cellClassName: "max-w-[280px] text-xs text-muted-foreground",
       render: (c) => c.purpose,
     },
     {
@@ -207,15 +207,15 @@ export function ExternalClientsPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-[#59677D] dark:text-white/78">
+        <p className="max-w-3xl text-sm text-muted-foreground">
           Sistemas externos que leen el feed de trámites de todas las compañías (p. ej. Flito), uno por ambiente.
           El secreto se genera al crear o regenerar y se muestra una sola vez.
         </p>
         <button
           type="button"
           onClick={() => setForm({ mode: "create" })}
-          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "var(--gradient-action)" }}
         >
           <PlugZap className="h-4 w-4" aria-hidden="true" />
           Nuevo cliente
@@ -225,19 +225,19 @@ export function ExternalClientsPanel() {
       {revealed && (
         <section
           aria-labelledby="external-client-secret-title"
-          className="rounded-[18px] border border-flit-brand/35 bg-white p-4 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/15 dark:bg-[#162744]"
+          className="rounded-[18px] border border-flit-brand/35 bg-card p-4 shadow-[var(--shadow-card)] dark:border-border"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-2">
-              <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
+              <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-flit-primary">
                 <KeyRound className="h-4 w-4 text-flit-brand" aria-hidden="true" />
                 Secreto de «{revealed.clientId}»
               </h3>
-              <p className="text-xs font-semibold text-[#C2410C]">
+              <p className="text-xs font-semibold text-destructive">
                 Cópielo ahora: no se volverá a mostrar ni se puede recuperar. Entrégueselo al sistema externo por un
                 canal seguro.
               </p>
-              <code className="break-all rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] px-3 py-2 font-mono text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
+              <code className="break-all rounded-[10px] border border-border bg-secondary px-3 py-2 font-mono text-sm text-flit-primary">
                 {revealed.secret}
               </code>
             </div>
@@ -245,7 +245,7 @@ export function ExternalClientsPanel() {
               <button
                 type="button"
                 onClick={() => void copySecret()}
-                className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:hover:bg-white/5"
+                className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
                 {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
                 {copied ? "Copiado" : "Copiar secreto"}
@@ -254,7 +254,7 @@ export function ExternalClientsPanel() {
                 type="button"
                 aria-label="Cerrar: el secreto no se volverá a mostrar"
                 onClick={() => setRevealed(null)}
-                className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white dark:hover:bg-white/5"
+                className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-flit-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>

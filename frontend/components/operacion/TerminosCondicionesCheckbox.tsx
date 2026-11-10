@@ -5,7 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 
 const BLUE = 'var(--color-flit-brand)';
-const BORDER = '#DFE5ED';
+const BORDER = 'var(--border)';
 
 /**
  * Enlace que se muestra mientras el backend no ha dicho cuál es el vigente (o si no responde). Es

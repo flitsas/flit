@@ -19,5 +19,5 @@ export function OtReportesSection({ transitOfficeId }: { transitOfficeId: string
     );
   }, [isSuperAdmin, transitOfficeId]);
 
-  return <PortalReportes api={api} />;
+  return <PortalReportes api={api} tarjeta={false} />;
 }

@@ -254,12 +254,12 @@ export function CargueMasivo() {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="flex flex-col gap-3 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
+      <section className="flex flex-col gap-3 rounded-2xl border border-border p-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={descargarPlantilla}
-            className="rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
+            className="rounded-lg border border-border px-3 py-2 text-xs font-semibold"
           >
             Descargar plantilla
           </button>
@@ -287,7 +287,7 @@ export function CargueMasivo() {
               type="button"
               onClick={limpiar}
               disabled={corriendo}
-              className="rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:border-white/10"
+              className="rounded-lg border border-border px-3 py-2 text-xs font-semibold disabled:opacity-50"
             >
               Descartar el lote
             </button>
@@ -303,7 +303,7 @@ export function CargueMasivo() {
       {error && <AvisoError error={error} />}
 
       {invalidas.length > 0 && (
-        <section className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
+        <section className="rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-4">
           <h3 className="text-sm font-semibold">
             {sinFilasValidas
               ? "Ninguna fila del archivo se puede migrar"
@@ -343,7 +343,7 @@ export function CargueMasivo() {
             la página se hubiera roto al cargar. Además invertía la importancia: las opciones se
             tocan una vez, y lo que se mira todo el rato es el archivo y el botón.
           */}
-          <section className="flex flex-col gap-4 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
+          <section className="flex flex-col gap-4 rounded-2xl border border-border p-4">
             <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold">{lote.archivo}</p>
@@ -365,7 +365,7 @@ export function CargueMasivo() {
                   </p>
                 )}
                 {reconciliado === false && (
-                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  <p className="mt-1 text-xs text-[var(--badge-warning-fg)]">
                     No se pudo contrastar con el servidor. Lo que ves es el avance guardado en este
                     navegador y puede estar desactualizado.
                   </p>
@@ -407,7 +407,7 @@ export function CargueMasivo() {
                   onClick={migrarSeleccionadas}
                   disabled={corriendo || pendientes.length === 0}
                   className={`flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-                    dryRun ? "bg-flit-brand" : "bg-amber-600 hover:bg-amber-700"
+                    dryRun ? "bg-flit-brand" : "bg-[var(--badge-warning-fg)] hover:opacity-90 dark:text-[var(--destructive-foreground)]"
                   }`}
                 >
                   {corriendo ? (
@@ -428,7 +428,7 @@ export function CargueMasivo() {
                     onClick={() => {
                       detener.current = true;
                     }}
-                    className="flex items-center gap-1.5 rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
+                    className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold"
                   >
                     <Square className="h-3.5 w-3.5" aria-hidden="true" />
                     Detener al terminar el actual
@@ -445,7 +445,7 @@ export function CargueMasivo() {
                         ),
                       );
                     }}
-                    className="rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
+                    className="rounded-lg border border-border px-3 py-2 text-xs font-semibold"
                   >
                     Seleccionar solo los que fallaron
                   </button>
@@ -460,7 +460,7 @@ export function CargueMasivo() {
               </p>
             )}
 
-            <div className="border-t border-[#DFE5ED] pt-4 dark:border-white/10">
+            <div className="border-t border-border pt-4">
               <OpcionesMigracion
                 instancias={instancias}
                 onInstancias={setInstancias}

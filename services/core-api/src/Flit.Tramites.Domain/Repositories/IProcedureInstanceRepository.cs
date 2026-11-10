@@ -574,6 +574,12 @@ public interface IProcedureInstanceRepository
     Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14494 — <c>CreatedAt</c> del último evento <c>cambio_estado</c> del trámite, o <c>null</c> si no hay historial.
+    /// </summary>
+    Task<DateTimeOffset?> GetUltimoCambioEstadoCreatedAtAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Documentos que se consultaron REALMENTE en el RUNT dentro de este trámite, en la forma
     /// <c>TIPO|NUMERO</c> de <see cref="Tramites.Services.RuntPersonaConsultada.Key"/>. Lo usa el gate
     /// de actores para exigir la consulta en vez de darla por hecha con el documento digitado.

@@ -37,7 +37,7 @@ export function IdentityCaptureLinkBlock({
   const href = qrHref(captureUrl);
   return (
     <div
-      className="rounded-xl border bg-white p-3"
+      className="rounded-xl border bg-card p-3"
       style={{ borderColor: FLIT.border.soft }}
       data-testid="identity-capture-qr"
     >

@@ -122,7 +122,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       render: (t) => (
         <>
           <span className="block font-semibold">{t.nombre}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">{legible(t.familia)}</span>
+          <span className="block text-xs text-muted-foreground">{legible(t.familia)}</span>
         </>
       ),
     },

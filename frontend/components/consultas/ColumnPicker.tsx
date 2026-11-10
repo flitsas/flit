@@ -73,7 +73,7 @@ export function ColumnPicker<TRow>({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="true"
-        className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-flit-brand dark:border-white/10"
+        className="rounded-xl border border-border px-3 py-2 text-xs font-semibold transition hover:border-flit-brand"
         data-testid={testId}
       >
         Columnas ({visible.length})
@@ -81,18 +81,18 @@ export function ColumnPicker<TRow>({
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+          className="absolute right-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-2xl"
           data-testid={`${testId}-panel`}
         >
           {groups.map((group) => (
             <fieldset key={group} className="mb-2 last:mb-0">
-              <legend className="mb-1 w-full rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:bg-white/[0.06] dark:text-white/75">
+              <legend className="mb-1 w-full rounded-md bg-secondary px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:text-muted-foreground">
                 {group}
               </legend>
               {columns.filter((c) => c.group === group).map((column) => (
                 <label
                   key={column.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-secondary"
                 >
                   <input
                     type="checkbox"

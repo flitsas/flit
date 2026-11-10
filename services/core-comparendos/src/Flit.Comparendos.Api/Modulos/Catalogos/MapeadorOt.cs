@@ -16,6 +16,7 @@ namespace Flit.Comparendos.Api.Modulos.Catalogos;
 /// tiene un único OT en el catálogo. Lo pide la respuesta real del SIMIT: las sedes departamentales llegan con su
 /// código de oficina (70670001 frente a 70670000 del catálogo) y algunas secretarías solo con el municipio («Galapa»).
 /// Sin coincidencia, el comparendo queda sin OT (RN-044) hasta que el SuperAdmin cree el alias.
+/// Los organismos gemelos (<see cref="OrganismosGemelos"/>: solo difieren en espacios) cuentan como uno, su titular.
 /// </summary>
 public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
 {
@@ -23,6 +24,17 @@ public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
     private Dictionary<string, Guid>? _porCodigo;
     private Dictionary<string, Guid>? _porDivipola;
     private Dictionary<string, Guid>? _porMunicipio;
+    private Dictionary<Guid, Guid>? _titulares;
+
+    /// <summary>Organismos con el id de su titular: un gemelo cuenta como su titular.</summary>
+    private async Task<List<(Guid Id, string Codigo, string Municipio)>> OrganismosAsync(CancellationToken ct)
+    {
+        var todos = await db.OrganismosTransito.AsNoTracking().Select(o => new { o.Id, o.Codigo, o.Nombre, o.Municipio }).ToListAsync(ct).ConfigureAwait(false);
+        _titulares ??= OrganismosGemelos.Titulares(todos, o => o.Id, o => o.Codigo, o => o.Nombre);
+        return [.. todos.Select(o => (_titulares[o.Id], o.Codigo, o.Municipio ?? string.Empty))];
+    }
+
+    private Guid Titular(Guid id) => _titulares is not null && _titulares.TryGetValue(id, out var t) ? t : id;
 
     public async Task<Guid?> MapearAsync(string? secretaria, CancellationToken ct, string? numeroComparendo = null) =>
         await PorTextoAsync(secretaria, ct).ConfigureAwait(false)
@@ -37,11 +49,11 @@ public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
     {
         if (numero is null || numero.Length < 16 || !numero.All(char.IsAsciiDigit))
             return null;
-        _porCodigo ??= (await db.OrganismosTransito.AsNoTracking().Select(o => new { o.Id, o.Codigo }).ToListAsync(ct).ConfigureAwait(false))
-            .Where(o => o.Codigo.Length is > 0 and <= 8 && o.Codigo.All(char.IsAsciiDigit))
-            .GroupBy(o => o.Codigo.PadLeft(8, '0'))
-            .Where(g => g.Count() == 1)
-            .ToDictionary(g => g.Key, g => g.Single().Id, StringComparer.Ordinal);
+        _porCodigo ??= (await OrganismosAsync(ct).ConfigureAwait(false))
+            .Where(o => OrganismosGemelos.Codigo8(o.Codigo) is not null)
+            .GroupBy(o => OrganismosGemelos.Codigo8(o.Codigo)!)
+            .Where(g => g.Select(o => o.Id).Distinct().Count() == 1)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
         return _porCodigo.TryGetValue(numero[..8], out var id) ? id : null;
     }
 
@@ -50,13 +62,13 @@ public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
     {
         if (_porDivipola is null || _porMunicipio is null)
         {
-            var todos = await db.OrganismosTransito.AsNoTracking().Select(o => new { o.Id, o.Codigo, o.Municipio }).ToListAsync(ct).ConfigureAwait(false);
-            _porDivipola = todos.Where(o => o.Codigo.Length is > 0 and <= 8 && o.Codigo.All(char.IsAsciiDigit))
-                .GroupBy(o => o.Codigo.PadLeft(8, '0')[..5]).Where(g => g.Count() == 1)
-                .ToDictionary(g => g.Key, g => g.Single().Id, StringComparer.Ordinal);
+            var todos = await OrganismosAsync(ct).ConfigureAwait(false);
+            _porDivipola = todos.Where(o => OrganismosGemelos.Codigo8(o.Codigo) is not null)
+                .GroupBy(o => OrganismosGemelos.Codigo8(o.Codigo)![..5]).Where(g => g.Select(o => o.Id).Distinct().Count() == 1)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
             _porMunicipio = todos.Select(o => (o.Id, Texto: TextoNormalizado.De(o.Municipio))).Where(o => o.Texto.Length > 0)
-                .GroupBy(o => o.Texto).Where(g => g.Count() == 1)
-                .ToDictionary(g => g.Key, g => g.Single().Id, StringComparer.Ordinal);
+                .GroupBy(o => o.Texto).Where(g => g.Select(o => o.Id).Distinct().Count() == 1)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
         }
 
         if (numero is { Length: >= 16 } && numero.All(char.IsAsciiDigit) && _porDivipola.TryGetValue(numero[..5], out var porNumero))
@@ -77,17 +89,18 @@ public sealed class MapeadorOt(ComparendosDb db, Reloj reloj)
         if (alias is null)
         {
             var candidatos = await db.OrganismosTransito.AsNoTracking().Select(o => new { o.Id, o.Codigo, o.Nombre }).ToListAsync(ct).ConfigureAwait(false);
+            _titulares ??= OrganismosGemelos.Titulares(candidatos, o => o.Id, o => o.Codigo, o => o.Nombre);
             var exacto = candidatos.FirstOrDefault(o => o.Codigo == texto || TextoNormalizado.De(o.Nombre) == texto);
             if (exacto is not null)
             {
-                alias = exacto.Id;
+                alias = Titular(exacto.Id);
                 if (texto.Length <= 250 && !db.OrganismosTransitoAlias.Local.Any(a => a.TextoNormalizado == texto))
                 {
                     db.OrganismosTransitoAlias.Add(new OrganismoTransitoAlias
                     {
                         Id = Guid.CreateVersion7(),
                         TextoNormalizado = texto,
-                        OrganismoTransitoId = exacto.Id,
+                        OrganismoTransitoId = alias.Value,
                         Origen = "AUTOMATICO",
                         CreadoEn = reloj.Ahora,
                     });

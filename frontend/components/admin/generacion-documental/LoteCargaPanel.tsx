@@ -245,7 +245,7 @@ export function LoteCargaPanel() {
 
         {/* El error no se comunica solo por color (CF-22): es texto, y `alert` lo anuncia. */}
         {error && (
-          <p role="alert" data-testid="lote-error" className="mt-3 text-xs" style={{ color: "#B42318" }}>
+          <p role="alert" data-testid="lote-error" className="mt-3 text-xs" style={{ color: "var(--destructive)" }}>
             {error}
           </p>
         )}

@@ -14,7 +14,7 @@ import {
 } from "@/lib/users/emailConflict";
 
 const INPUT_CLASS =
-  "w-full bg-white border border-flit-gray rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+  "w-full bg-card border border-input rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 export function ActivateAccountForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
@@ -35,16 +35,16 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
   if (done) {
     return (
       <div role="status" className="space-y-4">
-        <p className="text-sm" style={{ color: "var(--color-flit-primary)" }}>Tu cuenta fue activada correctamente.</p>
+        <p className="text-sm text-flit-primary">Tu cuenta fue activada correctamente.</p>
         {hadPriorSession && (
-          <p className="text-xs opacity-50" style={{ color: "var(--color-flit-primary)" }}>
+          <p className="text-xs opacity-50 text-flit-primary">
             Por tu seguridad, cerramos la sesión que estaba activa en este navegador. Inicia sesión con tu nueva cuenta.
           </p>
         )}
         <Link
           href="/login"
-          className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "var(--color-flit-brand)" }}
+          className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+          style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
         >
           Ir a iniciar sesión
         </Link>
@@ -101,7 +101,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <p className="mt-1 text-xs opacity-50" style={{ color: "var(--color-flit-primary)" }}>{PASSWORD_POLICY_HINT}</p>
+        <p className="mt-1 text-xs opacity-50 text-flit-primary">{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
         <label htmlFor="ac-confirm" className="block text-sm font-medium text-flit-primary mb-1">
@@ -124,8 +124,8 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--color-flit-brand)" }}
+        className="w-full rounded-xl py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
         {loading ? "Activando…" : "Activar mi cuenta"}
       </button>

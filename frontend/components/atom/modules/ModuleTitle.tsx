@@ -1,51 +1,94 @@
 import type { ReactNode } from "react";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { ILUSTRACIONES, ilustracionDe, rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 
 /**
- * Encabezado de módulo unificado (HU #10493). La caja del título es la misma tarjeta
- * blanca con borde de marca en todos los módulos. La acción primaria (botón) se
- * renderiza SIEMPRE FUERA de la caja del título (regla R7 del feedback de diseño),
- * en la misma fila y alineada a la derecha. `right` queda para contenido que sí vive
- * DENTRO de la caja (p. ej. un indicador de estado "En vivo").
+ * Cabecera de módulo de Trámites: `CabeceraModulo` de @flit/ui (HU #14476) con la ilustración elegida por esta tabla.
+ * Antes el marcado vivía aquí; el aspecto sigue siendo el modelo `page-header` de la propuesta «Diseño Inteligente»
+ * (rama `propuesta`, propuesta.css): tarjeta con la ilustración del módulo a la izquierda, antetítulo opcional, título con su línea
+ * de acento, bajada, y los dos círculos decorativos (turquesa lleno y aro) a la derecha. Las acciones van DENTRO de
+ * la cabecera, a la derecha, como en el prototipo (antes, regla R7 de HU #10493, iban fuera de la caja).
+ *
+ * La ilustración sale del título con la misma tabla del prototipo, así que ninguna pantalla tiene que pasarla; quien
+ * quiera otra la fija con `ilustracion` (nombre de ilustración o clave del dock).
  */
+
+const POR_TITULO: ReadonlyArray<[RegExp, Ilustracion]> = [
+  [/generaci[oó]n documental/i, "generacion-documental"],
+  [/historial/i, "historial-placa"],
+  [/revocatoria/i, "revocatorias"],
+  [/trazabilidad/i, "trazabilidad"],
+  [/log qx|quipux|\bict\b|integraci/i, "integraciones"],
+  [/confirmaci[oó]n runt|runt/i, "fuentes-oficiales"],
+  [/causal/i, "causales"],
+  [/organismo|tr[aá]nsito/i, "organismos"],
+  [/compa[nñ][ií]a|empresa|red de clientes/i, "empresas"],
+  [/impronta/i, "improntas"],
+  [/documental|documento/i, "documentos"],
+  [/mandato/i, "mandatos"],
+  [/\bfur\b/i, "fur"],
+  [/notificaci|mensajes muertos|correo/i, "notificaciones"],
+  [/banner/i, "banners"],
+  [/rol|permiso|rbac/i, "roles"],
+  [/auditor/i, "auditoria"],
+  [/proceso/i, "procesos"],
+  [/usuario|colaborador/i, "colaboradores"],
+  [/identidad|validaci|biom/i, "identidad"],
+  [/reporte|anal[ií]tica|consulta/i, "reportes"],
+  [/placa/i, "consulta-placa"],
+  [/configuraci|plataforma|par[aá]metro|tipos? de tr[aá]mite/i, "configuracion"],
+  [/ayuda|manual/i, "ayuda"],
+  [/perfil|cuenta|contrase/i, "perfil"],
+  [/comparendo/i, "comparendos"],
+  [/diagn[oó]stico/i, "diagnostico"],
+  [/matr[ií]cula/i, "matricula"],
+  [/traspaso/i, "traspaso"],
+  [/tr[aá]mite/i, "tramites"],
+];
+
+function rutaPara(title: string, ilustracion?: string): string {
+  if (ilustracion) {
+    if ((ILUSTRACIONES as readonly string[]).includes(ilustracion)) return rutaIlustracion(ilustracion as Ilustracion);
+    const porClave = ilustracionDe(ilustracion);
+    if (porClave) return porClave;
+  }
+  const hallada = POR_TITULO.find(([re]) => re.test(title))?.[1] ?? "inicio";
+  return rutaIlustracion(hallada);
+}
+
 export function ModuleTitle({
   title,
   subtitle,
   right,
   action,
+  ilustracion,
+  antetitulo,
 }: {
   title: string;
   subtitle?: string;
-  /** Contenido dentro de la caja del título (indicadores de estado, no acciones). */
+  /** Contenido a la derecha de la cabecera (indicadores de estado). */
   right?: ReactNode;
-  /** Acción primaria (botón) renderizada FUERA de la caja del título. */
+  /** Acción primaria; va a la derecha, dentro de la cabecera. */
   action?: ReactNode;
+  /** Ilustración del módulo (nombre o clave del dock). Si no se pasa, sale del título. */
+  ilustracion?: string;
+  /** Antetítulo en versalitas sobre el título (p. ej. «Gestión integral»). */
+  antetitulo?: string;
 }) {
-  const card = (
-    <div className="rounded-2xl px-5 py-3 border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] flex items-center justify-between gap-3 flex-wrap">
-      <div>
-        <h1 className="text-2xl font-bold leading-tight" style={{ color: "var(--color-flit-brand)" }}>
-          {title}
-        </h1>
-        {subtitle && <p className="text-xs opacity-70 mt-0.5">{subtitle}</p>}
-      </div>
-      {right}
-    </div>
-  );
-
-  // Con acción: caja del título (≈2/3) + botón FUERA, en una fila con justify-between.
-  if (action) {
-    return (
-      <div className="flex flex-wrap items-start justify-between gap-3 shrink-0">
-        <div className="min-w-0 flex-1 md:max-w-[66%]">{card}</div>
-        {action}
-      </div>
-    );
-  }
-
-  // Sin acción: caja del título a 2/3 en una grilla de 3 columnas (comportamiento previo).
   return (
-    <div className="grid grid-cols-1 gap-3 shrink-0 md:grid-cols-3">
-      <div className="md:col-span-2">{card}</div>
-    </div>
+    <CabeceraModulo
+      titulo={title}
+      descripcion={subtitle}
+      antetitulo={antetitulo}
+      ilustracion={rutaPara(title, ilustracion)}
+      acciones={
+        right || action ? (
+          <>
+            {right}
+            {action}
+          </>
+        ) : undefined
+      }
+    />
   );
 }

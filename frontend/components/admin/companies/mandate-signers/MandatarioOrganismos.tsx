@@ -76,22 +76,22 @@ export function MandatarioOrganismos({
           icon={Building2}
           iconBg="var(--color-flit-brand)"
           title={`Organismos de ${signerName}`}
-          titleClassName="text-base font-bold text-flit-primary dark:text-white"
+          titleClassName="text-base font-bold text-flit-primary"
           size="md"
         >
           <div className="space-y-3 text-xs" data-testid="mandatario-organismos-detalle">
-            <p className="text-[#59677D] dark:text-white/65">
+            <p className="text-muted-foreground">
               Organismos de tránsito donde está habilitado para firmar mandatos de la compañía.
             </p>
 
-            <ul className="max-h-72 divide-y divide-[#E3EAF5] overflow-y-auto rounded-xl border border-[#E3EAF5] dark:divide-white/10 dark:border-white/10">
+            <ul className="max-h-72 divide-y divide-border overflow-y-auto rounded-xl border border-border">
               {items.map((o) => (
                 <li
                   key={o.id}
                   className="flex flex-col gap-0.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                   data-bloqueado={o.bloqueado ? "true" : undefined}
                 >
-                  <span className="font-medium text-flit-primary dark:text-white">{o.nombre}</span>
+                  <span className="font-medium text-flit-primary">{o.nombre}</span>
                   <span
                     className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
                     style={{
@@ -114,7 +114,7 @@ export function MandatarioOrganismos({
             {conAviso && (
               <div
                 className="rounded-xl border px-3 py-2 leading-relaxed"
-                style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+                style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
                 role="note"
               >
                 {todos

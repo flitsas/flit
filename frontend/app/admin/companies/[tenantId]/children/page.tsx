@@ -105,7 +105,7 @@ export default function NetworkChildrenPage() {
                         {/* HU #12427 AC1/AC2 — la cabeza ve el estado de su dominio y puede comprobarlo;
                             registrar, cambiar o retirar es exclusivo del SuperAdmin (ficha de compañía, AC3). */}
                         <section
-                          className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
+                          className="rounded-2xl border bg-card/60 p-4"
                           aria-labelledby="domain-company-title"
                         >
                           <div className="mb-3">

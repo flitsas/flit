@@ -13,6 +13,7 @@ import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatInt, formatNumber, formatPct } from "../format";
 import { FunnelChart } from "../FunnelChart";
 import { KpiCard } from "../KpiCard";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -43,7 +44,7 @@ const STUCK_COLUMNS: DataTableColumn<StuckItem>[] = [
   {
     key: "dias",
     header: "Días detenido",
-    cellClassName: "font-semibold text-[#F9AC00]",
+    cellClassName: "font-semibold text-[var(--badge-warning-fg)]",
     render: (item) => formatNumber(item.daysInStatus),
   },
   { key: "organismo", header: "Organismo", cellClassName: "opacity-80", render: (item) => item.transitOfficeName },
@@ -85,9 +86,10 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
         skeletonRows={2}
       >
         {summary && (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Entregados"
+              ilustracion={rutaIlustracion("tramites")}
               value={formatInt(summary.entregados)}
               tooltip="Transiciones a 'entregado' dentro del rango de fechas."
               variation={kpiVariation("entregados")}
@@ -95,41 +97,45 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             />
             <KpiCard
               label="Aprobados"
+              ilustracion={rutaIlustracion("trazabilidad")}
               value={formatInt(summary.aprobados)}
               tooltip="Transiciones a 'aprobado' dentro del rango de fechas."
               variation={kpiVariation("aprobados")}
-              color="#8CC63F"
+              color="var(--flit-success-ink)"
             />
             <KpiCard
               label="Rechazados"
+              ilustracion={rutaIlustracion("causales")}
               value={formatInt(summary.rechazados)}
               tooltip="Transiciones a 'rechazado' dentro del rango de fechas."
               variation={kpiVariation("rechazados")}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             <KpiCard
               label="Tasa de rechazo"
+              ilustracion={rutaIlustracion("reportes")}
               value={formatPct(summary.rejectionRatePct)}
               tooltip="Rechazados / (aprobados + rechazados) × 100 en el rango."
               variation={kpiVariation("rejectionRatePct")}
               invertVariationColor
-              color="#FF4E00"
+              color="var(--destructive)"
             />
             <KpiCard
               label="Atascados"
+              ilustracion={rutaIlustracion("vencidos")}
               value={formatInt(summary.stuckCount)}
               tooltip="Trámites activos sin cambio de estado hace más días que el umbral (7 por defecto)."
               variation={kpiVariation("stuckCount")}
               invertVariationColor
-              color="#F9AC00"
+              color="var(--badge-warning-fg)"
             />
           </div>
         )}
       </UiStateBoundary>
 
       {/* Embudo de estados */}
-      <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="funnel-title">
+      <section className="rounded-2xl p-5 bg-card border" aria-labelledby="funnel-title">
         <h2
           id="funnel-title"
           className="text-sm font-bold mb-3"
@@ -171,7 +177,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
         {metrics.data && (
           <div className="flex flex-col gap-4">
             <section aria-labelledby="stuck-title">
-              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+              {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
               <h2
                 id="stuck-title"
                 className="text-sm font-bold mb-3"
@@ -199,7 +205,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="dist-tipo-title">
+              <section className="rounded-2xl p-5 bg-card border" aria-labelledby="dist-tipo-title">
                 <h2 id="dist-tipo-title" className="text-sm font-bold mb-3" title="Trámites entregados por tipo de trámite en el rango.">
                   Distribución por tipo de trámite
                 </h2>
@@ -214,7 +220,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                   emptyMessage="Sin entregas por tipo en el periodo."
                 />
               </section>
-              <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="dist-ot-title">
+              <section className="rounded-2xl p-5 bg-card border" aria-labelledby="dist-ot-title">
                 <h2 id="dist-ot-title" className="text-sm font-bold mb-3" title="Trámites entregados por organismo de tránsito en el rango.">
                   Distribución por organismo de tránsito
                 </h2>

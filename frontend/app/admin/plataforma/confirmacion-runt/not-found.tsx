@@ -14,25 +14,25 @@ export default function AdminConfirmacionRuntNotFound() {
         role="status"
         aria-live="polite"
         data-testid="admin-confirmacion-runt-not-found"
-        className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-6 py-14 text-center dark:border-white/10 dark:bg-[#0B0F14]"
+        className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 py-14 text-center"
       >
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FF4E00]/10"
-          style={{ color: "#FF4E00" }}
+          className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--badge-danger-bg)]"
+          style={{ color: "var(--destructive)" }}
           aria-hidden="true"
         >
           <FileQuestion className="h-6 w-6" strokeWidth={1.8} />
         </div>
         <p
-          className="text-3xl font-bold tracking-tight text-[#59677D] dark:text-white/55"
+          className="text-3xl font-bold tracking-tight text-muted-foreground"
           aria-hidden="true"
         >
           404
         </p>
-        <h1 className="text-base font-semibold text-flit-primary dark:text-white">
+        <h1 className="text-base font-semibold text-flit-primary">
           Confirmación RUNT no disponible
         </h1>
-        <p className="max-w-md text-sm text-[#59677D] dark:text-white/65">
+        <p className="max-w-md text-sm text-muted-foreground">
           No tienes acceso a esta sección o la ruta no existe. Vuelve al inicio o elige otra
           opción del menú Plataforma.
         </p>
@@ -43,7 +43,7 @@ export default function AdminConfirmacionRuntNotFound() {
         <Link
           href="/"
           className="mt-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           Volver al inicio
         </Link>

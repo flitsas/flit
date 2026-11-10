@@ -10,6 +10,8 @@
   "exports": {
     "./SuiteShell": "./src/SuiteShell.tsx",
     "./nav": "./src/nav.ts",
+    "./nav-context": "./src/ShellNavContext.tsx",
+    "./search": "./src/search.ts",
     "./account": "./src/account.ts",
     "./theme": "./src/theme.tsx",
     "./theme-script": "./src/theme-script.ts",

@@ -7,8 +7,8 @@ export interface Miga {
   href?: string;
 }
 
-const ENLACE_CLS = `rounded font-medium text-[var(--flit-brand-ink)] underline-offset-4 hover:underline dark:text-white ${FOCO_CLS}`;
-const ACTUAL_CLS = "font-semibold text-flit-primary dark:text-white";
+const ENLACE_CLS = `rounded font-medium text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`;
+const ACTUAL_CLS = "font-semibold text-flit-primary";
 
 /**
  * Migas de pan (HU #14087): «Diagnósticos › {lote} › …». Nav con nombre accesible, lista ordenada y la última miga con
@@ -17,7 +17,7 @@ const ACTUAL_CLS = "font-semibold text-flit-primary dark:text-white";
 export function Migas({ migas }: { migas: readonly Miga[] }) {
   return (
     <nav aria-label="Migas de pan">
-      <ol className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--nav-texto)] dark:text-slate-300">
+      <ol className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--nav-texto)]">
         {migas.map((m, i) => {
           const ultima = i === migas.length - 1;
           return (

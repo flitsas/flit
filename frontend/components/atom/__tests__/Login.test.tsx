@@ -14,8 +14,8 @@ const loginMock = vi.mocked(loginUser);
 const storeTokenMock = vi.mocked(storeToken);
 
 function fillCreds() {
-  fireEvent.change(screen.getByLabelText(/usuario corporativo/i), { target: { value: "admin@flit.io" } });
-  fireEvent.change(screen.getByLabelText(/contraseña/i), { target: { value: "Secret123" } });
+  fireEvent.change(screen.getByLabelText("Correo"), { target: { value: "admin@flit.io" } });
+  fireEvent.change(screen.getByLabelText("Contraseña", { selector: "input" }), { target: { value: "Secret123" } });
 }
 
 describe("Login (Feature #10113 — login real)", () => {
@@ -166,8 +166,8 @@ describe("Login (Feature #10113 — login real)", () => {
       Object.assign(new Error("401"), { status: 401, body: { error: "INVALID_CREDENTIALS" } }),
     );
     const credencial = render(<Login onAuthenticated={vi.fn()} />);
-    fireEvent.change(credencial.getByLabelText(/usuario corporativo/i), { target: { value: "admin@flit.io" } });
-    fireEvent.change(credencial.getByLabelText(/contraseña/i), { target: { value: "Secret123" } });
+    fireEvent.change(credencial.getByLabelText("Correo"), { target: { value: "admin@flit.io" } });
+    fireEvent.change(credencial.getByLabelText("Contraseña", { selector: "input" }), { target: { value: "Secret123" } });
     fireEvent.click(credencial.getByRole("button", { name: /iniciar sesión/i }));
     await waitFor(() => expect(credencial.getByRole("alert")).toBeInTheDocument());
     const credencialHtml = credencial.getByRole("alert").innerHTML;
@@ -179,8 +179,8 @@ describe("Login (Feature #10113 — login real)", () => {
       Object.assign(new Error("401"), { status: 401, body: { error: "INVALID_CREDENTIALS" } }),
     );
     const fueraDeRed = render(<Login onAuthenticated={vi.fn()} />);
-    fireEvent.change(fueraDeRed.getByLabelText(/usuario corporativo/i), { target: { value: "otro@red.io" } });
-    fireEvent.change(fueraDeRed.getByLabelText(/contraseña/i), { target: { value: "OtraClave1" } });
+    fireEvent.change(fueraDeRed.getByLabelText("Correo"), { target: { value: "otro@red.io" } });
+    fireEvent.change(fueraDeRed.getByLabelText("Contraseña", { selector: "input" }), { target: { value: "OtraClave1" } });
     fireEvent.click(fueraDeRed.getByRole("button", { name: /iniciar sesión/i }));
     await waitFor(() => expect(fueraDeRed.getByRole("alert")).toBeInTheDocument());
     const fueraDeRedHtml = fueraDeRed.getByRole("alert").innerHTML;
@@ -208,5 +208,28 @@ describe("Login (Feature #10113 — login real)", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     getItemSpy.mockRestore();
+  });
+
+  // HU #14485 — el botón para ver la contraseña y la línea de soporte de la propuesta.
+  it("el botón del campo alterna la contraseña entre oculta y visible sin enviar el formulario", () => {
+    render(<Login onAuthenticated={vi.fn()} />);
+    const clave = screen.getByLabelText("Contraseña", { selector: "input" });
+    expect(clave).toHaveAttribute("type", "password");
+    const ver = screen.getByRole("button", { name: "Mostrar contraseña" });
+    expect(ver).toHaveAttribute("type", "button");
+    expect(ver).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(ver);
+    expect(clave).toHaveAttribute("type", "text");
+    const ocultar = screen.getByRole("button", { name: "Ocultar contraseña" });
+    expect(ocultar).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(ocultar);
+    expect(clave).toHaveAttribute("type", "password");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("bajo el botón de ingresar está el correo de soporte", () => {
+    render(<Login onAuthenticated={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "soporte@flitsas.com" })).toHaveAttribute("href", "mailto:soporte@flitsas.com");
+    expect(screen.getByText(/¿Problemas para entrar\?/)).toBeInTheDocument();
   });
 });

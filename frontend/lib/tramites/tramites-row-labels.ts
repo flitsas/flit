@@ -137,11 +137,11 @@ export function stepLabel(item: InstanceSummary): string {
  * junto a las otras dos deudas de contraste abiertas (blanco sobre `#8CC63F` y sobre `#FF4E00`).
  */
 export const FIRMA_TEXTO: Record<FirmaParteEstado, { label: string; color: string }> = {
-  firmado: { label: 'Firmado', color: '#16A34A' },
-  pendiente: { label: 'Sin firma', color: '#F9AC00' },
+  firmado: { label: 'Firmado', color: 'var(--flit-success-ink)' },
+  pendiente: { label: 'Sin firma', color: 'var(--badge-warning-fg)' },
   // La propuesta no dibuja una firma rechazada, así que no hay "tono exacto" que copiar: se queda
   // el naranja de marca en su variante para texto, que sí cumple contraste.
-  rechazado: { label: 'Rechazado', color: '#C2410C' },
+  rechazado: { label: 'Rechazado', color: 'var(--destructive)' },
 };
 
 /** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */

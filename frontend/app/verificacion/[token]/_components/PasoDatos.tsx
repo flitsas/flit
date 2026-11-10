@@ -1,7 +1,7 @@
 "use client";
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
-import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG } from "@/components/atom/table-styles";
+import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG, TABLA_TARJETA_CLS } from "@/components/atom/table-styles";
 import { useId, useState } from "react";
 import {
   CAPTURE_TIPS,
@@ -85,6 +85,7 @@ export function PasoDatos({
 
       {/* HU #13919 — ficha de pares fijos con el MISMO diseño de toda tabla (cabecera gris y filas-
           tarjeta); no se pagina porque no recorre ninguna colección. */}
+      <div className={TABLA_TARJETA_CLS}>
       <table className="w-full border-separate border-spacing-y-2 text-base">
         <caption className="sr-only">Tus datos</caption>
         <thead>
@@ -100,7 +101,7 @@ export function PasoDatos({
           </tr>
         </thead>
         <tbody>
-          <tr className="bg-white dark:bg-[#0B0F14]">
+          <tr className="bg-card">
             <th
               scope="row"
               className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
@@ -115,7 +116,7 @@ export function PasoDatos({
               {view.fullName}
             </td>
           </tr>
-          <tr className="bg-white dark:bg-[#0B0F14]">
+          <tr className="bg-card">
             <th
               scope="row"
               className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
@@ -132,13 +133,14 @@ export function PasoDatos({
           </tr>
         </tbody>
       </table>
+      </div>
 
       <p className="text-base text-muted-foreground">
         Estos datos ya los tiene quien te envió el enlace. No tienes que escribirlos otra vez. Haremos una
         verificación facial, de tu documento (anverso y reverso) y tu firma. Toma menos de un minuto.
       </p>
 
-      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-flit-bg p-4">
+      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-secondary p-4">
         <h2 id="consejos-titulo" className="text-base font-semibold text-flit-primary">
           Para que salga bien
         </h2>
@@ -165,13 +167,13 @@ export function PasoDatos({
       </div>
 
       {versionMismatch ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           El texto de consentimiento cambió; recarga la página.
         </p>
       ) : null}
 
       {error && !staleText ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           No pudimos registrar tu autorización. Inténtalo de nuevo.
         </p>
       ) : null}

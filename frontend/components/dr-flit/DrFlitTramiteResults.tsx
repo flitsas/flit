@@ -135,7 +135,7 @@ export function DrFlitTramiteResults({
             <button
               type="button"
               onClick={() => onOpen(row.href)}
-              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2.5 text-xs font-semibold text-(--dr-flit-text-inverse) transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
               style={{
                 background: "var(--dr-flit-gradient-primary)",
                 boxShadow: "var(--dr-flit-shadow-fab)",

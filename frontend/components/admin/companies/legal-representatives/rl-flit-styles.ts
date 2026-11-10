@@ -8,45 +8,45 @@
 
 export const RL_COLOR = {
   /** color.text.primary / brand.blueDark */
-  navy: "#162744",
+  navy: "var(--color-flit-primary)",
   /** color.text.secondary / state.draft */
-  secondary: "#59677D",
+  secondary: "var(--muted-foreground)",
   /** color.text.muted */
-  muted: "#7D8798",
+  muted: "var(--muted-foreground)",
   /** Admin brand blue (≈ brand.blue #4F74C9 del prototipo) */
   brand: "var(--color-flit-brand)",
   /** Admin cyan (≈ brand.cyan #4FD4CC) */
   cyan: "var(--color-flit-tech)",
   /** color.background.tableHeader */
-  tableHeader: "#F4F6FA",
+  tableHeader: "var(--secondary)",
   /** color.border.soft */
-  border: "#DDE5F0",
+  border: "var(--border)",
   /** color.background.card */
-  card: "#FFFFFF",
+  card: "var(--card)",
   /** color.background.modal */
-  modal: "#EEF5FF",
+  modal: "var(--secondary)",
   /** color.state.success */
-  success: "#70CF3A",
-  successText: "#3f7a15",
-  successBg: "rgba(112, 207, 58, 0.14)",
+  success: "var(--flit-success-ink)",
+  successText: "var(--flit-success-ink)",
+  successBg: "var(--badge-success-bg)",
   /** color.state.warning */
-  warning: "#F05A35",
-  warningBg: "rgba(240, 90, 53, 0.08)",
-  warningText: "#8a3a1a",
+  warning: "var(--badge-warning-fg)",
+  warningBg: "var(--badge-warning-bg)",
+  warningText: "var(--badge-warning-fg)",
   /** color.state.danger */
-  danger: "#E43D30",
-  dangerBorder: "#f0c38e",
+  danger: "var(--destructive)",
+  dangerBorder: "var(--badge-danger-border)",
   /** Pendiente / alerta suave (semántica warning) */
-  pending: "#F05A35",
-  pendingBg: "rgba(240, 90, 53, 0.08)",
-  pendingText: "#8a3a1a",
+  pending: "var(--badge-warning-fg)",
+  pendingBg: "var(--badge-warning-bg)",
+  pendingText: "var(--badge-warning-fg)",
 } as const;
 
 export const RL_GRADIENT = {
   /** CTA primario — patrón admin FLIT */
-  primary: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)",
+  primary: "var(--gradient-action)",
   /** CTA peligro — tokens danger */
-  danger: "linear-gradient(90deg, #F05A35 0%, #E43D30 100%)",
+  danger: "var(--destructive)",
 } as const;
 
 export const rlPrimaryCtaClass =
@@ -57,7 +57,7 @@ export const rlPrimaryCtaStyle = { background: RL_GRADIENT.primary } as const;
 export const rlDangerCtaClass =
   "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60";
 
-export const rlDangerCtaStyle = { background: RL_GRADIENT.danger } as const;
+export const rlDangerCtaStyle = { background: RL_GRADIENT.danger, color: "var(--destructive-foreground)" } as const;
 
 export const rlGhostBrandClass =
   "inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50";
@@ -81,7 +81,7 @@ export const rlDangerGhostStyle = {
  * pasar el mouse, altura fija. Usar para acciones tipo «Agregar», «Ver», «Editar» dentro de tarjetas.
  */
 export const rlOutlinedActionClass =
-  "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent";
+  "inline-flex h-9 items-center gap-1.5 rounded-lg border bg-card px-4 text-[12px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
 
 export const rlOutlinedActionStyle = {
   borderColor: RL_COLOR.brand,
@@ -97,4 +97,4 @@ export const rlTextDangerActionStyle = {
 } as const;
 
 export const RL_INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 border-[#DDE5F0]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 border-border";

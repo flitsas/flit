@@ -103,7 +103,7 @@ export function PrevalidacionEditForm({
   };
 
   const fieldClass =
-    'w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-60 border-[#DDE5F0]';
+    'w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-60 border-border';
 
   return (
     <div
@@ -112,16 +112,16 @@ export function PrevalidacionEditForm({
       aria-modal="true"
       aria-labelledby="pv-edit-title"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl dark:bg-[#0B0F14]">
+      <div className="w-full max-w-lg rounded-2xl bg-card shadow-xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 id="pv-edit-title" className="text-base font-semibold text-flit-primary dark:text-white">
+          <h2 id="pv-edit-title" className="text-base font-semibold text-flit-primary">
             Editar prevalidación
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario de edición"
-            className="rounded-lg p-1 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:hover:bg-white/10"
+            className="rounded-lg p-1 hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand "
           >
             <X className="h-5 w-5 opacity-60" aria-hidden="true" />
           </button>
@@ -132,7 +132,7 @@ export function PrevalidacionEditForm({
             {/* Documento — NO editable (D7) */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="pv-edit-docType" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
+                <label htmlFor="pv-edit-docType" className="mb-1 block text-xs font-medium text-foreground">
                   Tipo de documento
                 </label>
                 <input
@@ -146,7 +146,7 @@ export function PrevalidacionEditForm({
                 />
               </div>
               <div>
-                <label htmlFor="pv-edit-docNum" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
+                <label htmlFor="pv-edit-docNum" className="mb-1 block text-xs font-medium text-foreground">
                   Número de documento
                 </label>
                 <input
@@ -168,7 +168,7 @@ export function PrevalidacionEditForm({
 
             {/* Nombre */}
             <div>
-              <label htmlFor="pv-edit-name" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
+              <label htmlFor="pv-edit-name" className="mb-1 block text-xs font-medium text-foreground">
                 Nombre
               </label>
               <input
@@ -183,7 +183,7 @@ export function PrevalidacionEditForm({
 
             {/* Correo */}
             <div>
-              <label htmlFor="pv-edit-email" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
+              <label htmlFor="pv-edit-email" className="mb-1 block text-xs font-medium text-foreground">
                 Nuevo correo electrónico
               </label>
               <input
@@ -203,7 +203,7 @@ export function PrevalidacionEditForm({
                 solo si quieres cambiarlo.
               </p>
               {emailInvalid && (
-                <p id="pv-edit-email-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
+                <p id="pv-edit-email-err" className="mt-1 text-[11px] text-destructive" role="alert">
                   Correo inválido
                 </p>
               )}
@@ -213,12 +213,12 @@ export function PrevalidacionEditForm({
             {willResend && (
               <div
                 className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-                style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--color-flit-primary)' }}
+                style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--foreground)' }}
                 role="status"
                 aria-live="polite"
               >
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
-                <span className="dark:text-white">
+                <span>
                   Al guardar, la validación se reenviará al nuevo correo y el enlace anterior dejará de
                   funcionar.
                 </span>
@@ -229,7 +229,7 @@ export function PrevalidacionEditForm({
             {apiError && (
               <div
                 className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-                style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+                style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
                 role="alert"
                 aria-live="assertive"
               >
@@ -252,7 +252,7 @@ export function PrevalidacionEditForm({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+              className="rounded-xl border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 "
             >
               Cancelar
             </button>
@@ -260,7 +260,7 @@ export function PrevalidacionEditForm({
               type="submit"
               disabled={submitting || hasErrors}
               className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-              style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+              style={{ background: 'var(--gradient-action)' }}
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               {submitting ? 'Guardando…' : willResend ? 'Guardar y reenviar' : 'Guardar cambios'}
@@ -319,9 +319,9 @@ export function PrevalidacionResendResultPanel({
       aria-modal="true"
       aria-labelledby="pv-resend-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl dark:bg-[#0B0F14] text-center">
-        <CheckCircle2 className="mx-auto h-12 w-12" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-        <h2 id="pv-resend-title" className="mt-3 text-base font-semibold text-flit-primary dark:text-white">
+      <div className="w-full max-w-md rounded-2xl bg-card p-8 shadow-xl text-center">
+        <CheckCircle2 className="mx-auto h-12 w-12" style={{ color: 'var(--flit-success-ink)' }} aria-hidden="true" />
+        <h2 id="pv-resend-title" className="mt-3 text-base font-semibold text-flit-primary">
           Validación reenviada
         </h2>
         {notice && (
@@ -372,7 +372,7 @@ export function PrevalidacionResendResultPanel({
             type="button"
             onClick={onClose}
             className="rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+            style={{ background: 'var(--gradient-action)' }}
           >
             Cerrar
           </button>

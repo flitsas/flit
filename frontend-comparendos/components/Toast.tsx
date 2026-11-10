@@ -3,11 +3,12 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, X, XCircle } from "lucide-react";
 
-// Toast mínimo sin dependencias externas (HU #10194). Éxito #00DBD5, advertencia #D9A400, error #FF4E00.
+// Toast mínimo sin dependencias externas (HU #10194). Colores de la propuesta (HU #14486): éxito con el azul del
+// check, advertencia y error con el naranja de las marcas de estado.
 // Región aria-live para accesibilidad (WCAG 2.1 AA).
 export type ToastType = "success" | "warning" | "error";
 
-const COLOR_TOAST: Record<ToastType, string> = { success: "var(--color-flit-tech)", warning: "#D9A400", error: "#FF4E00" };
+const COLOR_TOAST: Record<ToastType, string> = { success: "var(--di-success-dot)", warning: "var(--di-alerta-punto)", error: "var(--di-alerta-punto)" };
 
 interface ToastItem {
   id: number;
@@ -54,7 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="flex items-start gap-2 rounded-xl border bg-white px-4 py-3 text-xs shadow-lg dark:bg-[#0B0F14]"
+            className="flex items-start gap-2 rounded-xl border bg-card px-4 py-3 text-xs shadow-lg"
             style={{ borderColor: COLOR_TOAST[toast.type], minWidth: 260 }}
           >
             {toast.type === "success" ? (

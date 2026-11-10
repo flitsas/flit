@@ -80,9 +80,11 @@ export interface TarifasTabProps {
   api?: TarifasApi;
   /** Presentación y restricciones; por defecto Plataforma, sin cambios. */
   modo?: TarifasModo;
+  /** HU #14477 — `false` cuando se monta dentro de un panel que ya es tarjeta (el hub del OT), para no apilar dos. */
+  tarjeta?: boolean;
 }
 
-export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api = TARIFAS_API_PLATAFORMA, modo }: TarifasTabProps = {}) {
+export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api = TARIFAS_API_PLATAFORMA, modo, tarjeta = true }: TarifasTabProps = {}) {
   const fijo = modo?.organismoFijo === true;
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
@@ -222,7 +224,7 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
               Organismo
             </EncabezadoFiltrable>
           ),
-          render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los organismos</span>,
+          render: (g) => g.organismoNombre ?? <span className="text-muted-foreground">Todos los organismos</span>,
         },
     {
       key: "tipo",
@@ -231,7 +233,7 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
           Trámite
         </EncabezadoFiltrable>
       ),
-      render: (g) => g.tipoTramiteNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los trámites</span>,
+      render: (g) => g.tipoTramiteNombre ?? <span className="text-muted-foreground">Todos los trámites</span>,
     },
     { key: "derechos", header: "Derechos de tránsito", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "DERECHOS_TRANSITO") },
     { key: "servicio", header: "Servicio digital FLIT", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "SERVICIO_FLIT") },
@@ -312,13 +314,14 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
           onRetry={() => void load()}
         >
           <DataTable<GrupoTarifa>
+            tarjeta={tarjeta}
             ariaLabel="Tarifas del portal de Persona Natural"
             columns={columns}
             rows={pg.paginar(visibles)}
             getRowKey={(g) => g.clave}
             emptyContent={
               grupos.length === 0 && !filtros.hayFiltros ? (
-                <p className="text-sm text-[#59677D] dark:text-white/70">
+                <p className="text-sm text-muted-foreground">
                   No hay tarifas vigentes ni próximas. Para ver las anteriores, filtra por Estado en el encabezado de la columna.
                 </p>
               ) : (

@@ -28,7 +28,7 @@ export function CategoryDonut({ metrics, onSelect, activeKey }: CategoryDonutPro
 
   return (
     <section
-      className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col min-h-[240px]"
+      className="rounded-2xl p-4 bg-card border flex flex-col min-h-[240px]"
       aria-labelledby={`donut-${metrics.category}-title`}
     >
       <div className="flex items-center justify-between shrink-0">
@@ -82,10 +82,10 @@ export function CategoryDonut({ metrics, onSelect, activeKey }: CategoryDonutPro
                 <Tooltip
                   formatter={(val: number, name: string) => [val, statusLabel(name)]}
                   contentStyle={{
-                    background: "rgba(22,39,68,0.95)",
+                    background: "var(--primary)",
                     border: "none",
                     borderRadius: 10,
-                    color: "#fff",
+                    color: "var(--primary-foreground)",
                     fontSize: 11,
                   }}
                 />

@@ -4,6 +4,8 @@ import { useState, type ReactNode } from 'react';
 import { RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import type { AdminAuditModule, AdminAuditResult, AdminAuditTenantType } from '@/lib/api/types';
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validation/fieldRules';
+import { buttonClass } from '@flit/ui/Button';
+import { TRAMITES_INPUT_CLS } from '@/components/operacion/tramites-control-styles';
 
 /**
  * Barra de filtros del módulo "Auditoría" (HU #10680). Presentacional: el estado de los
@@ -92,8 +94,8 @@ const RESULT_OPTIONS: { value: '' | AdminAuditResult; label: string }[] = [
   { value: 'failure', label: 'Fallo' },
 ];
 
-const CONTROL_CLASS =
-  'w-full rounded-xl border bg-white py-2 px-2 text-xs outline-none focus:border-flit-brand dark:bg-[#0B0F14]';
+// HU #14484 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const CONTROL_CLASS = `${TRAMITES_INPUT_CLS} w-full`;
 
 /** Campo etiquetado (label asociado al control → nombre accesible = texto de la etiqueta). */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -146,7 +148,7 @@ export function AuditoriaFilterToolbar({
     resultCount === 0 ? 'Sin resultados' : `${resultCount} registro${resultCount === 1 ? '' : 's'}`;
 
   return (
-    <div className="rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0">
+    <div className="rounded-2xl border bg-card p-3 shrink-0">
       {/* Usuario (actor o afectado) + Actualizar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex-1">
@@ -255,8 +257,7 @@ export function AuditoriaFilterToolbar({
             onClick={() => setShowAdvanced((v) => !v)}
             aria-expanded={showAdvanced}
             aria-controls="auditoria-filtros-avanzados"
-            className="flex items-center gap-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ color: 'var(--color-flit-brand)' }}
+            className={buttonClass({ variant: 'ghost', size: 'sm' })}
           >
             <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
             {showAdvanced ? 'Menos filtros' : 'Más filtros'}
@@ -265,8 +266,7 @@ export function AuditoriaFilterToolbar({
             <button
               type="button"
               onClick={onClearFilters}
-              className="flex items-center gap-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ color: 'var(--color-flit-brand)' }}
+              className={buttonClass({ variant: 'secondary', size: 'sm' })}
               aria-label="Limpiar filtros"
             >
               <X className="h-3 w-3" aria-hidden="true" />

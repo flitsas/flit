@@ -89,7 +89,8 @@ describe('Guardián de diseño FLIT · administración de la identidad manual', 
     expect(acciones).toContain('WIZARD_CTA_GRADIENT_DANGER');
     expect(acciones).toContain('rounded-full');
     const estilos = codigo('components/operacion/wizard-field-styles.ts');
-    expect(estilos).toContain("'linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)'");
+    // Rediseño UI kit (HU #14482): el primer tramo es el token de alerta, no el hex.
+    expect(estilos).toContain("'linear-gradient(135deg, var(--color-flit-alert) 0%, #E43D30 100%)'");
   });
 
   it('el detalle de Identidad (porción de la épica) mantiene el piso de 12px en «Origen de la aprobación»', () => {

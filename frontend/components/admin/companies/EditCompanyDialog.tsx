@@ -217,7 +217,7 @@ export function EditCompanyDialog({
                 onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
                 maxLength={255}
                 className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-                style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
+                style={{ borderColor: errors.razonSocial ? "var(--destructive)" : "var(--border)" }}
               />
             </Field>
 
@@ -230,7 +230,7 @@ export function EditCompanyDialog({
                 maxLength={20}
                 placeholder="900123456-1"
                 className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-                style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
+                style={{ borderColor: errors.nit ? "var(--destructive)" : "var(--border)" }}
               />
             </Field>
 
@@ -242,7 +242,7 @@ export function EditCompanyDialog({
                 readOnly
                 disabled
                 className="w-full cursor-not-allowed rounded-xl border px-3 py-2 font-mono text-xs opacity-60 outline-none"
-                style={{ background: "rgba(223,229,237,0.35)" }}
+                style={{ background: "var(--secondary)" }}
               />
             </Field>
 
@@ -255,7 +255,7 @@ export function EditCompanyDialog({
                 title={typeChangeBlocked ? typeBlockedReason : undefined}
                 aria-describedby={typeChangeBlocked ? "ec-type-blocked" : undefined}
                 className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ borderColor: errors.tenantType ? "#FF4E00" : "#DFE5ED" }}
+                style={{ borderColor: errors.tenantType ? "var(--destructive)" : "var(--border)" }}
               >
                 {typeOptions.map((t) => (
                   <option key={t} value={t}>
@@ -280,7 +280,7 @@ export function EditCompanyDialog({
             {isMarcaBlanca && (
               <div
                 className="space-y-2 rounded-xl border px-3 py-2.5"
-                style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
+                style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
               >
                 <p className="text-xs font-semibold">Dominio de integración</p>
                 <input
@@ -323,7 +323,7 @@ export function EditCompanyDialog({
           <p
             role="alert"
             className="rounded-lg px-3 py-2 text-xs font-medium"
-            style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}
+            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
           >
             {formError}
           </p>
@@ -353,7 +353,7 @@ export function EditCompanyDialog({
             onClick={step === "form" ? goNext : () => void submit()}
             disabled={submitting}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {submitting ? "Guardando…" : step === "form" && needsOtStep ? "Siguiente" : "Guardar cambios"}
@@ -385,7 +385,7 @@ function Field({
       {children}
       {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
