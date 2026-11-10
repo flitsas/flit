@@ -53,6 +53,7 @@ import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { formatDurationMs, formatInt, formatNumber, formatPct } from "./_reportes/format";
 import { KpiCard } from "./_reportes/KpiCard";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 import { useAnalyticsQuery } from "./_reportes/useAnalyticsQuery";
@@ -611,11 +612,12 @@ function NovedadesTab({
               tres primeras y en dev eso enseñaba tres ceros mientras el 100% de las novedades
               estaba en "Otra/sin clasificar", sin nada en pantalla que dijera dónde estaba el
               resto. Con las cinco visibles, las causas suman exactamente el total. */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             {/* La cifra que duele va en el naranja de "rechazado" del resto de Reportes: una
                 novedad es trabajo que vuelve, no un indicador neutro. */}
             <KpiCard
               label="Novedades en el periodo"
+              ilustracion={rutaIlustracion("notificaciones")}
               value={formatInt(report.total)}
               tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -700,6 +702,7 @@ function AtascadosTab({
             {/* Ámbar de "esperando": un atascado no es un fallo, es algo detenido. */}
             <KpiCard
               label="Atascados ahora"
+              ilustracion={rutaIlustracion("vencidos")}
               value={formatInt(report.total)}
               tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
               color="var(--badge-warning-fg)"
@@ -769,9 +772,10 @@ function JobsTab({
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-jobs-tab">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Corridas en el periodo"
+              ilustracion={rutaIlustracion("procesos")}
               value={formatInt(report.total)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -782,6 +786,7 @@ function JobsTab({
             {/* `totalFueraDeSla` y no `corridasFueraDeSla.length`: la lista es una página. */}
             <KpiCard
               label="Corridas fuera de SLA"
+              ilustracion={rutaIlustracion("vencidos")}
               value={formatInt(report.totalFueraDeSla)}
               tooltip="Corridas que superaron el tiempo esperado para su job, en todo el periodo."
               color={report.totalFueraDeSla > 0 ? "var(--destructive)" : "var(--flit-success-ink)"}
@@ -881,9 +886,10 @@ function WebhooksTab({
           {/* El conteo total no dice lo único que importa de un webhook: si llegó. Los tres
               estados son del PERIODO COMPLETO (no de la página) y suman exactamente el total, así
               que la fila se lee entera: cuántas se intentaron y en qué acabaron. */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Webhooks en el periodo"
+              ilustracion={rutaIlustracion("integraciones")}
               value={formatInt(report.total)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -891,18 +897,21 @@ function WebhooksTab({
             />
             <KpiCard
               label="Entregados"
+              ilustracion={rutaIlustracion("trazabilidad")}
               value={estadoValor(report.totalEntregados, report.total)}
               tooltip="Entregas que el sistema del cliente confirmó en el periodo. Entregados + fallidos + pendientes suman el total."
               color={ESTADO_WEBHOOK_COLOR.Entregado}
             />
             <KpiCard
               label="Fallidos"
+              ilustracion={rutaIlustracion("causales")}
               value={estadoValor(report.totalFallidos, report.total)}
               tooltip="Entregas que se intentaron y el sistema del cliente rechazó o no respondió, en el periodo."
               color={ESTADO_WEBHOOK_COLOR.Fallido}
             />
             <KpiCard
               label="Pendientes"
+              ilustracion={rutaIlustracion("pendientes")}
               value={estadoValor(report.totalPendientes, report.total)}
               tooltip="Notificaciones que todavía no se han intentado entregar, en el periodo."
               color={ESTADO_WEBHOOK_COLOR.Pendiente}

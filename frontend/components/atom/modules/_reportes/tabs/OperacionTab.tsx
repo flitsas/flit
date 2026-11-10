@@ -13,6 +13,7 @@ import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatInt, formatNumber, formatPct } from "../format";
 import { FunnelChart } from "../FunnelChart";
 import { KpiCard } from "../KpiCard";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -85,9 +86,10 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
         skeletonRows={2}
       >
         {summary && (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Entregados"
+              ilustracion={rutaIlustracion("tramites")}
               value={formatInt(summary.entregados)}
               tooltip="Transiciones a 'entregado' dentro del rango de fechas."
               variation={kpiVariation("entregados")}
@@ -95,6 +97,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             />
             <KpiCard
               label="Aprobados"
+              ilustracion={rutaIlustracion("trazabilidad")}
               value={formatInt(summary.aprobados)}
               tooltip="Transiciones a 'aprobado' dentro del rango de fechas."
               variation={kpiVariation("aprobados")}
@@ -102,6 +105,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             />
             <KpiCard
               label="Rechazados"
+              ilustracion={rutaIlustracion("causales")}
               value={formatInt(summary.rechazados)}
               tooltip="Transiciones a 'rechazado' dentro del rango de fechas."
               variation={kpiVariation("rechazados")}
@@ -110,6 +114,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             />
             <KpiCard
               label="Tasa de rechazo"
+              ilustracion={rutaIlustracion("reportes")}
               value={formatPct(summary.rejectionRatePct)}
               tooltip="Rechazados / (aprobados + rechazados) × 100 en el rango."
               variation={kpiVariation("rejectionRatePct")}
@@ -118,6 +123,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
             />
             <KpiCard
               label="Atascados"
+              ilustracion={rutaIlustracion("vencidos")}
               value={formatInt(summary.stuckCount)}
               tooltip="Trámites activos sin cambio de estado hace más días que el umbral (7 por defecto)."
               variation={kpiVariation("stuckCount")}

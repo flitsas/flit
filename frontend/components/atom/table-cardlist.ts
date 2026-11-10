@@ -20,7 +20,10 @@
 // 10 px fija al hacer scroll y fila blanca que se eleva con sombra azul al pasar el puntero, en vez
 // del cambio de fondo por celda. Antes había dos recetas y los reportes se veían distintos.
 
-// Feature #13915 — la sombra de la fila sale de `table-styles`: una sola fuente para las dos recetas,
+// HU #14477 — la tabla sigue al prototipo «Diseño Inteligente»: cabecera hundida sin versalitas, filas
+// separadas 6px y, al pasar el puntero, cambia el borde de la fila y no su fondo.
+//
+// Feature #13915 — el realce de la fila sale de `table-styles`: una sola fuente para las dos recetas,
 // así cambiarla en un sitio cambia toda tabla del producto.
 import { TABLA_ROW_HOVER_CLS } from "./table-styles";
 
@@ -31,22 +34,25 @@ export const CARDLIST_SCROLL = "overflow-x-auto";
  * La `<table>`. `border-separate` + `border-spacing-y-2` es lo que abre el hueco entre filas que
  * las convierte en tarjetas sueltas; con `border-collapse` las tarjetas se pegan y vuelve el bloque.
  */
-export const CARDLIST_TABLE = "w-full border-separate border-spacing-y-2 text-xs";
+export const CARDLIST_TABLE = "w-full border-separate border-spacing-y-1.5 text-xs";
 
-/** El `<tr>` de la cabecera. La alineación se deja a cada `<th>` para no estorbar a las numéricas. */
-export const CARDLIST_HEAD_ROW = "text-left text-xs font-semibold uppercase tracking-wide";
+/**
+ * El `<tr>` de la cabecera. La alineación se deja a cada `<th>` para no estorbar a las numéricas.
+ * HU #14477 — sin versalitas: la cabecera del prototipo es texto normal de 13px en peso 600.
+ */
+export const CARDLIST_HEAD_ROW = "text-left text-[0.8125rem] font-semibold normal-case tracking-normal";
 
 /** Cada `<th>`. El fondo va aquí y no en el `<tr>`: con `border-separate` es lo que pinta parejo. */
 export const CARDLIST_TH =
-  "sticky top-0 z-10 bg-[color:var(--table-header-bg)] px-4 py-3 font-semibold " +
-  "text-[color:var(--table-header-fg)] first:rounded-l-xl last:rounded-r-xl";
+  "sticky top-0 z-10 bg-[color:var(--table-header-bg)] px-3.5 py-2.5 font-semibold " +
+  "text-[color:var(--table-header-fg)] first:rounded-l-lg last:rounded-r-lg";
 
 /** El `<tr>` de una fila. `group` habilita el resaltado al pasar por encima si la fila se pulsa. */
 export const CARDLIST_ROW = `group bg-card dark:bg-card ${TABLA_ROW_HOVER_CLS}`;
 
 /** Cada `<td>`. El borde completo de la tarjeta sale de los cuatro lados repartidos entre celdas. */
 export const CARDLIST_CELL =
-  "border-y border-[color:var(--table-row-border)] px-4 py-3 " +
+  "border-y border-[color:var(--table-row-border)] px-3.5 py-3 " +
   "first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r";
 
 /** Añadir a cada `<td>` de una fila que se pueda pulsar. Requiere `CARDLIST_ROW` en su `<tr>`. */

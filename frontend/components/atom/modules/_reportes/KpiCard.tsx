@@ -3,6 +3,7 @@
 // Tarjeta KPI de Reportes 2.0 (HU-C): valor grande, etiqueta, variación frente al
 // periodo comparado (flecha + color) y tooltip "cómo se calcula" (atributo title).
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { formatNumber } from "./format";
 
 export interface KpiCardProps {
@@ -16,8 +17,10 @@ export interface KpiCardProps {
    * `null` = sin base de comparación; `undefined` = comparación no solicitada.
    */
   variation?: number | null;
-  /** Color de acento del valor. */
+  /** Ya no se aplica (HU #14476): la cifra va en el texto principal, como en el prototipo. Se conserva por API. */
   color?: string;
+  /** Ilustración decorativa a la derecha (`ilustracionDe(...)` de `@flit/ui/ilustraciones`). */
+  ilustracion?: string;
   /** `true` cuando subir es MALO (p. ej. % de rechazo): invierte el color de la flecha. */
   invertVariationColor?: boolean;
   testId?: string;
@@ -31,30 +34,33 @@ export function KpiCard({
   value,
   tooltip,
   variation,
-  color = "var(--color-flit-primary)",
   invertVariationColor = false,
+  ilustracion,
   testId,
 }: KpiCardProps) {
+  // HU #14476 — la tarjeta de cifra del prototipo «Diseño Inteligente» (`TarjetaMetrica`): la cifra va en el texto
+  // principal (la paleta de la propuesta no tiñe cifras de verde ni de rojo), así que `color` ya no se aplica;
+  // la variación sigue en el pie con su flecha.
   return (
-    <div
-      className="rounded-2xl p-4 bg-card border flex flex-col justify-between min-h-[96px]"
+    <TarjetaMetrica
+      etiqueta={label}
+      cifra={value}
+      ilustracion={ilustracion}
       title={tooltip}
       data-testid={testId}
-    >
-      <p className="text-[11px] opacity-70 font-medium">{label}</p>
-      <p className="text-2xl font-bold mt-1 dark:text-foreground" style={{ color }}>
-        {value}
-      </p>
-      {variation !== undefined && (
-        <p className="mt-0.5 text-[11px] font-semibold" aria-live="polite">
-          {variation === null ? (
-            <span className="opacity-50 font-normal">Sin base de comparación</span>
-          ) : (
-            <Variation value={variation} invert={invertVariationColor} />
-          )}
-        </p>
-      )}
-    </div>
+      className="min-h-[96px]"
+      pie={
+        variation === undefined ? undefined : (
+          <span className="font-semibold" aria-live="polite">
+            {variation === null ? (
+              <span className="opacity-70 font-normal">Sin base de comparación</span>
+            ) : (
+              <Variation value={variation} invert={invertVariationColor} />
+            )}
+          </span>
+        )
+      }
+    />
   );
 }
 

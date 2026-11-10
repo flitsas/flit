@@ -15,6 +15,7 @@
     "./loader.css": "./src/styles/loader.css",
     "./cn": "./src/cn.ts",
     "./Button": "./src/Button.tsx",
+    "./ChipsFiltro": "./src/ChipsFiltro.tsx",
     "./DataTable": "./src/DataTable.tsx",
     "./InlineAlert": "./src/InlineAlert.tsx",
     "./Loader": "./src/Loader.tsx",
@@ -28,6 +29,7 @@
     "./ilustraciones": "./src/ilustraciones.ts",
     "./statusTones": "./src/statusTones.ts",
     "./table-styles": "./src/table-styles.ts",
+    "./TarjetaMetrica": "./src/TarjetaMetrica.tsx",
     "./UiStateBoundary": "./src/UiStateBoundary.tsx"
   },
   "scripts": {

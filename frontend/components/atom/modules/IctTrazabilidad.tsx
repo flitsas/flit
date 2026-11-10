@@ -3,6 +3,7 @@
 // Trazabilidad ICT (Feature #11814). Módulo NUEVO: no sustituye a «Log ICT», que se queda como la
 // capa técnica de bajo nivel, ni a «Reportes ICT», que sigue siendo la vista agregada por compañía.
 // Lo que aporta es el nivel que faltaba: el trámite.
+import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
@@ -304,13 +305,14 @@ export function IctTrazabilidad() {
         subtitle="Qué pasó con cada trámite que entró por la integración con terceros. Busca por número, placa o VIN y abre su recorrido completo."
       />
 
-      {/* Tira de contadores por estado, con la presentación de los KPIs de Trámites
+      {/* HU #14476 — chips de conteo del prototipo «Diseño Inteligente» («12 Recibidos»), solo con clases: el icono y la
+          barrita quedan ocultos y el conteo pasa delante. Antes: tira de contadores por estado, con la presentación de los KPIs de Trámites
           (`EstadoFunnel`): tarjeta única dividida en columnas, icono en pastilla del tono del
           estado, etiqueta y conteo. Los siete estados tienen color propio. */}
       <div
         role="group"
         aria-label="Contadores por estado"
-        className="grid shrink-0 grid-cols-2 divide-border overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-4 sm:divide-x lg:grid-cols-7"
+        className={`${CHIPS_FILTRO_FILA_CLS} shrink-0`}
       >
         {ESTADOS_ICT.map((estado) => {
           const meta = ESTADO_ICT[estado];
@@ -324,28 +326,27 @@ export function IctTrazabilidad() {
               aria-label={`${meta.label}: ${conteo} trámite${conteo === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
-              style={activo ? { background: meta.style.bg } : undefined}
+              className={`${CHIP_FILTRO_CLS} group`}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
               <span
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                className="hidden"
                 style={{ background: meta.style.bg }}
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-muted-foreground">
+              <span className="order-2 max-w-full truncate text-[0.8125rem]">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-flit-primary"
+                className="order-1 text-base font-bold leading-none tabular-nums text-[color:var(--di-text-primary)] group-aria-pressed:text-[color:var(--di-action)]"
                 aria-hidden="true"
               >
                 {conteo}
               </span>
               {/* El filtro activo no depende solo del fondo. */}
               <span
-                className="h-0.5 w-6 rounded-full"
+                className="hidden"
                 style={{ background: activo ? meta.style.color : "transparent" }}
                 aria-hidden="true"
               />
