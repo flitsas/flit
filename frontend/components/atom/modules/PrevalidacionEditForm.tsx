@@ -8,6 +8,17 @@ import type {
   EditarPrevalidacionResult,
   TenantBiometricValidation,
 } from '@/lib/api/types/procedure-runtime';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CERRAR,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_ICONO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_PIE,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 
 /**
  * Formulario de edición de una prevalidación STANDALONE (HU #10944 — Feature #10864, CF-03;
@@ -107,23 +118,24 @@ export function PrevalidacionEditForm({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="pv-edit-title"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h2 id="pv-edit-title" className="text-base font-semibold text-flit-primary">
+      <div className={`${DIALOGO_PANEL} w-full max-w-lg`}>
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h2 id="pv-edit-title" className={DIALOGO_FRANJA_TITULO}>
             Editar prevalidación
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario de edición"
-            className="rounded-lg p-1 hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand "
+            className={DIALOGO_FRANJA_CERRAR}
           >
-            <X className="h-5 w-5 opacity-60" aria-hidden="true" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -247,20 +259,19 @@ export function PrevalidacionEditForm({
             )}
           </div>
 
-          <div className="flex justify-end gap-3 border-t px-6 py-4">
+          <div className={`flex justify-end gap-3 px-6 py-4 ${DIALOGO_PIE}`}>
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 "
+              className={buttonClass({ variant: 'secondary', size: 'sm' })}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={submitting || hasErrors}
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-              style={{ background: 'var(--gradient-action)' }}
+              className={buttonClass({ size: 'sm' })}
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               {submitting ? 'Guardando…' : willResend ? 'Guardar y reenviar' : 'Guardar cambios'}
@@ -314,16 +325,20 @@ export function PrevalidacionResendResultPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="pv-resend-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-card p-8 shadow-xl text-center">
-        <CheckCircle2 className="mx-auto h-12 w-12" style={{ color: 'var(--flit-success-ink)' }} aria-hidden="true" />
-        <h2 id="pv-resend-title" className="mt-3 text-base font-semibold text-flit-primary">
-          Validación reenviada
-        </h2>
+      <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <CheckCircle2 className={DIALOGO_FRANJA_ICONO} aria-hidden="true" />
+          <h2 id="pv-resend-title" className={DIALOGO_FRANJA_TITULO}>
+            Validación reenviada
+          </h2>
+        </div>
+        <div className="p-8 pt-6 text-center">
         {notice && (
           <p
             className="mt-2 rounded-xl border px-3 py-2 text-xs"
@@ -355,7 +370,7 @@ export function PrevalidacionResendResultPanel({
             <button
               type="button"
               onClick={() => void copiar()}
-              className="mt-3 rounded-xl border px-4 py-2 text-sm font-medium text-flit-brand transition hover:bg-flit-brand/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+              className={buttonClass({ variant: 'secondary', size: 'sm', className: 'mt-3' })}
               aria-live="polite"
             >
               {copied ? 'Copiado ✓' : 'Copiar enlace'}
@@ -371,11 +386,11 @@ export function PrevalidacionResendResultPanel({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-            style={{ background: 'var(--gradient-action)' }}
+            className={buttonClass({ size: 'sm' })}
           >
             Cerrar
           </button>
+        </div>
         </div>
       </div>
     </div>

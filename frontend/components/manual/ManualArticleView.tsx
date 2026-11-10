@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ManualArticle } from "@/lib/manual/catalog";
 import { getAdjacentArticles } from "@/lib/manual/catalog";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { ManualCalloutBox } from "./ManualCallout";
 import { ManualMediaFigure } from "./ManualMediaFigure";
 
@@ -9,35 +11,34 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
   const { prev, next } = getAdjacentArticles(article.slug);
 
   return (
-    <article
-      className="rounded-[var(--manual-radius-card)] border p-6 sm:p-8 lg:p-10"
-      style={{
-        background: "var(--manual-card-bg)",
-        borderColor: "var(--manual-border-soft)",
-        boxShadow: "var(--manual-shadow)",
-      }}
-    >
-      <p
-        className="mb-4 inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+    // Homologación (HU #14511): vista «Ayuda» de la propuesta (`vAyuda`): cabecera con ilustración y el cuerpo en tarjeta.
+    <article className="grid gap-5">
+      <CabeceraModulo
+        ilustracion={rutaIlustracion("ayuda")}
+        encima={
+          <p
+            className="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
+            style={{
+              background: "var(--manual-badge-bg)",
+              color: "var(--manual-badge-text)",
+            }}
+          >
+            Aplica para: {article.audience}
+          </p>
+        }
+        titulo={article.title}
+        descripcion={article.summary}
+      />
+
+      <div
+        className="rounded-[var(--manual-radius-card)] border p-6 sm:p-8 lg:p-10"
         style={{
-          background: "var(--manual-badge-bg)",
-          color: "var(--manual-badge-text)",
+          background: "var(--manual-card-bg)",
+          borderColor: "var(--manual-border)",
+          boxShadow: "var(--manual-shadow)",
         }}
       >
-        Aplica para: {article.audience}
-      </p>
-
-      <h1
-        className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-[2rem] lg:leading-tight"
-        style={{ color: "var(--manual-heading)" }}
-      >
-        {article.title}
-      </h1>
-      <p className="mt-3 text-base leading-relaxed" style={{ color: "var(--manual-text-muted)" }}>
-        {article.summary}
-      </p>
-
-      <div className="mt-10 space-y-10">
+      <div className="space-y-10">
         {article.blocks.map((block) => (
           <section key={block.id} id={block.id} className="scroll-mt-28">
             <h2
@@ -95,7 +96,7 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[15px] font-semibold underline-offset-2 hover:underline"
-                  style={{ color: "var(--manual-tech)" }}
+                  style={{ color: "var(--manual-brand)" }}
                 >
                   {src.kind === "pdf" ? "📄 " : "🔗 "}
                   {src.title}
@@ -161,6 +162,7 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
           </Link>
         ) : null}
       </nav>
+      </div>
     </article>
   );
 }

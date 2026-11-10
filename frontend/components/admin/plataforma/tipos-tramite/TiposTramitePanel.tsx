@@ -1,5 +1,7 @@
 'use client';
 
+import { buttonClass } from '@flit/ui/Button';
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Archive, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
@@ -125,8 +127,7 @@ export function TiposTramitePanel() {
           <button
             type="button"
             onClick={() => setCreando(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: 'var(--gradient-action)' }}
+            className={buttonClass({ size: 'sm', className: 'shrink-0' })}
           >
             Nuevo tipo
           </button>
@@ -327,16 +328,17 @@ function ConfirmarRetiro({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'var(--overlay)' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-label="Retirar tipo de trámite"
     >
-      <div className="w-full max-w-md rounded-2xl border bg-card p-5 border-border">
-        <h2 className="text-base font-semibold text-flit-primary">
-          Retirar «{nombre}» del catálogo
-        </h2>
+      <div className={`w-full max-w-md overflow-hidden p-5 ${DIALOGO_PANEL_CLS}`}>
+        <FranjaDialogo className="-mx-5 -mt-5 mb-4">
+          <h2 className={`text-base font-semibold ${DIALOGO_TITULO_CLS}`}>
+            Retirar «{nombre}» del catálogo
+          </h2>
+        </FranjaDialogo>
         <p className="mt-2 text-xs leading-relaxed opacity-80">
           El tipo se archiva y deja de poder elegirse: no se borra, y su historial queda intacto. Si
           tiene trámites, la operación se rechaza — quedarían apuntando a un tipo retirado.
@@ -345,7 +347,7 @@ function ConfirmarRetiro({
           <button
             type="button"
             onClick={onCancelar}
-            className="rounded-xl border px-4 py-2 text-xs font-medium border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className={buttonClass({ variant: 'secondary', size: 'sm' })}
           >
             Cancelar
           </button>
@@ -353,8 +355,7 @@ function ConfirmarRetiro({
             type="button"
             onClick={onConfirmar}
             disabled={retirando}
-            className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: 'var(--destructive)' }}
+            className={buttonClass({ variant: 'navy', size: 'sm', className: 'bg-destructive text-destructive-foreground hover:bg-destructive/90' })}
           >
             {retirando ? 'Retirando…' : 'Sí, retirar'}
           </button>

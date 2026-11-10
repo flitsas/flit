@@ -14,7 +14,7 @@ const CABECERA_CLS = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase 
 const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" } as const;
 /** Separador vertical entre columnas de la cabecera. */
 const SEPARADOR_CLS = "border-l border-card/60";
-const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)]";
+const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
 const DOCUMENTO_CLS = "whitespace-nowrap font-mono text-xs font-medium text-flit-primary";
 const TD_CLS = "px-3 py-2.5 align-top";
 

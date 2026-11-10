@@ -14,6 +14,7 @@
     "./cursor.css": "./src/styles/cursor.css",
     "./loader.css": "./src/styles/loader.css",
     "./cn": "./src/cn.ts",
+    "./ingreso-clases": "./src/ingreso-clases.ts",
     "./Button": "./src/Button.tsx",
     "./CabeceraModulo": "./src/CabeceraModulo.tsx",
     "./ChipsFiltro": "./src/ChipsFiltro.tsx",

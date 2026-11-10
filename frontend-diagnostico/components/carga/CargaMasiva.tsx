@@ -146,7 +146,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         <h2 id="carga-vacio" className="text-lg font-semibold">
           No tienes permiso para cargar vehículos
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (!analisis) {

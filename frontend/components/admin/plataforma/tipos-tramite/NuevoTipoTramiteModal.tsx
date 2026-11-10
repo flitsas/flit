@@ -1,5 +1,7 @@
 'use client';
 
+import { buttonClass } from '@flit/ui/Button';
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { superadminClient } from '@/lib/api/superadmin-client';
@@ -61,20 +63,23 @@ export function NuevoTipoTramiteModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'var(--overlay)' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-label="Nuevo tipo de trámite"
     >
-      <div className="w-full max-w-lg rounded-2xl border bg-card p-5 border-border">
-        <h2 className="text-base font-semibold text-flit-primary">
-          Nuevo tipo de trámite
-        </h2>
-        <p className="mt-1 text-xs opacity-70">
-          Nace en borrador y sin operar. Después hay que darle recorrido, validarlo, publicarlo y
-          habilitarlo.
-        </p>
+      <div className={`w-full max-w-lg overflow-hidden p-5 ${DIALOGO_PANEL_CLS}`}>
+        <FranjaDialogo className="-mx-5 -mt-5 mb-1">
+          <div>
+            <h2 className={`text-base font-semibold ${DIALOGO_TITULO_CLS}`}>
+              Nuevo tipo de trámite
+            </h2>
+            <p className="mt-1 text-xs opacity-85">
+              Nace en borrador y sin operar. Después hay que darle recorrido, validarlo, publicarlo y
+              habilitarlo.
+            </p>
+          </div>
+        </FranjaDialogo>
 
         <div className="mt-4 flex flex-col gap-3">
           <label className="flex flex-col gap-1">
@@ -165,7 +170,7 @@ export function NuevoTipoTramiteModal({
           <button
             type="button"
             onClick={onCerrar}
-            className="rounded-xl border px-4 py-2 text-xs font-medium border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className={buttonClass({ variant: 'secondary', size: 'sm' })}
           >
             Cancelar
           </button>
@@ -173,8 +178,7 @@ export function NuevoTipoTramiteModal({
             type="button"
             onClick={() => void crear()}
             disabled={!puedeGuardar}
-            className="rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: 'var(--gradient-action)' }}
+            className={buttonClass({ size: 'sm' })}
           >
             {guardando ? (
               <span className="inline-flex items-center gap-1.5">

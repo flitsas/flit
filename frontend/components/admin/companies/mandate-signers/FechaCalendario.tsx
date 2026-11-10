@@ -106,7 +106,7 @@ export function FechaCalendario({
               ref={panelRef}
               role="dialog"
               aria-labelledby={titleId}
-              className="fixed z-[200] rounded-xl border border-border bg-card p-3 shadow-lg dark:text-foreground"
+              className="fixed z-[200] rounded-2xl border border-border bg-card p-3 shadow-[var(--shadow-modal)] dark:text-foreground"
               style={{ top: box.top, left: box.left }}
             >
               <p id={titleId} className="sr-only">
@@ -124,11 +124,11 @@ export function FechaCalendario({
                 components={{ DayButton: Dia }}
                 classNames={{
                   root: "rdp-root text-flit-primary",
-                  chevron: "fill-flit-brand",
+                  chevron: "fill-[var(--di-action)]",
                   day_button:
-                    "rounded-lg text-xs font-medium hover:bg-flit-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand",
-                  selected: "bg-flit-brand text-white hover:bg-flit-brand hover:text-white",
-                  today: "font-bold text-flit-brand",
+                    "rounded-lg text-xs font-medium hover:bg-[color:var(--di-accent-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+                  selected: "bg-[color:var(--di-accent)] text-[color:var(--di-on-accent)] hover:bg-[color:var(--di-accent)] hover:text-[color:var(--di-on-accent)]",
+                  today: "font-bold text-[color:var(--di-action)]",
                   outside: "text-muted-foreground opacity-50",
                 }}
               />

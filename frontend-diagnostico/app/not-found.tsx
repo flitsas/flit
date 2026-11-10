@@ -6,7 +6,7 @@ export default function NotFound() {
       <h1 className="text-2xl font-semibold text-flit-primary">Esta página no existe</h1>
       <Link
         href="/"
-        className="font-semibold text-[var(--flit-brand-ink)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]"
+        className="font-semibold text-[var(--flit-brand-ink)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         Volver al inicio
       </Link>

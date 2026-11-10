@@ -123,7 +123,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
           aria-multiline
           aria-label="Contenido de la plantilla"
           onInput={emitir}
-          className="plantilla-editor min-h-[360px] overflow-auto rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground focus:border-flit-brand focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:bg-[#EEF2F7] [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-6"
+          className="plantilla-editor min-h-[360px] overflow-auto rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground focus:border-flit-brand focus:outline-none [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:bg-secondary [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-6"
         />
       ) : (
         <textarea className={`${TEXTAREA_CLS} min-h-[360px] font-mono`} value={codigo} onChange={(e) => setCodigo(e.target.value)} aria-label="Código HTML de la plantilla" />

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Copy, ExternalLink } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { FLIT } from '@/lib/flit-design-tokens';
 
 /** Hay URL de captura Kyverum para pintar QR (identidad standalone o validación de trámite). */
 export function hasKyverumCaptureQr(captureUrl: string | null | undefined): boolean {
@@ -38,16 +37,16 @@ export function IdentityCaptureLinkBlock({
   return (
     <div
       className="rounded-xl border bg-card p-3"
-      style={{ borderColor: FLIT.border.soft }}
+      style={{ borderColor: 'var(--border)' }}
       data-testid="identity-capture-qr"
     >
-      <p className="mb-2 text-[12px] font-semibold" style={{ color: FLIT.brand.blue }}>
+      <p className="mb-2 text-[12px] font-semibold" style={{ color: 'var(--di-action)' }}>
         Enlace de captura
       </p>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div
           className="grid w-fit place-items-center rounded-xl border bg-white p-2"
-          style={{ borderColor: FLIT.border.soft }}
+          style={{ borderColor: 'var(--border)' }}
         >
           <QRCodeSVG value={href} size={112} aria-label="Código QR del enlace de captura" />
         </div>
@@ -58,8 +57,8 @@ export function IdentityCaptureLinkBlock({
             rel="noopener noreferrer"
             className="inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
-              background: FLIT.gradientPrimary,
-              outlineColor: FLIT.brand.blue,
+              background: 'var(--di-gradient-action)',
+              outlineColor: 'var(--di-action)',
             }}
           >
             <ExternalLink className="h-3 w-3" aria-hidden />
@@ -90,9 +89,9 @@ function CopyLinkButton({ captureUrl }: { captureUrl: string }) {
         onClick={() => void copy()}
         className="inline-flex w-fit items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{
-          borderColor: FLIT.brand.blue,
-          color: FLIT.brand.blue,
-          outlineColor: FLIT.brand.blue,
+          borderColor: 'var(--di-action)',
+          color: 'var(--di-action)',
+          outlineColor: 'var(--di-action)',
         }}
         aria-label="Copiar enlace de captura"
       >

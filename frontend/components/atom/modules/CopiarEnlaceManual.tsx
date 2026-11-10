@@ -5,7 +5,14 @@ import { createPortal } from 'react-dom';
 import { AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { WIZARD_CTA_GRADIENT } from '@/components/operacion/wizard-field-styles';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
 
 /**
@@ -18,10 +25,6 @@ import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/
 const MSG_COPIADO = 'Enlace copiado';
 const MSG_PORTAPAPELES = 'No se pudo copiar el enlace. Inténtalo de nuevo.';
 
-const BTN =
-  'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70';
-const GHOST_BTN = `${BTN} border border-border bg-card text-flit-primary hover:bg-secondary`;
-const CTA_BTN = `${BTN} text-white hover:opacity-90`;
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface Pendiente {
@@ -139,8 +142,7 @@ function RegenerarDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-[var(--overlay)] px-4 py-6"
-      style={{ backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${DIALOGO_VELO}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -151,12 +153,16 @@ function RegenerarDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-md rounded-[18px] border border-border bg-card p-5 text-flit-primary shadow-[var(--shadow-modal)]"
+        className={`${DIALOGO_PANEL} w-full max-w-md`}
       >
-        <h2 id={titleId} className="text-base font-bold">
-          No se pudo copiar el enlace
-        </h2>
-        <p id={descId} className="mt-3 text-sm text-flit-primary">
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h2 id={titleId} className={DIALOGO_FRANJA_TITULO}>
+            No se pudo copiar el enlace
+          </h2>
+        </div>
+        <div className="p-5">
+        <p id={descId} className="text-sm text-flit-primary dark:text-foreground">
           {mensaje} Regenera uno nuevo: el anterior dejará de funcionar y se enviará el nuevo por correo.
         </p>
         {error && (
@@ -174,19 +180,19 @@ function RegenerarDialog({
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className={GHOST_BTN} onClick={onClose} disabled={busy}>
+          <button type="button" className={buttonClass({ variant: 'secondary', size: 'sm' })} onClick={onClose} disabled={busy}>
             Cancelar
           </button>
           <button
             type="button"
-            className={CTA_BTN}
-            style={{ background: WIZARD_CTA_GRADIENT }}
+            className={buttonClass({ size: 'sm' })}
             onClick={onConfirm}
             disabled={busy}
             aria-busy={busy}
           >
             {busy ? 'Enviando…' : 'Regenerar enlace'}
           </button>
+        </div>
         </div>
       </div>
     </div>,

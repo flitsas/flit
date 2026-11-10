@@ -24,7 +24,6 @@ import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityMan
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import type {
   BiometricEstado,
@@ -33,6 +32,15 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CERRAR,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -198,35 +206,36 @@ export function PersonIdentityDetailDrawer({
     >
       <button
         type="button"
-        className="absolute inset-0"
-        style={{ background: 'rgba(22, 39, 68, 0.45)', backdropFilter: 'blur(6px)' }}
+        className={`absolute inset-0 ${DIALOGO_VELO}`}
         aria-label="Cerrar panel"
         onClick={onClose}
       />
       <div
-        className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border bg-card shadow-2xl"
-        style={{ borderColor: FLIT.border.soft }}
+        className={`${DIALOGO_PANEL} z-10 flex max-h-[90vh] w-full max-w-5xl flex-col`}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 px-6 py-4">
+        <header className={`${DIALOGO_FRANJA} mb-4 justify-between`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
           <h2
             id="person-identity-process-title"
-            className="min-w-0 truncate text-base font-bold"
-            style={{ color: FLIT.brand.blue }}
+            className={`${DIALOGO_FRANJA_TITULO} truncate`}
           >
             Historial y tracking de identidad
           </h2>
           {mandatario ? (
-            <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+            <span className="relative z-[1] inline-flex rounded-full bg-[var(--di-surface-elevated)]">
+              <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+            </span>
           ) : null}
           {soloConsulta ? (
-            <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+            <span className="relative z-[1] inline-flex rounded-full bg-[var(--di-surface-elevated)]">
+              <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+            </span>
           ) : null}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="relative z-[1] flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => void load()}
-              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              className={buttonClass({ size: 'sm' })}
               aria-label="Actualizar estado"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -236,9 +245,9 @@ export function PersonIdentityDetailDrawer({
               type="button"
               onClick={onClose}
               aria-label="Cerrar proceso"
-              className="grid h-8 w-8 place-items-center rounded-lg hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+              className={DIALOGO_FRANJA_CERRAR}
             >
-              <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
         </header>
@@ -256,7 +265,7 @@ export function PersonIdentityDetailDrawer({
           {error && !data && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: FLIT.state.danger, background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -278,13 +287,13 @@ export function PersonIdentityDetailDrawer({
             <div className="space-y-4 text-xs">
               <div
                 className="rounded-xl border bg-card px-4 py-3"
-                style={{ borderColor: FLIT.border.soft }}
+                style={{ borderColor: 'var(--border)' }}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   {awaiting ? (
                     <div className="flex min-w-0 items-center gap-2">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
-                      <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} aria-hidden />
+                      <p className="text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                         Esperando validación de {personName}
                       </p>
                     </div>
@@ -295,7 +304,7 @@ export function PersonIdentityDetailDrawer({
                   )}
                   <span
                     className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold"
-                    style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
+                    style={{ background: 'var(--di-info-soft)', color: 'var(--di-action)' }}
                   >
                     {latest.documentType} {latest.documentNumber}
                   </span>
@@ -306,7 +315,7 @@ export function PersonIdentityDetailDrawer({
                     wrap
                   />
                 </div>
-                <p className="mt-1 text-[12px]" style={{ color: FLIT.text.secondary }}>
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
                   {latest.email || '—'}
                 </p>
               </div>
@@ -382,7 +391,7 @@ function ValidationAccordionItem({
   });
 
   return (
-    <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: FLIT.border.soft }}>
+    <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: 'var(--border)' }}>
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
@@ -393,16 +402,16 @@ function ValidationAccordionItem({
         <span className="text-[13px] font-semibold text-foreground">{title}</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: FLIT.brand.blue }}
+          style={{ color: 'var(--di-action)' }}
           aria-hidden
         />
       </button>
 
       {open && (
-        <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: FLIT.border.soft }}>
+        <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: 'var(--border)' }}>
           <div
             className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-3"
-            style={{ borderColor: FLIT.border.soft }}
+            style={{ borderColor: 'var(--border)' }}
           >
             <SessionStat
               label="Asociado a trámite"
@@ -453,7 +462,7 @@ function ValidationAccordionItem({
           {v.status === 'rechazado' && motivoRechazo && (
             <p
               className="rounded-xl px-3 py-2 text-[11px]"
-              style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
             >
               Motivo del rechazo: {motivoRechazo}
             </p>
@@ -463,9 +472,9 @@ function ValidationAccordionItem({
             <div
               className="rounded-xl p-3 text-[11px]"
               style={{
-                background: FLIT.warningAlpha(0.08),
-                border: `1px solid ${FLIT.warningAlpha(0.3)}`,
-                color: FLIT.state.warning,
+                background: 'var(--di-warning-soft)',
+                border: '1px solid color-mix(in srgb, var(--di-warning) 30%, transparent)',
+                color: 'var(--di-warning)',
               }}
               role="status"
               aria-live="polite"
@@ -482,11 +491,11 @@ function ValidationAccordionItem({
 
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
-          <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
             <p className="mb-1 text-[13px] font-semibold text-foreground">
               Tracking de auditoría y proceso (tiempo real)
             </p>
-            <p className="mb-2 text-[11px]" style={{ color: FLIT.text.secondary }}>
+            <p className="mb-2 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
               Historial cronológico de eventos, cifrado y respuestas del proveedor.
             </p>
             <IdentityValidationTrackingPanel
@@ -525,7 +534,7 @@ function SessionStat({
       ) : (
         <p
           className={`mt-0.5 truncate text-[12px] font-semibold ${accent ? 'font-mono' : ''}`}
-          style={{ color: accent ? FLIT.brand.blue : FLIT.text.primary }}
+          style={{ color: accent ? 'var(--di-action)' : 'var(--foreground)' }}
         >
           {value}
         </p>

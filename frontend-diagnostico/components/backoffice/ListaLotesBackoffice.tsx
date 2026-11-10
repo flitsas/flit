@@ -123,7 +123,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   if (!hayEmpresa) {
     contenido = (
       <Vacio titulo="Elige una compañía" Icono={Building2}>
-        <p className="max-w-md text-sm text-[var(--nav-texto)]">Indica la compañía cuyos lotes de diagnóstico quieres revisar.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Indica la compañía cuyos lotes de diagnóstico quieres revisar.</p>
       </Vacio>
     );
   } else if (carga.tipo === "cargando" || es403) {
@@ -152,7 +152,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   } else if (carga.lista.diagnosticos.length === 0) {
     contenido = (
       <Vacio titulo="Esta compañía no tiene lotes con estos filtros">
-        <p className="max-w-md text-sm text-[var(--nav-texto)]">Cambia el estado o quita «Solo lotes con errores».</p>
+        <p className="max-w-md text-sm text-muted-foreground">Cambia el estado o quita «Solo lotes con errores».</p>
       </Vacio>
     );
   } else {
@@ -178,7 +178,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
                     <td className={CELDA_TABLA_CLS}>
                       <Link
                         href={`/backoffice/diagnosticos/${encodeURIComponent(d.id)}?empresa=${encodeURIComponent(filtros.empresa)}`}
-                        className="text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]"
+                        className="text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       >
                         {d.nombre}
                       </Link>

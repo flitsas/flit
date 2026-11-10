@@ -110,6 +110,14 @@ import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
 import { useTamanoDePagina } from '@/components/atom/usePaginacion';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -1149,7 +1157,7 @@ function ValidacionesLista({
           aria-describedby={networkActive ? 'val-nueva-solo-propio' : undefined}
           title={networkActive ? 'Disponible en Mi compañía' : undefined}
           className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
-          style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
+          style={{ background: 'var(--di-gradient-action)' }}
         >
           <span>Nueva</span>
           <span>prevalidación</span>
@@ -1416,16 +1424,20 @@ function ValidacionesLista({
       {/* Confirmación de envío (HU #10944, AC2): reenvío standalone o reintento de trámite */}
       {confirmAction && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="val-resend-confirm-title"
         >
-          <div className="w-full max-w-sm rounded-2xl bg-card p-6 shadow-xl">
-            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-flit-primary">
-              Reenviar validación
-            </h2>
-            <p className="mt-2 text-sm opacity-70">
+          <div className={`${DIALOGO_PANEL} w-full max-w-sm`}>
+            <div className={DIALOGO_FRANJA}>
+              <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+              <h2 id="val-resend-confirm-title" className={DIALOGO_FRANJA_TITULO}>
+                Reenviar validación
+              </h2>
+            </div>
+            <div className="p-6">
+            <p className="text-sm opacity-70">
               {confirmAction.mode === 'retry' ? (
                 <>
                   Se lanzará una validación de identidad <strong>nueva</strong> para{' '}
@@ -1453,7 +1465,7 @@ function ValidacionesLista({
                   setResendConfirmError(null);
                 }}
                 disabled={resendSubmitting}
-                className="rounded-xl border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 "
+                className={buttonClass({ variant: 'secondary', size: 'sm' })}
               >
                 Cancelar
               </button>
@@ -1461,11 +1473,11 @@ function ValidacionesLista({
                 type="button"
                 onClick={() => void handleConfirmAction()}
                 disabled={resendSubmitting}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-                style={{ background: 'var(--gradient-action)' }}
+                className={buttonClass({ size: 'sm' })}
               >
                 {resendSubmitting ? 'Enviando…' : 'Confirmar reenvío'}
               </button>
+            </div>
             </div>
           </div>
         </div>
@@ -1529,16 +1541,20 @@ function CompanyPickerDialog({
   const [elegida, setElegida] = useState('');
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="val-pick-company-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
-        <h2 id="val-pick-company-title" className="text-base font-semibold text-flit-primary">
-          ¿Para qué compañía es la prevalidación?
-        </h2>
-        <p className="mt-1 text-sm opacity-70">
+      <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h2 id="val-pick-company-title" className={DIALOGO_FRANJA_TITULO}>
+            ¿Para qué compañía es la prevalidación?
+          </h2>
+        </div>
+        <div className="p-6">
+        <p className="text-sm opacity-70">
           Estás viendo todas las compañías. La prevalidación queda registrada en la que elijas.
         </p>
         <div className="mt-4">
@@ -1555,7 +1571,7 @@ function CompanyPickerDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-foreground transition hover:bg-secondary "
+            className={buttonClass({ variant: 'secondary', size: 'sm' })}
           >
             Cancelar
           </button>
@@ -1563,11 +1579,11 @@ function CompanyPickerDialog({
             type="button"
             onClick={() => onPick(elegida)}
             disabled={elegida === ''}
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{ background: 'var(--gradient-action)' }}
+            className={buttonClass({ size: 'sm' })}
           >
             Continuar
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -1683,8 +1699,7 @@ function StuckIncidenciasDialog({
   const total = stuck?.total ?? 0;
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center p-6"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-50 grid place-items-center p-6 ${DIALOGO_VELO}`}
       role="presentation"
       onClick={onClose}
     >
@@ -1692,23 +1707,28 @@ function StuckIncidenciasDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="incidencias-title"
-        className="relative max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-card p-6"
+        className={`${DIALOGO_PANEL} flex max-h-[88vh] w-full max-w-5xl flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* La X sigue primera en el orden de foco; se pinta sobre la franja, arriba a la derecha. */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-lg p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+          className="absolute right-4 top-3 z-[2] grid h-10 w-10 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)] sm:right-5 sm:top-4"
         >
-          <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+          <X className="h-5 w-5" aria-hidden="true" />
         </button>
-        <div className="flex flex-wrap items-start justify-between gap-4 pr-8">
+        <div className={`${DIALOGO_FRANJA} pr-16`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h2 id="incidencias-title" className={DIALOGO_FRANJA_TITULO}>
+            Gestión de incidencias en validaciones
+          </h2>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 id="incidencias-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
-              Gestión de incidencias en validaciones
-            </h2>
-            <p className="mt-1 text-[13px] leading-snug opacity-70">
+            <p className="text-[13px] leading-snug opacity-70">
               {stuckError
                 ? 'No se pudieron cargar las validaciones atascadas.'
                 : total > 0
@@ -1776,6 +1796,7 @@ function StuckIncidenciasDialog({
             />
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

@@ -141,7 +141,7 @@ export function LoteDescargaTracker() {
           aria-label={`Mostrar la descarga masiva — ${estado}${porcentaje !== null ? `, ${porcentaje} %` : ''}`}
           aria-expanded={false}
           title={TITULO_DESCARGA_MASIVA}
-          className="pointer-events-auto absolute right-0 top-4 flex h-14 w-10 flex-col items-center justify-center gap-0.5 rounded-l-xl border border-r-0 bg-card text-xs font-semibold tabular-nums shadow-[0_8px_24px_rgba(22,39,68,0.08)] transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right motion-safe:duration-200"
+          className="pointer-events-auto absolute right-0 top-4 flex h-14 w-10 flex-col items-center justify-center gap-0.5 rounded-l-xl border border-r-0 bg-card text-xs font-semibold tabular-nums shadow-[var(--shadow-card)] transition hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right motion-safe:duration-200"
           style={{
             backgroundImage: `linear-gradient(var(--badge-${tone}-bg), var(--badge-${tone}-bg))`,
             borderColor: `var(--badge-${tone}-border)`,

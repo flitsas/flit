@@ -5,7 +5,7 @@ import { buttonClass } from "@flit/ui/Button";
 export const TARJETA_CLS =
   "rounded-2xl border border-border bg-card px-6 py-5 shadow-[var(--shadow-card)]";
 
-export const FOCO_CLS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]";
+export const FOCO_CLS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 // Botones de la propuesta (HU #14487): la familia `.btn` de @flit/ui/Button, en la densidad de 36 px de esta app.
 export const BOTON_PRIMARIO_CLS = buttonClass({ size: "sm", className: "gap-1.5 text-sm" });
@@ -18,7 +18,7 @@ export const CAMPO_CLS = `h-10 w-full rounded-xl border border-input bg-card px-
 
 export const ETIQUETA_CLS = "text-sm font-semibold text-flit-primary";
 
-export const AYUDA_CLS = "text-xs text-[var(--nav-texto)]";
+export const AYUDA_CLS = "text-xs text-muted-foreground";
 
 export const OPCION_CLS =
   "flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm text-flit-primary has-[:disabled]:opacity-60";

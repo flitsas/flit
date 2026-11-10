@@ -46,7 +46,7 @@ const CHEQUEOS = "chequeos";
 /** Avisa al contenedor de que un plegable cambió, para que el botón «Expandir/Contraer todo» diga lo correcto. */
 const AlCambiarPlegable = createContext<() => void>(() => {});
 
-const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-[var(--nav-texto)]";
+const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-muted-foreground";
 const VALOR_CLS = `${CELDA_TABLA_CLS} whitespace-pre-wrap break-words`;
 const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-border";
 const TITULO_CLS = "text-xs font-semibold text-flit-primary";

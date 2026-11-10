@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { Pencil, ShieldCheck, UserCheck, UserPlus } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
@@ -43,18 +44,18 @@ export function MandatarioGeneralCard({
     <section
       aria-labelledby="mandatario-general-titulo"
       data-testid="ot-mandatos-general-card"
-      className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm"
+      className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)]"
     >
       <span
         aria-hidden="true"
         className="absolute inset-y-0 left-0 w-1.5"
-        style={{ background: "linear-gradient(180deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+        style={{ background: "var(--di-gradient-brand)" }}
       />
       <div className="flex flex-col gap-4 pl-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <span
             aria-hidden="true"
-            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-white"
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-[color:var(--di-on-action)]"
             style={{ background: hay ? "var(--gradient-action)" : "var(--border-strong)" }}
           >
             {hay ? <UserCheck className="h-6 w-6" /> : <UserPlus className="h-6 w-6" />}
@@ -128,8 +129,7 @@ export function MandatarioGeneralCard({
             type="button"
             onClick={onEditar}
             aria-label="Editar mandatario general del organismo"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "var(--gradient-action)" }}
+            className={buttonClass({ size: "sm", className: "shrink-0" })}
           >
             <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
             {hay ? "Cambiar mandatario" : "Elegir mandatario"}

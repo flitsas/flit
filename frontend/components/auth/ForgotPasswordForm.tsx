@@ -4,9 +4,15 @@
 // (anti-enumeración), igual que el backend responde 202 genérico.
 import { useState } from "react";
 import { forgotPassword } from "@/lib/api/auth";
-
-const INPUT_CLASS =
-  "w-full bg-card border border-input rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+import { Mail } from "lucide-react";
+import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
+import {
+  AUTH_ERROR_CLASS,
+  AUTH_INPUT_CLASS,
+  AUTH_LABEL_CLASS,
+  AUTH_STATUS_CLASS,
+  AUTH_SUBMIT_CLASS,
+} from "./AuthCard";
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -34,37 +40,39 @@ export function ForgotPasswordForm() {
 
   if (sent) {
     return (
-      <p role="status" className="text-sm text-foreground">
+      <p role="status" className={AUTH_STATUS_CLASS}>
         Si el correo está registrado, enviaremos instrucciones de recuperación.
       </p>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label="Recuperar contraseña" noValidate>
+    <form onSubmit={handleSubmit} className="grid gap-4" aria-label="Recuperar contraseña" noValidate>
       <div>
-        <label htmlFor="fp-email" className="block text-sm font-medium text-flit-primary mb-1">
+        <label htmlFor="fp-email" className={AUTH_LABEL_CLASS}>
           Correo electrónico
         </label>
-        <input
-          id="fp-email"
-          type="email"
-          autoComplete="username"
-          className={INPUT_CLASS}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <div className="relative">
+          <Mail className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <input
+            id="fp-email"
+            type="email"
+            autoComplete="username"
+            className={AUTH_INPUT_CLASS}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-flit-alert">
+        <p role="alert" className={AUTH_ERROR_CLASS}>
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
+        className={AUTH_SUBMIT_CLASS}
       >
         {loading ? "Enviando…" : "Enviar instrucciones"}
       </button>
