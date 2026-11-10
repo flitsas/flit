@@ -73,7 +73,7 @@ export function IctQueriesTab({ tenantId, onScheduleQuery }: IctQueriesTabProps)
           <span
             className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
             style={{
-              background: `${ictEstadoMeta(fila.estado).color}1A`,
+              background: `color-mix(in srgb, ${ictEstadoMeta(fila.estado).color} 10%, transparent)`,
               color: ictEstadoMeta(fila.estado).color,
             }}
           >
