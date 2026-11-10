@@ -151,11 +151,11 @@ export function buildTrendData(serie: OtReportSeriesPoint[]): TrendPoint[] {
 
 const SERIES = [
   { key: "radicados", label: "Radicados", color: "var(--color-flit-brand)" },
-  { key: "aprobados", label: "Aprobados", color: "var(--estado-aprobado-acento)" },
-  { key: "rechazados", label: "Rechazados", color: "var(--color-flit-alert)" },
+  { key: "aprobados", label: "Aprobados", color: "var(--serie-verde)" },
+  { key: "rechazados", label: "Rechazados", color: "var(--serie-naranja)" },
 ] as const;
 
-const ACUMULADO_COLOR = "var(--estado-solicitud-revocatoria-acento)";
+const ACUMULADO_COLOR = "var(--serie-ambar)";
 
 /**
  * Radicados contra decisiones a lo largo del periodo, con el pendiente acumulado encima.
@@ -405,7 +405,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
   }
 
   // Del verde al rojo según el tramo: el color hace el trabajo de decir qué tramo es bueno.
-  const colors = ["var(--estado-aprobado-acento)", "var(--color-flit-tech)", "var(--color-flit-brand)", "var(--estado-solicitud-revocatoria-acento)", "var(--color-flit-alert)"];
+  const colors = ["var(--serie-verde)", "var(--color-flit-tech)", "var(--color-flit-brand)", "var(--serie-ambar)", "var(--serie-naranja)"];
 
   return (
     <div className="flex flex-col gap-2" data-testid="ot-report-histograma">

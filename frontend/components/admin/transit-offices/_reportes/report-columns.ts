@@ -41,37 +41,37 @@ export const ESTADO_META: Record<string, EstadoMeta> = {
   },
   [OT_REPORT_ESTADOS.esperandoCliente]: {
     label: "Esperando al cliente",
-    color: "var(--di-border-control)",
+    color: "var(--serie-gris-control)",
     hint: "La pelota está en la empresa: SOAT, impuestos o trámite pausado. No cuenta como demora del organismo.",
   },
   [OT_REPORT_ESTADOS.aprobado]: {
     label: "Aprobado",
-    color: "var(--estado-aprobado-acento)",
+    color: "var(--serie-verde)",
     hint: "Cerrado a favor. Es el desenlace que el informe mide contra el tiempo.",
   },
   [OT_REPORT_ESTADOS.enSubsanacion]: {
     label: "En subsanación",
-    color: "var(--estado-solicitud-revocatoria-acento)",
+    color: "var(--serie-ambar)",
     hint: "Rechazado y con subsanación abierta: va a volver. Es trabajo futuro ya comprometido.",
   },
   [OT_REPORT_ESTADOS.rechazado]: {
     label: "Rechazado",
-    color: "var(--color-flit-alert)",
+    color: "var(--serie-naranja)",
     hint: "Rechazado y sin subsanación abierta: por ahora no vuelve.",
   },
   [OT_REPORT_ESTADOS.anulado]: {
     label: "Anulado",
-    color: "var(--estado-borrador-acento)",
+    color: "var(--serie-gris)",
     hint: "La empresa lo dio de baja después de radicarlo.",
   },
   [OT_REPORT_ESTADOS.revocado]: {
     label: "Revocado",
-    color: "var(--estado-revocado-acento)",
+    color: "var(--serie-violeta)",
     hint: "Se aprobó y el organismo lo revocó después. Cerrado, pero no a favor.",
   },
   [OT_REPORT_ESTADOS.otro]: {
     label: "Otro",
-    color: "var(--di-border-strong)",
+    color: "var(--serie-gris-claro)",
     hint: "Volvió a un estado anterior a la radicación. No debería ocurrir; si aparece, hay que mirarlo.",
   },
 };
@@ -90,7 +90,7 @@ export const ESTADO_ORDER: string[] = [
 ];
 
 export function estadoMeta(estado: string): EstadoMeta {
-  return ESTADO_META[estado] ?? { label: estado, color: "var(--di-border-strong)", hint: "" };
+  return ESTADO_META[estado] ?? { label: estado, color: "var(--serie-gris-claro)", hint: "" };
 }
 
 // ── Formateo ───────────────────────────────────────────────────────────────────

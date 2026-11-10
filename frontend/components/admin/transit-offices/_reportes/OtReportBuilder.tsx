@@ -332,13 +332,13 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               <Tile
                 value={formatInt(resumen.aprobados)}
                 label="Aprobados"
-                accent="var(--estado-aprobado-acento)"
+                accent="var(--serie-verde)"
                 hint={pctOf(resumen.aprobados, resumen.total)}
               />
               <Tile
                 value={formatInt(resumen.rechazados + resumen.enSubsanacion)}
                 label="Rechazados"
-                accent="var(--color-flit-alert)"
+                accent="var(--serie-naranja)"
                 hint={`${formatInt(resumen.enSubsanacion)} con subsanación abierta`}
               />
               <Tile
