@@ -770,15 +770,19 @@ export const OT_ARTICLES: ManualArticle[] = [
       "comprobar dominio",
       "registros dns",
       "enlace y qr",
+      "caja",
+      "usuarios de caja",
+      "cobros de caja",
+      "anular cobro",
     ],
     summary:
-      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, le pone su marca y lo publica en sus propios dominios.",
+      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, maneja su caja, le pone su marca y lo publica en sus propios dominios.",
     blocks: [
       {
         id: "entrada",
         title: "1. Dónde está",
         paragraphs: [
-          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene tres secciones: «Reportes», «Cobro» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
+          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene cuatro secciones: «Reportes», «Cobro», «Caja» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
           "Los cambios de cobro, de diseño publicado y de dominios llegan al portal sin pasos adicionales: quien lo abra después del cambio ya lo ve. Un trámite ya radicado conserva el valor con el que se radicó.",
         ],
       },
@@ -811,8 +815,28 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "caja",
+        title: "4. Caja: usuarios y cobros",
+        paragraphs: [
+          "En el punto, la persona paga en la caja de tu organismo con el ID de su trámite. La pestaña «Caja» tiene dos partes: «Usuarios de caja», para decidir quién cobra, y «Cobros de caja», para revisar lo cobrado y corregir errores.",
+          "Un usuario de caja solo entra al portal de caja de tu organismo: no ve FLIT 2 ni los trámites de otros organismos. Crea uno por cada persona que cobra, así queda registrado quién hizo cada cobro.",
+        ],
+        bullets: [
+          "Crear un usuario de caja: pulsa «Crear usuario», escribe el nombre y el correo y guarda. Le llega una invitación para definir su contraseña; mientras no la use, aparece como «Invitación pendiente» y puedes reenviarla desde «Acciones».",
+          "Desactivar o reactivar: en «Acciones» de la fila. Un usuario desactivado ya no puede cobrar desde su siguiente intento.",
+          "Ver los cobros: «Cobros de caja» muestra los del día elegido con el ID, el valor, el medio, la hora y quién cobró, y el total del día sin contar los anulados.",
+          "Anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Solo se puede durante los 15 minutos siguientes al cobro, antes de que el trámite pase a FLIT 2; después, la opción aparece deshabilitada con el motivo. El trámite anulado vuelve a quedar pendiente de pago. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si la caja no está habilitada para tu organismo, la pestaña lo indica. Pide al administrador de FLIT que la habilite.",
+          },
+        ],
+      },
+      {
         id: "diseno",
-        title: "4. Diseño: tu marca en el portal",
+        title: "5. Diseño: tu marca en el portal",
         paragraphs: [
           "Aquí le pones al portal el nombre, el logo, los banners y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
         ],
@@ -836,7 +860,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       },
       {
         id: "dominios",
-        title: "5. Dominios del organismo",
+        title: "6. Dominios del organismo",
         paragraphs: [
           "En «Diseño» también están los dominios: las direcciones web propias por las que se abre tu portal. Un organismo puede tener varios, hasta 10, y todos llevan al mismo portal. Por estas direcciones solo se abre el portal: no hay inicio de sesión de FLIT.",
           "Cada dominio tiene su propio estado. Si uno falla, los demás siguen funcionando. Uno de los activos es el principal: el enlace y el QR del punto usan ese.",
@@ -852,6 +876,74 @@ export const OT_ARTICLES: ManualArticle[] = [
             variant: "tip",
             text: "Si no tienes ningún dominio activo, el portal sigue disponible en el enlace del punto de atención.",
           },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "2-ot/15-portal-de-caja",
+    title: "Portal de caja del organismo: cobrar un trámite del punto",
+    audience: "Organismo de Tránsito",
+    sectionId: "ot",
+    keywords: [
+      "portal de caja",
+      "caja del organismo",
+      "cobrar tramite",
+      "id del tramite",
+      "confirmar cobro",
+      "pago registrado",
+      "prefactura",
+      "cobros del dia",
+      "este tramite ya fue pagado",
+      "no encontramos ese tramite",
+      "cerrar sesion caja",
+    ],
+    summary:
+      "Cómo la caja del organismo cobra un trámite que la persona inició en el punto: buscar por ID, revisar el total, registrar el medio y ver los cobros del día.",
+    blocks: [
+      {
+        id: "entrar",
+        title: "1. Entrar a la caja",
+        paragraphs: [
+          "La caja se abre desde el enlace del punto de tu organismo, en la dirección terminada en «/caja». Inicia sesión con el correo y la contraseña de tu usuario de caja. La sesión dura como máximo 12 horas; al terminar el turno usa «Cerrar sesión», sobre todo si el equipo es compartido.",
+        ],
+      },
+      {
+        id: "cobrar",
+        title: "2. Cobrar un trámite",
+        paragraphs: ["Cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
+        bullets: [
+          "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y busca.",
+          "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
+          "Elige el medio con que pagó: efectivo, datáfono, transferencia u otro (en «Otro», escribe cuál).",
+          "Si tienes la prefactura, adjúntala (PDF, JPG o PNG de hasta 5 MB). Es opcional.",
+          "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            title: "Si el total cambió",
+            text: "Si el precio cambió desde que buscaste el trámite, la pantalla muestra el total nuevo y te pide confirmar otra vez. Cobra siempre el total que muestra la pantalla.",
+          },
+        ],
+      },
+      {
+        id: "mensajes",
+        title: "3. Mensajes frecuentes",
+        paragraphs: ["Si la búsqueda no deja cobrar, la pantalla dice por qué:"],
+        bullets: [
+          "«No encontramos ese trámite.»: revisa el ID con la persona.",
+          "«Este trámite ya fue pagado.»: no lo cobres otra vez.",
+          "«Este trámite no es de este organismo.»: la persona debe pagar en el organismo donde lo inició.",
+          "«El pago en caja de este trámite venció.»: el ID vale solo el día en que se generó; la persona debe generarlo de nuevo en el punto.",
+          "Si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar.",
+        ],
+      },
+      {
+        id: "cobros-dia",
+        title: "4. Cobros del día",
+        paragraphs: [
+          "«Cobros del día» lista lo que se cobró hoy en tu organismo, con el ID, el valor, el medio, la hora y quién cobró, y el total del día. Los cobros anulados aparecen marcados y no suman. Si te equivocaste en un cobro, avisa al administrador de tu organismo: solo el administrador puede anularlo, y únicamente durante los 15 minutos siguientes.",
         ],
       },
     ],
