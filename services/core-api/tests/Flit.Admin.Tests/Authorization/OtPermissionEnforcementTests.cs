@@ -265,7 +265,9 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (partes[0] is "POST" or "PUT" or "PATCH")
         {
+            // multipart: attachments y invite/bulk (IFormFile); JSON en el resto evita 415 antes del 403 de permiso.
             request.Content = partes[1].EndsWith("/attachments", StringComparison.Ordinal)
+                || partes[1].EndsWith("/invite/bulk", StringComparison.Ordinal)
                 ? new MultipartFormDataContent()
                 : new StringContent("{}", Encoding.UTF8, "application/json");
         }
