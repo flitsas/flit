@@ -994,6 +994,7 @@ public sealed class GenerarFurHandler(
                 entidadLevantamiento)
             : FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento, entidadLevantamiento);
 
+        // Orden canónico (REGLAS-NUMERAL-3): tipo → copropiedad → PPT → gravamen → transformaciones → …
         var automatico = FurPrendaObservation.Join(
             FurTramiteObservation.Compose(
                 codigo,
@@ -1005,6 +1006,8 @@ public sealed class GenerarFurHandler(
                     Placa: Get(fv, "plate"))),
             FurPrendaObservation.Join(
                 FurCopropiedadObservation.Compose(partes),
+                FurPrendaObservation.Join(
+                FurPptObservation.Compose(partes),
                 FurPrendaObservation.Join(
                 bloquePrenda,
                 FurPrendaObservation.Join(
@@ -1018,7 +1021,7 @@ public sealed class GenerarFurHandler(
                         FurServicioVinculadoraObservation.Compose(
                             Get(fv, "vehicle_service"),
                             Get(fv, "empresa_vinculadora_razon_social"),
-                            Get(fv, "empresa_vinculadora_nit")))))));
+                            Get(fv, "empresa_vinculadora_nit"))))))));
 
         return FurObservacionesComposer.Componer(automatico, Get(fv, "fur_observations"));
     }

@@ -412,6 +412,8 @@ public static class FurPreviewSample
             FurPrendaObservation.Join(
                 FurCopropiedadObservation.Compose(partes),
                 FurPrendaObservation.Join(
+                FurPptObservation.Compose(partes),
+                FurPrendaObservation.Join(
                 FurPrendaObservation.Compose(prenda, PhAcreedor, PhAcreedorNit),
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
@@ -419,7 +421,7 @@ public static class FurPreviewSample
                         transformaciones.Color ? PhColorNuevo : "ROJO",
                         transformaciones.Combustible ? "DIESEL" : "GASOLINA",
                         transformaciones.Carroceria ? "PICKUP" : "SEDAN"),
-                    extra))));
+                    extra)))));
 
         return FurObservacionesComposer.Componer(automatico, null);
     }

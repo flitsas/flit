@@ -215,6 +215,8 @@ const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
   { value: 'CE', label: 'Cédula de extranjería (CE)' },
   { value: 'NIT', label: 'NIT' },
   { value: 'PAS', label: 'Pasaporte (PAS)' },
+  // HU #14499 / ADR-0082 — Permiso por Protección Temporal.
+  { value: 'PPT', label: 'Permiso por Protección Temporal (PPT)' },
 ];
 
 const ROL_LABEL: Record<ActorRol, string> = {
