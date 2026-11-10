@@ -268,6 +268,19 @@ export interface InstanceSummary {
   tienePrenda?: boolean;
   tieneTransformacion?: boolean;
   /**
+   * ADR-0053 (Múltiple Propietario) — algún lado del trámite tiene 2+ propietarios. Marca
+   * informativa de la fila, como prenda y transformación.
+   */
+  multiplesPropietarios?: boolean;
+  /**
+   * ADR-0053 — todos los propietarios de cada lado, principal primero, con la acreditación de CADA
+   * persona. `vendedorNombre`/`compradorNombre` traen solo al principal; con copropietarios la celda
+   * ofrece un desplegable con esta lista. Ausentes en backends anteriores al campo: la celda cae al
+   * nombre único de siempre.
+   */
+  vendedoresActores?: ActorListado[] | null;
+  compradoresActores?: ActorListado[] | null;
+  /**
    * Feature #12276 (HU #12312) — «Confirmado en RUNT». Exactamente uno de tres valores en trámites
    * aprobados; `null`/ausente cuando no aplica. La celda pinta SÍ / NO / — y NADA más: intentos,
    * marcas y motivos son del Historial interno de plataforma, no del gestor.
@@ -377,6 +390,15 @@ export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
  * No habla de la firma electrónica de la compraventa: ese es otro eje (`signaturePending`).
  */
 export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
+
+/**
+ * ADR-0053 — un propietario de un lado en el listado: nombre y acreditación de esa persona.
+ * `firmaEstado` es `null` cuando el tipo no manda a ese lado a validar identidad.
+ */
+export interface ActorListado {
+  nombre: string;
+  firmaEstado: FirmaParteEstado | null;
+}
 
 /**
  * Query params de GET /api/v1/tramites/instances (filtros + orden server-side).
