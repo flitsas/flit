@@ -24,7 +24,7 @@ describe("HU #10498 — AC1: scroll encuadrado en el Shell", () => {
         <div>contenido largo</div>
       </Shell>,
     );
-    // Rediseño (Epic #14471): el contenido va en un contenedor centrado de 1240 px dentro del área con scroll.
+    // Rediseño (Epic #14471): el contenedor con scroll se ubica por `data-shell-scroll`; cada página pone su ancho.
     const wrapper = screen.getByText("contenido largo").closest("[data-shell-scroll]")!;
     expect(wrapper.className).toContain("overflow-y-auto");
     // El padding inferior libera el dock flotante (nada oculto tras él).
