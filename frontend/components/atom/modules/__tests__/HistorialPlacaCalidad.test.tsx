@@ -96,7 +96,10 @@ describe("HU #12197 — AC1: color por token, no por literal", () => {
     expect(CODIGO).toMatch(/\bring-flit-brand\b/);
     // Rediseño UI kit (HU #14482): el texto de cuerpo usa `text-foreground`, que tiene valor oscuro.
     expect(CODIGO).toMatch(/\btext-foreground\b/);
-    expect(CODIGO).toMatch(/\btext-muted-foreground\b/);
+    // HU #14476: el campo de placa usa el `.control` compartido de la barra de Trámites, que trae su placeholder en
+    // token (--di-text-tertiary); antes era el único `text-muted-foreground` del archivo.
+    expect(CODIGO).toMatch(/className=\{INPUT_CLS\}/);
+    expect(CODIGO).toMatch(/const INPUT_CLS = `\$\{TRAMITES_INPUT_CLS\} w-full uppercase`/);
   });
 
   it("edge: la CTA ya no pinta su color por `style` inline (no se puede tematizar)", () => {
