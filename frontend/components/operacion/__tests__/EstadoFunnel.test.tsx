@@ -91,11 +91,11 @@ describe('EstadoFunnel', () => {
       'Anulado: 0 trámites',
     ]);
     expect(screen.queryByLabelText(/^Preparado:/)).not.toBeInTheDocument();
-    // HU #14482 (propuesta): la franja es una fila de chips segmentados, sin rejilla por columnas.
+    // HU #14482: la franja es una fila de baldosas que pasa a varias filas, sin rejilla por columnas.
     expect(screen.getByRole('group')).toHaveClass('flex', 'flex-wrap');
   });
 
-  it('HU #14482 — cada tarjeta es un chip de la propuesta que lleva aria-pressed', () => {
+  it('HU #14482 — cada tarjeta es una baldosa con aria-pressed y la barra del color de su estado', () => {
     render(
       <EstadoFunnel
         counts={counts}
@@ -105,7 +105,11 @@ describe('EstadoFunnel', () => {
     );
     const botones = screen.getAllByRole('button');
     expect(botones).toHaveLength(8);
-    for (const b of botones) expect(b.className).toMatch(/rounded-\[10px\]/);
+    for (const b of botones) expect(b.className).toMatch(/rounded-xl/);
+    const barra = (re: RegExp) =>
+      screen.getByLabelText(re).querySelector('span.rounded-full') as HTMLElement;
+    expect(barra(/^Aprobado:/).style.background).toBe('var(--estado-aprobado-acento)');
+    expect(barra(/^Anulado:/).style.background).toBe('var(--estado-anulado-acento)');
     expect(screen.getByLabelText(/^Aprobado:/)).toHaveAttribute('aria-pressed', 'true');
   });
 
