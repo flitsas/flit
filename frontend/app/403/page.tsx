@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ShieldX } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { getHubUrl } from "@flit/auth/server";
 
 // Destino de acceso denegado (HU #10194, AC6). El middleware redirige aquí a los usuarios sin rol SuperAdmin antes de
@@ -43,22 +44,22 @@ export default async function ForbiddenPage({ searchParams }: { searchParams: Pr
   const href = denied && hubUrl ? `${hubUrl}/?inicio=1` : "/";
 
   return (
-    <main className="app-bg flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-      <ShieldX className="h-14 w-14" style={{ color: "var(--badge-warning-fg)" }} />
-      <h1 className="text-2xl font-bold text-flit-primary">
-        {denied?.title ?? "Acceso restringido"}
-      </h1>
-      <p className="max-w-md text-sm opacity-70">
-        {denied?.body ??
-          "No tienes los permisos necesarios para acceder a esta sección. Si crees que es un error, contacta al administrador de la plataforma."}
-      </p>
-      <Link
-        href={href}
-        className="rounded-xl px-5 py-2.5 text-sm font-semibold text-primary-foreground"
-        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
-      >
-        {denied && hubUrl ? "Ir a mis productos" : "Volver al inicio"}
-      </Link>
+    <main className="app-bg flex min-h-screen flex-col items-center justify-center px-4 py-10 text-center">
+      {/* Homologación (HU #14511): estado vacío de la propuesta (`.vacio`), tarjeta con ilustración y botón del kit. */}
+      <div className="flex w-full max-w-lg flex-col items-center gap-4 rounded-[20px] border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10">
+        {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
+        <img src={rutaIlustracion("seguridad")} alt="" aria-hidden="true" width={96} height={96} className="h-24 w-24" />
+        <h1 className="text-2xl font-bold text-[color:var(--di-heading)]">
+          {denied?.title ?? "Acceso restringido"}
+        </h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {denied?.body ??
+            "No tienes los permisos necesarios para acceder a esta sección. Si crees que es un error, contacta al administrador de la plataforma."}
+        </p>
+        <Link href={href} className={buttonClass({ className: "mt-2" })}>
+          {denied && hubUrl ? "Ir a mis productos" : "Volver al inicio"}
+        </Link>
+      </div>
     </main>
   );
 }
