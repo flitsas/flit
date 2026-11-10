@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { ilustracionDe, rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Secciones del dock de Trámites y a cuál va cada entrada. El catálogo (`tramitesNav.ts`) las usa; el dock lo dibuja
@@ -140,3 +141,57 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   // ICT anida Log ICT y Reportes ICT; solo el padre necesita grupo (mismo patrón que Tránsito).
   ict: "integraciones",
 };
+
+/**
+ * HU #14479 (prototipo «Diseño Inteligente»): para qué sirve cada entrada, bajo su nombre en el submenú. Textos tomados
+ * tal cual del lanzador del prototipo (`LANZADOR` en propuesta.js de la rama `propuesta`). Las entradas que el
+ * prototipo no tiene van sin descripción: no se inventan.
+ */
+export const DOCK_ITEM_DESCRIPCION: Record<string, string> = {
+  tramites: "Traspasos y matrículas",
+  "historial-placa": "Todo lo de un vehículo",
+  validaciones: "Validación antes de firmar",
+  reportes: "La operación en cifras",
+  auditoria: "Quién hizo qué y cuándo",
+  usuarios: "Invitar y administrar",
+  rbac: "Qué puede hacer cada rol",
+  "admin-companies": "Empresas y su configuración",
+  "admin-transit-offices": "Dónde se radica cada trámite",
+  "admin-rejection-reasons": "Por qué se devuelve un trámite",
+  "admin-documents": "Qué pide cada trámite",
+  "admin-improntas": "Motor y chasis",
+  "admin-generacion-documental": "Contratos y mandatos en lote",
+  "admin-quipux": "Radicación por Quipux",
+  "admin-tipos-tramite": "Qué trámites están activos",
+  "admin-confirmacion-runt": "Radicados por confirmar",
+  "admin-mandatos": "Plantillas de mandato",
+  "admin-fur": "Formulario único por trámite",
+  "admin-notificaciones": "Correos y mensajes",
+  "admin-banners": "Avisos para todos",
+  "admin-jobs": "Tareas automáticas",
+  "log-qx": "Mensajes con QX",
+  "ict-logs": "Llamadas de los clientes",
+  "ict-trazabilidad": "Del registro al trámite",
+  "ict-reportes": "Volumen por cliente",
+};
+
+/**
+ * Ilustración de las pestañas del organismo en el dock, que `ilustracionDe` (@flit/ui) no conoce por clave: la misma
+ * que lleva el módulo homónimo de la compañía.
+ */
+export const DOCK_OT_ILUSTRACION: Record<string, Ilustracion> = {
+  [OT_ADM_DOCK.tramites]: "tramites",
+  [OT_ADM_DOCK.documents]: "documentos",
+  [OT_ADM_DOCK.usuarios]: "colaboradores",
+  [OT_ADM_DOCK.reportes]: "reportes",
+  [OT_ADM_DOCK.mandatos]: "mandatos",
+  [OT_ADM_DOCK.imprintValidation]: "improntas",
+  [OT_ADM_DOCK.webhooks]: "integraciones",
+  [OT_ADM_DOCK.portalPersonaNatural]: "identidad",
+};
+
+/** Ilustración de una entrada o grupo del dock de Trámites; `undefined` si no tiene (queda el ícono de línea). */
+export function dockIlustracion(key: string): string | undefined {
+  const ot = DOCK_OT_ILUSTRACION[key];
+  return ot ? rutaIlustracion(ot) : ilustracionDe(key);
+}

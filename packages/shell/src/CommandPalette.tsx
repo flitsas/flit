@@ -125,13 +125,11 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
         aria-haspopup="dialog"
         aria-keyshortcuts="Control+K Meta+K"
         aria-label="Buscar (Ctrl K)"
-        className="flex h-9 items-center gap-2 rounded-full border border-[var(--nav-borde)] px-3 text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]"
+        className="suite-buscar"
       >
-        <Search className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden md:inline">Buscar</span>
-        <kbd className="hidden rounded-[var(--radius-sm)] border border-[var(--border)] px-1.5 font-sans text-[11px] text-[var(--muted-foreground)] md:inline" aria-hidden="true">
-          Ctrl K
-        </kbd>
+        <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <span>Buscar placa, trámite o módulo</span>
+        <kbd aria-hidden="true">Ctrl K</kbd>
       </button>
 
       {open && (

@@ -2,7 +2,7 @@
 // los MÓDULOS ACCESIBLES del usuario, no por `currentUser?.isSuperAdmin`.
 // Uso de ejemplo: <Shell visibleModuleCodes={["generacion-documental"]} …/> → la entrada aparece.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { Shell } from "../Shell";
@@ -45,9 +45,8 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell(["tramites", "generacion-documental"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    // HU #14479: las entradas de Administradores viven en secciones con nombre.
-    await userEvent.click(screen.getByRole("button", { name: "Documentos" }));
-    expect(screen.getByRole("link", { name: "Generación documental" })).toHaveAttribute("href", "/admin/generacion-documental");
+    // HU #14479: las entradas de Administradores viven en secciones con nombre (grupos, ya no desplegables).
+    expect(within(screen.getByRole("group", { name: "Documentos" })).getByRole("link", { name: "Generación documental" })).toHaveAttribute("href", "/admin/generacion-documental");
   });
 
   it("un usuario cuyo listado de módulos NO incluye el módulo no ve la entrada", async () => {
@@ -79,9 +78,8 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell();
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    // HU #14479: las entradas de Administradores viven en secciones con nombre.
-    await userEvent.click(screen.getByRole("button", { name: "Documentos" }));
-    expect(screen.getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
+    // HU #14479: las entradas de Administradores viven en secciones con nombre (grupos, ya no desplegables).
+    expect(within(screen.getByRole("group", { name: "Documentos" })).getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
   });
 
   it("un SuperAdmin con el módulo accesible también la ve (misma vía: módulos, no rol)", async () => {
@@ -93,8 +91,7 @@ describe("Shell — entrada de dock 'Generación documental' (R12)", () => {
     renderShell(["generacion-documental"]);
 
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    // HU #14479: las entradas de Administradores viven en secciones con nombre.
-    await userEvent.click(screen.getByRole("button", { name: "Documentos" }));
-    expect(screen.getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
+    // HU #14479: las entradas de Administradores viven en secciones con nombre (grupos, ya no desplegables).
+    expect(within(screen.getByRole("group", { name: "Documentos" })).getByRole("link", { name: "Generación documental" })).toBeInTheDocument();
   });
 });
