@@ -125,3 +125,20 @@ message AdjuntoSolicitud {
   string mime_type = 6;
   string nombre_archivo = 7;
 }
+
+// Administración del cobro en caja desde el hub del OT. Token de svc-tramites con aud=personanatural y scope
+// platform.personanatural.caja. El organismo lo resuelve core-api desde el token del administrador; el BFF no lo discute.
+service CajaAdminService {
+  rpc ListarCobros(ListarCobrosRequest) returns (ListarCobrosResponse);
+  rpc AnularCobro(AnularCobroRequest) returns (AnularCobroResponse); // FAILED_PRECONDITION reason=cobro_no_anulable | NOT_FOUND reason=cobro_no_encontrado
+}
+message ListarCobrosRequest { string organismo_id = 1; string fecha = 2; /* AAAA-MM-DD Colombia; vacio = hoy */ int32 pagina = 3; int32 tamano = 4; }
+message CobroResumen {
+  string cobro_id = 1; string codigo = 2; int64 valor_cop = 3; string medio = 4; string medio_detalle = 5;
+  string pagado_en = 6; string pagado_por_nombre = 7; string estado = 8; // pagado | anulado
+  bool anulable = 9; string motivo_no_anulable = 10; string anulado_en = 11; string anulado_por_nombre = 12; string anulacion_motivo = 13;
+  int64 row_version = 14;
+}
+message ListarCobrosResponse { repeated CobroResumen items = 1; int32 total = 2; int64 total_dia_cop = 3; }
+message AnularCobroRequest { string organismo_id = 1; string cobro_id = 2; string motivo = 3; /* 10..300 */ string actor_user_id = 4; string actor_nombre = 5; int64 row_version = 6; }
+message AnularCobroResponse { string cobro_id = 1; string estado = 2; }

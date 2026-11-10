@@ -15498,6 +15498,142 @@ paths:
         "400": { description: Igual que el listado. }
         "401": { description: Sin sesión. }
         "403": { description: Otro rol o sin el permiso. }
+  /api/v1/admin/ot/portal-caja/users:
+    get:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Usuarios de caja del organismo: activos, desactivados e invitaciones pendientes"
+      description: "Rol ot_admin o SuperAdmin (HU #14454, ADR-0082). El ot_admin trabaja con el organismo de su token y si nombra otro recibe 403 OTRO_ORGANISMO; el SuperAdmin envía transitOfficeId (obligatorio). Responde 404 con PortalCaja:Habilitado apagado."
+      operationId: AdminOtPortalCajaUsersList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: "Usuarios de caja."
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CajaUsuario" }
+        "400": { description: "ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "Función apagada o ORGANISMO_NO_EXISTE." }
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Invita a un usuario de caja (rol ot_caja) por correo"
+      description: "Rol fijo ot_caja: no se envía rol. Enciende el producto caja en el organismo si hacía falta. La persona define su contraseña al activar la cuenta."
+      operationId: AdminOtPortalCajaUsersInvite
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CajaInvitarRequest" }
+      responses:
+        "201": { description: "Invitación creada.", content: { application/json: { schema: { $ref: "#/components/schemas/CajaInvitacionCreada" } } } }
+        "400": { description: "EMAIL_REQUIRED o FULL_NAME_REQUIRED." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "409": { description: "EMAIL_ALREADY_IN_USE con el motivo exacto, CAJA_NO_CONFIGURADA o PRODUCT_NOT_ENABLED_FOR_HEAD." }
+  /api/v1/admin/ot/portal-caja/users/{userId}/suspend:
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Desactiva a un usuario de caja"
+      description: "Pierde el acceso en su siguiente petición: el portal consulta su estado en cada llamada."
+      operationId: AdminOtPortalCajaUsersSuspend
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: "Desactivado." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "USER_NOT_FOUND: no es un usuario de caja de este organismo." }
+    delete:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Reactiva a un usuario de caja desactivado"
+      operationId: AdminOtPortalCajaUsersUnsuspend
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: "Reactivado." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "USER_NOT_FOUND o NO_ACTIVE_SUSPENSION." }
+  /api/v1/admin/ot/portal-caja/invitations/{invitationId}/resend:
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Reenvía la invitación pendiente de un usuario de caja"
+      operationId: AdminOtPortalCajaInvitationResend
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: "Reenviada." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "INVITATION_NOT_FOUND: no es una invitación de caja de este organismo." }
+        "409": { description: "INVITATION_NOT_PENDING." }
+        "429": { description: "RESEND_COOLDOWN con Retry-After." }
+  /api/v1/admin/ot/portal-caja/cobros:
+    get:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Cobros en caja del organismo en un día de Colombia"
+      description: "Rol ot_admin o SuperAdmin (HU #14461, ADR-0082). Fachada: core-api consulta al portal por gRPC (CajaAdminService.ListarCobros) con el organismo de su token. El total del día no suma los cobros anulados. 503 PORTAL_NO_DISPONIBLE si el portal no responde."
+      operationId: AdminOtPortalCajaCobrosList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: date, in: query, required: false, description: "Día de Colombia AAAA-MM-DD; vacío es hoy.", schema: { type: string, format: date } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: "Cobros del día."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CajaCobroLista" }
+        "400": { description: "INVALID_DATE u ORGANISMO_REQUERIDO." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo (OTRO_ORGANISMO) o rol sin permiso: la caja no consulta desde el hub." }
+        "503": { description: "PORTAL_NO_DISPONIBLE." }
+  /api/v1/admin/ot/portal-caja/cobros/{cobroId}/anular:
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Anula un cobro en caja con motivo obligatorio"
+      description: "Solo el administrador del OT o el SuperAdmin; el usuario de caja no anula. Posible mientras el trámite no haya llegado a FLIT 2.0 (ventana de 15 minutos desde el cobro). La anulación devuelve la solicitud a pendiente de pago."
+      operationId: AdminOtPortalCajaCobrosAnular
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: cobroId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CajaAnularRequest" }
+      responses:
+        "200": { description: "Anulado.", content: { application/json: { schema: { $ref: "#/components/schemas/CajaAnulacion" } } } }
+        "400": { description: "REASON_REQUIRED (sin motivo) o REASON_LENGTH (fuera de 10 a 300 caracteres)." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "OTRO_ORGANISMO o rol sin permiso." }
+        "404": { description: "COBRO_NO_ENCONTRADO en este organismo." }
+        "409": { description: "COBRO_NO_ANULABLE: el trámite ya llegó a FLIT 2.0 o pasó la ventana." }
+        "503": { description: "PORTAL_NO_DISPONIBLE." }
 
 components:
   securitySchemes:
@@ -15672,6 +15808,68 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    CajaUsuario:
+      type: object
+      required: [fullName, email, status]
+      properties:
+        userId: { type: string, format: uuid, nullable: true, description: "Vacío mientras es una invitación pendiente." }
+        invitationId: { type: string, format: uuid, nullable: true, description: "Solo en estado invited; sirve para reenviar." }
+        fullName: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [invited, active, suspended] }
+        createdAt: { type: string, format: date-time, nullable: true }
+    CajaInvitarRequest:
+      type: object
+      required: [email, fullName]
+      properties:
+        email: { type: string }
+        fullName: { type: string }
+    CajaInvitacionCreada:
+      type: object
+      required: [invitationId, email, emailSent]
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string }
+        emailSent: { type: boolean }
+    CajaCobro:
+      type: object
+      required: [cobroId, codigo, valorCop, medio, estado, anulable, rowVersion]
+      properties:
+        cobroId: { type: string, format: uuid }
+        codigo: { type: string, description: "Código público del trámite, PN-AAAA-NNNNNN." }
+        valorCop: { type: integer, format: int64 }
+        medio: { type: string, description: "efectivo, datafono, transferencia u otro." }
+        medioDetalle: { type: string }
+        pagadoEn: { type: string }
+        pagadoPorNombre: { type: string }
+        estado: { type: string, enum: [pagado, anulado] }
+        anulable: { type: boolean }
+        motivoNoAnulable: { type: string, description: "Por qué no se puede anular; vacío si anulable es true." }
+        anuladoEn: { type: string }
+        anuladoPorNombre: { type: string }
+        anulacionMotivo: { type: string }
+        rowVersion: { type: integer, format: int64 }
+    CajaCobroLista:
+      type: object
+      required: [items, total, totalDiaCop]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CajaCobro" }
+        total: { type: integer }
+        totalDiaCop: { type: integer, format: int64, description: "Suma del día sin los cobros anulados." }
+    CajaAnularRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 300 }
+        rowVersion: { type: integer, format: int64, description: "El rowVersion del cobro que se vio en la lista." }
+    CajaAnulacion:
+      type: object
+      required: [cobroId, estado]
+      properties:
+        cobroId: { type: string, format: uuid }
+        estado: { type: string }
     CobroPortal:
       type: object
       required: [medios, tipos]
