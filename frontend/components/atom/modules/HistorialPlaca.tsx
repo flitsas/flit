@@ -31,6 +31,7 @@ import { TAMANO_DE_PAGINA_POR_DEFECTO, useTamanoDePagina } from "@/components/at
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { ModuleTitle } from "./ModuleTitle";
 import { TramiteDetalleModal } from "@/components/operacion/TramiteDetalleModal";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 import { tramitesClient } from "@/lib/api/tramites-client";
 import type { InstanceSummary } from "@/lib/api/types/procedure-runtime";
 import { estadoLabel } from "@/lib/tramites/estados";
@@ -40,11 +41,9 @@ import { formatFechaHora } from "@/lib/format/date";
 
 type Phase = "idle" | "loading" | "error" | "empty" | "ready";
 
-// Clases del input: el color sale de tokens, no de hex (HU #12197). `border` a secas ya toma
-// `--border` (== #DFE5ED en claro, white/10 en oscuro) desde la capa base de globals.css, así que
-// la pareja `border-[#DFE5ED] dark:border-white/10` era el token escrito a mano.
-const INPUT_CLS =
-  "w-full rounded-xl border bg-card px-3 py-2 text-xs uppercase text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
+// Clases del input: el `.control` del prototipo, el mismo de la barra de Trámites (HU #14476), a todo el ancho y en
+// mayúsculas como la placa que se escribe.
+const INPUT_CLS = `${TRAMITES_INPUT_CLS} w-full uppercase`;
 
 /** Tono semántico del chip de estado (verde válido / azul proceso / naranja-rojo alerta / gris). */
 const ESTADO_TONE: Record<string, StatusTone> = {
