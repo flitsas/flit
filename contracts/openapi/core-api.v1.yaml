@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.0"
+  version: "1.0.1"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -277,6 +277,139 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/security/invitations/bulk/template:
+    get:
+      tags: [Security · Invitaciones]
+      operationId: securityBulkInvitationTemplate
+      summary: Plantilla Excel de invitación masiva (Feature #14420 / ADR-0077)
+      description: >
+        Descarga `.xlsx` con columnas Nombre completo, Correo y Rol, y el catálogo de roles
+        asignables al invitador en el destino. SuperAdmin debe indicar `targetTenantId`.
+        AdminCompany opera sobre su propio tenant. Perfil FLIT fuera de v1.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: targetTenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Obligatorio para SuperAdmin (compañía u OT destino).
+      responses:
+        '200':
+          description: Plantilla Excel.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '400':
+          description: TARGET_TENANT_REQUIRED u otro error de parámetros.
+        '401': { description: No autenticado. }
+        '403':
+          description: TARGET_TENANT_OUT_OF_SCOPE / INVITER_NOT_AUTHORIZED / CANNOT_INVITE_TO_OWN_TENANT.
+        '404':
+          description: TARGET_TENANT_NOT_FOUND.
+  /api/v1/security/invitations/bulk:
+    post:
+      tags: [Security · Invitaciones]
+      operationId: securityBulkInvitationSubmit
+      summary: Valida (dryRun) o ejecuta invitación masiva por Excel (Feature #14420)
+      description: >
+        Multipart campo `file` (.xlsx ≤ 1 MB, ≤ 50 filas). `dryRun=true` (default) solo valida;
+        `dryRun=false` revalida y crea invitaciones vía CreateInvitationHandler. Filas inválidas
+        no tumban el lote. Rate limit en dryRun (429). Auditoría `users/bulk_invite` solo en commit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+        - name: targetTenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: BulkInvitationReport (dryRun o commit).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkInvitationReport'
+        '400':
+          description: FILE_REQUIRED / INVALID_FILE / TEMPLATE_INVALID / EMPTY_FILE / TOO_MANY_ROWS.
+        '401': { description: No autenticado. }
+        '403':
+          description: Alcance denegado.
+        '404':
+          description: TARGET_TENANT_NOT_FOUND.
+        '413':
+          description: FILE_TOO_LARGE.
+        '429':
+          description: TOO_MANY_REQUESTS (dryRun).
+  /api/v1/admin/ot/users/invite/bulk/template:
+    get:
+      tags: [Admin OT · Usuarios]
+      operationId: adminOtBulkInvitationTemplate
+      summary: Plantilla Excel de invitación masiva OT (Feature #14420)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Obligatorio para SuperAdmin.
+      responses:
+        '200':
+          description: Plantilla Excel.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '401': { description: No autenticado. }
+        '403': { description: Sin ot.usuarios.manage o destino fuera de alcance. }
+  /api/v1/admin/ot/users/invite/bulk:
+    post:
+      tags: [Admin OT · Usuarios]
+      operationId: adminOtBulkInvitationSubmit
+      summary: Valida o ejecuta invitación masiva OT por Excel (Feature #14420)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: BulkInvitationReport.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkInvitationReport'
+        '401': { description: No autenticado. }
+        '403': { description: Sin permiso o rol administrador rechazado por fila. }
+        '429': { description: TOO_MANY_REQUESTS (dryRun). }
   /api/v1/security/invitations/{invitationId}/resend:
     parameters:
       - name: invitationId
@@ -15366,6 +15499,35 @@ components:
         password:
           type: string
           format: password
+    BulkInvitationReport:
+      type: object
+      description: Reporte efímero de invitación masiva (Feature #14420 / ADR-0077). No se persiste el lote.
+      required: [dryRun, total, valid, created, rejected, notProcessed, rows]
+      properties:
+        dryRun: { type: boolean }
+        total: { type: integer }
+        valid: { type: integer }
+        created: { type: integer }
+        rejected: { type: integer }
+        notProcessed: { type: integer }
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkInvitationRowResult'
+    BulkInvitationRowResult:
+      type: object
+      required: [rowNumber, fullName, email, role, status]
+      properties:
+        rowNumber: { type: integer }
+        fullName: { type: string }
+        email: { type: string }
+        role: { type: string, description: Nombre o código del rol tal como vino en el Excel. }
+        status:
+          type: string
+          enum: [valid, created, rejected, not_processed]
+        errorCode: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        emailSent: { type: boolean, nullable: true }
     MessageResponse:
       type: object
       required: [message]
