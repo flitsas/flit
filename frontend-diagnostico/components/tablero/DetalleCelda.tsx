@@ -73,7 +73,7 @@ export function useFocoAtrapado(ancla: React.RefObject<HTMLElement | null>, devo
 }
 
 const TITULO_SECCION_CLS = "text-sm font-semibold text-flit-primary";
-const ROTULO_CLS = "text-xs text-[var(--nav-texto)]";
+const ROTULO_CLS = "text-xs text-muted-foreground";
 const ROLES: Record<PersonaDetalle["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
 
 /** Estado de una persona con el mismo chip de la tabla: OK → Ejecutado (OK), ERROR → Error, SIN_RESULTADO → Novedad. */

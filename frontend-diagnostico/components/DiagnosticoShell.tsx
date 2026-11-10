@@ -114,7 +114,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
           <button
             type="button"
             onClick={recargar}
-            className="rounded-full border border-current px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]"
+            className="rounded-full border border-current px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             Reintentar
           </button>

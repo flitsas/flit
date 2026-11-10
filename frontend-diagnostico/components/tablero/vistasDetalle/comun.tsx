@@ -8,7 +8,7 @@ export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-[10px] font-semibold
 export const CABECERA_TABLA_ESTILO: CSSProperties = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" };
 export const CELDA_TABLA_CLS = "px-3 py-2 align-top text-xs text-flit-primary";
 export const FILA_TABLA_CLS = "border-t border-[var(--table-row-border)]";
-export const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)]";
+export const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
 
 /** Tarjeta interna del detalle (borde gris de marca, radio 12px). */
 export const TARJETA_DETALLE_CLS = "rounded-xl border border-border p-4";
@@ -48,5 +48,5 @@ export function Etiqueta({ tono, children }: { tono: TonoEtiqueta; children: Rea
 
 /** Mensaje de estado vacío dentro del detalle. */
 export function Vacio({ children }: { children: ReactNode }) {
-  return <p className={`${TARJETA_DETALLE_CLS} text-sm text-[var(--nav-texto)]`}>{children}</p>;
+  return <p className={`${TARJETA_DETALLE_CLS} text-sm text-muted-foreground`}>{children}</p>;
 }

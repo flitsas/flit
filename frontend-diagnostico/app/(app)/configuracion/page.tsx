@@ -57,7 +57,7 @@ export default function ConfiguracionPagina() {
         <h2 id="configuracion-vacio" className="text-lg font-semibold">
           No tienes acceso a la configuración
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (verConfiguracion && carga.tipo === "cargando") {

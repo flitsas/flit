@@ -177,7 +177,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     contenido =
       error instanceof ApiError && error.status === 404 ? (
         <Vacio titulo="No encontramos este lote en la compañía elegida" Icono={SearchX}>
-          <p className="max-w-md text-sm text-[var(--nav-texto)]">Revisa la compañía o vuelve a la lista de sus lotes.</p>
+          <p className="max-w-md text-sm text-muted-foreground">Revisa la compañía o vuelve a la lista de sus lotes.</p>
           <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>
             Volver a los lotes
           </Link>
@@ -208,7 +208,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     contenido =
       grilla.avance.vehiculos === 0 ? (
         <Vacio titulo="Este lote no tiene vehículos">
-          <p className="max-w-md text-sm text-[var(--nav-texto)]">No hay celdas que revisar ni llenar.</p>
+          <p className="max-w-md text-sm text-muted-foreground">No hay celdas que revisar ni llenar.</p>
         </Vacio>
       ) : (
         <>

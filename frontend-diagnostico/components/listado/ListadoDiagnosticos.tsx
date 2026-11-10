@@ -40,7 +40,7 @@ const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Es
 /** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
 const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
-const TEXTO_SECUNDARIO = "max-w-md text-sm text-[var(--nav-texto)]";
+const TEXTO_SECUNDARIO = "max-w-md text-sm text-muted-foreground";
 
 function Vacio({ titulo, Icono, children }: { titulo: string; Icono: typeof ClipboardList; children?: ReactNode }) {
   return (

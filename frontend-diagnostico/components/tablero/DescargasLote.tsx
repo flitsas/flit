@@ -123,7 +123,7 @@ export function DescargasLote({ diagnosticoId, estadoLote, puedeDescargar }: Des
       </div>
 
       {/* La región vive siempre en el DOM (vacía e invisible si no hay ZIP) para que el lector de pantalla anuncie cada cambio. */}
-      <p role="status" aria-live="polite" aria-label="Estado del ZIP" className={estado ? "text-sm font-medium text-[var(--nav-texto)]" : "sr-only"}>
+      <p role="status" aria-live="polite" aria-label="Estado del ZIP" className={estado ? "text-sm font-medium text-muted-foreground" : "sr-only"}>
         {estado}
       </p>
 
