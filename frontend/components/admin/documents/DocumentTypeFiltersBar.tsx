@@ -2,6 +2,8 @@
 
 import { Search, X } from "lucide-react";
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 export interface DocumentTypeCatalogFilters {
   q: string;
@@ -15,8 +17,8 @@ export const EMPTY_DOCUMENT_TYPE_FILTERS: DocumentTypeCatalogFilters = {
   estado: "",
 };
 
-const INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-[#DFE5ED]";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const INPUT_CLS = `${TRAMITES_INPUT_CLS} w-full`;
 
 export function DocumentTypeFiltersBar({
   value,
@@ -90,15 +92,14 @@ export function DocumentTypeFiltersBar({
       <div className="flex items-end gap-2">
         <button
           type="submit"
-          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           <Search className="h-3.5 w-3.5" /> Buscar
         </button>
         <button
           type="button"
           onClick={onClear}
-          className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-medium"
+          className={buttonClass({ variant: "secondary", size: "sm" })}
         >
           <X className="h-3.5 w-3.5" /> Limpiar
         </button>

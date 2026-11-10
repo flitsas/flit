@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
+import { estadoChipClass, estadoChipStyle } from '@/lib/tramites/estados';
 import { TramiteDetalleModal } from '@/components/operacion/TramiteDetalleModal';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
@@ -218,7 +219,9 @@ describe('TramiteDetalleModal', () => {
     const badge = screen.getByRole('button', {
       name: /Estado: Preasignación\. Ver línea de tiempo del trámite/i,
     });
-    expect(badge).toHaveStyle({ background: '#E08A00' });
+    // Rediseño (Epic #14471): el chip toma la pastilla de estado de la propuesta (sin amarillo) y su marca.
+    expect(badge).toHaveStyle({ background: estadoChipStyle('preasignacion').bg });
+    expect(badge.className).toContain(estadoChipClass('preasignacion'));
   });
 
   it('toggle identidad muestra firma del baúl en nodos', async () => {

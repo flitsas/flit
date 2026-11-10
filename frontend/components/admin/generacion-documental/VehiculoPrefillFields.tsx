@@ -191,13 +191,13 @@ export function VehiculoPrefillFields({
         <div
           role="alert"
           data-testid="tf-prefill-vehiculo-error"
-          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-800"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           <span>No se pudo consultar el vehículo. {prefill.error}</span>
           <button
             type="button"
             onClick={() => void prefill.ejecutar()}
-            className="flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="flex items-center gap-1 rounded-lg border border-[var(--badge-danger-border)] px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             <RefreshCw className="h-3 w-3" aria-hidden="true" />
             Reintentar la consulta del vehículo

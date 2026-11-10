@@ -149,7 +149,7 @@ export function PrevalidacionDetailDrawer({
             >
               <ScanFace className="h-4 w-4" />
             </span>
-            <h2 id={titleId} className="truncate text-sm font-bold text-flit-primary dark:text-white">
+            <h2 id={titleId} className="truncate text-sm font-bold text-flit-primary">
               {title}
             </h2>
           </div>
@@ -157,7 +157,7 @@ export function PrevalidacionDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Cerrar proceso"
-            className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+            className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
           >
             <X className="h-4 w-4 opacity-70" aria-hidden="true" />
           </button>
@@ -168,8 +168,8 @@ export function PrevalidacionDetailDrawer({
           {loading && !detail && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>
-              <div className="h-4 w-2/3 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-              <div className="h-24 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+              <div className="h-4 w-2/3 animate-pulse rounded bg-secondary" />
+              <div className="h-24 w-full animate-pulse rounded-xl bg-secondary" />
             </div>
           )}
 
@@ -198,7 +198,7 @@ export function PrevalidacionDetailDrawer({
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-flit-primary dark:text-white">{detail.name}</p>
+                  <p className="text-sm font-semibold text-foreground">{detail.name}</p>
                 )}
                 <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} wrap />
               </div>
@@ -286,7 +286,7 @@ export function PrevalidacionDetailDrawer({
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
-                <p className="mb-1 text-[11px] font-semibold text-flit-primary dark:text-white">
+                <p className="mb-1 text-[11px] font-semibold text-foreground">
                   Tracking del proceso
                 </p>
                 <p className="mb-2 text-[10px] opacity-60">

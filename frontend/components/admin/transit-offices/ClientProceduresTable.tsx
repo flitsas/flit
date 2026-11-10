@@ -18,12 +18,14 @@ import {
   X,
 } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { Placa } from "@flit/ui/Placa";
 import {
   TABLA_CELDA_SECUNDARIA_CLS,
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { OtTablePagination } from "./OtTablePagination";
@@ -32,6 +34,7 @@ import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
+  estadoChipClass,
   esRevocationRequestStatus,
   revocationRequestListColor,
   revocationRequestListLabel,
@@ -173,7 +176,7 @@ function SortMenu({
             ? `Ordenar ${label}. Ahora: ${activa.label} ${sortDir === "asc" ? "ascendente" : "descendente"}`
             : `Ordenar ${label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:opacity-80 ${
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 normal-case transition-colors hover:opacity-80 ${
           activa ? "underline underline-offset-4" : ""
         }`}
       >
@@ -186,16 +189,16 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-flit-primary shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-xl"
         >
-          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
           </p>
           <div className="p-1.5">
             {opciones.map((opcion) => (
               <div
                 key={opcion.id}
-                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-border [&+&]:pt-2"
               >
                 <p className="mb-1.5 text-xs font-medium">{opcion.label}</p>
                 <span className="flex items-center gap-1.5">
@@ -215,8 +218,8 @@ function SortMenu({
                         }}
                         className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                           seleccionada
-                            ? "border-[#2C6BED] bg-[#2C6BED] text-white"
-                            : "border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                            ? "border-flit-brand bg-flit-brand text-white"
+                            : "border-border text-muted-foreground hover:bg-secondary"
                         }`}
                       >
                         <Flecha className="h-3 w-3" aria-hidden="true" />
@@ -289,7 +292,7 @@ function SortableTh({
     <th className={cls} style={style}>
       <button
         type="button"
-        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        className="inline-flex items-center gap-1 normal-case hover:opacity-80"
         aria-label={`Ordenar por ${sortLabel ?? label}${active ? ` (${sortDir === "asc" ? "ascendente" : "descendente"})` : ""}`}
         onClick={() => onSortChange(apiKey, nextDir)}
       >
@@ -327,7 +330,7 @@ function renderCelda(
           {row.prioritario && (
             <Star
               className="h-3.5 w-3.5 shrink-0"
-              style={{ color: "#F59E0B", fill: "#F59E0B" }}
+              style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }}
               aria-label="Trámite prioritario"
             />
           )}
@@ -337,7 +340,12 @@ function renderCelda(
     case "vin":
       return row.vin?.trim() || "—";
     case "placa":
-      return row.placa?.trim() || "—";
+      // Propuesta: placa amarilla (`Placa` de @flit/ui), con el texto tal cual viene; sin placa, el guion.
+      return row.placa?.trim() ? (
+        <Placa placa={row.placa.trim()} />
+      ) : (
+        "—"
+      );
     case "vendedor":
       return row.vendedorNombre?.trim() || "—";
     case "comprador":
@@ -360,7 +368,11 @@ function renderCelda(
     case "estado": {
       const estadoLabel = formatOtProcedureStatus(row.status);
       const chip = (
-        <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+        <StatusBadge
+          className={estadoChipClass(row.status)}
+          label={estadoLabel}
+          {...procedureStatusChip(row.status)}
+        />
       );
       return (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -563,9 +575,9 @@ export function ClientProceduresTable({
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
+      <table className="di-tabla-tarjetas w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr>
             {conCasillas ? (
@@ -601,7 +613,7 @@ export function ClientProceduresTable({
             <tr
               key={row.id}
               // Bug #13055 — tabla homologada con el modelo de trámites.
-              className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
+              className={`bg-[var(--di-surface-elevated)] [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
               onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
               // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
               // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
@@ -622,7 +634,7 @@ export function ClientProceduresTable({
             >
               {conCasillas && onToggle ? (
                 // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
-                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-white/10">
+                <td className="w-10 rounded-l-xl border-y border-l border-[color:var(--di-border)] px-4 py-3 align-middle">
                   <CasillaFilaLote
                     radicado={row.referenceNumber}
                     seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}
@@ -633,8 +645,10 @@ export function ClientProceduresTable({
               {columnasVisibles.map((columna, indice) => (
                 <td
                   key={columna.key}
+                  // Excepción aprobada: en celular la fila es tarjeta y la celda dice su columna.
+                  data-label={columna.label}
                   className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
-                  style={{ borderColor: "#DFE5ED" }}
+                  style={{ borderColor: "var(--di-border)" }}
                 >
                   {renderCelda(columna.key, row, onVerDetalle)}
                 </td>
@@ -651,7 +665,7 @@ export function ClientProceduresTable({
               {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                style={{ borderColor: "#DFE5ED" }}
+                style={{ borderColor: "var(--di-border)" }}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -660,12 +674,12 @@ export function ClientProceduresTable({
                   {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-success-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-success)]">
                           SOAT
                         </span>
                       )}
                       {row.impuestoDepartamentalPagado && (
-                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-action)]">
                           Impuesto
                         </span>
                       )}

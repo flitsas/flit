@@ -146,7 +146,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     {
       key: "imagen",
       header: "Imagen",
-      render: (b) => <BannerImagen key={b.imagenSha256} id={b.id} alt={b.textoAlternativo} className="h-12 w-24 rounded-lg border border-[#DFE5ED] object-cover" />,
+      render: (b) => <BannerImagen key={b.imagenSha256} id={b.id} alt={b.textoAlternativo} className="h-12 w-24 rounded-lg border border-border object-cover" />,
     },
     {
       key: "banner",
@@ -159,7 +159,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
       render: (b) => (
         <>
           <span className="block font-semibold">{b.titulo}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">Descripción: {b.textoAlternativo}</span>
+          <span className="block text-xs text-muted-foreground">Descripción: {b.textoAlternativo}</span>
         </>
       ),
     },

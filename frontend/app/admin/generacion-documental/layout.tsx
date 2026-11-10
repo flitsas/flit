@@ -54,7 +54,7 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
             role="alert"
             className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
           >
-            <ShieldX className="h-10 w-10" style={{ color: '#FF4E00' }} aria-hidden="true" />
+            <ShieldX className="h-10 w-10" style={{ color: 'var(--destructive)' }} aria-hidden="true" />
             <h1 className="text-lg font-bold" style={{ color: 'var(--color-flit-primary)' }}>
               Acceso restringido
             </h1>

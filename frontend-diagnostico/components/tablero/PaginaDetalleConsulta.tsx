@@ -21,6 +21,8 @@ import {
   type ErrorDetalle,
 } from "@/lib/tablero/detalle";
 import { VistaDetalleCelda } from "./DetalleCelda";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle; causa: unknown } | { tipo: "listo"; detalle: Detalle };
 
@@ -143,8 +145,13 @@ export function PaginaDetalleConsulta({
 
   return (
     <>
-      <section aria-labelledby="detalle-consulta-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
-        <div className="flex min-w-0 flex-col gap-2">
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="detalle-consulta-titulo"
+        tituloId="detalle-consulta-titulo"
+        tituloClassName="break-all"
+        titulo={titulo}
+        encima={
           <Migas
             migas={[
               { texto: "Diagnósticos", href: rutaListado },
@@ -152,16 +159,16 @@ export function PaginaDetalleConsulta({
               { texto: titulo },
             ]}
           />
-          <h1 id="detalle-consulta-titulo" className="break-all text-2xl font-semibold text-flit-primary dark:text-white">
-            {titulo}
-          </h1>
-          {detalle && nota?.(detalle)}
-        </div>
-        <Link href={rutaDiagnostico} className={BOTON_SECUNDARIO_CLS}>
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Volver al diagnóstico
-        </Link>
-      </section>
+        }
+        debajo={detalle && nota?.(detalle)}
+        ilustracion={rutaIlustracion("diagnostico")}
+        acciones={
+          <Link href={rutaDiagnostico} className={BOTON_SECUNDARIO_CLS}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Volver al diagnóstico
+          </Link>
+        }
+      />
       <section aria-label="Detalle de la consulta" className={TARJETA_CLS}>
         {contenido}
       </section>

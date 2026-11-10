@@ -48,8 +48,8 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
       <div
         className={cn(
           "flex flex-wrap items-center gap-1.5 rounded-xl border px-2 py-1.5 min-h-[42px]",
-          "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
-          message && "border-red-400 dark:border-red-500",
+          "bg-card border-border",
+          message && "border-destructive",
         )}
       >
         {value.map((email) => (
@@ -78,7 +78,7 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
           disabled={disabled}
           aria-label="Agregar destinatario"
           placeholder={value.length === 0 ? "correo@empresa.co" : ""}
-          className="flex-1 min-w-[140px] bg-transparent text-sm outline-none py-1 text-flit-primary dark:text-slate-100 placeholder:text-slate-400"
+          className="flex-1 min-w-[140px] bg-transparent text-sm outline-none py-1 text-flit-primary placeholder:text-muted-foreground"
           onChange={(e) => {
             setLocalError(null);
             if (e.target.value.endsWith(",")) {
@@ -98,11 +98,11 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
           onBlur={() => tryAdd(draft)}
         />
       </div>
-      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+      <p className="mt-1 text-[11px] text-muted-foreground">
         Presiona Enter o coma para agregar. Máximo {MAX_RECIPIENTS} destinatarios.
       </p>
       {message && (
-        <p role="alert" data-testid="recipients-error" className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" data-testid="recipients-error" className="mt-1 text-xs font-medium text-destructive">
           {message}
         </p>
       )}

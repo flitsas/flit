@@ -38,7 +38,7 @@ export default function AdminBannersPage() {
 function NoAccess() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
-      <ShieldAlert className="h-8 w-8" style={{ color: "#FF4E00" }} aria-hidden="true" />
+      <ShieldAlert className="h-8 w-8" style={{ color: "var(--destructive)" }} aria-hidden="true" />
       <p className="text-sm font-medium" style={{ color: "var(--color-flit-primary)" }}>
         No tienes permiso para administrar banners promocionales.
       </p>

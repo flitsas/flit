@@ -126,7 +126,7 @@ export function CreateChildCompanyDialog({
             onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
             maxLength={255}
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-            style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
+            style={{ borderColor: errors.razonSocial ? "var(--destructive)" : "var(--border)" }}
           />
         </Field>
 
@@ -138,7 +138,7 @@ export function CreateChildCompanyDialog({
             onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
             maxLength={20}
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-            style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
+            style={{ borderColor: errors.nit ? "var(--destructive)" : "var(--border)" }}
           />
         </Field>
 
@@ -149,7 +149,7 @@ export function CreateChildCompanyDialog({
             disabled
             aria-describedby="nc-type-hint"
             className="w-full cursor-not-allowed rounded-xl border px-3 py-2 text-xs opacity-60 outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
           >
             <option value={tenantType}>{TENANT_TYPE_LABELS[tenantType]}</option>
           </select>
@@ -166,7 +166,7 @@ export function CreateChildCompanyDialog({
         />
 
         {errors.general && (
-          <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
             {errors.general}
           </p>
         )}
@@ -180,7 +180,7 @@ export function CreateChildCompanyDialog({
             onClick={() => void submit()}
             disabled={submitting}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {submitting ? "Creando…" : "Crear cliente"}
@@ -209,7 +209,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

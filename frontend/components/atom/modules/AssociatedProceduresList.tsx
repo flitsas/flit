@@ -58,7 +58,7 @@ export function AssociatedProceduresList({
               className={
                 compact
                   ? 'block truncate underline'
-                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[rgba(79,116,201,0.05)]'
+                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[var(--badge-info-bg)]'
               }
               style={compact ? { color: FLIT.brand.blue } : { borderColor: FLIT.border.soft }}
               title={`${p.referenceNumber}${tipo ? ` · ${tipo}` : ''}${p.status ? ` (${p.status})` : ''}`}
@@ -105,7 +105,7 @@ export function AssociatedProceduresList({
   if (!collapsible) {
     return (
       <div className="space-y-2" aria-label={ariaLabel}>
-        <p className="text-[11px] font-semibold text-flit-primary dark:text-white">Trámites asociados</p>
+        <p className="text-[11px] font-semibold text-foreground">Trámites asociados</p>
         {list}
       </div>
     );

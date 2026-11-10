@@ -133,7 +133,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                         key={d.valor}
                         type="button"
                         aria-pressed={marcado}
-                        className={`${CHIP_DIA_CLS} ${marcado ? "border-[#3B4FD6] bg-[#3B4FD6] text-white" : "border-current/20 opacity-70"}`}
+                        className={`${CHIP_DIA_CLS} ${marcado ? "border-flit-brand-ink bg-flit-brand-ink text-primary-foreground" : "border-current/20 opacity-70"}`}
                         onClick={() => alternarDia(d.valor)}
                       >
                         {d.corto}
@@ -169,7 +169,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                       )}
                     </span>
                   ))}
-                  <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => cambiar({ horas: [...prog.horas, siguienteHora(prog.horas)] })}>
+                  <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => cambiar({ horas: [...prog.horas, siguienteHora(prog.horas)] })}>
                     + Otra hora
                   </button>
                 </div>
@@ -330,6 +330,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
           {d.ciclo.mensajeError && <InlineAlert tone="error" compact>{d.ciclo.mensajeError}</InlineAlert>}
           <h3 className="text-sm font-semibold">Por empresa y clave</h3>
           <DataTable
+            tarjeta={false}
             ariaLabel="Resultado por empresa"
             rows={d.logs}
             getRowKey={(l) => l.id}
@@ -350,6 +351,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
           />
           <h3 className="text-sm font-semibold">Consultas a la fuente</h3>
           <DataTable
+            tarjeta={false}
             ariaLabel="Consultas a la fuente"
             rows={d.consultas}
             getRowKey={(c) => c.id}
@@ -370,7 +372,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
                   c.tieneRespuesta ? (
                     <button
                       type="button"
-                      className="font-semibold text-[#3B4FD6] hover:underline"
+                      className="font-semibold text-flit-brand-ink hover:underline"
                       onClick={() => apiDownload(`/admin/ingesta/consultas/${c.id}/respuesta`, "respuesta-error.txt").catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"))}
                     >
                       Respuesta del error
@@ -446,7 +448,7 @@ export default function Ingesta() {
               render: (t) => (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline"
                   onClick={(e) => {
                     e.stopPropagation();
                     const c = canalDeIngesta(t.tipo);

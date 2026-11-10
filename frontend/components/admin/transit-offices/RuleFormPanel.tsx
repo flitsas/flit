@@ -139,7 +139,7 @@ export function RuleFormPanel({
     >
       <div className="space-y-4">
         {editing ? (
-          <p className="text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
             Lógica y acción de la regla (solo lectura). Para cambiarlas, crea una regla nueva y
             desactiva esta con el toggle de la tabla.
           </p>
@@ -214,7 +214,7 @@ export function RuleFormPanel({
                 <button
                   type="button"
                   className="flex items-center gap-1 text-[10px] font-semibold"
-                  style={{ color: "#FF4E00" }}
+                  style={{ color: "var(--destructive)" }}
                   onClick={() => setConditions((prev) => prev.filter((_, i) => i !== index))}
                 >
                   <Trash2 className="h-3 w-3" /> Quitar
@@ -233,7 +233,7 @@ export function RuleFormPanel({
             </button>
           )}
           {conditionError && (
-            <p className="text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="text-[11px] font-medium" style={{ color: "var(--destructive)" }} role="alert">
               {conditionError}
             </p>
           )}

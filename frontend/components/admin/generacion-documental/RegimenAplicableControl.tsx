@@ -93,7 +93,7 @@ export function RegimenAplicableControl({ seleccion, onChange }: RegimenAplicabl
         <div
           role="alert"
           data-testid="transferencia-regimen-bloqueo"
-          className="mt-3 flex gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-800"
+          className="mt-3 flex gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           {/* El icono acompaña al texto: el bloqueo no puede comunicarse solo por color (CF-22). */}
           <Ban className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />

@@ -64,11 +64,13 @@ describe.each(ARCHIVOS)('guardián de diseño · %s', (archivo) => {
 
 describe('guardián de diseño · modal de IdentityManualFlowActions', () => {
   const src = codigo(ARCHIVOS[0]).join('\n');
-  it('overlay rgba(22,39,68,0.45) con blur(6px), panel de 18px y capa dark #162744', () => {
+  it('overlay rgba(22,39,68,0.45) con blur(6px), panel de 18px y superficie bg-card (oscuro por token)', () => {
     expect(src).toContain("rgba(22,39,68,0.45)");
     expect(src).toContain('blur(6px)');
     expect(src).toContain('rounded-[18px]');
-    expect(src).toContain('dark:bg-[#162744]');
+    // Rediseño UI kit (HU #14482): bg-card ya resuelve el oscuro, sin dark:bg-[hex].
+    expect(src).toContain('bg-card');
+    expect(src).not.toContain('dark:bg-[#162744]');
     expect(src).not.toContain('backdrop-blur-md');
   });
 });

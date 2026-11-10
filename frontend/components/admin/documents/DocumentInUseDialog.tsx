@@ -28,9 +28,9 @@ export function DocumentInUseDialog({
       onClose={onClose}
       size="sm"
       icon={Ban}
-      iconBg="#FF4E00"
+      iconBg="var(--destructive)"
       title="No se puede desactivar"
-      titleClassName="text-base font-bold text-[#FF4E00]"
+      titleClassName="text-base font-bold text-destructive"
     >
         <p className="text-xs opacity-80">
           El documento <strong>«{documentName}»</strong>{" "}
@@ -58,7 +58,7 @@ export function DocumentInUseDialog({
             type="button"
             onClick={onClose}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Entendido
           </button>

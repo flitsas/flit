@@ -79,8 +79,8 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
                 onClick={() => setColors({ primary: preset.primary, secondary: preset.secondary })}
                 aria-pressed={selected}
                 aria-label={`Combinación ${preset.name}`}
-                className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-medium transition hover:shadow-sm"
-                style={{ borderColor: selected ? preset.secondary : "#DFE5ED", boxShadow: selected ? `0 0 0 1px ${preset.secondary}` : undefined }}
+                className="flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-[11px] font-medium transition hover:shadow-sm"
+                style={{ borderColor: selected ? preset.secondary : "var(--border)", boxShadow: selected ? `0 0 0 1px ${preset.secondary}` : undefined }}
               >
                 <span className="flex" aria-hidden>
                   <span className="h-3.5 w-3.5 rounded-full border border-white" style={{ background: preset.secondary }} />
@@ -101,11 +101,11 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
           const value = colors[field.key] ?? "#000000";
           const fieldValid = isValidHexColor(value);
           return (
-            <div key={field.key} className="flex flex-col gap-1.5 rounded-xl border bg-white p-3" style={{ borderColor: "#DFE5ED" }}>
+            <div key={field.key} className="flex flex-col gap-1.5 rounded-xl border bg-card p-3" style={{ borderColor: "var(--border)" }}>
               <span className="text-xs font-semibold text-flit-primary">{field.label}</span>
               <p className="text-[11px] opacity-60">{field.hint}</p>
               <div className="flex items-center gap-2">
-                <label className="relative block h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-xl border" style={{ borderColor: "#DFE5ED", background: fieldValid ? value : "#FFFFFF" }}>
+                <label className="relative block h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)", background: fieldValid ? value : "#FFFFFF" }}>
                   <span className="sr-only">Elegir {field.label.toLowerCase()}</span>
                   <input
                     type="color"
@@ -128,12 +128,12 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
                     aria-invalid={!fieldValid}
                     aria-label={`Código de ${field.label.toLowerCase()}`}
                     className="w-28 rounded-lg border px-2 py-1 font-mono text-xs"
-                    style={{ borderColor: fieldValid ? "#DFE5ED" : "#FF4E00" }}
+                    style={{ borderColor: fieldValid ? "var(--border)" : "var(--destructive)" }}
                   />
                 </div>
               </div>
               {!fieldValid && (
-                <span role="alert" className="text-[11px]" style={{ color: "#FF4E00" }}>
+                <span role="alert" className="text-[11px]" style={{ color: "var(--destructive)" }}>
                   Escribe el código con el formato #RRGGBB, por ejemplo #2563EB.
                 </span>
               )}
@@ -146,16 +146,16 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
         <div
           className="flex flex-col gap-2 rounded-xl border px-3 py-2.5 text-xs"
           style={{
-            borderColor: readable ? "#8CC63F" : "#F9AC00",
-            background: readable ? "rgba(140,198,63,0.08)" : "rgba(249,172,0,0.08)",
+            borderColor: readable ? "var(--badge-success-border)" : "var(--badge-warning-border)",
+            background: readable ? "var(--badge-success-bg)" : "var(--badge-warning-bg)",
           }}
           role="status"
         >
           <div className="flex items-start gap-2">
             {readable ? (
-              <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#4F7A12" }} aria-hidden />
+              <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} aria-hidden />
             ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#8A6000" }} aria-hidden />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--badge-warning-fg)" }} aria-hidden />
             )}
             <span className="text-flit-primary">
               {readable
@@ -168,7 +168,7 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
               type="button"
               onClick={() => onChange(rules ? rules.fix(colors) : fixContrast(colors))}
               className="inline-flex w-fit items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "#8A6000" }}
+              style={{ background: "var(--badge-warning-fg)", color: "var(--destructive-foreground)" }}
             >
               <Wand2 className="h-3.5 w-3.5" aria-hidden /> Ajustar automáticamente
             </button>

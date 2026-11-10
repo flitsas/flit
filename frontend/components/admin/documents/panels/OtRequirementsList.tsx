@@ -55,7 +55,7 @@ export function OtRequirementsList({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 dark:bg-[#0B0F14]">
+      <div className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2">
         <Search className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
         <label htmlFor="ot-req-doc-search" className="sr-only">
           Buscar documento
@@ -81,7 +81,7 @@ export function OtRequirementsList({
         return (
           <li
             key={d.id}
-            className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+            className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold">

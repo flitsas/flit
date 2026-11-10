@@ -181,7 +181,7 @@ export function ActionsMenu({
         aria-label={ariaLabel}
         onKeyDown={onMenuKeyDown}
         style={{ top: coords.top, left: coords.left, minWidth: coords.minWidth }}
-        className="fixed z-[200] rounded-xl border bg-white p-1 shadow-lg dark:bg-[#0B0F14]"
+        className="fixed z-[200] rounded-xl border bg-card p-1 shadow-lg dark:bg-card"
       >
         {items.map((item, i) => {
           const Icon = item.icon;
@@ -206,9 +206,9 @@ export function ActionsMenu({
               }}
               className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-flit-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
                 item.attention
-                  ? "bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200"
+                  ? "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95 dark:bg-[var(--badge-warning-bg)] dark:text-[var(--badge-warning-fg)]"
                   : item.tone === "danger"
-                    ? "text-[#FF4E00]"
+                    ? "text-[var(--badge-warning-fg)]"
                     : ""
               }`}
             >
@@ -216,7 +216,7 @@ export function ActionsMenu({
               <span className="flex-1">{item.label}</span>
               {item.attention ? (
                 <span
-                  className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                  className="inline-flex h-2 w-2 shrink-0 rounded-full bg-flit-alert"
                   aria-hidden="true"
                   title="Acción pendiente"
                 />
@@ -250,8 +250,8 @@ export function ActionsMenu({
         // rechazar, asignar placa. El chevron dice lo que de verdad pasa: se despliega una lista.
         className={`relative flex w-full items-center justify-between gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition hover:bg-flit-brand/10 ${
           attention
-            ? "border-amber-400/70 bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
-            : "border-[#DFE5ED] bg-white text-flit-brand dark:border-white/15 dark:bg-[#0B0F14]"
+            ? "border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95 dark:bg-[var(--badge-warning-bg)] dark:text-[var(--badge-warning-fg)] dark:hover:brightness-110"
+            : "border-border bg-card text-flit-brand dark:border-border dark:bg-card"
         }`}
       >
         {triggerLabel}
@@ -261,8 +261,8 @@ export function ActionsMenu({
         />
         {attention ? (
           <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-[#162744]" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-flit-alert opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-flit-alert ring-2 ring-white dark:ring-card" />
           </span>
         ) : null}
       </button>

@@ -36,7 +36,7 @@ const ESTILOS: Record<Tono, CSSProperties> = {
   success: { background: "var(--badge-success-bg)", color: "var(--badge-success-fg)", borderColor: "var(--badge-success-border)" },
   danger: { background: "var(--badge-danger-bg)", color: "var(--badge-pending-fg)", borderColor: "var(--badge-danger-border)" },
   warning: { background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)", borderColor: "var(--badge-warning-border)" },
-  na: { background: "var(--color-flit-bg)", color: "var(--nav-texto)", borderColor: "var(--nav-borde)", borderStyle: "dashed" },
+  na: { background: "var(--surface-sunken)", color: "var(--nav-texto)", borderColor: "var(--nav-borde)", borderStyle: "dashed" },
 };
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
@@ -100,7 +100,7 @@ export function ChipEstadoCelda({ estado, conDeuda = false }: { estado: EstadoVi
   return (
     <span
       data-tono={tono}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${tono === "na" ? "dark:!bg-white/[0.04]" : ""}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold`}
       style={ESTILOS[tono]}
     >
       <Icono className={`h-3.5 w-3.5 ${animado ? "motion-safe:animate-spin" : ""}`} aria-hidden="true" />
@@ -181,7 +181,7 @@ export function CeldaSemaforo({
           <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
         )}
         {marca}
-        {nota && <span className="text-xs text-[var(--nav-texto)] dark:text-slate-300">{nota}</span>}
+        {nota && <span className="text-xs text-[var(--nav-texto)]">{nota}</span>}
         {accion}
         {puedeReprocesar && esReprocesable(celda) && (
           <BotonReprocesar

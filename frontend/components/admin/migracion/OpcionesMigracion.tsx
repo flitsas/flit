@@ -89,7 +89,7 @@ export function OpcionesMigracion({
           {INSTANCIAS.map((instancia) => (
             <label
               key={instancia}
-              className="flex cursor-pointer items-start gap-2 rounded-lg border border-[#DFE5ED] p-2.5 dark:border-white/10"
+              className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-2.5"
             >
               <input
                 type="checkbox"
@@ -182,7 +182,7 @@ function ModoEjecucion({
           deshabilitado={deshabilitado}
           titulo="Migración"
           detalle="Escribe en V2"
-          clasesActivo="border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          clasesActivo="border-[var(--badge-warning-fg)] bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]"
         />
       </div>
 
@@ -193,7 +193,7 @@ function ModoEjecucion({
       </p>
 
       {avisarDependencia && (
-        <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+        <p className="flex items-start gap-1.5 text-xs text-[var(--badge-warning-fg)]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>
             Simulando, los adjuntos y los documentos solo se pueden comprobar en trámites que{" "}
@@ -230,7 +230,7 @@ function Modo({
       onClick={onClick}
       disabled={deshabilitado}
       className={`flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-colors disabled:opacity-50 ${
-        activo ? clasesActivo : "border-[#DFE5ED] opacity-70 dark:border-white/10"
+        activo ? clasesActivo : "border-border opacity-70"
       }`}
     >
       <span className="text-sm font-semibold">{titulo}</span>

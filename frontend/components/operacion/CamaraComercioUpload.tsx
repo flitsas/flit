@@ -159,7 +159,7 @@ export function CamaraComercioUpload({
               borderColor: 'var(--badge-warning-border)',
               background: 'var(--badge-warning-bg)',
             }
-          : { borderColor: 'var(--border-soft, #DFE5ED)' }
+          : { borderColor: 'var(--border)' }
       }
       aria-label="Certificado de Cámara de Comercio"
     >
@@ -194,7 +194,7 @@ export function CamaraComercioUpload({
       )}
 
       {error && (
-        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}

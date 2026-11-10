@@ -331,9 +331,9 @@ describe("Columnas de la empresa", () => {
   it("ADR-0059 — etiqueta y colorea los estados de la Ruta Larga y el revocado", () => {
     // Antes la consulta mostraba el valor crudo («preasignacion») y el gris de «desconocido». Es el
     // mismo trámite que en /tramites: mismo nombre y mismo acento.
-    expect(estadoEmpresa("preasignacion")).toEqual({ label: "Preasignación", color: "#E08A00" });
-    expect(estadoEmpresa("asignado")).toEqual({ label: "Asignado", color: "#6366F1" });
-    expect(estadoEmpresa("revocado")).toEqual({ label: "Revocado", color: "#8B5CF6" });
+    expect(estadoEmpresa("preasignacion")).toEqual({ label: "Preasignación", color: "var(--estado-preasignacion-fg)" });
+    expect(estadoEmpresa("asignado")).toEqual({ label: "Asignado", color: "var(--estado-asignado-fg)" });
+    expect(estadoEmpresa("revocado")).toEqual({ label: "Revocado", color: "var(--estado-revocado-fg)" });
     expect(estadoEmpresa("subsanacion").label).toBe("En subsanación");
     // Un estado que no existe sigue saliendo tal cual, sin romper la celda.
     expect(estadoEmpresa("otro").label).toBe("otro");

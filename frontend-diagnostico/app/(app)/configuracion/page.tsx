@@ -10,6 +10,8 @@ import { PestanaContrato } from "@/components/configuracion/PestanaContrato";
 import { PestanaOperacion } from "@/components/configuracion/PestanaOperacion";
 import { BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -55,7 +57,7 @@ export default function ConfiguracionPagina() {
         <h2 id="configuracion-vacio" className="text-lg font-semibold">
           No tienes acceso a la configuración
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (verConfiguracion && carga.tipo === "cargando") {
@@ -96,12 +98,14 @@ export default function ConfiguracionPagina() {
 
   return (
     <>
-      <section aria-labelledby="configuracion-titulo" className={TARJETA_CLS}>
-        <h1 id="configuracion-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-          Configuración
-        </h1>
-        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="configuracion-titulo"
+        tituloId="configuracion-titulo"
+        titulo="Configuración"
+        descripcion={sesion?.empresa.nombre}
+        ilustracion={rutaIlustracion("configuracion")}
+      />
       {contenido}
     </>
   );

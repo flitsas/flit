@@ -3,9 +3,10 @@
 import { Suspense } from "react";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CapturaExpress } from "@/components/express/CapturaExpress";
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Pantalla base de Diagnóstico (HU #13732): la tarjeta título con la compañía de la sesión. El shell solo la muestra con
@@ -23,15 +24,15 @@ export default function Inicio() {
 
   return (
     <>
-      <section aria-labelledby="diagnostico-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between`}>
-        <div>
-          <h1 id="diagnostico-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-            Diagnóstico vehicular
-          </h1>
-          {empresa && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{empresa}</p>}
-        </div>
-        {puedeCrear && <CapturaExpress />}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="diagnostico-titulo"
+        tituloId="diagnostico-titulo"
+        titulo="Diagnóstico vehicular"
+        descripcion={empresa}
+        ilustracion={rutaIlustracion("diagnostico")}
+        acciones={puedeCrear && <CapturaExpress />}
+      />
 
       {puedeVer && (
         <Suspense fallback={<VehicleLoader label="Cargando los diagnósticos…" />}>

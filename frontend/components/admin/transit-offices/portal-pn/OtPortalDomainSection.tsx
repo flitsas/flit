@@ -18,7 +18,7 @@ import {
 } from "@/lib/api/admin-ot-portal-dominio";
 
 const FOCO =
-  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /**
  * Dominios propios del portal Persona Natural del organismo (Épica #14297, HU #14385). Hasta 10 por organismo, todos
@@ -70,7 +70,7 @@ export function OtPortalDomainSection({ transitOfficeId }: { transitOfficeId: st
 
   return (
     <section
-      className="mt-6 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
+      className="mt-6 rounded-2xl border bg-card p-4"
       aria-labelledby="portal-domain-title"
     >
       <div className="mb-3">
@@ -178,13 +178,13 @@ function DominioItem({
   return (
     <article
       className="rounded-xl border p-3"
-      style={{ borderColor: "#DFE5ED" }}
+      style={{ borderColor: "var(--border)" }}
       aria-label={`Dominio ${dominio.host}`}
     >
       {dominio.principal && (
         <p
           className="mb-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
-          style={{ borderColor: "#557EFF", color: "#162744" }}
+          style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-primary)" }}
         >
           <Star className="h-3 w-3" aria-hidden /> Dominio principal
         </p>
@@ -199,7 +199,7 @@ function DominioItem({
             onClick={() => void ejecutar(() => setPortalDominioPrincipal(dominio.id, scope))}
             disabled={trabajando}
             className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${FOCO}`}
-            style={{ borderColor: "#162744", color: "#162744" }}
+            style={{ borderColor: "var(--color-flit-primary)", color: "var(--color-flit-primary)" }}
           >
             <Star className="h-3.5 w-3.5" aria-hidden /> Hacer principal
           </button>
@@ -209,14 +209,14 @@ function DominioItem({
           onClick={() => setConfirmando(true)}
           disabled={trabajando}
           className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${FOCO}`}
-          style={{ borderColor: "#C10000", color: "#C10000" }}
+          style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
         >
           <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar
         </button>
       </div>
 
       {error && (
-        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "#C10000" }}>
+        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -224,7 +224,7 @@ function DominioItem({
       {confirmando && (
         <div
           className="mt-3 rounded-xl border p-3 text-xs"
-          style={{ borderColor: "#C10000" }}
+          style={{ borderColor: "var(--destructive)" }}
           role="alertdialog"
           aria-label={`Confirmar el retiro de ${dominio.host}`}
         >
@@ -246,7 +246,7 @@ function DominioItem({
               onClick={() => void ejecutar(() => deletePortalDominio(dominio.id, scope))}
               disabled={trabajando}
               className={`rounded-full px-4 py-1.5 font-semibold text-white disabled:opacity-60 ${FOCO}`}
-              style={{ background: "#C10000" }}
+              style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
             >
               {trabajando ? "Retirando…" : "Retirar"}
             </button>

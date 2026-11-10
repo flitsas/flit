@@ -17,6 +17,14 @@ const poppins = localFont({
   ],
 });
 
+// Placa colombiana (UI kit «Diseño Inteligente», HU #14475): local, como Poppins.
+const barlowCondensed = localFont({
+  variable: "--font-barlow-condensed",
+  src: "./fonts/BarlowCondensed-700-latin.woff2",
+  weight: "700",
+  style: "normal",
+});
+
 // La marca sale del host de la petición (Marca Blanca, ADR-0060 §D5): en un host FLIT no se llama a nadie; en el
 // dominio de una red, título, favicon y colores son los de la red. Se resuelve en el servidor, sin destello.
 export async function generateMetadata(): Promise<Metadata> {
@@ -32,7 +40,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const brand = await resolveFreshBrand();
 
   return (
-    <html lang="es" suppressHydrationWarning className={`${poppins.variable} h-full scroll-smooth`}>
+    <html lang="es" suppressHydrationWarning className={`${poppins.variable} ${barlowCondensed.variable} h-full scroll-smooth`}>
       <head>
         {/* Tema claro/oscuro antes de pintar, sin destello (la preferencia es la misma que en Trámites). */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

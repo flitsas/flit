@@ -76,9 +76,9 @@ export function SelectorColumnas({
           id={id}
           role="dialog"
           aria-label="Elegir columnas visibles"
-          className="absolute left-0 top-full z-30 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border border-[#DFE5ED] bg-white shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-30 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
         >
-          <div className="flex shrink-0 items-baseline justify-between gap-2 border-b border-[#DFE5ED] px-4 py-2.5 dark:border-white/10">
+          <div className="flex shrink-0 items-baseline justify-between gap-2 border-b border-border px-4 py-2.5">
             <span className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Columnas</span>
             <span className="text-[11px] tabular-nums opacity-50">
               {visibles.length} de {columnas.length}
@@ -99,7 +99,7 @@ export function SelectorColumnas({
               );
             })}
           </div>
-          <p className="shrink-0 border-t border-[#DFE5ED] px-4 py-2 text-[10px] opacity-60 dark:border-white/10">Debes mantener al menos una columna visible.</p>
+          <p className="shrink-0 border-t border-border px-4 py-2 text-[10px] opacity-60">Debes mantener al menos una columna visible.</p>
         </div>
       )}
     </div>

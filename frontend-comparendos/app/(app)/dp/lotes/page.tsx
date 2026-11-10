@@ -49,7 +49,7 @@ function Avance({ l }: { l: Lote }) {
   const pct = avanceLote(l);
   return (
     <div className="flex min-w-32 items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#EEF1F6] dark:bg-white/10">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-flit-brand" style={{ width: `${pct}%` }} />
       </div>
       <span className="tabular-nums opacity-70">{pct}%</span>
@@ -91,6 +91,7 @@ function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
             </button>
           </div>
           <DataTable
+            tarjeta={false}
             ariaLabel="Comparendos del lote"
             rows={pg.paginar(items)}
             getRowKey={(i) => i.comparendoId}

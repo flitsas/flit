@@ -34,7 +34,7 @@ type Fase =
 type ErrorGeneral = { titulo: string; mensaje: string; reintentar?: () => void };
 
 /** Botón «Anterior» del prototipo: azul marino. */
-const BOTON_ANTERIOR_CLS = BOTON_PRIMARIO_CLS.replace("bg-[var(--flit-brand-ink)]", "bg-flit-primary");
+const BOTON_ANTERIOR_CLS = BOTON_PRIMARIO_CLS.replace("bg-[var(--flit-brand-ink)]", "bg-flit-primary dark:bg-secondary dark:text-foreground");
 
 /** Nombre autogenerado del Express («Express <placa>», HU #13752 F01-C10, sin fecha desde HU #14087); vacío sin una placa válida. */
 export function nombreAutogenerado(placa: string): string {
@@ -169,8 +169,8 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
             )}
 
             {fase.tipo === "confirmar" ? (
-              <section aria-labelledby={`${id}-estimado`} className="flex flex-col gap-3 rounded-xl border border-[var(--color-flit-gray)] p-4 dark:border-white/15">
-                <h3 id={`${id}-estimado`} className="text-sm font-semibold text-flit-primary dark:text-white">
+              <section aria-labelledby={`${id}-estimado`} className="flex flex-col gap-3 rounded-xl border border-border p-4">
+                <h3 id={`${id}-estimado`} className="text-sm font-semibold text-flit-primary">
                   Estimado de consultas
                 </h3>
                 <p className={AYUDA_CLS}>

@@ -97,7 +97,7 @@ function PasoConsulta() {
   if (gate.estado === 'not-found') {
     return (
       <div className="space-y-4 rounded-2xl border px-4 py-6" role="alert">
-        <p className="text-sm font-semibold text-flit-primary dark:text-white">
+        <p className="text-sm font-semibold text-foreground">
           Este trámite no está disponible
         </p>
         <p className="text-xs opacity-70">
@@ -111,7 +111,7 @@ function PasoConsulta() {
   if (gate.estado === 'blocked') {
     return (
       <div className="space-y-4 rounded-2xl border px-4 py-6" role="alert">
-        <p className="text-sm font-semibold text-flit-primary dark:text-white">
+        <p className="text-sm font-semibold text-foreground">
           No se puede iniciar este trámite
         </p>
         <p className="text-xs opacity-70">

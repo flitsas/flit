@@ -35,11 +35,11 @@ import {
 import { companyRoleErrorMessage } from "./companyRoleErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
+  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
-  "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-flit-primary dark:text-white";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
-const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
+  "disabled:bg-secondary";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary";
+const HINT_CLS = "text-xs font-normal text-muted-foreground";
 const PRODUCT_LABEL: Record<string, string> = {
   tramites: "Trámites",
   comparendos: "Comparendos",
@@ -207,9 +207,9 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     const moduleName = readableModuleName(moduleCode, perms);
     const rest = pair ? perms.filter((p) => p.id !== pair.read.id && p.id !== pair.create.id) : perms;
     return (
-      <div key={moduleCode} className="rounded-[10px] border border-[#DFE5ED] p-3 dark:border-white/15">
+      <div key={moduleCode} className="rounded-[10px] border border-border p-3">
         <label
-          className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white"
+          className="flex items-center gap-2 text-sm font-semibold text-flit-primary"
         >
           <input
             type="checkbox"
@@ -221,7 +221,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
           {moduleName}
         </label>
         {pair && (
-          <div className="mt-2 pl-6 text-flit-primary dark:text-white">
+          <div className="mt-2 pl-6 text-flit-primary">
             <FamilyPairCheckboxes
               moduleName={moduleName}
               read={pair.read}
@@ -235,7 +235,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
           <ul className="mt-2 flex flex-col gap-1.5 pl-6">
             {rest.map((p) => (
               <li key={p.id}>
-                <label className="flex items-start gap-2 text-sm text-flit-primary dark:text-white">
+                <label className="flex items-start gap-2 text-sm text-flit-primary">
                   <input
                     type="checkbox"
                     checked={selected.has(p.id)}
@@ -255,22 +255,22 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const permissionsFieldset = (entries: [string, GrantablePermission[]][], legend: string) => (
     <fieldset className="flex flex-col gap-3">
       {/* Con los títulos de sección, la leyenda solo se ve en el rol de solo lectura (lleva el total). */}
-      <legend className={readOnly ? "mb-1 text-sm font-semibold text-flit-primary dark:text-white" : "sr-only"}>
+      <legend className={readOnly ? "mb-1 text-sm font-semibold text-flit-primary" : "sr-only"}>
         {legend}
         {readOnly && detail ? ` (${detail.permissions.length})` : ""}
       </legend>
       {readOnly ? (
         detail && detail.permissions.length > 0 ? (
-          <ul className="flex flex-col gap-1 text-sm text-flit-primary dark:text-white">
+          <ul className="flex flex-col gap-1 text-sm text-flit-primary">
             {detail.permissions.map((p) => (
               <li key={p.id}>{p.name}</li>
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-[#59677D] dark:text-white/70">Este rol no tiene permisos asignados.</p>
+          <p className="text-sm text-muted-foreground">Este rol no tiene permisos asignados.</p>
         )
       ) : entries.length === 0 ? (
-        <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
+        <p className="rounded-[10px] border border-border bg-secondary p-3 text-sm text-flit-primary">
           No tienes permisos para otorgar en este producto. El rol se puede crear sin permisos y completarlo después.
         </p>
       ) : (
@@ -301,7 +301,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
+            className="rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
           >
             {readOnly ? "Cerrar" : "Cancelar"}
           </button>
@@ -310,8 +310,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
               type="submit"
               form="company-role-form"
               disabled={busy || loading || loadError !== null}
-              className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
-              style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
+              className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
+              style={{ background: "var(--gradient-action)" }}
             >
               {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
               {creating ? "Crear rol" : "Guardar cambios"}
@@ -321,12 +321,12 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
       }
     >
       {loading ? (
-        <div role="status" aria-busy="true" className="flex items-center gap-2 py-8 text-sm text-[#59677D] dark:text-white/70">
+        <div role="status" aria-busy="true" className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           Cargando permisos…
         </div>
       ) : loadError ? (
-        <p role="alert" className="py-6 text-sm font-semibold text-[#C2410C]">
+        <p role="alert" className="py-6 text-sm font-semibold text-destructive">
           {loadError}
         </p>
       ) : (
@@ -349,7 +349,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                     className={INPUT_CLS}
                   />
                   {fieldError?.field === "name" && (
-                    <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">
+                    <span role="alert" className="mt-1 block text-xs font-semibold text-destructive">
                       {fieldError.message}
                     </span>
                   )}
@@ -392,14 +392,14 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
           />
 
           {dropped.length > 0 && (
-            <p role="status" className="rounded-[10px] bg-[#FFF4E5] p-3 text-xs font-semibold text-[#C2410C]">
+            <p role="status" className="rounded-[10px] bg-[var(--badge-danger-bg)] p-3 text-xs font-semibold text-destructive">
               {dropped.length === 1 ? "1 permiso de este rol" : `${dropped.length} permisos de este rol`} ya no se pueden
               otorgar desde tu cuenta y se quitarán al guardar: {dropped.map((p) => p.name).join(", ")}.
             </p>
           )}
 
           {error && (
-            <p role="alert" className="text-sm font-semibold text-[#C2410C]">
+            <p role="alert" className="text-sm font-semibold text-destructive">
               {error}
             </p>
           )}

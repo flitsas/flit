@@ -12,6 +12,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { fetchProcedureDetails } from "@/lib/api/analytics";
@@ -136,8 +144,8 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
           >
             {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
             <div className={CARDLIST_SCROLL}>
-              <table className={`min-w-[520px] ${CARDLIST_TABLE}`} aria-label="Detalle de trámites">
-                <thead>
+              <table className={`min-w-[520px] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Detalle de trámites">
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr className={CARDLIST_HEAD_ROW}>
                     <th scope="col" className={CARDLIST_TH}>Referencia</th>
                     <th scope="col" className={CARDLIST_TH}>Tipo</th>
@@ -146,14 +154,14 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
                     <th scope="col" className={CARDLIST_TH}>Enviado</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {data?.items.map((row) => (
-                    <tr key={row.id} className={CARDLIST_ROW}>
-                      <td className={`${CARDLIST_CELL} font-medium`}>{row.referenceNumber}</td>
-                      <td className={`${CARDLIST_CELL} opacity-80`}>{row.procedureTypeName}</td>
-                      <td className={CARDLIST_CELL}>{statusLabel(row.status)}</td>
-                      <td className={`${CARDLIST_CELL} opacity-80`}>{row.createdByDisplayName}</td>
-                      <td className={`${CARDLIST_CELL} opacity-80`}>{formatDate(row.submittedAt)}</td>
+                    <tr key={row.id} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                      <td data-label="Referencia" className={`${CARDLIST_CELL} font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>{row.referenceNumber}</td>
+                      <td data-label="Tipo" className={`${CARDLIST_CELL} opacity-80 ${TABLA_MOVIL_CELL_CLS}`}>{row.procedureTypeName}</td>
+                      <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{statusLabel(row.status)}</td>
+                      <td data-label="Radicador" className={`${CARDLIST_CELL} opacity-80 ${TABLA_MOVIL_CELL_CLS}`}>{row.createdByDisplayName}</td>
+                      <td data-label="Enviado" className={`${CARDLIST_CELL} opacity-80 ${TABLA_MOVIL_CELL_CLS}`}>{formatDate(row.submittedAt)}</td>
                     </tr>
                   ))}
                 </tbody>

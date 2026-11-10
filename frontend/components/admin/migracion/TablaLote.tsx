@@ -17,6 +17,13 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 
 /**
@@ -43,7 +50,7 @@ export function TablaLote({
   // (por clave), así que cambiar de página no la pierde.
   const pg = usePaginacion("migracion.TablaLote");
   const head = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
-  const cell = { borderColor: "#DFE5ED" } as const;
+  const cell = { borderColor: "var(--border)" } as const;
 
   const seleccionables = filas.filter((f) => !estaTerminada(f));
   const todasMarcadas =
@@ -70,11 +77,11 @@ export function TablaLote({
     <div className="flex flex-col">
     <div className="overflow-x-auto">
       <table
-        className="min-w-[640px] text-sm"
+        className={`min-w-[640px] text-sm ${TABLA_MOVIL_TABLE_CLS}`}
         style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
       >
         <caption className="sr-only">Trámites del lote de migración</caption>
-        <thead>
+        <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} w-10 rounded-l-xl`} style={head}>
               <input
@@ -93,15 +100,15 @@ export function TablaLote({
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={head}>Resultado</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {pg.paginar(filas).map((fila) => {
             const clave = claveFila(fila);
             const desplegada = abierta === clave;
 
             return (
               <Fragment key={clave}>
-                <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={cell}>
+                <tr className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-label="" style={cell}>
                     <input
                       type="checkbox"
                       aria-label={`Seleccionar ${ETIQUETA_TRAMITE[fila.tramite]} ${fila.v1Id}`}
@@ -111,10 +118,10 @@ export function TablaLote({
                       disabled={bloqueada}
                     />
                   </td>
-                  <td className="border-y px-4 py-3 tabular-nums opacity-60" style={cell}>{fila.fila}</td>
-                  <td className="border-y px-4 py-3" style={cell}>{ETIQUETA_TRAMITE[fila.tramite]}</td>
-                  <td className="border-y px-4 py-3 font-medium tabular-nums" style={cell}>{fila.v1Id}</td>
-                  <td className="border-y px-4 py-3" style={cell}>
+                  <td className={`border-y px-4 py-3 tabular-nums opacity-60 ${TABLA_MOVIL_CELL_CLS}`} data-label="Fila" style={cell}>{fila.fila}</td>
+                  <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Trámite" style={cell}>{ETIQUETA_TRAMITE[fila.tramite]}</td>
+                  <td className={`border-y px-4 py-3 font-medium tabular-nums ${TABLA_MOVIL_CELL_CLS}`} data-label="Id V1" style={cell}>{fila.v1Id}</td>
+                  <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Estado" style={cell}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <Estado estado={fila.estado} />
                       {/*
@@ -129,7 +136,7 @@ export function TablaLote({
                       )}
                     </div>
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3" style={cell}>
+                  <td className={`rounded-r-xl border-y border-r px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Resultado" style={cell}>
                     <div className="flex flex-wrap items-center gap-2">
                       {fila.respuesta?.destino && (
                         <a
@@ -164,10 +171,10 @@ export function TablaLote({
                 </tr>
 
                 {desplegada && fila.respuesta && (
-                  <tr>
+                  <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
                     <td
                       colSpan={6}
-                      className="rounded-xl border bg-white p-4 dark:bg-[#0B0F14]"
+                      className={`rounded-xl border bg-card p-4 ${TABLA_MOVIL_FILA_ANCHA_CLS}`}
                       style={cell}
                     >
                       <ReporteMigracion respuesta={fila.respuesta} />
@@ -208,15 +215,15 @@ function motivoDelFallo(fila: FilaLote): string | null {
 }
 
 const TONO: Record<EstadoFila, string> = {
-  pendiente: "bg-black/5 dark:bg-white/10 opacity-70",
-  en_curso: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  pendiente: "bg-secondary opacity-70",
+  en_curso: "bg-[var(--badge-info-bg)] text-flit-brand-ink",
   // Deliberadamente NO verde: una simulación no migró nada, y el verde es la señal universal de
   // «hecho». Se parece más a un pendiente informado que a un logro.
-  simulado: "bg-flit-brand/10 text-flit-brand dark:text-[#8AA6FF]",
-  migrado: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  con_avisos: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  fallido: "bg-red-500/10 text-red-600 dark:text-red-400",
-  ya_estaba: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  simulado: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]",
+  migrado: "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]",
+  con_avisos: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]",
+  fallido: "bg-[var(--badge-danger-bg)] text-destructive",
+  ya_estaba: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
 };
 
 function Estado({ estado }: { estado: EstadoFila }) {

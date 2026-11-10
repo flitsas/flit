@@ -1,6 +1,6 @@
 // AC1 (HU #10680): "Auditoría" vive en el agrupador Administradores (solo SuperAdmin).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
@@ -28,7 +28,8 @@ describe("Shell — dock Auditoría (HU #10680, AC1)", () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
-    expect(screen.getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
+    // HU #14479: las entradas de Administradores viven en secciones con nombre (grupos, ya no desplegables).
+    expect(within(screen.getByRole("group", { name: "Seguridad y operación" })).getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
   });
 
   it("no muestra la entrada 'Auditoría' sin sesión SuperAdmin", () => {

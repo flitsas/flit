@@ -40,9 +40,9 @@ describe("botones azules de la captura manual (texto blanco, como Kyverum)", () 
     const circles = screen.getAllByRole("listitem").map((li) => li.querySelector("span.rounded-full"));
     expect(circles[0]).toHaveClass("bg-flit-brand", "text-white");
     expect(circles[1]).toHaveClass("bg-flit-brand", "text-white");
-    expect(circles[2]).toHaveClass("bg-white", "border-flit-brand", "text-flit-brand");
-    expect(circles[3]).toHaveClass("bg-flit-gray");
-    expect(circles[4]).toHaveClass("bg-flit-gray");
+    expect(circles[2]).toHaveClass("bg-card", "border-flit-brand", "text-flit-brand");
+    expect(circles[3]).toHaveClass("bg-secondary");
+    expect(circles[4]).toHaveClass("bg-secondary");
     // Línea hacia el siguiente paso: azul solo tras un paso completado.
     const lines = screen.getAllByTestId("step-line");
     expect(lines).toHaveLength(4);

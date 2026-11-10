@@ -44,7 +44,7 @@ export function BannerDeleteDialog({ banner, onClose, onDeleted }: BannerDeleteD
       size="sm"
       zClassName="z-[90]"
       title="Eliminar banner"
-      titleClassName="text-lg font-semibold text-flit-primary dark:text-white"
+      titleClassName="text-lg font-semibold text-flit-primary"
     >
       <p className="mt-2 text-sm opacity-80">
         ¿Confirmas eliminar el banner <strong>{banner.name}</strong>? Dejará de mostrarse en el
@@ -52,7 +52,7 @@ export function BannerDeleteDialog({ banner, onClose, onDeleted }: BannerDeleteD
       </p>
 
       {error && (
-        <p role="alert" className="mt-3 text-sm" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="mt-3 text-sm" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -71,7 +71,7 @@ export function BannerDeleteDialog({ banner, onClose, onDeleted }: BannerDeleteD
           onClick={() => void confirm()}
           disabled={busy}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "#FF4E00" }}
+          style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
         >
           {busy ? "Eliminando…" : "Eliminar"}
         </button>

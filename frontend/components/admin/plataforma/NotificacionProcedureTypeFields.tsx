@@ -113,13 +113,13 @@ function SelectField({
 }) {
   return (
     <label className="flex flex-col gap-1.5 text-sm" htmlFor={id}>
-      <span className="font-semibold text-[#162244] dark:text-white">{label}</span>
+      <span className="font-semibold text-foreground">{label}</span>
       <select
         id={id}
         value={value}
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+        className="rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
       >
         {children}
       </select>

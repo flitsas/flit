@@ -6,6 +6,7 @@ import { postJson } from "@/lib/api";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/password-reused";
 import { INPUT_CLASS, SUBMIT_CLASS } from "./AuthCard";
+import { buttonClass } from "@flit/ui/Button";
 
 /**
  * Fijar una contraseña con el token de un enlace: recuperación (HU #10173) o activación de invitación. Mismas reglas
@@ -46,8 +47,8 @@ export function NewPasswordForm({ mode, token }: { mode: NewPasswordMode; token:
   if (done) {
     return (
       <div role="status" className="space-y-4">
-        <p className="text-sm text-slate-700">{texts.done}</p>
-        <Link href="/login" className="inline-block rounded-xl bg-flit-brand px-4 py-2.5 text-sm font-semibold text-white">
+        <p className="text-sm text-foreground">{texts.done}</p>
+        <Link href="/login" className={buttonClass()}>
           Ir a iniciar sesión
         </Link>
       </div>
@@ -92,7 +93,7 @@ export function NewPasswordForm({ mode, token }: { mode: NewPasswordMode; token:
       <div>
         <label htmlFor="np-password" className="mb-1 block text-sm font-medium text-flit-primary">Nueva contraseña</label>
         <input id="np-password" type="password" autoComplete="new-password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
-        <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
         <label htmlFor="np-confirm" className="mb-1 block text-sm font-medium text-flit-primary">Confirmar contraseña</label>

@@ -88,7 +88,7 @@ export function CancelInvitationDialog({
       onClose={handleClose}
       busy={busy}
       icon={MailX}
-      iconBg="#FF4E00"
+      iconBg="var(--destructive)"
       title="Cancelar invitación"
       description={invitation.email}
     >
@@ -111,7 +111,7 @@ export function CancelInvitationDialog({
             role="alert"
             aria-live="assertive"
             className="rounded-lg px-3 py-2 text-[11px] font-medium"
-            style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}
+            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
           >
             {error}
           </p>
@@ -131,7 +131,7 @@ export function CancelInvitationDialog({
             onClick={handleConfirm}
             disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "#FF4E00" }}
+            style={{ background: "var(--destructive)" }}
           >
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {busy ? "Cancelando…" : "Cancelar invitación"}

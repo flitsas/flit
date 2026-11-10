@@ -18,8 +18,8 @@ const styles: Record<
     label: "Consejo",
   },
   warning: {
-    border: "rgba(255, 78, 0, 0.35)",
-    bg: "rgba(255, 78, 0, 0.08)",
+    border: "var(--badge-warning-border)",
+    bg: "var(--badge-warning-bg)",
     icon: AlertTriangle,
     label: "Importante",
   },

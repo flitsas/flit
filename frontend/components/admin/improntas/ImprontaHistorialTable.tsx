@@ -8,6 +8,13 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 
 export interface ImprontaHistorialTableProps {
@@ -36,15 +43,15 @@ export function ImprontaHistorialTable({
   onPageSizeChange,
 }: ImprontaHistorialTableProps) {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
       <div className="overflow-x-auto">
         <table
           aria-label="Historial de improntas"
-          className="min-w-[640px] text-xs"
+          className={`min-w-[640px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
           style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
         >
-          <thead>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr>
               <th
                 scope="col"
@@ -83,22 +90,22 @@ export function ImprontaHistorialTable({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {rows.map((row) => (
-              <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono font-semibold" style={{ borderColor: "#DFE5ED" }}>
+              <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                <td className={`border-y px-4 py-3 rounded-l-xl border-l font-mono font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-label="Radicado" style={{ borderColor: "var(--border)" }}>
                   {row.radicado}
                 </td>
-                <td className="border-y px-4 py-3 font-medium uppercase" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 font-medium uppercase ${TABLA_MOVIL_CELL_CLS}`} data-label="Placa" style={{ borderColor: "var(--border)" }}>
                   {row.placa}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Fecha de generación" style={{ borderColor: "var(--border)" }}>
                   {formatImprontaHistorialDate(row.fechaImpresa)}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Operador" style={{ borderColor: "var(--border)" }}>
                   {row.operador}
                 </td>
-                <td className="border-y px-4 py-3 rounded-r-xl border-r opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 rounded-r-xl border-r opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Usuario FLIT" style={{ borderColor: "var(--border)" }}>
                   {row.flitUserName}
                 </td>
               </tr>

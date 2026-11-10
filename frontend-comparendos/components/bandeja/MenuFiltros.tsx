@@ -37,8 +37,8 @@ const RANGOS = {
   registro: ["registroDesde", "registroHasta"],
 } as const;
 
-const OPCION_CLS = "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-[#EFF6FF] dark:hover:bg-white/5";
-const TITULO_GRUPO_CLS = "px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[#5B6B82] dark:text-slate-400";
+const OPCION_CLS = "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-secondary";
+const TITULO_GRUPO_CLS = "px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
 
 /**
  * HU #13868: el menú «Filtros» de la bandeja, de un nivel como el de Trámites: al abrirlo se ve qué se puede filtrar,
@@ -136,7 +136,7 @@ export function MenuFiltros({
           id={id}
           role="dialog"
           aria-label="Filtros de la bandeja"
-          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-[#DFE5ED] bg-white shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-border bg-card shadow-lg"
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {editando ? (
@@ -149,7 +149,7 @@ export function MenuFiltros({
                 {editando !== "activos" && resumen(editando) && (
                   <button
                     type="button"
-                    className="mt-3 text-xs font-semibold text-[#3B4FD6] hover:underline"
+                    className="mt-3 text-xs font-semibold text-flit-brand-ink hover:underline"
                     onClick={() => {
                       setBorrador(quitarEtiqueta(borrador, editando));
                       setEditando(null);
@@ -170,11 +170,11 @@ export function MenuFiltros({
                         key={clave}
                         type="button"
                         onClick={() => setEditando(clave)}
-                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#EFF6FF] dark:hover:bg-white/5"
+                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-secondary"
                       >
                         <span className="min-w-0">
                           <span className="block font-medium">{NOMBRE_CAMPO[clave]}</span>
-                          {valor && <span className="block truncate text-[11px] font-semibold text-[#3B4FD6] dark:text-[#8FA8FF]">{valor}</span>}
+                          {valor && <span className="block truncate text-[11px] font-semibold text-flit-brand-ink">{valor}</span>}
                         </span>
                         <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
                       </button>
@@ -184,12 +184,12 @@ export function MenuFiltros({
               ))
             )}
           </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#DFE5ED] p-3 dark:border-white/10">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border p-3">
             <button
               type="button"
               onClick={empezarDeCero}
               disabled={n === 0}
-              className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-xl border border-flit-alert px-3 py-2 text-xs font-semibold text-[var(--badge-warning-fg)] transition hover:bg-flit-alert/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Empezar de cero
             </button>
@@ -208,7 +208,7 @@ function EsNoEs({ campo, borrador, onCambio }: { campo: CampoNegable; borrador: 
   const no = borrador.negar.includes(campo);
   const poner = (negar: boolean) => onCambio({ ...borrador, negar: negar ? [...borrador.negar.filter((c) => c !== campo), campo] : borrador.negar.filter((c) => c !== campo) });
   return (
-    <div role="radiogroup" aria-label="Condición" className="mb-2 inline-flex rounded-lg border border-[#DFE5ED] p-0.5 dark:border-white/15">
+    <div role="radiogroup" aria-label="Condición" className="mb-2 inline-flex rounded-lg border border-border p-0.5">
       {[false, true].map((v) => (
         <button
           key={String(v)}
@@ -216,7 +216,7 @@ function EsNoEs({ campo, borrador, onCambio }: { campo: CampoNegable; borrador: 
           role="radio"
           aria-checked={no === v}
           onClick={() => poner(v)}
-          className={`rounded-md px-3 py-1 text-xs font-semibold transition ${no === v ? "bg-flit-brand text-white" : "text-[#5B6B82] hover:bg-[#EFF6FF] dark:text-slate-300 dark:hover:bg-white/5"}`}
+          className={`rounded-md px-3 py-1 text-xs font-semibold transition ${no === v ? "bg-flit-brand text-white" : "text-muted-foreground hover:bg-secondary"}`}
         >
           {v ? "no es" : "es"}
         </button>
@@ -299,11 +299,11 @@ function Editor({
       const [desde, hasta] = RANGOS[clave];
       return (
         <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#5B6B82] dark:text-slate-300">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
             Desde
             <input type="date" className={INPUT_CLS} value={borrador[desde]} onChange={(e) => onCambio({ ...borrador, [desde]: e.target.value })} />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#5B6B82] dark:text-slate-300">
+          <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
             Hasta
             <input type="date" className={INPUT_CLS} value={borrador[hasta]} onChange={(e) => onCambio({ ...borrador, [hasta]: e.target.value })} />
           </label>

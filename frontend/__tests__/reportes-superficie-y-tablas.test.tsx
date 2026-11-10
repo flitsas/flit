@@ -101,6 +101,7 @@ describe("las tablas de reportes", () => {
 
     const tabla = container.querySelector("table");
     expect(tabla?.className).toMatch(/border-separate/);
-    expect(tabla?.className).toMatch(/border-spacing-y-2/);
+    // HU #14477 — 6px entre filas, como el `border-spacing: 0 6px` del prototipo.
+    expect(tabla?.className).toMatch(/border-spacing-y-1\.5/);
   });
 });

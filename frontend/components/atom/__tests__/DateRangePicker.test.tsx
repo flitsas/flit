@@ -166,9 +166,9 @@ describe("DateRangePicker — HU #12724", () => {
       render(<DateRangePicker value={sinRango()} onChange={onChange} />);
       await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
       const dialog = screen.getByRole("dialog");
-      expect(dialog.className).toMatch(/dark:bg-\[#0B0F14\]/);
-      expect(dialog.className).toMatch(/dark:text-white/);
-      expect(dialog.className).toMatch(/dark:border-white\/15/);
+      expect(dialog.className).toMatch(/dark:bg-card/);
+      expect(dialog.className).toMatch(/dark:text-foreground/);
+      expect(dialog.className).toMatch(/dark:border-border/);
     });
   });
 

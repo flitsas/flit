@@ -19,6 +19,7 @@ import { departmentName } from "@/lib/co-departments";
 import { matchesOtOfficeSearch, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { TransitOfficeStatusDialog } from "@/components/admin/transit-offices/TransitOfficeStatusDialog";
 import { TransitOfficeQuipuxDialog } from "@/components/admin/transit-offices/TransitOfficeQuipuxDialog";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 /**
  * Listado de organismos de tránsito con estado operativo (RF01) + acciones de ciclo de
@@ -69,11 +70,10 @@ function matchesQuipux(office: TransitOfficeOperationalStatus, filter: QuipuxFil
 }
 
 // Selects de filtro — tokens FLIT (borde soft, foco azul marca).
-const FILTER_SELECT_CLS =
-  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white px-3 py-2 text-sm text-flit-primary outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
-const FILTER_OPTION_CLS = "bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white";
-const FILTER_INPUT_CLS =
-  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white py-2 pl-9 pr-3 text-sm text-flit-primary outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const FILTER_SELECT_CLS = TRAMITES_INPUT_CLS;
+const FILTER_OPTION_CLS = "bg-card text-flit-primary";
+const FILTER_INPUT_CLS = `${TRAMITES_INPUT_CLS} w-full pl-9`;
 
 export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps = {}) {
   const router = useRouter();
@@ -252,7 +252,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
 
         {status === "ready" && (
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#59677D] dark:text-white/70">
+            <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
               Departamento
               <select
                 value={departamento}
@@ -271,7 +271,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#59677D] dark:text-white/70">
+            <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
               Estado
               <select
                 value={estadoFilter}
@@ -294,7 +294,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#59677D] dark:text-white/70">
+            <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
               Código integrador
               <select
                 value={quipuxFilter}
@@ -318,7 +318,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       </div>
 
       {status === "ready" && (
-        <p className="text-[11px] text-[#59677D] dark:text-white/60" data-testid="divipo-summary">
+        <p className="text-[11px] text-muted-foreground" data-testid="divipo-summary">
           {sinDivipoCount === 0
             ? `Las ${offices.length} secretarías del catálogo tienen código DIVIPO.`
             : `${sinDivipoCount} de ${offices.length} secretarías aún no tienen código DIVIPO cargado y no son elegibles para radicar por Quipux.`}
@@ -417,7 +417,7 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
   return (
     <div className="flex flex-col gap-1">
       {office.divipoCode ? (
-        <span className="font-mono text-xs text-flit-primary dark:text-white">{office.divipoCode}</span>
+        <span className="font-mono text-xs text-flit-primary">{office.divipoCode}</span>
       ) : (
         <StatusBadge
           label="Sin código integrador"
@@ -427,7 +427,7 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
       )}
 
       {familias.length > 0 && (
-        <span className="text-[11px] text-[#59677D] dark:text-white/70">{familias.join(" · ")}</span>
+        <span className="text-[11px] text-muted-foreground">{familias.join(" · ")}</span>
       )}
 
       {inconsistente && <StatusBadge label="Sin código integrador no se radica" tone="warning" />}
