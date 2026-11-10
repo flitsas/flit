@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList } from "lucide-react";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList, FileSpreadsheet } from "lucide-react";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -11,6 +11,7 @@ import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { ReactivateInvitationButton } from "./users/ReactivateInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { InviteUserModal } from "./users/InviteUserModal";
+import { UsuariosBulkInvite } from "./users/UsuariosBulkInvite";
 import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
 import { UserPermissionsModal } from "./users/UserPermissionsModal";
@@ -85,6 +86,8 @@ export function Usuarios() {
   const canConfigurePermissions = isSuperAdmin || isAdminCompany;
   const permissionsMode: "superadmin" | "admin" = isSuperAdmin ? "superadmin" : "admin";
   const [open, setOpen] = useState(false);
+  // HU #14427 (Feature #14420) — invitación masiva por Excel.
+  const [bulkOpen, setBulkOpen] = useState(false);
   const pgEliminados = usePaginacion("modulos.Usuarios");
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -377,9 +380,20 @@ export function Usuarios() {
           // concedido veria el boton y recibiria un 403 opaco: se gatea con el mismo criterio
           // que el resto de acciones de ciclo de vida.
           tab === "usuarios" && canManageUserLifecycle ? (
-            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
-              Invitar usuario
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* HU #14427: mismo gate que «Invitar usuario» (AC2: sin permiso de invitar no aparece). */}
+              <button
+                type="button"
+                onClick={() => setBulkOpen(true)}
+                className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl border border-[#DFE5ED] bg-white text-sm font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
+              >
+                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+                Importar Excel
+              </button>
+              <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
+                Invitar usuario
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -585,6 +599,13 @@ export function Usuarios() {
           roles={roles}
           rolesLoading={rolesLoading}
           isSuperAdmin={isSuperAdmin}
+        />
+      )}
+      {bulkOpen && (
+        <UsuariosBulkInvite
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setBulkOpen(false)}
+          onCompleted={() => loadUsers()}
         />
       )}
       {suspendTarget && (
