@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
-import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { controlCls } from './tramites-control-styles';
+import { buttonClass } from '@flit/ui/Button';
+import { TRAMITES_INPUT_CLS, controlCls } from './tramites-control-styles';
 import {
   ConditionEditor,
   QueryFieldPicker,
@@ -38,10 +38,10 @@ export const PERIODOS = [
 ] as const;
 export type Periodo = (typeof PERIODOS)[number];
 
-export const INPUT_CLS =
-  'h-9 rounded-xl border border-border bg-card px-3 text-xs text-foreground outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2';
+// HU #14476 — `.control` del prototipo, compartido con Validaciones (ver tramites-control-styles).
+export const INPUT_CLS = TRAMITES_INPUT_CLS;
 export const POPOVER_SURFACE_CLS =
-  'rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]';
+  'rounded-2xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-modal)]';
 
 
 /**
@@ -267,19 +267,18 @@ export function PeriodoPopover({
             </>
           ) : null}
 
-          <div className="mt-3 flex items-center justify-end gap-2 border-t border-border pt-3">
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-[color:var(--di-divider)] pt-3">
             <button
               type="button"
               onClick={handleLimpiar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+              className={buttonClass({ variant: 'secondary', size: 'sm' })}
             >
               Limpiar
             </button>
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: WIZARD_CTA_GRADIENT }}
+              className={buttonClass({ variant: 'primary', size: 'sm' })}
             >
               Aplicar
             </button>
@@ -454,7 +453,7 @@ function FiltroEspecificoPopover({
               del DOM en vez de ocultarse con clase, para que tampoco exista para un lector de
               pantalla ni sea alcanzable con el tabulador. */}
           {campoEditado && !fieldsError ? null : (
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-border pt-3">
+          <div className="mt-2 flex items-center justify-end gap-2 border-t border-[color:var(--di-divider)] pt-3">
             <button
               type="button"
               onClick={handleEmpezarDeCero}
@@ -466,8 +465,7 @@ function FiltroEspecificoPopover({
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: WIZARD_CTA_GRADIENT }}
+              className={buttonClass({ variant: 'primary', size: 'sm' })}
             >
               Aplicar
             </button>

@@ -72,6 +72,7 @@ import {
   revocationRequestListColor,
   revocationRequestListLabel,
 } from '@/lib/tramites/estados';
+import { Placa } from '@flit/ui/Placa';
 import {
   TRAMITES_COLUMNS,
   TRAMITES_SELECTABLE_COLUMNS,
@@ -2804,13 +2805,10 @@ function TramiteRow({
     // muda allí en vez de salir dos veces.
     placa: (
       <span className="flex min-w-0 flex-col gap-0.5">
-        {/* Propuesta: la placa de la fila es la placa amarilla. Va con la clase local `.di-placa` y no
-            con `Placa` de @flit/ui porque esta separa «ABC 123» y aquí el texto de la placa no cambia
-            (se busca, se copia y lo leen las pruebas tal cual viene). Sin placa, el guion. */}
+        {/* Propuesta: la placa de la fila es la placa amarilla (`Placa` de @flit/ui), con el texto tal
+            cual viene. Sin placa, el guion. */}
         {item.placa ? (
-          <span className="di-placa self-start">
-            <span className="di-placa__num">{item.placa}</span>
-          </span>
+          <Placa placa={item.placa} className="self-start" />
         ) : (
           <span className="block truncate font-mono font-semibold tracking-wider text-foreground">—</span>
         )}

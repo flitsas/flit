@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { Placa } from "@flit/ui/Placa";
 import {
   TABLA_CELDA_SECUNDARIA_CLS,
   TABLA_HEADER_BG,
@@ -338,11 +339,9 @@ function renderCelda(
     case "vin":
       return row.vin?.trim() || "—";
     case "placa":
-      // Propuesta: placa amarilla (`.di-placa`), con el texto tal cual viene; sin placa, el guion.
+      // Propuesta: placa amarilla (`Placa` de @flit/ui), con el texto tal cual viene; sin placa, el guion.
       return row.placa?.trim() ? (
-        <span className="di-placa">
-          <span className="di-placa__num">{row.placa.trim()}</span>
-        </span>
+        <Placa placa={row.placa.trim()} />
       ) : (
         "—"
       );
