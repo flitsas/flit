@@ -5,16 +5,18 @@ import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { reauthenticate } from "@flit/auth/client";
 import { AppsSessionError, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
 import { buildDock } from "@flit/shell/nav";
-import { ProductIcon } from "@/components/ui/ProductIcon";
+import { ProductArt } from "@/components/ui/ProductIcon";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { productInfo } from "@/lib/products";
 import { hubNav, type HubUser } from "./HubShell";
 
+// `.card` de la propuesta «Diseño Inteligente» (HU #14487): superficie elevada, borde suave, radio de 20 px y sombra.
 const card =
-  "rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]";
-const muted = "text-muted-foreground";
+  "rounded-[20px] border border-[color:var(--di-border)] bg-[color:var(--di-surface-elevated)] shadow-[var(--shadow-card)]";
+const muted = "text-[color:var(--di-text-secondary)]";
+const subtitulo = "text-lg font-semibold text-[color:var(--di-heading)]";
 
 /** Fecha de hoy en Colombia («jueves, 2 de octubre»), la misma en el servidor y en el navegador. */
 function today(): string {
@@ -69,13 +71,13 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
       />
 
       <section aria-labelledby="hub-productos">
-        <h2 id="hub-productos" className="text-lg font-semibold">
+        <h2 id="hub-productos" className={subtitulo}>
           Tus productos
         </h2>
         {failed ? (
           <p role="alert" className={`mt-4 text-sm ${muted}`}>
             No pudimos cargar tus productos.{" "}
-            <button type="button" onClick={() => window.location.reload()} className="font-semibold text-flit-brand underline-offset-4 hover:underline">
+            <button type="button" onClick={() => window.location.reload()} className="font-semibold text-[color:var(--di-action)] underline-offset-4 hover:underline">
               Intentar de nuevo
             </button>
           </p>
@@ -96,15 +98,15 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
                 <li key={app.code}>
                   <a
                     href={app.url}
-                    className={`${card} group flex h-full flex-col p-6 transition hover:-translate-y-0.5 hover:border-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]`}
+                    className={`${card} group flex h-full flex-col p-6 transition hover:-translate-y-0.5 hover:border-[color:var(--di-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <ProductIcon icon={app.icon} muted={soon} />
+                      <ProductArt code={app.code} icon={app.icon} muted={soon} />
                       <StatusChip status={soon ? "soon" : "available"} />
                     </div>
-                    <p className="mt-5 text-lg font-semibold">{app.name}</p>
+                    <p className="mt-4 text-lg font-semibold text-[color:var(--di-heading)]">{app.name}</p>
                     {info && <p className={`mt-1.5 flex-1 text-sm leading-relaxed ${muted}`}>{info.tagline}</p>}
-                    <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-flit-brand">
+                    <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[color:var(--di-action)]">
                       {soon ? "Ver qué viene" : `Abrir ${app.name}`}
                       <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
                     </span>
@@ -118,24 +120,33 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
 
       {shortcuts.length > 0 && (
         <section aria-labelledby="hub-admin">
-          <h2 id="hub-admin" className="text-lg font-semibold">
+          <h2 id="hub-admin" className={subtitulo}>
             Administración
           </h2>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {shortcuts.map((item) => (
-              <li key={item.key}>
-                <a
-                  href={item.href}
-                  className={`${card} group flex items-center gap-3 px-4 py-3.5 text-sm font-medium transition hover:border-flit-brand`}
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-flit-brand/10 text-flit-brand">
-                    {createElement(item.icon, { className: "h-4 w-4", "aria-hidden": true })}
-                  </span>
-                  <span className="flex-1">{item.label}</span>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground transition group-hover:text-flit-brand" aria-hidden="true" />
-                </a>
-              </li>
-            ))}
+            {shortcuts.map((item) => {
+              const ilustracion = item.ilustracion;
+              return (
+                <li key={item.key}>
+                  {/* `.card` de la propuesta con la ilustración del módulo (la misma del dock), nombre y acento al pasar. */}
+                  <a
+                    href={item.href}
+                    className={`${card} group flex min-h-[72px] items-center gap-3.5 p-4 text-sm font-semibold text-[color:var(--di-heading)] transition hover:border-[color:var(--di-border-strong)] hover:bg-[color:var(--di-accent-soft)]`}
+                  >
+                    {ilustracion ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática
+                      <img src={ilustracion} alt="" aria-hidden="true" className="h-10 w-10 shrink-0 object-contain" />
+                    ) : (
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color:var(--di-accent-soft)] text-[color:var(--di-action)]">
+                        {createElement(item.icon, { className: "h-4 w-4", "aria-hidden": true })}
+                      </span>
+                    )}
+                    <span className="flex-1">{item.label}</span>
+                    <ArrowUpRight className="h-4 w-4 text-[color:var(--di-text-tertiary)] transition group-hover:text-[color:var(--di-action)]" aria-hidden="true" />
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

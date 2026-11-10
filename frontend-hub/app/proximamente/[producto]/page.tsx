@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Check, Mail } from "lucide-react";
 import { getSession } from "@flit/auth/server";
 import { HubShell } from "@/components/HubShell";
-import { ProductIcon } from "@/components/ui/ProductIcon";
+import { ProductArt } from "@/components/ui/ProductIcon";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { HUB_PRODUCT } from "@/lib/auth.server";
 import { hubConfig } from "@/lib/config.server";
@@ -31,7 +31,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
       </Link>
       <div className="mt-6 rounded-3xl border border-border bg-card p-8 shadow-[var(--shadow-card)] md:p-10">
         <div className="flex items-center gap-4">
-          <ProductIcon icon={product.icon} size="lg" />
+          <ProductArt code={product.code} icon={product.icon} size="lg" />
           <div>
             <h1 className="text-3xl font-semibold">{product.name}</h1>
             <div className="mt-1">
