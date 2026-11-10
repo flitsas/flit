@@ -3,6 +3,19 @@
 import { useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Check, Eye, EyeOff, Lock, Mail, type LucideIcon } from "lucide-react";
 import { cn } from "./cn";
+import {
+  INGRESO_MARCA_ANTETITULO_CLS,
+  INGRESO_MARCA_TITULO_CLS,
+  INGRESO_MARCA_TEXTO_CLS,
+  INGRESO_TITULO_CLS,
+  INGRESO_ETIQUETA_CLS,
+  INGRESO_CONTROL_CLS,
+  INGRESO_ICONO_CLS,
+  INGRESO_ENLACE_CLS,
+  INGRESO_ERROR_CLS,
+  INGRESO_AVISO_CLS,
+  INGRESO_BOTON_CLS,
+} from "./ingreso-clases";
 import { rutaIlustracion } from "./ilustraciones";
 
 /**
@@ -29,7 +42,7 @@ const FLOTANTES: ReadonlyArray<{
     detalle: "KLM 482 · hace 2 min",
     Icono: Check,
     icono: "bg-[color:var(--di-ingreso-acento-2)] text-[color:var(--di-ingreso-fondo)]",
-    lugar: "left-0 top-[12%] flex",
+    lugar: "-left-[6%] top-[12%] flex",
     duracion: "6s",
     retraso: "0s",
   },
@@ -38,7 +51,7 @@ const FLOTANTES: ReadonlyArray<{
     detalle: "Comprador · en línea",
     Icono: Lock,
     icono: "bg-[color:var(--di-ingreso-azul)] text-[color:var(--di-ingreso-tarjeta)]",
-    lugar: "right-0 top-[40%] hidden lg:flex",
+    lugar: "-right-[6%] top-[40%] hidden lg:flex",
     duracion: "7.5s",
     retraso: "0.8s",
   },
@@ -47,7 +60,7 @@ const FLOTANTES: ReadonlyArray<{
     detalle: "Medellín · hoy",
     Icono: Mail,
     icono: "bg-[color:var(--di-alerta-punto)] text-[color:var(--di-ingreso-tarjeta)]",
-    lugar: "bottom-[4%] left-[8%] flex",
+    lugar: "bottom-[4%] left-[2%] flex",
     duracion: "6.8s",
     retraso: "1.6s",
   },
@@ -63,6 +76,7 @@ export function IngresoLayout({
   logo,
   logoTarjeta,
   pie,
+  marca,
   children,
 }: {
   /** Logo sobre el panel de tinta (variante blanca). */
@@ -71,6 +85,11 @@ export function IngresoLayout({
   logoTarjeta?: ReactNode;
   /** Debajo del pie de certificación (p. ej. el enlace de políticas). */
   pie?: ReactNode;
+  /**
+   * Textos del panel de tinta. Si se omite, van los del ingreso. Las pantallas que ya traen sus propios textos
+   * (activar cuenta) los pasan aquí para no perderlos; se pintan con las clases `INGRESO_MARCA_*`.
+   */
+  marca?: ReactNode;
   /** Contenido de la tarjeta: título y formulario o avisos. */
   children: ReactNode;
 }) {
@@ -93,31 +112,37 @@ export function IngresoLayout({
         />
         <div className="relative z-[1] self-start [&_img]:h-14 [&_img]:w-auto">{logo}</div>
         <div className="relative z-[1]">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-[color:var(--di-ingreso-acento-2)]">
-            Plataforma de trámites de tránsito
-          </p>
-          <p className="m-0 text-[clamp(2rem,3.4vw,3rem)] font-extrabold leading-[1.08] tracking-[-0.01em]">
-            Tus trámites vehiculares
-            <span
-              className="block bg-clip-text text-transparent"
-              style={{ backgroundImage: "linear-gradient(90deg, var(--di-ingreso-acento-1), var(--di-ingreso-acento-2))" }}
-            >
-              en un solo lugar
-            </span>
-          </p>
-          <p className="mt-3.5 max-w-[46ch] text-base text-[color:var(--di-ingreso-texto-2)]">
-            Traspasos, matrículas, comparendos y el estado de cada vehículo, conectados con las fuentes oficiales y
-            firmados en línea.
-          </p>
+          {marca ?? (
+            <>
+              <p className={INGRESO_MARCA_ANTETITULO_CLS}>Plataforma de trámites de tránsito</p>
+              <p className={INGRESO_MARCA_TITULO_CLS}>
+                Tus trámites vehiculares
+                <span
+                  className="block bg-clip-text text-transparent"
+                  style={{ backgroundImage: "linear-gradient(90deg, var(--di-ingreso-acento-1), var(--di-ingreso-acento-2))" }}
+                >
+                  en un solo lugar
+                </span>
+              </p>
+              <p className={INGRESO_MARCA_TEXTO_CLS}>
+                Traspasos, matrículas, comparendos y el estado de cada vehículo, conectados con las fuentes oficiales y
+                firmados en línea.
+              </p>
+            </>
+          )}
         </div>
         <figure aria-hidden="true" className="relative z-[1] m-0 hidden min-h-[260px] flex-1 place-items-center md:grid">
           {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
+          {/* Las tarjetas se anclan a la escena (este marco del tamaño de la imagen) y no a la figura: la figura crece con
+              el panel y, en monitores grandes, las tarjetas se iban a las esquinas, lejos del carro. Así quedan pegadas a
+              la ilustración en cualquier ancho y alto de pantalla. */}
+          <div className="relative w-[min(560px,100%)] 2xl:w-[min(680px,100%)]">
           <img
             src={rutaIlustracion("heroe-ingreso")}
             alt=""
             width={1100}
             height={821}
-            className="di-flotar h-auto w-[min(560px,100%)]"
+            className="di-flotar h-auto w-full"
             style={{ filter: "drop-shadow(var(--di-ingreso-sombra-escena))" }}
           />
           {FLOTANTES.map(({ titulo, detalle, Icono, icono, lugar, duracion, retraso }) => (
@@ -136,6 +161,7 @@ export function IngresoLayout({
               </span>
             </div>
           ))}
+          </div>
         </figure>
         <ul aria-label="Productos de FLIT" className="relative z-[1] m-0 flex list-none flex-wrap gap-2.5 p-0">
           {PRODUCTOS.map(([nombre, ilus]) => (
@@ -174,29 +200,19 @@ export function IngresoLayout({
   );
 }
 
-/** Título de la tarjeta de ingreso (`.ingreso__tarjeta h2`). */
-export const INGRESO_TITULO_CLS = "m-0 text-2xl font-bold text-[color:var(--di-heading)]";
-/** Etiqueta de campo (`.campo label`). */
-export const INGRESO_ETIQUETA_CLS = "mb-1.5 block text-[0.8125rem] font-semibold text-[color:var(--di-text-primary)]";
-/** Control con ícono a la izquierda (`.control-icono .control`). */
-export const INGRESO_CONTROL_CLS =
-  "w-full min-h-11 rounded-xl border border-[color:var(--di-border-control)] bg-[color:var(--di-surface-elevated)] " +
-  "py-2.5 pl-[42px] pr-3.5 text-base text-[color:var(--di-text-primary)] outline-none transition " +
-  "placeholder:text-[color:var(--di-text-tertiary)] focus:border-[color:var(--di-action)] " +
-  "focus:ring-2 focus:ring-[color:var(--di-accent-soft)]";
-/** Ícono dentro del control (`.control-icono svg`). */
-export const INGRESO_ICONO_CLS =
-  "pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--di-text-tertiary)]";
-/** Enlace de texto (`.enlace`). */
-export const INGRESO_ENLACE_CLS =
-  "inline-flex min-h-11 items-center text-sm font-medium text-[color:var(--di-action)] underline underline-offset-[3px]";
-/** Mensaje de error del formulario (`.ingreso__error`). */
-export const INGRESO_ERROR_CLS =
-  "m-0 flex items-center gap-2 rounded-xl bg-[color:var(--di-danger-soft)] px-3.5 py-2.5 text-[0.8125rem] font-semibold text-[color:var(--di-danger)]";
-/** Aviso de acceso (bloqueo, rol desactivado, dominio propio): misma caja suave del error. */
-export const INGRESO_AVISO_CLS = "flex gap-3 rounded-xl p-5";
-/** Botón de enviar (`.ingreso__boton`), sobre `buttonClass()`. */
-export const INGRESO_BOTON_CLS = "w-full min-h-[50px] text-base";
+export {
+  INGRESO_MARCA_ANTETITULO_CLS,
+  INGRESO_MARCA_TITULO_CLS,
+  INGRESO_MARCA_TEXTO_CLS,
+  INGRESO_TITULO_CLS,
+  INGRESO_ETIQUETA_CLS,
+  INGRESO_CONTROL_CLS,
+  INGRESO_ICONO_CLS,
+  INGRESO_ENLACE_CLS,
+  INGRESO_ERROR_CLS,
+  INGRESO_AVISO_CLS,
+  INGRESO_BOTON_CLS,
+};
 
 /**
  * Campo de contraseña con el botón para verla (`.clave` de propuesta.css): el candado a la izquierda y, dentro del

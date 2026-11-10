@@ -50,7 +50,6 @@ import {
   textoExcluidosNoIct,
 } from '@/lib/tramites/pausa-lote';
 import { TramitesListToolbar } from './TramitesListToolbar';
-import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { SoatSoporteAsignado } from './SoatSoporteAsignado';
 import { ImpuestoDepartamentalCheck, useImpuestoPagadoPorFlito } from './ImpuestoDepartamentalCheck';
 import { esErrorFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
@@ -75,6 +74,13 @@ import {
 } from '@/lib/tramites/estados';
 import { Placa } from '@flit/ui/Placa';
 import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from './dialogo-propio';
 import {
   TRAMITES_COLUMNS,
   TRAMITES_SELECTABLE_COLUMNS,
@@ -1771,23 +1777,24 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
 
       {processTarget && (
         <div
-          // Overlay FLIT (component.modal): rgba(22,39,68,0.45) + blur 6px. Antes era
-          // `bg-slate-900/40`, y la escala slate de Tailwind no es paleta de este producto.
-          className="fixed inset-0 z-[90] flex items-center justify-center px-4 backdrop-blur-[6px]"
-          style={{ background: 'rgba(22,39,68,0.45)' }}
+          // Homologación #14507: velo, panel y franja del Modal, en su sitio (mismo foco y cierre).
+          className={`fixed inset-0 z-[90] flex items-center justify-center px-4 ${DIALOGO_VELO}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl"
-            style={{ border: '1px solid var(--border)' }}
+            className={`${DIALOGO_PANEL} flex max-h-[90dvh] w-full max-w-md flex-col`}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
-              Enviar al organismo de tránsito
-            </h2>
-            <p className="mt-1 text-sm opacity-80">
+            <div className={DIALOGO_FRANJA}>
+              <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+              <h2 id="procesar-plate-title" className={DIALOGO_FRANJA_TITULO}>
+                Enviar al organismo de tránsito
+              </h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            <p className="text-sm opacity-80">
               {processTarget.referenceNumber}
               {processTarget.placa ? ` · ${processTarget.placa}` : ''}
             </p>
@@ -1838,8 +1845,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               {processWarning ? (
                 <button
                   type="button"
-                  className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
-                  style={{ background: WIZARD_CTA_GRADIENT }}
+                  className={buttonClass({ className: 'flex-1' })}
                   onClick={() => setProcessTarget(null)}
                 >
                   Entendido
@@ -1848,7 +1854,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 <>
                   <button
                     type="button"
-                    className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                    className={buttonClass({ variant: 'secondary', className: 'flex-1' })}
                     onClick={() => setProcessTarget(null)}
                     disabled={processActing}
                   >
@@ -1856,8 +1862,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   </button>
                   <button
                     type="button"
-                    className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    className={buttonClass({ className: 'flex-1' })}
                     disabled={processActing}
                     onClick={() => void confirmProcesar()}
                   >
@@ -1865,6 +1870,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   </button>
                 </>
               )}
+            </div>
             </div>
           </div>
         </div>
@@ -3318,7 +3324,7 @@ function TramiteRow({
             data-testid="tramite-confirmado-runt"
             className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
               item.runtConfirmed === 'yes'
-                ? 'bg-flit-tech/20 text-[#0B6F6C] dark:text-flit-tech'
+                ? 'bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]'
                 : 'bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]'
             }`}
           >
@@ -3488,7 +3494,7 @@ function TramiteRow({
               onOpen(item.id, item.tenantId);
             }}
             className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+            style={{ background: 'var(--di-gradient-action)' }}
           >
             Continuar de todos modos
           </button>

@@ -26,14 +26,14 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
 
   const content = (
     <section className="mx-auto max-w-3xl py-10">
-      <Link href="/?inicio=1" className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition hover:text-flit-brand">
+      <Link href="/?inicio=1" className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition hover:text-[color:var(--di-action)]">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Volver al inicio
       </Link>
-      <div className="mt-6 rounded-3xl border border-border bg-card p-8 shadow-[var(--shadow-card)] md:p-10">
+      <div className="mt-6 rounded-[20px] border border-border bg-card p-8 shadow-[var(--shadow-card)] md:p-10">
         <div className="flex items-center gap-4">
           <ProductArt code={product.code} icon={product.icon} size="lg" />
           <div>
-            <h1 className="text-3xl font-semibold">{product.name}</h1>
+            <h1 className="text-3xl font-bold text-[color:var(--di-heading)]">{product.name}</h1>
             <div className="mt-1">
               <StatusChip status="soon" />
             </div>
@@ -41,7 +41,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
         </div>
         <p className="mt-6 text-lg font-medium leading-relaxed">{product.tagline}</p>
         <p className="mt-3 leading-relaxed text-muted-foreground">{product.description}</p>
-        <p className="mt-8 text-xs font-semibold uppercase tracking-[0.16em] text-flit-brand">Lo que traerá</p>
+        <p className="mt-8 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--di-action)]">Lo que traerá</p>
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">
           {product.features.map((f) => (
             <li key={f} className="flex gap-3 text-sm leading-relaxed">

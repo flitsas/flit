@@ -7,9 +7,16 @@ import { useState } from "react";
 import { changePassword } from "@/lib/api/auth";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
-
-const INPUT_CLASS =
-  "w-full bg-card border border-input rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+import { Lock } from "lucide-react";
+import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
+import {
+  AUTH_ERROR_CLASS,
+  AUTH_HINT_CLASS,
+  AUTH_INPUT_CLASS,
+  AUTH_LABEL_CLASS,
+  AUTH_STATUS_CLASS,
+  AUTH_SUBMIT_CLASS,
+} from "./AuthCard";
 
 export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
   const [current, setCurrent] = useState("");
@@ -56,64 +63,72 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
 
   if (done) {
     return (
-      <p role="status" className="text-sm text-foreground">
+      <p role="status" className={AUTH_STATUS_CLASS}>
         Tu contraseña fue actualizada correctamente.
       </p>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label="Cambiar contraseña" noValidate>
+    <form onSubmit={handleSubmit} className="grid gap-4" aria-label="Cambiar contraseña" noValidate>
       <div>
-        <label htmlFor="cp-current" className="block text-sm font-medium text-flit-primary mb-1">
+        <label htmlFor="cp-current" className={AUTH_LABEL_CLASS}>
           Contraseña actual
         </label>
-        <input
-          id="cp-current"
-          type="password"
-          autoComplete="current-password"
-          className={INPUT_CLASS}
-          value={current}
-          onChange={(e) => setCurrent(e.target.value)}
-        />
+        <div className="relative">
+          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <input
+            id="cp-current"
+            type="password"
+            autoComplete="current-password"
+            className={AUTH_INPUT_CLASS}
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </div>
       </div>
       <div>
-        <label htmlFor="cp-next" className="block text-sm font-medium text-flit-primary mb-1">
+        <label htmlFor="cp-next" className={AUTH_LABEL_CLASS}>
           Nueva contraseña
         </label>
-        <input
-          id="cp-next"
-          type="password"
-          autoComplete="new-password"
-          className={INPUT_CLASS}
-          value={next}
-          onChange={(e) => setNext(e.target.value)}
-        />
-        <p className="mt-1 text-xs text-muted-foreground">{PASSWORD_POLICY_HINT}</p>
+        <div className="relative">
+          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <input
+            id="cp-next"
+            type="password"
+            autoComplete="new-password"
+            className={AUTH_INPUT_CLASS}
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
+        </div>
+        <p className={AUTH_HINT_CLASS}>{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
-        <label htmlFor="cp-confirm" className="block text-sm font-medium text-flit-primary mb-1">
+        <label htmlFor="cp-confirm" className={AUTH_LABEL_CLASS}>
           Confirmar nueva contraseña
         </label>
-        <input
-          id="cp-confirm"
-          type="password"
-          autoComplete="new-password"
-          className={INPUT_CLASS}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-        />
+        <div className="relative">
+          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <input
+            id="cp-confirm"
+            type="password"
+            autoComplete="new-password"
+            className={AUTH_INPUT_CLASS}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </div>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className={AUTH_ERROR_CLASS}>
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
+        className={AUTH_SUBMIT_CLASS}
       >
         {loading ? "Guardando…" : "Cambiar contraseña"}
       </button>

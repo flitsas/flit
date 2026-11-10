@@ -3,14 +3,14 @@
 import type { OverrideScope, ResolutionLevel } from "@/lib/api/types-documents";
 
 // Badge de nivel/scope documental (HU #10198, AC3/AC4/AC5). Colores con contraste
-// AA: CLIENTE (azul), OT (turquesa), DEFAULT (gris). Reutilizado por el formulario
+// AA: CLIENTE (azul), OT (tinta), DEFAULT (gris), con los tonos de badge del kit (HU #14510). Reutilizado por el formulario
 // de overrides, las listas de overrides y la matriz resuelta.
 type BadgeLevel = OverrideScope | ResolutionLevel;
 
 const STYLES: Record<BadgeLevel, { bg: string; fg: string; label: string }> = {
-  CLIENTE: { bg: "var(--color-flit-brand)", fg: "#FFFFFF", label: "CLIENTE" },
-  OT: { bg: "var(--color-flit-tech)", fg: "#0a3d3b", label: "OT" },
-  DEFAULT: { bg: "var(--border)", fg: "var(--color-flit-primary)", label: "DEFAULT" },
+  CLIENTE: { bg: "var(--badge-info-bg)", fg: "var(--badge-info-fg)", label: "CLIENTE" },
+  OT: { bg: "var(--badge-tinta-bg)", fg: "var(--badge-tinta-fg)", label: "OT" },
+  DEFAULT: { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)", label: "DEFAULT" },
 };
 
 export function ScopeBadge({ scope }: { scope: BadgeLevel }) {

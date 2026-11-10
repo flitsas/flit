@@ -6,7 +6,7 @@
 export const DETALLE_BLUE = 'var(--color-flit-brand)';
 export const DETALLE_NAVY = 'var(--di-heading)';
 export const DETALLE_GREEN = 'var(--flit-success-ink)';
-export const DETALLE_GOLD = '#F9AC00';
+export const DETALLE_GOLD = 'var(--di-warning)';
 export const DETALLE_RED = 'var(--destructive)';
 export const DETALLE_GREY = 'var(--muted-foreground)';
 export const DETALLE_META = 'var(--muted-foreground)';
@@ -25,7 +25,7 @@ export const DETALLE_CARD =
   'rounded-[20px] border border-[var(--di-border)] bg-[var(--di-surface-elevated)] p-4 shadow-[var(--shadow-card)]';
 
 export const DETALLE_OVERLAY_STYLE = {
-  background: 'rgba(22, 39, 68, 0.45)',
+  background: 'var(--overlay)',
   backdropFilter: 'blur(6px)',
   WebkitBackdropFilter: 'blur(6px)',
 } as const;

@@ -50,23 +50,45 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | null | un
   );
 }
 
+/**
+ * Marca de la ventana de descuento, como el `.badge::before` de la propuesta (acuerdo de UI/UX, HU #14512): check cielo
+ * mientras el descuento sigue vigente (50 % o 25 %) y punto naranja cuando el plazo terminó (es un aviso, no un error).
+ * Sale del campo `ventana`, nunca del texto. Sin fecha base no lleva marca. Decorativa: el texto ya lo dice.
+ */
+function MarcaVentana({ ventana }: { ventana: string }) {
+  if (ventana === "Descuento50" || ventana === "Descuento25")
+    return (
+      <svg aria-hidden="true" data-marca="check" viewBox="0 0 10 8" className="h-2 w-2.5 shrink-0 self-center" fill="none">
+        <path d="M1 4.2 3.7 6.8 9 1.2" stroke="var(--di-success-dot)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  if (ventana === "SinDescuento")
+    return <span aria-hidden="true" data-marca="punto" className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-[var(--di-alerta-punto)]" />;
+  return null;
+}
+
 export default async function PortalConductor({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const portal = await cargar(token);
 
   if (!portal) {
+    // Mismo fondo que la rama con datos: el body de la app no pinta fondo y en oscuro el texto claro caía sobre blanco.
     return (
-      <main className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-flit-primary">Este enlace no está disponible</h1>
-        <p className="text-sm text-muted-foreground">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
-      </main>
+      <div className="flex min-h-screen bg-secondary">
+        <main className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+          <h1 className="text-xl font-semibold text-flit-primary">Este enlace no está disponible</h1>
+          <p className="text-sm text-muted-foreground">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
+        </main>
+      </div>
     );
   }
 
   const c = portal.comparendo;
   // La marca de la gestora (§7.17) es su conjunto de plantillas, igual que en los correos (HtmlCorreo.Envolver).
   const marcaFlit = portal.conjunto !== "Renting";
-  const fondoEncabezado = marcaFlit ? "#162744" : "#3A4250";
+  // FLIT va en la tinta de la cabecera de tabla (oscura en los dos temas, con texto blanco); el gris de Renting es el de su
+  // marca en el correo (HtmlCorreo), excepción de marca blanca de la homologación.
+  const fondoEncabezado = marcaFlit ? "var(--table-header-bg)" : "#3A4250";
   const color =
     portal.descuento.ventana === "Descuento50" ? "var(--flit-success-ink)" : portal.descuento.ventana === "Descuento25" ? "var(--badge-warning-fg)" : "var(--badge-danger-fg)";
   // B7-3: el gris ocupa toda la pantalla (en escritorio la columna quedaba sobre fondo blanco) y la marca FLIT lleva su
@@ -89,8 +111,9 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
         </header>
 
         <section className="rounded-xl border-l-4 bg-card p-4 shadow-sm" style={{ borderColor: color }}>
-          <p className="text-sm font-semibold" style={{ color }}>
-            {portal.descuento.texto}
+          <p className="flex items-baseline gap-2 text-sm font-semibold" style={{ color }}>
+            <MarcaVentana ventana={portal.descuento.ventana} />
+            <span>{portal.descuento.texto}</span>
           </p>
           <p className="mt-2 text-sm text-muted-foreground">{portal.dondePagar}</p>
         </section>

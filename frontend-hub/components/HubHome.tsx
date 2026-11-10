@@ -98,7 +98,7 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
                 <li key={app.code}>
                   <a
                     href={app.url}
-                    className={`${card} group flex h-full flex-col p-6 transition hover:-translate-y-0.5 hover:border-[color:var(--di-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]`}
+                    className={`${card} group flex h-full flex-col p-6 transition hover:-translate-y-0.5 hover:border-[color:var(--di-border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <ProductArt code={app.code} icon={app.icon} muted={soon} />

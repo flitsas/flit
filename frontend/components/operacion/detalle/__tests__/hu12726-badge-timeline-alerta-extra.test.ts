@@ -20,8 +20,8 @@ describe('HU #12726 — AC1 cabecera = catálogo de estados', () => {
     }
   });
 
-  it('edge: el dorado DETALLE_GOLD (#F9AC00) no es el color de cabecera de ningún estado del catálogo', () => {
-    expect(DETALLE_GOLD).toBe('#F9AC00');
+  it('edge: el tono pendiente DETALLE_GOLD (var(--di-warning)) no es el color de cabecera de ningún estado del catálogo', () => {
+    expect(DETALLE_GOLD).toBe('var(--di-warning)');
     for (const estado of ESTADOS_TRAMITE) {
       expect(detalleEstadoHeader(estado).color).not.toBe(DETALLE_GOLD);
     }
@@ -102,7 +102,7 @@ describe('HU #12726 — AC5 no regresión catálogo / tonos', () => {
   });
 
   it('edge: DETALLE_GOLD sigue existiendo como token visual pero no pinta cabecera de estados', () => {
-    expect(DETALLE_GOLD).toBe('#F9AC00');
+    expect(DETALLE_GOLD).toBe('var(--di-warning)');
     expect(detalleEstadoHeader('borrador').color).not.toBe(DETALLE_GOLD);
   });
 });

@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/ot-metrics";
 import type { RejectionReason } from "@/lib/api/types-ot";
 import { Pencil, PowerOff, RotateCcw } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -129,7 +130,7 @@ export function RejectionReasonsConsole() {
     <div className="flex flex-col gap-5" data-testid="rejection-reasons-console">
       <fieldset
         ref={editorRef}
-        className="flex flex-wrap items-end gap-3 rounded-xl border border-border p-4"
+        className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-card)]"
       >
         <legend className="px-1 text-xs font-semibold">
           {form.id ? "Editar causal" : "Nueva causal"}
@@ -141,7 +142,7 @@ export function RejectionReasonsConsole() {
             value={form.code}
             onChange={(e) => setForm({ ...form, code: e.target.value })}
             placeholder="soat_no_vigente"
-            className="w-48 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
+            className="w-48 rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 py-2 text-xs outline-none focus:border-[color:var(--di-action)]"
           />
         </label>
 
@@ -151,7 +152,7 @@ export function RejectionReasonsConsole() {
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="SOAT no vigente"
-            className="w-72 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
+            className="w-72 rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 py-2 text-xs outline-none focus:border-[color:var(--di-action)]"
           />
         </label>
 
@@ -160,7 +161,7 @@ export function RejectionReasonsConsole() {
           <select
             value={form.modalidad}
             onChange={(e) => setForm({ ...form, modalidad: e.target.value })}
-            className="rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
+            className="rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 py-2 text-xs outline-none focus:border-[color:var(--di-action)]"
           >
             {MODALIDADES.map((m) => (
               <option key={m.value} value={m.value}>
@@ -177,7 +178,7 @@ export function RejectionReasonsConsole() {
             onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
             inputMode="numeric"
             placeholder="auto"
-            className="w-20 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand"
+            className="w-20 rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 py-2 text-xs outline-none focus:border-[color:var(--di-action)]"
           />
         </label>
 
@@ -185,8 +186,7 @@ export function RejectionReasonsConsole() {
           type="button"
           onClick={() => void submit()}
           disabled={busy}
-          className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "var(--gradient-action)" }}
+          className={buttonClass({ size: "sm" })}
         >
           {form.id ? "Guardar cambios" : "Crear causal"}
         </button>
@@ -196,7 +196,7 @@ export function RejectionReasonsConsole() {
             type="button"
             onClick={() => setForm(emptyForm)}
             disabled={busy}
-            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-60"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             Cancelar
           </button>

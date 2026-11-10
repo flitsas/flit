@@ -118,7 +118,7 @@ function OriginBadge({ origin }: { origin: PermissionOrigin }) {
   const Icon = ORIGIN_ICON[origin];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
+      className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
       data-origin={origin}
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
@@ -163,7 +163,7 @@ function PiiConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -368,7 +368,7 @@ export function ModulePermissionsSection({
   const serviceViews = sortServiceTypeModules(views.filter(isServiceTypeModule));
 
   const renderModule = (m: ModuleView) => (
-    <li key={m.id} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
+    <li key={m.id} className="rounded-xl border border-border p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold text-flit-primary dark:text-white">{m.name}</h3>
         <OriginBadge origin={m.origin} />
@@ -382,7 +382,7 @@ export function ModulePermissionsSection({
               disabled={controlsOff || (mode === "admin" && m.actions.length > 0 && m.actions.every((a) => a.outOfCap === true))}
               onClick={() => void setModule(m, "allow")}
               aria-label={`Habilitar el módulo ${m.name} completo`}
-              className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
               style={{ color: "var(--permiso-habilitado)" }}
             >
               Habilitar módulo
@@ -392,7 +392,7 @@ export function ModulePermissionsSection({
               disabled={controlsOff}
               onClick={() => void setModule(m, "deny")}
               aria-label={`Denegar el módulo ${m.name} completo`}
-              className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
               style={{ color: "var(--permiso-deshabilitado)" }}
             >
               Denegar módulo
@@ -403,7 +403,7 @@ export function ModulePermissionsSection({
                 disabled={controlsOff}
                 onClick={() => void moduleBackToRole(m)}
                 aria-label={`Volver el módulo ${m.name} a lo que dicta el rol`}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
               >
                 <RotateCcw className="h-3 w-3" aria-hidden="true" />
                 Volver al rol
@@ -413,7 +413,7 @@ export function ModulePermissionsSection({
         )}
       </div>
 
-      <ul className="mt-2 flex flex-col divide-y divide-[#DFE5ED] dark:divide-white/10">
+      <ul className="mt-2 flex flex-col divide-y divide-border">
         {(() => {
           // HU #13666: par Ver / Crear por tipo de servicio (módulos tramites-matriculas/-traspasos/-otros).
           const pair = findFamilyPair(m.actions);
@@ -482,7 +482,7 @@ export function ModulePermissionsSection({
                 disabled={controlsOff}
                 onClick={() => void backToRole(a)}
                 aria-label={`Volver ${a.name} a lo que dicta el rol`}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
               >
                 <RotateCcw className="h-3 w-3" aria-hidden="true" />
                 Volver al rol

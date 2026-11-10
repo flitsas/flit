@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, Clock, FileSpreadsheet, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -468,8 +470,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-              style={{ background: "var(--gradient-action)" }}
+              className={buttonClass({ size: "sm" })}
             >
               Invitar usuario
             </button>
@@ -729,20 +730,23 @@ function OtInviteUserDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "var(--overlay)" }}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl bg-card">
-        <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
-          Invitar usuario
-        </h2>
-        <p className="text-xs mb-4 text-muted-foreground">
-          Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
-          usuario.
-        </p>
+      <div className={`w-full max-w-md overflow-hidden p-6 ${DIALOGO_PANEL_CLS}`}>
+        <FranjaDialogo className="-mx-6 -mt-6 mb-5">
+          <div>
+            <h2 id="ot-invite-user-title" className={`text-base font-bold mb-1 ${DIALOGO_TITULO_CLS}`}>
+              Invitar usuario
+            </h2>
+            <p className="text-xs opacity-85">
+              Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
+              usuario.
+            </p>
+          </div>
+        </FranjaDialogo>
         <form onSubmit={handleSubmit} className="space-y-4">
           <OtField label="Nombre completo" htmlFor="ot-invite-name">
             <input
@@ -800,15 +804,14 @@ function OtInviteUserDialog({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-secondary disabled:opacity-60 text-foreground"
+              className={buttonClass({ variant: "secondary", className: "flex-1" })}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={busy || missingRole}
-              className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "var(--gradient-action)" }}
+              className={buttonClass({ className: "flex-1" })}
             >
               {busy ? "Enviando…" : "Enviar invitación"}
             </button>

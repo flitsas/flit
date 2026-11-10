@@ -110,7 +110,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
       <div className="glass rounded-2xl p-4 flex flex-col min-h-0 lg:max-h-[calc(100vh-120px)]">
         <div className="flex items-center justify-between mb-4 shrink-0">
           <h3 className="font-bold text-foreground text-sm">Asistente Transaccional</h3>
-          <button onClick={onExit} className="p-1 rounded-lg hover:bg-white/70"><X className="h-4 w-4 text-muted-foreground" /></button>
+          <button onClick={onExit} className="p-1 rounded-lg hover:bg-secondary"><X className="h-4 w-4 text-muted-foreground" /></button>
         </div>
         <ol className="space-y-2 flex-1 min-h-0 overflow-y-auto">
           {STEPS.map((label, i) => {
@@ -313,7 +313,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   <canvas ref={canvasRef} width={800} height={220} className="w-full h-[220px] cursor-crosshair" onMouseDown={startDraw} onMouseMove={moveDraw} onMouseUp={endDraw} onMouseLeave={endDraw} />
                 </div>
                 <div className="flex justify-between items-center">
-                  <button onClick={clearCanvas} className="text-xs px-3 py-1.5 rounded-lg bg-card/70 text-muted-foreground hover:bg-white">Limpiar Canvas</button>
+                  <button onClick={clearCanvas} className="text-xs px-3 py-1.5 rounded-lg bg-card/70 text-muted-foreground hover:bg-card">Limpiar Canvas</button>
                   {signedVendor && <span className="text-xs" style={{ color: "var(--badge-success-fg)" }}>✓ Firma capturada</span>}
                 </div>
                 <pre className="text-[10px] bg-secondary text-muted-foreground rounded-lg p-2 font-mono overflow-x-auto">[IP: 192.168.1.45 | UA: Mozilla/5.0 (Windows NT 10.0; Win64) | RequestPath: /api/v2/tramites/sign]</pre>
@@ -354,7 +354,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
               <div className="text-center py-6 space-y-5">
                 <div className="relative mx-auto h-24 w-24">
                   <div className="absolute inset-0 rounded-full animate-pulse" style={{ background: "var(--color-flit-brand)", filter: "blur(30px)", opacity: 0.5 }} />
-                  <div className="relative h-24 w-24 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
+                  <div className="relative h-24 w-24 rounded-full flex items-center justify-center" style={{ background: "var(--di-gradient-action)" }}>
                     <Check className="h-12 w-12 text-white" strokeWidth={3} />
                   </div>
                 </div>

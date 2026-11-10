@@ -6,6 +6,8 @@
 // necesita saber cuáles son para ir a resolverlos. El backend los recalcula con los MISMOS
 // predicados de la tarjeta, así que la lista nunca contradice al número que la abrió.
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import Link from "next/link";
 import type { OtDrilldown } from "@/lib/api/ot-metrics";
 import { Empty } from "./shared";
@@ -42,7 +44,7 @@ export function DrilldownPanel({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+      className={`fixed inset-0 z-[100] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-label={label}
@@ -51,18 +53,18 @@ export function DrilldownPanel({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-card p-4 shadow-2xl sm:p-6">
-        <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
-          <h3 className="text-sm font-semibold">{label}</h3>
+      <div className={`flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden p-4 sm:p-6 ${DIALOGO_PANEL_CLS}`}>
+        <FranjaDialogo className="-mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6">
+          <h3 className={`text-sm font-semibold ${DIALOGO_TITULO_CLS}`}>{label}</h3>
           <button
             type="button"
             aria-label="Cerrar"
             onClick={onClose}
-            className="text-muted-foreground hover:text-muted-foreground dark:hover:text-foreground"
+            className={DIALOGO_CERRAR_CLS}
           >
             ✕
           </button>
-        </div>
+        </FranjaDialogo>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading && <p className="text-xs text-muted-foreground">Cargando…</p>}
@@ -105,8 +107,7 @@ export function DrilldownPanel({
                       target="_blank"
                       rel="noopener noreferrer"
                       title="Se abre en una pestaña nueva"
-                      className="shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white"
-                      style={{ background: "var(--gradient-action)" }}
+                      className={buttonClass({ size: "sm", className: "shrink-0 text-[11px]" })}
                     >
                       Ir a gestionar ↗
                     </Link>

@@ -67,7 +67,7 @@ export function OtQueriesTab({ transitOfficeId, onScheduleQuery }: OtQueriesTabP
           <span
             className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
             style={{
-              background: `${estadoMeta(fila.estadoOt).color}1A`,
+              background: `color-mix(in srgb, ${estadoMeta(fila.estadoOt).color} 10%, transparent)`,
               color: estadoMeta(fila.estadoOt).color,
             }}
           >

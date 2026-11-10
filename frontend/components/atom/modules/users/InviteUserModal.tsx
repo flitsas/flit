@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useEffect, useMemo, useState } from "react";
 import { Landmark, Shield, ShieldCheck, X } from "lucide-react";
 import { createInvitation, type InvitationCreatedResult, type TenantRole } from "@/lib/api/security";
@@ -219,17 +221,17 @@ export function InviteUserModal({
   const ProfileIcon = PROFILE_ICON[profile];
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-[var(--overlay)] px-4 py-6 backdrop-blur-sm">
-      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border bg-card p-6">
-        <div className="mb-4 flex items-start justify-between">
+    <div className={`fixed inset-0 z-50 grid place-items-center overflow-y-auto px-4 py-6 ${DIALOGO_VELO_CLS}`}>
+      <div className={`max-h-[90dvh] w-full max-w-md overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+        <FranjaDialogo className="-mx-6 -mt-6 mb-5">
           <div>
-            <h3 className="text-lg font-bold">Invitar usuario</h3>
-            <p className="mt-0.5 text-xs opacity-70">Asigna el acceso para colaborar dentro de FLIT.</p>
+            <h3 className={`text-lg font-bold ${DIALOGO_TITULO_CLS}`}>Invitar usuario</h3>
+            <p className="mt-0.5 text-xs opacity-85">Asigna el acceso para colaborar dentro de FLIT.</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
+          <button type="button" onClick={onClose} aria-label="Cerrar" className={DIALOGO_CERRAR_CLS}>
             <X className="h-5 w-5" />
           </button>
-        </div>
+        </FranjaDialogo>
 
         {isDone ? (
           <div className="space-y-3">
@@ -253,8 +255,7 @@ export function InviteUserModal({
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-xl py-2.5 text-sm font-semibold text-white"
-              style={{ background: "var(--gradient-action)" }}
+              className={buttonClass({ className: "w-full" })}
             >
               Cerrar
             </button>
@@ -447,8 +448,7 @@ export function InviteUserModal({
               disabled={
                 status === "loading" || (needsTenant && !selectedTenantId) || rolesRequiredAndMissing
               }
-              className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "var(--gradient-action)" }}
+              className={buttonClass({ className: "w-full" })}
             >
               {status === "loading" ? "Enviando…" : "Enviar Instrucciones"}
             </button>

@@ -135,7 +135,7 @@ export function ConsultasTab({
             <span
               className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
               style={{
-                background: `${estadoEmpresa(fila.status).color}1A`,
+                background: `color-mix(in srgb, ${estadoEmpresa(fila.status).color} 10%, transparent)`,
                 color: estadoEmpresa(fila.status).color,
               }}
             >
@@ -163,7 +163,7 @@ export function ConsultasTab({
           <span
             className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
             style={{
-              background: `${estadoEmpresa(fila.status).color}1A`,
+              background: `color-mix(in srgb, ${estadoEmpresa(fila.status).color} 10%, transparent)`,
               color: estadoEmpresa(fila.status).color,
             }}
           >

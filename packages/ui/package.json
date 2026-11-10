@@ -13,6 +13,7 @@
     "./tokens.css": "./src/styles/tokens.css",
     "./cursor.css": "./src/styles/cursor.css",
     "./cn": "./src/cn.ts",
+    "./ingreso-clases": "./src/ingreso-clases.ts",
     "./Button": "./src/Button.tsx",
     "./CabeceraModulo": "./src/CabeceraModulo.tsx",
     "./ChipsFiltro": "./src/ChipsFiltro.tsx",
