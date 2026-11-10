@@ -145,7 +145,7 @@ function CasillaFuente({
             Dependiente
           </span>
         )}
-        {motivoBloqueo && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {motivoBloqueo && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
       </label>
       {motivoBloqueo && (
         <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>

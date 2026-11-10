@@ -17,7 +17,7 @@ const ACTUAL_CLS = "font-semibold text-flit-primary";
 export function Migas({ migas }: { migas: readonly Miga[] }) {
   return (
     <nav aria-label="Migas de pan">
-      <ol className="flex flex-wrap items-center gap-1.5 text-sm text-[var(--nav-texto)]">
+      <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
         {migas.map((m, i) => {
           const ultima = i === migas.length - 1;
           return (

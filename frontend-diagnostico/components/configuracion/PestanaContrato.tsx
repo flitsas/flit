@@ -446,7 +446,7 @@ function CasillaFuenteContrato({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombre}</span>
-        {bloqueada && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {bloqueada && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
         {estado === "ya-no-disponible" && <TriangleAlert className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" aria-hidden="true" />}
       </label>
       {bloqueada && (

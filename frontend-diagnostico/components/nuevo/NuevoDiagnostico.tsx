@@ -93,7 +93,7 @@ export function NuevoDiagnostico() {
         <h2 id="nuevo-vacio" className="text-lg font-semibold">
           No tienes permiso para crear diagnósticos
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)]">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (carga.tipo !== "listo") {
