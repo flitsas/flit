@@ -5,6 +5,7 @@ import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
 import { AvisoDigitoPlacaOt } from '@/components/operacion/AvisoDigitoPlacaOt';
 import { PLATE_PREFERRED_LAST_DIGIT_KEY } from '@/lib/tramites/plate-digit-preference';
+import { PagoPortalBloque } from './PagoPortalBloque';
 import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
 /**
@@ -26,7 +27,7 @@ export function DetalleVehiculoSidebar({
   item: InstanceSummary;
   canal?: Pick<
     ProcedureInstanceDetail,
-    'channel' | 'channelTransitOfficeName'
+    'channel' | 'channelTransitOfficeName' | 'pagoPortal'
   > & { fieldValues?: ProcedureInstanceDetail['fieldValues'] } | null;
 }) {
   const modelo = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
@@ -79,6 +80,7 @@ export function DetalleVehiculoSidebar({
           </p>
         ) : null}
       </div>
+      <PagoPortalBloque pago={canal?.pagoPortal} />
     </aside>
   );
 }
