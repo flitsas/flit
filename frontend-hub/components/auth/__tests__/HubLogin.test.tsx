@@ -16,8 +16,8 @@ function respond(status: number, body: unknown) {
 }
 
 async function submit(email = "a@b.co", password = "Clave123") {
-  fireEvent.change(screen.getByLabelText("Usuario Corporativo"), { target: { value: email } });
-  fireEvent.change(screen.getByLabelText("Contraseña"), { target: { value: password } });
+  fireEvent.change(screen.getByLabelText("Correo"), { target: { value: email } });
+  fireEvent.change(screen.getByLabelText("Contraseña", { selector: "input" }), { target: { value: password } });
   fireEvent.click(screen.getByRole("button", { name: "Iniciar Sesión" }));
 }
 
@@ -86,5 +86,28 @@ describe("HubLogin", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Ingresa tu correo y contraseña.");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // HU #14485 — el botón para ver la contraseña y la línea de soporte de la propuesta.
+  it("el botón del campo alterna la contraseña entre oculta y visible sin enviar el formulario", () => {
+    render(<HubLogin navigate={vi.fn()} />);
+    const clave = screen.getByLabelText("Contraseña", { selector: "input" });
+    expect(clave).toHaveAttribute("type", "password");
+    const ver = screen.getByRole("button", { name: "Mostrar contraseña" });
+    expect(ver).toHaveAttribute("type", "button");
+    expect(ver).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(ver);
+    expect(clave).toHaveAttribute("type", "text");
+    const ocultar = screen.getByRole("button", { name: "Ocultar contraseña" });
+    expect(ocultar).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(ocultar);
+    expect(clave).toHaveAttribute("type", "password");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("bajo el botón de ingresar está el correo de soporte", () => {
+    render(<HubLogin navigate={vi.fn()} />);
+    expect(screen.getByRole("link", { name: "soporte@flitsas.com" })).toHaveAttribute("href", "mailto:soporte@flitsas.com");
+    expect(screen.getByText(/¿Problemas para entrar\?/)).toBeInTheDocument();
   });
 });
