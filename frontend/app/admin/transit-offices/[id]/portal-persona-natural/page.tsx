@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtHubLayout } from "@/components/admin/transit-offices/OtHubLayout";
+import { OtCajaTab } from "@/components/admin/transit-offices/portal-pn/OtCajaTab";
 import { OtCobroTab } from "@/components/admin/transit-offices/portal-pn/OtCobroTab";
 import { OtPortalDomainSection } from "@/components/admin/transit-offices/portal-pn/OtPortalDomainSection";
 import { OtReportesSection } from "@/components/admin/transit-offices/portal-pn/OtReportesSection";
@@ -43,6 +44,7 @@ function OtPortalPersonaNaturalPageInner() {
           transitOfficeId={params.id}
           reportes={<OtReportesSection transitOfficeId={params.id} />}
           cobro={<OtCobroTab transitOfficeId={params.id} />}
+          caja={<OtCajaTab transitOfficeId={params.id} />}
           domain={<OtPortalDomainSection transitOfficeId={params.id} />}
         />
       </PortalPnAccess>

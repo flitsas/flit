@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { SectionTabs, type SectionTab } from "@/components/atom/SectionTabs";
 import { PortalPnDesignSection } from "./PortalPnDesignSection";
 
-export type PortalPnTabId = "reportes" | "cobro" | "diseno";
+export type PortalPnTabId = "reportes" | "cobro" | "caja" | "diseno";
 
 export interface PortalPnTabsProps {
   transitOfficeId: string;
@@ -12,6 +12,8 @@ export interface PortalPnTabsProps {
   reportes?: ReactNode;
   /** Contenido de la subpestaña Cobro (precios del portal). Lo conecta la HU de precios; sin él, un aviso. */
   cobro?: ReactNode;
+  /** Contenido de la subpestaña Caja (usuarios y cobros de caja). Sin él, la pestaña no aparece. */
+  caja?: ReactNode;
   /** Sección de dominio de Diseño (llega con otra HU). */
   domain?: ReactNode;
   /** Subpestaña inicial. Por defecto Reportes, la primera. */
@@ -22,7 +24,7 @@ export interface PortalPnTabsProps {
  * Subpestañas del Portal Persona Natural del organismo (Épica #14297): `Reportes` (la primera), `Cobro` y `Diseño`.
  * Es el mismo componente para el administrador del organismo y para el SuperAdmin: todo se ancla a `transitOfficeId`.
  */
-export function PortalPnTabs({ transitOfficeId, reportes, cobro, domain, initialTab }: PortalPnTabsProps) {
+export function PortalPnTabs({ transitOfficeId, reportes, cobro, caja, domain, initialTab }: PortalPnTabsProps) {
   const [active, setActive] = useState<PortalPnTabId>(initialTab ?? "reportes");
 
   const tabs: SectionTab<PortalPnTabId>[] = [
@@ -44,6 +46,7 @@ export function PortalPnTabs({ transitOfficeId, reportes, cobro, domain, initial
         </p>
       ),
     },
+    ...(caja ? [{ id: "caja" as const, label: "Caja", content: caja }] : []),
     {
       id: "diseno",
       label: "Diseño",
