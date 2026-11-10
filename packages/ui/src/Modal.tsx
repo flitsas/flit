@@ -130,10 +130,10 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-[color:var(--di-surface-elevated)] text-[color:var(--di-text-primary)] shadow-[var(--shadow-modal)] ${panelClassName}`}
+        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-flit-primary shadow-[var(--shadow-modal)] dark:text-foreground ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
-          <div className="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6">{resolvedHeader}</div>
+          <div className="mx-4 mt-4 shrink-0 sm:mx-6 sm:mt-6">{resolvedHeader}</div>
         ) : (
           // Franja tinta del `.modal__franja` del prototipo: ícono y título en el color sobre acento, y un círculo
           // turquesa decorativo arriba a la derecha sobre el que queda la X.
@@ -169,12 +169,17 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-6">
-          <div className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto ${bodyClassName}`}>{children}</div>
-          {footer ? (
-            <div className="mt-4 shrink-0 border-t border-[color:var(--di-divider)] pt-4">{footer}</div>
-          ) : null}
+        {/* Márgenes y no padding: el cuerpo conserva su barra de scroll y el `px-*` que algunos llamadores le pasan. */}
+        <div
+          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 sm:mt-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
+        >
+          {children}
         </div>
+        {footer ? (
+          <div className="mx-4 mb-4 mt-4 shrink-0 border-t border-[color:var(--di-divider)] pt-4 sm:mx-6 sm:mb-6">
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body,
