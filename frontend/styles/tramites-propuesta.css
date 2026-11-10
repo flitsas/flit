@@ -25,19 +25,12 @@
 /* ── Antetítulo (texto pequeño en mayúsculas sobre un título) ── */
 .di-antetitulo { margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem; font-weight: 700; color: var(--di-highlight); }
 
-/* ── Placa colombiana. Local hasta que S3 entregue <Placa> en @flit/ui ── */
-.di-placa {
-  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-  width: 92px; aspect-ratio: 33 / 16; padding: 2px 6px 3px; border-radius: 5px;
-  background: var(--placa-fondo) url("/assets/ilustraciones/placa-colombia.webp") center / 100% 100% no-repeat;
-  color: var(--placa-texto); font-family: var(--font-placa); white-space: nowrap; text-decoration: none;
-  box-shadow: var(--shadow-card); vertical-align: middle;
+/* ── Hueco de placa: el detalle de un trámite sin placa (la placa real es `Placa` de @flit/ui) ── */
+.di-placa-vacia {
+  display: inline-grid; place-items: center; width: 156px; aspect-ratio: 33 / 16; border-radius: 8px;
+  background: var(--di-surface-sunken); color: var(--di-text-tertiary); border: 1.5px dashed var(--di-border-control);
+  font-size: 0.8125rem; font-weight: 600;
 }
-.di-placa__num { font-size: 1.375rem; font-weight: 700; line-height: 1; letter-spacing: 0.04em; text-transform: uppercase; }
-.di-placa--grande { width: 156px; padding: 6px 10px 7px; border-radius: 8px; }
-.di-placa--grande .di-placa__num { font-size: 2.25rem; }
-.di-placa--vacia { background: var(--di-surface-sunken); color: var(--di-text-tertiary); box-shadow: none; border: 1.5px dashed var(--di-border-control); }
-.di-placa--vacia .di-placa__num { font-family: inherit; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
 
 /* ── Tarjeta de vehículo ── */
 .di-vehiculo { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }

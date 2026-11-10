@@ -41,8 +41,8 @@ export function DetalleVehiculoSidebar({
         {item.placa ? (
           <Placa placa={item.placa} size="lg" aria-hidden="true" />
         ) : (
-          <span className="di-placa di-placa--grande di-placa--vacia" aria-hidden="true">
-            <span className="di-placa__num">Sin placa</span>
+          <span className="di-placa-vacia" aria-hidden="true">
+            Sin placa
           </span>
         )}
       </div>
