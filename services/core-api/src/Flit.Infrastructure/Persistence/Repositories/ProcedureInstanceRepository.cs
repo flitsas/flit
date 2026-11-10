@@ -1826,6 +1826,18 @@ internal sealed partial class ProcedureInstanceRepository(
     public async Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct) =>
         await db.ProcedureInstanceEvents.AddAsync(evt, ct);
 
+    /// <inheritdoc />
+    public Task<DateTimeOffset?> GetUltimoCambioEstadoCreatedAtAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstanceEvents.AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == procedureInstanceId
+                && e.TenantId == tenantId
+                && e.Tipo == "cambio_estado")
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Select(e => (DateTimeOffset?)e.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
     public async Task<IReadOnlySet<string>> ListRuntConsultedDocumentKeysAsync(
         Guid id, Guid tenantId, CancellationToken ct)
     {
