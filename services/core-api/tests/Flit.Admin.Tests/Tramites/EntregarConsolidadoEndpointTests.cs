@@ -62,11 +62,15 @@ public sealed class EntregarConsolidadoEndpointTests : IClassFixture<AdminTramit
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    // HU #14494 — estado final sirve el PDF sin regenerar solo si la coherencia temporal es fresca
+    // (bandera vigente + sello GeneradoEn ≥ último cambio de estado); espeja handler AC2.
     [Theory]
     [InlineData("consolidado", "consolidado")]
     public async Task AC3_EstadoFinal_200_ConMarcadorDefinitivo_Y_SinRegenerar(string tipoQuery, string tipoAdjunto)
     {
         var ct = TestContext.Current.CancellationToken;
+        var tCambio = DateTimeOffset.UtcNow.AddHours(-1);
+        var tPdf = DateTimeOffset.UtcNow;
         var instance = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
@@ -75,6 +79,10 @@ public sealed class EntregarConsolidadoEndpointTests : IClassFixture<AdminTramit
             ReferenceNumber = "TRM-2026-012785",
             Status = TramiteEstado.Aprobado,
             CreatedAt = DateTimeOffset.UtcNow,
+            ConsolidadoWizardVigente = tipoAdjunto == "consolidado",
+            ConsolidadoMaestroVigente = tipoAdjunto == "consolidado_maestro",
+            ConsolidadoWizardGeneradoEn = tipoAdjunto == "consolidado" ? tPdf : null,
+            ConsolidadoMaestroGeneradoEn = tipoAdjunto == "consolidado_maestro" ? tPdf : null,
         };
         var adjunto = new ProcedureInstanceAttachment
         {
@@ -87,10 +95,13 @@ public sealed class EntregarConsolidadoEndpointTests : IClassFixture<AdminTramit
             Sha256 = "sha-definitivo",
             StoragePath = "x/definitivo.pdf",
             Source = "system",
-            UploadedAt = DateTimeOffset.UtcNow,
+            UploadedAt = tPdf,
         };
         instance.Attachments.Add(adjunto);
         _factory.Repo.GetByIdWithAttachmentsAsync(instance.Id, TenantA, Arg.Any<CancellationToken>()).Returns(instance);
+        _factory.Repo
+            .GetUltimoCambioEstadoCreatedAtAsync(instance.Id, TenantA, Arg.Any<CancellationToken>())
+            .Returns(tCambio);
 
         var response = await ClientFor(TenantA).GetAsync(
             $"/api/v1/tramites/instances/{instance.Id}/consolidado/entrega?tipo={tipoQuery}", ct);
