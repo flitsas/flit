@@ -150,7 +150,6 @@ import type {
 import {
   WIZARD_BTN,
   WIZARD_CTA_GRADIENT,
-  WIZARD_CTA_GRADIENT_DONE,
   WIZARD_INPUT,
   WIZARD_SELECT,
   WIZARD_LABEL,
@@ -2194,8 +2193,8 @@ export function TramiteWizard(props: Props) {
                     (!fullReadOnly && !canRadicar && draftFinalized)
                   }
                   aria-describedby={mandatarioBloquea ? MANDATARIO_ALERTA_ID : undefined}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+                  // HU #14482 — la propuesta no tiene verde: las acciones terminales también son `.btn`.
+                  className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                   title={
                     mandatarioBloquea
                       ? 'Sin mandatario válido no se puede radicar: pide que lo configuren'
@@ -2278,18 +2277,15 @@ export function TramiteWizard(props: Props) {
                   >
                     {continuing ? 'Guardando…' : 'Guardar y continuar'}
                   </button>
-                  {/* Cierre de la subsanación: degradado cian→verde (`gradient.success`), el mismo
-                      que "Finalizar y enviar trámite". Re-radicar TAMBIÉN cierra el trámite
-                      (rechazado→entregado), así que comparte el tono de las acciones terminales y no
-                      el azul del avance, que queda para "Guardar y continuar". */}
+                  {/* Cierre de la subsanación (rechazado→entregado). Hasta HU #14482 iba con el
+                      degradado cian→verde de las acciones terminales; la propuesta no tiene verde, así
+                      que es el `.btn` principal como "Finalizar y enviar trámite" y el avance. */}
                   <button
                     type="button"
                     onClick={() => void reradicar()}
                     disabled={!reradicarHabilitado}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-tech disabled:opacity-50`}
-                    style={{
-                      background: reradicarHabilitado ? WIZARD_CTA_GRADIENT_DONE : 'var(--input)',
-                    }}
+                    // HU #14482 — `.btn` principal, sin el degradado turquesa a verde.
+                    className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                     title={
                       hasUnsavedChanges
                         ? 'Hay cambios sin guardar: usa Guardar y continuar antes de re-radicar'
@@ -2464,8 +2460,7 @@ export function TramiteWizard(props: Props) {
                 setConfirmRadicar(false);
                 void handleRadicarTramite();
               }}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+              className={buttonClass({ variant: 'primary', size: 'sm' })}
             >
               Sí, radicar trámite
             </button>
