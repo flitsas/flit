@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandLogo } from "@flit/brand/BrandLogo";
+import { buttonClass } from "@flit/ui/Button";
 
 // Contenedor de las pantallas de recuperación del hub (mismo que el de Trámites, components/auth/AuthCard.tsx).
 export function AuthCard({ title, subtitle, children, backHref = "/login" }: { title: string; subtitle?: string; children: React.ReactNode; backHref?: string | null }) {
@@ -23,5 +24,4 @@ export function AuthCard({ title, subtitle, children, backHref = "/login" }: { t
 export const INPUT_CLASS =
   "w-full bg-card border border-input rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
-export const SUBMIT_CLASS =
-  "w-full rounded-xl bg-flit-brand py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60";
+export const SUBMIT_CLASS = buttonClass({ className: "w-full" });

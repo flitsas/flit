@@ -12,6 +12,7 @@ import { toHubUser } from "@/lib/hub-user";
 import { productInfo } from "@/lib/products";
 import { CONTACT } from "@/lib/site";
 import { resolveTramitesUrl } from "@/lib/tramites-url";
+import { buttonClass } from "@flit/ui/Button";
 
 // Apertura de un producto que todavía no está desplegado (Comparendos, Diagnóstico): la tarjeta del inicio y el menú de
 // productos llegan aquí en vez de a un host que no responde. La API decide qué productos vienen aquí
@@ -55,7 +56,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
           <p className="mr-auto text-sm text-muted-foreground">Cuando esté listo aparecerá aquí mismo, con tu misma cuenta.</p>
           <a
             href={`mailto:${CONTACT.email}?subject=${encodeURIComponent(`Quiero saber cuándo llega ${product.name}`)}`}
-            className="inline-flex items-center gap-2 rounded-full bg-flit-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className={buttonClass()}
           >
             <Mail className="h-4 w-4" aria-hidden="true" /> Avísame cuando llegue
           </a>

@@ -6,6 +6,7 @@ import { ExternalLink, Lock, Mail, ShieldAlert, User as UserIcon } from "lucide-
 import { BrandLogo } from "@flit/brand/BrandLogo";
 import { postJson } from "@/lib/api";
 import { ParticlesCanvas } from "./ParticlesCanvas";
+import { buttonClass } from "@flit/ui/Button";
 
 // Login del hub (A-06, HU #12991). Mismo diseño y mensajes que el de Trámites (components/atom/Login.tsx), pero
 // no guarda tokens en el navegador: POST /connect/login abre la sesión del hub (cookie HttpOnly) y se vuelve a la
@@ -88,6 +89,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
         <div className="relative z-10 flex flex-col items-center px-8 text-center">
           <BrandLogo variant="white" className="h-auto w-full max-w-[280px] object-contain md:max-w-[360px]" />
           {/* Ilustración de ingreso de la propuesta, como en el login de Trámites: decorativa, solo desde tablet. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
           <img
             src="/assets/ilustraciones/heroe-ingreso.webp"
             alt=""
@@ -177,7 +179,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
                 </p>
               )}
 
-              <button type="submit" disabled={loading} className="w-full rounded-xl bg-flit-brand py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60">
+              <button type="submit" disabled={loading} className={buttonClass({ className: "w-full" })}>
                 {loading ? "Ingresando…" : "Iniciar Sesión"}
               </button>
             </form>
