@@ -172,6 +172,7 @@ internal static class BiometricaEndpoints
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
             [FromQuery] bool? standalone,
+            [FromQuery] string? referenceNumber,
             HttpContext http,
             ListTenantBiometricPersonsHandler handler,
             CancellationToken ct) =>
@@ -193,7 +194,8 @@ internal static class BiometricaEndpoints
                 venceEnDias,
                 page ?? 1,
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
-                standalone);
+                standalone,
+                referenceNumber);
 
             var (result, error) = await handler.HandleAsync(scope, query, ct);
             return error is not null
