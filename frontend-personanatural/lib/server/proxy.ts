@@ -10,6 +10,38 @@ export const COOKIE_SESION = "pn_sesion";
 export const COOKIE_PUNTO = "pn_punto";
 export const PREFIJO_BFF = "/api/v1/persona-natural";
 
+/** Tope de la prefactura (5 MB) más el sobre multipart de la confirmación en caja. */
+export const MAX_CUERPO_CAJA_BYTES = 6 * 1024 * 1024;
+
+/**
+ * La caja del organismo (ADR-0082) es la única rama con sesión de usuario: el Bearer lo pone @flit/auth con el token del
+ * producto `caja` (cookie flit_session_caja), nunca estas cookies. Aquí solo se decide si una ruta es de la caja y se
+ * valida lo que el navegador manda; el reenvío lo hace `cajaApiProxy`.
+ */
+export function esRutaCaja(path: string[]): boolean {
+  return path[0] === "caja";
+}
+
+/**
+ * Compuerta de las peticiones de la caja antes de adjuntar el Bearer: la ruta no puede salirse del prefijo, el Origin debe
+ * ser el del propio portal en métodos que cambian estado (CSRF; la cookie ya es Lax) y el cuerpo, JSON o multipart y
+ * dentro del tope. Devuelve el rechazo, o `null` si la petición puede pasar.
+ */
+export function validarPeticionCaja(request: Request, path: string[], origenesPermitidos?: string[]): ResultadoProxy | null {
+  if (!rutaSegura(path)) return problema(400, "ruta_invalida", "Ruta inválida");
+  if (!origenPermitido(request, origenesPermitidos)) return problema(403, "origen_no_permitido", "Origen no permitido");
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    const tipo = (request.headers.get("content-type") ?? "").toLowerCase();
+    if (tipo !== "" && !tipo.startsWith("application/json") && !tipo.startsWith("multipart/form-data")) {
+      return problema(415, "tipo_no_permitido", "Tipo de contenido no permitido");
+    }
+    if (Number(request.headers.get("content-length") ?? 0) > MAX_CUERPO_CAJA_BYTES) {
+      return problema(413, "cuerpo_demasiado_grande", "El archivo es demasiado grande");
+    }
+  }
+  return null;
+}
+
 /** Cabeceras del navegador que sí se reenvían al BFF. Todo lo demás (cookies, Host, Authorization) se descarta. */
 const CABECERAS_PERMITIDAS = ["content-type", "accept", "x-captcha-token", "idempotency-key", "x-correlation-id"];
 
@@ -63,6 +95,8 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
   }
   const publica = esConfiguracionPublica(path);
   const punto = esCanalPunto(path);
+  // La caja no pasa por aquí: su sesión es la de @flit/auth. Si llegara, nunca se le prestan las sesiones del ciudadano.
+  if (esRutaCaja(path)) return problema(404, "ruta_invalida", "Ruta inválida");
   if (publica) {
     const condicional = request.headers.get("if-none-match");
     if (condicional) cabeceras.set("if-none-match", condicional);

@@ -2,7 +2,8 @@ import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { portalConfig } from "@/lib/config.server";
 import { ipDelCliente } from "@/lib/server/ip";
-import { COOKIE_PUNTO, COOKIE_SESION, reenviarAlBff } from "@/lib/server/proxy";
+import { cajaApiProxy } from "@/lib/caja/auth.server";
+import { COOKIE_PUNTO, COOKIE_SESION, esRutaCaja, reenviarAlBff, validarPeticionCaja } from "@/lib/server/proxy";
 
 // /api/v1/persona-natural/* del navegador → gateway → BFF del portal. El token de la sesión del trámite vive en una
 // cookie HttpOnly: aquí se guarda al abrir o reanudar un trámite y se adjunta al reenviar; el navegador nunca lo ve.
@@ -12,6 +13,7 @@ type Context = { params: Promise<{ path: string[] }> };
 
 async function handle(request: Request, context: Context): Promise<Response> {
   const { path } = await context.params;
+  if (esRutaCaja(path)) return atenderCaja(request, path);
   const config = portalConfig();
   const jar = await cookies();
   const cabeceras = await headers();
@@ -47,6 +49,15 @@ async function handle(request: Request, context: Context): Promise<Response> {
   } else if (resultado.cookiePunto?.accion === "borrar") {
     respuesta.cookies.set(COOKIE_PUNTO, "", { httpOnly: true, secure: config.cookieSegura, sameSite: "strict", path: "/api/v1/persona-natural", maxAge: 0 });
   }
+  return respuesta;
+}
+
+/** Caja del organismo: sesión OIDC de @flit/auth (cookie HttpOnly del servidor); el Bearer solo se adjunta en `/caja/*`. */
+async function atenderCaja(request: Request, path: string[]): Promise<Response> {
+  const rechazo = validarPeticionCaja(request, path);
+  if (rechazo) return new NextResponse(rechazo.cuerpo, { status: rechazo.status, headers: rechazo.headers });
+  const respuesta = await cajaApiProxy(request, path.slice(1));
+  respuesta.headers.set("cache-control", "no-store");
   return respuesta;
 }
 
