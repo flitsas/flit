@@ -1,5 +1,6 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PdfSharpCore.Pdf;
@@ -13,6 +14,8 @@ namespace Flit.Infrastructure.Documents;
 /// <summary>
 /// Fusiona adjuntos en un PDF único. PDFs se importan con PdfSharpCore; imágenes se
 /// renderizan a una página con QuestPDF (ya presente por HU #10256).
+/// <para>HU #14505 / ADR-0083 — <see cref="NormalizeToPdf"/> clasifica por magic bytes
+/// (precedencia sobre MIME) y reencodea PNG/JPEG vía <see cref="PngJpegImageDecoding"/>.</para>
 /// </summary>
 public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerger
 {
@@ -54,14 +57,90 @@ public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolid
     {
         ArgumentNullException.ThrowIfNull(content);
 
+        // HU #14505 / ADR-0083 — magic bytes mandan sobre el MIME declarado (FT1-0000372:
+        // PDF real etiquetado image/jpeg → QuestPDF "Cannot decode the provided image").
+        var kind = DetectContentKind(content);
+        if (kind == AttachmentContentKind.Pdf)
+            return content;
+
+        if (kind is AttachmentContentKind.Jpeg or AttachmentContentKind.Png)
+            return ImageBytesToPdfSafe(content);
+
         if (string.Equals(mimetype, "application/pdf", StringComparison.OrdinalIgnoreCase))
             return content;
 
         if (IsImageMime(mimetype))
-            return ImageToPdf(content);
+            return ImageBytesToPdfSafe(content);
 
         throw new NotSupportedException($"Mimetype no soportado para consolidado: {mimetype}");
     }
+
+    /// <summary>Clasificación por firma de archivo (sin confiar en MIME).</summary>
+    internal enum AttachmentContentKind
+    {
+        Unknown = 0,
+        Pdf = 1,
+        Jpeg = 2,
+        Png = 3,
+    }
+
+    internal static AttachmentContentKind DetectContentKind(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length >= 4
+            && bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46)
+            return AttachmentContentKind.Pdf;
+
+        if (IdentitySignatureImageFormat.IsJpeg(bytes))
+            return AttachmentContentKind.Jpeg;
+
+        if (IdentitySignatureImageFormat.IsPng(bytes))
+            return AttachmentContentKind.Png;
+
+        return AttachmentContentKind.Unknown;
+    }
+
+    /// <summary>
+    /// Reencode limpio (HU #13371) + QuestPDF; si falla, página de aviso Import-ok (sin lanzar).
+    /// </summary>
+    private byte[] ImageBytesToPdfSafe(byte[] imageBytes)
+    {
+        var clean = PngJpegImageDecoding.ReencodeToCleanPng(imageBytes);
+        if (clean is null)
+        {
+            LogUndecodableImagePlaceholder(_logger);
+            return CreateUndecodableImagePlaceholder();
+        }
+
+        try
+        {
+            return ImageToPdf(clean);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogUndecodableImagePlaceholder(_logger);
+            return CreateUndecodableImagePlaceholder();
+        }
+    }
+
+    /// <summary>Página de aviso cuando la imagen no se puede decodificar (HU #14505).</summary>
+    internal static byte[] CreateUndecodableImagePlaceholder() =>
+        Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.Letter);
+                page.Margin(48);
+                page.DefaultTextStyle(x => x.FontSize(11));
+                page.Content().Column(col =>
+                {
+                    col.Spacing(12);
+                    col.Item().Text("Imagen no incluida en el consolidado").Bold().FontSize(14);
+                    col.Item().Text(
+                        "El archivo de imagen no pudo procesarse (formato ilegible o incompatible). " +
+                        "Reemplace el adjunto por un PNG o JPEG estándar, o por un PDF, y regenere el consolidado.");
+                });
+            });
+        }).GeneratePdf();
 
     public byte[] Merge(IReadOnlyList<byte[]> pdfParts)
     {
@@ -176,6 +255,11 @@ public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolid
                 page.Content().Image(imageBytes).FitArea();
             });
         }).GeneratePdf();
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "HU14505: imagen de adjunto no decodificable; se sustituye por página de aviso en el consolidado.")]
+    private static partial void LogUndecodableImagePlaceholder(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
