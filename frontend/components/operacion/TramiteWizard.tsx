@@ -2500,7 +2500,7 @@ export function TramiteWizard(props: Props) {
   );
 }
 
-const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
+const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS', 'PPT'];
 
 /**
  * Trámites principales del selector del paso 1, en el orden y con el copy de la propuesta.
