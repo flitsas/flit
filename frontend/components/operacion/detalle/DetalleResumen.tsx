@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react';
 import { Placa } from '@flit/ui/Placa';
 import { formatFechaHora } from '@/lib/format/date';
-import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
 import { DETALLE_CARD } from './detalle-visual';
 
@@ -34,7 +33,7 @@ export function DetalleResumen({
   pasos,
 }: {
   item: InstanceSummary;
-  /** Detalle cargado; `null` mientras carga o con error (canal en «—»). */
+  /** Detalle cargado; `null` mientras carga o con error (sin OT del punto). */
   detalle?: Pick<ProcedureInstanceDetail, 'channel' | 'channelTransitOfficeName'> | null;
   /** Navegador de pasos de sección, debajo de la línea divisoria. */
   pasos?: ReactNode;
@@ -67,10 +66,8 @@ export function DetalleResumen({
           <Ficha dt="Compañía">{item.companiaNombre || '—'}</Ficha>
           <Ficha dt="Creado">{formatFechaHora(item.createdAt)}</Ficha>
           <Ficha dt="Actualizado">{item.updatedAt ? formatFechaHora(item.updatedAt) : '—'}</Ficha>
-          {/* HU #14322 — solo lectura: texto, sin control para cambiarlo (ningún rol lo edita). */}
-          <Ficha dt="Canal" testId="detalle-canal">
-            {detalle ? canalLabel(detalle.channel) : '—'}
-          </Ficha>
+          {/* HU #14322: el canal ya no se muestra (decisión de Samuel en el rediseño, Epic #14471). Solo queda el OT
+              del punto cuando el trámite llegó por uno, en solo lectura. */}
           {detalle?.channel === 'pn_punto' && detalle.channelTransitOfficeName ? (
             <Ficha dt="OT del punto" testId="detalle-canal-ot">
               {detalle.channelTransitOfficeName}
