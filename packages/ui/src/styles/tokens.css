@@ -212,38 +212,39 @@
   --overlay: rgba(22, 39, 68, 0.45);
   --placa-texto: #111111;
 
-  /* Estados del trámite (lib/tramites/estados.ts) en el lenguaje de la propuesta (pedido de S1, ronda 2): sin verde ni rojo.
+  /* HU #14482 (S1, pedido de Samuel) — chip de estado del trámite con el color propio de cada estado: los valores de
+     develop (ESTADO_CHIP_STYLES): fondo tintado al 14 %, texto oscurecido a ≥4.5:1 sobre ese fondo y borde al 35 %.
      Sus SVG de public/assets/estados conservan el `accent` en hex. */
-  --estado-borrador-bg: var(--di-surface-sunken);
-  --estado-borrador-fg: var(--di-text-secondary);
-  --estado-borrador-border: transparent;
-  --estado-preparado-bg: var(--di-accent-soft);
-  --estado-preparado-fg: var(--di-action);
-  --estado-preparado-border: transparent;
-  --estado-preasignacion-bg: var(--di-accent-soft);
-  --estado-preasignacion-fg: var(--di-action);
-  --estado-preasignacion-border: transparent;
-  --estado-asignado-bg: var(--di-accent-soft);
-  --estado-asignado-fg: var(--di-action);
-  --estado-asignado-border: transparent;
-  --estado-entregado-bg: var(--di-accent-soft);
-  --estado-entregado-fg: var(--di-action);
-  --estado-entregado-border: transparent;
-  --estado-aprobado-bg: var(--di-success-soft);
-  --estado-aprobado-fg: var(--di-success);
-  --estado-aprobado-border: transparent;
-  --estado-rechazado-bg: var(--di-surface-elevated);
-  --estado-rechazado-fg: var(--di-heading);
-  --estado-rechazado-border: var(--di-alerta-punto);
-  --estado-anulado-bg: var(--di-surface-elevated);
-  --estado-anulado-fg: var(--di-heading);
-  --estado-anulado-border: var(--di-alerta-punto);
-  --estado-revocado-bg: var(--di-surface-elevated);
-  --estado-revocado-fg: var(--di-heading);
-  --estado-revocado-border: var(--di-alerta-punto);
-  --estado-subsanacion-bg: var(--di-sky);
-  --estado-subsanacion-fg: var(--di-heading);
-  --estado-subsanacion-border: transparent;
+  --estado-borrador-bg: rgba(94,106,123, 0.14);
+  --estado-borrador-fg: #5e6a7b;
+  --estado-borrador-border: rgba(94,106,123, 0.35);
+  --estado-preparado-bg: rgba(85,126,255, 0.14);
+  --estado-preparado-fg: #4465cc;
+  --estado-preparado-border: rgba(85,126,255, 0.35);
+  --estado-preasignacion-bg: rgba(224,138,0, 0.14);
+  --estado-preasignacion-fg: #8a5400;
+  --estado-preasignacion-border: rgba(224,138,0, 0.35);
+  --estado-asignado-bg: rgba(99,102,241, 0.14);
+  --estado-asignado-fg: #4f46e5;
+  --estado-asignado-border: rgba(99,102,241, 0.35);
+  --estado-entregado-bg: rgba(0,169,157, 0.14);
+  --estado-entregado-fg: #007a71;
+  --estado-entregado-border: rgba(0,169,157, 0.35);
+  --estado-aprobado-bg: rgba(140,198,63, 0.14);
+  --estado-aprobado-fg: #557926;
+  --estado-aprobado-border: rgba(140,198,63, 0.35);
+  --estado-rechazado-bg: rgba(255,0,0, 0.14);
+  --estado-rechazado-fg: #cc0000;
+  --estado-rechazado-border: rgba(255,0,0, 0.35);
+  --estado-anulado-bg: rgba(193,39,45, 0.14);
+  --estado-anulado-fg: #c1272d;
+  --estado-anulado-border: rgba(193,39,45, 0.35);
+  --estado-revocado-bg: rgba(139,92,246, 0.14);
+  --estado-revocado-fg: #6d28d9;
+  --estado-revocado-border: rgba(139,92,246, 0.35);
+  --estado-subsanacion-bg: rgba(255,78,0, 0.14);
+  --estado-subsanacion-fg: #bf3b00;
+  --estado-subsanacion-border: rgba(255,78,0, 0.35);
 
   /* HU #14482 (S1) — acento propio de cada estado, SOLO para la barra de la tira de contadores de /tramites y de la
    * bandeja del OT (elemento gráfico, no texto). Son los `accent` de develop (lib/tramites/estados.ts). */
@@ -449,6 +450,38 @@
   --di-success-soft: #1c3158;
   --di-success-line: #6f93ff;
 
+  /* HU #14482 (S1) — chips de estado en oscuro: fondo del acento al 22 % y texto aclarado del mismo tono, ≥5.9:1 sobre
+     ese fondo compuesto sobre --di-surface-elevated (#132544). */
+  --estado-borrador-bg: rgba(94,106,123, 0.22);
+  --estado-borrador-fg: #b4becc;
+  --estado-borrador-border: rgba(94,106,123, 0.45);
+  --estado-preparado-bg: rgba(85,126,255, 0.22);
+  --estado-preparado-fg: #a3baff;
+  --estado-preparado-border: rgba(85,126,255, 0.45);
+  --estado-preasignacion-bg: rgba(224,138,0, 0.22);
+  --estado-preasignacion-fg: #ffc266;
+  --estado-preasignacion-border: rgba(224,138,0, 0.45);
+  --estado-asignado-bg: rgba(99,102,241, 0.22);
+  --estado-asignado-fg: #b0b2fa;
+  --estado-asignado-border: rgba(99,102,241, 0.45);
+  --estado-entregado-bg: rgba(0,169,157, 0.22);
+  --estado-entregado-fg: #5fd8ce;
+  --estado-entregado-border: rgba(0,169,157, 0.45);
+  --estado-aprobado-bg: rgba(140,198,63, 0.22);
+  --estado-aprobado-fg: #b5de7f;
+  --estado-aprobado-border: rgba(140,198,63, 0.45);
+  --estado-rechazado-bg: rgba(255,0,0, 0.22);
+  --estado-rechazado-fg: #ff8a8a;
+  --estado-rechazado-border: rgba(255,0,0, 0.45);
+  --estado-anulado-bg: rgba(193,39,45, 0.22);
+  --estado-anulado-fg: #f28c90;
+  --estado-anulado-border: rgba(193,39,45, 0.45);
+  --estado-revocado-bg: rgba(139,92,246, 0.22);
+  --estado-revocado-fg: #c4aefb;
+  --estado-revocado-border: rgba(139,92,246, 0.45);
+  --estado-subsanacion-bg: rgba(255,78,0, 0.22);
+  --estado-subsanacion-fg: #ff9a6b;
+  --estado-subsanacion-border: rgba(255,78,0, 0.45);
   /* HU #14482 (S1) — acentos de la tira de estados en oscuro: mismo tono; solo borrador y anulado se aclaran para
    * llegar a 3:1 sobre --di-surface-elevated (#132544); los demás ya lo cumplen tal cual. */
   --estado-borrador-acento: #93a0b3;

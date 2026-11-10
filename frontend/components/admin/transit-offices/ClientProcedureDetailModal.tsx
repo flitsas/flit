@@ -34,6 +34,7 @@ import {
   OT_WARN_TEXT,
 } from "./detalle/ot-detalle-visual";
 import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
+import { estadoChipClass } from "@/lib/tramites/estados";
 
 import { formatFechaHora } from "@/lib/format/date";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -291,7 +292,7 @@ export function ClientProcedureDetailModal({
             title="Ver línea de tiempo del trámite"
             className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+            <StatusBadge className={estadoChipClass(row.status)} label={estadoLabel} {...procedureStatusChip(row.status)} />
           </button>
         </div>
         <p className="mt-1 text-[12px] text-muted-foreground">

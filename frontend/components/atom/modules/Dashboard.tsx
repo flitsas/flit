@@ -844,8 +844,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 ) : (
                   <ul className="space-y-2">
                     {globalFunnel.map((f, i) => {
-                      // HU #14481 — lenguaje de estados de la propuesta: el número va en la pastilla del
-                      // estado (--estado-*), el nombre con su marca (check, punto, equis) y la cifra en tinta.
+                      // HU #14481 — el número va en la pastilla del estado (--estado-*, color propio del
+                      // estado desde HU #14482), el nombre sin marca y la cifra en tinta.
                       const chip = estadoChipStyle(f.status);
                       return (
                         <li

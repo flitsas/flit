@@ -6,19 +6,22 @@
  * tiene esos tokens.
  */
 
-/* ── Chip de estado: la marca va en ::before; color y fondo los ponen los tokens --estado-* ── */
+/* ── Chip de estado del trámite (HU #14482): solo texto, con el color propio del estado (tokens --estado-*). ── */
 .di-estado { display: inline-flex; align-items: center; gap: 6px; }
-.di-estado::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-/* Un StatusBadge con la marca del estado ya trae su propia marca genérica (por tono): manda la del estado. */
+/* StatusBadge con color crudo pinta un punto genérico (data-marca): el chip de trámite va sin marca. */
 .di-estado > [data-marca] { display: none; }
+/* Marcas que siguen en pastillas que no son estado del trámite («✓ Adjunto», SOAT…). */
+.di-estado--check::before,
+.di-estado--punto::before,
+.di-estado--equis::before { content: ""; flex: none; }
 .di-estado--check::before {
-  width: 9px; height: 5px; border-radius: 0; background: none;
+  width: 9px; height: 5px;
   border-left: 2px solid var(--di-success-dot); border-bottom: 2px solid var(--di-success-dot);
   transform: translateY(-2px) rotate(-45deg);
 }
-.di-estado--punto::before { background: var(--di-alerta-punto); }
+.di-estado--punto::before { width: 6px; height: 6px; border-radius: 50%; background: var(--di-alerta-punto); }
 .di-estado--equis::before {
-  width: 8px; height: 8px; border-radius: 0;
+  width: 8px; height: 8px;
   background:
     linear-gradient(45deg, transparent 40%, var(--di-alerta-punto) 40% 60%, transparent 60%),
     linear-gradient(-45deg, transparent 40%, var(--di-alerta-punto) 40% 60%, transparent 60%);

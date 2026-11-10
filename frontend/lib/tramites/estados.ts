@@ -242,32 +242,13 @@ export function estadoChipStyle(value: string | null | undefined): EstadoChipSty
 }
 
 /**
- * Marca del chip en el lenguaje de la propuesta (HU #14482): el estado no se dice con verde ni con
- * rojo sino con una marca junto al texto. `check` = completo (cielo con check azul), `punto` =
- * pendiente de quien gestiona (cielo con punto naranja), `equis` = rechazado o cerrado sin
- * aprobar (blanco con aro y equis naranja), `avance` = en curso (azul suave con punto del mismo
- * tono), `neutro` = borrador. La dibuja `styles/tramites-propuesta.css` con `::before`, así que el
- * DOM del chip no cambia: solo suma la clase.
+ * Clase del chip de estado del trámite (HU #14482): `di-estado`, solo texto y sin marca; el color lo
+ * ponen `bg`/`color`/`border` de {@link estadoChipStyle} (tokens `--estado-<x>-*`). Sobre un
+ * `StatusBadge` con color crudo además oculta su punto genérico.
  */
-export type EstadoMarca = 'check' | 'punto' | 'equis' | 'avance' | 'neutro';
-
-export const ESTADO_MARCA: Record<EstadoTramite, EstadoMarca> = {
-  borrador: 'neutro',
-  preparado: 'avance',
-  preasignacion: 'avance',
-  asignado: 'avance',
-  entregado: 'avance',
-  aprobado: 'check',
-  rechazado: 'equis',
-  anulado: 'equis',
-  revocado: 'equis',
-  subsanacion: 'punto',
-};
-
-/** Clase del chip de estado (`di-estado di-estado--<marca>`); neutra para estados desconocidos. */
-export function estadoChipClass(value: string | null | undefined): string {
-  const marca = value && esEstadoTramite(value) ? ESTADO_MARCA[value] : 'neutro';
-  return `di-estado di-estado--${marca}`;
+export function estadoChipClass(value?: string | null): string {
+  void value; // Firma conservada: todos los estados comparten la misma clase.
+  return 'di-estado';
 }
 
 /**
