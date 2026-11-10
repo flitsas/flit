@@ -83,6 +83,9 @@ service PersonaNaturalService {
   rpc ResolverUsuarioCaja(ResolverUsuarioCajaRequest) returns (ResolverUsuarioCajaResponse);
 }
 
+message ResolverUsuarioCajaRequest { string tenant_id = 1; string user_id = 2; }
+message ResolverUsuarioCajaResponse { bool activo = 1; string organismo_id = 2; string organismo_codigo = 3; string organismo_nombre = 4; string usuario_nombre = 5; }
+
 message PersonaIdentidad {
   string tipo_documento = 1;     // CC, CE, PAS...
   string numero_documento = 2;

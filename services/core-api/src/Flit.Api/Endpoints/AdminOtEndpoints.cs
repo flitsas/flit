@@ -2697,6 +2697,14 @@ public static partial class AdminOtEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
+        // HU #14454 (ADR-0082): el rol de caja se reparte solo desde «Usuarios de caja».
+        if (selectedRoles.Exists(r => r.Code == AdminAuthorization.OtCajaRole))
+        {
+            return Results.Json(
+                new { error = CajaRoleExclusivity.Code, message = CajaRoleExclusivity.Message },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         var roleIds = requestedRoleIds;
 
         try

@@ -196,6 +196,7 @@ builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con
 builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13348: consultas, avalúos y documentos por core-consultas
 builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
 builder.Services.AddPersonaNaturalConsumidor(builder.Configuration); // Épica #14021 · HU #14050/#14051: crea los trámites del portal y devuelve su estado (apagado por defecto)
+builder.Services.AddPortalCaja(builder.Configuration); // Épica #14210 · HU #14461: administración de la caja del organismo desde el hub (apagado por defecto)
 
 var app = builder.Build();
 
@@ -260,6 +261,9 @@ app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
 app.UseMiddleware<Flit.Api.Middleware.PortalDomainGuardMiddleware>();
 
 app.UseAuthentication();
+
+// HU #14454 (Épica #14210, ADR-0082) — el token «solo-caja» no usa la API de FLIT 2.0 (segunda capa; la primera es Identidad).
+app.UseMiddleware<Flit.Api.Authorization.SoloCajaGuardMiddleware>();
 
 // HU #12422 (Feature #12369, ADR-0060 D3) — liga la sesión al dominio de emisión (claim "dom").
 // Va DESPUÉS de auth (necesita HttpContext.User) y ANTES de authorization: una petición anónima

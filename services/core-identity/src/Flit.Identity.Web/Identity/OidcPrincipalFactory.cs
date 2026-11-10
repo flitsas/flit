@@ -66,6 +66,11 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         }
         else
         {
+            // HU #14454 (ADR-0082): quien solo tiene ot_caja trabaja en el portal de caja. Ni el hub ni Trámites le emiten token:
+            // el hub no exige rol y el tenant del OT pasaría OtModulePolicy por su tipo de entidad.
+            if (product != ProductCodes.Caja && CajaOnly.IsCajaOnly(user.ActiveRoles.Select(r => r.Code)))
+                return OidcGrant.Denied(CajaOnly.DeniedCode);
+
             var grant = await access.ResolveAsync(user.UserId, user.TenantId, product, ct).ConfigureAwait(false);
             // Bug #14010 H-13: «Usuarios y roles» vive en las pantallas de Trámites, pero no exige el producto.
             // Si Trámites está apagado y la persona administra la plataforma, el token lleva solo esos permisos.

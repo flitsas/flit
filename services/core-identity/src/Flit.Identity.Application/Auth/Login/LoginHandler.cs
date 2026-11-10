@@ -28,6 +28,10 @@ public sealed class LoginHandler(
             .ConfigureAwait(false);
         var snapshot = verified.User;
 
+        // HU #14454 (ADR-0082): el JWT heredado abre FLIT 2.0; quien solo tiene ot_caja trabaja únicamente en el portal de caja.
+        if (CajaOnly.IsCajaOnly(snapshot.ActiveRoles.Select(r => r.Code)))
+            throw new CajaOnlyAccountException();
+
         var issued = jwtTokenIssuer.IssueToken(
             snapshot.UserId,
             snapshot.Email,

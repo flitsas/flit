@@ -201,3 +201,15 @@ public sealed class PasswordReusedException : Exception
     {
     }
 }
+
+/// <summary>
+/// El usuario solo tiene el rol <c>ot_caja</c> (HU #14454, ADR-0082): su sesión es la del portal de caja, no la de FLIT 2.0.
+/// Identidad no le emite el JWT heredado ni tokens de plataforma o trámites.
+/// </summary>
+public sealed class CajaOnlyAccountException : Exception
+{
+    public CajaOnlyAccountException()
+        : base("The account only has the cashier role and cannot sign in to this application.")
+    {
+    }
+}
