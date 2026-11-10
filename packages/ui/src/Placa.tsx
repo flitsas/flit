@@ -28,9 +28,14 @@ export interface PlacaProps extends Omit<HTMLAttributes<HTMLSpanElement>, "child
   ciudad?: string | null;
   /** `md` (92 px, tablas y listas) o `lg` (156 px, cabecera del vehículo). */
   size?: PlacaSize;
+  /**
+   * Separa letras y números como el prototipo («ABC123» → «ABC 123»). Por defecto NO: el rediseño no cambia textos
+   * visibles, así que la placa se muestra tal como llega. Solo para pantallas nuevas que lo pidan.
+   */
+  formatear?: boolean;
 }
 
-export function Placa({ placa, ciudad, size = "md", className, style, ...rest }: PlacaProps) {
+export function Placa({ placa, ciudad, size = "md", formatear = false, className, style, ...rest }: PlacaProps) {
   const s = SIZE[size];
   return (
     <span
@@ -46,7 +51,7 @@ export function Placa({ placa, ciudad, size = "md", className, style, ...rest }:
       }}
       {...rest}
     >
-      <span className={cn("font-bold leading-none tracking-[0.04em]", s.num)}>{formatoPlaca(placa)}</span>
+      <span className={cn("font-bold leading-none tracking-[0.04em]", s.num)}>{formatear ? formatoPlaca(placa) : placa}</span>
       {ciudad ? (
         <span className={cn("font-semibold uppercase leading-none tracking-[0.1em]", s.ciudad)}>{ciudad}</span>
       ) : null}

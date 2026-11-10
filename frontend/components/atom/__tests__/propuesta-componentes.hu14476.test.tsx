@@ -71,13 +71,16 @@ describe("Placa", () => {
 
   it("muestra los caracteres como texto y la ciudad solo si viene", () => {
     const { container, rerender } = render(<Placa placa="KLM482" ciudad="Bogotá D.C." />);
-    expect(screen.getByText("KLM 482")).toBeTruthy();
+    // Sin `formatear`, el texto es el mismo que llega (el rediseño no cambia textos visibles).
+    expect(screen.getByText("KLM482")).toBeTruthy();
     expect(screen.getByText("Bogotá D.C.")).toBeTruthy();
     const caja = container.firstElementChild as HTMLElement;
     expect(caja.style.background).toContain("var(--placa-fondo)");
     expect(caja.className).toContain("[font-family:var(--font-placa)]");
     rerender(<Placa placa="KLM482" />);
     expect(caja.children).toHaveLength(1);
+    rerender(<Placa placa="KLM482" formatear />);
+    expect(screen.getByText("KLM 482")).toBeTruthy();
   });
 });
 
