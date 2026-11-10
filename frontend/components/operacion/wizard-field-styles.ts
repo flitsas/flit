@@ -17,8 +17,12 @@
  * - `aria-[invalid=true]` en naranja de alerta, para que el estado de error no dependa de que
  *   cada formulario se acuerde de pintarlo.
  */
+// HU #14482 (propuesta): `.control` del prototipo — 44 px, contorno de control visible, superficie
+// elevada y texto de 14px. El error sigue en el naranja de alerta (`aria-invalid`).
 export const WIZARD_INPUT =
-  'w-full rounded-xl border bg-card px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
+  'min-h-11 w-full rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-sm ' +
+  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--di-text-tertiary)] outline-none transition ' +
+  'focus:border-[color:var(--di-action)] focus:ring-2 focus:ring-flit-brand/20 ' +
   'aria-[invalid=true]:border-flit-alert ' +
   'disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -29,13 +33,16 @@ export const WIZARD_INPUT =
  * También añade `hover:border-flit-brand` (señal de foco pre-click) y elimina
  * `dark:bg-[#162744]` (el fondo oscuro del OS ya está cubierto por color-scheme:light en la caja).
  */
+// HU #14482 — mismo `.control` que el campo de texto. El esquema de color sigue al tema (claro en
+// claro, oscuro en oscuro), así que el desplegable nativo ya no queda negro sobre negro.
 export const WIZARD_SELECT =
-  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition ' +
-  'focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
-  'hover:border-flit-brand ' +
+  'min-h-11 w-full rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-sm ' +
+  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--di-text-tertiary)] outline-none transition ' +
+  'focus:border-[color:var(--di-action)] focus:ring-2 focus:ring-flit-brand/20 ' +
+  'hover:border-[color:var(--di-action)] ' +
   'aria-[invalid=true]:border-flit-alert ' +
   'disabled:cursor-not-allowed disabled:opacity-60 ' +
-  '[color-scheme:light]';
+  '[color-scheme:light] dark:[color-scheme:dark]';
 
 /**
  * Etiqueta sobre el campo. 12px es el piso tipográfico del sistema.
@@ -46,7 +53,7 @@ export const WIZARD_SELECT =
  * cuando la transparencia se escribe como alfa del color en vez de como `opacity-*` — ahí no la ve
  * ningún grep, que es justo como había sobrevivido.
  */
-export const WIZARD_LABEL = 'block text-xs font-medium text-muted-foreground';
+export const WIZARD_LABEL = 'block text-[0.8125rem] font-semibold text-[color:var(--di-text-primary)]';
 
 /** Texto de ayuda o error bajo el campo. */
 export const WIZARD_HINT = 'mt-1 block text-xs leading-snug opacity-70';

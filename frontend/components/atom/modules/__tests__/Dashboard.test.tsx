@@ -730,8 +730,10 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(heroRow?.className).toMatch(/items-stretch/);
     const grid = screen.getByTestId("dashboard-kpi-grid");
     const firstCard = grid.querySelector(":scope > div");
-    // Rediseño UI kit (HU #14482): `bg-card` trae su valor oscuro; ya no hay `dark:bg-[#…]` fijo.
-    expect(firstCard?.className).toMatch(/\bbg-card\b/);
+    // HU #14481 (propuesta): la tarjeta es `TarjetaMetrica`, sobre `--di-surface-elevated`, que trae su
+    // valor oscuro; sigue sin `dark:bg-[#…]` fijo.
+    expect(firstCard?.className).toMatch(/bg-\[var\(--di-surface-elevated\)\]/);
+    expect(firstCard?.className).not.toMatch(/dark:bg-\[#/);
   });
 
   it("AC5 edge — bannerAmbientGradient y useDominantColor siguen exportados sin cambio de firma", async () => {

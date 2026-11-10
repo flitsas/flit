@@ -87,6 +87,7 @@ import {
   esCancelacionDeMatricula,
 } from '@/lib/catalogs/cancelacion';
 import { WizardStepTracker } from './WizardStepTracker';
+import { buttonClass } from '@flit/ui/Button';
 import { Modal } from '@/components/atom/Modal';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
@@ -2217,8 +2218,8 @@ export function TramiteWizard(props: Props) {
               disabled={activeIndex === 0}
               // Misma altura que las acciones de la derecha: en la propuesta el pie es una sola
               // línea de botones, y un "Anterior" más bajo la partía en dos.
-              className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-flit-primary disabled:opacity-30`}
-              style={{ borderColor: 'var(--color-flit-primary)', color: 'var(--color-flit-primary)' }}
+              // HU #14482 (propuesta): `.btn.secondary`.
+              className={buttonClass({ variant: 'secondary', className: 'gap-1 disabled:opacity-30' })}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
@@ -2272,8 +2273,7 @@ export function TramiteWizard(props: Props) {
                       })();
                     }}
                     disabled={continuing || reradicando}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                     title="Guarda los cambios de este paso y habilita Re-radicar"
                   >
                     {continuing ? 'Guardando…' : 'Guardar y continuar'}
@@ -2308,8 +2308,7 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT }}
+                  className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                 >
                   {submitting ? 'Finalizando…' : 'Finalizar'}
                 </button>
@@ -2318,8 +2317,7 @@ export function TramiteWizard(props: Props) {
               <button
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
-                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                style={{ background: WIZARD_CTA_GRADIENT }}
+                className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
               >
                 Continuar
                 <ChevronRight className="h-3 w-3" />
@@ -2334,8 +2332,13 @@ export function TramiteWizard(props: Props) {
                   <button
                     type="button"
                     onClick={() => setConfirmCancel(true)}
-                    className={`${WIZARD_BTN} text-white focus-visible:ring-flit-alert`}
-                    style={{ background: 'var(--color-flit-alert)' }}
+                    // HU #14482 — patrón de peligro de la propuesta (como BOTON_PELIGRO_CLS de
+                    // comparendos): secundario con aro de alerta y texto de error, sin naranja sólido.
+                    className={buttonClass({
+                      variant: 'secondary',
+                      className:
+                        'border-[color:var(--di-alerta-punto)] text-[color:var(--di-danger)] hover:bg-[color:var(--di-danger-soft)]',
+                    })}
                   >
                     Anular trámite
                   </button>
@@ -2343,10 +2346,9 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleContinue()}
                   disabled={continueDisabled}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-40`}
                   // Deshabilitado en gris pleno, no el degradado atenuado: media opacidad sobre un
                   // degradado deja un azul lavado que sigue leyéndose como acción disponible.
-                  style={{ background: continueDisabled ? 'var(--input)' : WIZARD_CTA_GRADIENT }}
+                  className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                 >
                   {continuing ? 'Guardando…' : 'Continuar y guardar'}
                 </button>
