@@ -429,12 +429,13 @@ function Bienvenida({
           solo ocupe una franja arriba y otra abajo — sin esto, el hueco vacío del medio tapaba el
           enlace del banner de abajo y ni el hover ni el clic le llegaban nunca. Se restaura
           pointer-events-auto solo en la franja de controles (puntos/flechas), que sí son clicables. */}
-      {/* En el slide fijo, la ilustración va de fondo a la izquierda de esta misma caja (92 px; 58 px arriba en
-          celular), como `.page-header__ilus`, sin marcado nuevo. */}
+      {/* En el slide fijo, la ilustración va de fondo a la izquierda de esta misma caja (92 px; 58 px en celular),
+          como `.page-header__ilus`, sin marcado nuevo. Va arriba, a la altura del antetítulo y el título: la columna de
+          cifras estira el banner, y centrada en vertical quedaba flotando lejos del texto. */}
       <div
         className={`relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none ${
           fijo
-            ? "bg-no-repeat bg-[length:92px_92px] bg-[position:24px_center] pl-[132px] max-sm:bg-[length:58px_58px] max-sm:bg-[position:14px_20px] max-sm:pl-[84px]"
+            ? "bg-no-repeat bg-[length:92px_92px] bg-[position:24px_20px] pl-[132px] max-sm:bg-[length:58px_58px] max-sm:bg-[position:14px_20px] max-sm:pl-[84px]"
             : ""
         }`}
         style={fijo ? { backgroundImage: `url("${ILUSTRACION_COLA}")` } : undefined}
@@ -1068,10 +1069,11 @@ function Kpi({
   return (
     // HU #14481 (propuesta), receta del Inicio del gestor: `TarjetaMetrica` —etiqueta, cifra en tinta e ilustración—
     // en vez del número de color y el ícono en un círculo. En la columna angosta junto al banner la tarjeta va a una
-    // columna y la ilustración se fija abajo a la derecha (con `max-w-none`, o la rejilla la aplasta). El pie es la
-    // aclaración de la cifra, no una acción: va en el gris terciario.
+    // columna y la ilustración se fija abajo a la derecha (con `max-w-none`, o la rejilla la aplasta). `content-start`:
+    // si la fila la estira (la mediana es más alta), la cifra sigue pegada bajo el rótulo en vez de caer al fondo. El
+    // pie es la aclaración de la cifra, no una acción: va en el gris terciario.
     <TarjetaMetrica
-      className="relative w-full grid-cols-1 p-4 [&>img]:absolute [&>img]:bottom-3.5 [&>img]:right-3.5 [&>img]:h-9 [&>img]:w-9 [&>img]:max-w-none [&>img]:shrink-0 [&>span:nth-child(2)]:pr-11 [&>span:nth-child(4)]:pr-11 [&>span:nth-child(4)]:font-normal [&>span:nth-child(4)]:text-[color:var(--di-text-tertiary)]"
+      className="relative w-full grid-cols-1 content-start p-4 [&>img]:absolute [&>img]:bottom-3.5 [&>img]:right-3.5 [&>img]:h-9 [&>img]:w-9 [&>img]:max-w-none [&>img]:shrink-0 [&>span:nth-child(2)]:pr-11 [&>span:nth-child(4)]:pr-11 [&>span:nth-child(4)]:font-normal [&>span:nth-child(4)]:text-[color:var(--di-text-tertiary)]"
       etiqueta={label}
       cifra={<span className={tamano}>{cargando ? "—" : (value ?? 0)}</span>}
       colorCifra={sinDato ? "var(--di-text-tertiary)" : undefined}
