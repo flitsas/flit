@@ -41,37 +41,37 @@ export const ESTADO_META: Record<string, EstadoMeta> = {
   },
   [OT_REPORT_ESTADOS.esperandoCliente]: {
     label: "Esperando al cliente",
-    color: "#94A3B8",
+    color: "var(--di-border-control)",
     hint: "La pelota está en la empresa: SOAT, impuestos o trámite pausado. No cuenta como demora del organismo.",
   },
   [OT_REPORT_ESTADOS.aprobado]: {
     label: "Aprobado",
-    color: "#8CC63F",
+    color: "var(--estado-aprobado-acento)",
     hint: "Cerrado a favor. Es el desenlace que el informe mide contra el tiempo.",
   },
   [OT_REPORT_ESTADOS.enSubsanacion]: {
     label: "En subsanación",
-    color: "#F9AC00",
+    color: "var(--estado-solicitud-revocatoria-acento)",
     hint: "Rechazado y con subsanación abierta: va a volver. Es trabajo futuro ya comprometido.",
   },
   [OT_REPORT_ESTADOS.rechazado]: {
     label: "Rechazado",
-    color: "#FF4E00",
+    color: "var(--color-flit-alert)",
     hint: "Rechazado y sin subsanación abierta: por ahora no vuelve.",
   },
   [OT_REPORT_ESTADOS.anulado]: {
     label: "Anulado",
-    color: "#64748B",
+    color: "var(--estado-borrador-acento)",
     hint: "La empresa lo dio de baja después de radicarlo.",
   },
   [OT_REPORT_ESTADOS.revocado]: {
     label: "Revocado",
-    color: "#8B5CF6",
+    color: "var(--estado-revocado-acento)",
     hint: "Se aprobó y el organismo lo revocó después. Cerrado, pero no a favor.",
   },
   [OT_REPORT_ESTADOS.otro]: {
     label: "Otro",
-    color: "#CBD5E1",
+    color: "var(--di-border-strong)",
     hint: "Volvió a un estado anterior a la radicación. No debería ocurrir; si aparece, hay que mirarlo.",
   },
 };
@@ -90,7 +90,7 @@ export const ESTADO_ORDER: string[] = [
 ];
 
 export function estadoMeta(estado: string): EstadoMeta {
-  return ESTADO_META[estado] ?? { label: estado, color: "#CBD5E1", hint: "" };
+  return ESTADO_META[estado] ?? { label: estado, color: "var(--di-border-strong)", hint: "" };
 }
 
 // ── Formateo ───────────────────────────────────────────────────────────────────

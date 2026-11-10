@@ -299,7 +299,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
         {zoom && (
           <p
-            className="flex flex-wrap items-center gap-2 rounded-xl bg-flit-brand/10 px-3 py-2 text-[11px] text-[#2B4AA8] dark:text-[#9DB4FF]"
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-flit-brand/10 px-3 py-2 text-[11px] text-[color:var(--di-action)]"
             data-testid="ot-report-zoom"
           >
             Informe acotado a <strong>{zoom.label}</strong> desde la gráfica.
@@ -332,13 +332,13 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               <Tile
                 value={formatInt(resumen.aprobados)}
                 label="Aprobados"
-                accent="#8CC63F"
+                accent="var(--estado-aprobado-acento)"
                 hint={pctOf(resumen.aprobados, resumen.total)}
               />
               <Tile
                 value={formatInt(resumen.rechazados + resumen.enSubsanacion)}
                 label="Rechazados"
-                accent="#FF4E00"
+                accent="var(--color-flit-alert)"
                 hint={`${formatInt(resumen.enSubsanacion)} con subsanación abierta`}
               />
               <Tile
@@ -596,7 +596,7 @@ function EstadoChip({ estado }: { estado: string }) {
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-      style={{ background: `${meta.color}1A`, color: meta.color }}
+      style={{ background: `color-mix(in srgb, ${meta.color} 10%, transparent)`, color: meta.color }}
       title={meta.hint}
     >
       <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />

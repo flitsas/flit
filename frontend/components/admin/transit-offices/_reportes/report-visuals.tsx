@@ -151,11 +151,11 @@ export function buildTrendData(serie: OtReportSeriesPoint[]): TrendPoint[] {
 
 const SERIES = [
   { key: "radicados", label: "Radicados", color: "var(--color-flit-brand)" },
-  { key: "aprobados", label: "Aprobados", color: "#8CC63F" },
-  { key: "rechazados", label: "Rechazados", color: "#FF4E00" },
+  { key: "aprobados", label: "Aprobados", color: "var(--estado-aprobado-acento)" },
+  { key: "rechazados", label: "Rechazados", color: "var(--color-flit-alert)" },
 ] as const;
 
-const ACUMULADO_COLOR = "#F9AC00";
+const ACUMULADO_COLOR = "var(--estado-solicitud-revocatoria-acento)";
 
 /**
  * Radicados contra decisiones a lo largo del periodo, con el pendiente acumulado encima.
@@ -237,8 +237,8 @@ export function TrendChart({
         <span
           className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
           style={{
-            background: saldoFinal > 0 ? "#F9AC001A" : "#8CC63F1A",
-            color: saldoFinal > 0 ? "#B47800" : "#5B8A22",
+            background: saldoFinal > 0 ? "var(--di-warning-soft)" : "var(--di-success-soft)",
+            color: saldoFinal > 0 ? "var(--di-warning)" : "var(--di-success)",
           }}
           data-testid="ot-report-tendencia-saldo"
         >
@@ -267,7 +267,7 @@ export function TrendChart({
                   if (point && onZoom) onZoom(point.desde, point.hasta, point.label);
                 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={tickInterval} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
                 <YAxis
@@ -362,7 +362,7 @@ function TrendTooltip({
   const point = payload[0]!.payload;
 
   return (
-    <div className="rounded-xl bg-[#162744]/95 px-3 py-2 text-[11px] text-white shadow-lg">
+    <div className="rounded-xl bg-[var(--di-accent)]/95 px-3 py-2 text-[11px] text-[color:var(--di-on-accent)] shadow-lg">
       <p className="mb-1 font-semibold">{point.label}</p>
       {SERIES.map((s) => (
         <p key={s.key} className="flex items-center gap-1.5">
@@ -405,7 +405,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
   }
 
   // Del verde al rojo según el tramo: el color hace el trabajo de decir qué tramo es bueno.
-  const colors = ["#8CC63F", "var(--color-flit-tech)", "var(--color-flit-brand)", "#F9AC00", "#FF4E00"];
+  const colors = ["var(--estado-aprobado-acento)", "var(--color-flit-tech)", "var(--color-flit-brand)", "var(--estado-solicitud-revocatoria-acento)", "var(--color-flit-alert)"];
 
   return (
     <div className="flex flex-col gap-2" data-testid="ot-report-histograma">
