@@ -66,7 +66,7 @@ export function SchedulingPanel({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8 ${DIALOGO_VELO_CLS}`}
+      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-24 sm:p-8 sm:pt-24 ${DIALOGO_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

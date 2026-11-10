@@ -42,7 +42,10 @@ export function FranjaDialogo({ children, className }: { children: ReactNode; cl
         aria-hidden="true"
         className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
       />
-      <div className="relative z-[1] flex min-w-0 flex-1 items-center justify-between gap-3">{children}</div>
+      {/* El primer hijo es el bloque de título: deja libre el círculo para que el texto no quede encima. */}
+      <div className="relative z-[1] flex min-w-0 flex-1 items-center justify-between gap-3 [&>:first-child]:min-w-0 [&>:first-child]:pr-16">
+        {children}
+      </div>
     </div>
   );
 }
