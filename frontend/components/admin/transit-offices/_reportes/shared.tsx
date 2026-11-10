@@ -92,18 +92,18 @@ export function Bucket({
   // bloque resaltado sin contenido enseña a ignorar el resaltado cuando sí importa.
   const alerta = Boolean(hot) && value > 0;
   const baseCls = alerta
-    ? "border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10"
+    ? "border-[color:var(--di-alerta-punto)] bg-[var(--di-warning-soft)]"
     : "border-border";
 
   const content = (
     <>
       <p
-        className={`text-lg font-semibold tabular-nums ${alerta ? "text-amber-800 dark:text-amber-300" : ""}`}
+        className={`text-lg font-semibold tabular-nums ${alerta ? "text-[color:var(--di-warning)]" : ""}`}
       >
         {value}
       </p>
       <p
-        className={`text-[11px] ${alerta ? "text-amber-700 dark:text-amber-400" : "text-[#6B7280] dark:text-muted-foreground"}`}
+        className={`text-[11px] ${alerta ? "text-[color:var(--di-warning)]" : "text-[color:var(--di-text-tertiary)]"}`}
       >
         {label}
       </p>

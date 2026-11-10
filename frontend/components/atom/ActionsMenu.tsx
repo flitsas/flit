@@ -250,7 +250,7 @@ export function ActionsMenu({
         // rechazar, asignar placa. El chevron dice lo que de verdad pasa: se despliega una lista.
         className={`relative flex w-full items-center justify-between gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition hover:bg-flit-brand/10 ${
           attention
-            ? "border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95 dark:bg-[var(--badge-warning-bg)] dark:text-[var(--badge-warning-fg)] dark:hover:bg-amber-500/15"
+            ? "border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95 dark:bg-[var(--badge-warning-bg)] dark:text-[var(--badge-warning-fg)] dark:hover:brightness-110"
             : "border-border bg-card text-flit-brand dark:border-border dark:bg-card"
         }`}
       >
