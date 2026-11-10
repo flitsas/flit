@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Drop, type EstadoArchivo } from "@/components/tramite/Drop";
@@ -445,7 +446,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
           )}
           {(verPrenda || gravamenExige) && (
             <div aria-live="polite" className="mt-3 space-y-1 text-sm font-light text-muted-foreground">
-              {gravamen.isFetching && <p role="status">Consultando el gravamen en el RUNT...</p>}
+              {gravamen.isFetching && <MobilityEstado mensaje="Consultando el gravamen en el RUNT..." />}
               {gravamen.data?.aviso === "sin_gravamen" && <p role="status">RUNT sin gravamen registrado para este vehículo.</p>}
               {gravamen.isError && !gravamen.isFetching && (
                 <p role="status">No pudimos consultar el gravamen en el RUNT. Escribe el acreedor y su NIT a mano.</p>
@@ -659,7 +660,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
       {canal !== "punto" && <TotalLiquidado cliente={cliente} organismoId={solicitud.organismoId} tipoCodigo={definicion.code} transformaciones={t.transformaciones ? transformaciones : []} />}
 
       <div aria-live="polite" className="text-right text-xs">
-        {borrador === "guardando" && <p role="status">Guardando borrador...</p>}
+        {borrador === "guardando" && <MobilityEstado mensaje="Guardando borrador..." />}
         {borrador === "guardado" && <p role="status" className="text-success">Borrador guardado</p>}
         {borrador === "error" && (
           <div role="alert" className="inline-flex flex-col items-end gap-2 rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert">

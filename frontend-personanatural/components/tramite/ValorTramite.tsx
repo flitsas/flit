@@ -2,6 +2,7 @@
 
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { useEffect, useId } from "react";
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { useCotizacionAutomatica } from "@/components/tramite/useCotizacionAutomatica";
 import type { ClientePortal } from "@/lib/api/cliente";
 import { esperaDe, mensajeDe } from "@/lib/api/errores";
@@ -40,7 +41,7 @@ export function ValorTramite({ cliente, organismoId, tipoCodigo, onSinTarifa }: 
       </label>
       <input id={idValor} className="field" readOnly value={total} aria-describedby={`${idValor}-estado`} />
       <div id={`${idValor}-estado`} aria-live="polite" className="mt-1 text-xs">
-        {calculando && <p role="status">Calculando...</p>}
+        {calculando && <MobilityEstado mensaje="Calculando..." />}
         {cotizacion.sinTarifa && <p role="alert" className="text-alert">{MENSAJE_SIN_TARIFA}</p>}
         {error !== null && !cotizacion.sinTarifa && <p role="alert" className="text-alert">{esperaDe(error) ? mensajeDe(error) : "No pudimos calcular el valor. Intenta de nuevo."}</p>}
         {cotizacion.bloqueo.bloqueado && <p role="status">Podrás intentarlo de nuevo en {cotizacion.bloqueo.segundosRestantes} s.</p>}

@@ -204,6 +204,14 @@ public sealed class PersonaNaturalGrpcService(
         LogoId = m.LogoId?.ToString() ?? string.Empty,
         BannerId = m.BannerId?.ToString() ?? string.Empty,
         Version = m.Version,
+        Carrusel =
+        {
+            m.Carrusel.Select(i => new CarruselItem { ImagenId = i.ImageId.ToString(), Alt = i.Alt, Enlace = i.LinkUrl ?? string.Empty }),
+        },
+        Banners =
+        {
+            m.Banners.Select(i => new BannerItem { ImagenId = i.ImageId.ToString(), Alt = i.Alt, Enlace = i.LinkUrl ?? string.Empty }),
+        },
     };
     /// <summary>
     /// HU #14383 — dominio activo del portal de un organismo, sin caché. Con <c>host</c> devuelve el código del organismo solo si ese

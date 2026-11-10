@@ -1,6 +1,6 @@
 "use client";
 
-// HU #14220 / #14222 / #14232 — Acciones del punto con el mismo layout del portal (AccionesPrincipales), sin Cotizar.
+// HU #14220 / #14222 / #14232 — Acciones del punto con el mismo layout del portal (AccionesPrincipales). Cotizar va con el organismo fijo del punto.
 // Tras arranque OK abre el cascarón del wizard (DiagnosticoPunto), igual que el portal web PN.
 import { useEffect, useState } from "react";
 import { AccionFila } from "@/components/landing/AccionesPrincipales";
@@ -13,6 +13,7 @@ import { textoArranque, type ClientePortal } from "@/lib/api/cliente";
 import { mensajeDe, mensajeDeFallo } from "@/lib/api/errores";
 import { ASSETS } from "@/lib/assets";
 import { normalizarPlaca, soloDigitos } from "@/lib/entradas";
+import { ETIQUETA_VEHICULO } from "@/lib/landing/vehiculo";
 import { MENSAJE_CONSULTANDO_VEHICULO } from "@/lib/tramite/diagnostico";
 
 function IconoAccion({ src }: { src: string }) {
@@ -29,6 +30,7 @@ export function AccionesPunto({
   organismoId,
   organismoNombre,
   onConsultar,
+  onCotizar,
   onAviso,
   onWizard,
 }: {
@@ -37,6 +39,7 @@ export function AccionesPunto({
   organismoId: string;
   organismoNombre: string;
   onConsultar: () => void;
+  onCotizar?: () => void;
   /** Fallas y reglas de negocio: mismo AvisoModal del portal. */
   onAviso: (titulo: string, mensaje: string, tono?: "alerta" | "exito" | "info") => void;
   /** El padre cambia el shell (dashboard → cascarón del wizard). */
@@ -100,7 +103,7 @@ export function AccionesPunto({
       <div className="dashboard-institutional-card action-start" id="nuevo-tramite">
         <IconoAccion src={ASSETS.acciones.iniciar} />
         <h2 className="dashboard-title">Iniciar mi trámite</h2>
-        <p>Placa, documento y tipo de trámite. No se pide contraseña.</p>
+        <p>Da clic aquí para iniciar el proceso de tu trámite digital en {organismoNombre}.</p>
         <form
           className="action-start-fields"
           aria-busy={fase === "cargando"}
@@ -110,19 +113,7 @@ export function AccionesPunto({
           }}
         >
           <label>
-            Placa
-            <input
-              required
-              className="field uppercase"
-              autoComplete="off"
-              placeholder="Ej. ABC123"
-              maxLength={6}
-              value={placa}
-              onChange={(e) => setPlaca(normalizarPlaca(e.target.value))}
-            />
-          </label>
-          <label>
-            Número de documento
+            Número de Cédula
             <input
               required
               className="field"
@@ -133,6 +124,18 @@ export function AccionesPunto({
               onChange={(e) => setDocumento(soloDigitos(e.target.value))}
             />
           </label>
+          <label>
+            {ETIQUETA_VEHICULO.PLATE}
+            <input
+              required
+              className="field uppercase"
+              autoComplete="off"
+              placeholder="Ej. ABC123"
+              maxLength={6}
+              value={placa}
+              onChange={(e) => setPlaca(normalizarPlaca(e.target.value))}
+            />
+          </label>
           <div className="dashboard-label" aria-busy={tipos.isPending}>
             Tipo de Trámite
             <SelectorTipoTramite
@@ -141,6 +144,7 @@ export function AccionesPunto({
               onChange={setTipo}
               disabled={!tipos.isSuccess || sinTipos}
               marcador={tipos.isPending ? "Cargando..." : "Selecciona"}
+              cargando={tipos.isPending}
             />
             <div aria-live="polite" className="text-xs font-normal">
               {tipos.isError && (
@@ -159,7 +163,7 @@ export function AccionesPunto({
           </button>
         </form>
       </div>
-      <FilaConsultar onConsultar={onConsultar} />
+      <FilasAccion onConsultar={onConsultar} onCotizar={onCotizar} />
       {fase === "cargando" && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
           <MobilityLoader mensaje={MENSAJE_CONSULTANDO_VEHICULO} />
@@ -169,11 +173,12 @@ export function AccionesPunto({
   );
 }
 
-/** Misma fila AccionFila del portal; sin Cotizar (una sola fila). */
-function FilaConsultar({ onConsultar }: { onConsultar: () => void }) {
+/** Mismas filas AccionFila del portal. Sin acción de cotizar conectada queda una sola fila. */
+function FilasAccion({ onConsultar, onCotizar }: { onConsultar: () => void; onCotizar?: () => void }) {
   return (
-    <div className="action-rows action-rows-una">
+    <div className={onCotizar ? "action-rows" : "action-rows action-rows-una"}>
       <AccionFila etiqueta="Consultar mi trámite" src={ASSETS.acciones.consultar} onClick={onConsultar} />
+      {onCotizar && <AccionFila etiqueta="Cotizar mi trámite" src={ASSETS.acciones.cotizar} onClick={onCotizar} />}
     </div>
   );
 }

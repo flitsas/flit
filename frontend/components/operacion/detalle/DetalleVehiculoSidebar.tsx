@@ -3,6 +3,8 @@
 import { formatFechaHora } from '@/lib/format/date';
 import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
+import { AvisoDigitoPlacaOt } from '@/components/operacion/AvisoDigitoPlacaOt';
+import { PLATE_PREFERRED_LAST_DIGIT_KEY } from '@/lib/tramites/plate-digit-preference';
 import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
 
 /**
@@ -11,6 +13,11 @@ import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './deta
 /**
  * HU #14322 — `canal` es el detalle ya cargado del trámite. `null` (aún cargando o con error) pinta
  * «—»: no se asume «Trámites» hasta saber que el backend no trae el dato.
+ *
+ * Registro diferido 2026-11-09 (HU 3) — del mismo detalle salen `fieldValues`: con la placa que
+ * asignó el OT (`plate`, source `ot` o vacío) y el dígito de preferencia del gestor se pinta el aviso
+ * de coincidencia bajo la placa. Tras la asignación el gestor ya no abre el asistente desde el
+ * listado (el trámite dejó de ser borrador): esta columna es lo que ve.
  */
 export function DetalleVehiculoSidebar({
   item,
@@ -20,9 +27,15 @@ export function DetalleVehiculoSidebar({
   canal?: Pick<
     ProcedureInstanceDetail,
     'channel' | 'channelTransitOfficeName'
-  > | null;
+  > & { fieldValues?: ProcedureInstanceDetail['fieldValues'] } | null;
 }) {
   const modelo = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
+  const fieldValues = canal?.fieldValues ?? [];
+  const plateField = fieldValues.find((f) => f.fieldKey === 'plate');
+  const preferredDigit =
+    fieldValues.find((f) => f.fieldKey === PLATE_PREFERRED_LAST_DIGIT_KEY)?.valueText ?? '';
+  // HU7 — en motos el aviso compara el primer número de la placa.
+  const vehicleClass = fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText ?? '';
 
   return (
     <aside className={`${DETALLE_CARD} h-full`} aria-label="Datos del vehículo">
@@ -39,6 +52,16 @@ export function DetalleVehiculoSidebar({
           Modelo: <span className="font-bold">{modelo}</span>
         </p>
         <p className="mt-1 font-mono text-[11px] opacity-70">VIN: {item.vin ?? '—'}</p>
+        {plateField && (
+          <AvisoDigitoPlacaOt
+            placa={plateField.valueText}
+            source={plateField.source}
+            digito={preferredDigit}
+            clase={vehicleClass}
+            testId="detalle-aviso-digito-placa"
+            className="mt-2"
+          />
+        )}
       </div>
       <div
         className="mt-3 border-t pt-3 text-[11px] border-[#DFE5ED] dark:border-white/5"

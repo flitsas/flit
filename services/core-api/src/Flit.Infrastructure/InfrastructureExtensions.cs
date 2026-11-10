@@ -261,6 +261,8 @@ public static class InfrastructureExtensions
         // HU #10919 (Feature #10918) — plantilla de FUR según la clasificación del vehículo (catálogo
         // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
         services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
+        // HU9 (Caso C 2026-11-09) — grupo de placa del preview del paso 1, misma regla que la bandeja OT (HU8).
+        services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IVehiclePlateGroupResolver, OtClientProcedures.VehiclePlateGroupResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
         services.AddSingleton<IImprontaManualStamper, Documents.Improntas.ImprontaManualStamper>();
         services.AddSingleton<Flit.Tramites.Application.Documents.IImprontaManualSignatureVerifier,

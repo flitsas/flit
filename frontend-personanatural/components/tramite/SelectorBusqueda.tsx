@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
+import { MobilityEstado, MobilityMini } from "@/components/MobilityLoader";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
@@ -141,7 +142,7 @@ export function SelectorBusqueda({ etiqueta, opciones, valor, etiquetaElegida, o
           onBlur={() => onBlur?.()}
         />
         <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-primary">
-          {cargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+          {cargando ? <MobilityMini className="text-primary" /> : <ChevronDown className="h-4 w-4" />}
         </span>
       </div>
       {abierto && destino && posicion && createPortal(
@@ -156,7 +157,7 @@ export function SelectorBusqueda({ etiqueta, opciones, valor, etiquetaElegida, o
         >
           {visibles.length === 0 ? (
             <li role="presentation" className="px-3 py-2 text-sm font-light text-muted-foreground">
-              {cargando ? "Buscando..." : sinResultados}
+              {cargando ? <MobilityEstado mensaje="Buscando..." /> : sinResultados}
             </li>
           ) : (
             visibles.map((o, i) => (
