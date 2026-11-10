@@ -211,38 +211,38 @@
   --overlay: rgba(22, 39, 68, 0.45);
   --placa-texto: #111111;
 
-  /* Estados del trámite (lib/tramites/estados.ts, pedido de S1): los 10 tonos de siempre, ahora por token.
+  /* Estados del trámite (lib/tramites/estados.ts) en el lenguaje de la propuesta (pedido de S1, ronda 2): sin verde ni rojo.
      Sus SVG de public/assets/estados conservan el `accent` en hex. */
-  --estado-borrador-bg: rgba(94,106,123,0.14);
-  --estado-borrador-fg: #5E6A7B;
-  --estado-borrador-border: rgba(94,106,123,0.35);
-  --estado-preparado-bg: rgba(85,126,255,0.14);
-  --estado-preparado-fg: #4465CC;
-  --estado-preparado-border: rgba(85,126,255,0.35);
-  --estado-preasignacion-bg: rgba(224,138,0,0.14);
-  --estado-preasignacion-fg: #8A5400;
-  --estado-preasignacion-border: rgba(224,138,0,0.35);
-  --estado-asignado-bg: rgba(99,102,241,0.14);
-  --estado-asignado-fg: #4F46E5;
-  --estado-asignado-border: rgba(99,102,241,0.35);
-  --estado-entregado-bg: rgba(0,169,157,0.14);
-  --estado-entregado-fg: #007A71;
-  --estado-entregado-border: rgba(0,169,157,0.35);
-  --estado-aprobado-bg: rgba(140,198,63,0.14);
-  --estado-aprobado-fg: #557926;
-  --estado-aprobado-border: rgba(140,198,63,0.35);
-  --estado-rechazado-bg: rgba(255,0,0,0.14);
-  --estado-rechazado-fg: #CC0000;
-  --estado-rechazado-border: rgba(255,0,0,0.35);
-  --estado-anulado-bg: rgba(193,39,45,0.14);
-  --estado-anulado-fg: #C1272D;
-  --estado-anulado-border: rgba(193,39,45,0.35);
-  --estado-revocado-bg: rgba(139,92,246,0.14);
-  --estado-revocado-fg: #6D28D9;
-  --estado-revocado-border: rgba(139,92,246,0.35);
-  --estado-subsanacion-bg: rgba(255,78,0,0.14);
-  --estado-subsanacion-fg: #BF3B00;
-  --estado-subsanacion-border: rgba(255,78,0,0.35);
+  --estado-borrador-bg: var(--di-surface-sunken);
+  --estado-borrador-fg: var(--di-text-secondary);
+  --estado-borrador-border: transparent;
+  --estado-preparado-bg: var(--di-accent-soft);
+  --estado-preparado-fg: var(--di-action);
+  --estado-preparado-border: transparent;
+  --estado-preasignacion-bg: var(--di-accent-soft);
+  --estado-preasignacion-fg: var(--di-action);
+  --estado-preasignacion-border: transparent;
+  --estado-asignado-bg: var(--di-accent-soft);
+  --estado-asignado-fg: var(--di-action);
+  --estado-asignado-border: transparent;
+  --estado-entregado-bg: var(--di-accent-soft);
+  --estado-entregado-fg: var(--di-action);
+  --estado-entregado-border: transparent;
+  --estado-aprobado-bg: var(--di-success-soft);
+  --estado-aprobado-fg: var(--di-success);
+  --estado-aprobado-border: transparent;
+  --estado-rechazado-bg: var(--di-surface-elevated);
+  --estado-rechazado-fg: var(--di-heading);
+  --estado-rechazado-border: var(--di-alerta-punto);
+  --estado-anulado-bg: var(--di-surface-elevated);
+  --estado-anulado-fg: var(--di-heading);
+  --estado-anulado-border: var(--di-alerta-punto);
+  --estado-revocado-bg: var(--di-surface-elevated);
+  --estado-revocado-fg: var(--di-heading);
+  --estado-revocado-border: var(--di-alerta-punto);
+  --estado-subsanacion-bg: var(--di-sky);
+  --estado-subsanacion-fg: var(--di-heading);
+  --estado-subsanacion-border: transparent;
 
   /* Tokens del prototipo «Diseño Inteligente» (rama `propuesta`, tokens.css) con prefijo --di-: quien porte
    * propuesta.css cambia var(--color-x) por var(--di-x). El prefijo evita chocar con los --color-* de Tailwind. */
@@ -386,38 +386,7 @@
   --flit-primary-tema: #b9cdff;
   --flit-bg-tema: #0b182d;
   --flit-gray-tema: #22375c;
-
-  /* Estados del trámite en oscuro: mismo tono, texto aclarado hasta ≥ 5:1 sobre la tarjeta oscura. */
-  --estado-borrador-bg: rgba(94,106,123,0.2);
-  --estado-borrador-fg: #9ea6b0;
-  --estado-borrador-border: rgba(94,106,123,0.45);
-  --estado-preparado-bg: rgba(85,126,255,0.2);
-  --estado-preparado-fg: #99b2ff;
-  --estado-preparado-border: rgba(85,126,255,0.45);
-  --estado-preasignacion-bg: rgba(224,138,0,0.2);
-  --estado-preasignacion-fg: #ecb966;
-  --estado-preasignacion-border: rgba(224,138,0,0.45);
-  --estado-asignado-bg: rgba(99,102,241,0.2);
-  --estado-asignado-fg: #a1a3f7;
-  --estado-asignado-border: rgba(99,102,241,0.45);
-  --estado-entregado-bg: rgba(0,169,157,0.2);
-  --estado-entregado-fg: #66cbc4;
-  --estado-entregado-border: rgba(0,169,157,0.45);
-  --estado-aprobado-bg: rgba(140,198,63,0.2);
-  --estado-aprobado-fg: #badd8c;
-  --estado-aprobado-border: rgba(140,198,63,0.45);
-  --estado-rechazado-bg: rgba(255,0,0,0.2);
-  --estado-rechazado-fg: #ff6666;
-  --estado-rechazado-border: rgba(255,0,0,0.45);
-  --estado-anulado-bg: rgba(193,39,45,0.2);
-  --estado-anulado-fg: #da7d81;
-  --estado-anulado-border: rgba(193,39,45,0.45);
-  --estado-revocado-bg: rgba(139,92,246,0.2);
-  --estado-revocado-fg: #b99dfa;
-  --estado-revocado-border: rgba(139,92,246,0.45);
-  --estado-subsanacion-bg: rgba(255,78,0,0.2);
-  --estado-subsanacion-fg: #ff9566;
-  --estado-subsanacion-border: rgba(255,78,0,0.45);
+  /* Estados del trámite: sin valores propios en oscuro; apuntan a --di-*, que ya cambian con el tema. */
 
   /* --di-* en oscuro (bloque [data-theme="dark"] del prototipo). --di-on-action pasa a oscuro cuando el
    * degradado de acción sea el claro del prototipo; mientras los botones lleven texto blanco fijo, sigue el profundo. */
