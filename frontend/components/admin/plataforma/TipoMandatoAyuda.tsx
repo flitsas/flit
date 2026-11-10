@@ -39,7 +39,7 @@ export function TipoMandatoAyuda({ label = "Tipo de mandato" }: { label?: string
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-flit-brand-ink hover:bg-flit-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-inherit hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
       >
         <Info className="h-3.5 w-3.5" aria-hidden />
       </button>

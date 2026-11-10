@@ -12,6 +12,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import {
   AuditoriaFilterToolbar,
@@ -259,7 +260,7 @@ export function Auditoria() {
         }
       >
         {entries && entries.length > 0 && (
-          <>
+          <div className={`shrink-0 ${TABLA_TARJETA_CLS}`}>
             <AuditoriaTable rows={entries} />
             <Pagination
               page={page}
@@ -269,7 +270,7 @@ export function Auditoria() {
               onPageSizeChange={setPageSize}
               noun="registros de auditoría"
             />
-          </>
+          </div>
         )}
       </UiStateBoundary>
     </div>

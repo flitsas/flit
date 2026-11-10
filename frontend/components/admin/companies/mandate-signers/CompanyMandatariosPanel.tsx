@@ -22,6 +22,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import {
   createCompanyMandateSigner,
@@ -410,7 +411,7 @@ export function CompanyMandatariosPanel({
           </div>
 
           {
-            <>
+            <div className={TABLA_TARJETA_CLS}>
               <div className="overflow-x-auto">
                 <table
                   className={`text-xs ${TABLA_MOVIL_TABLE_CLS}`}
@@ -634,7 +635,7 @@ export function CompanyMandatariosPanel({
                   noun="mandatarios"
                 />
               ) : null}
-            </>
+            </div>
           }
         </UiStateBoundary>
       )}

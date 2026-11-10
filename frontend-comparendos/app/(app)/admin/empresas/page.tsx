@@ -240,6 +240,7 @@ function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string
         </InlineAlert>
       )}
       <DataTable
+        tarjeta={false}
         ariaLabel="NIT que consultan la API de contratos"
         rows={nits.datos ?? []}
         getRowKey={(n) => n.id}
@@ -451,6 +452,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Tipologías de derecho de petición habilitadas</h2>
         <DataTable
+          tarjeta={false}
           ariaLabel="Tipologías por empresa"
           rows={(tipologias.datos ?? []).filter((t) => t.activo || t.habilitada)}
           getRowKey={(t) => t.id}

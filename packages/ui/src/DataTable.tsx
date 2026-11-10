@@ -15,6 +15,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "./table-styles";
 
 // HU #10844 — Componente de tabla compartido (patrón canónico card-list de CompanyListTable).
@@ -75,6 +76,11 @@ export interface DataTableProps<T> {
    * Solo aplica cuando el estado es `ready`/`empty` (no en `loading`/`error`); la paginación se oculta.
    */
   emptyContent?: ReactNode;
+  /**
+   * HU #14477 — la tabla y su paginador van dentro de una tarjeta (`TABLA_TARJETA_CLS`). `false` cuando la pantalla ya
+   * la pinta dentro de una tarjeta, un panel o un modal, para no apilar dos. Default: `true`.
+   */
+  tarjeta?: boolean;
 }
 
 const ALIGN: Record<CellAlign, string> = {
@@ -98,6 +104,7 @@ export function DataTable<T>({
   ariaLabel,
   renderExpanded,
   emptyContent,
+  tarjeta = true,
 }: DataTableProps<T>) {
   // `ready` con 0 filas → `empty`. Sin `status`, se infiere de `rows`.
   const effectiveStatus: UiStatus =
@@ -113,7 +120,7 @@ export function DataTable<T>({
     (status === undefined || status === "ready" || status === "empty");
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${tarjeta ? TABLA_TARJETA_CLS : ""}`}>
       <UiStateBoundary
         status={showEmptyContent ? "ready" : effectiveStatus}
         emptyMessage={emptyMessage}

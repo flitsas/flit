@@ -112,7 +112,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
           </div>
 
           <section aria-labelledby="wizard-steps-title">
-            {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+            {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
             <h2
               id="wizard-steps-title"
               className="text-sm font-bold mb-3"

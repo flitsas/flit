@@ -22,6 +22,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
@@ -69,7 +70,7 @@ export function CompanyListTable({
       titulo
     );
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
       {/* Bug #13055 — tabla homologada con el modelo de trámites */}
       <table

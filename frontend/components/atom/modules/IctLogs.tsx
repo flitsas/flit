@@ -17,6 +17,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import {
   fetchIctAlerts,
@@ -222,7 +223,7 @@ function LogsTab() {
         emptyMessage="Ningún log coincide con los filtros. Amplía el rango o quita algún filtro."
       >
         {!loading && data.length > 0 ? (
-          <>
+          <div className={TABLA_TARJETA_CLS}>
             <div className="overflow-x-auto">
               <table
                 aria-label="Logs de integración ICT"
@@ -344,7 +345,7 @@ function LogsTab() {
               noun="registros"
               ariaLabel="Paginación del Log ICT"
             />
-          </>
+          </div>
         ) : null}
       </UiStateBoundary>
     </section>
@@ -583,6 +584,7 @@ function IctAlertEventsList() {
           errorMessage="El historial de alertas ICT no está disponible aquí; gestiónelo en Reportes ICT."
           onRetry={() => void load()}
         >
+          <div className={TABLA_TARJETA_CLS}>
           <div className="overflow-x-auto">
           <table
             aria-label="Eventos de alerta ICT"
@@ -680,6 +682,7 @@ function IctAlertEventsList() {
             noun="eventos"
             ariaLabel="Paginación de eventos de alerta ICT"
           />
+          </div>
         </UiStateBoundary>
       )}
     </div>

@@ -33,6 +33,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 const COLUMNAS = columnasHijas("Razón social");
 const ACCESORES: AccesoresFiltro<CompanyChildListItem> = {
@@ -129,7 +130,7 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
           skeletonRows={3}
         >
           {(
-            <>
+            <div className={TABLA_TARJETA_CLS}>
               <div className="overflow-x-auto">
                 {/* Bug #13055 — tabla homologada con el modelo de trámites */}
                 <table
@@ -269,7 +270,7 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
                   noun="clientes"
                 />
               )}
-            </>
+            </div>
           )}
         </UiStateBoundary>
       )}

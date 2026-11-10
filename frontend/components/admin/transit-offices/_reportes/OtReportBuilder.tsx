@@ -535,7 +535,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                           <button
                             type="button"
                             onClick={() => toggleSort(column.sort!)}
-                            className="flex items-center gap-1 uppercase transition hover:text-flit-brand"
+                            className="flex items-center gap-1 normal-case text-inherit transition hover:opacity-80"
                             aria-label={`Ordenar por ${column.label}`}
                           >
                             {column.label}

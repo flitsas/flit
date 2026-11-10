@@ -584,6 +584,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
               getRowKey={(row) => row.id}
               ariaLabel="Historial de validaciones de impronta"
               minWidth={640}
+              tarjeta={false}
               pagination={{
                 page: pgHistory.page,
                 pageSize: pgHistory.pageSize,

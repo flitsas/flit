@@ -1145,6 +1145,7 @@ export function MandatoOtConfigForm({
                 ) : null}
 
                 <DataTable
+                  tarjeta={false}
                   columns={companyColumns}
                   rows={companyPageRows}
                   getRowKey={(row) => row.companyTenantId}

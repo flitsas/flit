@@ -69,9 +69,11 @@ export interface TarifasTabProps {
   api?: TarifasApi;
   /** Presentación y restricciones; por defecto Plataforma, sin cambios. */
   modo?: TarifasModo;
+  /** HU #14477 — `false` cuando se monta dentro de un panel que ya es tarjeta (el hub del OT), para no apilar dos. */
+  tarjeta?: boolean;
 }
 
-export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: TarifasTabProps = {}) {
+export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo, tarjeta = true }: TarifasTabProps = {}) {
   const fijo = modo?.organismoFijo === true;
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
@@ -276,6 +278,7 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
           onRetry={() => void load()}
         >
           <DataTable<GrupoTarifa>
+            tarjeta={tarjeta}
             ariaLabel="Tarifas del portal de Persona Natural"
             columns={columns}
             rows={pg.paginar(visibles)}

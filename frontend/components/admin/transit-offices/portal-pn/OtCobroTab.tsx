@@ -27,7 +27,7 @@ export function OtCobroTab({ transitOfficeId }: { transitOfficeId: string }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <OtCobroMediosSection api={api} onIrAPrecios={irAPrecios} />
+      <OtCobroMediosSection api={api} onIrAPrecios={irAPrecios} tarjeta={false} />
       <div id={ANCLA_PRECIOS} tabIndex={-1} className="focus:outline-none">
         <OtPreciosSection transitOfficeId={transitOfficeId} />
       </div>

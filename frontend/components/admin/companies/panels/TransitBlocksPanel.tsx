@@ -262,6 +262,7 @@ export function TransitBlocksPanel({
 
             {(
               <DataTable
+                tarjeta={false}
                 emptyContent={
                   filtros.hayFiltros ? (
                     <TablaFiltrosVacio

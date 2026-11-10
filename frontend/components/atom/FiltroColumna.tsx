@@ -343,8 +343,9 @@ function BotonFiltro({
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         data-activo={activo ? "true" : undefined}
-        className={`-my-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/60 ${BTN_FOCO} ${
-          activo ? "text-flit-brand-ink" : "text-muted-foreground"
+        className={`-my-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/10 ${BTN_FOCO} ${
+          // HU #14477 — vive en la cabecera en tinta: hereda su texto claro y, activo, el turquesa que sí se ve encima.
+          activo ? "text-[color:var(--di-highlight-decor)]" : "text-inherit"
         }`}
       >
         <Filter className={`h-3.5 w-3.5 ${activo ? "fill-current" : ""}`} aria-hidden="true" />

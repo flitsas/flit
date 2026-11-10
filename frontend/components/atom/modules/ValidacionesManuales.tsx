@@ -29,7 +29,7 @@ import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
 /**
  * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
  * (`Validaciones`) ya comprobó el rol. Tabla del modelo único de trámites: `DataTable` (cabecera
- * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `ActionsMenu`, paginación numerada con
+ * `table-styles`, filas-tarjeta y, desde la HU #14477, tarjeta envolvente), `ActionsMenu`, paginación numerada con
  * «Filas por página» y `CarLoaderModal` mientras carga.
  */
 

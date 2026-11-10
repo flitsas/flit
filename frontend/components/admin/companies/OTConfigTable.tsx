@@ -335,6 +335,7 @@ export function OTConfigTable({
 
       {(
         <DataTable
+          tarjeta={false}
           emptyContent={
             filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={limpiarTodo} /> : undefined
           }

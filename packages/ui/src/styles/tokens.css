@@ -158,8 +158,9 @@
      gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
      blanco que se aplanaba sobre paneles blancos; la fila lleva borde definido + sombra sutil
      que la hace flotar aunque el contenedor sea blanco. */
-  --table-header-bg: #e4edfb;
-  --table-header-fg: #4a5878;
+  /* HU #14477 — cabecera en tinta, como la `.table th` del UI kit (decisión de producto sobre la propuesta). */
+  --table-header-bg: #162744;
+  --table-header-fg: #ffffff;
   --table-row-border: #dfe5ed;
   --table-row-hover: #ffffff;
 
@@ -364,8 +365,9 @@
   --flit-brand-ink: var(--brand-ink, #6fa5ff);
 
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
-  --table-header-bg: #0f1f3a;
-  --table-header-fg: #c3cde6;
+  /* Tinta levantada: se distingue de la tarjeta oscura (#132544, 1,36:1) y el blanco queda en 11,2:1 (AA). */
+  --table-header-bg: #1f3a6b;
+  --table-header-fg: #ffffff;
   --table-row-border: #22375c;
   --table-row-hover: #132544;
 

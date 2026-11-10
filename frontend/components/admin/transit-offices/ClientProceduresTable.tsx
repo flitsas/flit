@@ -25,6 +25,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { OtTablePagination } from "./OtTablePagination";
@@ -574,7 +575,7 @@ export function ClientProceduresTable({
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
       <table className="di-tabla-tarjetas w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>

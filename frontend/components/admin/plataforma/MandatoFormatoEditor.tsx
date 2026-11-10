@@ -415,6 +415,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   detail && detail.versions.length > 0 ? (
                     <div data-testid="mandato-formato-historial">
                       <DataTable<MandatoFormatVersionInfo>
+                        tarjeta={false}
                         ariaLabel="Versiones publicadas de la plantilla"
                         columns={versionColumns}
                         rows={pgVersiones.paginar(detail.versions)}

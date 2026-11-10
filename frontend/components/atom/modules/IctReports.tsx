@@ -33,6 +33,7 @@ import {
   TABLA_MOVIL_TABLE_CLS,
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
@@ -444,7 +445,7 @@ function describeExportError(error: unknown): string {
   return "No se pudo generar la exportación. Inténtalo de nuevo.";
 }
 
-/** Sección de contenido: título y tabla de detalle, sin tarjeta que las envuelva. */
+/** Sección de contenido: título y tabla de detalle; la tarjeta la lleva la tabla (HU #14477), no la sección. */
 function ReportSection({
   title,
   hint,
@@ -457,7 +458,7 @@ function ReportSection({
   testId?: string;
 }) {
   return (
-    // HU #13919 — sin tarjeta blanca envolvente: la tabla va directa sobre el fondo, como la de trámites.
+    // HU #13919 — la sección no pinta tarjeta; desde la HU #14477 la pone la tabla (`TABLA_TARJETA_CLS`).
     <section data-testid={testId}>
       <h2 className="text-sm font-bold mb-3" title={hint}>
         {title}
@@ -476,7 +477,7 @@ function DetailTable({
   rows: { key: string; cells: string[] }[];
 }) {
   return (
-    <div className={CARDLIST_SCROLL}>
+    <div className={`${CARDLIST_SCROLL} ${TABLA_TARJETA_CLS}`}>
       <table className={`${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr className={CARDLIST_HEAD_ROW}>

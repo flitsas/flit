@@ -113,6 +113,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_640_CLS,
 } from '@/components/atom/table-styles';
 import { PageNav } from '@/components/atom/PageNav';
 import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePaginacion';
@@ -1959,8 +1960,8 @@ function SortableHeaderCell({
             ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
             : `Ordenar ${column.label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 normal-case transition-colors hover:bg-[var(--di-accent-soft)] ${
-          activa ? 'text-flit-brand-ink' : ''
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 normal-case text-inherit transition-colors hover:bg-white/10 ${
+          activa ? 'text-[color:var(--di-highlight-decor)]' : ''
         }`}
       >
         {column.label}
@@ -2220,7 +2221,7 @@ function TableBody({
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
     // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
     // fundió con "Mostrando X de Y" de `PageNav` — un solo lugar para el recuento.
-    <div className="flex flex-col">
+    <div className={`flex flex-col ${TABLA_TARJETA_640_CLS}`}>
       <div className="overflow-x-auto">
         <table
           aria-label="Trámites en curso"

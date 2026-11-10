@@ -11,6 +11,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
   TABLA_MOVIL_ROW_CLS,
@@ -51,7 +52,7 @@ export function DocumentTypeListTable({
   onDelete,
 }: DocumentTypeListTableProps) {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
       {/* Bug #13055 — tabla homologada con el modelo de trámites */}
       <table

@@ -12,6 +12,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import type { RowAction } from "@/components/atom/RowActions";
 import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
@@ -401,7 +402,7 @@ export function UsersTable({
       )}
 
       {!loading && !error && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
           <table
             aria-label="Usuarios"
             className="text-xs"

@@ -32,6 +32,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 
 /**
@@ -131,6 +132,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
         skeletonRows={4}
       >
         {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+        <div className={TABLA_TARJETA_CLS}>
         <div className="overflow-x-auto">
           <table className={`min-w-[820px] text-xs ${TABLA_MOVIL_TABLE_CLS}`} style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}>
             <caption className="sr-only">Firmas de apoderados registradas en el baúl</caption>
@@ -238,6 +240,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           onPageSizeChange={pg.setPageSize}
           noun="firmas"
         />
+        </div>
       </UiStateBoundary>
       )}
 

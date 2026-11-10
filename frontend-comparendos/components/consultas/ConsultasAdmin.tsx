@@ -313,11 +313,11 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-border">
-                <th className="px-3 py-2 font-semibold">Consulta</th>
-                <th className="px-3 py-2 font-semibold">Agenda</th>
-                <th className="px-3 py-2 font-semibold">Última consulta</th>
-                <th className="px-3 py-2 font-semibold">Próxima consulta</th>
+              <tr>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Consulta</th>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Agenda</th>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Última consulta</th>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Próxima consulta</th>
               </tr>
             </thead>
             <tbody>

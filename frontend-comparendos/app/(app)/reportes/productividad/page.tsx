@@ -35,6 +35,7 @@ function DetalleCifra({ sel, periodo, onCerrar, onVer }: { sel: Seleccion; perio
   return (
     <Modal open onClose={onCerrar} title={`${titulo} · ${sel.usuario}`} description={`Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}.`} size="xl">
       <DataTable
+        tarjeta={false}
         ariaLabel="Comparendos de la cifra"
         rows={pg.paginar(filas)}
         getRowKey={(c) => c.id}

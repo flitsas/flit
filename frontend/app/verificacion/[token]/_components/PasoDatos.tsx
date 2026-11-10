@@ -1,7 +1,7 @@
 "use client";
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
-import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG } from "@/components/atom/table-styles";
+import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG, TABLA_TARJETA_CLS } from "@/components/atom/table-styles";
 import { useId, useState } from "react";
 import {
   CAPTURE_TIPS,
@@ -85,6 +85,7 @@ export function PasoDatos({
 
       {/* HU #13919 — ficha de pares fijos con el MISMO diseño de toda tabla (cabecera gris y filas-
           tarjeta); no se pagina porque no recorre ninguna colección. */}
+      <div className={TABLA_TARJETA_CLS}>
       <table className="w-full border-separate border-spacing-y-2 text-base">
         <caption className="sr-only">Tus datos</caption>
         <thead>
@@ -132,6 +133,7 @@ export function PasoDatos({
           </tr>
         </tbody>
       </table>
+      </div>
 
       <p className="text-base text-muted-foreground">
         Estos datos ya los tiene quien te envió el enlace. No tienes que escribirlos otra vez. Haremos una

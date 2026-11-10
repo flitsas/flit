@@ -429,6 +429,7 @@ function SolicitudesTabla({ solicitudes }: { solicitudes: Solicitud[] }) {
       rows={pg.paginar(solicitudes)}
       getRowKey={(s) => `${s.noSolicitud}-${s.fecha}`}
       minWidth={520}
+      tarjeta={false}
       pagination={{
         page: pg.page,
         pageSize: pg.pageSize,

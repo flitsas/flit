@@ -16,6 +16,7 @@ import {
   TABLA_MOVIL_TABLE_CLS,
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/detailed-report";
@@ -74,7 +75,7 @@ export function DetailedReportGrid({
       skeletonRows={6}
     >
       {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
-      <div className={CARDLIST_SCROLL}>
+      <div className={`${CARDLIST_SCROLL} ${TABLA_TARJETA_CLS}`}>
         <table className={`min-w-full ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Reporte detallado de trámites">
           <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr className={CARDLIST_HEAD_ROW}>
