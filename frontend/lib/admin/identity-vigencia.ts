@@ -6,6 +6,7 @@
 // `AdminIdentityVigencia` y ahora devuelve también hasta cuándo es válida.
 
 import { formatFechaCalendario, formatFechaHora } from "@/lib/format/date";
+import type { StatusTone } from "@flit/ui/StatusBadge";
 
 /** Estados que expone el backend (`AdminIdentityVigencia`). */
 export type AdminIdentityStatus = "valid" | "expired" | "pending" | "none";
@@ -13,8 +14,12 @@ export type AdminIdentityStatus = "valid" | "expired" | "pending" | "none";
 export interface AdminIdentityUi {
   /** Rótulo del chip. */
   label: string;
-  /** Estilo del chip (paleta FLIT). */
-  style: { background: string; color: string };
+  /**
+   * Tono del chip para `StatusBadge` (homologación #14507, acuerdo de la mesa UI/UX): texto en tinta y la marca de
+   * la propuesta —check (validada), punto naranja (vencida), aro y equis naranja (sin validar)—. El naranja va
+   * solo como marca, nunca como texto.
+   */
+  tone: StatusTone;
   /** true solo cuando la identidad está aprobada y vigente (icono de escudo "ok"). */
   isValid: boolean;
   /** Rótulo del botón de acción: enviar / reenviar / renovar. */
@@ -24,25 +29,25 @@ export interface AdminIdentityUi {
 const IDENTITY_UI: Record<AdminIdentityStatus, AdminIdentityUi> = {
   valid: {
     label: "Identidad validada",
-    style: { background: "var(--di-success-soft)", color: "var(--di-success)" },
+    tone: "success",
     isValid: true,
     action: "Reenviar validación",
   },
   expired: {
     label: "Identidad vencida",
-    style: { background: "var(--di-warning-soft)", color: "var(--di-warning)" },
+    tone: "warning",
     isValid: false,
     action: "Renovar validación",
   },
   pending: {
     label: "Validación en proceso",
-    style: { background: "var(--di-info-soft)", color: "var(--di-info)" },
+    tone: "info",
     isValid: false,
     action: "Reenviar validación",
   },
   none: {
     label: "Identidad sin validar",
-    style: { background: "var(--di-danger-soft)", color: "var(--di-danger)" },
+    tone: "danger",
     isValid: false,
     action: "Enviar validación",
   },
