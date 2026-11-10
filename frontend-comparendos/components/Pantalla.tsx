@@ -3,17 +3,52 @@
 import type { ReactNode } from "react";
 import { InlineAlert } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { TITULO_CLS } from "@/components/ui/estilos";
+import { CABECERA_CLS, DecoracionCabecera, TITULO_CABECERA_CLS } from "@/components/ui/CabeceraModulo";
+import type { Ilustracion } from "@flit/ui/ilustraciones";
 import { tienePermiso } from "@/lib/sesion";
 
-/** Encabezado común de una pantalla: título, descripción y acciones a la derecha. */
-export function Encabezado({ titulo, descripcion, acciones }: { titulo: string; descripcion?: ReactNode; acciones?: ReactNode }) {
+/** Ilustración de la cabecera según el título, como `ModuleTitle` de Trámites; sin coincidencia, la de Comparendos. */
+const POR_TITULO: ReadonlyArray<[RegExp, Ilustracion]> = [
+  [/dashboard|reporte|productividad/i, "reportes"],
+  [/calendario|horario/i, "calendario"],
+  [/organismo/i, "organismos"],
+  [/municip|fuentes/i, "fuentes-oficiales"],
+  [/alerta|integraci|ingesta|migraci/i, "integraciones"],
+  [/ocr|prompt|paquete/i, "documentos"],
+  [/plantilla|mensaje|correo/i, "notificaciones"],
+  [/representante/i, "firmas"],
+  [/empresa|parametrizador/i, "empresas"],
+  [/tipolog|petici/i, "causales"],
+  [/monitore|placa/i, "consulta-placa"],
+  [/pago/i, "fur"],
+];
+
+function ilustracionPara(titulo: string): Ilustracion {
+  return POR_TITULO.find(([re]) => re.test(titulo))?.[1] ?? "comparendos";
+}
+
+/**
+ * Encabezado común de una pantalla: título, descripción y acciones a la derecha. Con el aspecto de la cabecera de
+ * módulo de la propuesta (HU #14486). La ilustración sale del título salvo que la pantalla pida otra.
+ */
+export function Encabezado({
+  titulo,
+  descripcion,
+  acciones,
+  ilustracion,
+}: {
+  titulo: string;
+  descripcion?: ReactNode;
+  acciones?: ReactNode;
+  ilustracion?: Ilustracion;
+}) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-3">
-      <div className="flex flex-col gap-1">
-        <h1 className={TITULO_CLS}>{titulo}</h1>
+    <header className={`${CABECERA_CLS} flex flex-wrap items-center justify-between gap-6 max-md:gap-3.5`}>
+      <DecoracionCabecera ilustracion={ilustracion ?? ilustracionPara(titulo)} />
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
+        <h1 className={TITULO_CABECERA_CLS}>{titulo}</h1>
         {/* div y no p: algunas pantallas pasan bloques (chip, barra de progreso) y un div dentro de p rompe la hidratación. */}
-        {descripcion && <div className="text-sm text-muted-foreground">{descripcion}</div>}
+        {descripcion && <div className="mt-1.5 max-w-[60ch] text-sm text-[color:var(--di-text-secondary)]">{descripcion}</div>}
       </div>
       {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
     </header>
