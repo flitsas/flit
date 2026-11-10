@@ -17,6 +17,12 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 
@@ -276,11 +282,11 @@ function ReasonsTable({
     <div className="flex flex-col">
       <div className="overflow-x-auto">
         <table
-          className="min-w-[36rem] text-xs"
+          className={`min-w-[36rem] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
           style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
         >
           <caption className="sr-only">Causales de rechazo — {modalidadLabel}</caption>
-          <thead>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr>
               <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={head}>
                 Descripción
@@ -299,27 +305,27 @@ function ReasonsTable({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {pg.paginar(items).map((r) => (
               <tr
                 key={r.id}
-                className={`bg-card ${TABLA_ROW_HOVER_CLS} ${
+                className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS} ${
                   r.isActive ? "" : "opacity-60"
                 }`}
               >
-                <td className="rounded-l-xl border-y border-l px-4 py-3" style={cell}>
+                <td data-label="Descripción" className={`rounded-l-xl border-y border-l px-4 py-3 ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={cell}>
                   {r.description}
                 </td>
-                <td className="border-y px-4 py-3 font-mono text-[11px]" style={cell}>
+                <td data-label="Código" className={`border-y px-4 py-3 font-mono text-[11px] ${TABLA_MOVIL_CELL_CLS}`} style={cell}>
                   {r.code}
                 </td>
-                <td className="border-y px-4 py-3 tabular-nums" style={cell}>
+                <td data-label="Orden" className={`border-y px-4 py-3 tabular-nums ${TABLA_MOVIL_CELL_CLS}`} style={cell}>
                   {r.sortOrder}
                 </td>
-                <td className="border-y px-4 py-3" style={cell}>
+                <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={cell}>
                   {r.isActive ? "Activa" : "Retirada"}
                 </td>
-                <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={cell}>
+                <td data-label="Acciones" className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`} style={cell}>
                   <RowActions
                     actions={[
                       {

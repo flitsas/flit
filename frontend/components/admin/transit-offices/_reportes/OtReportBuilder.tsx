@@ -59,6 +59,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 
 
 /** Tope de la exportación. Existe para no encadenar decenas de páginas; si se alcanza, se DICE. */
@@ -518,8 +526,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         ) : (
           <>
             <div className={CARDLIST_SCROLL}>
-              <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-report-table">
-                <thead>
+              <table className={`min-w-[40rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} data-testid="ot-report-table">
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr className={CARDLIST_HEAD_ROW}>
                     {columns.map((column) => (
                       <th key={column.id} scope="col" className={CARDLIST_TH}>
@@ -542,16 +550,17 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                     ))}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {report.filas.map((row) => (
                     <tr
                       key={row.procedureInstanceId}
-                      className={CARDLIST_ROW}
+                      className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}
                     >
-                      {columns.map((column) => (
+                      {columns.map((column, i) => (
                         <td
                           key={column.id}
-                          className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
+                          data-label={column.label}
+                          className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""} ${TABLA_MOVIL_CELL_CLS} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
                         >
                           {column.id === "estado" ? (
                             <EstadoChip estado={row.estadoOt} />

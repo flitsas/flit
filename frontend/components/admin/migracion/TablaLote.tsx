@@ -17,6 +17,13 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 
 /**
@@ -70,11 +77,11 @@ export function TablaLote({
     <div className="flex flex-col">
     <div className="overflow-x-auto">
       <table
-        className="min-w-[640px] text-sm"
+        className={`min-w-[640px] text-sm ${TABLA_MOVIL_TABLE_CLS}`}
         style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
       >
         <caption className="sr-only">Trámites del lote de migración</caption>
-        <thead>
+        <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} w-10 rounded-l-xl`} style={head}>
               <input
@@ -93,15 +100,15 @@ export function TablaLote({
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`} style={head}>Resultado</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {pg.paginar(filas).map((fila) => {
             const clave = claveFila(fila);
             const desplegada = abierta === clave;
 
             return (
               <Fragment key={clave}>
-                <tr className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={cell}>
+                <tr className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-label="" style={cell}>
                     <input
                       type="checkbox"
                       aria-label={`Seleccionar ${ETIQUETA_TRAMITE[fila.tramite]} ${fila.v1Id}`}
@@ -111,10 +118,10 @@ export function TablaLote({
                       disabled={bloqueada}
                     />
                   </td>
-                  <td className="border-y px-4 py-3 tabular-nums opacity-60" style={cell}>{fila.fila}</td>
-                  <td className="border-y px-4 py-3" style={cell}>{ETIQUETA_TRAMITE[fila.tramite]}</td>
-                  <td className="border-y px-4 py-3 font-medium tabular-nums" style={cell}>{fila.v1Id}</td>
-                  <td className="border-y px-4 py-3" style={cell}>
+                  <td className={`border-y px-4 py-3 tabular-nums opacity-60 ${TABLA_MOVIL_CELL_CLS}`} data-label="Fila" style={cell}>{fila.fila}</td>
+                  <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Trámite" style={cell}>{ETIQUETA_TRAMITE[fila.tramite]}</td>
+                  <td className={`border-y px-4 py-3 font-medium tabular-nums ${TABLA_MOVIL_CELL_CLS}`} data-label="Id V1" style={cell}>{fila.v1Id}</td>
+                  <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Estado" style={cell}>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <Estado estado={fila.estado} />
                       {/*
@@ -129,7 +136,7 @@ export function TablaLote({
                       )}
                     </div>
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3" style={cell}>
+                  <td className={`rounded-r-xl border-y border-r px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Resultado" style={cell}>
                     <div className="flex flex-wrap items-center gap-2">
                       {fila.respuesta?.destino && (
                         <a
@@ -164,10 +171,10 @@ export function TablaLote({
                 </tr>
 
                 {desplegada && fila.respuesta && (
-                  <tr>
+                  <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
                     <td
                       colSpan={6}
-                      className="rounded-xl border bg-card p-4"
+                      className={`rounded-xl border bg-card p-4 ${TABLA_MOVIL_FILA_ANCHA_CLS}`}
                       style={cell}
                     >
                       <ReporteMigracion respuesta={fila.respuesta} />

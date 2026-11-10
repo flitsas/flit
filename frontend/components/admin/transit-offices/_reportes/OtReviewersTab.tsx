@@ -58,6 +58,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 
 const COLUMNS_STORAGE_KEY = "flit-ot-revisores-columnas";
 
@@ -251,7 +259,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               <Tile
                 value={`${resumen.aprobacionPct.toFixed(1).replace(".", ",")} %`}
                 label="Aprobación del equipo"
-                accent="#8CC63F"
+                accent="var(--di-text-primary)"
               />
               <Tile
                 value={formatHours(resumen.tiempoMedianoHoras)}
@@ -261,7 +269,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               <Tile
                 value={`${resumen.concentracionTopPct.toFixed(1).replace(".", ",")} %`}
                 label="Concentración"
-                accent={resumen.concentracionTopPct >= 60 ? "#F9AC00" : undefined}
+                accent={resumen.concentracionTopPct >= 60 ? "var(--di-warning)" : undefined}
                 hint={
                   resumen.revisorMasActivo
                     ? `Se lo lleva ${resumen.revisorMasActivo}`
@@ -273,7 +281,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
             {/* Un equipo donde una persona hace más de la mitad no es un equipo: es un cuello de
                 botella con testigos. El número solo no lo dice; la frase sí. */}
             {resumen.concentracionTopPct >= 60 && resumen.revisores > 1 && (
-              <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+              <p className="rounded-xl bg-[var(--di-warning-soft)] text-[color:var(--di-warning)] px-3 py-2 text-[11px]">
                 {resumen.revisorMasActivo} concentra el{" "}
                 {resumen.concentracionTopPct.toFixed(1).replace(".", ",")} % de las decisiones del
                 periodo. Si esa persona falta, la cola se detiene.
@@ -383,8 +391,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         ) : (
           <>
           <div className={CARDLIST_SCROLL}>
-            <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-reviewers-table">
-              <thead>
+            <table className={`min-w-[40rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} data-testid="ot-reviewers-table">
+              <thead className={TABLA_MOVIL_THEAD_CLS}>
                 <tr className={CARDLIST_HEAD_ROW}>
                   {columns.map((column) => (
                     <th key={column.id} scope="col" className={CARDLIST_TH}>
@@ -405,13 +413,14 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className={TABLA_MOVIL_TBODY_CLS}>
                 {pg.paginar(report!.filas).map((row) => (
-                  <tr key={row.userId} className={CARDLIST_ROW}>
-                    {columns.map((column) => (
+                  <tr key={row.userId} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                    {columns.map((column, i) => (
                       <td
                         key={column.id}
-                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
+                        data-label={column.label}
+                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""} ${TABLA_MOVIL_CELL_CLS} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
                       >
                         {column.value(row)}
                       </td>
@@ -451,11 +460,11 @@ function ReviewerLoadChart({ filas }: { filas: OtReviewerRow[] }) {
     <div className="flex flex-col gap-2" data-testid="ot-reviewers-reparto-chart">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "#8CC63F" }} />
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--di-success-dot)" }} />
           Aprobados
         </span>
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "#FF4E00" }} />
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--di-alerta-punto)" }} />
           Rechazados
         </span>
       </div>
@@ -475,11 +484,11 @@ function ReviewerLoadChart({ filas }: { filas: OtReviewerRow[] }) {
           >
             <span
               className="h-full"
-              style={{ width: `${(fila.aprobados / max) * 100}%`, background: "#8CC63F" }}
+              style={{ width: `${(fila.aprobados / max) * 100}%`, background: "var(--di-success-dot)" }}
             />
             <span
               className="h-full"
-              style={{ width: `${(fila.rechazados / max) * 100}%`, background: "#FF4E00" }}
+              style={{ width: `${(fila.rechazados / max) * 100}%`, background: "var(--di-alerta-punto)" }}
             />
           </span>
           <span className="tabular-nums font-semibold">{formatInt(fila.decididos)}</span>

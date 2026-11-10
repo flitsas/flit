@@ -9,6 +9,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/detailed-report";
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
@@ -67,37 +75,37 @@ export function DetailedReportGrid({
     >
       {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
       <div className={CARDLIST_SCROLL}>
-        <table className={`min-w-full ${CARDLIST_TABLE}`} aria-label="Reporte detallado de trámites">
-          <thead>
+        <table className={`min-w-full ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Reporte detallado de trámites">
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr className={CARDLIST_HEAD_ROW}>
               {columnas.map((h) => (
                 <th key={h} scope="col" className={CARDLIST_TH}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {data?.items.map((row) => (
-              <tr key={row.id} className={CARDLIST_ROW}>
+              <tr key={row.id} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
                 {columnaCompania && (
-                  <td className={`${CARDLIST_CELL} font-medium`} data-testid="detallado-fila-cliente">
+                  <td data-label={columnaCompania} className={`${CARDLIST_CELL} font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-testid="detallado-fila-cliente">
                     {"tenantName" in row && row.tenantName ? row.tenantName : "—"}
                   </td>
                 )}
-                <td className={CARDLIST_CELL}>{row.referenceNumber}</td>
-                <td className={CARDLIST_CELL}>{row.procedureTypeName}</td>
-                <td className={CARDLIST_CELL}>{statusLabel(row.status) ?? row.status}</td>
-                <td className={CARDLIST_CELL} data-testid="detallado-fila-canal">
+                <td data-label="Referencia" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS} ${columnaCompania ? "" : TABLA_MOVIL_CELL_TITULO_CLS}`}>{row.referenceNumber}</td>
+                <td data-label="Tipo" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.procedureTypeName}</td>
+                <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{statusLabel(row.status) ?? row.status}</td>
+                <td data-label="Canal" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`} data-testid="detallado-fila-canal">
                   {canalLabel(row.channel)}
                   {row.channel === "pn_punto" && row.channelTransitOfficeName ? (
                     <span className="block text-[11px] opacity-70">{row.channelTransitOfficeName}</span>
                   ) : null}
                 </td>
-                <td className={CARDLIST_CELL}>{row.personFullName || row.personDocument || "—"}</td>
-                <td className={CARDLIST_CELL}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
-                <td className={CARDLIST_CELL}>{row.isLeasing ? "Sí" : "No"}</td>
-                <td className={CARDLIST_CELL}>{row.paymentType || "—"}</td>
-                <td className={CARDLIST_CELL}>{row.transferType}</td>
-                <td className={CARDLIST_CELL}>{row.createdByDisplayName}</td>
+                <td data-label="Persona" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.personFullName || row.personDocument || "—"}</td>
+                <td data-label="Transformación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
+                <td data-label="Leasing" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.isLeasing ? "Sí" : "No"}</td>
+                <td data-label="Pago" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.paymentType || "—"}</td>
+                <td data-label="Traspaso" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.transferType}</td>
+                <td data-label="Radicador" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.createdByDisplayName}</td>
               </tr>
             ))}
           </tbody>

@@ -8,6 +8,12 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -95,11 +101,11 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
         {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
         <div className="overflow-x-auto">
           <table
-            className="min-w-[720px] text-xs"
+            className={`min-w-[720px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
             style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
           >
             <caption className="sr-only">Filas del lote con su resultado y el detalle del error</caption>
-            <thead>
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
                 <th
                   scope="col"
@@ -131,23 +137,23 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {rows.map((row) => {
                 const vista = standaloneDocumentStatusView(row.status);
                 const errores = row.validationErrors ?? [];
                 return (
-                  <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-                    <td className="rounded-l-xl border-y border-l px-4 py-3 font-medium" style={{ borderColor: "var(--border)" }}>
+                  <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                    <td className={`rounded-l-xl border-y border-l px-4 py-3 font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-label="Fila" style={{ borderColor: "var(--border)" }}>
                       {row.rowNumber ?? "—"}
                     </td>
-                    <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "var(--border)" }}>
+                    <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Tipo" style={{ borderColor: "var(--border)" }}>
                       {generacionDocumentalTypeLabel(row.documentType)}
                       {row.scenario ? ` · ${row.scenario}` : ""}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                    <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Estado" style={{ borderColor: "var(--border)" }}>
                       <StatusBadge label={vista.label} tone={vista.tone} />
                     </td>
-                    <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "var(--border)" }}>
+                    <td className={`rounded-r-xl border-y border-r px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Detalle del error" style={{ borderColor: "var(--border)" }}>
                       {errores.length > 0 ? (
                         <ul className="space-y-1">
                           {errores.map((error, index) => (

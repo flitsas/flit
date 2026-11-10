@@ -8,6 +8,12 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -311,9 +317,9 @@ function DnsInstructions({
       <div className="overflow-x-auto">
         <table
           aria-label="Registros DNS que debes crear"
-          className="w-full border-separate border-spacing-y-2 text-left text-xs"
+          className={`w-full border-separate border-spacing-y-2 text-left text-xs ${TABLA_MOVIL_TABLE_CLS}`}
         >
-          <thead>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr>
               <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Tipo</th>
               <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Nombre</th>
@@ -323,7 +329,7 @@ function DnsInstructions({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             <DnsRow type="TXT" name={verification.txtName} value={verification.txtValue} />
             {verification.aValue && <DnsRow type="A" name={verification.aName} value={verification.aValue} />}
           </tbody>
@@ -341,11 +347,11 @@ function DnsInstructions({
 function DnsRow({ type, name, value }: { type: string; name: string; value: string }) {
   const border = { borderColor: "var(--table-row-border)" };
   return (
-    <tr className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
-      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={border}>{type}</td>
-      <td className="max-w-[220px] truncate border-y px-4 py-3 font-mono" style={border}>{name}</td>
-      <td className="max-w-[260px] truncate border-y px-4 py-3 font-mono" style={border}>{value}</td>
-      <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={border}>
+    <tr className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+      <td data-label="Tipo" className={`rounded-l-xl border-y border-l px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={border}>{type}</td>
+      <td data-label="Nombre" className={`max-w-[220px] truncate border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`} style={border}>{name}</td>
+      <td data-label="Valor" className={`max-w-[260px] truncate border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`} style={border}>{value}</td>
+      <td data-label="Acciones" className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`} style={border}>
         <CopyButton value={value} label={`Copiar valor del registro ${type}`} />
       </td>
     </tr>

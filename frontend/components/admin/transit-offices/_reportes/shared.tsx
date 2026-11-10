@@ -18,6 +18,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 
 export {
   CSV_EXPORT_VISIBLE,
@@ -92,18 +100,18 @@ export function Bucket({
   // bloque resaltado sin contenido enseña a ignorar el resaltado cuando sí importa.
   const alerta = Boolean(hot) && value > 0;
   const baseCls = alerta
-    ? "border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10"
+    ? "border-[color:var(--di-alerta-punto)] bg-[var(--di-warning-soft)]"
     : "border-border";
 
   const content = (
     <>
       <p
-        className={`text-lg font-semibold tabular-nums ${alerta ? "text-amber-800 dark:text-amber-300" : ""}`}
+        className={`text-lg font-semibold tabular-nums ${alerta ? "text-[color:var(--di-warning)]" : ""}`}
       >
         {value}
       </p>
       <p
-        className={`text-[11px] ${alerta ? "text-amber-700 dark:text-amber-400" : "text-[#6B7280] dark:text-muted-foreground"}`}
+        className={`text-[11px] ${alerta ? "text-[color:var(--di-warning)]" : "text-[color:var(--di-text-tertiary)]"}`}
       >
         {label}
       </p>
@@ -191,8 +199,8 @@ export function Table({
   return (
     <>
       <div className={CARDLIST_SCROLL}>
-        <table className={`min-w-[34rem] ${CARDLIST_TABLE}`}>
-          <thead>
+        <table className={`min-w-[34rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`}>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr className={CARDLIST_HEAD_ROW}>
               {headers.map((h) => (
                 <th key={h} scope="col" className={CARDLIST_TH}>
@@ -201,13 +209,14 @@ export function Table({
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {pg.paginar(rows).map((row) => (
-              <tr key={row.key} className={CARDLIST_ROW}>
+              <tr key={row.key} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
                 {row.cells.map((cell, i) => (
                   <td
                     key={headers[i]}
-                    className={`${CARDLIST_CELL} ${i === 0 ? "" : "tabular-nums"}`}
+                    data-label={headers[i]}
+                    className={`${CARDLIST_CELL} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : "tabular-nums"} ${TABLA_MOVIL_CELL_CLS}`}
                   >
                     {cell}
                   </td>

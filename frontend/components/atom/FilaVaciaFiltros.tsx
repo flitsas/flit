@@ -1,6 +1,7 @@
 "use client";
 
 import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { TABLA_MOVIL_FILA_ANCHA_CLS } from "@/components/atom/table-styles";
 
 /**
  * Fila única de `<tbody>` para el vacío POR FILTROS (Feature #13996): la tabla sigue montada con su
@@ -16,10 +17,10 @@ export function FilaVaciaFiltros({
   mensaje?: string;
 }) {
   return (
-    <tr>
+    <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
       <td
         colSpan={columnas}
-        className="rounded-xl border border-border bg-card dark:border-border dark:bg-card"
+        className={`rounded-xl border border-border bg-card dark:border-border dark:bg-card ${TABLA_MOVIL_FILA_ANCHA_CLS}`}
       >
         <TablaFiltrosVacio onLimpiar={onLimpiar} mensaje={mensaje} />
       </td>

@@ -67,7 +67,7 @@ export function DrilldownPanel({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading && <p className="text-xs text-muted-foreground">Cargando…</p>}
           {error && (
-            <p className="rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">
+            <p className="rounded-xl bg-[var(--di-danger-soft)] px-4 py-3 text-xs text-[color:var(--di-danger)]">
               {error}
             </p>
           )}
@@ -86,7 +86,7 @@ export function DrilldownPanel({
                       <p className="font-semibold">
                         {item.referenceNumber}
                         {item.prioritario && (
-                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                          <span className="ml-2 rounded-full bg-[var(--di-warning-soft)] text-[color:var(--di-warning)] px-2 py-0.5 text-[10px] font-semibold">
                             Prioritario
                           </span>
                         )}
