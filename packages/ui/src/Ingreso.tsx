@@ -63,6 +63,7 @@ export function IngresoLayout({
   logo,
   logoTarjeta,
   pie,
+  marca,
   children,
 }: {
   /** Logo sobre el panel de tinta (variante blanca). */
@@ -71,6 +72,11 @@ export function IngresoLayout({
   logoTarjeta?: ReactNode;
   /** Debajo del pie de certificación (p. ej. el enlace de políticas). */
   pie?: ReactNode;
+  /**
+   * Textos del panel de tinta. Si se omite, van los del ingreso. Las pantallas que ya traen sus propios textos
+   * (activar cuenta) los pasan aquí para no perderlos; se pintan con las clases `INGRESO_MARCA_*`.
+   */
+  marca?: ReactNode;
   /** Contenido de la tarjeta: título y formulario o avisos. */
   children: ReactNode;
 }) {
@@ -93,22 +99,24 @@ export function IngresoLayout({
         />
         <div className="relative z-[1] self-start [&_img]:h-14 [&_img]:w-auto">{logo}</div>
         <div className="relative z-[1]">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-[color:var(--di-ingreso-acento-2)]">
-            Plataforma de trámites de tránsito
-          </p>
-          <p className="m-0 text-[clamp(2rem,3.4vw,3rem)] font-extrabold leading-[1.08] tracking-[-0.01em]">
-            Tus trámites vehiculares
-            <span
-              className="block bg-clip-text text-transparent"
-              style={{ backgroundImage: "linear-gradient(90deg, var(--di-ingreso-acento-1), var(--di-ingreso-acento-2))" }}
-            >
-              en un solo lugar
-            </span>
-          </p>
-          <p className="mt-3.5 max-w-[46ch] text-base text-[color:var(--di-ingreso-texto-2)]">
-            Traspasos, matrículas, comparendos y el estado de cada vehículo, conectados con las fuentes oficiales y
-            firmados en línea.
-          </p>
+          {marca ?? (
+            <>
+              <p className={INGRESO_MARCA_ANTETITULO_CLS}>Plataforma de trámites de tránsito</p>
+              <p className={INGRESO_MARCA_TITULO_CLS}>
+                Tus trámites vehiculares
+                <span
+                  className="block bg-clip-text text-transparent"
+                  style={{ backgroundImage: "linear-gradient(90deg, var(--di-ingreso-acento-1), var(--di-ingreso-acento-2))" }}
+                >
+                  en un solo lugar
+                </span>
+              </p>
+              <p className={INGRESO_MARCA_TEXTO_CLS}>
+                Traspasos, matrículas, comparendos y el estado de cada vehículo, conectados con las fuentes oficiales y
+                firmados en línea.
+              </p>
+            </>
+          )}
         </div>
         <figure aria-hidden="true" className="relative z-[1] m-0 hidden min-h-[260px] flex-1 place-items-center md:grid">
           {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
@@ -175,6 +183,12 @@ export function IngresoLayout({
 }
 
 /** Título de la tarjeta de ingreso (`.ingreso__tarjeta h2`). */
+/** Textos del panel de tinta (prop `marca` de IngresoLayout). */
+export const INGRESO_MARCA_ANTETITULO_CLS =
+  "mb-2 text-xs font-bold uppercase tracking-[0.08em] text-[color:var(--di-ingreso-acento-2)]";
+export const INGRESO_MARCA_TITULO_CLS = "m-0 text-[clamp(2rem,3.4vw,3rem)] font-extrabold leading-[1.08] tracking-[-0.01em]";
+export const INGRESO_MARCA_TEXTO_CLS = "mt-3.5 max-w-[46ch] text-base text-[color:var(--di-ingreso-texto-2)]";
+
 export const INGRESO_TITULO_CLS = "m-0 text-2xl font-bold text-[color:var(--di-heading)]";
 /** Etiqueta de campo (`.campo label`). */
 export const INGRESO_ETIQUETA_CLS = "mb-1.5 block text-[0.8125rem] font-semibold text-[color:var(--di-text-primary)]";
