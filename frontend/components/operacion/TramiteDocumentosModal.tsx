@@ -518,8 +518,8 @@ export function TramiteDocumentosModal({
                   type="button"
                   className="mt-4 inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
                   style={{
-                    background: 'linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)',
-                    boxShadow: '0 10px 24px -6px color-mix(in srgb, var(--color-flit-brand) 45%, transparent)',
+                    background: 'var(--di-gradient-action)',
+                    boxShadow: 'var(--shadow-button)',
                   }}
                   onClick={() => void preview.downloadConsolidado()}
                   aria-label="Descargar todo · Expediente consolidado (PDF)"

@@ -5,7 +5,6 @@ import { ChevronRight, RefreshCw } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { DataTable, type DataTableColumn } from '@/components/atom/DataTable';
 import { Pagination } from '@/components/atom/Pagination';
 import { usePaginacion } from '@/components/atom/usePaginacion';
@@ -280,7 +279,7 @@ export function IdentityValidationTrackingPanel({
         type="button"
         onClick={toggle}
         className="flex items-center gap-1.5 text-xs font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ outlineColor: FLIT.brand.blue }}
+        style={{ outlineColor: 'var(--di-action)' }}
         aria-expanded={open}
         aria-label="Ver tracking de la validación"
       >
@@ -300,7 +299,7 @@ export function IdentityValidationTrackingPanel({
             </p>
           )}
           {error && (
-            <p className="text-xs" style={{ color: FLIT.state.danger }} role="alert" aria-live="polite">
+            <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert" aria-live="polite">
               {error}
             </p>
           )}
@@ -311,7 +310,7 @@ export function IdentityValidationTrackingPanel({
           {referenced && (
             <p
               className="rounded-lg px-2.5 py-1.5 text-xs"
-              style={{ background: FLIT.blueAlpha(0.1), color: FLIT.brand.blue }}
+              style={{ background: 'var(--di-info-soft)', color: 'var(--di-action)' }}
               role="status"
             >
               Validación reutilizada de otro trámite del mismo cliente (identidad ya verificada). El
@@ -366,7 +365,7 @@ export function IdentityValidationTrackingPanel({
               onClick={() => void loadAudit()}
               disabled={loading}
               className="flex items-center gap-1 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ color: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              style={{ color: 'var(--di-action)', outlineColor: 'var(--di-action)' }}
               aria-label="Refrescar bitácora"
             >
               <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />

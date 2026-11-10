@@ -37,7 +37,7 @@ export function DangerButton({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {
   return (
-    <button type="button" {...props} className={`${BTN_BASE} ${props.className ?? ''}`} style={{ background: WIZARD_CTA_GRADIENT_DANGER }}>
+    <button type="button" {...props} className={`${BTN_BASE} ${props.className ?? ''}`} style={{ background: WIZARD_CTA_GRADIENT_DANGER, color: 'var(--destructive-foreground)' }}>
       {children}
     </button>
   );

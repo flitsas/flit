@@ -217,7 +217,7 @@ export function LoteDescargaAlertCard({
       // sobre el contenido y el tinte de `--badge-*-bg` es translúcido. Sombra = token `shadow.card`
       // de flit_design_tokens.json. Al minimizar se desliza a la derecha en ~200 ms solo si el
       // sistema permite movimiento (prefers-reduced-motion).
-      className={`rounded-xl border bg-card px-3 py-2 text-xs shadow-[0_8px_24px_rgba(22,39,68,0.08)] motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none ${
+      className={`rounded-xl border bg-card px-3 py-2 text-xs shadow-[var(--shadow-card)] motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none ${
         minimizado ? 'pointer-events-none translate-x-[calc(100%+1.5rem)] opacity-0' : 'translate-x-0 opacity-100'
       } ${className ?? ''}`}
       style={{

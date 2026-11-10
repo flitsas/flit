@@ -21,6 +21,7 @@ import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
+import { DIALOGO_FRANJA, DIALOGO_FRANJA_CERRAR, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL, DIALOGO_VELO } from './dialogo-propio';
 import type {
   Actor,
   BiometricParte,
@@ -1184,8 +1185,8 @@ function OrganismoModal({
 
   return (
     <div
-      // B6 (guardián de diseño) — overlay único del sistema (antes `bg-black/40 backdrop-blur-sm`).
-      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] backdrop-blur-[6px] px-4"
+      // Homologación #14507 — velo, panel y franja del Modal, en su sitio (mismo foco y Escape).
+      className={`fixed inset-0 z-50 grid place-items-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-label="Seleccionar organismo de tránsito"
@@ -1193,17 +1194,18 @@ function OrganismoModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-card rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
+        className={`${DIALOGO_PANEL} p-6 w-full max-w-lg flex flex-col max-h-[85vh] outline-none focus:ring-0`}
       >
-        <WizardCardHeader
-          title="Organismo de tránsito"
-          subtitle="Elige dónde se radicará el trámite."
-          action={
-            <button type="button" onClick={onClose} aria-label="Cerrar">
-              <X className="h-5 w-5" />
-            </button>
-          }
-        />
+        <div className={`${DIALOGO_FRANJA} -mx-6 -mt-6 mb-4 justify-between`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <div className="relative z-[1] min-w-0">
+            <h3 className={DIALOGO_FRANJA_TITULO}>Organismo de tránsito</h3>
+            <p className="mt-1 text-xs leading-snug opacity-85">Elige dónde se radicará el trámite.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className={DIALOGO_FRANJA_CERRAR}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
         {runtSuggestion && (
           <button
