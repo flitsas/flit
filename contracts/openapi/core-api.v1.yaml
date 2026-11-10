@@ -7440,6 +7440,87 @@ paths:
         "503":
           description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
 
+  /api/v1/tramites/biometric-validations/{id}/reconcile:
+    post:
+      operationId: reconciliarBiometricValidation
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Reconciliar con Kyverum una validación por su id (trámite o prevalidación)
+      description: >
+        Igual que `POST /instances/{id}/biometric/{validationId}/reconcile`, pero sin trámite en la ruta: sirve
+        para la validación ligada a un trámite y para la prevalidación standalone. Consulta el estado real en
+        Kyverum y lo aplica con la misma lógica que el webhook y el proceso de fondo (aprobado con vigencia y
+        sello y evento de firma; rechazado; expirado deja la frase en la bitácora del trámite, sin evento).
+        Reinicia el presupuesto de sondeo aunque Kyverum aún no resuelva. La usa «Actualizar estado» del
+        detalle de la persona en el módulo Validaciones. Exige `validaciones.manage`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado (posiblemente actualizado) de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, updated]
+                properties:
+                  status:
+                    type: string
+                    description: Estado FLIT tras reconciliar (enviado|en_proceso|aprobado|rechazado|expirado).
+                  updated:
+                    type: boolean
+                    description: true si la consulta cambió el estado local.
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin `validaciones.manage` o perfil de organismo de tránsito.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe o es de otra compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La validación no es del proveedor Kyverum (mock o manual).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: No se pudo guardar el resultado (queda en la bitácora técnica).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la consulta de estado (definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/biometric-validations/{id}/activate-manual:
     post:
       operationId: activarIdentidadManual
