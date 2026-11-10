@@ -114,12 +114,16 @@ public static class AdminPortalCajaCobrosEndpoints
             return AlcancePortalCaja.Error(
                 StatusCodes.Status400BadRequest, "REASON_LENGTH", $"El motivo debe tener entre {MotivoMinimo} y {MotivoMaximo} caracteres.");
 
+        // Sin la versión del cobro no hay control de concurrencia: se exige (viene de la lista) en vez de tratar 0 como «cualquiera».
+        if (body?.RowVersion is not > 0)
+            return AlcancePortalCaja.Error(StatusCodes.Status400BadRequest, "ROW_VERSION_REQUIRED", "Falta la versión del cobro. Actualice la lista e intente de nuevo.");
+
         var portal = http.RequestServices.GetRequiredService<ICajaAdminClient>(); // solo existe con PortalCaja:Habilitado
         var nombre = await db.Users.AsNoTracking().Where(u => u.Id == actor).Select(u => u.DisplayName)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? string.Empty;
         try
         {
-            var r = await portal.AnularAsync(alcance!.TransitOfficeId, cobroId, motivo, actor, nombre, body?.RowVersion ?? 0, ct).ConfigureAwait(false);
+            var r = await portal.AnularAsync(alcance!.TransitOfficeId, cobroId, motivo, actor, nombre, body.RowVersion.Value, ct).ConfigureAwait(false);
             return r.Razon switch
             {
                 null => Results.Ok(new { cobroId, estado = r.Estado }),

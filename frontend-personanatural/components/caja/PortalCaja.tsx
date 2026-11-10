@@ -12,7 +12,7 @@ import { boton } from "@/components/landing/estilos";
 import { LogoPortal } from "@/components/marca/MarcaPunto";
 import { cajaApi, CajaError } from "@/lib/caja/cliente";
 import { mensajeDeCaja } from "@/lib/caja/mensajes";
-import { irAlLogin } from "@/lib/caja/navegacion";
+import { cerrarSesion, irAlLogin } from "@/lib/caja/navegacion";
 import { CobrarTramite } from "./CobrarTramite";
 import { CobrosDelDia } from "./CobrosDelDia";
 import { MensajeCaja } from "./MensajeCaja";
@@ -68,12 +68,10 @@ export function PortalCaja({ codigo }: { codigo: string }) {
                 <span className="text-muted-foreground"> · {sesion.data.organismo.nombre}</span>
               </p>
             )}
-            {/* Navegación (GET), no formulario: el cierre pasa también por la sesión del hub y la CSP del portal limita form-action. */}
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- es una ruta del servidor (route handler) que redirige al hub, no una página */}
-            <a href="/auth/logout" className={boton("back", "min-h-10 px-4", "none")}>
+            <button type="button" onClick={() => void cerrarSesion()} className={boton("back", "min-h-10 px-4", "none")}>
               <LogOut aria-hidden />
               Cerrar sesión
-            </a>
+            </button>
           </div>
         </div>
       </header>

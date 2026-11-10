@@ -27,8 +27,11 @@ public sealed record OidcGrant(ClaimsPrincipal? Principal, string? DeniedCode)
 /// Se conservan los nombres y formatos de claims del JWT de siempre (<c>RsaJwtTokenIssuer</c>).
 /// </para>
 /// </summary>
-public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAccessResolver access)
+public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAccessResolver access, TimeProvider? clock = null)
 {
+    /// <summary>Claim estándar (OIDC Core §2): instante, en segundos Unix, en que el usuario se autenticó con sus credenciales.</summary>
+    public const string AuthTimeClaim = "auth_time";
+
     private const string SuperAdmin = "SuperAdmin";
 
     public const string ProductNotEnabled = "PRODUCT_NOT_ENABLED";
@@ -129,6 +132,14 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         identity.AddClaim(new Claim("is_group_parent", user.IsGroupParent ? "true" : "false", JsonClaimValueTypes.Json));
         identity.SetClaim("dom", source.FindFirstValue(OidcDefaults.DomainClaim) ?? "flit");
         identity.SetClaim("product", product);
+
+        // Cuándo inició sesión de verdad el usuario. Se conserva el valor de la sesión del hub (authorize) o del refresh token
+        // (canje): un refresh NO lo renueva, así quien lo use como tope absoluto de sesión no se estira con cada refresh.
+        // Si la sesión es anterior a este claim, arranca ahora.
+        var authTime = long.TryParse(source.FindFirstValue(AuthTimeClaim), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var previo) && previo > 0
+            ? previo
+            : (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds();
+        identity.AddClaim(new Claim(AuthTimeClaim, authTime.ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64));
 
         foreach (var role in roles)
         {

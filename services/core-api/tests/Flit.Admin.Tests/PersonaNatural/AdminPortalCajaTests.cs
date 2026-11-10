@@ -191,7 +191,7 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
         using var client = ClienteDe(_on, "ot_caja", _tenantA, _cajaA);
 
         (await client.GetAsync("/api/v1/admin/ot/portal-caja/users", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación" }, Ct))
+        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación", rowVersion = 3 }, Ct))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await client.GetAsync("/api/v1/admin/ot/users", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -332,9 +332,39 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
         using var client = ClienteDe(_on, "ot_admin", _tenantA, _adminA);
         var id = Guid.NewGuid();
 
-        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{id}/anular", new { reason = "corto" }, Ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{id}/anular", new { reason = new string('x', 301) }, Ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{id}/anular", new { reason = "corto", rowVersion = 3 }, Ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{id}/anular", new { reason = new string('x', 301), rowVersion = 3 }, Ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         _portal.Anulaciones.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0L)]
+    [InlineData(-1L)]
+    public async Task Anular_SinLaVersionDelCobro_400RowVersionRequired_SinLlamarAlPortal(long? rowVersion)
+    {
+        using var client = ClienteDe(_on, "ot_admin", _tenantA, _adminA);
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Cobrado por error en la caja", rowVersion }, Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("ROW_VERSION_REQUIRED");
+        _portal.Anulaciones.Should().BeEmpty("sin versión no hay control de concurrencia");
+    }
+
+    [Fact]
+    public async Task ListaGenericaDeRolesAsignables_NoOfreceElRolDeCaja()
+    {
+        using var client = ClienteDe(_on, "AdminCompany", _tenantA, _adminA);
+
+        var response = await client.GetAsync("/api/v1/security/roles", Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var codigos = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.EnumerateArray()
+            .Select(r => r.GetProperty("code").GetString()).ToList();
+        codigos.Should().NotContain("ot_caja", "el rol de caja solo se reparte desde «Usuarios de caja»");
+        codigos.Should().Contain("ot_admin", "la lista sigue ofreciendo los demás roles del organismo");
     }
 
     [Fact]
@@ -361,12 +391,12 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
     {
         using var client = ClienteDe(_on, "ot_admin", _tenantA, _adminA);
         _portal.Resultado = new CajaAnulacionResultado(CajaAnulacionResultado.NoAnulable, string.Empty);
-        var noAnulable = await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación" }, Ct);
+        var noAnulable = await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación", rowVersion = 3 }, Ct);
         noAnulable.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await noAnulable.Content.ReadAsStringAsync(Ct)).Should().Contain("COBRO_NO_ANULABLE");
 
         _portal.Resultado = new CajaAnulacionResultado(CajaAnulacionResultado.NoEncontrado, string.Empty);
-        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación" }, Ct))
+        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación", rowVersion = 3 }, Ct))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -376,12 +406,12 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
         using var client = ClienteDe(_on, "ot_admin", _tenantA, _adminA);
 
         var ajeno = await client.PostAsJsonAsync(
-            $"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular?transitOfficeId={_officeB}", new { reason = "Motivo suficiente de anulación" }, Ct);
+            $"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular?transitOfficeId={_officeB}", new { reason = "Motivo suficiente de anulación", rowVersion = 3 }, Ct);
         ajeno.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         _portal.Anulaciones.Should().BeEmpty();
 
         _portal.Caido = true;
-        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación" }, Ct))
+        (await client.PostAsJsonAsync($"/api/v1/admin/ot/portal-caja/cobros/{Guid.NewGuid()}/anular", new { reason = "Motivo suficiente de anulación", rowVersion = 3 }, Ct))
             .StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
     }
 

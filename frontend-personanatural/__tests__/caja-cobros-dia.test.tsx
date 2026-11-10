@@ -11,7 +11,8 @@ import { sesionDeCajaVencida } from "@/lib/caja/sesion";
 import { routerPush } from "./router";
 
 const irAlLogin = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/caja/navegacion", () => ({ irAlLogin }));
+const cerrarSesion = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/caja/navegacion", () => ({ irAlLogin, cerrarSesion }));
 
 const json = (cuerpo: unknown, status = 200) => new Response(JSON.stringify(cuerpo), { status, headers: { "content-type": "application/json" } });
 const item = (codigo: string, extra: object = {}) => ({ codigo, valorCop: 185000, medio: "efectivo", hora: "09:30", usuario: "Ana Caja", estado: "pagado", ...extra });
@@ -92,12 +93,14 @@ describe("Caja OT · cobros del día", () => {
 });
 
 describe("Caja OT · sesión y cabecera", () => {
-  it("AC: muestra el usuario, el organismo y «Cerrar sesión» (enlace a /auth/logout), sin menú de la web", async () => {
+  it("AC: muestra el usuario, el organismo y «Cerrar sesión» (POST, no enlace), sin menú de la web", async () => {
     fetchMock.mockResolvedValue(json(SESION));
     montar(<PortalCaja codigo="5631000" />);
 
     expect(await screen.findByTestId("usuario-caja")).toHaveTextContent("Ana Caja");
-    expect(screen.getByRole("link", { name: "Cerrar sesión" })).toHaveAttribute("href", "/auth/logout");
+    expect(screen.queryByRole("link", { name: "Cerrar sesión" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
+    expect(cerrarSesion).toHaveBeenCalledTimes(1);
     for (const prohibido of ["Iniciar", "Consultar", "Cotizar"]) expect(screen.queryByRole("link", { name: prohibido })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Cobrar" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Cobros del día" })).toBeInTheDocument();
@@ -150,12 +153,12 @@ describe("lógica de la caja", () => {
     expect(mensajeDeCaja(new Error("x")).texto).toBe("No pudimos completar la acción. Intente de nuevo.");
   });
 
-  it("la sesión de caja vence a las 12 h desde auth_time; sin auth_time no se corta aquí", () => {
+  it("la sesión de caja vence a las 12 h desde auth_time; sin auth_time (o ilegible) se da por vencida", () => {
     const token = (c: object) => `e30.${btoa(JSON.stringify(c)).replace(/=+$/, "")}.`;
     const ahora = 1_800_000_000;
     expect(sesionDeCajaVencida(token({ auth_time: ahora - 11 * 3600 }), ahora)).toBe(false);
     expect(sesionDeCajaVencida(token({ auth_time: ahora - 12 * 3600 - 1 }), ahora)).toBe(true);
-    expect(sesionDeCajaVencida(token({ sub: "u" }), ahora)).toBe(false);
-    expect(sesionDeCajaVencida("basura", ahora)).toBe(false);
+    expect(sesionDeCajaVencida(token({ sub: "u" }), ahora)).toBe(true);
+    expect(sesionDeCajaVencida("basura", ahora)).toBe(true);
   });
 });

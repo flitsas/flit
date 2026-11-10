@@ -17,5 +17,9 @@ export function inicioDeSesion(claimsToken: string): number | null {
 
 export function sesionDeCajaVencida(claimsToken: string, ahoraSegundos = Math.floor(Date.now() / 1000)): boolean {
   const inicio = inicioDeSesion(claimsToken);
-  return inicio !== null && ahoraSegundos - inicio > TOPE_SESION_CAJA_HORAS * 3600;
+  // Fail-closed: sin `auth_time` legible no hay forma de acotar la sesión, así que se da por vencida.
+  return inicio === null || ahoraSegundos - inicio > TOPE_SESION_CAJA_HORAS * 3600;
 }
+
+/** Cookies de la sesión de la caja (la cifrada se parte en trozos `nombre`, `nombre.1`, …). */
+export const COOKIES_SESION_CAJA = ["flit_session_caja", ...[1, 2, 3, 4].map((i) => `flit_session_caja.${i}`)];
