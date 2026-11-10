@@ -4,7 +4,7 @@
  */
 
 export const DETALLE_BLUE = 'var(--color-flit-brand)';
-export const DETALLE_NAVY = 'var(--color-flit-primary)';
+export const DETALLE_NAVY = 'var(--di-heading)';
 export const DETALLE_GREEN = 'var(--flit-success-ink)';
 export const DETALLE_GOLD = '#F9AC00';
 export const DETALLE_RED = 'var(--destructive)';
@@ -20,9 +20,9 @@ export const DETALLE_CANVAS = 'var(--color-flit-bg)';
  */
 export const DETALLE_CTA_GRADIENT = 'var(--gradient-action)';
 
-/** Card interior: radius 12px, sombra mockup, dark #0B0F14 */
+/** Card interior: `.card` de la propuesta (radio 20px, borde y sombra suaves). */
 export const DETALLE_CARD =
-  'rounded-xl border border-border bg-card p-4 shadow-[var(--shadow-card)]';
+  'rounded-[20px] border border-[var(--di-border)] bg-[var(--di-surface-elevated)] p-4 shadow-[var(--shadow-card)]';
 
 export const DETALLE_OVERLAY_STYLE = {
   background: 'rgba(22, 39, 68, 0.45)',
@@ -31,4 +31,4 @@ export const DETALLE_OVERLAY_STYLE = {
 } as const;
 
 export const DETALLE_SHEET_CLASS =
-  'w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-2xl bg-flit-bg p-5 shadow-[var(--shadow-modal)]';
+  'w-full max-w-6xl max-h-[92vh] overflow-y-auto rounded-[24px] bg-flit-bg p-5 shadow-[var(--shadow-modal)]';

@@ -1786,7 +1786,11 @@ export function TramiteWizard(props: Props) {
       id="tramite-wizard-root"
       ref={wizardRootRef}
       tabIndex={-1}
-      className="flex w-full flex-col gap-3 pb-2 focus:outline-none"
+      // Propuesta (asistente lateral): desde lg la cabecera fija (pasos + salida + franja) pasa a
+      // una columna de 280px a la izquierda y todo lo demás a la derecha. Es solo CSS de rejilla: el
+      // orden del DOM —y con él el del lector de pantalla y el del Tab— no cambia. La cabecera
+      // abarca 16 filas implícitas sin hueco entre filas, así que las vacías miden cero.
+      className="flex w-full flex-col gap-3 pb-2 focus:outline-none lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-x-6 lg:gap-y-0 lg:[&>*]:col-start-2 lg:[&>*:not(:first-child)]:mt-3"
     >
       {/* Radicar es la espera más larga del flujo y la que más ansiedad genera: mientras dura, el
           velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
@@ -1800,7 +1804,7 @@ export function TramiteWizard(props: Props) {
       {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
           franja de identidad estaba calculada para la cabecera completa. */}
       <div
-        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none ${
+        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none lg:!col-start-1 lg:row-start-1 lg:row-span-[16] lg:!mt-0 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:!space-y-3 lg:!pb-3 ${
           cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
         }`}
       >
@@ -1808,7 +1812,7 @@ export function TramiteWizard(props: Props) {
         <h1 className="sr-only">{displayTitle}</h1>
         <p className="sr-only">{displaySubtitle}</p>
 
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-3 lg:flex-col lg:items-stretch">
           <div className="min-w-0 flex-1">
             {steps.length === 0 ? (
               <p className="text-xs opacity-60">
@@ -1840,7 +1844,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             disabled={cancelandoSubsanacion}
-            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
+            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand lg:self-start lg:px-2"
             style={{ color: puedeCancelarSubsanacion ? 'var(--destructive)' : 'var(--muted-foreground)' }}
             aria-label={
               puedeCancelarSubsanacion
@@ -1871,8 +1875,10 @@ export function TramiteWizard(props: Props) {
             referencia del PO — no sustituir por tinte claro. */}
         {(refLabel || identificador) && (
           <div
-            className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5"
-            style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
+            className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5 lg:mx-0 lg:w-full lg:flex-col lg:items-start lg:gap-y-1.5 lg:rounded-[20px] lg:px-4 lg:py-3"
+            // Degradado de acción de la propuesta: el mismo de los botones, legible con blanco en
+            // claro y en oscuro (HU #14478).
+            style={{ background: 'var(--gradient-action)', color: '#fff' }}
             data-testid="tramite-identity-strip"
           >
             {refLabel && (

@@ -10,7 +10,7 @@ import type {
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { COPY } from '@/lib/copy/copy-catalog';
@@ -986,6 +986,7 @@ export default function MatriculaResumen({
                 ) : null}
                 <StatusBadge
                   label={estadoLabelConOrigen(status, rejectedFrom)}
+                  className={estadoChipClass(status)}
                   bg={estadoChipStyle(status).bg}
                   color={estadoChipStyle(status).color}
                   border={estadoChipStyle(status).border}

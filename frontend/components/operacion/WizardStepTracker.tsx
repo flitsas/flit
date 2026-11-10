@@ -30,54 +30,26 @@ export function StepMarker({
   /** Modo condensado: el mismo marcador, un punto más pequeño. */
   compacto?: boolean;
 }) {
-  const tamano = compacto ? 'h-6 w-6' : 'h-8 w-8';
-  if (status === 'complete') {
+  // Marcador `.paso__num` de la propuesta (styles/tramites-propuesta.css): hecho en turquesa con
+  // check, el paso en curso relleno en azul de acción con halo, lo pendiente en cielo con aro gris
+  // y lo bloqueado con aro punteado y candado.
+  const base = `di-paso__num ${compacto ? 'h-6 w-6' : 'h-8 w-8'}`;
+  if (status === 'complete' && !active) {
     return (
-      <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full text-xs font-bold`}
-        style={{ background: 'var(--flit-success-ink)', color: '#fff' }}
-        aria-hidden="true"
-      >
-        <Check className={compacto ? 'h-3 w-3' : 'h-4 w-4'} strokeWidth={2.5} />
+      <span className={`${base} di-paso__num--hecho`} aria-hidden="true">
+        <Check className={compacto ? 'h-3 w-3' : 'h-4 w-4'} strokeWidth={3} />
       </span>
     );
   }
-  // Pendiente y bloqueado comparten la forma de la propuesta: círculo blanco con borde. El candado
-  // distingue el bloqueado sin recurrir a un relleno gris que rompe la línea de círculos.
-  if (status === 'locked') {
+  if (status === 'locked' && !active) {
     return (
-      <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-card text-xs font-bold`}
-        style={{ border: '2px solid var(--border)', color: 'var(--muted-foreground)' }}
-        aria-hidden="true"
-      >
+      <span className={`${base} di-paso__num--bloqueado`} aria-hidden="true">
         <Lock className={compacto ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
       </span>
     );
   }
-  // Activo: círculo blanco con borde y número en azul, más un halo. El relleno azul sólido competía
-  // con el verde de los completos y hacía que el paso en curso pareciera otro estado terminado.
-  if (active) {
-    return (
-      <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-card text-xs font-bold`}
-        style={{
-          border: '2px solid var(--color-flit-brand)',
-          color: 'var(--color-flit-brand)',
-          boxShadow: '0 0 0 4px color-mix(in srgb, var(--color-flit-brand) 15%, transparent)',
-        }}
-        aria-hidden="true"
-      >
-        {index + 1}
-      </span>
-    );
-  }
   return (
-    <span
-      className={`grid ${tamano} shrink-0 place-items-center rounded-full border-2 bg-card text-xs font-bold`}
-      style={{ borderColor: 'var(--border-strong)', color: 'var(--muted-foreground)' }}
-      aria-hidden="true"
-    >
+    <span className={`${base} ${active ? 'di-paso__num--actual' : ''}`} aria-hidden="true">
       {index + 1}
     </span>
   );
@@ -130,8 +102,14 @@ export function WizardStepTracker({
   if (displaySteps.length === 0) return null;
 
   return (
-    <nav aria-label="Asistente de seguimiento" className={compacto ? 'w-full' : 'w-full py-1'}>
-      <ol className="flex w-full min-w-0 items-start gap-0">
+    // Desde lg es la columna de pasos de la propuesta (`.asistente > nav.card` + `.pasos`): tarjeta
+    // con la lista en vertical, marcador a la izquierda y rótulo siempre visible. Debajo de lg sigue
+    // siendo el seguimiento horizontal.
+    <nav
+      aria-label="Asistente de seguimiento"
+      className={`${compacto ? 'w-full' : 'w-full py-1'} lg:rounded-[20px] lg:border lg:border-[var(--di-border)] lg:bg-[var(--di-surface-elevated)] lg:p-4 lg:shadow-[var(--shadow-card)]`}
+    >
+      <ol className="flex w-full min-w-0 items-start gap-0 lg:flex-col lg:items-stretch lg:gap-1">
         {displaySteps.map((s, i) => {
           const isActive = i === displayActive;
           const clickable = s.sourceIndexes.some((idx) => canNavigateToStep(steps, idx, viewOnly));
@@ -145,20 +123,20 @@ export function WizardStepTracker({
           return (
             <li
               key={s.key}
-              className="relative flex min-w-0 flex-1 flex-col items-center"
+              className="relative flex min-w-0 flex-1 flex-col items-center lg:flex-none lg:items-stretch"
               aria-current={isActive ? 'step' : undefined}
             >
               {i > 0 && (
                 <span
-                  className={`pointer-events-none absolute left-0 right-1/2 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: prevComplete ? 'var(--color-flit-brand)' : 'var(--border)' }}
+                  className={`pointer-events-none absolute left-0 right-1/2 h-[3px] -translate-y-1/2 lg:hidden ${compacto ? 'top-3' : 'top-4'}`}
+                  style={{ background: prevComplete ? 'var(--color-flit-tech)' : 'var(--di-surface-sunken)' }}
                   aria-hidden="true"
                 />
               )}
               {i < displaySteps.length - 1 && (
                 <span
-                  className={`pointer-events-none absolute left-1/2 right-0 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: lineAfterGreen ? 'var(--color-flit-brand)' : 'var(--border)' }}
+                  className={`pointer-events-none absolute left-1/2 right-0 h-[3px] -translate-y-1/2 lg:hidden ${compacto ? 'top-3' : 'top-4'}`}
+                  style={{ background: lineAfterGreen ? 'var(--color-flit-tech)' : 'var(--di-surface-sunken)' }}
                   aria-hidden="true"
                 />
               )}
@@ -169,7 +147,7 @@ export function WizardStepTracker({
                 // El foco estaba roto: la clase venía escrita como
                 // `focus-visible:ring-flit-brand/focus-visible:ring-offset-2` (sin separar), que
                 // Tailwind no reconoce — el paso activo no mostraba anillo alguno al tabular.
-                className={`relative z-10 flex w-full flex-col items-center rounded-lg px-1 text-center outline-none disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 ${compacto ? 'gap-1' : 'gap-2'}`}
+                className={`relative z-10 flex w-full flex-col items-center rounded-lg px-1 text-center outline-none disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 lg:min-h-[52px] lg:flex-row lg:gap-3 lg:rounded-xl lg:px-2.5 lg:py-2 lg:text-left lg:enabled:hover:bg-[var(--di-accent-soft)] ${isActive ? 'lg:bg-[var(--di-accent-soft)]' : ''} ${compacto ? 'gap-1' : 'gap-2'}`}
                 aria-label={`Paso ${i + 1}: ${label} (${s.status})`}
               >
                 <StepMarker status={s.status} index={i} active={isActive} compacto={compacto} />
@@ -179,15 +157,15 @@ export function WizardStepTracker({
                       accesible del botón los conserva enteros. Los círculos siguen contando la
                       historia a la vista: cuántos pasos hay, cuáles van y en cuál estás. */}
                   <span
-                    className={`block truncate text-xs leading-snug ${
-                      isActive ? 'font-bold' : 'font-medium'
-                    } ${compacto && !isActive ? 'sr-only' : ''}`}
+                    className={`block truncate text-xs leading-snug lg:whitespace-normal lg:text-sm ${
+                      isActive ? 'font-bold' : 'font-medium lg:font-semibold'
+                    } ${compacto && !isActive ? 'sr-only lg:not-sr-only' : ''}`}
                     style={
                       isActive
-                        ? { color: 'var(--color-flit-brand)' }
+                        ? { color: 'var(--di-action)' }
                         : s.status === 'complete'
-                          ? { color: 'var(--muted-foreground)' }
-                          : { color: 'var(--muted-foreground)' }
+                          ? { color: 'var(--di-heading)' }
+                          : { color: 'var(--di-text-secondary)' }
                     }
                     title={label}
                   >
@@ -199,8 +177,8 @@ export function WizardStepTracker({
                       y en el propio paso. */}
                   {!compacto && isActive && s.status === 'incomplete' && s.reasons.length > 0 && (
                     <span
-                      className="mt-1 block truncate text-xs"
-                      style={{ color: 'var(--badge-warning-fg)' }}
+                      className="mt-1 block truncate text-xs lg:whitespace-normal"
+                      style={{ color: 'var(--di-text-tertiary)' }}
                       // El detalle completo queda al alcance sin ocupar la línea de tiempo.
                       title={s.reasons.map(reasonCopy).join(' · ')}
                     >

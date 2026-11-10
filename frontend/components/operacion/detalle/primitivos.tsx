@@ -1,8 +1,15 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
-import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import {
+  DETALLE_BLUE,
+  DETALLE_CARD,
+  DETALLE_GOLD,
+  DETALLE_GREEN,
+  DETALLE_NAVY,
+  DETALLE_RED,
+} from './detalle-visual';
 
 export { DETALLE_CARD } from './detalle-visual';
 
@@ -35,12 +42,37 @@ export interface SeccionDetalleProps {
 const NAVY = DETALLE_NAVY;
 const AZUL = DETALLE_BLUE;
 
-/** Badge soft del mockup detalle (`{color}22` fondo). */
+/**
+ * Pastilla del detalle en el lenguaje de la propuesta (HU #14482): los tres tonos semánticos del
+ * detalle (hecho, pendiente, rechazado) dejan el verde, el dorado y el rojo y pasan a cielo con
+ * check, cielo con punto naranja y blanco con aro y equis naranja. Cualquier otro color conserva
+ * el tinte suave de antes.
+ */
+const BADGE_PROPUESTA: Record<string, { clase: string; style: CSSProperties }> = {
+  [DETALLE_GREEN]: {
+    clase: 'di-estado di-estado--check',
+    style: { background: 'var(--di-success-soft)', color: 'var(--di-success)' },
+  },
+  [DETALLE_GOLD]: {
+    clase: 'di-estado di-estado--punto',
+    style: { background: 'var(--di-sky)', color: 'var(--di-heading)' },
+  },
+  [DETALLE_RED]: {
+    clase: 'di-estado di-estado--equis',
+    style: {
+      background: 'var(--di-surface-elevated)',
+      color: 'var(--di-heading)',
+      boxShadow: 'inset 0 0 0 1px var(--di-alerta-punto)',
+    },
+  },
+};
+
 export function DetalleBadgeSoft({ text, color }: { text: string; color: string }) {
+  const propuesta = BADGE_PROPUESTA[color];
   return (
     <span
-      className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
+      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${propuesta?.clase ?? ''}`}
+      style={propuesta?.style ?? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
     >
       {text}
     </span>

@@ -26,7 +26,6 @@ import {
   DETALLE_CARD,
   DETALLE_CTA_GRADIENT,
   DETALLE_NAVY,
-  DETALLE_BORDER,
 } from './detalle/detalle-visual';
 import { TramiteDetalleDocumentos } from './detalle/TramiteDetalleDocumentos';
 import { TramiteDetalleActores } from './detalle/TramiteDetalleActores';
@@ -52,7 +51,12 @@ import {
   ETIQUETA_SOLO_CONSULTA,
   describirErrorDeSeccion,
 } from '@/lib/tramites/network-scope';
-import { revocationRequestLabel, revocationRequestTone } from '@/lib/tramites/estados';
+import {
+  estadoChipClass,
+  estadoChipStyle,
+  revocationRequestLabel,
+  revocationRequestTone,
+} from '@/lib/tramites/estados';
 import type {
   BiometricValidation,
   InstanceSummary,
@@ -510,7 +514,7 @@ export function TramiteDetalleModal({
               <h2
                 id={titleId}
                 className="text-[22px] font-bold leading-tight"
-                style={{ color: BLUE }}
+                style={{ color: 'var(--di-heading)' }}
               >
                 {title}
               </h2>
@@ -521,10 +525,16 @@ export function TramiteDetalleModal({
                   aria-pressed={panelTracking === 'timeline'}
                   aria-label={`Estado: ${estadoHdr.label}. Ver línea de tiempo del trámite`}
                   title="Ver línea de tiempo del trámite"
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-                  style={{ background: estadoHdr.color }}
+                  className={`${estadoChipClass(estadoVigente)} rounded-full border px-3 py-1 text-[12px] font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2`}
+                  style={{
+                    background: estadoChipStyle(estadoVigente).bg,
+                    color: estadoChipStyle(estadoVigente).color,
+                    borderColor: estadoChipStyle(estadoVigente).border,
+                  }}
                 >
-                  <estadoHdr.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {/* La marca de la propuesta (check, punto o equis) la pinta `di-estado`; el icono
+                      sigue en el DOM pero oculto para no repetir la señal. */}
+                  <estadoHdr.Icon className="hidden" aria-hidden="true" />
                   {estadoHdr.label}
                 </button>
               ) : null}
@@ -576,11 +586,11 @@ export function TramiteDetalleModal({
                   type="button"
                   onClick={() => toggleTracking(key)}
                   aria-pressed={active}
-                  className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+                  className="min-h-9 rounded-[10px] border px-3 py-2 text-xs font-semibold transition hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                   style={
                     active
-                      ? { background: BLUE, borderColor: BLUE, color: '#fff' }
-                      : { borderColor: DETALLE_BORDER, color: NAVY, background: 'transparent' }
+                      ? { background: 'var(--di-accent-soft)', borderColor: 'var(--di-action)', color: 'var(--di-action)' }
+                      : { borderColor: 'var(--di-border)', color: 'var(--di-text-secondary)', background: 'var(--di-surface-elevated)' }
                   }
                 >
                   {label}

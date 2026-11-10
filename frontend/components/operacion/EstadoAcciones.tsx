@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /**
@@ -143,6 +143,7 @@ export function EstadoAcciones({
       >
         <span style={{ color: 'var(--muted-foreground)', fontSize: 13, fontWeight: 600 }}>Estado del trámite:</span>
         <span
+          className={estadoChipClass(status)}
           style={{
             background: chip.bg,
             color: chip.color,

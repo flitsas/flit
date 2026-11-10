@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
-import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipClass, estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { LogQxLink } from './LogQxLink';
 
 
@@ -96,7 +96,7 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
                 position: 'relative',
                 paddingLeft: 22,
                 paddingBottom: isLast ? 0 : 16,
-                borderLeft: isLast ? '2px solid transparent' : '2px solid var(--border)',
+                borderLeft: isLast ? '2px solid transparent' : '2px solid var(--di-divider)',
                 marginLeft: 6,
               }}
             >
@@ -109,11 +109,14 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  background: chip.color,
+                  // Propuesta: el carril va en azul de acción con halo; el estado lo dice el chip.
+                  background: 'var(--di-action)',
+                  boxShadow: '0 0 0 3px var(--di-accent-soft)',
                 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span
+                  className={estadoChipClass(item.toStatus)}
                   style={{
                     background: chip.bg,
                     color: chip.color,
