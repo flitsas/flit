@@ -20,6 +20,9 @@ import userEvent from "@testing-library/user-event";
 import type { ActiveModulesResponse, AnalyticsOverviewResponse } from "@/lib/api/types";
 
 // ── Mocks compartidos de la capa de datos y de identidad (sin red real) ─────
+/** Ver de las tres familias: sin ellas la cabecera no pinta ninguna tarjeta (HU #13665). */
+const FAMILIAS_READ = ["matriculas.read", "traspasos.read", "otros-tramites.read"];
+
 const mocks = vi.hoisted(() => ({
   fetchAnalyticsOverview: vi.fn(),
   fetchMonthlyTrend: vi.fn(),
@@ -99,7 +102,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read", ...FAMILIAS_READ] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -113,11 +116,10 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
-    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboard-kpi-grid")).toBeInTheDocument();
     // "Matrículas"/"Traspasos" también aparecen en la leyenda del gráfico de tendencia.
     expect(screen.getAllByText("Matrículas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Traspasos").length).toBeGreaterThan(0);
-    expect(screen.getByText("Completados")).toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
 
@@ -217,7 +219,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     // El resto de secciones (independientes) sigue operativo.
-    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboard-kpi-grid")).toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Validaciones Biométricas")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
@@ -236,7 +238,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboard-kpi-grid")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
     expect(screen.queryByText("Validaciones Biométricas")).not.toBeInTheDocument();
@@ -253,7 +255,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboard-kpi-grid")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
   });
@@ -264,7 +266,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboard-kpi-grid")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
 
     // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
@@ -375,7 +377,7 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     // El resto del dashboard (KPIs) se sigue viendo con normalidad.
-    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
+    expect(await screen.findByTestId("dashboard-kpi-grid")).toBeInTheDocument();
   });
 
   it("AC3 — si la imagen de un banner no carga, ese slide se retira sin romper el carrusel", async () => {
@@ -587,7 +589,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read", ...FAMILIAS_READ] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -597,12 +599,13 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it.each(["Total trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+  // HU #14481 (referencia de Samuel): la cabecera solo lleva las tres familias; «Total trámites» y «Completados» salen.
+  it.each(["Matrículas", "Traspasos", "Otros Trámites"])(
     "«%s» se renderiza completo, sin recortar",
     async (label) => {
       render(<Dashboard onNewTramite={noop} />);
 
-      const rotulo = await screen.findByText(label);
+      const rotulo = await within(await screen.findByTestId("dashboard-kpi-grid")).findByText(label);
       expect(rotulo).toBeInTheDocument();
       // `truncate` corta por CSS sin tocar el texto, así que el nodo tiene que llevar el
       // tratamiento de dos líneas y NO la clase que recortaba.
@@ -614,7 +617,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    const rotulo = await screen.findByText("Total trámites");
+    const rotulo = await screen.findByText("Otros Trámites");
     expect(rotulo).toHaveClass("text-xs");
     expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
   });
@@ -622,7 +625,8 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   it("la cifra no se trunca: recortarla mostraría un conteo falso", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    const cifra = await screen.findByText("7");
+    // 5 matrículas en FULL_OVERVIEW.
+    const cifra = await within(await screen.findByTestId("dashboard-kpi-grid")).findByText("5");
     expect(cifra).toHaveClass("tabular-nums");
     expect(cifra).not.toHaveClass("truncate");
   });
@@ -634,7 +638,7 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getToken.mockReturnValue("token");
-    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read", ...FAMILIAS_READ] });
     mocks.isSuperAdmin.mockReturnValue(false);
     mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
     mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
@@ -668,18 +672,16 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(filterRow.className).toMatch(/grid-cols-2/);
   });
 
-  it("AC3 (Bug #13055) — KPIs en 3 columnas con «Otros Trámites» de vuelta", async () => {
+  it("AC3 (Bug #13055, HU #14481) — KPIs en 3 columnas: solo Matrículas, Traspasos y Otros Trámites", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     expect(grid.className).toContain("grid-cols-3");
-    expect(within(grid).getByText("Total trámites")).toBeInTheDocument();
-    expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
+    expect(within(grid).queryByText("Total trámites")).not.toBeInTheDocument();
+    expect(await within(grid).findByText("Matrículas")).toBeInTheDocument();
     expect(within(grid).getByText("Traspasos")).toBeInTheDocument();
     expect(within(grid).getByText("Otros Trámites")).toBeInTheDocument();
-    expect(within(grid).getByText("Completados")).toBeInTheDocument();
-    // Total incluye todas las categorías (5+2+0 = 7 en FULL_OVERVIEW).
-    expect(within(grid).getByText("7")).toBeInTheDocument();
+    expect(within(grid).queryByText("Completados")).not.toBeInTheDocument();
   });
 
   it("AC4 — el slide de bienvenida recorta título y cuerpo con line-clamp", async () => {
@@ -714,11 +716,12 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(filterRow.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("AC4 contrato (Bug #13055) — exactamente 5 tarjetas KPI en el grid, «Otros» incluida", async () => {
+  it("AC4 contrato (Bug #13055, HU #14481) — exactamente 3 tarjetas KPI en el grid, «Otros» incluida", async () => {
     render(<Dashboard onNewTramite={noop} />);
     const grid = await screen.findByTestId("dashboard-kpi-grid");
+    await within(grid).findByText("Otros Trámites");
     const cards = grid.querySelectorAll(":scope > div");
-    expect(cards).toHaveLength(5);
+    expect(cards).toHaveLength(3);
   });
 
   it("AC5 contrato — layout apila en mobile (grid-cols-1) y items-stretch; dark tokens en KPI", async () => {

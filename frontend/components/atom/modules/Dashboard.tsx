@@ -39,7 +39,7 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
-import { estadoChipClass, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { estadoAcentoVar, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { DateRangePicker } from "@/components/atom/DateRangePicker";
@@ -49,7 +49,6 @@ import { ApiError } from "@/lib/api/types";
 import type {
   ActiveModulesResponse,
   AnalyticsOverviewResponse,
-  CategoryMetrics,
   CompanyListItem,
   MonthlyTrendPoint,
 } from "@/lib/api/types";
@@ -103,13 +102,6 @@ function buildChartData(items: MonthlyTrendPoint[]) {
   return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, v]) => v);
-}
-
-function countCompleted(categories: CategoryMetrics[]): number {
-  return categories.reduce(
-    (sum, cat) => sum + (cat.byStatus.find((s) => s.status === "aprobado")?.count ?? 0),
-    0,
-  );
 }
 
 function describeError(error: unknown, networkActive = false): string {
@@ -473,7 +465,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
   const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
-  const completados = countCompleted(categories);
   // HU #13665 (FF-4) — sin Ver de una familia, su tarjeta y su serie no se pintan (la API ya no la cuenta).
   const { showsInAggregates } = useFamilyAccess();
 
@@ -489,6 +480,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       .filter((s) => s.count > 0)
       .sort((a, b) => b.count - a.count);
   }, [categories]);
+
+  const totalFunnel = globalFunnel.reduce((sum, f) => sum + f.count, 0);
 
   const chartData = useMemo(() => buildChartData(trend), [trend]);
 
@@ -719,17 +712,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
           {tramitesModuleEnabled !== false && (
-            // Bug #13055 — vuelve la tarjeta «Otros Trámites» (la decisión D3 de absorberla en el
-            // Total se revierte a pedido de QA/producto): 5 tarjetas en 3 columnas; la última fila
-            // queda incompleta y alineada a la izquierda.
+            // HU #14481 (referencia de Samuel) — solo las tres familias, en una fila de 3 columnas; el
+            // «Total trámites» y «Completados» salen de la cabecera (el total sigue en el saludo).
             <div className="grid grid-cols-3 gap-3 flex-1" data-testid="dashboard-kpi-grid">
               {[
-                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, ilustracion: "tramites" as const, family: null },
                 { label: "Matrículas", value: matriculas, ilustracion: "matricula" as const, family: "MATRICULAS" as const },
                 { label: "Traspasos", value: traspasos, ilustracion: "traspaso" as const, family: "TRASPASO" as const },
                 { label: "Otros Trámites", value: otros, ilustracion: "procesos" as const, family: "OTROS" as const },
-                { label: "Completados", value: completados, ilustracion: "documentos" as const, family: null },
-              ].filter((k) => k.family === null || showsInAggregates(k.family)).map((k) => {
+              ].filter((k) => showsInAggregates(k.family)).map((k) => {
                 const isError = status === "error";
                 // HU #14481 (propuesta): `TarjetaMetrica` de @flit/ui —etiqueta, cifra en tinta e
                 // ilustración— en vez del número de color y el ícono en un círculo.
@@ -844,9 +834,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 ) : (
                   <ul className="space-y-2">
                     {globalFunnel.map((f, i) => {
-                      // HU #14481 — el número va en la pastilla del estado (--estado-*, color propio del
-                      // estado desde HU #14482), el nombre sin marca y la cifra en tinta.
+                      // HU #14481 — lista numerada: el número va en la pastilla del estado (--estado-*, color
+                      // propio del estado desde HU #14482), el nombre sin ícono ni marca, la cifra en tinta y
+                      // su porcentaje sobre el total del rango.
                       const chip = estadoChipStyle(f.status);
+                      const pct = totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0;
                       return (
                         <li
                           key={f.status}
@@ -858,11 +850,14 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           >
                             {i + 1}
                           </span>
-                          <span className={`flex-1 text-xs font-medium ${estadoChipClass(f.status)}`}>
+                          <span className="min-w-0 flex-1 text-xs font-medium text-[color:var(--di-text-primary)]">
                             {estadoLabel(f.status)}
                           </span>
                           <span className="text-base font-bold tabular-nums text-[color:var(--di-text-primary)]">
                             {f.count}
+                          </span>
+                          <span className="w-10 shrink-0 text-right text-xs font-medium tabular-nums text-[color:var(--di-text-tertiary)]">
+                            {pct}%
                           </span>
                         </li>
                       );
@@ -893,20 +888,22 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   </span>
                 )}
               </h2>
-              <div className="grid grid-cols-2 gap-2">
+              {/* HU #14481 (referencia de Samuel) — tres cajitas; el punto de color, con el acento del estado
+                  de trámite equivalente (Aprobado, Preparado, Rechazado), las distingue sin ícono. */}
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "Total", value: biometricStats?.total ?? 0 },
-                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0 },
-                  { label: "En proceso", value: biometricStats?.enProceso ?? 0 },
-                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0 },
+                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, punto: estadoAcentoVar("aprobado") },
+                  { label: "En proceso", value: biometricStats?.enProceso ?? 0, punto: estadoAcentoVar("preparado") },
+                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, punto: estadoAcentoVar("rechazado") },
                 ].map((k) => (
-                  // HU #14481 — receta de `TarjetaMetrica` (etiqueta secundaria, cifra en tinta) sin
-                  // cambiar el marcado de la tarjeta.
                   <div
                     key={k.label}
-                    className="rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-3 shadow-[var(--shadow-card)]"
+                    className="min-w-0 rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-3 shadow-[var(--shadow-card)]"
                   >
-                    <p className="text-xs font-medium text-[color:var(--di-text-secondary)]">{k.label}</p>
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-[color:var(--di-text-secondary)]">
+                      <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ background: k.punto }} />
+                      <span className="min-w-0 leading-tight">{k.label}</span>
+                    </p>
                     <p className="text-2xl font-bold leading-tight mt-0.5 tabular-nums text-[color:var(--di-text-primary)]">
                       {k.value}
                     </p>
