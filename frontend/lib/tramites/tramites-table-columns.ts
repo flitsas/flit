@@ -11,7 +11,7 @@ import {
   tramiteLabel,
   vehiculo,
 } from '@/lib/tramites/tramites-row-labels';
-import type { FirmaParteEstado, InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import type { ActorListado, FirmaParteEstado, InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 /**
  * Definición de las columnas configurables de la tabla "Trámites en curso" del gestor
@@ -372,6 +372,18 @@ function texto(valor: string | null | undefined): XlsxCell {
   return limpio && limpio !== '—' ? limpio : null;
 }
 
+/**
+ * ADR-0053 — todos los propietarios de un lado en una celda del archivo, separados por coma. Sin la
+ * lista (backend anterior) cae al nombre único del principal.
+ */
+function nombresDelLado(
+  actores: ActorListado[] | null | undefined,
+  principal: string | null | undefined,
+): string | null | undefined {
+  const lista = (actores ?? []).map((a) => a.nombre.trim()).filter(Boolean);
+  return lista.length > 0 ? lista.join(', ') : principal;
+}
+
 /** Un campo de texto simple, con el mismo criterio de vacío en pantalla y en el archivo. */
 function campoTexto(
   id: string,
@@ -469,11 +481,17 @@ const EXPORT_FIELDS: Record<string, TramitesExportField[]> = {
     apilado(CAMPO_VEHICULO, 'vehiculo'),
   ],
   propietario: [
-    { ...campoTexto('vendedor', COPY.A01, (row) => row.vendedorNombre, 28), sort: 'vendedor' },
+    {
+      ...campoTexto('vendedor', COPY.A01, (row) => nombresDelLado(row.vendedoresActores, row.vendedorNombre), 28),
+      sort: 'vendedor',
+    },
     campoFirma('vendedorFirma', 'Firma del vendedor', (r) => r.vendedorNombre, (r) => r.firmaVendedorEstado),
   ],
   comprador: [
-    { ...campoTexto('comprador', 'Comprador', (row) => row.compradorNombre, 28), sort: 'comprador' },
+    {
+      ...campoTexto('comprador', 'Comprador', (row) => nombresDelLado(row.compradoresActores, row.compradorNombre), 28),
+      sort: 'comprador',
+    },
     campoFirma('compradorFirma', 'Firma del comprador', (r) => r.compradorNombre, (r) => r.firmaCompradorEstado),
   ],
   marcas: [

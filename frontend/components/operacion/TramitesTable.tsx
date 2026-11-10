@@ -10,6 +10,7 @@ import {
   Download,
   ArrowUpDown,
   CheckCircle2,
+  ChevronDown,
   Eye,
   FileCheck,
   FileStack,
@@ -149,6 +150,7 @@ export type OpenDetalleOptions = { panel?: TramiteDetalleInitialPanel };
 import { TramiteTrackingModal } from './TramiteTrackingModal';
 import { useAdminTramiteAcciones } from './AdminTramiteAcciones';
 import type {
+  ActorListado,
   BiometricParte,
   FirmaParteEstado,
   InstanceStatus,
@@ -2385,19 +2387,36 @@ function TableBody({
  */
 function ActorCell({
   nombre,
+  actores,
   rotulo,
   estado,
   onOpenTracking,
+  desplegado = false,
+  onToggleDesplegado,
 }: {
   nombre: string | null | undefined;
+  /**
+   * ADR-0053 — todos los propietarios del lado, principal primero, con la firma de cada uno. Con 2+
+   * la celda muestra al principal y un desplegable con todos; sin la lista (backend anterior) o con
+   * uno solo, la celda es la de siempre.
+   */
+  actores?: ActorListado[] | null;
   /** Parte a la que pertenece la celda; solo se usa para nombrar la acción de trazabilidad. */
   rotulo: string;
   /** `null` = la parte YA está en la fila pero aún no tiene acreditación; se dice, no se calla. */
   estado?: FirmaParteEstado | null;
   /** Click en la acreditación → modal de tracking de identidad de esta parte. */
   onOpenTracking?: () => void;
+  /**
+   * Desplegable controlado por la fila: así el ícono «Con múltiples propietarios» de Marcas abre
+   * los dos lados a la vez, y el botón de cada celda sigue abriendo solo el suyo.
+   */
+  desplegado?: boolean;
+  onToggleDesplegado?: () => void;
 }) {
-  const texto = nombre?.trim();
+  const copropietarios = (actores ?? []).filter((a) => a.nombre.trim());
+  const multiples = copropietarios.length > 1;
+  const texto = multiples ? copropietarios[0].nombre.trim() : nombre?.trim();
   // Sin actor en la celda no hay firma que reportar: "Sin registrar" debajo de un guion se lee
   // como una acreditación pendiente de alguien que ni siquiera está capturado todavía. Cubre los
   // dos casos de una: la parte que NO EXISTE en ese tipo de trámite (el vendedor en matrícula
@@ -2415,6 +2434,74 @@ function ActorCell({
       Sin registrar
     </span>
   );
+
+  // ADR-0053 — desplegable de copropietarios: cada persona con SU firma. La firma de la parte (abajo,
+  // plegado) es «todos firman»; abierto se ve quién falta.
+  const conmutador = multiples ? (
+    <button
+      type="button"
+      onClick={(e) => {
+        // La fila entera abre el asistente: el desplegable no debe navegar.
+        e.stopPropagation();
+        onToggleDesplegado?.();
+      }}
+      aria-expanded={desplegado}
+      aria-label={
+        desplegado
+          ? `Ocultar los propietarios de ${rotulo}`
+          : `Ver los ${copropietarios.length} propietarios de ${rotulo} y su firma`
+      }
+      className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 text-[11px] font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white/90"
+    >
+      <ChevronDown
+        className={`h-3 w-3 transition-transform ${desplegado ? 'rotate-180' : ''}`}
+        aria-hidden="true"
+      />
+      {desplegado ? 'Ocultar' : `+${copropietarios.length - 1} propietario${copropietarios.length > 2 ? 's' : ''}`}
+    </button>
+  ) : null;
+
+  if (multiples && desplegado) {
+    return (
+      <span className="flex min-w-0 flex-col items-start gap-1">
+        <ul
+          className="flex w-full flex-col gap-1.5 leading-snug text-flit-primary dark:text-white/90"
+          aria-label={`${rotulo}: ${copropietarios.length} propietarios`}
+        >
+          {copropietarios.map((a, i) => (
+            // Divisoria fina entre propietarios: los nombres largos envuelven a dos líneas y, sin
+            // ella, dos nombres seguidos se leían como uno solo de cuatro líneas.
+            <li
+              key={`${i}-${a.nombre}`}
+              className={
+                i > 0
+                  ? 'flex w-full flex-col gap-0.5 border-t border-flit-primary/15 pt-1.5 dark:border-white/15'
+                  : 'flex w-full flex-col gap-0.5'
+              }
+            >
+              <span className="break-words">{a.nombre}</span>
+              {a.firmaEstado ? (
+                // Punto de color + texto: el color solo no puede portar el significado.
+                <span
+                  className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold"
+                  style={{ color: FIRMA_TEXTO[a.firmaEstado].color }}
+                >
+                  {/* Punto grande, como en FLIT 1: se lee de un vistazo al recorrer la lista. */}
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ background: FIRMA_TEXTO[a.firmaEstado].color }}
+                    aria-hidden="true"
+                  />
+                  {FIRMA_TEXTO[a.firmaEstado].label}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {conmutador}
+      </span>
+    );
+  }
 
   return (
     <span className="flex min-w-0 flex-col items-start gap-0.5">
@@ -2442,6 +2529,7 @@ function ActorCell({
           valor
         )
       ) : null}
+      {conmutador}
     </span>
   );
 }
@@ -2717,6 +2805,17 @@ function TramiteRow({
   // preferencias de columnas ya guardadas por cada usuario.
   const shows = (key: string) => visibleColumns.includes(key);
 
+  // ADR-0053 — desplegables de copropietarios de la fila. Cada celda abre el suyo; el ícono
+  // «Con múltiples propietarios» de Marcas abre (o cierra) los dos a la vez.
+  const [propietariosAbiertos, setPropietariosAbiertos] = useState({ vendedor: false, comprador: false });
+  const alternarPropietarios = (lado: 'vendedor' | 'comprador') =>
+    setPropietariosAbiertos((prev) => ({ ...prev, [lado]: !prev[lado] }));
+  const alternarTodosLosPropietarios = () =>
+    setPropietariosAbiertos((prev) => {
+      const abrir = !(prev.vendedor && prev.comprador);
+      return { vendedor: abrir, comprador: abrir };
+    });
+
   const cellsByKey: Record<string, React.ReactNode> = {
     radicado: (
       <span className="flex min-w-0 flex-col gap-0.5">
@@ -2870,6 +2969,9 @@ function TramiteRow({
     propietario: (
       <ActorCell
         nombre={item.vendedorNombre}
+        actores={item.vendedoresActores}
+        desplegado={propietariosAbiertos.vendedor}
+        onToggleDesplegado={() => alternarPropietarios('vendedor')}
         rotulo="Vendedor"
         estado={item.firmaVendedorEstado}
         onOpenTracking={() =>
@@ -2880,6 +2982,9 @@ function TramiteRow({
     comprador: (
       <ActorCell
         nombre={item.compradorNombre}
+        actores={item.compradoresActores}
+        desplegado={propietariosAbiertos.comprador}
+        onToggleDesplegado={() => alternarPropietarios('comprador')}
         rotulo="Comprador"
         estado={item.firmaCompradorEstado}
         onOpenTracking={() =>
@@ -3177,18 +3282,44 @@ function TramiteRow({
         {marcasDe(item).length === 0 ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
-          marcasDe(item).map((marca) => (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              key={marca.id}
-              src={marca.src}
-              alt={marca.label}
-              title={marca.label}
-              width={26}
-              height={26}
-              className="h-[26px] w-[26px] shrink-0"
-            />
-          ))
+          marcasDe(item).map((marca) =>
+            marca.id === 'multiples-propietarios' ? (
+              // Atajo de fila: abre (o cierra) a la vez los propietarios de vendedor y comprador.
+              // Es la única marca accionable; las demás siguen siendo informativas.
+              <button
+                key={marca.id}
+                type="button"
+                onClick={(e) => {
+                  // La fila entera abre el asistente: este clic solo despliega.
+                  e.stopPropagation();
+                  alternarTodosLosPropietarios();
+                }}
+                aria-expanded={propietariosAbiertos.vendedor && propietariosAbiertos.comprador}
+                title={`${marca.label} — clic para ver a todos con su firma`}
+                className="shrink-0 rounded-full transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={marca.src}
+                  alt={`${marca.label}: ver propietarios y su firma`}
+                  width={26}
+                  height={26}
+                  className="h-[26px] w-[26px]"
+                />
+              </button>
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                key={marca.id}
+                src={marca.src}
+                alt={marca.label}
+                title={marca.label}
+                width={26}
+                height={26}
+                className="h-[26px] w-[26px] shrink-0"
+              />
+            ),
+          )
         )}
       </span>
     ),
