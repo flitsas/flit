@@ -572,6 +572,9 @@
   }
 
   .dock-menu__seccion-titulo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin: 6px 0 4px;
     padding: 0 12px;
     font-size: 0.75rem;
@@ -591,11 +594,12 @@
 
   .dock-entrada {
     display: flex;
-    align-items: center;
+    /* Arriba, no al centro: la viñeta se alinea con la primera línea del nombre aunque haya descripción. */
+    align-items: flex-start;
     gap: 10px;
     width: 100%;
     min-height: 40px;
-    padding: 8px 12px;
+    padding: 10px 12px;
     border-radius: 12px;
     color: var(--di-text-primary);
     font-size: 0.875rem;
@@ -615,9 +619,25 @@
     font-weight: 650;
   }
 
-  .dock-entrada__glifo {
-    width: 32px;
-    height: 32px;
+  .dock-menu__seccion-glifo {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Viñeta antes del nombre (HU #14479): las entradas no llevan ilustración, solo el título de su sección. */
+  .dock-entrada__vineta {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    /* Centrada en la primera línea del nombre (0.875rem × 1.25 de interlineado). */
+    margin-top: calc(0.875rem * 1.25 / 2 - 3px);
+    border-radius: 999px;
+    background: var(--di-highlight);
+  }
+
+  .dock-entrada:hover .dock-entrada__vineta,
+  .dock-entrada[aria-current="page"] .dock-entrada__vineta {
+    background: var(--di-action);
   }
 
   .dock-entrada__texto {

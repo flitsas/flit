@@ -85,7 +85,7 @@ function leaves(entries: DockEntry[]): DockEntry[] {
   return entries.flatMap((it) => (it.children?.length ? it.children : [it]));
 }
 
-type Block = { key: string; title?: string; items: DockEntry[] };
+type Block = { key: string; title?: string; icon?: DockEntry["icon"]; ilustracion?: string; items: DockEntry[] };
 
 /**
  * Bloques del submenú en el orden del catálogo: las entradas sueltas seguidas van juntas en un bloque sin nombre; cada
@@ -95,7 +95,7 @@ function blocks(entries: DockEntry[]): Block[] {
   const out: Block[] = [];
   for (const it of entries) {
     if (it.children?.length) {
-      out.push({ key: it.key, title: it.label, items: it.children });
+      out.push({ key: it.key, title: it.label, icon: it.icon, ilustracion: it.ilustracion, items: it.children });
       continue;
     }
     const last = out[out.length - 1];
@@ -220,6 +220,9 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
   return (
     <div role="group" aria-labelledby={titleId} className="dock-menu__seccion">
       <p id={titleId} className="dock-menu__seccion-titulo">
+        {block.icon && (
+          <DockGlyph icon={block.icon} ilustracion={block.ilustracion} className="dock-menu__seccion-glifo" />
+        )}
         {block.title}
       </p>
       {list}
@@ -228,8 +231,8 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
 }
 
 /**
- * Entrada del submenú (también la usa la hoja móvil): ilustración de 32 px, nombre y, si el catálogo la trae, la
- * descripción corta. El nombre accesible es solo el nombre; la descripción se anuncia como descripción.
+ * Entrada del submenú (también la usa la hoja móvil): viñeta, nombre y, si el catálogo la trae, la descripción corta.
+ * La ilustración va solo en el título de la sección (HU #14479). El nombre accesible es solo el nombre; la descripción se anuncia como descripción.
  */
 export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
   const uid = useId();
@@ -243,7 +246,7 @@ export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigat
       aria-describedby={descId}
       aria-current={item.active ? "page" : undefined}
     >
-      <DockGlyph icon={item.icon} ilustracion={item.ilustracion} className="dock-entrada__glifo" />
+      <span aria-hidden="true" className="dock-entrada__vineta" />
       <span className="dock-entrada__texto">
         <strong>{item.label}</strong>
         {item.descripcion && <small id={descId}>{item.descripcion}</small>}
