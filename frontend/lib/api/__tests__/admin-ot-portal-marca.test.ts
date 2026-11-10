@@ -2,6 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deletePortalMarcaBanner,
+  deletePortalMarcaBannerItem,
+  reorderPortalMarcaBanners,
+  updatePortalMarcaBannerItem,
+  uploadPortalMarcaBannerItem,
+  deletePortalMarcaCarrusel,
+  reorderPortalMarcaCarrusel,
+  updatePortalMarcaCarrusel,
+  uploadPortalMarcaCarrusel,
   deletePortalMarcaLogo,
   fetchPortalMarcaImage,
   getPortalMarca,
@@ -70,7 +78,68 @@ describe("admin-ot-portal-marca", () => {
     expect(JSON.parse(String(lastCall().init.body))).toEqual({ rowVersion: 4 });
   });
 
-  it("logo y banner: multipart `file` (sin Content-Type manual) y DELETE", async () => {
+  it("carrusel: multipart con alt y enlace, edición, orden y borrado con el mismo ámbito", async () => {
+    fetchMock.mockImplementation(async () => json({}));
+    const file = new File(["x"], "a.png", { type: "image/png" });
+    const scope = { transitOfficeId: "ot-1" };
+
+    await uploadPortalMarcaCarrusel(file, "Promo", "https://x.co", scope);
+    const form = lastCall().init.body as FormData;
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["POST", "/api/v1/admin/ot/portal-marca/carrusel"]);
+    expect([form.get("file"), form.get("alt"), form.get("linkUrl")]).toEqual([file, "Promo", "https://x.co"]);
+    expect(lastCall().url.searchParams.get("transitOfficeId")).toBe("ot-1");
+
+    await uploadPortalMarcaCarrusel(file, "Sin enlace", null);
+    expect((lastCall().init.body as FormData).has("linkUrl")).toBe(false);
+
+    await updatePortalMarcaCarrusel("img-1", { alt: "N", linkUrl: null }, scope);
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["PUT", "/api/v1/admin/ot/portal-marca/carrusel/img-1"]);
+    expect(lastCall().init.body).toBe(JSON.stringify({ alt: "N", linkUrl: null }));
+
+    await reorderPortalMarcaCarrusel(["b", "a"], scope);
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["PUT", "/api/v1/admin/ot/portal-marca/carrusel/orden"]);
+    expect(lastCall().init.body).toBe(JSON.stringify({ imageIds: ["b", "a"] }));
+
+    await deletePortalMarcaCarrusel("img-1", scope);
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["DELETE", "/api/v1/admin/ot/portal-marca/carrusel/img-1"]);
+  });
+
+  it("banners: multipart con alt y enlace, edición, orden y borrado en /banners con el mismo ámbito", async () => {
+    fetchMock.mockImplementation(async () => json({}));
+    const file = new File(["x"], "b.png", { type: "image/png" });
+    const scope = { transitOfficeId: "ot-1" };
+
+    await uploadPortalMarcaBannerItem(file, "Bienvenida", "https://x.co", scope);
+    const form = lastCall().init.body as FormData;
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["POST", "/api/v1/admin/ot/portal-marca/banners"]);
+    expect([form.get("file"), form.get("alt"), form.get("linkUrl")]).toEqual([file, "Bienvenida", "https://x.co"]);
+    expect(lastCall().url.searchParams.get("transitOfficeId")).toBe("ot-1");
+    expect(lastCall().headers["Content-Type"]).toBeUndefined();
+
+    await uploadPortalMarcaBannerItem(file, "Sin enlace", null);
+    expect((lastCall().init.body as FormData).has("linkUrl")).toBe(false);
+
+    await updatePortalMarcaBannerItem("ban-1", { alt: "N", linkUrl: null }, scope);
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["PUT", "/api/v1/admin/ot/portal-marca/banners/ban-1"]);
+    expect(lastCall().init.body).toBe(JSON.stringify({ alt: "N", linkUrl: null }));
+
+    await reorderPortalMarcaBanners(["b", "a"], scope);
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["PUT", "/api/v1/admin/ot/portal-marca/banners/orden"]);
+    expect(lastCall().init.body).toBe(JSON.stringify({ imageIds: ["b", "a"] }));
+
+    await deletePortalMarcaBannerItem("ban-1", scope);
+    expect([lastCall().init.method, lastCall().url.pathname]).toEqual(["DELETE", "/api/v1/admin/ot/portal-marca/banners/ban-1"]);
+  });
+
+  it("los errores de banners conservan el código y el motivo (BANNERS_LLENO, 404, 403)", async () => {
+    fetchMock.mockResolvedValueOnce(json({ code: "BANNERS_LLENO", message: "Ya hay 6 banners." }, 409));
+    const lleno = await uploadPortalMarcaBannerItem(new File(["x"], "b.png"), "A", null).catch((e: unknown) => e);
+    expect([portalMarcaErrorCode(lleno), portalMarcaErrorMessage(lleno)]).toEqual(["BANNERS_LLENO", "Ya hay 6 banners."]);
+    fetchMock.mockResolvedValueOnce(json({ code: "PORTAL_MARCA_NO_ENCONTRADA", message: "El banner no existe." }, 404));
+    expect(portalMarcaErrorCode(await deletePortalMarcaBannerItem("x").catch((e: unknown) => e))).toBe("PORTAL_MARCA_NO_ENCONTRADA");
+  });
+
+  it("logo y banner único (legado): multipart `file` (sin Content-Type manual) y DELETE", async () => {
     fetchMock.mockImplementation(async () => json({}));
     const file = new File(["x"], "logo.png", { type: "image/png" });
 

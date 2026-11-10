@@ -66,12 +66,39 @@ public sealed partial class DespachadorCorreos(IServiceScopeFactory scopes, Time
         }
 
         foreach (var id in ids)
-            await DespacharAsync(id, ct).ConfigureAwait(false);
+            await EnviarReclamadoAsync(id, ct).ConfigureAwait(false);
         return ids.Count;
     }
 
-    /// <summary>Envía ya un correo concreto (por ejemplo, el DP al pulsar «Enviar») sin esperar al ciclo.</summary>
+    /// <summary>
+    /// Envía ya un correo concreto (por ejemplo, el DP al pulsar «Enviar») sin esperar al ciclo. Antes lo reclama con un
+    /// UPDATE condicional (la misma concesión de 10 minutos que deja el ciclo): si el ciclo u otra llamada ya lo tomó, no lo
+    /// vuelve a enviar y devuelve el estado que tenga (bug #14270: correos duplicados del cambio de contraventor).
+    /// </summary>
     public async Task<EstadoComunicacion> DespacharAsync(Guid id, CancellationToken ct)
+    {
+        await using (var reclamo = scopes.CreateAsyncScope())
+        {
+            var db = reclamo.ServiceProvider.GetRequiredService<ComparendosDb>();
+            var ahora = time.GetUtcNow();
+            var reclamado = await db.Database.SqlQuery<Guid>($"""
+                UPDATE comparendos.comunicacion_saliente SET proximo_intento_en = {ahora.AddMinutes(10)}
+                WHERE id = {id} AND estado = 'Pendiente' AND (proximo_intento_en IS NULL OR proximo_intento_en <= {ahora})
+                RETURNING id AS "Value"
+                """).ToListAsync(ct).ConfigureAwait(false);
+            if (reclamado.Count == 0)
+                return await EstadoAsync(db, id, ct).ConfigureAwait(false);
+        }
+
+        return await EnviarReclamadoAsync(id, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<EstadoComunicacion> EstadoAsync(ComparendosDb db, Guid id, CancellationToken ct) =>
+        await db.Comunicaciones.AsNoTracking().Where(x => x.Id == id).Select(x => (EstadoComunicacion?)x.Estado).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+        ?? EstadoComunicacion.Fallido;
+
+    /// <summary>Envía un correo que ya se reclamó (el ciclo o <see cref="DespacharAsync"/>).</summary>
+    private async Task<EstadoComunicacion> EnviarReclamadoAsync(Guid id, CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
@@ -128,14 +155,33 @@ public sealed partial class DespachadorCorreos(IServiceScopeFactory scopes, Time
             c.MotivoFallo = r.Mensaje ?? r.Resultado;
         }
 
-        if (c.Estado != EstadoComunicacion.Pendiente)
+        if (c.Estado == EstadoComunicacion.Pendiente)
         {
-            foreach (var reaccion in scope.ServiceProvider.GetServices<IReaccionCorreo>())
-                await reaccion.AlTerminarAsync(c, r, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return c.Estado;
         }
 
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return c.Estado;
+        // El estado final y lo que crean las reacciones (el aviso 4, el DP enviado…) se guardan en una transacción que
+        // bloquea la fila del correo: si otro camino ya lo cerró, no se reacciona dos veces. La estrategia de reintentos
+        // de Npgsql exige que la transacción corra dentro de ella.
+        var cerrado = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            var sigue = await db.Database.SqlQuery<Guid>($"""
+                SELECT id AS "Value" FROM comparendos.comunicacion_saliente WHERE id = {c.Id} AND estado = 'Pendiente' FOR UPDATE
+                """).ToListAsync(ct).ConfigureAwait(false);
+            if (sigue.Count == 0)
+                return false;
+            foreach (var reaccion in scope.ServiceProvider.GetServices<IReaccionCorreo>())
+                await reaccion.AlTerminarAsync(c, r, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+            return true;
+        }).ConfigureAwait(false);
+        if (cerrado)
+            return c.Estado;
+        db.ChangeTracker.Clear();
+        return await EstadoAsync(db, id, ct).ConfigureAwait(false);
     }
 
     private static async Task<CorreoParaEnviar> ArmarAsync(ComparendosDb db, IAlmacenArchivos almacen, ComunicacionSaliente c, CancellationToken ct)

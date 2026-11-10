@@ -138,7 +138,7 @@ public static class CatalogosEndpoints
         }).OrderByDescending(x => x.activos));
     }
 
-    private static async Task<IResult> CrearAlias(NuevoAlias pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, Comparendos.Timeline timeline, CancellationToken ct)
+    private static async Task<IResult> CrearAlias(NuevoAlias pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, RemapeoOrganismos remapeo, CancellationToken ct)
     {
         var texto = TextoNormalizado.De(pedido.Texto);
         if (texto.Length is 0 or > 250)
@@ -152,19 +152,11 @@ public static class CatalogosEndpoints
         db.OrganismosTransitoAlias.Add(alias);
         auditoria.Registrar(null, "organismo_transito_alias", alias.Id, "CREAR", new CambioCampo("texto", null, texto));
 
-        // Los comparendos que llegaron con ese texto y sin OT quedan asociados ahora, con su evento (RN-009). Primero los
-        // textos crudos distintos (pocos), luego solo los comparendos de esos textos.
-        var crudos = await db.Comparendos.Where(c => c.OrganismoTransitoId == null && c.SecretariaTexto != null).Select(c => c.SecretariaTexto!).Distinct()
-            .ToListAsync(ct).ConfigureAwait(false);
-        var coincidentes = crudos.Where(t => TextoNormalizado.De(t) == texto).ToList();
-        var nombre = await db.OrganismosTransito.Where(o => o.Id == pedido.OrganismoTransitoId).Select(o => o.Nombre).FirstAsync(ct).ConfigureAwait(false);
-        foreach (var c in await db.Comparendos.Where(c => c.OrganismoTransitoId == null && coincidentes.Contains(c.SecretariaTexto!)).ToListAsync(ct).ConfigureAwait(false))
-        {
-            c.OrganismoTransitoId = pedido.OrganismoTransitoId;
-            timeline.Agregar(c, TipoEventoTimeline.DatosActualizados, $"Organismo de tránsito asignado: {nombre} (alias creado para «{c.SecretariaTexto}»).",
-                Comparendos.Actor.De(usuario), new { organismo = pedido.OrganismoTransitoId, alias = alias.Id });
-        }
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        // Con el alias guardado, los comparendos sin OT se vuelven a mapear con texto y número (GDC punto 3): los de ese
+        // texto y también los que ahora resuelve el número. Cada uno con su evento (RN-009).
+        await remapeo.RemapearSinOrganismoAsync(Comparendos.Actor.De(usuario), $"alias creado para «{texto}»", new { alias = alias.Id }, ct).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}/admin/organismos/alias/{alias.Id}", alias.Id);
     }
 

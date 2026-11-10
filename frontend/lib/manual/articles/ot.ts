@@ -752,6 +752,8 @@ export const OT_ARTICLES: ManualArticle[] = [
       "logo del portal",
       "colores del portal",
       "banner del portal",
+      "banners del portal",
+      "varios banners",
       "publicar diseno",
       "retirar diseno",
       "precios del portal",
@@ -792,13 +794,14 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "cobro",
         title: "3. Cobro: medios de pago y precios",
         paragraphs: [
-          "«Medios de pago» muestra una tarjeta por medio («Pasarela de pago» y «PIN en caja») con su interruptor y cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», que son los mismos en todos los medios y se definen en Precios. Al lado, por cada medio, eliges si cada valor se cobra y ves el total de ese medio y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican.",
-          "«Precios», en la misma sección, muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general.",
+          "La subpestaña «Cobro» tiene dos pasos, que ves como pestañas: «1 · Precios» (cuánto cuesta cada trámite) y «2 · Medios de pago» (en qué medio se cobra). Empieza por el paso 1 y sigue con el 2; solo ves una tabla a la vez.",
+          "«Medios de pago» (paso 2) muestra una tarjeta por medio («Pasarela de pago» y «PIN en caja») con su interruptor y cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», que son los mismos en todos los medios y se definen en Precios. Al lado, por cada medio, eliges si cada valor se cobra y ves el total de ese medio y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican.",
+          "«Precios» (paso 1) muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general.",
         ],
         bullets: [
           "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
           "Dejar de cobrar un valor en un medio: apaga su interruptor en la columna de ese medio; pasa a «No se cobra» solo ahí. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
-          "Encender un valor sin monto: no se guarda. El mensaje pide definir el valor en Precios y volver a encenderlo.",
+          "Encender un valor sin monto: no se guarda. Junto a ese valor aparece «Definir precio», que abre el formulario del trámite en Precios; al guardar o cerrar, vuelves a Medios de pago con el monto ya cargado.",
         ],
         callouts: [
           {
@@ -811,12 +814,16 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "diseno",
         title: "4. Diseño: tu marca en el portal",
         paragraphs: [
-          "Aquí le pones al portal el nombre, el logo, el banner y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
+          "Aquí le pones al portal el nombre, el logo, los banners y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
         ],
         bullets: [
           "Colores: elige el principal y el secundario. Si con ellos el portal no se leería bien, un mensaje lo dice y no deja publicar; «Ajustar automáticamente» los corrige por ti.",
-          "Logo y banner: cárgalos desde su recuadro, donde se indican los formatos y el tamaño máximo. Son opcionales.",
-          "Publicar: el portal muestra tu marca desde la siguiente carga.",
+          "Logo: cárgalo desde su recuadro, donde se indican los formatos y el tamaño máximo. Es opcional.",
+          "Banners: es el banner principal que ve la persona arriba de tu portal; si agregas varios, rotan como carrusel. Puedes tener hasta 6. Usa «Agregar banner», elige el archivo (PNG, JPEG o WebP, máximo 2 MB cada uno) y escribe el texto alternativo, que describe el banner para quien no puede verlo. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 1600 × 366 px (proporción cercana a 4,4:1); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados. Si la proporción es muy distinta, te avisamos, pero puedes subirlo igual.",
+          "Orden y cambios de los banners: en el botón «Acciones» de cada banner puedes editarlo, subirlo, bajarlo o quitarlo (pide confirmación). Si no hay banners, el portal usa el banner de FLIT. Estos cambios van al borrador y se ven en el portal cuando publiques.",
+          "Carrusel de imágenes: se muestra en la columna derecha del portal, en lugar de «Servicios Adicionales». Puedes tener hasta 6 imágenes. Usa «Agregar imagen», elige el archivo (JPG, PNG o WebP, máximo 512 KB) y escribe el texto alternativo, que describe la imagen para quien no puede verla. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 900 × 600 px (proporción 3:2); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados.",
+          "Orden y cambios del carrusel: en el botón «Acciones» de cada imagen puedes editarla, subirla, bajarla o quitarla (pide confirmación). Si no hay imágenes, el portal muestra los servicios de siempre. Estos cambios van al borrador y se ven en el portal cuando publicas.",
+          "Publicar: el portal muestra tu marca desde la siguiente carga. La vista previa y la confirmación de publicar solo dicen que se usa lo de FLIT para lo que te falte (logo o banners).",
           "Retirar: el portal vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez.",
         ],
         callouts: [

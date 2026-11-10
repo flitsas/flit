@@ -16,7 +16,7 @@ public sealed class ApiContratosCoreConsultasTests
     private static Task<RespuestaContrato> Consultar(ConsultarContratoConductorResponse? respuesta, RpcException? falla = null, bool simulada = false, ClienteFalso? cliente = null)
     {
         cliente ??= new ClienteFalso(respuesta, falla);
-        return new ApiContratosCoreConsultas(cliente, simulada ? new ApiContratosSimulada() : null).ConsultarAsync(Empresa, "LZO228", Fecha, TestContext.Current.CancellationToken);
+        return new ApiContratosCoreConsultas(cliente, simulada ? new ApiContratosSimulada() : null).ConsultarAsync(Empresa, "LZO228", Fecha, null, TestContext.Current.CancellationToken);
     }
 
     [Fact]

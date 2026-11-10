@@ -27,13 +27,15 @@ import {
   PORTAL_IMAGE_ACCEPT,
   portalImageHint,
   validatePortalImage,
-  type PortalImageKind,
 } from "@/lib/brand/validate-portal-image";
+import { BannersSection } from "./BannersSection";
+import { CarruselSection } from "./CarruselSection";
 import { clienteMarcaOt, type ClienteMarcaPortal } from "./cliente-marca";
 import { PortalPnPreview } from "./PortalPnPreview";
 import {
   TEXTOS_DISENO_OT,
   TEXTOS_VISTA_PREVIA_OT,
+  textoSegunImagenes,
   type TextosDiseno,
   type TextosVistaPrevia,
 } from "./textos-diseno";
@@ -62,7 +64,7 @@ export interface PortalPnDesignSectionProps {
   /** Textos propios. Sin ellos, los del portal del organismo. */
   textos?: TextosDiseno;
   textosVistaPrevia?: TextosVistaPrevia;
-  /** Ocupa el lugar del banner cuando la marca no lo lleva (el cliente no trae `banner`): p. ej. un acceso a Contenido. */
+  /** Ocupa el lugar de los banners cuando la marca no los lleva (el cliente no trae `banners`): p. ej. un acceso a Contenido. */
   accesoBanner?: ReactNode;
   /**
    * Espacio para la sección de dominio del portal (llega con otra HU). Se pinta debajo de la marca, con su propio
@@ -72,7 +74,7 @@ export interface PortalPnDesignSectionProps {
 }
 
 /**
- * HU #14377 (Feature #14374) — Diseño del portal Persona Natural del organismo: nombre, colores, logo y banner, con
+ * HU #14377 (Feature #14374) — Diseño del portal Persona Natural del organismo: nombre, colores, logo y banners (hasta 6), con
  * borrador, vista previa, publicar y retirar. Compone las piezas de marca blanca (selector de colores, carga de imagen,
  * confirmación de publicar) con el cliente de `/api/v1/admin/ot/portal-marca`.
  */
@@ -105,15 +107,21 @@ export function PortalPnDesignSection({
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [retiring, setRetiring] = useState(false);
-  const [removing, setRemoving] = useState<PortalImageKind | null>(null);
+  const [removingLogo, setRemovingLogo] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [formError, setFormError] = useState<{ message: string; conflict: boolean } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [carouselBusy, setCarouselBusy] = useState(false);
+  const [bannersBusy, setBannersBusy] = useState(false);
+  const carouselFirstSrc = useAuthedImage(
+    cliente.carrusel ? (marca?.carousel?.[0]?.imageUrl ?? null) : null,
+    cliente.imagen,
+  );
   const logoSrc = useAuthedImage(marca?.logoUrl ?? null, cliente.imagen);
   const bannerSrc = useAuthedImage(
-    cliente.banner ? (marca?.bannerUrl ?? null) : null,
+    cliente.banners ? (marca?.banners?.[0]?.imageUrl ?? null) : null,
     cliente.imagen,
   );
 
@@ -157,7 +165,7 @@ export function PortalPnDesignSection({
   }, [draftName, colorsValid, textos.nombreObligatorio]);
 
   const canPublish = missing.length === 0 && contrastOk;
-  const busy = saving || publishing || retiring || removing !== null;
+  const busy = saving || publishing || retiring || removingLogo || carouselBusy || bannersBusy;
 
   function fail(err: unknown, fallback: string) {
     setFormError({
@@ -238,20 +246,25 @@ export function PortalPnDesignSection({
     }
   }
 
-  async function handleRemove(kind: PortalImageKind) {
+  async function handleRemoveLogo() {
     setSuccessMessage(null);
     setFormError(null);
-    setRemoving(kind);
+    setRemovingLogo(true);
     try {
-      const banner = cliente.banner;
-      const updated = await (kind === "logo" || !banner ? cliente.quitarLogo() : banner.quitar());
-      setMarca(updated);
-      setSuccessMessage((kind === "logo" ? textos.logoQuitado : textos.bannerQuitado) ?? "");
+      setMarca(await cliente.quitarLogo());
+      setSuccessMessage(textos.logoQuitado);
     } catch (err) {
-      fail(err, kind === "logo" ? "No se pudo quitar el logo." : "No se pudo quitar el banner.");
+      fail(err, "No se pudo quitar el logo.");
     } finally {
-      setRemoving(null);
+      setRemovingLogo(false);
     }
+  }
+
+  // El carrusel y los banners se guardan en el servidor al instante (como el logo): solo se toma la versión nueva del registro.
+  function handleListChanged(updated: PortalMarca, message: string) {
+    setMarca(updated);
+    setFormError(null);
+    setSuccessMessage(message);
   }
 
   // La imagen subida ya es parte del borrador en el servidor: solo se toma la versión nueva del registro, sin pisar
@@ -322,34 +335,41 @@ export function PortalPnDesignSection({
                   />
 
                   <ImageField
-                    kind="logo"
                     label="Logo"
                     textos={textos}
                     currentSrc={logoSrc}
                     hasImage={Boolean(marca.logoUrl)}
-                    previewClassName="h-16 w-16"
                     disabled={busy}
-                    removing={removing === "logo"}
+                    removing={removingLogo}
                     onUpload={(file) => cliente.subirLogo(file)}
                     onUploaded={handleImageUploaded}
-                    onRemove={() => void handleRemove("logo")}
+                    onRemove={() => void handleRemoveLogo()}
                   />
-                  {cliente.banner ? (
-                    <ImageField
-                      kind="banner"
-                      label="Banner"
-                      textos={textos}
-                      currentSrc={bannerSrc}
-                      hasImage={Boolean(marca.bannerUrl)}
-                      previewClassName="h-16 w-40"
+                  {cliente.banners ? (
+                    <BannersSection
+                      items={marca.banners ?? []}
+                      api={cliente.banners}
+                      imagen={cliente.imagen}
+                      readOnly={marca.canEdit === false}
                       disabled={busy}
-                      removing={removing === "banner"}
-                      onUpload={(file) => cliente.banner!.subir(file)}
-                      onUploaded={handleImageUploaded}
-                      onRemove={() => void handleRemove("banner")}
+                      onChange={handleListChanged}
+                      onError={fail}
+                      onBusyChange={setBannersBusy}
                     />
                   ) : (
                     accesoBanner
+                  )}
+                  {cliente.carrusel && (
+                    <CarruselSection
+                      items={marca.carousel ?? []}
+                      api={cliente.carrusel}
+                      imagen={cliente.imagen}
+                      readOnly={marca.canEdit === false}
+                      disabled={busy}
+                      onChange={handleListChanged}
+                      onError={fail}
+                      onBusyChange={setCarouselBusy}
+                    />
                   )}
                 </div>
                 <div className="lg:sticky lg:top-4">
@@ -359,7 +379,10 @@ export function PortalPnDesignSection({
                     logoSrc={logoSrc}
                     bannerSrc={bannerSrc}
                     textos={textosVistaPrevia}
-                    conBanner={Boolean(cliente.banner)}
+                    bannerCount={cliente.banners ? (marca.banners?.length ?? 0) : undefined}
+                    tieneLogo={Boolean(marca.logoUrl)}
+                    carouselSrc={carouselFirstSrc}
+                    carouselCount={cliente.carrusel ? (marca.carousel?.length ?? 0) : undefined}
                   />
                 </div>
               </div>
@@ -460,7 +483,10 @@ export function PortalPnDesignSection({
           onConfirm={() => void handleConfirmPublish()}
           title={textos.publicarTitulo}
           description={textos.publicarDescripcion}
-          note={textos.publicarNota}
+          note={textoSegunImagenes(textos.publicarNota, {
+            tieneLogo: Boolean(marca?.logoUrl),
+            tieneBanners: (marca?.banners?.length ?? 0) > 0,
+          })}
         />
 
         <Modal
@@ -500,12 +526,10 @@ export function PortalPnDesignSection({
 }
 
 interface ImageFieldProps {
-  kind: PortalImageKind;
   label: string;
   textos: TextosDiseno;
   currentSrc: string | null;
   hasImage: boolean;
-  previewClassName: string;
   disabled: boolean;
   removing: boolean;
   onUpload: (file: File) => Promise<PortalMarca>;
@@ -513,14 +537,12 @@ interface ImageFieldProps {
   onRemove: () => void;
 }
 
-/** Carga (pieza de marca blanca) y quitar de una imagen del portal. */
+/** Carga (pieza de marca blanca) y quitar del logo del portal. */
 function ImageField({
-  kind,
   label,
   textos,
   currentSrc,
   hasImage,
-  previewClassName,
   disabled,
   removing,
   onUpload,
@@ -535,25 +557,15 @@ function ImageField({
         disabled={disabled}
         upload={onUpload}
         onUploaded={onUploaded}
-        validate={async (file) => validatePortalImage(file, kind)}
+        validate={async (file) => validatePortalImage(file, "logo")}
         label={label}
-        buttonLabel={
-          hasImage
-            ? kind === "logo"
-              ? "Reemplazar logo"
-              : "Reemplazar banner"
-            : kind === "logo"
-              ? "Seleccionar logo"
-              : "Seleccionar banner"
-        }
+        buttonLabel={hasImage ? "Reemplazar logo" : "Seleccionar logo"}
         dropzone
-        hint={`${portalImageHint(kind)} · ${
-          kind === "logo" ? textos.logoSinImagen : "Opcional: sin banner, el portal usa el de FLIT."
-        }`}
+        hint={`${portalImageHint("logo")} · ${textos.logoSinImagen}`}
         accept={PORTAL_IMAGE_ACCEPT}
-        inputAriaLabel={kind === "logo" ? textos.logoInput : "Cargar banner del portal"}
-        imageAlt={kind === "logo" ? textos.logoAlt : "Banner del portal"}
-        previewClassName={previewClassName}
+        inputAriaLabel={textos.logoInput}
+        imageAlt={textos.logoAlt}
+        previewClassName="h-16 w-16"
       />
       {hasImage && (
         <button
@@ -564,7 +576,7 @@ function ImageField({
           style={{ borderColor: "#C10000", color: "#C10000" }}
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
-          {removing ? "Quitando…" : `Quitar ${kind === "logo" ? "logo" : "banner"}`}
+          {removing ? "Quitando…" : "Quitar logo"}
         </button>
       )}
     </div>

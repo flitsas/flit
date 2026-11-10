@@ -212,7 +212,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await elegirSecretaria(user);
     // HU #11628 — con preasignación activa, el dígito exige una elección consciente antes de
     // "Continuar" (dígito o "sin preferencia" explícita).
-    const digito = await screen.findByLabelText('Dígito de preasignación de placa');
+    const digito = await screen.findByLabelText('Dígito de preferencia');
     await waitFor(() => expect(digito).toBeEnabled());
     await user.selectOptions(digito, 'none');
 
@@ -233,7 +233,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
     await elegirSecretaria(user);
-    const digito = () => screen.getByLabelText('Dígito de preasignación de placa') as HTMLSelectElement;
+    const digito = () => screen.getByLabelText('Dígito de preferencia') as HTMLSelectElement;
     await waitFor(() => expect(digito()).toBeEnabled());
     await user.selectOptions(digito(), 'none');
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();

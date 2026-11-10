@@ -181,7 +181,7 @@ describe('ADR-0050 — un trámite de la familia OTROS ya no se comporta como un
     await screen.findByText('Organismo de Tránsito y Radicación');
 
     expect(
-      screen.queryByLabelText('Dígito de preasignación de placa'),
+      screen.queryByLabelText('Dígito de preferencia'),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Trámite prioritario' }),
