@@ -764,6 +764,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.IPreflightPreviewStore => 
 Flit.Tramites.Application.UseCases.ProcedureInstances.IRegeneracionDocumentalTrazaWriter => Flit.Infrastructure.Messaging.RegeneracionDocumentalTrazaWriter (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy => Flit.Infrastructure.OtRules.SoatRuntValidationPolicy (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ITramiteFirmaAplicador => Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteFirmaAplicador (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.IVehiclePlateGroupResolver => Flit.Infrastructure.OtClientProcedures.VehiclePlateGroupResolver (Singleton)
 Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions => factory (Singleton)
 Flit.Tramites.Application.UseCases.ProcedureInstances.IniciarBiometriaHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.IniciarBiometriaHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.IniciarKyverumVerifyHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.IniciarKyverumVerifyHandler (Scoped)

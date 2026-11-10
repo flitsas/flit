@@ -82,10 +82,18 @@ export const PLATE_PATTERN = /^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9
 /** Deja solo alfanumérico en mayúsculas, tope de 8 (maquinaria `AA123456`). */
 export const sanitizePlate = (v: string): string =>
   v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+/**
+ * HU10 (registro diferido 2026-11-09) — placa de motocarro (MOTOCARRO / MOTOTRICICLO / TRICIMOTO):
+ * 3 números y 3 letras. Va APARTE de `PLATE_PATTERN` a propósito: ese patrón es el contrato
+ * compartido con el validador .NET de core-diagnóstico (`contracts/fixtures/validacion/
+ * identificadores-vehiculo.json`, test `identificadoresCompartidos`, cuatro ramas) y cambiarlo es
+ * una decisión del Líder Técnico. Trámites lo suma en `validatePlate`.
+ */
+export const PLATE_MOTOCARRO_PATTERN = /^[0-9]{3}[A-Z]{3}$/;
 export const validatePlate = (value: string): string | null =>
-  PLATE_PATTERN.test(value)
+  PLATE_PATTERN.test(value) || PLATE_MOTOCARRO_PATTERN.test(value)
     ? null
-    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
+    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
 
 /** ¿El tipo de documento es pasaporte? (admite letras y números). */
 export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";
