@@ -24,25 +24,25 @@ export interface AdminIdentityUi {
 const IDENTITY_UI: Record<AdminIdentityStatus, AdminIdentityUi> = {
   valid: {
     label: "Identidad validada",
-    style: { background: "rgba(112,207,58,0.14)", color: "#3f7a15" },
+    style: { background: "var(--di-success-soft)", color: "var(--di-success)" },
     isValid: true,
     action: "Reenviar validación",
   },
   expired: {
     label: "Identidad vencida",
-    style: { background: "rgba(245,158,11,0.16)", color: "#b45309" },
+    style: { background: "var(--di-warning-soft)", color: "var(--di-warning)" },
     isValid: false,
     action: "Renovar validación",
   },
   pending: {
     label: "Validación en proceso",
-    style: { background: "color-mix(in srgb, var(--color-flit-brand) 14%, transparent)", color: "#3559c7" },
+    style: { background: "var(--di-info-soft)", color: "var(--di-info)" },
     isValid: false,
     action: "Reenviar validación",
   },
   none: {
     label: "Identidad sin validar",
-    style: { background: "rgba(240,90,53,0.12)", color: "#c2410c" },
+    style: { background: "var(--di-danger-soft)", color: "var(--di-danger)" },
     isValid: false,
     action: "Enviar validación",
   },

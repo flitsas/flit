@@ -628,7 +628,7 @@ export function QueryConsole<TRow>({
                 type="button"
                 onClick={() => void handleExport("xlsx")}
                 disabled={exporting || !result || result.total === 0}
-                className="rounded-lg bg-[#1D6F42] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                className="rounded-lg border border-[color:var(--di-border-control)] bg-[color:var(--di-surface-elevated)] px-3 py-1.5 text-xs font-semibold text-[color:var(--di-action)] transition hover:bg-[color:var(--di-accent-soft)] disabled:opacity-40"
                 data-testid={`${prefix}-export-xlsx`}
               >
                 {exporting ? "Exportando…" : "Exportar a Excel"}
@@ -747,7 +747,7 @@ export function QueryConsole<TRow>({
           <button
             type="button"
             onClick={() => (hayTrabajoSinGuardar ? setConfirmandoLimpiar(true) : limpiar())}
-            className="mt-1 w-full rounded-xl border border-flit-brand/30 bg-flit-brand/[0.06] px-2 py-2 text-[11px] font-semibold text-flit-brand transition hover:border-flit-brand hover:bg-flit-brand/10 dark:border-flit-brand/30 dark:bg-flit-brand/10 dark:text-[#9DB5FF]"
+            className="mt-1 w-full rounded-xl border border-flit-brand/30 bg-flit-brand/[0.06] px-2 py-2 text-[11px] font-semibold text-flit-brand transition hover:border-flit-brand hover:bg-flit-brand/10 dark:border-flit-brand/30 dark:bg-flit-brand/10 dark:text-[color:var(--di-action)]"
             data-testid={`${prefix}-nueva`}
           >
             Empezar de cero

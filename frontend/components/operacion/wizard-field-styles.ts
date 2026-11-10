@@ -107,16 +107,17 @@ export const WIZARD_BTN_BRAND_OUTLINE =
 export const WIZARD_CTA_GRADIENT = 'var(--gradient-action)';
 
 /**
- * Degradado del CTA de cierre: token FLIT `gradient.success` (cian→verde), descrito en el token
+ * Homologación #14507: la propuesta no usa verde, así que el cierre lleva el mismo `--di-gradient-action`.
+ * Antes: token FLIT `gradient.success` (cian→verde), descrito en el token
  * file como «CTA de cierre/finalizar» y exigido por `prototype_rules.md` para el último paso.
  * Reservado a las acciones terminales del asistente —Radicar y Finalizar—: son las únicas que
  * cierran el trámite. «Continuar» y «Guardar y continuar» siguen con el degradado primario,
  * porque avanzar no es cerrar.
  */
-export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, var(--color-flit-tech) 0%, var(--flit-success-ink) 100%)';
+export const WIZARD_CTA_GRADIENT_DONE = 'var(--di-gradient-action)';
 
 /**
  * Degradado del CTA de acción destructiva o de rechazo: token FLIT `gradient.danger` (naranja de alerta → rojo),
  * en pastilla con texto blanco. Sustituye al rojo plano `#C1272D`, que no es un token de la línea base.
  */
-export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, var(--color-flit-alert) 0%, #E43D30 100%)';
+export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, var(--di-danger) 0%, var(--color-flit-alert) 100%)';
