@@ -5,8 +5,9 @@ import { Search } from "lucide-react";
 import { useId, useState } from "react";
 import { boton } from "@/components/landing/estilos";
 import { MobilityLoader } from "@/components/MobilityLoader";
-import { portal, type ClientePortal, type EstadoRadicado, type TipoTramite } from "@/lib/api/cliente";
-import { mensajeDe } from "@/lib/api/errores";
+import { ResumenCierre } from "@/components/punto/ResumenCierre";
+import { portal, type CierrePuntoRespuesta, type ClientePortal, type EstadoRadicado, type TipoTramite } from "@/lib/api/cliente";
+import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import {
   clasificarRadicadoOCedula,
@@ -27,10 +28,17 @@ interface Props {
   tipos?: readonly TipoTramite[];
   /** Valor inicial del segundo campo (p. ej. el radicado que acaba de entregarse en el wizard). */
   radicadoInicial?: string;
+  /**
+   * Consultar del canal OT (HU #14465): un código de trámite (público o radicado) se busca primero en el cierre con pago del organismo
+   * y no pide placa; si no tiene pago (404) se consulta como siempre con placa + radicado.
+   */
+  consultaPunto?: boolean;
 }
 
+const MENSAJE_FALTA_PLACA = "Para consultar este trámite necesitas ingresar la placa.";
+
 /** Modal «Consultar mi trámite» (diseño UI): placa + radicado o cédula, y tracking de 5 pasos. */
-export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "" }: Props) {
+export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "", consultaPunto = false }: Props) {
   return (
     <ModalFlit
       abierto={abierto}
@@ -39,7 +47,7 @@ export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = []
       icono={Search}
       descripcion="Ingresa la placa y el número de radicado o cédula."
     >
-      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} radicadoInicial={radicadoInicial} />
+      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} radicadoInicial={radicadoInicial} consultaPunto={consultaPunto} />
     </ModalFlit>
   );
 }
@@ -49,21 +57,37 @@ function ContenidoConsulta({
   tipos,
   onCerrar,
   radicadoInicial,
+  consultaPunto,
 }: {
   cliente: ClientePortal;
   tipos: readonly TipoTramite[];
   onCerrar: () => void;
   radicadoInicial: string;
+  consultaPunto: boolean;
 }) {
   const idAyuda = useId();
   const [placa, setPlaca] = useState("");
   const [clave, setClave] = useState(radicadoInicial);
   const bloqueo = useBloqueo();
 
-  const consulta = useMutation({
-    mutationFn: () => {
+  // En el punto, un código (con letra o guion) puede ser un trámite con pago: se consulta sin placa.
+  const clasificadoClave = clasificarRadicadoOCedula(clave);
+  const esCodigo = consultaPunto && clasificadoClave !== null && "radicado" in clasificadoClave;
+
+  const consulta = useMutation<EstadoRadicado | CierrePuntoRespuesta>({
+    mutationFn: async () => {
       const clasificado = clasificarRadicadoOCedula(clave);
-      if (!clasificado || !placaValida(placa)) throw new Error("Datos incompletos");
+      if (!clasificado) throw new Error("Datos incompletos");
+      if (esCodigo && "radicado" in clasificado) {
+        try {
+          return await cliente.punto.pago.cierrePorCodigo(clasificado.radicado);
+        } catch (error) {
+          // Sin pago (404 uniforme; 403 y 409 por compatibilidad): se cae a la consulta de siempre, que sí pide la placa.
+          if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 403 && error.status !== 409)) throw error;
+          if (!placaValida(placa)) throw new Error(MENSAJE_FALTA_PLACA);
+        }
+      }
+      if (!placaValida(placa)) throw new Error("Datos incompletos");
       return cliente.radicados.consultar({ placa, ...clasificado });
     },
     onError: (error) => {
@@ -71,7 +95,7 @@ function ContenidoConsulta({
     },
   });
 
-  const listo = placaValida(placa) && clasificarRadicadoOCedula(clave) !== null;
+  const listo = (placaValida(placa) || esCodigo) && clasificadoClave !== null;
   const puedeEnviar = listo && !consulta.isPending && !bloqueo.bloqueado;
   const cambio = (fijar: (v: string) => void) => (valor: string) => {
     fijar(valor);
@@ -90,7 +114,7 @@ function ContenidoConsulta({
         <label className="dashboard-label">
           Placa
           <input
-            required
+            required={!consultaPunto}
             className="field uppercase"
             autoComplete="off"
             placeholder="EJ. ABC123"
@@ -124,10 +148,20 @@ function ContenidoConsulta({
         {consulta.isPending && <MobilityLoader />}
         {consulta.isError && (
           <p role="alert" className="mt-4 rounded-[9px] border border-alert bg-alert/10 p-3 text-center text-sm text-alert">
-            {mensajeDe(consulta.error)}
+            {consulta.error instanceof Error && consulta.error.message === MENSAJE_FALTA_PLACA ? MENSAJE_FALTA_PLACA : mensajeDe(consulta.error)}
           </p>
         )}
-        {consulta.isSuccess && <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />}
+        {consulta.isSuccess &&
+          ("estadoCierre" in consulta.data ? (
+            <div className="mt-6">
+              <ResumenCierre cierre={consulta.data} />
+              <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
+                Entendido
+              </button>
+            </div>
+          ) : (
+            <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />
+          ))}
       </div>
     </>
   );

@@ -56,10 +56,13 @@ public interface IRegistroDePagos
 /// </list>
 /// </summary>
 public sealed class RegistroDePagos(
-    PersonaNaturalDb db, CotizadorDelPunto cotizador, RadicacionService radicacion, TimeProvider reloj, IOptions<CajaOptions> caja) : IRegistroDePagos
+    PersonaNaturalDb db, CotizadorDelPunto cotizador, RadicacionService radicacion, ICorreoDeCierre correoCierre, TimeProvider reloj, IOptions<CajaOptions> caja) : IRegistroDePagos
 {
     public const string IndicePagado = "uq_payment_charge_paid_per_request";
     public const int MaxDetalle = 200;
+
+    /// <summary>Tiempo máximo que el pago espera al correo de cierre.</summary>
+    internal static readonly TimeSpan TopeCorreoCierre = TimeSpan.FromSeconds(3);
 
     public async Task<PagoRegistrado> RegistrarPagoAsync(PedidoDePago pedido, CancellationToken ct)
     {
@@ -88,7 +91,30 @@ public sealed class RegistroDePagos(
             return pagado with { RadicaEn = pagado.PagadoEn + ventana };
 
         var radicada = await radicacion.IntentarRadicarPagadaAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
+
+        // HU #14466: el correo de cierre sale fuera de la ruta crítica: con tope de tiempo corto y sin lanzar nunca. Si no sale a tiempo o falla,
+        // la marca closure_email_sent_at queda libre y el reintento ocurre al consultar el cierre (GET /pago/cierre).
+        await EnviarCorreoAcotadoAsync(pagado.SolicitudId, ct).ConfigureAwait(false);
         return radicada ? pagado with { EstadoSolicitud = EstadoSolicitud.EnCola } : pagado;
+    }
+
+    /// <summary>
+    /// El BFF no tiene cola de correos (sus jobs son sondeos de identidad y retención), así que el envío se acota con un tope corto
+    /// en lugar de correr sin límite dentro de la petición del pago. El reclamo atómico de <see cref="ICorreoDeCierre"/> sigue
+    /// garantizando un solo envío; si el tope vence o el transporte falla, la marca se libera y el cierre lo reintenta.
+    /// </summary>
+    private async Task EnviarCorreoAcotadoAsync(Guid solicitudId, CancellationToken ct)
+    {
+        using var tope = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        tope.CancelAfter(TopeCorreoCierre);
+        try
+        {
+            await correoCierre.EnviarSiCorrespondeAsync(solicitudId, tope.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Venció el tope: el pago ya está firme; el cierre reintenta el correo.
+        }
     }
 
     private async Task<PagoRegistrado> ConfirmarEnTransaccionAsync(PedidoDePago pedido, string tipoCodigo, CancellationToken ct)
