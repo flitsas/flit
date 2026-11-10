@@ -20,6 +20,13 @@ export interface UseUiPreferencesOptions {
    * tal cual, porque ocultar una columna que ya existía SÍ fue una decisión suya.
    */
   addedSinceLegacy?: readonly string[];
+  /**
+   * Claves que YA existían en el catálogo y pasaron al default más tarde: `known` no sirve para
+   * ellas (el usuario sí pudo ocultarlas). Se re-muestran UNA sola vez a quien tiene preferencia
+   * guardada sin ellas; la marca `reshown` que se persiste al guardar deja constancia de que ya se
+   * hizo, y a partir de ahí, si el usuario la oculta, su decisión manda.
+   */
+  reshowOnce?: readonly string[];
 }
 
 export interface UseUiPreferencesResult {
@@ -45,7 +52,7 @@ export function useUiPreferences(
   defaultVisible: readonly string[],
   options: UseUiPreferencesOptions = {},
 ): UseUiPreferencesResult {
-  const { catalog, addedSinceLegacy } = options;
+  const { catalog, addedSinceLegacy, reshowOnce } = options;
   const [visible, setVisibleState] = useState<string[]>(() => [...defaultVisible]);
   const [status, setStatus] = useState<UiPreferencesStatus>('loading');
   const [saving, setSaving] = useState(false);
@@ -59,11 +66,16 @@ export function useUiPreferences(
   const catalogRef = useRef(catalog);
   const defaultsRef = useRef(defaultVisible);
   const addedRef = useRef(addedSinceLegacy);
+  const reshowRef = useRef(reshowOnce);
+  // Marca `reshown` tal como llegó del backend: al guardar se une con `reshowOnce` para no perder
+  // re-muestras de otras claves que ya se hubieran hecho.
+  const reshownSavedRef = useRef<string[]>([]);
   useEffect(() => {
     visibleRef.current = visible;
     catalogRef.current = catalog;
     defaultsRef.current = defaultVisible;
     addedRef.current = addedSinceLegacy;
+    reshowRef.current = reshowOnce;
   });
 
   useEffect(() => {
@@ -82,6 +94,12 @@ export function useUiPreferences(
         if (!active) return;
         const saved = res?.value?.visible;
         const rawKnown = res?.value?.known;
+        const rawReshown = res?.value?.reshown;
+        const reshown =
+          Array.isArray(rawReshown) && rawReshown.every((k) => typeof k === 'string')
+            ? (rawReshown as string[])
+            : [];
+        reshownSavedRef.current = reshown;
         // Sin preferencia guardada, el backend responde `value: {}` (AC del contrato) — se
         // conservan las columnas por defecto. Igual si `visible` llega vacío/corrupto.
         if (Array.isArray(saved) && saved.length > 0 && saved.every((k) => typeof k === 'string')) {
@@ -98,7 +116,14 @@ export function useUiPreferences(
           const nuevas = known
             ? (catalogoActual ?? []).filter((k) => !known.includes(k) && defaults.includes(k))
             : (addedRef.current ?? []).filter((k) => defaults.includes(k));
-          const merged = [...saved, ...nuevas.filter((k) => !saved.includes(k))];
+          // Re-muestra única: solo si la marca persistida aún no la registra.
+          const reMostrar = (reshowRef.current ?? []).filter(
+            (k) => defaults.includes(k) && !reshown.includes(k),
+          );
+          const merged = [
+            ...saved,
+            ...[...nuevas, ...reMostrar].filter((k, i, all) => !saved.includes(k) && all.indexOf(k) === i),
+          ];
           // Orden canónico del catálogo, no el de llegada.
           setVisibleState(
             catalogoActual ? catalogoActual.filter((k) => merged.includes(k)) : merged,
@@ -131,9 +156,16 @@ export function useUiPreferences(
           // `known` deja constancia del catálogo vigente al guardar: es lo que permite que una
           // columna añadida MÁS TARDE se distinga de una que el usuario ocultó a propósito.
           const catalogoActual = catalogRef.current;
+          const reshowActual = reshowRef.current;
+          // `reshown` registra que la re-muestra única ya se aplicó: desde aquí, si el usuario oculta
+          // la columna, la próxima carga lo respeta.
+          const reshown = reshowActual?.length
+            ? [...new Set([...reshownSavedRef.current, ...reshowActual])]
+            : null;
           await uiPreferencesClient.put(scope, {
             visible: next,
             ...(catalogoActual ? { known: [...catalogoActual] } : {}),
+            ...(reshown ? { reshown } : {}),
           });
         } catch {
           // Fallo al guardar: revierte a la selección previa sin interrumpir al usuario (puede
