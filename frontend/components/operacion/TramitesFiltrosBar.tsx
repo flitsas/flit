@@ -458,7 +458,14 @@ function FiltroEspecificoPopover({
               type="button"
               onClick={handleEmpezarDeCero}
               disabled={empezarDeCeroDisabled}
-              className="rounded-xl border border-[var(--badge-danger-border)] px-3 py-2 text-xs font-semibold text-destructive transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+              // Acción de peligro de la propuesta (mismo patrón que BOTON_PELIGRO_CLS de comparendos):
+              // secundario con aro de alerta y texto de error, sin rojo sólido.
+              className={buttonClass({
+                variant: 'secondary',
+                size: 'sm',
+                className:
+                  'gap-1.5 border-[color:var(--di-alerta-punto)] text-[color:var(--di-danger)] hover:bg-[color:var(--di-danger-soft)]',
+              })}
             >
               Empezar de cero
             </button>
