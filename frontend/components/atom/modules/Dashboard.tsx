@@ -740,7 +740,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                     // rótulo se comía el ancho y la ilustración quedaba en 0 px. Aquí la tarjeta va a
                     // una columna —el rótulo usa todo el ancho y no se parte— y la ilustración se fija
                     // abajo a la derecha, junto a la cifra, con un tamaño que no se encoge.
-                    className="relative grid-cols-1 p-3.5 [&>img]:absolute [&>img]:bottom-3 [&>img]:right-3 [&>img]:h-8 [&>img]:w-8 [&>img]:shrink-0 [&>span:nth-child(2)]:pr-10 [&>span:nth-child(2)]:text-2xl"
+                    className="relative grid-cols-1 p-3.5 [&>img]:absolute [&>img]:bottom-3 [&>img]:right-3 [&>img]:h-8 [&>img]:w-8 [&>img]:shrink-0 [&>img]:max-w-none [&>span:nth-child(2)]:pr-10 [&>span:nth-child(2)]:text-2xl"
                     ilustracion={rutaIlustracion(k.ilustracion)}
                     etiqueta={
                       <span className="block min-w-0">
