@@ -63,6 +63,7 @@ import {
 import {
   ESTADOS_TRAMITE,
   FILTRO_RECHAZADO_PREASIGNACION,
+  estadoChipClass,
   estadoChipStyle,
   estadoLabel,
   estadoLabelConOrigen,
@@ -160,6 +161,11 @@ const SERVER_LIST_TAKE = 200;
  * (Continuar/Ver) llevan al mismo destino. Se refresca al montar, al pulsar
  * Actualizar y cada vez que cambia `refreshKey`.
  */
+
+/** Nombre visible de cada columna, para el `data-label` de las tarjetas en celular. */
+const ETIQUETA_COLUMNA: Record<string, string> = Object.fromEntries(
+  TRAMITES_COLUMNS.map((c) => [c.key, c.label]),
+);
 
 // N 03 (RF01) — chip de estado de negocio en español; labels/colores desde la fuente única
 // lib/tramites/estados.ts (fallback titlecase para valores desconocidos). ADR-0059: un rechazo
@@ -2215,6 +2221,7 @@ function TableBody({
       <div className="overflow-x-auto">
         <table
           aria-label="Trámites en curso"
+          className="di-tabla-tarjetas"
           style={{
             // `width: 100%` + `minWidth`: la tabla ocupa SIEMPRE el ancho del contenedor y los
             // porcentajes del `<colgroup>` reparten ese ancho entre las columnas visibles. Sin el
@@ -2751,7 +2758,9 @@ function TramiteRow({
               handleOpen();
             }}
             aria-label={`Abrir trámite ${item.referenceNumber}`}
-            className="min-w-0 truncate font-mono font-semibold text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+            // Propuesta: «Abrir» como enlace. El radicado es el control que abre el trámite, así que
+            // lleva el azul de acción con subrayado al pasar.
+            className="min-w-0 truncate font-mono font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
             {item.referenceNumber}
           </button>
@@ -2795,9 +2804,16 @@ function TramiteRow({
     // muda allí en vez de salir dos veces.
     placa: (
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="block truncate font-mono font-semibold tracking-wider text-foreground">
-          {item.placa ?? '—'}
-        </span>
+        {/* Propuesta: la placa de la fila es la placa amarilla. Va con la clase local `.di-placa` y no
+            con `Placa` de @flit/ui porque esta separa «ABC 123» y aquí el texto de la placa no cambia
+            (se busca, se copia y lo leen las pruebas tal cual viene). Sin placa, el guion. */}
+        {item.placa ? (
+          <span className="di-placa self-start">
+            <span className="di-placa__num">{item.placa}</span>
+          </span>
+        ) : (
+          <span className="block truncate font-mono font-semibold tracking-wider text-foreground">—</span>
+        )}
         {/* El VIN no envuelve: es un token de 17 caracteres sin espacios y partirlo en dos líneas
             no ayuda a compararlo de un vistazo. El piso de la columna cabe los 17 enteros. */}
         {!shows('vin') ? (
@@ -2877,7 +2893,18 @@ function TramiteRow({
     ),
     paso: (
       <span className="block min-w-0">
-        <span className="block font-mono text-xs text-muted-foreground">
+        {/* Barra de avance del prototipo (`.avance`) pintada como fondo de la cifra: sin marcado
+            nuevo; el ancho sale del mismo pasoActual/totalPasos que ya se muestra. */}
+        <span
+          className="block pb-2 font-mono text-xs text-muted-foreground"
+          style={
+            item.totalPasos
+              ? {
+                  background: `var(--di-gradient-brand) left bottom / ${Math.min(100, Math.round((100 * (item.pasoActual ?? 0)) / item.totalPasos))}% 6px no-repeat, linear-gradient(var(--di-surface-sunken), var(--di-surface-sunken)) left bottom / 100% 6px no-repeat`,
+                }
+              : undefined
+          }
+        >
           {item.pasoActual}/{item.totalPasos}
         </span>
         <span className="block truncate text-[10px] opacity-55">
@@ -2910,6 +2937,7 @@ function TramiteRow({
                  mismo tono. El nombre accesible sigue siendo el completo. */
               <span className="flex flex-col items-start gap-0.5">
                 <StatusBadge
+                  className={estadoChipClass(item.estado)}
                   label={estadoLabel(item.estado)}
                   ariaLabel={chip.label}
                   bg={chip.bg}
@@ -2921,7 +2949,13 @@ function TramiteRow({
                 </span>
               </span>
             ) : (
-              <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+              <StatusBadge
+                className={estadoChipClass(item.estado)}
+                label={chip.label}
+                bg={chip.bg}
+                color={chip.color}
+                border={chip.border}
+              />
             )}
           </button>
           {showRejectPopover ? (
@@ -3170,13 +3204,13 @@ function TramiteRow({
   return (
     <tr
       onClick={handleOpen}
-      className={`group cursor-pointer bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}
+      className={`group cursor-pointer bg-[var(--di-surface-elevated)] text-xs [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
       {includeSelectColumn ? (
         <td
-          className="rounded-l-xl border-y border-l border-border px-4 py-3 align-middle"
+          className="rounded-l-xl border-y border-l border-[color:var(--di-border)] px-4 py-3 align-middle"
           onClick={(e) => e.stopPropagation()}
         >
           {/* HU #13380 — UNA casilla por fila: la misma selección sirve a la descarga masiva y a la
@@ -3204,7 +3238,10 @@ function TramiteRow({
       {visibleColumns.map((key, index) => (
         <td
           key={key}
-          className={`border-y border-border px-4 py-3 align-middle text-xs ${
+          // Excepción aprobada del rediseño: en celular la fila se lee como tarjeta y cada celda
+          // muestra el nombre de su columna desde `data-label` (styles/tramites-propuesta.css).
+          data-label={ETIQUETA_COLUMNA[key]}
+          className={`border-y border-[color:var(--di-border)] px-4 py-3 align-middle text-xs ${
             !includeSelectColumn && index === 0 ? 'border-l rounded-l-xl' : ''
           }`}
         >
@@ -3217,7 +3254,7 @@ function TramiteRow({
           de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
           botones en la misma celda. */}
       <td
-        className="rounded-r-xl border-y border-r border-border px-4 py-3 text-right align-middle"
+        className="rounded-r-xl border-y border-r border-[color:var(--di-border)] px-4 py-3 text-right align-middle"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
