@@ -19,13 +19,16 @@ export function DetalleStepper({
   pasos,
   pasoActivoId,
   onSelect,
+  integrado = false,
 }: {
   pasos: DetallePaso[];
   pasoActivoId: string;
   onSelect: (id: string) => void;
+  /** HU #14482 — dentro de la tarjeta de resumen: sin tarjeta propia. */
+  integrado?: boolean;
 }) {
   return (
-    <div className={`${DETALLE_CARD} mt-3 overflow-x-auto p-4`}>
+    <div className={integrado ? 'overflow-x-auto' : `${DETALLE_CARD} mt-3 overflow-x-auto p-4`}>
       <div className="flex min-w-[760px] items-start" role="tablist" aria-label="Pasos del trámite">
         {pasos.map((paso, i) => {
           const isSel = paso.id === pasoActivoId;

@@ -33,7 +33,7 @@ import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
 import { TramiteDetalleComercial } from './detalle/TramiteDetalleComercial';
 import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
 import { RevocationRequestButton } from './RevocationRequestButton';
-import { DetalleResumenAvance } from './detalle/DetalleResumenAvance';
+import { DetalleResumen } from './detalle/DetalleResumen';
 import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
   mapEventsToTimelineNodes,
@@ -764,23 +764,21 @@ export function TramiteDetalleModal({
               </InlineAlert>
             ) : null}
 
-            {/* HU #14482 — resumen y avance de la propuesta (vehículo, fichas y línea de estados) en
-                vez de la columna del vehículo: se muestra cuando se ve una sección, igual que esa
-                columna, y deja que la sección use todo el ancho. */}
-            {!panelTracking && estadoVigente ? (
-              <DetalleResumenAvance
-                item={item}
-                detalle={detail}
-                estadoVigente={estadoVigente}
-                rejectedFrom={rejectedFromVigente}
-              />
-            ) : null}
-
-            <DetalleStepper
-              pasos={pasosStepper}
-              pasoActivoId={panelTracking ? '' : seccion}
-              onSelect={(id) => selectSeccion(id as SeccionId)}
-            />
+            {/* HU #14482 — resumen de la propuesta (vehículo y fichas) con los pasos de sección
+                integrados tras la línea divisoria. Con un panel de seguimiento abierto el resumen se
+                oculta, como la antigua columna del vehículo, y los pasos quedan en su tarjeta: pulsar
+                uno cierra el panel. */}
+            {(() => {
+              const stepper = (
+                <DetalleStepper
+                  pasos={pasosStepper}
+                  pasoActivoId={panelTracking ? '' : seccion}
+                  onSelect={(id) => selectSeccion(id as SeccionId)}
+                  integrado={!panelTracking}
+                />
+              );
+              return panelTracking ? stepper : <DetalleResumen item={item} detalle={detail} pasos={stepper} />;
+            })()}
 
             <div className="mt-3 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
               {panelTracking === 'timeline' ? (

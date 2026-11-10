@@ -49,31 +49,6 @@
 .di-fichas__dt { display: block; margin-bottom: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--di-text-secondary); }
 .di-fichas__dd { color: var(--di-heading); font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; }
 
-/* ── Línea de avance (pasos del trámite en horizontal; vertical en celular) ── */
-.di-linea { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr); }
-.di-linea__paso { position: relative; display: grid; justify-items: center; gap: 2px; text-align: center; padding-top: 30px; }
-.di-linea__paso::before { content: ""; position: absolute; top: 10px; left: 0; right: 0; height: 3px; background: var(--di-surface-sunken); }
-.di-linea__paso:first-child::before { left: 50%; }
-.di-linea__paso:last-child::before { right: 50%; }
-.di-linea__paso--hecho::before { background: var(--color-flit-tech); }
-.di-linea__punto { position: absolute; top: 2px; left: 50%; margin-left: -10px; width: 20px; height: 20px; border-radius: 50%; background: var(--di-surface-elevated); border: 3px solid var(--di-border-control); }
-.di-linea__paso--hecho .di-linea__punto { background: var(--color-flit-tech); border-color: var(--color-flit-tech); }
-.di-linea__paso--actual .di-linea__punto { background: var(--di-action); border-color: var(--di-action); box-shadow: 0 0 0 5px var(--di-accent-soft); }
-/* Texto del paso: la primera línea es el nombre y la segunda la fecha o «Pendiente» (un solo elemento). */
-.di-linea__texto { display: block; font-size: 0.6875rem; line-height: 1.5; color: var(--di-text-tertiary); }
-.di-linea__texto::first-line { font-size: 0.8125rem; font-weight: 600; color: var(--paso-color, var(--di-text-secondary)); }
-.di-linea__paso--hecho .di-linea__texto { --paso-color: var(--di-heading); }
-.di-linea__paso--actual .di-linea__texto { --paso-color: var(--di-action); }
-.di-linea__paso--actual .di-linea__texto::first-line { font-weight: 700; }
-@media (max-width: 640px) {
-  .di-linea { grid-auto-flow: row; grid-auto-columns: auto; gap: 12px; }
-  .di-linea__paso { justify-items: start; text-align: left; padding: 0 0 0 34px; min-height: 24px; }
-  .di-linea__paso::before { top: 0; bottom: -12px; left: 9px; right: auto; width: 3px; height: auto; }
-  .di-linea__paso:first-child::before { left: 9px; top: 10px; }
-  .di-linea__paso:last-child::before { right: auto; bottom: 50%; }
-  .di-linea__punto { left: 0; margin-left: 0; top: 0; }
-}
-
 /* ── Pasos del asistente (marcador numerado del prototipo) ── */
 .di-paso__num {
   display: grid; place-items: center; flex: none; border-radius: 50%; font-weight: 700; font-size: 0.8125rem;
