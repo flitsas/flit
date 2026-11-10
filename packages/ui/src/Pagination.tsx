@@ -58,7 +58,7 @@ export function Pagination({
   return (
     <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
       {onPageSizeChange ? (
-        <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
+        <label className="flex items-center gap-2 pt-4 text-[0.8125rem] text-[color:var(--di-text-tertiary)]">
           Filas por página
           <select
             value={pageSize}
