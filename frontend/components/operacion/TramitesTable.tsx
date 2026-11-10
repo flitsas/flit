@@ -73,6 +73,7 @@ import {
   revocationRequestListLabel,
 } from '@/lib/tramites/estados';
 import { Placa } from '@flit/ui/Placa';
+import { buttonClass } from '@flit/ui/Button';
 import {
   TRAMITES_COLUMNS,
   TRAMITES_SELECTABLE_COLUMNS,
@@ -1550,8 +1551,13 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 ? 'La compañía tiene bloqueada la creación de trámites.'
                 : undefined
             }
-            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-            style={{ background: WIZARD_CTA_GRADIENT }}
+            // HU #14482 (propuesta): `.btn` principal en píldora, en el mismo sitio del DOM. El salto
+            // de línea del rótulo se oculta por CSS para que quepa en una sola línea.
+            className={buttonClass({
+              variant: 'primary',
+              size: 'md',
+              className: 'shrink-0 self-start [&_br]:hidden',
+            })}
           >
             <span>
               Nuevo
@@ -1957,7 +1963,7 @@ function SortableHeaderCell({
             ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
             : `Ordenar ${column.label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:bg-secondary ${
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 normal-case transition-colors hover:bg-[var(--di-accent-soft)] ${
           activa ? 'text-flit-brand-ink' : ''
         }`}
       >

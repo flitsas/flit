@@ -135,7 +135,7 @@ function TarjetaSelect({
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl border bg-card px-3 py-2.5 text-left text-[13px] outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#0B0F14]"
+        className="flex min-h-11 w-full items-center justify-between rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-left text-[13px] text-[color:var(--di-text-primary)] outline-none transition focus:border-[color:var(--di-action)] focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         style={{ borderColor: BORDER, color: elegida ? 'var(--color-flit-primary)' : 'var(--muted-foreground)' }}
       >
         <span className="truncate pr-2">{elegida?.label ?? placeholder}</span>
@@ -152,7 +152,7 @@ function TarjetaSelect({
               role="listbox"
               aria-label={ariaLabel}
               // z por encima del overlay del Modal (z-[100]): si no, el panel queda detrás.
-              className="fixed z-[1200] overflow-y-auto rounded-xl border bg-card shadow-lg"
+              className="fixed z-[1200] overflow-y-auto rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-modal)]"
               style={{
                 borderColor: BORDER,
                 left: rect?.left ?? -9999,
