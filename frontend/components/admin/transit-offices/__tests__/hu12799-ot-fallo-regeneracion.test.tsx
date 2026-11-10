@@ -164,15 +164,18 @@ describe("hu12799 AC3 — detalle OT: aviso de fallo del maestro", () => {
     expect(fetchOtAttachmentPreviewUrl).toHaveBeenCalledWith("proc-1", "att-maestro-anterior", undefined);
   });
 
-  it("un maestro vigente que falla al actualizarse avisa y NO muestra «Consolidado generado»", async () => {
+  it("HU #14207 — fallo al Ver consolidado avisa y NO muestra «Consolidado generado»", async () => {
     vi.mocked(generarOtConsolidadoMaestro).mockResolvedValue(FALLO_POST);
     const user = userEvent.setup();
     renderDocs({ consolidadoMaestro: maestro({ estado: "vigente" }) });
 
-    await user.click(await screen.findByRole("button", { name: "Actualizar el consolidado del expediente" }));
+    await abrirConsolidado(user);
 
     await waitFor(() => expect(screen.getAllByTestId("aviso-fallo-regeneracion").length).toBeGreaterThan(0));
     expect(screen.queryByText("Consolidado generado.")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Actualizar el consolidado del expediente/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("read-only no radicado: la entrega con fallo (modo null) también avisa", async () => {
