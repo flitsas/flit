@@ -1,9 +1,33 @@
 "use client";
 
-import Link from "next/link";
+import type { MouseEvent } from "react";
+import { useRouter } from "next/navigation";
+import { TarjetaMetrica, METRICAS_GRID_CLS } from "@flit/ui/TarjetaMetrica";
+import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import { ESTADO_LABELS, ESTADOS_TRAMITE, type EstadoTramite } from "@/lib/tramites/estados";
 import { tramitesPorEstado } from "./destinos";
 import type { ConteosEstado } from "./useConteosEstado";
+
+/**
+ * Ilustración de cada estado en su tarjeta (prototipo «Diseño Inteligente», HU #14481). Las que el prototipo usa en su
+ * Inicio real se toman de ahí (subsanación → pendientes, entregado → organismos, aprobado → trazabilidad); las demás,
+ * la del módulo más cercano.
+ */
+const ILUSTRACION_ESTADO: Record<EstadoTramite, Ilustracion> = {
+  borrador: "documentos",
+  anulado: "vencidos",
+  preparado: "procesos",
+  preasignacion: "preasignacion",
+  asignado: "placa-colombia",
+  entregado: "organismos",
+  aprobado: "trazabilidad",
+  rechazado: "causales",
+  revocado: "revocatorias",
+  subsanacion: "pendientes",
+};
+
+/** El estado que espera que alguien haga algo: su tarjeta lleva el borde turquesa del prototipo si tiene trámites. */
+const ESTADO_PENDIENTE: EstadoTramite = "subsanacion";
 
 /**
  * HU #14481 (AC2) — cifras de trámites por estado. Cada cifra es un enlace a /tramites filtrado por ese estado; el
@@ -11,22 +35,22 @@ import type { ConteosEstado } from "./useConteosEstado";
  */
 export function CifrasEstado({ conteos }: { conteos: ConteosEstado }) {
   return (
-    <section aria-labelledby="inicio-cifras-titulo" className="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] p-4 text-[var(--card-foreground)] shadow-[var(--shadow-card)] md:p-5">
-      <h2 id="inicio-cifras-titulo" className="text-base font-semibold text-[var(--foreground)]">
+    <section aria-labelledby="inicio-cifras-titulo">
+      <h2 id="inicio-cifras-titulo" className="text-base font-semibold text-[color:var(--di-heading)]">
         Tus trámites por estado
       </h2>
-      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Pulsa una cifra para ver esos trámites.</p>
+      <p className="mt-0.5 text-xs text-[color:var(--di-text-tertiary)]">Pulsa una cifra para ver esos trámites.</p>
 
       {conteos.estado === "cargando" ? (
-        <p className="mt-4 text-sm text-[var(--muted-foreground)]" role="status">
+        <p className="mt-4 text-sm text-[color:var(--di-text-tertiary)]" role="status">
           Cargando cifras…
         </p>
       ) : conteos.estado === "sin-datos" ? (
-        <p className="mt-4 text-sm text-[var(--muted-foreground)]">Por ahora no hay cifras para mostrar.</p>
+        <p className="mt-4 text-sm text-[color:var(--di-text-tertiary)]">Por ahora no hay cifras para mostrar.</p>
       ) : (
-        <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <ul className={`mt-4 list-none p-0 ${METRICAS_GRID_CLS}`}>
           {ESTADOS_TRAMITE.map((estado) => (
-            <li key={estado}>
+            <li key={estado} className="grid">
               <Cifra estado={estado} total={conteos.conteos[estado] ?? 0} />
             </li>
           ))}
@@ -37,18 +61,25 @@ export function CifrasEstado({ conteos }: { conteos: ConteosEstado }) {
 }
 
 function Cifra({ estado, total }: { estado: EstadoTramite; total: number }) {
+  const router = useRouter();
   const etiqueta = ESTADO_LABELS[estado];
+  const href = tramitesPorEstado(estado);
+  // TarjetaMetrica pinta un <a> normal: un clic simple navega dentro de la app, como el <Link> de antes; con Ctrl,
+  // ⌘, Mayús o el botón del medio el navegador hace lo suyo (pestaña nueva).
+  const navegar = (e: MouseEvent<HTMLElement>) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    router.push(href);
+  };
   return (
-    <Link
-      href={tramitesPorEstado(estado)}
+    <TarjetaMetrica
+      href={href}
+      onClick={navegar}
+      etiqueta={etiqueta}
+      cifra={total.toLocaleString("es-CO")}
+      ilustracion={rutaIlustracion(ILUSTRACION_ESTADO[estado])}
+      pendiente={estado === ESTADO_PENDIENTE && total > 0}
       aria-label={`${etiqueta}: ${total} ${total === 1 ? "trámite" : "trámites"}`}
-      className="flex min-h-16 flex-col justify-between gap-1 rounded-[var(--radius-lg)] border px-3 py-2 no-underline transition-shadow hover:shadow-[var(--shadow-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-      style={{ background: `var(--estado-${estado}-bg)`, borderColor: `var(--estado-${estado}-border)` }}
-    >
-      <span className="text-xs font-medium" style={{ color: `var(--estado-${estado}-fg)` }}>
-        {etiqueta}
-      </span>
-      <span className="text-2xl font-bold tabular-nums text-[var(--foreground)]">{total.toLocaleString("es-CO")}</span>
-    </Link>
+    />
   );
 }

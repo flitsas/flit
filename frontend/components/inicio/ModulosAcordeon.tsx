@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronUp } from "lucide-react";
 import type { DockEntry, DockGroup } from "@flit/shell/nav";
 import { useShellNav } from "@flit/shell/nav-context";
 
@@ -39,16 +39,21 @@ export function ModulosAcordeon({ conteos = {} }: { conteos?: ConteosModulo }) {
   const columnas = [groups.slice(0, mitad), groups.slice(mitad)].filter((c) => c.length > 0);
 
   return (
-    <section aria-labelledby="inicio-modulos-titulo" className="flex flex-col gap-3">
+    // Tarjeta «Módulos» del prototipo (`.card` con `.acordeones`): dos columnas independientes; abrir un grupo solo
+    // empuja su columna. Una columna desde 900 px hacia abajo.
+    <section
+      aria-labelledby="inicio-modulos-titulo"
+      className="flex flex-col gap-4 rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-5 shadow-[var(--shadow-card)] md:p-6"
+    >
       <div>
-        <h2 id="inicio-modulos-titulo" className="text-base font-semibold text-[var(--foreground)]">
+        <h2 id="inicio-modulos-titulo" className="text-base font-semibold text-[color:var(--di-heading)]">
           Módulos
         </h2>
-        <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Todo lo que puedes hacer en la plataforma, agrupado como en el menú.</p>
+        <p className="mt-0.5 text-xs text-[color:var(--di-text-tertiary)]">Todo lo que puedes hacer en la plataforma, agrupado como en el menú.</p>
       </div>
-      <div className="grid items-start gap-3 md:grid-cols-2">
+      <div className="grid items-start gap-x-4 gap-y-3 min-[901px]:grid-cols-2">
         {columnas.map((col, c) => (
-          <div key={c} className="grid min-w-0 gap-3">
+          <div key={c} className="grid min-w-0 gap-3 [&>*]:min-w-0">
             {col.map((g) => (
               <Grupo key={g.id} grupo={g} abierto={abierto === g.id} onAlternar={() => alternar(g.id)} conteos={conteos} />
             ))}
@@ -67,63 +72,83 @@ function filas(grupo: DockGroup): { entry: DockEntry; sub?: string }[] {
   ]);
 }
 
+/** Ilustración del grupo o del módulo (la del dock, HU #14479); sin ella, el ícono de línea en un círculo cielo. */
+function Glifo({ entry, size }: { entry: { icon: DockEntry["icon"]; ilustracion?: string }; size: "grupo" | "modulo" }) {
+  const cls = size === "grupo" ? "h-9 w-9 max-sm:h-8 max-sm:w-8" : "h-8 w-8";
+  if (entry.ilustracion) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={entry.ilustracion} alt="" aria-hidden="true" className={`${cls} shrink-0`} />;
+  }
+  const Icon = entry.icon;
+  return (
+    <span aria-hidden="true" className={`${cls} grid shrink-0 place-items-center rounded-full bg-[var(--di-sky)] text-[color:var(--di-accent)]`}>
+      <Icon className="h-[55%] w-[55%]" aria-hidden="true" />
+    </span>
+  );
+}
+
 function Grupo({ grupo, abierto, onAlternar, conteos }: { grupo: DockGroup; abierto: boolean; onAlternar: () => void; conteos: ConteosModulo }) {
   const lista = filas(grupo);
   const conCifra = lista.map((f) => conteos[f.entry.key]).filter((x): x is ConteosModulo[string] => Boolean(x));
   const total = conCifra.reduce((s, x) => s + x.total, 0);
   const panelId = `inicio-grupo-${grupo.id}`;
-  const Icono = grupo.icon;
 
+  // `.acordeon` del prototipo: contador a la izquierda, ilustración y nombre del grupo, a la derecha lo pendiente y
+  // la flecha.
   return (
-    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-[var(--shadow-card)]">
+    <div className="overflow-clip rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-card)]">
       <h3 className="m-0">
         <button
           type="button"
           aria-expanded={abierto}
           aria-controls={panelId}
           onClick={onAlternar}
-          className={`flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${
-            abierto ? "border-b border-[var(--border)] bg-[var(--accent)]" : ""
+          className={`group/fila flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-[var(--di-sky)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--di-action)] motion-reduce:transition-none max-sm:gap-2.5 max-sm:px-3 max-sm:py-2 ${
+            abierto ? "border-b border-[color:var(--di-divider)] bg-[var(--di-sky)]" : ""
           }`}
         >
-          <span className="grid h-8 min-w-8 place-items-center rounded-full bg-[var(--nav-app-bg)] px-2 text-sm font-bold tabular-nums text-[var(--flit-brand-ink)] max-sm:hidden">
+          <span className="inline-grid h-8 min-w-8 shrink-0 place-items-center rounded-[var(--di-radius-chip)] bg-[var(--di-accent-soft)] px-2 font-bold tabular-nums text-[color:var(--di-action)] max-sm:hidden">
             {lista.length}
             <span className="sr-only">{lista.length === 1 ? " módulo" : " módulos"}</span>
           </span>
-          <Icono className="h-6 w-6 shrink-0 text-[var(--flit-brand-ink)]" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate font-semibold text-[var(--foreground)]">{grupo.label}</span>
+          <Glifo entry={grupo} size="grupo" />
+          <span className="min-w-0 flex-1 truncate font-semibold text-[color:var(--di-heading)]">{grupo.label}</span>
           {conCifra.length > 0 && (
             <span
-              className="shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums"
-              style={{ background: "var(--badge-pending-bg)", color: "var(--badge-pending-fg)", borderColor: "var(--badge-pending-border)" }}
+              // Sobre el cielo de la fila abierta o con el puntero encima, la insignia pasa a blanco (como `.badge.warn`).
+              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                abierto ? "bg-[var(--di-surface-elevated)]" : "bg-[var(--badge-pending-bg)] group-hover/fila:bg-[var(--di-surface-elevated)]"
+              }`}
+              style={{ color: "var(--badge-pending-fg)", borderColor: "var(--badge-pending-border)" }}
             >
               {total.toLocaleString("es-CO")} {conCifra.length === 1 ? conCifra[0].etiqueta : "con cifra"}
             </span>
           )}
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${abierto ? "rotate-180 text-[var(--flit-brand-ink)]" : "text-[var(--muted-foreground)]"}`}
+          <ChevronUp
+            className={`h-[18px] w-[18px] shrink-0 transition-transform duration-150 motion-reduce:transition-none ${abierto ? "text-[color:var(--di-action)]" : "rotate-180 text-[color:var(--di-text-tertiary)]"}`}
             aria-hidden="true"
           />
         </button>
       </h3>
       <div id={panelId} hidden={!abierto}>
-        <ul className="m-0 list-none divide-y divide-[var(--border)] p-0 py-1">
+        <ul className="m-0 list-none p-0 py-1">
           {lista.map(({ entry, sub }) => {
             const cifra = conteos[entry.key];
-            const Icon = entry.icon;
+            const detalle = [sub, entry.descripcion].filter(Boolean).join(" · ");
             return (
               <li key={entry.key}>
+                {/* `.modulo` del prototipo: ilustración de 32 px, nombre, para qué sirve y, si hay, su cifra. */}
                 <Link
                   href={entry.href}
-                  className="group flex min-h-13 items-center gap-3 px-4 py-2 pl-5 no-underline transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]"
+                  className="group flex min-h-13 items-center gap-3 py-2 pl-5 pr-4 no-underline transition-colors duration-150 hover:bg-[var(--di-surface-sunken)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--di-action)] motion-reduce:transition-none max-sm:pl-3"
                 >
-                  <Icon className="h-5 w-5 shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
-                  <span className="grid min-w-0 flex-1 leading-tight">
-                    <span className="truncate text-sm font-semibold text-[var(--foreground)] group-hover:text-[var(--flit-brand-ink)]">{entry.label}</span>
-                    {sub && <span className="truncate text-xs text-[var(--muted-foreground)]">{sub}</span>}
+                  <Glifo entry={entry} size="modulo" />
+                  <span className="grid min-w-0 flex-1 leading-[1.3]">
+                    <span className="truncate text-[0.8125rem] font-semibold text-[color:var(--di-heading)] group-hover:text-[color:var(--di-action)]">{entry.label}</span>
+                    {detalle && <span className="truncate text-xs text-[color:var(--di-text-tertiary)]">{detalle}</span>}
                   </span>
                   {cifra && (
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--muted-foreground)]">
+                    <span className="inline-grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-[var(--di-sky)] px-2 text-xs font-bold tabular-nums text-[color:var(--di-heading)] shadow-[inset_0_0_0_1.5px_var(--di-alerta-punto)]">
                       {cifra.total.toLocaleString("es-CO")} {cifra.etiqueta}
                     </span>
                   )}
