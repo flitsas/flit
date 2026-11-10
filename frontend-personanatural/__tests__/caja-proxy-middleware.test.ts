@@ -116,6 +116,15 @@ describe("middleware de la caja", () => {
     expect(new URL(respuesta.headers.get("location") ?? "").pathname).toBe("/auth/login");
   });
 
+  it("sin auth_time (fail-closed) vuelve al login y borra las cookies de la caja", async () => {
+    claimsTokenFromCookieHeader.mockResolvedValue(tokenCon({ sub: "u" }));
+    const respuesta = await middleware(pedir("/o/5631000/caja"));
+    expect(new URL(respuesta.headers.get("location") ?? "").pathname).toBe("/auth/login");
+    const borradas = respuesta.headers.getSetCookie().filter((c) => /Max-Age=0/i.test(c));
+    expect(borradas.some((c) => c.startsWith("flit_session_caja="))).toBe(true);
+    expect(borradas.some((c) => c.startsWith("flit_session_caja.1="))).toBe(true);
+  });
+
   it("el matcher cubre solo /o/:codigo/caja", () => {
     expect(config.matcher).toEqual(["/o/:codigo/caja", "/o/:codigo/caja/:path*"]);
   });
