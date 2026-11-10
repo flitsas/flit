@@ -85,7 +85,8 @@ export function SelectorColumnas({
               className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
             />
             <span className="relative z-[1] text-sm font-semibold">Columnas</span>
-            <span className="relative z-[1] text-[11px] tabular-nums opacity-85">
+            {/* Pastilla tinta: el contador cae sobre el círculo turquesa de la franja y sin ella no se lee. */}
+            <span className="relative z-[1] rounded-full bg-[color:var(--di-accent)] px-2 py-0.5 text-[11px] tabular-nums">
               {visibles.length} de {columnas.length}
             </span>
           </div>

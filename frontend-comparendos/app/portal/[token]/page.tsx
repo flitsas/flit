@@ -55,11 +55,14 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
   const portal = await cargar(token);
 
   if (!portal) {
+    // Mismo fondo que la rama con datos: el body de la app no pinta fondo y en oscuro el texto claro caía sobre blanco.
     return (
-      <main className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-        <h1 className="text-xl font-semibold text-flit-primary">Este enlace no está disponible</h1>
-        <p className="text-sm text-muted-foreground">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
-      </main>
+      <div className="flex min-h-screen bg-secondary">
+        <main className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+          <h1 className="text-xl font-semibold text-flit-primary">Este enlace no está disponible</h1>
+          <p className="text-sm text-muted-foreground">Puede haber vencido o ya no estar vigente. Si tienes dudas sobre tu comparendo, comunícate con la empresa que te lo envió.</p>
+        </main>
+      </div>
     );
   }
 
