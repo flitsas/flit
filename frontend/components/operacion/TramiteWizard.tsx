@@ -38,11 +38,30 @@ import {
   type CapacidadesEfectivas,
 } from './wizardCapabilities';
 
-/** HU #14482 — ilustración del encabezado del asistente según la familia del tipo. */
-function ilustracionDeFamilia(familia: string): string {
-  const f = familia.toUpperCase();
-  if (f.startsWith('TRASP')) return 'traspaso';
-  if (f.startsWith('MATR')) return 'matricula';
+/**
+ * HU #14482 — ilustración del encabezado del asistente. Manda lo mismo que decide la frase del
+ * encabezado (las capacidades del tipo: pide vendedor = traspaso, entra por VIN = matrícula); si no
+ * lo dicen, el código del tipo (`TRASPASO_STANDARD`…) y por último la familia. Antes solo miraba la
+ * familia, que en /tramites/nuevo/TRASPASO_STANDARD no llegaba como TRASPASO y caía en la genérica.
+ */
+export function ilustracionDelAsistente({
+  pideVendedor,
+  entraPorVin,
+  tipoCodigo,
+  familia,
+}: {
+  pideVendedor: boolean;
+  entraPorVin: boolean;
+  tipoCodigo: string;
+  familia: string;
+}): string {
+  if (pideVendedor) return 'traspaso';
+  if (entraPorVin) return 'matricula';
+  for (const v of [tipoCodigo, familia]) {
+    const f = v.toUpperCase();
+    if (f.startsWith('TRASP')) return 'traspaso';
+    if (f.startsWith('MATR')) return 'matricula';
+  }
   return 'tramites';
 }
 
@@ -1813,7 +1832,12 @@ export function TramiteWizard(props: Props) {
         <ModuleTitle
           title={displayTitle}
           subtitle={displaySubtitle}
-          ilustracion={ilustracionDeFamilia(familia)}
+          ilustracion={ilustracionDelAsistente({
+            pideVendedor: caps.pideVendedor,
+            entraPorVin: caps.entraPorVin,
+            tipoCodigo,
+            familia,
+          })}
         />
       </div>
       {/* Centinela del colapso: mientras se ve, la cabecera va completa; al salir de cuadro el
