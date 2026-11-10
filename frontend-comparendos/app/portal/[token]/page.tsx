@@ -66,7 +66,9 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
   const c = portal.comparendo;
   // La marca de la gestora (§7.17) es su conjunto de plantillas, igual que en los correos (HtmlCorreo.Envolver).
   const marcaFlit = portal.conjunto !== "Renting";
-  const fondoEncabezado = marcaFlit ? "#162744" : "#3A4250";
+  // FLIT va en la tinta de la cabecera de tabla (oscura en los dos temas, con texto blanco); el gris de Renting es el de su
+  // marca en el correo (HtmlCorreo), excepción de marca blanca de la homologación.
+  const fondoEncabezado = marcaFlit ? "var(--table-header-bg)" : "#3A4250";
   const color =
     portal.descuento.ventana === "Descuento50" ? "var(--flit-success-ink)" : portal.descuento.ventana === "Descuento25" ? "var(--badge-warning-fg)" : "var(--badge-danger-fg)";
   // B7-3: el gris ocupa toda la pantalla (en escritorio la columna quedaba sobre fondo blanco) y la marca FLIT lleva su

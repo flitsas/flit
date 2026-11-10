@@ -20,7 +20,7 @@ import {
 } from "@/lib/filtros";
 import type { Nit, Organismo, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
-import { BOTON_PRIMARIO_CLS, controlCls, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
+import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 
 /** El menú agrupado por tema que aprobó Samuel (tanda 4 de la Epic #13779). */
 const GRUPOS: { titulo: string; campos: ClaveEtiqueta[] }[] = [
@@ -136,12 +136,12 @@ export function MenuFiltros({
           id={id}
           role="dialog"
           aria-label="Filtros de la bandeja"
-          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-border bg-card shadow-lg"
+          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-foreground shadow-[var(--shadow-modal)]"
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {editando ? (
               <>
-                <button type="button" onClick={() => setEditando(null)} className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-flit-brand hover:underline">
+                <button type="button" onClick={() => setEditando(null)} className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
                   ← Volver a los filtros
                 </button>
                 <p className="mb-2 text-xs font-semibold">{NOMBRE_CAMPO[editando]}</p>
@@ -184,12 +184,12 @@ export function MenuFiltros({
               ))
             )}
           </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border p-3">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[color:var(--di-divider)] p-3">
             <button
               type="button"
               onClick={empezarDeCero}
               disabled={n === 0}
-              className="rounded-xl border border-flit-alert px-3 py-2 text-xs font-semibold text-[var(--badge-warning-fg)] transition hover:bg-flit-alert/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className={`${BOTON_PELIGRO_CLS} disabled:cursor-not-allowed disabled:opacity-40`}
             >
               Empezar de cero
             </button>
@@ -208,7 +208,7 @@ function EsNoEs({ campo, borrador, onCambio }: { campo: CampoNegable; borrador: 
   const no = borrador.negar.includes(campo);
   const poner = (negar: boolean) => onCambio({ ...borrador, negar: negar ? [...borrador.negar.filter((c) => c !== campo), campo] : borrador.negar.filter((c) => c !== campo) });
   return (
-    <div role="radiogroup" aria-label="Condición" className="mb-2 inline-flex rounded-lg border border-border p-0.5">
+    <div role="radiogroup" aria-label="Condición" className="mb-2 inline-flex gap-1 rounded-full border border-input bg-card p-1">
       {[false, true].map((v) => (
         <button
           key={String(v)}
@@ -216,7 +216,7 @@ function EsNoEs({ campo, borrador, onCambio }: { campo: CampoNegable; borrador: 
           role="radio"
           aria-checked={no === v}
           onClick={() => poner(v)}
-          className={`rounded-md px-3 py-1 text-xs font-semibold transition ${no === v ? "bg-flit-brand text-white" : "text-muted-foreground hover:bg-secondary"}`}
+          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${no === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
         >
           {v ? "no es" : "es"}
         </button>
