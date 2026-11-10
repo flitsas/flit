@@ -244,6 +244,22 @@
   --estado-subsanacion-fg: var(--di-heading);
   --estado-subsanacion-border: transparent;
 
+  /* HU #14482 (S1) — acento propio de cada estado, SOLO para la barra de la tira de contadores de /tramites y de la
+   * bandeja del OT (elemento gráfico, no texto). Son los `accent` de develop (lib/tramites/estados.ts). */
+  --estado-borrador-acento: #5e6a7b;
+  --estado-preparado-acento: #557eff;
+  --estado-preasignacion-acento: #e08a00;
+  --estado-asignado-acento: #6366f1;
+  --estado-entregado-acento: #00a99d;
+  --estado-aprobado-acento: #8cc63f;
+  --estado-rechazado-acento: #ff0000;
+  --estado-anulado-acento: #c1272d;
+  --estado-revocado-acento: #8b5cf6;
+  --estado-subsanacion-acento: #ff4e00;
+  /* Tarjeta «Solicitud de revocatoria» del OT: no es un estado; el ámbar de su ícono. */
+  --estado-solicitud-revocatoria-acento: #f9ac00;
+  /* Fin HU #14482 (S1). */
+
   /* Tokens del prototipo «Diseño Inteligente» (rama `propuesta`, tokens.css) con prefijo --di-: quien porte
    * propuesta.css cambia var(--color-x) por var(--di-x). El prefijo evita chocar con los --color-* de Tailwind. */
   --di-accent: var(--brand-primary, #162744);
@@ -430,6 +446,12 @@
   --di-success-dot: #8fb0ff;
   --di-success-soft: #1c3158;
   --di-success-line: #6f93ff;
+
+  /* HU #14482 (S1) — acentos de la tira de estados en oscuro: mismo tono; solo borrador y anulado se aclaran para
+   * llegar a 3:1 sobre --di-surface-elevated (#132544); los demás ya lo cumplen tal cual. */
+  --estado-borrador-acento: #93a0b3;
+  --estado-anulado-acento: #e5484f;
+  /* Fin HU #14482 (S1). */
 }
 
 /* Ilustración del ingreso flotando (propuesta.css @keyframes flotar); quieta si la persona pidió menos movimiento. */

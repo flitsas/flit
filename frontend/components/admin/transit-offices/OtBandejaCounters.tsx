@@ -1,6 +1,6 @@
 "use client";
 
-import { ESTADO_ICONO } from "@/lib/tramites/estados";
+import { ESTADO_ICONO, estadoAcentoVar } from "@/lib/tramites/estados";
 import type { OtBandejaCounters as Counters } from "@/lib/api/types-ot";
 import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
 import { familiaUsaEstado } from "@/lib/tramites/panelesEstado";
@@ -153,6 +153,8 @@ export function OtBandejaCountersStrip({
       title: t.hint,
       activeBg: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)",
       activeColor: "var(--color-flit-brand)",
+      // HU #14482 — barra con el color del estado; la de revocatoria (no es un estado) lleva el ámbar de su ícono.
+      acento: t.status ? estadoAcentoVar(t.status) : "var(--estado-solicitud-revocatoria-acento)",
     };
   });
 

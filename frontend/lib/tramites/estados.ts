@@ -271,6 +271,16 @@ export function estadoChipClass(value: string | null | undefined): string {
 }
 
 /**
+ * HU #14482 — color propio del estado para la barra de la tira de contadores (`--estado-<x>-acento`,
+ * los `accent` de develop llevados a token con su valor en oscuro). Solo elemento gráfico: el texto
+ * de la tarjeta queda en tinta. Estados desconocidos van en gris borrador.
+ */
+export function estadoAcentoVar(value: string | null | undefined): string {
+  const estado = value && esEstadoTramite(value) ? value : 'borrador';
+  return `var(--estado-${estado}-acento)`;
+}
+
+/**
  * HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (`ProcedureInstanceDetail
  * .activeRevocationRequest`), ORTOGONAL al `EstadoTramite` (que permanece 'aprobado' durante todo el
  * sub-flujo, ADR-0022): es un badge secundario, no el chip de estado. Solo los
