@@ -223,7 +223,19 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
     /// jerarquía — el caso que <c>TenantWriteGuard</c> no cubre).</summary>
     public sealed class RepoSubstituteFactory : WebApplicationFactory<Program>
     {
-        public IProcedureInstanceRepository Repo { get; } = Substitute.For<IProcedureInstanceRepository>();
+        public IProcedureInstanceRepository Repo { get; } = CreateRepo();
+
+        /// <summary>
+        /// HU #14494 — stub por defecto de <c>GetUltimoCambioEstadoCreatedAtAsync</c> para que la
+        /// entrega en estado final no intente regenerar JIT cuando el test no configura vigencia.
+        /// </summary>
+        private static IProcedureInstanceRepository CreateRepo()
+        {
+            var repo = Substitute.For<IProcedureInstanceRepository>();
+            repo.GetUltimoCambioEstadoCreatedAtAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                .Returns((DateTimeOffset?)null);
+            return repo;
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
