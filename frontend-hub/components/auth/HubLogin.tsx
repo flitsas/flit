@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Lock, Mail, ShieldAlert } from "lucide-react";
+import { ExternalLink, Mail, ShieldAlert } from "lucide-react";
 import { BrandLogo } from "@flit/brand/BrandLogo";
 import { postJson } from "@/lib/api";
 import { buttonClass } from "@flit/ui/Button";
 import {
+  CampoClave,
+  IngresoAyuda,
   IngresoLayout,
   INGRESO_AVISO_CLS,
   INGRESO_BOTON_CLS,
@@ -123,7 +125,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
       ) : (
         <form onSubmit={submit} className="grid gap-4" aria-label="Iniciar sesión" noValidate>
           <div>
-            <label htmlFor="login-email" className={INGRESO_ETIQUETA_CLS}>Usuario Corporativo</label>
+            <label htmlFor="login-email" className={INGRESO_ETIQUETA_CLS}>Correo</label>
             <div className="relative">
               <Mail className={INGRESO_ICONO_CLS} />
               <input
@@ -140,19 +142,14 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
           </div>
           <div>
             <label htmlFor="login-password" className={INGRESO_ETIQUETA_CLS}>Contraseña</label>
-            <div className="relative">
-              <Lock className={INGRESO_ICONO_CLS} />
-              <input
-                id="login-password"
-                type="password"
-                autoComplete="current-password"
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                placeholder="••••••••"
-                aria-invalid={error ? true : undefined}
-                className={INGRESO_CONTROL_CLS}
-              />
-            </div>
+            <CampoClave
+              id="login-password"
+              autoComplete="current-password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="••••••••"
+              aria-invalid={error ? true : undefined}
+            />
             <Link href="/auth/forgot-password" className={INGRESO_ENLACE_CLS}>
               ¿Olvidó su contraseña?
             </Link>
@@ -167,6 +164,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
           <button type="submit" disabled={loading} className={buttonClass({ className: INGRESO_BOTON_CLS })}>
             {loading ? "Ingresando…" : "Iniciar Sesión"}
           </button>
+          <IngresoAyuda />
         </form>
       )}
     </IngresoLayout>

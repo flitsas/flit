@@ -1,5 +1,8 @@
-import type { ReactNode } from "react";
-import { Check, Lock, Mail, type LucideIcon } from "lucide-react";
+"use client";
+
+import { useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { Check, Eye, EyeOff, Lock, Mail, type LucideIcon } from "lucide-react";
+import { cn } from "./cn";
 import { rutaIlustracion } from "./ilustraciones";
 
 /**
@@ -194,3 +197,43 @@ export const INGRESO_ERROR_CLS =
 export const INGRESO_AVISO_CLS = "flex gap-3 rounded-xl p-5";
 /** Botón de enviar (`.ingreso__boton`), sobre `buttonClass()`. */
 export const INGRESO_BOTON_CLS = "w-full min-h-[50px] text-base";
+
+/**
+ * Campo de contraseña con el botón para verla (`.clave` de propuesta.css): el candado a la izquierda y, dentro del
+ * control a la derecha, un botón redondo de 40 px que alterna entre `password` y `text`. Es `type="button"` para no
+ * enviar el formulario. Recibe los mismos atributos del `input` (id, value, onChange, autoComplete…), salvo `type`.
+ */
+export function CampoClave({ className, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, "type">) {
+  const [visible, setVisible] = useState(false);
+  const Icono = visible ? EyeOff : Eye;
+  return (
+    <div className="relative">
+      <Lock className={INGRESO_ICONO_CLS} />
+      <input {...props} type={visible ? "text" : "password"} className={cn(INGRESO_CONTROL_CLS, "pr-[52px]", className)} />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+        aria-pressed={visible}
+        className="absolute right-1 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border-0 bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--di-accent-soft)] hover:text-[color:var(--di-action)]"
+      >
+        <Icono className="h-[18px] w-[18px]" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Línea de ayuda bajo el botón de enviar (`.ingreso__ayuda`): a quién escribir si no se puede entrar. Va dentro del
+ * formulario, así solo sale en esa vista y no en los avisos de bloqueo.
+ */
+export function IngresoAyuda() {
+  return (
+    <p className="m-0 text-center text-xs text-[color:var(--di-text-tertiary)]">
+      ¿Problemas para entrar? Escribe a{" "}
+      <a href="mailto:soporte@flitsas.com" className="text-[color:var(--di-action)]">
+        soporte@flitsas.com
+      </a>
+    </p>
+  );
+}

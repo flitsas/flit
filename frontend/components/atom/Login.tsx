@@ -6,9 +6,11 @@ import { loginUser } from "@/lib/api/auth";
 import { rememberEmail, storeToken } from "@/lib/auth/session";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
-import { ShieldAlert, Lock, Mail, ExternalLink } from "lucide-react";
+import { ShieldAlert, Mail, ExternalLink } from "lucide-react";
 import { buttonClass } from "@flit/ui/Button";
 import {
+  CampoClave,
+  IngresoAyuda,
   IngresoLayout,
   INGRESO_AVISO_CLS,
   INGRESO_BOTON_CLS,
@@ -167,7 +169,7 @@ export function Login({
       ) : (
         <form onSubmit={submitCreds} className="grid gap-4 animate-fade-in" aria-label="Iniciar sesión" noValidate>
           <div>
-            <label htmlFor="login-email" className={INGRESO_ETIQUETA_CLS}>Usuario Corporativo</label>
+            <label htmlFor="login-email" className={INGRESO_ETIQUETA_CLS}>Correo</label>
             <div className="relative">
               <Mail className={INGRESO_ICONO_CLS} />
               <input
@@ -184,19 +186,14 @@ export function Login({
           </div>
           <div>
             <label htmlFor="login-password" className={INGRESO_ETIQUETA_CLS}>Contraseña</label>
-            <div className="relative">
-              <Lock className={INGRESO_ICONO_CLS} />
-              <input
-                id="login-password"
-                type="password"
-                autoComplete="current-password"
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                placeholder="••••••••"
-                aria-invalid={error ? true : undefined}
-                className={INGRESO_CONTROL_CLS}
-              />
-            </div>
+            <CampoClave
+              id="login-password"
+              autoComplete="current-password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="••••••••"
+              aria-invalid={error ? true : undefined}
+            />
             <Link href="/auth/forgot-password" className={INGRESO_ENLACE_CLS}>
               ¿Olvidó su contraseña?
             </Link>
@@ -211,6 +208,7 @@ export function Login({
           <button type="submit" disabled={loading} className={buttonClass({ className: INGRESO_BOTON_CLS })}>
             {loading ? "Ingresando…" : "Iniciar Sesión"}
           </button>
+          <IngresoAyuda />
         </form>
       )}
     </IngresoLayout>
