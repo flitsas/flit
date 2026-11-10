@@ -1,5 +1,7 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -1869,15 +1871,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {approveTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Confirmar aprobación"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
-            <h2 className="text-lg font-semibold text-foreground">
-              ¿Aprobar este trámite?
-            </h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>¿Aprobar este trámite?</h2>
+            </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">{approveTarget.referenceNumber}</p>
             <label className="mt-4 block text-xs font-semibold text-foreground">
               Licencia de Tránsito (LT) — opcional
@@ -1896,7 +1898,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                className={buttonClass({ variant: "secondary", className: "flex-1" })}
                 onClick={() => {
                   setApproveTarget(null);
                   setLtFile(null);
@@ -1911,8 +1913,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   que diga, incluso si no se pudo analizar— se abre: el análisis informa, no veta. */}
               <button
                 type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "var(--color-flit-brand)" }}
+                className={buttonClass({ className: "flex-1" })}
                 disabled={acting || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmApprove()}
               >
@@ -1929,13 +1930,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {mandatarioTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Elegir mandatario del mandato"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
-            <h2 className="text-lg font-semibold text-foreground">Elige el mandatario que firma</h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Elige el mandatario que firma</h2>
+            </FranjaDialogo>
             {mandatarioOptions.length > 0 && (
               <p className="mt-2 text-sm opacity-80">
                 Este trámite requiere contrato de mandato y hay varios mandatarios válidos. Elige quién firma
@@ -1983,7 +1986,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                className={buttonClass({ variant: "secondary", className: "flex-1" })}
                 onClick={() => setMandatarioTarget(null)}
                 disabled={acting}
               >
@@ -1991,8 +1994,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </button>
               <button
                 type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "var(--color-flit-brand)" }}
+                className={buttonClass({ className: "flex-1" })}
                 disabled={acting || !mandatarioChoice}
                 onClick={() => void confirmMandatario()}
               >
@@ -2005,13 +2007,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {assignTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Asignar placa"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid var(--border)" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Asignar placa al trámite</h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Asignar placa al trámite</h2>
+            </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
             {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede escribir una placa
                 que termine en ese dígito o cualquier otra.
@@ -2057,8 +2061,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               className="mt-4"
             />
             <div className="mt-5 flex gap-3">
-              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !assignPlacaLista} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
+              <button type="button" className={buttonClass({ variant: "secondary", className: "flex-1" })} onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className={buttonClass({ className: "flex-1" })} disabled={acting || !assignPlacaLista} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
             </div>
           </div>
         </div>
@@ -2066,13 +2070,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {revokeTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Liberar placa"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid var(--border)" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Liberar placa</h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Liberar placa</h2>
+            </FranjaDialogo>
             <p className="mt-1 text-xs opacity-70">
               El trámite vuelve a Preasignación para asignarle otra placa. La placa actual queda liberada en el inventario.
             </p>
@@ -2086,8 +2092,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               aria-label="Motivo para liberar la placa"
             />
             <div className="mt-5 flex gap-3">
-              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Liberando…" : "Liberar placa"}</button>
+              <button type="button" className={buttonClass({ variant: "secondary", className: "flex-1" })} onClick={() => setRevokeTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className={buttonClass({ variant: "navy", className: "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" })} disabled={acting || !revokePlateReason.trim()} onClick={() => void confirmRevokePlate()}>{acting ? "Liberando…" : "Liberar placa"}</button>
             </div>
           </div>
         </div>
@@ -2097,13 +2103,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           revocatoria activa radicada por el gestor (HU #12572) sobre este trámite Aprobado. */}
       {decideRevocationTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Decidir revocatoria"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid var(--border)" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Decidir revocatoria</h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Decidir revocatoria</h2>
+            </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
             <p className="mt-2 text-xs opacity-70">
               El gestor solicitó revocar este trámite. Aprobar lo revoca; rechazar lo deja Aprobado
@@ -2217,7 +2225,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                className={buttonClass({ variant: "secondary", className: "flex-1" })}
                 onClick={() => {
                   setDecideRevocationTarget(null);
                   setDecideRevocationReason("");
@@ -2229,8 +2237,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </button>
               <button
                 type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: decideRevocationMode === "reject" ? "var(--destructive)" : "var(--color-flit-brand)" }}
+                className={decideRevocationMode === "reject" ? buttonClass({ variant: "navy", className: "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" }) : buttonClass({ className: "flex-1" })}
                 disabled={acting}
                 onClick={() => void confirmDecideRevocation()}
               >
@@ -2250,13 +2257,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           modal solo se abre cuando SÍ aplica. */}
       {updatePlateTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Actualizar placa"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl" style={{ border: "1px solid var(--border)" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-brand)" }}>Corregir placa</h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Corregir placa</h2>
+            </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">
               Trámite {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}
             </p>
@@ -2283,8 +2292,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               className="mt-3"
             />
             <div className="mt-5 flex gap-3">
-              <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setUpdatePlateTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !updatePlacaLista || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
+              <button type="button" className={buttonClass({ variant: "secondary", className: "flex-1" })} onClick={() => setUpdatePlateTarget(null)} disabled={acting}>Cancelar</button>
+              <button type="button" className={buttonClass({ className: "flex-1" })} disabled={acting || !updatePlacaLista || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
             </div>
           </div>
         </div>
@@ -2292,15 +2301,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {rejectTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Rechazar trámite"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
-            <h2 className="text-lg font-semibold text-foreground">
-              Motivo del rechazo
-            </h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Motivo del rechazo</h2>
+            </FranjaDialogo>
 
             {/* Causales del catálogo: varias son válidas y esperadas. Un expediente puede llegar
                 con improntas borrosas, sin impronta y sin pago de impuestos a la vez, y el gestor
@@ -2349,7 +2358,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                className={buttonClass({ variant: "secondary", className: "flex-1" })}
                 onClick={() => setRejectTarget(null)}
                 disabled={acting}
               >
@@ -2357,8 +2366,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </button>
               <button
                 type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
+                className={buttonClass({ variant: "navy", className: "flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" })}
                 disabled={acting || !rejectReason.trim()}
                 onClick={() => void confirmReject()}
               >
@@ -2371,15 +2379,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
       {ltTarget && (
         <div
-          className="fixed inset-0 z-[1200] flex items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-sm"
+          className={`fixed inset-0 z-[1200] flex items-center justify-center px-4 ${DIALOGO_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-label="Adjuntar Licencia de Tránsito"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
-            <h2 className="text-lg font-semibold text-foreground">
-              Adjuntar Licencia de Tránsito (LT)
-            </h2>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+              <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Adjuntar Licencia de Tránsito (LT)</h2>
+            </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">{ltTarget.referenceNumber}</p>
             <input
               type="file"
@@ -2395,7 +2403,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <div className="mt-5 flex gap-3">
               <button
                 type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                className={buttonClass({ variant: "secondary", className: "flex-1" })}
                 onClick={() => {
                   setLtTarget(null);
                   setLtFile(null);
@@ -2407,8 +2415,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </button>
               <button
                 type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "var(--color-flit-brand)" }}
+                className={buttonClass({ className: "flex-1" })}
                 disabled={acting || !ltFile || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmAdjuntarLt()}
               >
