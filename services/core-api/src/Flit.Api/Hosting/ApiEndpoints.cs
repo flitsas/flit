@@ -30,6 +30,7 @@ internal static class ApiEndpoints
         app.MapExternalAttachmentEndpoints(); // HU #13263 (Épica #12741) — POST /api/v1/external/tramites/{id}/adjuntos
         app.MapExternalSyncEndpoints(); // HU #13081 (Épica #12737) — GET /api/v1/external/tramites/sync
         app.MapSecurityEndpoints();
+        app.MapSecurityBulkInvitationEndpoints(); // Feature #14420 (HU #14424) — /security/invitations/bulk*
         app.MapUserUiPreferencesEndpoints();
         app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
         app.MapAdminCompaniesEndpoints();

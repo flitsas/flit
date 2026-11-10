@@ -128,6 +128,8 @@ builder.Services.AddPublicBrandingRateLimiter();
 builder.Services.AddExternalClientRateLimiter(builder.Configuration);
 // HU #13289 (Épica #13202) — policy manual-capture (por IP) de la captura manual pública; no fija OnRejected.
 builder.Services.AddManualCaptureRateLimiter();
+// Feature #14420 (HU #14424 AC4) — límite del dryRun de la invitación masiva, por usuario (no por IP).
+builder.Services.AddBulkInvitationDryRunLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
