@@ -217,6 +217,36 @@ describe("pantalla: una línea de 46 px por actor", () => {
     expect(screen.getByTitle("Documento ilegible")).toBeTruthy();
   });
 
+  it("el chip neutro no usa --border como color de texto", () => {
+    render(
+      <ActoresValidacionCell
+        actores={[actor("comprador", 1, { estadoValidacion: "sin_validacion", intentos: 0 })]}
+        campo="validacion"
+      />,
+    );
+    const chip = screen.getByText("Sin validar");
+    expect(chip.getAttribute("style")).not.toMatch(/var\(--border\)/);
+    expect(chip.style.color).toBe("var(--badge-neutral-fg)");
+    expect(chip.style.background).toBe("var(--badge-neutral-bg)");
+  });
+
+  it("con un nombre larguísimo, Persona y Motivo tienen ancho máximo y el alto no cambia", () => {
+    const largo = "BANCOLOMBIA S.A, ADEMÁS PODRÁ GIRAR BAJO LA DENOMINACIÓN ".repeat(4).trim();
+    for (const [campo, tope] of [["persona", "max-w-[250px]"], ["motivo", "max-w-[260px]"]] as const) {
+      const { unmount } = render(
+        <ActoresValidacionCell
+          actores={[actor("comprador", 1, { nombre: largo, estadoValidacion: "rechazado", motivoRechazo: largo })]}
+          campo={campo}
+        />,
+      );
+      expect(screen.getByTestId(`actores-${campo}`).className).toContain(tope);
+      expect(screen.getByTestId(`actor-${campo}`).className).toContain("h-[46px]");
+      unmount();
+    }
+    render(<ActoresValidacionCell actores={[actor("comprador", 1, { nombre: largo })]} campo="persona" />);
+    expect(screen.getByTitle(largo).className).toContain("truncate");
+  });
+
   it("sin actores deja un solo «—» del mismo alto", () => {
     render(<ActoresValidacionCell actores={[]} campo="persona" />);
     expect(screen.getByText("—").className).toContain("h-[46px]");
