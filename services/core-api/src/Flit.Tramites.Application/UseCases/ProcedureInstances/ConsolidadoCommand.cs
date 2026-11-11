@@ -151,14 +151,37 @@ public sealed class GenerarConsolidadoHandler(
     /// la generación». Con <c>false</c> (las demás sobrecargas) el comportamiento es el de siempre; solo
     /// <c>ConsolidadoLoteEntregador</c> lo pasa en <c>true</c> (lo vigila <c>ConsolidadoLoteArchitectureTests</c>).
     /// </param>
-    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid? userId,
         bool force,
         bool bypassSourceUserProtection,
         bool soloSiNoExiste,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, userId, force, bypassSourceUserProtection, soloSiNoExiste, sinCascadaFur: false, ct);
+
+    /// <summary>
+    /// HU #14547 (R3) — rearma el consolidado del wizard tras regenerar SOLO el mandato: fuerza la reconstrucción y
+    /// salta la protección de <c>Source="user"</c> (como «Limpiar»), pero SIN la cascada del FUR: no regenera el FUR
+    /// aunque esté desactualizado ni la impronta (va sin operador). Sin FUR responde <c>fur_requerido</c>.
+    /// </summary>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> RegenerarSinCascadaAsync(
+        Guid id,
+        Guid tenantId,
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, userId: null, force: true, bypassSourceUserProtection: true,
+            soloSiNoExiste: false, sinCascadaFur: true, ct);
+
+    private async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleCoreAsync(
+        Guid id,
+        Guid tenantId,
+        Guid? userId,
+        bool force,
+        bool bypassSourceUserProtection,
+        bool soloSiNoExiste,
+        bool sinCascadaFur,
+        CancellationToken ct)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
         // reglas condicionales) resuelva la completitud con el mismo contexto que radicación.
@@ -267,7 +290,10 @@ public sealed class GenerarConsolidadoHandler(
         // entradas de `ExpedienteVisor` no. Arreglarlo en el llamador habría dejado el mismo defecto
         // latente para cualquier consumidor futuro; arreglarlo aquí cierra la clase, no la instancia.
         var faltaFur = !TieneFur(instance);
-        if (force || faltaFur || furDesactualizado || MandatoPendienteDeRegenerar(instance))
+        // HU #14547 — la regeneración del mandato del SuperAdmin no toca el FUR: sin él no hay qué consolidar.
+        if (sinCascadaFur && faltaFur)
+            return (null, SubmitGate.FurRequerido);
+        if (!sinCascadaFur && (force || faltaFur || furDesactualizado || MandatoPendienteDeRegenerar(instance)))
         {
             // Sin regenerador inyectado solo se puede fallar si además NO hay FUR: con el FUR en pie
             // se sigue adelante y se fusiona lo que hay, que es el comportamiento de siempre. (Cortar

@@ -2736,6 +2736,17 @@ export const tramitesClient = {
     ),
 
   /**
+   * HU #14547 — regenera SOLO el mandato (firmante recalculado con la configuración vigente de
+   * Mandatos) y vuelve a armar el consolidado del gestor y el maestro del OT. Rol SuperAdmin estricto
+   * en el backend (403 para el resto); 409 en aprobado/anulado/revocado o migrado de solo lectura.
+   */
+  regenerarMandatoYConsolidado: (instanceId: string, tenantId?: string) =>
+    request<RegenerarMandatoYConsolidadoResult>(
+      `/api/v1/admin/tramites/${instanceId}/mandato/regenerar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  /**
    * HU #12158 — registra un PDF externo como el consolidado del trámite (Source="user"). Multipart
    * (campo `file`): NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
    * `analyzeDocument`/`analyzeBatch` de este archivo.
@@ -2848,6 +2859,34 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     ),
 };
+
+/** HU #14547 — aviso no bloqueante de la regeneración del mandato (el `mensaje` ya viene en texto de negocio). */
+export interface RegenerarMandatoAviso {
+  codigo:
+    | 'maestro_radicado_conservado'
+    | 'maestro_fallo'
+    | 'mandato_sin_firmar'
+    | 'mandato_personalizado_conservado'
+    | (string & {});
+  mensaje: string;
+}
+
+/** HU #14547 — respuesta 200 de `POST /api/v1/admin/tramites/{id}/mandato/regenerar`. */
+export interface RegenerarMandatoYConsolidadoResult {
+  mandato: {
+    attachmentId: string | null;
+    firmanteAnteriorId: string | null;
+    firmanteNuevoId: string | null;
+    sinFirmar: boolean;
+  };
+  consolidado: { attachmentId: string; generadoEn: string };
+  maestro: {
+    estado: 'regenerado' | 'radicado_conservado' | 'fallo';
+    attachmentId: string | null;
+    generadoEn: string | null;
+  };
+  avisos: RegenerarMandatoAviso[];
+}
 
 /** HU #12159 — resultado del cambio de estado administrativo (espejo de `AdminCambiarEstadoResult`). */
 export interface AdminCambiarEstadoResult {

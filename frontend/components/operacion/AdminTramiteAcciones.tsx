@@ -1,7 +1,16 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { ArrowRightLeft, BadgeCheck, Ban, Paperclip, RefreshCcw, Send, UserCog } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  BadgeCheck,
+  Ban,
+  Paperclip,
+  RefreshCcw,
+  Send,
+  UserCog,
+} from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -20,6 +29,10 @@ import { useToast } from '@/components/admin/Toast';
 import { tramitesClient, type GestorOption } from '@/lib/api/tramites-client';
 import { ConsultNowConflictError, consultRuntNow, RUNT_VERDICT_LABEL } from '@/lib/api/admin-runt-confirmation';
 import { estadoLabel } from '@/lib/tramites/estados';
+import {
+  mensajeErrorRegenerarMandato,
+  permiteRegenerarMandato,
+} from '@/lib/tramites/regenerar-mandato';
 import {
   ADMIN_ESTADO_DESTINO_OPTIONS,
   ADMIN_TRAMITE_PERMISSIONS,
@@ -79,17 +92,21 @@ function SecondaryButton({
   disabled,
   onClick,
   className = 'w-full',
+  describedBy,
 }: {
   children: ReactNode;
   disabled?: boolean;
   onClick?: () => void;
   className?: string;
+  /** `aria-describedby` (p. ej. el motivo visible de un botón deshabilitado). */
+  describedBy?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-describedby={describedBy}
       className={`rounded-xl border py-2.5 text-sm font-medium text-flit-primary transition hover:bg-[#162744]/[0.04] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:text-white ${className}`}
       style={FIELD_BORDER}
     >
@@ -310,7 +327,11 @@ function AnularModal({ open, onClose, item, tenantId, onSuccess, onError }: Moda
   );
 }
 
-/** HU #12158 — Limpiar/Cargar consolidado: dos secciones independientes, cada una gateada por su permiso. */
+/**
+ * HU #12158 — Limpiar/Cargar consolidado: dos secciones independientes, cada una gateada por su permiso.
+ * HU #14547 — tercera sección «Regenerar mandato y consolidado», gateada por ROL (SuperAdmin) y no por
+ * permiso: no depende de `canLimpiar`/`canCargar`.
+ */
 function ConsolidadoModal({
   open,
   onClose,
@@ -318,14 +339,22 @@ function ConsolidadoModal({
   tenantId,
   canLimpiar,
   canCargar,
+  canRegenerarMandato,
   onSuccess,
   onError,
-}: ModalBaseProps & { canLimpiar: boolean; canCargar: boolean }) {
+}: ModalBaseProps & { canLimpiar: boolean; canCargar: boolean; canRegenerarMandato: boolean }) {
   const [busyLimpiar, setBusyLimpiar] = useState(false);
   const [busyCargar, setBusyCargar] = useState(false);
+  const [busyRegenerar, setBusyRegenerar] = useState(false);
+  const [confirmRegenerarOpen, setConfirmRegenerarOpen] = useState(false);
+  const [avisosRegenerar, setAvisosRegenerar] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const busy = busyLimpiar || busyCargar;
+  const busy = busyLimpiar || busyCargar || busyRegenerar;
+  const regenerarPermitido = permiteRegenerarMandato(item.estado);
+  const regenerarDescId = `admin-regenerar-mandato-desc-${item.id}`;
+  const regenerarMotivoId = `admin-regenerar-mandato-motivo-${item.id}`;
+  const regenerarAvisosId = `admin-regenerar-mandato-avisos-${item.id}`;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // HU #12794, AC3 — tras limpiar/cargar el modal sigue abierto y vuelve a leer el detalle, para que
   // el SuperAdmin vea el estado resultante (vigencia, sello, origen) sobre el que decidir.
@@ -336,7 +365,29 @@ function ConsolidadoModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFile(null);
     setError(null);
+    setAvisosRegenerar([]);
+    setConfirmRegenerarOpen(false);
   }, [open]);
+
+  // HU #14547 — tras la confirmación: regenera el mandato y ambos consolidados; los avisos del backend
+  // (maestro radicado conservado, éxito parcial, mandato sin firmar…) quedan visibles en el modal.
+  const regenerarMandato = async () => {
+    setBusyRegenerar(true);
+    setError(null);
+    setAvisosRegenerar([]);
+    try {
+      const res = await tramitesClient.regenerarMandatoYConsolidado(item.id, tenantId);
+      setAvisosRegenerar((res.avisos ?? []).map((a) => a.mensaje).filter(Boolean));
+      onSuccess('Mandato y consolidado regenerados.');
+    } catch (e) {
+      const msg = mensajeErrorRegenerarMandato(e);
+      setError(msg);
+      onError(msg);
+    } finally {
+      setBusyRegenerar(false);
+      setConfirmRegenerarOpen(false);
+    }
+  };
 
   const limpiar = async () => {
     setBusyLimpiar(true);
@@ -379,7 +430,8 @@ function ConsolidadoModal({
       icon={RefreshCcw}
       description={`Trámite ${item.referenceNumber}`}
       size="sm"
-      busy={busy}
+      // Con la confirmación abierta encima, Escape/backdrop solo deben cerrar la confirmación.
+      busy={busy || confirmRegenerarOpen}
     >
       <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
         {canLimpiar ? (
@@ -447,8 +499,107 @@ function ConsolidadoModal({
           </div>
         ) : null}
 
+        {canRegenerarMandato ? (
+          <section
+            className="space-y-2 rounded-xl border p-3"
+            style={FIELD_BORDER}
+            aria-labelledby={`admin-regenerar-mandato-titulo-${item.id}`}
+          >
+            <h3
+              id={`admin-regenerar-mandato-titulo-${item.id}`}
+              className="text-xs font-semibold text-foreground"
+            >
+              Regenerar mandato y consolidado
+            </h3>
+            <p id={regenerarDescId} className="text-xs text-muted-foreground">
+              Vuelve a generar el contrato de mandato con el mandatario que indique hoy la
+              configuración de Mandatos y arma de nuevo los consolidados del gestor y del organismo
+              de tránsito. El FUR y los demás documentos no cambian. No está disponible en trámites
+              aprobados, anulados o revocados.
+            </p>
+            {!regenerarPermitido ? (
+              <p
+                id={regenerarMotivoId}
+                className="text-xs font-semibold"
+                style={{ color: 'var(--badge-warning-fg)' }}
+              >
+                {`No disponible: el trámite está ${estadoLabel(item.estado).toLowerCase()}.`}
+              </p>
+            ) : null}
+            <SecondaryButton
+              onClick={() => setConfirmRegenerarOpen(true)}
+              disabled={busy || !regenerarPermitido}
+              describedBy={
+                regenerarPermitido ? regenerarDescId : `${regenerarDescId} ${regenerarMotivoId}`
+              }
+            >
+              {busyRegenerar ? 'Regenerando…' : 'Regenerar mandato'}
+            </SecondaryButton>
+            {avisosRegenerar.length > 0 ? (
+              <InlineAlert tone="warning" title="Avisos de la regeneración">
+                <ul
+                  id={regenerarAvisosId}
+                  aria-label="Avisos de la regeneración"
+                  className="list-disc space-y-1 pl-4"
+                >
+                  {avisosRegenerar.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </InlineAlert>
+            ) : null}
+          </section>
+        ) : null}
+
         {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       </div>
+
+      <Modal
+        open={confirmRegenerarOpen}
+        onClose={() => setConfirmRegenerarOpen(false)}
+        title="Confirmar regeneración del mandato"
+        titleClassName="text-base font-bold text-flit-brand"
+        icon={AlertTriangle}
+        iconBg="var(--color-flit-alert)"
+        description={`Trámite ${item.referenceNumber}`}
+        size="sm"
+        zClassName="z-[110]"
+        busy={busyRegenerar}
+      >
+        <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+          <p className="text-sm text-foreground">
+            Se genera de nuevo el contrato de mandato y se arman otra vez los consolidados del gestor
+            y del organismo de tránsito.
+          </p>
+          <p
+            role="note"
+            className="rounded-xl border px-3 py-2 text-xs leading-relaxed"
+            style={{
+              borderColor: 'var(--badge-warning-border)',
+              background: 'var(--badge-warning-bg)',
+              color: 'var(--badge-warning-fg)',
+            }}
+          >
+            El mandatario puede cambiar según la configuración actual de Mandatos.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <SecondaryButton
+              className="flex-1"
+              onClick={() => setConfirmRegenerarOpen(false)}
+              disabled={busyRegenerar}
+            >
+              Cancelar
+            </SecondaryButton>
+            <PrimaryButton
+              className="flex-1"
+              onClick={() => void regenerarMandato()}
+              disabled={busyRegenerar}
+            >
+              {busyRegenerar ? 'Regenerando…' : 'Sí, regenerar'}
+            </PrimaryButton>
+          </div>
+        </div>
+      </Modal>
     </Modal>
   );
 }
@@ -734,7 +885,9 @@ export function useAdminTramiteAcciones({
   }
   const canLimpiar = puede(ADMIN_TRAMITE_PERMISSIONS.limpiarConsolidado);
   const canCargar = puede(ADMIN_TRAMITE_PERMISSIONS.cargarConsolidado);
-  if (canLimpiar || canCargar) {
+  // HU #14547 (R5) — rol SuperAdmin estricto: ningún slug lo habilita, y el modo consulta lo oculta.
+  const canRegenerarMandato = !consultaMode && isSuperAdmin;
+  if (canLimpiar || canCargar || canRegenerarMandato) {
     items.push({
       key: 'admin-consolidado',
       label: 'Gestionar consolidado',
@@ -803,6 +956,7 @@ export function useAdminTramiteAcciones({
         tenantId={tenantId}
         canLimpiar={canLimpiar}
         canCargar={canCargar}
+        canRegenerarMandato={canRegenerarMandato}
         onSuccess={onSuccess}
         onError={onError}
       />
