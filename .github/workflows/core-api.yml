@@ -130,6 +130,18 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      # El contenedor de Postgres trae max_connections=100. Las pruebas crean muchas bases propias y cada una
+      # deja su pool de Npgsql abierto: en «admin» se agotaban («too many clients already») desde el minuto ~30
+      # y la suite pasaba de ~30 a más de 65 min esperando conexión (PR #860). Los services no aceptan
+      # argumentos del servidor, así que se ajusta por ALTER SYSTEM y se reinicia el contenedor.
+      - name: Postgres con más conexiones
+        run: |
+          pg=${{ job.services.postgres.id }}
+          docker exec "$pg" psql -U postgres -c "ALTER SYSTEM SET max_connections = 500;"
+          docker restart "$pg"
+          for i in $(seq 1 30); do docker exec "$pg" pg_isready -U postgres -d flit_dev && break; sleep 2; done
+          docker exec "$pg" psql -U postgres -tAc "SHOW max_connections;"
+
       - name: Apply migrations
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.1
