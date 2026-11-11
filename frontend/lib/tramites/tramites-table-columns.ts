@@ -100,6 +100,10 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // el valor más largo ("Sin registrar", ~82px) debajo, más los 32px de padding del `<td>`.
   { key: 'propietario', label: COPY.A01, minPx: 170, group: GRUPO_BASE },
   { key: 'comprador', label: 'Comprador', minPx: 170, group: GRUPO_BASE },
+  // Ajuste 2026-11-10 (D2=a) — Gestor pasó al default y se mudó junto a los actores: cierra el
+  // bloque de personas (vendedor, comprador, quien radica) sin separar Trámite de sus Marcas y su
+  // Confirmado en RUNT, que lo anotan. Antes iba tras Organismo, oculta por defecto.
+  { key: 'gestor', label: COPY.A06, minPx: 160, group: GRUPO_BASE },
   { key: 'tramite', label: COPY.A03, minPx: 160, group: GRUPO_BASE },
   // HU #12183 — dos íconos como mucho, de 20px, y nunca texto: el piso cubre los dos más el
   // padding de la celda. Fija por eso mismo: no tiene nada que hacer con el ancho sobrante.
@@ -111,7 +115,6 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).
   // Envuelve en varias líneas, así que es de las que mejor aprovecha el ancho sobrante.
   { key: 'secretaria', label: COPY.A05, minPx: 190, group: GRUPO_BASE },
-  { key: 'gestor', label: COPY.A06, minPx: 160, group: GRUPO_BASE },
   // Fija: tres etiquetas conocidas y cortas ("Dashboard", "Integración", "Migrado").
   { key: 'fuente', label: 'Fuente', minPx: 120, fixed: true, group: GRUPO_BASE },
   // HU #12363 — cliente dueño del trámite, solo en el alcance de red. Va al final del listado base
@@ -180,6 +183,14 @@ export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [
   'confirmadoRunt',
 ];
 
+/**
+ * Ajuste 2026-11-10 (D2=a) — columnas que YA estaban en el catálogo (y por tanto en el `known` de
+ * cualquiera que guardó) y pasaron después al default. `useUiPreferences` las re-muestra UNA vez a
+ * quien tenía preferencia guardada sin ellas y persiste la marca `reshown`; si luego las oculta
+ * desde «Columnas», se respeta.
+ */
+export const TRAMITES_COLUMNS_RESHOWN_ONCE: readonly string[] = ['gestor'];
+
 
 /**
  * Columnas visibles por defecto: con lo que arranca un gestor que nunca ha tocado "Columnas".
@@ -187,8 +198,8 @@ export const TRAMITES_COLUMNS_ADDED_SINCE_LEGACY: readonly string[] = [
  * Es solo el punto de partida — en cuanto el gestor cambia la selección, su preferencia manda y
  * este arreglo deja de aplicarle (ver `useUiPreferences` con scope `tramites.columns`).
  *
- * NINGUNA de las que faltan desapareció: `gestor` y `fuente` siguen en el catálogo y se activan
- * desde el selector.
+ * NINGUNA de las que faltan desapareció: `fuente` sigue en el catálogo y se activa desde el
+ * selector. `gestor` entró al default el 2026-11-10 (D2=a; ver TRAMITES_COLUMNS_RESHOWN_ONCE).
  *
  * `vin`, `vehiculo`, `paso`, `estado`, `fechaCreacion` y `fechaActualizacion` quedan fuera por
  * otro motivo: su dato YA viaja apilado dentro de `placa`, `tramite` y `radicado` — activarlas
@@ -199,6 +210,8 @@ export const DEFAULT_TRAMITES_VISIBLE_COLUMNS: readonly string[] = [
   'placa',
   'propietario',
   'comprador',
+  // Ajuste 2026-11-10 (D2=a) — visible para todos: quién radica el trámite.
+  'gestor',
   'tramite',
   // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
   // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.

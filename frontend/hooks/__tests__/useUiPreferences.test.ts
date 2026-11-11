@@ -86,6 +86,74 @@ describe('useUiPreferences', () => {
     });
   });
 
+  // Ajuste 2026-11-10 (D2=a) — una columna que YA existía y pasa al default se re-muestra UNA vez
+  // a quien la tenía oculta; la marca `reshown` persistida deja constancia de que ya se hizo, así
+  // que si después la oculta desde «Columnas» su decisión se respeta.
+  describe('reshowOnce: re-mostrar una vez una columna que pasa al default', () => {
+    it('la añade a una preferencia guardada sin la marca `reshown`, aunque `known` ya la conociera', async () => {
+      vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+        scope: 'tramites.columns',
+        value: { visible: ['a', 'c'], known: ['a', 'b', 'c'] },
+      });
+      const { result } = renderHook(() =>
+        useUiPreferences('tramites.columns', ['a', 'b', 'c'], {
+          catalog: ['a', 'b', 'c'],
+          reshowOnce: ['b'],
+        }),
+      );
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.visible).toEqual(['a', 'b', 'c']);
+    });
+
+    it('si la marca `reshown` ya la incluye, respeta que el usuario la ocultó después', async () => {
+      vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+        scope: 'tramites.columns',
+        value: { visible: ['a', 'c'], known: ['a', 'b', 'c'], reshown: ['b'] },
+      });
+      const { result } = renderHook(() =>
+        useUiPreferences('tramites.columns', ['a', 'b', 'c'], {
+          catalog: ['a', 'b', 'c'],
+          reshowOnce: ['b'],
+        }),
+      );
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.visible).toEqual(['a', 'c']);
+    });
+
+    it('al guardar persiste la marca `reshown` para que no se vuelva a forzar', async () => {
+      vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+        scope: 'tramites.columns',
+        value: { visible: ['a', 'c'], known: ['a', 'b', 'c'] },
+      });
+      vi.mocked(uiPreferencesClient.put).mockResolvedValue({ scope: 'tramites.columns', value: {} });
+      const { result } = renderHook(() =>
+        useUiPreferences('tramites.columns', ['a', 'b', 'c'], {
+          catalog: ['a', 'b', 'c'],
+          reshowOnce: ['b'],
+        }),
+      );
+      await waitFor(() => expect(result.current.visible).toEqual(['a', 'b', 'c']));
+      act(() => result.current.setVisible(['a', 'c']));
+      await waitFor(() =>
+        expect(uiPreferencesClient.put).toHaveBeenCalledWith('tramites.columns', {
+          visible: ['a', 'c'],
+          known: ['a', 'b', 'c'],
+          reshown: ['b'],
+        }),
+      );
+    });
+
+    it('no toca a quien nunca guardó preferencia: el default ya la trae', async () => {
+      vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: 'tramites.columns', value: {} });
+      const { result } = renderHook(() =>
+        useUiPreferences('tramites.columns', ['a', 'b'], { catalog: ['a', 'b', 'c'], reshowOnce: ['b'] }),
+      );
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.visible).toEqual(['a', 'b']);
+      expect(uiPreferencesClient.put).not.toHaveBeenCalled();
+    });
+  });
+
   it('sin preferencia guardada (value: {}) conserva las columnas por defecto', async () => {
     vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: 'tramites.columns', value: {} });
     const { result } = renderHook(() => useUiPreferences('tramites.columns', DEFAULTS));

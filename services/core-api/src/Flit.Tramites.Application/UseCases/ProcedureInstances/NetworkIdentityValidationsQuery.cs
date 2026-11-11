@@ -97,8 +97,11 @@ public static class NetworkIdentityRedaction
         p.ValidUntil,
         p.DaysRemaining);
 
-    /// <summary>Validación del historial de una persona: correo enmascarado y sin enlace de captura.</summary>
-    public static BiometricValidationDto ToNetwork(BiometricValidationDto v) => v with
+    /// <summary>
+    /// Validación del historial de una persona: correo enmascarado y sin enlace de captura. El id de Kyverum
+    /// se conserva (solo lectura, sin PII).
+    /// </summary>
+    public static PersonBiometricValidationDto ToNetwork(PersonBiometricValidationDto v) => v with
     {
         Email = EditarPrevalidacionHandler.MaskEmail(v.Email),
         RegisteredEmail = v.RegisteredEmail is null ? null : EditarPrevalidacionHandler.MaskEmail(v.RegisteredEmail),
