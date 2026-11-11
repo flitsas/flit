@@ -10,7 +10,7 @@
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   // UI Kit 2026: cada módulo se resuelve a un ícono del paquete de íconos de FLIT.
   var KIT = "assets/kit/", KI = window.KIT_ICONOS || {};
-  var MAPA_ICONO = {"auditoria": "portapapeles", "ayuda": "ayuda", "banners": "megafono", "biometria": "biometria", "calendario": "calendario", "causales": "causal", "colaboradores": "usuarios", "comparendos": "comparendos", "configuracion": "ajustes", "consulta-placa": "buscar", "contrasena": "candado", "diagnostico": "consulta", "documentos": "documento", "empresas": "empresas", "filtros": "filtro", "firmas": "firma", "fuentes-oficiales": "fuentes-oficiales", "fur": "fur", "generacion-documental": "archivo", "historial-placa": "historial-placa", "identidad": "identidad", "improntas": "impronta", "inicio": "carpeta", "integraciones": "integraciones", "mandatos": "mandato", "matricula": "@tramite-matricula", "notificaciones": "campana", "organismos": "banco", "pendientes": "espera", "perfil": "persona", "preasignacion": "placa", "procesos": "procesos", "productos": "rejilla", "reportes": "reportes", "revocatorias": "@estado-revocado", "roles": "rol", "seguridad": "escudo", "tramites": "tramites", "traspaso": "@tramite-traspaso", "trazabilidad": "ruta", "vencidos": "vencido", "reportes-detallados": "reporte-detallado", "reportes-ict": "reporte-ict", "quipux": "radicacion", "log-qx": "log-mensajes", "log-ict": "log-llamadas", "tipos-tramite": "tipos-tramite", "tiempo": "cronometro", "finalizados": "finalizado", "en-curso": "avance", "rapido": "medidor", "devoluciones": "devolucion", "ingresos": "ingreso", "celular": "celular", "destacado": "medalla", "llamadas": "intercambio", "marca": "destello", "cargar": "archivo-subir", "correcciones": "lapiz", "errores": "nube-alerta"};
+  var MAPA_ICONO = {"auditoria": "portapapeles", "ayuda": "ayuda", "banners": "megafono", "biometria": "biometria", "calendario": "calendario", "causales": "causal", "colaboradores": "usuarios", "comparendos": "comparendos", "configuracion": "ajustes", "consulta-placa": "buscar", "contrasena": "candado", "diagnostico": "consulta", "documentos": "documento", "empresas": "empresas", "filtros": "filtro", "firmas": "firma", "fuentes-oficiales": "fuentes-oficiales", "fur": "fur", "generacion-documental": "archivo", "historial-placa": "historial-placa", "identidad": "identidad", "improntas": "impronta", "inicio": "carpeta", "integraciones": "integraciones", "mandatos": "mandato", "matricula": "@tramite-matricula", "notificaciones": "campana", "organismos": "banco", "pendientes": "espera", "perfil": "persona", "preasignacion": "placa", "procesos": "procesos", "productos": "rejilla", "reportes": "reportes", "revocatorias": "@estado-revocado", "roles": "rol", "seguridad": "escudo", "tramites": "tramites", "traspaso": "@tramite-traspaso", "trazabilidad": "ruta", "vencidos": "vencido", "reportes-detallados": "reporte-detallado", "reportes-ict": "reporte-ict", "quipux": "radicacion", "log-qx": "log-mensajes", "log-ict": "log-llamadas", "tipos-tramite": "tipos-tramite", "tiempo": "cronometro", "finalizados": "finalizado", "en-curso": "avance", "rapido": "medidor", "devoluciones": "devolucion", "ingresos": "ingreso", "celular": "celular", "destacado": "medalla", "llamadas": "intercambio", "marca": "destello", "cargar": "archivo-subir", "correcciones": "lapiz", "errores": "nube-alerta", "simulador": "pesos", "seguimiento": "ruta"};
   var kico = function (nombre, cls) { return '<span class="kico ' + (cls || "") + '" aria-hidden="true">' + (KI[nombre] || KI.documento || "") + "</span>"; };
   var ilus = function (n, cls) {
     var m = MAPA_ICONO[n] || "documento";
@@ -60,7 +60,7 @@
   function bannerInicio() {
     var n = BANNERS_INICIO.length;
     return '<section class="banner-kit" aria-roledescription="carrusel" aria-label="Novedades">' + BANNERS_INICIO.map(function (b, i) {
-      return '<div class="banner-kit__lamina banner-kit__lamina--' + b[3] + '"' + (i === BANNER_I ? "" : " hidden") + '><h1><span class="banner-kit__chip" aria-hidden="true">' + (KI[b[2]] || "") + "</span>" + b[0] + "</h1><p>" + b[1] + "</p></div>";
+      return '<div class="banner-kit__lamina banner-kit__lamina--' + b[3] + '"' + (i === BANNER_I ? "" : " hidden") + "><" + (i ? "h2" : "h1") + ' class="banner-kit__titulo"><span class="banner-kit__chip" aria-hidden="true">' + (KI[b[2]] || "") + "</span>" + b[0] + "</" + (i ? "h2" : "h1") + "><p>" + b[1] + "</p></div>";
     }).join("") + '<div class="banner-kit__pie">' + BANNERS_INICIO.map(function (b, i) { return '<button class="banner-kit__punto" type="button" data-banner="' + i + '" aria-label="Contenido ' + (i + 1) + " de " + n + '"' + (i === BANNER_I ? ' aria-current="true"' : "") + "></button>"; }).join("") +
       '<span class="banner-kit__esp"></span><button class="banner-kit__flecha" type="button" data-banner="' + ((BANNER_I + n - 1) % n) + '" aria-label="Contenido anterior">' + KI.izquierda + '</button><button class="banner-kit__flecha" type="button" data-banner="' + ((BANNER_I + 1) % n) + '" aria-label="Contenido siguiente">' + KI.derecha + "</button></div></section>";
   }
@@ -236,7 +236,8 @@
   // Rutas: módulos propios + los definidos en datos.js
   var PROPIAS = {
     inicio: ["Inicio", "inicio"], tramites: ["Trámites", "tramites"], traspaso: ["Nuevo traspaso", "traspaso"], tramite: ["Traspaso KLM 482", "traspaso"],
-    reportes: ["Reportes", "reportes"], marca: ["Juego de marca", "marca"], ingreso: ["Ingreso", "seguridad"], ayuda: ["Ayuda", "ayuda"], perfil: ["Mi perfil", "perfil"]
+    reportes: ["Reportes", "reportes"], marca: ["Juego de marca", "marca"], ingreso: ["Ingreso", "seguridad"], ayuda: ["Ayuda", "ayuda"], perfil: ["Mi perfil", "perfil"],
+    simulador: ["Simulador de costo", "simulador"], seguimiento: ["Seguimiento por enlace", "seguimiento"]
   };
   function titulo(id) { return PROPIAS[id] ? PROPIAS[id][0] : D.MODULOS[id] ? D.MODULOS[id].titulo : "Inicio"; }
 
@@ -510,7 +511,7 @@
       meta: D.TRAMITES,
       filtros: filtrosTramites(D.TRAMITES) };
     var html = lista(spec, "tramites", q, "tramites");
-    return cabecera({ il: "tramites", ante: "Gestión integral", titulo: "Trámites", texto: "Traspasos y matrículas, del borrador a la entrega.", acciones: [["Nuevo trámite", "form:nuevo-tramite"], ["Consultar placa", "abrir:consulta"], ["Revocatorias", "#revocatorias"]] }) + html;
+    return cabecera({ il: "tramites", ante: "Gestión integral", titulo: "Trámites", texto: "Traspasos y matrículas, del borrador a la entrega.", acciones: [["Nuevo trámite", "form:nuevo-tramite"], ["Simular costo", "#simulador"], ["Consultar placa", "abrir:consulta"], ["Revocatorias", "#revocatorias"]] }) + html;
   }
 
   var PASOS = [["Consulta del vehículo", "Completo"], ["SOAT y revisión técnico-mecánica", "Completo"], ["Vendedor", "Completo"], ["Comprador", "En curso"], ["Firmas", "Pendiente"], ["Radicación", "Pendiente"]];
@@ -556,7 +557,7 @@
     var actividad = [["Hoy, 09:58", "Andrés Rojas firmó el contrato."], ["Hoy, 09:40", "Se confirmó la identidad del vendedor y de la compradora."], ["29 oct, 16:12", "Sofía Cardona cargó las improntas y el paz y salvo."], ["29 oct, 15:30", "La plataforma generó el contrato de compraventa."], ["28 oct, 11:05", "Sofía Cardona creó el trámite."]];
     var iniciales = function (n) { return n.split(" ").slice(0, 2).map(function (x) { return x.charAt(0); }).join(""); };
     var hechos = linea.filter(function (l) { return l[2] === 1; }).length;
-    return cabecera({ il: "traspaso", ante: "Seguimiento", titulo: "Traspaso KLM 482", texto: "De Andrés Rojas a María Fernanda Ruiz.", volver: ["tramites", "Trámites"], acciones: [["Continuar el trámite", "#traspaso"], ["Descargar expediente", "descargar:expediente-KLM482.pdf"]] }) +
+    return cabecera({ il: "traspaso", ante: "Seguimiento", titulo: "Traspaso KLM 482", texto: "De Andrés Rojas a María Fernanda Ruiz.", volver: ["tramites", "Trámites"], acciones: [["Continuar el trámite", "#traspaso"], ["Descargar expediente", "descargar:expediente-KLM482.pdf"], ["Compartir seguimiento", "#seguimiento"]] }) +
       '<div class="barra-accion"><p><strong>Faltan 2 cosas para radicar:</strong> la firma de María Fernanda Ruiz y su documento de identidad.</p><button class="btn sm" type="button" data-hacer="aviso:Le recordamos a María Fernanda Ruiz la firma y el documento">Recordarle a la compradora</button></div>' +
       '<section class="card"><div class="tramite-resumen">' + vehiculo() + '<dl class="dl detalle__fichas">' + datos.map(function (d) { return "<div><dt>" + d[0] + "</dt><dd>" + d[1] + "</dd></div>"; }).join("") + "</dl></div>" +
       '<div class="tramite-avance"><div class="card__cabeza"><div><h2>Avance</h2><p>Paso ' + (hechos + 1) + " de " + linea.length + ": firmas.</p></div></div>" +
@@ -698,6 +699,41 @@
       '<section class="card"><div class="card__cabeza"><div><h2>Interruptores</h2><p>Las cuatro posiciones del interruptor del kit.</p></div></div><div class="ilus-rejilla">' +
       INTERRUPTORES.map(function (i) { return '<figure><img src="assets/kit/' + i[0] + '.svg" alt="" width="67" height="36"><figcaption>' + i[1] + "</figcaption></figure>"; }).join("") + "</div></section>";
   }
+  // Simulador: desglose del costo de un trámite antes de iniciarlo. Las tarifas son de muestra.
+  var SIM = { tramite: "traspaso", organismo: "medellin", avaluo: 85000000 };
+  var SIM_TRAMITES = { traspaso: ["Traspaso", 229000, 0.01], unilateral: ["Traspaso unilateral", 229000, 0.01], matricula: ["Matrícula inicial", 412000, 0] };
+  var SIM_ORGANISMOS = { medellin: ["Secretaría de Movilidad de Medellín", 1], envigado: ["Tránsito de Envigado", 0.94], sabaneta: ["Tránsito de Sabaneta", 0.9] };
+  function simDesglose() {
+    var t = SIM_TRAMITES[SIM.tramite], o = SIM_ORGANISMOS[SIM.organismo], av = Math.max(0, Number(SIM.avaluo) || 0);
+    var filas = [["Derechos del organismo de tránsito", Math.round(t[1] * o[1] / 100) * 100], ["Tarifa del registro nacional", 21900], ["Retención en la fuente (" + (t[2] * 100).toLocaleString("es-CO") + " % del avalúo)", Math.round(av * t[2])], ["Servicio de la plataforma", 45000]];
+    var total = filas.reduce(function (a, f) { return a + f[1]; }, 0);
+    return '<table class="matriz sim__tabla"><caption class="sr-only">Desglose del costo</caption><tbody>' + filas.map(function (f) { return "<tr><th scope=\"row\">" + f[0] + '</th><td class="num">' + pesos(f[1]) + "</td></tr>"; }).join("") +
+      '</tbody><tfoot><tr><th scope="row">Total estimado</th><td class="num">' + pesos(total) + "</td></tr></tfoot></table>";
+  }
+  function vSimulador() {
+    var op = function (lista, sel) { return Object.keys(lista).map(function (k) { return '<option value="' + k + '"' + (k === sel ? " selected" : "") + ">" + lista[k][0] + "</option>"; }).join(""); };
+    return cabecera({ il: "simulador", volver: ["tramites", "Trámites"], titulo: "Simulador de costo", texto: "Cuánto cuesta el trámite antes de empezarlo, con el desglose de cada concepto.", acciones: [["Iniciar el trámite", "form:nuevo-tramite"]] }) +
+      '<div class="rejilla rejilla--2"><section class="card"><div class="card__cabeza"><div><h2>Datos del trámite</h2><p>Cambia un dato y el total se recalcula.</p></div></div>' +
+      '<div class="campo"><label for="sim-tramite">Tipo de trámite</label><select class="control" id="sim-tramite" data-sim="tramite">' + op(SIM_TRAMITES, SIM.tramite) + "</select></div>" +
+      '<div class="campo"><label for="sim-organismo">Organismo de tránsito</label><select class="control" id="sim-organismo" data-sim="organismo">' + op(SIM_ORGANISMOS, SIM.organismo) + "</select></div>" +
+      '<div class="campo"><label for="sim-avaluo">Avalúo del vehículo, en pesos</label><input class="control" id="sim-avaluo" data-sim="avaluo" type="number" inputmode="numeric" min="0" step="100000" value="' + SIM.avaluo + '" aria-describedby="sim-nota"></div>' +
+      '<p class="nota" id="sim-nota">Valores de muestra. Las tarifas reales las fija cada organismo de tránsito y se cargan en Configuración.</p></section>' +
+      '<section class="card"><div class="card__cabeza"><div><h2>Costo estimado</h2><p>Lo que paga quien hace el trámite.</p></div></div><div id="sim-resultado" aria-live="polite">' + simDesglose() + "</div></section></div>";
+  }
+  document.addEventListener("input", function (ev) {
+    var c = ev.target.closest && ev.target.closest("[data-sim]"); if (!c) return;
+    SIM[c.getAttribute("data-sim")] = c.value; var r = document.getElementById("sim-resultado"); if (r) r.innerHTML = simDesglose();
+  });
+  // Seguimiento por enlace: lo que ven comprador y vendedor sin iniciar sesión. Sin datos personales completos.
+  function vSeguimiento() {
+    var pasos = [["Documentos", "Completos", 1], ["Identidad", "Validada", 1], ["Firmas", "Falta la compradora", 2], ["Radicación", "Pendiente", 0], ["Entrega", "Pendiente", 0]];
+    return cabecera({ il: "seguimiento", volver: ["tramite", "Traspaso KLM 482"], titulo: "Seguimiento por enlace", texto: "Así ven el avance el comprador y el vendedor al abrir su enlace. No necesitan cuenta ni contraseña.", acciones: [["Copiar enlace", "aviso:Enlace de seguimiento copiado"]] }) +
+      '<section class="card seg"><div class="seg__cab"><span class="ingreso__placa">KLM 482</span><div><h2>Traspaso de vehículo</h2><p>Mazda CX-30 Touring 2022 · Secretaría de Movilidad de Medellín</p></div>' + badge(ET, "firma") + "</div>" +
+      '<ol class="seg__pasos">' + pasos.map(function (x) { return '<li class="' + (x[2] === 1 ? "hecho" : x[2] === 2 ? "actual" : "") + '"><strong>' + x[0] + "</strong><small>" + x[1] + "</small></li>"; }).join("") + "</ol>" +
+      '<div class="rejilla rejilla--2"><div class="seg__bloque"><h3>Qué falta</h3><p>La firma de la compradora, M. F. R. Le enviamos el enlace de firma a su correo.</p></div>' +
+      '<div class="seg__bloque"><h3>Qué sigue</h3><p>Con las dos firmas el trámite se radica en el organismo de tránsito. Te avisamos por correo.</p></div></div>' +
+      '<p class="nota">Este enlace solo muestra el avance. Los nombres van con iniciales y no se pueden ver documentos ni cambiar nada.</p></section>';
+  }
   function vIngreso() {
     var correoGuardado = almacen.getItem("flit-correo") || "";
     var conexion = MODO === "real"
@@ -709,10 +745,10 @@
       '<div class="ingreso__texto"><p class="ingreso__ante">Plataforma de trámites de tránsito</p>' +
       '<h1 class="ingreso__titular">Tus trámites vehiculares<span>en un solo lugar</span></h1>' +
       "<p class=\"ingreso__lead\">Traspasos, matrículas, comparendos y el estado de cada vehículo, conectados con las fuentes oficiales y firmados en línea.</p></div>" +
-      '<figure class="ingreso__escena" aria-hidden="true"><img src="assets/ilustraciones/heroe-ingreso.webp" alt="" width="1100" height="821">' +
-      '<div class="flotante flotante--1"><span class="flotante__icono">' + '<svg class="i"><use href="#i-check"/></svg></span><span><strong>Traspaso firmado</strong><small>KLM 482 · hace 2 min</small></span></div>' +
-      '<div class="flotante flotante--2"><span class="flotante__icono flotante__icono--azul"><svg class="i"><use href="#i-candado"/></svg></span><span><strong>Identidad validada</strong><small>Comprador · en línea</small></span></div>' +
-      '<div class="flotante flotante--3"><span class="flotante__icono flotante__icono--naranja"><svg class="i"><use href="#i-correo"/></svg></span><span><strong>Radicado en el organismo</strong><small>Medellín · hoy</small></span></div></figure>' +
+      '<div class="ingreso__panel" aria-hidden="true">' +
+      '<div class="ingreso__panel-cab"><span class="ingreso__placa">KLM 482</span><span><strong>Traspaso</strong><small>Mazda CX-30 · Medellín</small></span><span class="ingreso__panel-estado">En firma</span></div>' +
+      '<ol class="ingreso__pasos"><li class="hecho">Documentos</li><li class="hecho">Identidad</li><li class="actual">Firmas</li><li>Radicación</li></ol>' +
+      '<ul class="ingreso__hechos">' + [["pluma", "Traspaso firmado por el vendedor", "Hace 2 min"], ["escudo", "Identidad validada", "Comprador, en línea"], ["radicacion", "Listo para radicar en el organismo", "Medellín"]].map(function (h) { return "<li>" + kico(h[0]) + "<span><strong>" + h[1] + "</strong><small>" + h[2] + "</small></span></li>"; }).join("") + "</ul></div>" +
       '<ul class="ingreso__productos" aria-label="Productos de FLIT">' + [["Trámites", "tramites"], ["Comparendos", "comparendos"], ["Diagnóstico", "diagnostico"]].map(function (p) { return "<li>" + ilus(p[1]) + "<span>" + p[0] + "</span></li>"; }).join("") + "</ul>" +
       '<p class="ingreso__pie">FLIT S.A.S. · Medellín, Colombia · Certificada ISO/IEC 27001:2022</p></section>' +
       '<section class="ingreso__form"><form class="ingreso__tarjeta" id="form-ingreso" novalidate>' +
@@ -791,7 +827,7 @@
     $("#barra").hidden = ingreso; $("#dock").hidden = ingreso;
     main.classList.toggle("main--completo", ingreso);
     var propia = (MODO === "real" ? { inicio: vInicioReal, tramites: vTramitesReal, tramite: vTramiteReal } : {})[r.id] ||
-      { inicio: vInicio, tramites: vTramites, traspaso: vTraspaso, tramite: vTramite, reportes: vReportes, marca: vMarca, ingreso: vIngreso, ayuda: vAyuda, perfil: vPerfil }[r.id];
+      { inicio: vInicio, tramites: vTramites, traspaso: vTraspaso, tramite: vTramite, reportes: vReportes, marca: vMarca, ingreso: vIngreso, ayuda: vAyuda, perfil: vPerfil, simulador: vSimulador, seguimiento: vSeguimiento }[r.id];
     main.innerHTML = '<div class="vista">' + (propia ? propia(r.q) : vModulo(r.id, r.q)) + "</div>";
     document.title = titulo(r.id) + " · FLIT 2.0";
     var mod = D.MODULOS[r.id];
@@ -1110,6 +1146,8 @@
     { g: "Acciones", t: "Trámites que esperan firma", d: cuantos("firma") + " trámites", il: "firmas", h: "#tramites?vista=firma" },
     { g: "Cuenta", t: "Mi perfil", d: "Datos y contraseña", il: "perfil", h: "#perfil" },
     { g: "Cuenta", t: "Ayuda", d: "Manual de usuario", il: "ayuda", h: "#ayuda" },
+    { g: "Trámites", t: "Simulador de costo", d: "Cuánto cuesta antes de empezar", il: "simulador", h: "#simulador" },
+    { g: "Trámites", t: "Seguimiento por enlace", d: "Lo que ven comprador y vendedor", il: "seguimiento", h: "#seguimiento" },
     { g: "Cuenta", t: "Juego de marca", d: "Logos e íconos", il: "marca", h: "#marca" }
   ], D.TRAMITES.map(function (t) { return { g: "Placas", t: placaTxt(t.placa), d: t.tipo + " · " + ET[t.estado][0], il: "consulta-placa", h: "#tramites?q=" + t.placa, placa: t.placa }; }));
   var activos = [], sel = 0;

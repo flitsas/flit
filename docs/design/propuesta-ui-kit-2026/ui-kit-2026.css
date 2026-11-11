@@ -446,7 +446,7 @@ dialog.modal::backdrop { background: #557eff80; backdrop-filter: blur(5px); }
 .banner-kit__lamina--degradado { background: linear-gradient(160deg, #00dbd5 0%, #2f9fe8 55%, #557eff 100%); }
 .banner-kit__lamina--azul { background: #557eff; }
 .banner-kit__lamina--tinta { background: #162744; }
-.banner-kit h1 { display: flex; align-items: center; gap: var(--space-12); color: #fff; font-size: 1.75rem; }
+.banner-kit h1, .banner-kit h2.banner-kit__titulo { display: flex; align-items: center; gap: var(--space-12); color: #fff; font-size: 1.75rem; }
 .banner-kit__chip { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: #ffffff38; }
 .banner-kit__chip svg { width: 22px; height: 22px; }
 .banner-kit p { margin: 0; max-width: 58ch; }
@@ -478,7 +478,7 @@ dialog.modal::backdrop { background: #557eff80; backdrop-filter: blur(5px); }
 .grafico-vacio { margin: 0; padding: var(--space-32) 0; text-align: center; color: var(--kit-gris); }
 .grafico-total { font-size: 1.5rem; font-weight: 700; color: var(--kit-azul); font-variant-numeric: tabular-nums; }
 @media (max-width: 960px) { .inicio-tope { grid-template-columns: 1fr; } }
-@media (max-width: 480px) { .inicio-tope .metricas { grid-template-columns: 1fr; } .banner-kit h1 { font-size: 1.375rem; } }
+@media (max-width: 480px) { .inicio-tope .metricas { grid-template-columns: 1fr; } .banner-kit h1, .banner-kit h2.banner-kit__titulo { font-size: 1.375rem; } }
 .grafico svg { max-height: 300px; }
 
 /* ---------- Miga de pan, paginación, línea de progreso, banners, notificaciones y tooltips ---------- */
@@ -669,4 +669,73 @@ td.fila-abrir { width: 1%; white-space: nowrap; }
   .filtros__panel input[type="date"] { width: 100%; }
   .barra-accion p { flex-basis: 100%; }
   .barra-accion .btn { max-width: 100%; white-space: normal; height: auto; min-height: 36px; text-align: center; }
+}
+
+/* Contraste: todo texto llega a 4,5 a 1 (3 a 1 en títulos grandes). Los discos e íconos conservan el color del manual. */
+:root:not([data-theme="dark"]) {
+  --kit-azul: #1d53ff; --kit-azul-hover: #1746e0; --kit-gris: #546b7d;
+  --color-action: #1d53ff; --gradient-action: linear-gradient(#1d53ff, #1d53ff); --gradient-action-hover: linear-gradient(#1746e0, #1746e0);
+  --color-highlight: #1d53ff; --color-highlight-display: #1d53ff; --color-heading: #1d53ff; --color-info: #1d53ff;
+  --color-text-tertiary: #546b7d;
+}
+.badge, .badge.ok, .badge.warn, .badge.danger, .badge.info { color: var(--ct, var(--c)); }
+:root:not([data-theme="dark"]) .badge.ok { --ct: #4f7121; }
+:root:not([data-theme="dark"]) .badge.warn { --ct: #bd3a00; }
+:root:not([data-theme="dark"]) .badge[data-estado="radicado"], :root:not([data-theme="dark"]) .badge[data-estado="entregado"] { --ct: #00736b; }
+:root:not([data-theme="dark"]) .badge[data-estado="revocado"] { --ct: #8b6000; }
+:root:not([data-theme="dark"]) .badge[data-estado="preasignacion"] { --ct: #a54f00; }
+.btn.positiva { color: #162744; }
+:root:not([data-theme="dark"]) .btn.alerta { --b: #d44100; }
+.banner-kit__lamina--degradado, .banner-muestra--degradado { background: linear-gradient(160deg, #007d79 0%, #1670b8 55%, #1d53ff 100%); }
+.banner-kit__lamina--azul, .banner-muestra--azul { background: #1d53ff; }
+
+/* Ingreso: fondo de tinta y el avance real de un trámite en lugar de una ilustración. */
+.ingreso__marca { background: #162744; }
+.ingreso__ante, .ingreso__lead, .ingreso__pie { color: #dbe6fb; }
+.ingreso__productos li { background: #ffffff14; border-color: #ffffff40; color: #fff; }
+.ingreso__panel { align-self: center; width: min(460px, 100%); margin: var(--space-24) 0; padding: var(--space-20); border-radius: 9px; background: #fff; color: #162744; display: grid; gap: var(--space-16); }
+.ingreso__panel-cab { display: flex; align-items: center; gap: var(--space-12); }
+.ingreso__panel-cab > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+.ingreso__panel-cab small, .ingreso__hechos small { color: #546b7d; font-size: 0.8125rem; }
+.ingreso__placa { flex: none; padding: 4px 10px; border-radius: 6px; border: 2px solid #162744; background: #ffd200; color: #162744; font-family: "Barlow Condensed", Poppins, sans-serif; font-weight: 700; font-size: 1.125rem; letter-spacing: 0.04em; white-space: nowrap; }
+.ingreso__panel-estado { flex: none; padding: 4px 10px; border-radius: 999px; background: #ffe9df; color: #bd3a00; font-size: 0.8125rem; font-weight: 700; }
+.ingreso__pasos, .seg__pasos { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.ingreso__pasos li, .seg__pasos li { padding-top: 10px; border-top: 4px solid #c9d6ee; font-size: 0.8125rem; color: #546b7d; min-width: 0; }
+.ingreso__pasos li.hecho, .seg__pasos li.hecho { border-color: #4f7121; color: #162744; }
+.ingreso__pasos li.actual, .seg__pasos li.actual { border-color: #1d53ff; color: #1d53ff; font-weight: 700; }
+.ingreso__hechos { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-12); }
+.ingreso__hechos li { display: flex; align-items: center; gap: var(--space-12); }
+.ingreso__hechos li > span:last-child { display: grid; min-width: 0; }
+.ingreso__hechos .kico { width: 36px; height: 36px; }
+/* Simulador y seguimiento por enlace */
+.sim__tabla { width: 100%; border-collapse: collapse; }
+.sim__tabla th { text-align: left; font-weight: 400; padding: 10px 0; border-bottom: 1px solid var(--color-divider); }
+.sim__tabla td { text-align: right; padding: 10px 0; border-bottom: 1px solid var(--color-divider); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sim__tabla tfoot th, .sim__tabla tfoot td { border-bottom: 0; padding-top: 14px; font-weight: 700; font-size: 1.25rem; color: var(--kit-azul); }
+.seg { display: grid; gap: var(--space-20); }
+.seg__cab { display: flex; align-items: center; gap: var(--space-16); flex-wrap: wrap; }
+.seg__cab > div { flex: 1 1 220px; min-width: 0; }
+.seg__cab h2, .seg__cab p { margin: 0; }
+.seg__pasos li { display: grid; gap: 2px; }
+.seg__pasos li small { font-weight: 400; color: var(--color-text-tertiary); }
+.seg__bloque { padding: var(--space-16); border: 1px solid var(--color-border); border-radius: 9px; }
+.seg__bloque h3, .seg__bloque p { margin: 0; }
+.seg__bloque h3 { margin-bottom: 4px; }
+[data-theme="dark"] .ingreso__panel { background: #1c2f52; color: #fff; }
+[data-theme="dark"] .ingreso__panel-cab small, [data-theme="dark"] .ingreso__hechos small, [data-theme="dark"] .ingreso__pasos li, [data-theme="dark"] .seg__pasos li { color: #c5d3ee; }
+[data-theme="dark"] .ingreso__pasos li.hecho, [data-theme="dark"] .seg__pasos li.hecho { border-color: #a6d95f; color: #fff; }
+[data-theme="dark"] .ingreso__pasos li.actual, [data-theme="dark"] .seg__pasos li.actual { border-color: #8fb0ff; color: #a9c9fc; }
+@media (max-width: 640px) { .seg__pasos { grid-auto-flow: row; grid-auto-columns: auto; } .seg__pasos li { border-top: 0; border-left: 4px solid #c9d6ee; padding: 4px 0 4px 12px; } }
+/* Contraste en tema oscuro */
+/* En oscuro el azul se separa en dos: uno para rellenos con texto blanco y otro, más claro, para texto y trazos sobre el fondo. */
+[data-theme="dark"] { --kit-azul: #8fb0ff; --kit-azul-relleno: #1d53ff; --color-action: #8fb0ff; --color-heading: #a9c9fc; --color-highlight: #8fb0ff; --color-info: #8fb0ff; }
+[data-theme="dark"] .btn:not(.secondary):not(.ghost):not(.positiva):not(.alerta):not([disabled]), [data-theme="dark"] .saltar, [data-theme="dark"] .pildora-tramite, [data-theme="dark"] .dock__cabeza, [data-theme="dark"] .kico.estado-ico:not([class*="estado-ico--"]), [data-theme="dark"] .banner-kit__lamina--azul, [data-theme="dark"] .banner-muestra--azul { --b: #1d53ff; background-color: #1d53ff; color: #fff; }
+[data-theme="dark"] .btn.alerta { --b: #d44100; }
+[data-theme="dark"] .persona__avatar { background-color: #1d53ff; color: #fff; }
+.ingreso__marca, .ingreso__form, .ingreso__texto, .ingreso__panel { min-width: 0; }
+.ingreso__titular { overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .ingreso__pasos { grid-auto-flow: row; grid-auto-columns: auto; }
+  .ingreso__pasos li { border-top: 0; border-left: 4px solid #c9d6ee; padding: 3px 0 3px 10px; }
+  .ingreso__panel-cab { flex-wrap: wrap; }
 }

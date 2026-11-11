@@ -77,18 +77,26 @@ Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga despu�
 
 ## Contraste medido (WCAG 2.2, texto normal pide 4,5:1)
 
-El manual pide el color semántico pleno en texto y botones. Estos pares quedan por debajo de AA y hay que decidirlos antes de producción:
+Medido sobre el color real de cada texto y de su fondo en las 77 pantallas y pestañas, en tema claro y en tema oscuro: ningún texto queda por debajo de 4,5:1 (3:1 en títulos grandes).
 
-| Par | Relación |
-|---|---|
-| Blanco sobre azul `#557EFF` (botón principal) | 3,61:1 |
-| Blanco sobre verde `#8CC63F` (botón positivo) | 2,05:1 |
-| Blanco sobre naranja `#FF4E00` (botón de alerta) | 3,31:1 |
-| Azul `#557EFF` sobre blanco (títulos, enlaces) | 3,61:1 |
-| Azul `#557EFF` sobre su fondo al 10 % (etiqueta) | 3,23:1 |
-| Naranja `#FF4E00` sobre su fondo al 10 % (etiqueta) | 2,92:1 |
-| Verde `#8CC63F` sobre su fondo al 10 % (etiqueta) | 1,91:1 |
-| Amarillo `#F9AC00` sobre su fondo al 10 % (etiqueta) | 1,80:1 |
-| Gris `#91A5B5` sobre blanco (pestaña inactiva) | 2,54:1 |
+Para llegar ahí se ajustaron estos valores frente al manual. Los discos de estado, los íconos y el isotipo conservan el color original.
 
-Sí cumplen: blanco sobre tinta `#162744` (14,92:1), tinta sobre el encabezado de tabla `#A9C9FC` (8,84:1) y rojo `#C10000` sobre su fondo al 10 % (5,35:1).
+| Uso | Manual | Aquí | Relación |
+|---|---|---|---|
+| Azul de botones, títulos y enlaces | `#557EFF` | `#1D53FF` | 4,6:1 con blanco |
+| Gris de texto secundario | `#91A5B5` | `#546B7D` | 4,6:1 sobre `#E6F0FF` |
+| Texto de etiqueta verde | `#8CC63F` | `#4F7121` | 4,6:1 sobre su fondo |
+| Texto de etiqueta naranja | `#FF4E00` | `#BD3A00` | 4,6:1 sobre su fondo |
+| Texto de etiqueta turquesa y amarilla | `#00A99D`, `#F9AC00` | `#00736B`, `#8B6000` | 4,6:1 sobre su fondo |
+| Botón verde | texto blanco | texto tinta `#162744` | 7,3:1 |
+| Botón naranja | `#FF4E00` | `#D44100` | 4,6:1 con blanco |
+| Banner de Inicio | degradado desde `#00DBD5` | degradado desde `#007D79` | 4,6:1 con blanco |
+
+En tema oscuro el azul se separa en dos: `#1D53FF` para rellenos con texto blanco y `#8FB0FF` para texto y trazos sobre el fondo.
+
+## Pantallas añadidas
+
+- Simulador de costo (`#simulador`): desglose del trámite antes de iniciarlo, recalculado al cambiar tipo, organismo o avalúo. Las tarifas son de muestra.
+- Seguimiento por enlace (`#seguimiento`): lo que ven comprador y vendedor sin cuenta; nombres con iniciales, sin documentos ni acciones.
+- Ingreso: fondo de tinta y el avance de un trámite en lugar de la ilustración. `assets/ilustraciones/heroe-ingreso.webp` ya no se usa.
+- Inicio: un solo título de primer nivel.
