@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AlertTriangle,
   Calendar,
   Car,
   ChevronLeft,
@@ -63,6 +64,7 @@ import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
+import type { ResolverEdicion, SeccionResumen } from './MatriculaResumen';
 import {
   blockerCopy,
   FIRMA_EXENTA_AVISO,
@@ -286,6 +288,30 @@ const CARROCERIA_NO_REGISTRADA =
 const STEP_SUBTITLE: Record<string, string> = {
   identidad: 'Verificación de autenticidad de las partes involucradas.',
 };
+
+/**
+ * Paso del asistente donde se captura cada sección del Resumen (botón «Editar» de sus tarjetas).
+ * Se resuelve por el CUERPO del paso, no por su clave, porque los tipos parametrizados nombran sus
+ * pasos con el código de sección: vehículo y transformaciones viven en la consulta inicial, la
+ * prenda dentro de Requisitos y cada parte en el paso de actores de su rol. -1 si no existe.
+ */
+function indicePasoDeSeccion(steps: WizardStep[], seccion: SeccionResumen): number {
+  switch (seccion) {
+    case 'vehiculo':
+      return steps.findIndex((s) => resolveStepBody(s) === 'consulta');
+    // Transformaciones, prenda y documentos se capturan en Requisitos (el resumen lee de ahí las
+    // transformaciones declaradas, ver `FirmaFurStep`).
+    case 'transformaciones':
+    case 'prenda':
+    case 'documentos':
+      return steps.findIndex((s) => {
+        const body = resolveStepBody(s);
+        return body === 'documentos' || body === 'prenda';
+      });
+    default:
+      return steps.findIndex((s) => resolveStepBody(s) === 'actores' && resolveActorRole(s) === seccion);
+  }
+}
 
 
 /**
@@ -521,6 +547,11 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // Sección del Resumen por la que el gestor salió con «Editar». Mientras exista, el pie ofrece
+  // «Volver al resumen» y, al llegar al paso, la pantalla baja hasta esa sección. Se limpia al
+  // volver al Resumen.
+  // `'pasos'`: salió del Resumen por la barra de pasos o «Anterior» (sin sección a la que bajar).
+  const [regresoAResumen, setRegresoAResumen] = useState<SeccionResumen | 'pasos' | null>(null);
   // HU #13403 — la compañía puede tener la generación automática de improntas deshabilitada. El flag
   // viene en el detalle del trámite; ausente/undefined ⇒ true (comportamiento histórico).
   const [improntaGenInstancia, setImprontaGeneracionHabilitada] = useState(true);
@@ -1131,6 +1162,14 @@ export function TramiteWizard(props: Props) {
     // AC1 (HU #10883) — solo se persiste al avanzar (index > activeIndex), no al retroceder ni al
     // reabrir un paso ya visitado: retroceder a revisar un paso no debe mover el punto de retoma.
     if (index > activeIndex && steps[index]) persistCurrentStep(steps[index].key);
+    // De vuelta en el Resumen (por «Volver al resumen» o por la barra de pasos) ya no hay regreso
+    // pendiente que ofrecer en el pie.
+    if (steps[index]?.key === 'fur') setRegresoAResumen(null);
+    // Sale del Resumen de un borrador editable por la barra de pasos o «Anterior»: el aviso del
+    // Resumen promete «Volver al resumen» por cualquier camino, no solo por «Editar» (que ya dejó
+    // su sección anotada antes de navegar).
+    else if (steps[activeIndex]?.key === 'fur' && estadoTramite === 'borrador' && !editLocked)
+      setRegresoAResumen((prev) => prev ?? 'pasos');
     setActiveIndex(index);
   };
 
@@ -1196,6 +1235,74 @@ export function TramiteWizard(props: Props) {
       index >= 0 ? index : steps.findIndex((s) => s.key === 'comprador' || s.key === 'vendedor');
     if (destino >= 0) goToStep(destino);
   };
+
+  /**
+   * Botón «Editar» de las tarjetas del Resumen: lleva al paso donde se captura esa sección, con la
+   * misma navegación del asistente (guarda lo pendiente antes de salir). Solo en un borrador que aún
+   * se puede editar; en cualquier otro estado los datos están bloqueados y el botón no se pinta.
+   */
+  const resolverEdicionResumen: ResolverEdicion | undefined =
+    estadoTramite === 'borrador' && !editLocked
+      ? (seccion) => {
+          const index = indicePasoDeSeccion(steps, seccion);
+          if (index < 0 || index === activeIndex || !canNavigateToStep(steps, index, navViewOnly)) {
+            return null;
+          }
+          const paso = steps[index];
+          return {
+            pasoLabel: esPasoDeActoresUnificado(steps, index)
+              ? stepLabelCopy('actores', 'Actores')
+              : stepLabelCopy(paso.key, paso.label),
+            ir: () => {
+              setRegresoAResumen(seccion);
+              void navigateToStep(index).then((ok) => {
+                if (!ok) setRegresoAResumen(null);
+              });
+            },
+          };
+        }
+      : undefined;
+
+  /** Índice del Resumen (paso de decisión): destino de «Volver al resumen». */
+  const resumenIndex = steps.findIndex((s) => s.key === 'fur');
+  // Mismo criterio que `isDecisionStep`, que se declara más abajo.
+  const enResumen = activeStep?.key === 'fur';
+  const puedeVolverAResumen =
+    regresoAResumen !== null &&
+    !enResumen &&
+    resumenIndex >= 0 &&
+    canNavigateToStep(steps, resumenIndex, navViewOnly);
+
+  // Al llegar por «Editar», baja hasta la sección que se quiere corregir. Solo las que viven a mitad
+  // de Requisitos lo necesitan; vehículo y actores ya quedan arriba del paso. El contenido del paso
+  // carga en diferido, así que se reintenta un rato corto en vez de rendirse al primer intento.
+  useEffect(() => {
+    const titulo =
+      regresoAResumen === 'documentos'
+        ? 'Gestión de documentos'
+        : regresoAResumen === 'prenda'
+          ? 'Asignación de Prenda / Limitación a la Propiedad'
+          : regresoAResumen === 'transformaciones'
+            ? 'Trámites Simultáneos — Transformaciones del Vehículo'
+            : null;
+    if (!titulo || enResumen) return;
+    let intentos = 0;
+    const timer = window.setInterval(() => {
+      intentos += 1;
+      const encabezado = Array.from(document.querySelectorAll('h2, h3, h4')).find(
+        (el) => el.textContent?.trim() === titulo,
+      );
+      if (encabezado || intentos >= 20) {
+        window.clearInterval(timer);
+        if (encabezado instanceof HTMLElement) {
+          // La barra de pasos queda fija arriba: sin este margen el título quedaba tapado por ella.
+          encabezado.style.scrollMarginTop = '180px';
+          encabezado.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }, 150);
+    return () => window.clearInterval(timer);
+  }, [regresoAResumen, activeIndex, enResumen]);
 
   /**
    * Salida de emergencia del paso cuyo guardado falla (observación de code review, Bug #11614).
@@ -2047,6 +2154,7 @@ export function TramiteWizard(props: Props) {
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
+                resolverEdicionResumen={resolverEdicionResumen}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
                 firmaExenta={firmaExenta}
@@ -2294,6 +2402,21 @@ export function TramiteWizard(props: Props) {
               </button>
             ) : (
               <>
+                {/* Regreso directo al Resumen tras pulsar «Editar» en una de sus tarjetas: sin él, el
+                    único avance del pie lleva al paso SIGUIENTE, no de vuelta a donde se estaba
+                    revisando. Guarda lo pendiente igual que la barra de pasos. */}
+                {puedeVolverAResumen && (
+                  <button
+                    type="button"
+                    onClick={() => goToStep(resumenIndex)}
+                    disabled={continuing}
+                    className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-flit-brand disabled:opacity-40`}
+                    style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
+                  >
+                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                    Volver al resumen
+                  </button>
+                )}
                 {/* Anular trámite (propuesta): acción destructiva en naranja de alerta, junto al
                     avance y no escondida en la cabecera, con confirmación porque se pierde lo no
                     guardado. Solo mientras el trámite se está capturando: ya radicado no hay nada
@@ -4766,6 +4889,7 @@ function StepBody({
   onCamposRequeridosGateChange,
   rotulosActores,
   onIrAActores,
+  resolverEdicionResumen,
   identityOperable = false,
   identityApproved = false,
   firmaExenta = false,
@@ -4840,6 +4964,8 @@ function StepBody({
   rotulosActores?: Partial<Record<ActorRol, string>>;
   /** HU #11666 — navega al paso de actores de una parte (acción correctiva de los motivos de no envío). */
   onIrAActores?: (parte: BiometricParte) => void;
+  /** Botón «Editar» de las tarjetas del Resumen (solo en borrador editable). */
+  resolverEdicionResumen?: ResolverEdicion;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
   rnmcEnabled?: boolean;
   /** Migración V1→V2 — el trámite viene de V1; el paso de consulta lo explica en el pre-vuelo. */
@@ -5373,7 +5499,33 @@ function StepBody({
           {/* HU #10350 — con la identidad pendiente, el FUR/firma se generan AUTOMÁTICAMENTE al
               aprobarse la validación del cliente (consumidor de outbox #10349). Se avisa aquí para que
               el gestor no intente generarlos a mano y entienda que solo debe "Finalizar". */}
-          {!identityApproved && (
+          {/* Borrador editable: UN solo aviso que reúne cómo corregir datos y, si la identidad está
+              pendiente, lo del FUR automático. Dos recuadros azules seguidos se leían repetidos. */}
+          {resolverEdicionResumen ? (
+            <InlineAlert tone="info" title="¿Algún dato no está bien?">
+              <p>
+                Pulsa <span className="font-semibold">Editar</span> en la sección que quieras
+                corregir, o entra al paso que necesites desde la{' '}
+                <span className="font-semibold">barra de pasos de arriba</span> (Consulta, Actores,
+                Requisitos…). Cuando termines, pulsa{' '}
+                <span className="font-semibold">Volver al resumen</span>: tus cambios quedan
+                guardados.
+              </p>
+              <p className="mt-2 flex items-start gap-1.5">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  <span className="font-semibold">Revisa bien antes de enviar:</span> después ya
+                  no podrás modificar los datos.
+                </span>
+              </p>
+              {!identityApproved && (
+                <p className="mt-2">
+                  No necesitas generar el FUR ni la firma: se crean solos cuando el cliente valide
+                  su identidad.
+                </p>
+              )}
+            </InlineAlert>
+          ) : !identityApproved && (
             <div
               className="rounded-xl p-3 text-xs border flex items-start gap-2"
               style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--color-flit-primary)' }}
@@ -5417,6 +5569,7 @@ function StepBody({
             onPaqueteStatusChange={onPaqueteStatusChange}
             vaultCoveredPartes={vaultCoveredPartes}
             biometricForceEditable={identityOperable}
+            resolverEdicion={resolverEdicionResumen}
           />
         </div>
       );
