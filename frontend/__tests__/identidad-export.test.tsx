@@ -162,6 +162,13 @@ describe("nada revela cómo se validó", () => {
     expect(motivoVisible("Revisión manual fallida")).toBe("Validación rechazada");
     expect(motivoVisible("Documento ilegible")).toBe("Documento ilegible");
     expect(motivoVisible("  ")).toBeNull();
+    // Las frases reales del servidor se muestran tal cual, con su punto final.
+    expect(motivoVisible("El rostro no coincide con el documento.")).toBe(
+      "El rostro no coincide con el documento.",
+    );
+    expect(motivoVisible("No se pudo verificar la identidad con las imágenes recibidas.")).toBe(
+      "No se pudo verificar la identidad con las imágenes recibidas.",
+    );
     const csv = buildCompanyQueryCsv(
       [fila([actor("comprador", 1, { estadoValidacion: "rechazado", motivoRechazo: "Proveedor sin respuesta" })])],
       IDENTIDAD,
