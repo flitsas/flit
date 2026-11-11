@@ -69,11 +69,16 @@
     BANNER_I = Number(b.getAttribute("data-banner")); var viejo = b.closest(".banner-kit"), caja = document.createElement("div");
     caja.innerHTML = bannerInicio(); viejo.replaceWith(caja.firstChild); var p = document.querySelector('.banner-kit__punto[aria-current="true"]'); if (p) p.focus();
   });
-  var ICONO_ESTADO = { borrador: "borrador", validacion: "preparado", firma: "pendiente", radicado: "entregado", finalizado: "aprobado", rechazado: "rechazado", preparado: "preparado",
-    preasignacion: "sin-placa", asignado: "placa", entregado: "entregado", subsanacion: "subsanado", aprobado: "aprobado", revocado: "revocado", anulado: "anulado" };
+  var ICONO_ESTADO = { borrador: "borrador", validacion: "preparado", radicado: "entregado", rechazado: "rechazado", preparado: "preparado",
+    preasignacion: "sin-placa", asignado: "placa", entregado: "entregado", subsanacion: "subsanado", aprobado: "aprobado", revocado: "revocado", anulado: "anulado", rechazada: "rechazado", negada: "rechazado" };
+  // Estados con glifo propio del catálogo, sobre un disco con el color de su tono.
+  var GLIFO_ESTADO = {"pendiente": "espera", "firma": "pluma", "finalizado": "finalizado", "aprobada": "check", "validada": "escudo", "fallida": "distinto", "activa": "encendido", "activo": "encendido", "invitado": "correo", "suspendido": "pausa", "inactivo": "menos", "publicado": "ojo", "programado": "reloj", "flit": "radicacion", "quipux": "externo", "listo": "archivo", "generando": "avance", "error": "alerta", "ok": "check", "reintento": "reintento", "habilitado": "asistente", "apagado": "asistente-apagado", "confirmado": "doble-check", "diferencia": "distinto", "completo": "portapapeles", "incompleto": "lista", "normal": "punto", "sensible": "rol", "bloqueado": "candado", "espera": "archivo-subir", "materializado": "tramites", "descartado": "papelera", "descuento": "porcentaje", "pagado": "pesos", "cobro": "mazo", "aldia": "carro", "alerta": "exclamacion", "libre": "candado-abierto", "usada": "placa", "reservada": "marcador"};
   var ICONO_TONO = { ok: "aviso-ok", warn: "estado-pendiente", danger: "estado-rechazado", info: "aviso-info", "": "estado-borrador" };
   var iconoEstado = function (k, tono) { return KIT + (ICONO_ESTADO[k] ? "estado-" + ICONO_ESTADO[k] : ICONO_TONO[tono || ""] || "estado-borrador") + ".svg"; };
-  var imgEstado = function (k, tono) { return '<img class="estado-ico" src="' + iconoEstado(k, tono) + '" alt="" aria-hidden="true" width="20" height="20">'; };
+  var imgEstado = function (k, tono) {
+    if (!ICONO_ESTADO[k] && GLIFO_ESTADO[k] && KI[GLIFO_ESTADO[k]]) return '<span class="kico estado-ico estado-ico--' + (tono || "neutro") + '" aria-hidden="true">' + KI[GLIFO_ESTADO[k]] + "</span>";
+    return '<img class="estado-ico" src="' + iconoEstado(k, tono) + '" alt="" aria-hidden="true" width="20" height="20">';
+  };
   var badge = function (estados, k) { var e = estados[k] || [k, ""]; return '<span class="badge badge--icono ' + e[1] + '" data-estado="' + esc(k) + '">' + imgEstado(k, e[1]) + e[0] + "</span>"; };
 
   // ---------- Modo real: la propuesta servida por servidor-local.mjs, con la API de FLIT en solo lectura ----------
@@ -172,7 +177,7 @@
         items.forEach(function (t) { CACHE_TRAMITES[t.id] = t; });
         actualizarCampana(c.subsanacion || 0);
         var todos = Object.keys(c).reduce(function (a, k) { return a + c[k]; }, 0);
-        var chips = '<button class="chip" type="button" data-vista="" aria-pressed="' + (!vista) + '">' + kico("carpeta", "estado-ico") + '<span>Todos</span><strong>' + todos.toLocaleString("es-CO") + "</strong></button>" +
+        var chips = '<button class="chip" type="button" data-vista="" aria-pressed="' + (!vista) + '">' + kico("todos", "estado-ico") + '<span>Todos</span><strong>' + todos.toLocaleString("es-CO") + "</strong></button>" +
           Object.keys(ESTADOS_REALES).filter(function (k) { return c[k]; }).map(function (k) {
             return '<button class="chip' + (k === "subsanacion" ? " chip--pendiente" : "") + '" type="button" data-vista="' + k + '" aria-pressed="' + (vista === k) + '">' + imgEstado(k, ESTADOS_REALES[k][1]) + "<span>" + ESTADOS_REALES[k][0] + "</span><strong>" + c[k].toLocaleString("es-CO") + "</strong></button>";
           }).join("");
@@ -371,7 +376,7 @@
     });
     var base = spec.filas.map(function (f, i) { return { f: f, i: i }; }).filter(function (x) { return (!texto || norm(JSON.stringify(x.f)).indexOf(texto) >= 0) && pasaFiltros(x); });
     var cuenta = function (k) { return base.filter(function (x) { return x.f[iEst] === k; }).length; };
-    var chips = iEst < 0 ? "" : '<div class="embudo" role="group" aria-label="Filtrar por estado"><button class="chip" type="button" data-vista="" aria-pressed="' + (!vista) + '">' + kico("carpeta", "estado-ico") + "<span>Todos</span><strong>" + base.length + "</strong></button>" +
+    var chips = iEst < 0 ? "" : '<div class="embudo" role="group" aria-label="Filtrar por estado"><button class="chip" type="button" data-vista="" aria-pressed="' + (!vista) + '">' + kico("todos", "estado-ico") + "<span>Todos</span><strong>" + base.length + "</strong></button>" +
       Object.keys(spec.estados).filter(function (k) { return cuenta(k) > 0 || spec.estados === ET; }).map(function (k) {
         var n = cuenta(k);
         return '<button class="chip' + (spec.pendiente === k ? " chip--pendiente" : "") + '" type="button" data-vista="' + k + '" aria-pressed="' + (vista === k) + '"' + (n ? "" : " disabled") + ">" + imgEstado(k, spec.estados[k][1]) + "<span>" + spec.estados[k][0] + "</span><strong>" + n + "</strong></button>";

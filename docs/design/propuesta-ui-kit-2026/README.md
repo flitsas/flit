@@ -64,6 +64,7 @@ Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga despu�
 - Cada cifra de Reportes usa un ícono según lo que mide (finalizados, tiempo, en curso, más rápido, devoluciones, ingresos, celular, más productivo, correcciones); el reparto está en `ICONOS_REPORTE` de `propuesta.js`.
 - En `kit-iconos.js` el azul del glifo es `currentColor`, el naranja y el verde de acento se conservan y los detalles blancos son recortes (máscara), de modo que el mismo ícono sirve sobre claro, oscuro y botones de color. Cada ícono se encuadra a su dibujo.
 - Estados, avisos y trámites (`estado-*.svg`, `aviso-*.svg`, `tramite-*.svg`, `persona-nueva.svg`): dibujo blanco sobre disco de 100 × 100 con el color de cada estado. Matrícula, Otros trámites y Transformación comparten el mismo carro de frente.
+- Cada estado tiene su propio ícono. Los del trámite que ya traía el paquete siguen como disco (`estado-*.svg`); los demás (activo, inactivo, invitado, suspendido, publicado, programado, pagado, en cobro, bloqueado, con error, en reintento, entre otros) son un glifo de `kit-iconos.js` sobre un disco con el color de su tono, según `GLIFO_ESTADO` de `propuesta.js`. El filtro «Todos» usa su propio glifo de lista.
 - Los SVG se guardan sin hojas de estilo internas, títulos ni identificadores, con el color como atributo.
 - La pantalla «Juego de marca» (`#marca`) muestra todo el juego.
 

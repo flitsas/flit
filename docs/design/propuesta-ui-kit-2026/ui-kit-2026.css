@@ -143,6 +143,11 @@ small, .cap { font-weight: 300; }
 .kimg { flex: none; width: 40px; height: 40px; }
 .estado-ico { flex: none; width: 20px; height: 20px; }
 .kico.estado-ico { background: var(--kit-azul); color: #fff; }
+.kico.estado-ico--ok { background: #8cc63f; }
+.kico.estado-ico--warn { background: #ff4e00; }
+.kico.estado-ico--danger { background: #ff0000; }
+.kico.estado-ico--info { background: #557eff; }
+.kico.estado-ico--neutro { background: #5e6a7b; }
 [data-theme="dark"] .kico { color: #a9c9fc; }
 [data-theme="dark"] .kico.estado-ico { color: #fff; }
 
