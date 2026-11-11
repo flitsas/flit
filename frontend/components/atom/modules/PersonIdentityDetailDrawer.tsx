@@ -27,6 +27,8 @@ import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
+import { InlineAlert } from '@/components/atom/InlineAlert';
+import { useReconcileIdentity } from '@/hooks/useReconcileIdentity';
 import type {
   BiometricEstado,
   BiometricValidation,
@@ -67,6 +69,17 @@ function isTerminal(v: BiometricValidation): boolean {
   return v.status === 'aprobado' || v.status === 'rechazado' || v.status === 'expirado' || v.expired;
 }
 
+/**
+ * Estados en vuelo que el proveedor aún puede resolver (los que se le consultan desde «Actualizar estado»).
+ * `pendiente_envio` NO entra: aún no salió al proveedor (sin id de Verify) y el backend respondería 409.
+ */
+const ESTADOS_RECONCILIABLES: ReadonlySet<BiometricEstado> = new Set(['enviado', 'en_proceso']);
+
+/** Validación Kyverum no final: candidata a consultar al proveedor. */
+function esReconciliable(v: BiometricValidation): boolean {
+  return v.provider === 'kyverum' && !isTerminal(v) && ESTADOS_RECONCILIABLES.has(v.status);
+}
+
 function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -92,6 +105,17 @@ export interface PersonIdentityDetailDrawerProps {
   mandatario?: boolean;
   /** Super Admin: abre el detalle de una validación manual en su pestaña (el detalle actual se cierra aparte). */
   onVerEnManuales?: (validationId: string) => void;
+  /**
+   * El usuario GESTIONA el módulo de identidad (`validaciones.manage` o SuperAdmin): «Actualizar estado»
+   * consulta a Verify las validaciones Kyverum no finales antes de recargar. Ausente = solo recarga.
+   * En red o mandatario nunca consulta (solo consulta por contrato).
+   */
+  canManage?: boolean;
+  /**
+   * Compañía de la persona (fila del listado). La consulta al proveedor sale con ese `X-Tenant-Id`: un
+   * SuperAdmin que mira otra compañía recibiría 404 con el suyo. Ausente = tenant activo del cliente.
+   */
+  tenantId?: string;
 }
 
 export function PersonIdentityDetailDrawer({
@@ -102,9 +126,15 @@ export function PersonIdentityDetailDrawer({
   networkTenantId,
   mandatario = false,
   onVerEnManuales,
+  canManage = false,
+  tenantId,
 }: PersonIdentityDetailDrawerProps) {
   const esRed = Boolean(networkTenantId);
   const soloConsulta = esRed || mandatario;
+  const puedeConsultarProveedor = canManage && !soloConsulta;
+  const reconcile = useReconcileIdentity();
+  /** Consulta al proveedor en vuelo: corta el doble clic del mismo tick y pausa el polling. */
+  const inFlightRef = useRef(false);
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -113,7 +143,8 @@ export function PersonIdentityDetailDrawer({
   const allTerminalRef = useRef(false);
   const prevStatusesRef = useRef<string>('');
 
-  const load = useCallback(async () => {
+  /** Recarga el detalle. Devuelve `true` si avisó `onStatusChanged` (algún estado cambió). */
+  const load = useCallback(async (): Promise<boolean> => {
     setLoading(true);
     try {
       const res = networkTenantId
@@ -134,13 +165,14 @@ export function PersonIdentityDetailDrawer({
       setTrackingTick((t) => t + 1);
 
       const statusKey = res.validations.map((v) => `${v.id}:${v.status}`).join('|');
-      if (prevStatusesRef.current && prevStatusesRef.current !== statusKey) {
-        onStatusChanged?.();
-      }
+      const changed = Boolean(prevStatusesRef.current) && prevStatusesRef.current !== statusKey;
+      if (changed) onStatusChanged?.();
       prevStatusesRef.current = statusKey;
+      return changed;
     } catch (err) {
       failedRef.current = true;
       setError(err instanceof Error ? err.message : 'No se pudo cargar el historial.');
+      return false;
     } finally {
       setLoading(false);
     }
@@ -161,7 +193,7 @@ export function PersonIdentityDetailDrawer({
     if (!data || data.allTerminal || failedRef.current) return;
     const id = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
-      if (failedRef.current || allTerminalRef.current) return;
+      if (failedRef.current || allTerminalRef.current || inFlightRef.current) return;
       void load();
     }, POLL_MS);
     return () => window.clearInterval(id);
@@ -198,6 +230,35 @@ export function PersonIdentityDetailDrawer({
       latest.status === 'enviado' ||
       latest.status === 'pendiente_envio');
   const personName = data?.name ?? latest?.name ?? 'Persona';
+  const reconciliables = puedeConsultarProveedor ? validationsDesc.filter(esReconciliable) : [];
+  const consultaProveedor = reconciliables.length > 0;
+  const ocupado = reconcile.submitting;
+
+  /**
+   * «Actualizar estado»: con permiso de gestionar (y fuera de red/mandatario) consulta a Verify las
+   * validaciones Kyverum no finales, en secuencia, y luego recarga; si alguna cambió, avisa al listado.
+   * Sin candidatas o sin permiso, solo recarga, como siempre.
+   */
+  const handleActualizar = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      if (!consultaProveedor) {
+        reconcile.clearMessage();
+        await load();
+        return;
+      }
+      const summary = await reconcile.runMany(
+        reconciliables.map((v) => v.id),
+        (id) => tramitesClient.reconcileBiometricValidation(id, tenantId),
+      );
+      // `load()` rearma el polling de 5 s (failedRef = false) si la recarga sale bien.
+      const avisado = await load();
+      if (summary.updated > 0 && !avisado) onStatusChanged?.();
+    } finally {
+      inFlightRef.current = false;
+    }
+  };
 
   return (
     <div
@@ -236,11 +297,13 @@ export function PersonIdentityDetailDrawer({
           <div className="relative z-[1] flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => void handleActualizar()}
+              disabled={ocupado}
+              aria-busy={ocupado}
               className={buttonClass({ size: 'sm' })}
-              aria-label="Actualizar estado"
+              aria-label={consultaProveedor ? 'Actualizar estado consultando al proveedor' : 'Actualizar estado'}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading || ocupado ? 'animate-spin' : ''}`} aria-hidden="true" />
               Actualizar estado
             </button>
             <button
@@ -276,6 +339,17 @@ export function PersonIdentityDetailDrawer({
                 <p className="opacity-80">{error}</p>
               </div>
             </div>
+          )}
+
+          {reconcile.message && (
+            <InlineAlert tone={reconcile.message.tone}>{reconcile.message.text}</InlineAlert>
+          )}
+
+          {/* L3 — la recarga falló con datos ya pintados: el refresco automático se cortó (failedRef). */}
+          {error && data && (
+            <InlineAlert tone="warning" title="No se pudo actualizar el historial.">
+              {error} El refresco automático se detuvo; pulsa «Actualizar estado» para reintentar.
+            </InlineAlert>
           )}
 
           {!loading && data && data.validations.length === 0 && (

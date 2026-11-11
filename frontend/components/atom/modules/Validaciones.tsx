@@ -70,6 +70,7 @@ import {
 } from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
 import { MANUAL_ESTADO_META, enlaceDetalleManual } from '@/lib/identity/manual-flow';
+import { puedeGestionarIdentidad } from '@/lib/identity/permisos-modulo';
 import { useSearchParams } from 'next/navigation';
 import {
   PrevalidacionForm,
@@ -444,6 +445,9 @@ function ValidacionesLista({
     const payload = decodeJwtPayload(getToken());
     return isSuperAdmin(payload) || hasPermission(payload, ADMIN_TRAMITE_PERMISSIONS.reenviarValidacion);
   });
+  // D1 (plan «Actualizar estado» con Verify) — solo quien GESTIONA el módulo consulta al proveedor desde el
+  // detalle de persona; con solo lectura el botón recarga. Misma regla que `RequireIdentityModuleManage`.
+  const [puedeGestionarModulo] = useState(() => puedeGestionarIdentidad(decodeJwtPayload(getToken())));
   const { show: showToast } = useToast();
   const [companies, setCompanies] = useState<CompanyItem[] | null>(null);
   // '' = «Todas las compañías» (solo SuperAdmin).
@@ -1357,6 +1361,8 @@ function ValidacionesLista({
           documentNumber={personDetail.documentNumber}
           networkTenantId={personDetail.soloConsulta ? personDetail.tenantId : undefined}
           mandatario={personDetail.mandatario}
+          canManage={puedeGestionarModulo}
+          tenantId={personDetail.tenantId}
           onClose={() => {
             setPersonDetail(null);
             closeTenantScope();
