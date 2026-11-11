@@ -103,7 +103,7 @@ public static class ActoresExcelColumns
                 if (campos.HasFlag(Campos.Persona))
                 {
                     cells.Add(new ActorCell(a.Nombre));
-                    cells.Add(new ActorCell(a.Documento ?? string.Empty));
+                    cells.Add(new ActorCell(Documento(a)));
                 }
 
                 if (campos.HasFlag(Campos.Validacion))
@@ -122,6 +122,36 @@ public static class ActoresExcelColumns
     public static IReadOnlyList<string> Cells(
         IReadOnlyList<ActorValidacionDto>? actores, MaxActoresPorRolDto max, Campos campos = Campos.Todos) =>
         CellsTyped(actores, max, campos).Select(c => c.Text).ToList();
+
+    /// <summary>
+    /// «tipo número» separados por un espacio (como la pantalla y el Excel del navegador); solo el número si no hay
+    /// tipo; vacío si no hay documento.
+    /// </summary>
+    public static string Documento(ActorValidacionDto a)
+    {
+        var numero = a.Documento?.Trim();
+        if (string.IsNullOrEmpty(numero))
+            return string.Empty;
+        var tipo = a.TipoDocumento?.Trim();
+        return string.IsNullOrEmpty(tipo) ? numero : $"{tipo} {numero}";
+    }
+
+    /// <summary>
+    /// Posiciones (base 0, ya desplazadas por <paramref name="offset"/> columnas previas) de las columnas «Intentos …»
+    /// dentro del bloque, para escribirlas como NÚMERO y no como texto.
+    /// </summary>
+    public static IReadOnlySet<int> IntentosColumns(MaxActoresPorRolDto max, int offset, Campos campos = Campos.Todos)
+    {
+        var set = new HashSet<int>();
+        if (!campos.HasFlag(Campos.Intentos))
+            return set;
+
+        var porActor = ColumnsPerActor(campos);
+        var antes = (campos.HasFlag(Campos.Persona) ? 2 : 0) + (campos.HasFlag(Campos.Validacion) ? 1 : 0);
+        for (var i = 0; i < max.Comprador + max.Vendedor + max.Propietario; i++)
+            set.Add(offset + i * porActor + antes);
+        return set;
+    }
 
     private static int Cantidad(MaxActoresPorRolDto max, string rol) => rol switch
     {

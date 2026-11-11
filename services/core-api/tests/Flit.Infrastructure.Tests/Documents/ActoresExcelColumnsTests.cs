@@ -73,8 +73,23 @@ public sealed class ActoresExcelColumnsTests
         var max = new MaxActoresPorRolDto(2, 0, 0);
         var cells = ActoresExcelColumns.Cells([Actor("comprador", 1, "sin_validacion", 0)], max);
 
-        cells.Take(5).Should().Equal("comprador 1", "100", "Sin validar", "0", "");
+        cells.Take(5).Should().Equal("comprador 1", "CC 100", "Sin validar", "0", "");
         cells.Skip(5).Should().OnlyContain(c => c == "");
+    }
+
+    [Theory]
+    [InlineData("CC", "1000098455", "CC 1000098455")]
+    [InlineData("NIT", "890903938", "NIT 890903938")]
+    [InlineData(null, "1000098455", "1000098455")]
+    [InlineData("  ", "1000098455", "1000098455")]
+    [InlineData("CC", null, "")]
+    [InlineData("CC", "  ", "")]
+    public void El_documento_va_con_su_tipo_separados_por_un_espacio(string? tipo, string? numero, string esperado)
+    {
+        var actor = new ActorValidacionDto("comprador", 1, "Persona", tipo, numero, "aprobado", null, 1);
+
+        ActoresExcelColumns.Documento(actor).Should().Be(esperado);
+        ActoresExcelColumns.Cells([actor], new MaxActoresPorRolDto(1, 0, 0))[1].Should().Be(esperado);
     }
 
     [Fact]
@@ -104,7 +119,7 @@ public sealed class ActoresExcelColumnsTests
         Guid.NewGuid(), "REF-1", "Traspaso", "traspasos", "borrador", "Usuario", null, null, "1", "Persona",
         false, null, false, "", null, Actores: actores);
 
-    private static async Task<List<List<string>>> ExportAsync(
+    private static async Task<byte[]> ExportBytesAsync(
         IReadOnlyList<DetailedProcedureRowDto> filas, MaxActoresPorRolDto max)
     {
         var repo = Substitute.For<IDetailedReportReadRepository>();
@@ -123,8 +138,12 @@ public sealed class ActoresExcelColumnsTests
         var filter = new DetailedReportFilter(Guid.NewGuid(), new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 31),
             null, null, null, null, null, null, null, null, null);
         await exporter.ExportAsync(ms, filter, CancellationToken.None);
-        return Leer(ms.ToArray());
+        return ms.ToArray();
     }
+
+    private static async Task<List<List<string>>> ExportAsync(
+        IReadOnlyList<DetailedProcedureRowDto> filas, MaxActoresPorRolDto max) =>
+        Leer(await ExportBytesAsync(filas, max));
 
     private static List<List<string>> Leer(byte[] bytes)
     {
@@ -151,6 +170,35 @@ public sealed class ActoresExcelColumnsTests
         hoja[1].Should().HaveCount(hoja[0].Count);
         hoja[0].Take(ColumnasBase).Should().StartWith(["Referencia", "Tipo de trámite"]);
         hoja[0].Skip(ColumnasBase).Should().Equal(ActoresExcelColumns.Headers(max));
+    }
+
+    [Fact]
+    public async Task Solo_las_celdas_de_intentos_son_numericas_en_el_xml_de_la_hoja()
+    {
+        var max = new MaxActoresPorRolDto(1, 1, 0);
+        var bytes = await ExportBytesAsync(
+            [Fila([Actor("comprador", 1, intentos: 3), Actor("vendedor", 1, "sin_validacion", 0)])], max);
+
+        using var doc = SpreadsheetDocument.Open(new MemoryStream(bytes), false);
+        var filas = doc.WorkbookPart!.WorksheetParts.Single().Worksheet.Descendants<Row>().ToList();
+        var encabezados = filas[0].Elements<Cell>().Select(c => c.InnerText).ToList();
+        var datos = filas[1].Elements<Cell>().ToList();
+
+        var colsIntentos = encabezados
+            .Select((h, i) => (h, i)).Where(x => x.h.StartsWith("Intentos ")).Select(x => x.i).ToList();
+        colsIntentos.Should().HaveCount(2);
+        foreach (var i in colsIntentos)
+        {
+            datos[i].DataType.Should().BeNull("Intentos es número, no inlineStr");
+            datos[i].CellValue.Should().NotBeNull();
+        }
+
+        datos[colsIntentos[0]].CellValue!.Text.Should().Be("3");
+        datos[colsIntentos[1]].CellValue!.Text.Should().Be("0");
+        // El resto del archivo conserva su convención: texto en línea (incluidos los encabezados).
+        datos.Where((_, i) => !colsIntentos.Contains(i)).Should()
+            .OnlyContain(c => c.DataType != null && c.DataType.Value == CellValues.InlineString);
+        filas[0].Elements<Cell>().Should().OnlyContain(c => c.DataType != null && c.DataType.Value == CellValues.InlineString);
     }
 
     [Fact]
