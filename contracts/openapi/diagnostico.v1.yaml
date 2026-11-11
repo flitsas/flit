@@ -1603,6 +1603,109 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/reintentar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Tablero]
+      operationId: reintentarPlaca
+      summary: Reencola las consultas pegadas de una placa
+      description: >
+        Ajuste 2026-11-11 (Punto 3, decisiones 3.2-3.4). Permiso diagnostico.consultas.reprocesar. Sin cuerpo. Reencola solo
+        las celdas pegadas de la placa: en ERROR, o en PENDIENTE/EN_CURSO sin cambio hace más de
+        Diagnostico:Consultas:UmbralPegada (10 min por defecto). Si la RUNT del vehículo no está COMPLETADO solo se reencola
+        la RUNT (las demás esperan su cierre). Las COMPLETADO, NA y las recientes no se tocan. Cada celda sale por el camino
+        del reproceso: PENDIENTE, intentos_auto=0 (vuelve a tener sus reintentos automáticos), disponible_desde=ahora, intento
+        con disparador=REPROCESO y el usuario, y un trabajo con trabajo_id NUEVO; la respuesta tardía del trabajo anterior se
+        descarta. Un lote COMPLETADO o INCOMPLETO vuelve a EN_PROCESO (historial REPROCESO). Idempotente: pulsar dos veces
+        seguidas responde reencoladas=0 la segunda (una celda recién reencolada no cuenta como pegada). El dictamen de la placa
+        se recalcula al completarse sus consultas.
+      responses:
+        "200":
+          description: Celdas reencoladas (0 si no había ninguna pegada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintentoPegadas"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.consultas.reprocesar; sin compañía (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario, o el vehículo no es del lote."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = CELDA_MODIFICADA: una celda cambió mientras se pedía el reintento; volver a leer la grilla."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/reintentar-pegadas:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Tablero]
+      operationId: reintentarPegadasLote
+      summary: Reencola las consultas pegadas de todo el lote
+      description: >
+        Ajuste 2026-11-11 (Punto 3). Igual que reintentarPlaca, para todas las placas del lote en una sola transacción. Permiso
+        diagnostico.consultas.reprocesar. Idempotente. El tablero lo ofrece como «Reintentar pegadas (N)» con N = total_pegadas
+        de la grilla.
+      responses:
+        "200":
+          description: Celdas reencoladas (0 si no había ninguna pegada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintentoPegadas"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.consultas.reprocesar; sin compañía (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = CELDA_MODIFICADA: una celda cambió mientras se pedía el reintento; volver a leer la grilla."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/express:
     post:
       tags: [Express]
@@ -3460,6 +3563,20 @@ components:
           description: Solo con estimado_consultas=AL_FINALIZAR y el lote COMPLETADO o INCOMPLETO; si no, la clave no viene.
           items:
             $ref: "#/components/schemas/EstimadoVsConsumido"
+        total_pegadas:
+          type: integer
+          minimum: 0
+          description: >
+            Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): placas del lote con alguna consulta pegada
+            (ERROR, o PENDIENTE/EN_CURSO sin cambio hace más de 10 min; con la RUNT sin completar cuenta solo la RUNT). Viene
+            siempre, también en el sondeo incremental (una placa se pega sin que cambie ninguna celda). Es la N de
+            «Reintentar pegadas (N)».
+        vehiculos_pegados:
+          type: array
+          description: Punto 3. Ids de las placas pegadas (las de total_pegadas), en el orden del lote; siempre presente.
+          items:
+            type: string
+            format: uuid
 
     AvanceLote:
       type: object
@@ -3515,6 +3632,12 @@ components:
             los registre. Solo tipo y número enmascarado.
           items:
             $ref: "#/components/schemas/PropietarioGrilla"
+        pegada:
+          type: boolean
+          description: >
+            Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): la placa tiene alguna consulta que
+            «Reintentar placa» reencolaría. Solo viaja en las filas de la respuesta; para las que no viajan, usar
+            vehiculos_pegados del lote.
 
     DocumentoDeclaradoGrilla:
       type: object
@@ -3647,6 +3770,15 @@ components:
           type: integer
           format: int64
           description: version_tablero del lote tras el reproceso (la celda la lleva para el sondeo ?desde=).
+
+    ReintentoPegadas:
+      type: object
+      required: [reencoladas]
+      properties:
+        reencoladas:
+          type: integer
+          minimum: 0
+          description: Celdas que se reencolaron con un trabajo_id nuevo (0 si no había ninguna pegada).
 
     HistorialLote:
       type: object

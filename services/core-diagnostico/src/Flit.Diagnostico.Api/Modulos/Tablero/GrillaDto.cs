@@ -11,7 +11,10 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// las columnas y el avance van siempre. DTO de cliente: nunca lleva el origen de la celda, el usuario que la llenó a mano,
 /// el payload ni documentos en claro (R-20; <c>GrillaTests</c> lo verifica por reflexión). Desde HU #14087 cada fila lleva el
 /// documento declarado y el de cada propietario, solo con su tipo y ENMASCARADO en el servidor. <c>estimado_consultas</c> solo aparece con
-/// <c>estimado_consultas=AL_FINALIZAR</c> en la copia de configuración del lote y el lote cerrado (R-11b).
+/// <c>estimado_consultas=AL_FINALIZAR</c> en la copia de configuración del lote y el lote cerrado (R-11b). Desde el ajuste
+/// 2026-11-11 (Punto 3) van SIEMPRE, también en el sondeo incremental, <c>total_pegadas</c> (placas del lote con alguna celda que el
+/// reintento reencolaría, <see cref="Domain.Consultas.CriterioPegada"/>) y <c>vehiculos_pegados</c> (sus ids, en el orden del lote):
+/// una placa puede quedar pegada sin que cambie ninguna celda (pasan los 10 min), así que el cliente no lo vería solo con las filas.
 /// </summary>
 public sealed record GrillaDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -23,7 +26,9 @@ public sealed record GrillaDto(
     [property: JsonPropertyName("avance")] AvanceLoteDto Avance,
     [property: JsonPropertyName("vehiculos")] IReadOnlyList<FilaVehiculoDto> Vehiculos,
     [property: JsonPropertyName("estimado_consultas"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<EstimadoVsConsumidoDto>? EstimadoConsultas);
+    IReadOnlyList<EstimadoVsConsumidoDto>? EstimadoConsultas,
+    [property: JsonPropertyName("total_pegadas")] int TotalPegadas,
+    [property: JsonPropertyName("vehiculos_pegados")] IReadOnlyList<Guid> VehiculosPegados);
 
 /// <summary>Avance del lote: vehículos en total y cuántos ya terminaron (todas sus celdas en COMPLETADO o NA, R-7).</summary>
 public sealed record AvanceLoteDto(
@@ -33,6 +38,7 @@ public sealed record AvanceLoteDto(
 /// <summary>
 /// Una fila de la grilla: el vehículo, sus celdas (solo las cambiadas desde <c>desde</c>) y sus documentos actuales (HU #14087):
 /// el declarado por el cliente (null si no hay) y los propietarios del RUNT en su orden (vacío si aún no hay), enmascarados.
+/// <c>pegada</c> (Punto 3, 2026-11-11): la placa tiene alguna celda que «Reintentar placa» reencolaría.
 /// </summary>
 public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -44,7 +50,8 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("terminado")] bool Terminado,
     [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaDto> Celdas,
     [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
-    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios);
+    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios,
+    [property: JsonPropertyName("pegada")] bool Pegada);
 
 /// <summary>
 /// El documento que declaró el cliente para el vehículo (HU #14087; hoy el locatario de la captura masiva o Express): rol

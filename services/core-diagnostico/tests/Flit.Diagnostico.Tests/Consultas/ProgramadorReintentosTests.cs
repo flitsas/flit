@@ -17,7 +17,7 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// HU #13737 (ADR-0075, Q4, U2 = a) — <see cref="ProgramadorReintentos"/>: los reintentos de las consultas por el bus los decide
 /// Diagnóstico. Un transitorio con reintentos disponibles deja la celda PENDIENTE con su intento, <c>intentos_auto + 1</c> y
 /// <c>disponible_desde = fin + Espera(n)</c> en un scope propio y lanza <see cref="ReintentoProgramadoException"/> (el SDK lleva el
-/// resultado a la cola de reintentos de 5, 10 y 20 s); cuando el resultado demorado vuelve, si la espera venció se publica un
+/// resultado a la cola de reintentos con la espera fija de la política, punto 3); cuando el resultado demorado vuelve, si la espera venció se publica un
 /// trabajo con <c>trabajo_id</c> nuevo y, si no, da otra vuelta. Un resultado de un trabajo que ya no es el vigente no toca la
 /// celda. PostgreSQL real (<see cref="ApiDePrueba"/>), reloj manual; placas TST###.
 /// </summary>
@@ -28,11 +28,13 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// </example>
 public sealed class ProgramadorReintentosTests
 {
+    // Punto 3 (2026-11-11): la cola de reintentos del consumidor espera lo mismo que la política (fija, configurable).
     [Fact]
     public void Las_esperas_de_la_cola_de_reintentos_son_las_de_la_politica()
     {
-        ProgramadorReintentos.Esperas.Should().Equal(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20));
-        ProgramadorReintentos.Esperas.Should().Equal(Enumerable.Range(1, PoliticaReintentos.Maximo).Select(PoliticaReintentos.Espera));
+        ProgramadorReintentos.EsperasDe(PoliticaReintentos.EsperaPorDefecto)
+            .Should().Equal(TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2));
+        ProgramadorReintentos.EsperasDe(TimeSpan.FromSeconds(45)).Should().HaveCount(PoliticaReintentos.Maximo).And.OnlyContain(e => e == TimeSpan.FromSeconds(45));
     }
 
     [Fact]
@@ -54,7 +56,7 @@ public sealed class ProgramadorReintentosTests
         await programar.Should().ThrowAsync<ReintentoProgramadoException>();
         var despues = await LeerAsync(empresa, celda.Id, ct);
         (despues.Estado, despues.IntentosAuto, despues.TipoError, despues.TrabajoId).Should().Be((EstadoCelda.Pendiente, 1, (string?)null, celda.TrabajoId));
-        despues.DisponibleDesde.Should().BeCloseTo(fin + PoliticaReintentos.Espera(1), TimeSpan.FromMilliseconds(1), "backoff desde el fin del intento (Postgres guarda microsegundos)");
+        despues.DisponibleDesde.Should().BeCloseTo(fin + PoliticaReintentos.EsperaPorDefecto, TimeSpan.FromMilliseconds(1), "backoff desde el fin del intento (Postgres guarda microsegundos)");
         despues.ReprocesoUsuarioId.Should().BeNull("el reproceso se consumió en esta ejecución; el reintento es AUTO");
         despues.VersionTablero.Should().BeGreaterThan(celda.VersionTablero);
         var intentos = await IntentosAsync(empresa, celda.Id, ct);
@@ -91,17 +93,21 @@ public sealed class ProgramadorReintentosTests
         var empresa = DosEmpresas.En(api).A;
         var celda = await EnCursoAsync(api, empresa, ct);
         var programador = Programador(api, reloj, maxReintentos: 2);
-        // Segundo reintento (intentos_auto = 1): espera 10 s, más que la primera cola de reintentos (5 s).
+        // Segundo reintento (intentos_auto = 1). Punto 3, decisión 3.1: la espera es fija (2 min por defecto), no crece; el resultado
+        // que vuelve a mitad de la espera da otra vuelta y el que vuelve cumplida la espera publica.
         await Motor.EjecutarAsync(api, $"UPDATE diagnostico.consultas SET intentos_auto = 1 WHERE id = '{celda.Id}'", ct);
         var decision = programador.Politica.Decidir("TIMEOUT", 1, reloj.GetUtcNow());
+        programador.Politica.Espera.Should().Be(PoliticaReintentos.EsperaPorDefecto);
+        decision.DisponibleDesde.Should().Be(reloj.GetUtcNow() + programador.Politica.Espera, "la espera del segundo reintento es la misma fija");
         await programador.Invoking(p => p.ProgramarAsync(CeldaEnCurso.De(celda), ResultadoCelda.Error("TIMEOUT"), decision, [], ct))
             .Should().ThrowAsync<ReintentoProgramadoException>();
 
-        reloj.Avanzar(ProgramadorReintentos.Esperas[0]);
-        (await ReanudarAsync(api, empresa, celda.Id, reloj, ct)).Should().BeTrue("a los 5 s la espera de 10 s no vence: otra vuelta");
+        var mitad = programador.Politica.Espera / 2;
+        reloj.Avanzar(mitad);
+        (await ReanudarAsync(api, empresa, celda.Id, reloj, ct)).Should().BeTrue("a mitad de la espera fija no vence: otra vuelta");
         (await LeerAsync(empresa, celda.Id, ct)).TrabajoId.Should().Be(celda.TrabajoId);
 
-        reloj.Avanzar(ProgramadorReintentos.Esperas[1]);
+        reloj.Avanzar(programador.Politica.Espera - mitad);
         (await ReanudarAsync(api, empresa, celda.Id, reloj, ct)).Should().BeFalse("vencida la espera, se publica");
         var publicada = await LeerAsync(empresa, celda.Id, ct);
         publicada.TrabajoId.Should().NotBeNull().And.NotBe(celda.TrabajoId!.Value, "el reintento es un trabajo nuevo");

@@ -119,7 +119,7 @@ public sealed class EjecutorPorPersonasTests
         var enEspera = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         (enEspera.Estado, enEspera.IntentosAuto).Should().Be((EstadoCelda.Pendiente, 1), "el TIMEOUT de una persona se reintenta con backoff");
         MotorPersonas.PersonasDelPayload(enEspera.Payload).Select(p => p.GetProperty("estado").GetString()).Should().Equal("OK", "ERROR", "OK");
-        reloj.Avanzar(PoliticaReintentos.Espera(1));
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         var agotada = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);

@@ -43,6 +43,8 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
    * `descargarReportes`). Sin ella la columna no existe (backoffice y compañía sin la capacidad).
    */
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
+  /** Título de la columna de `accionVehiculo`; por defecto «Reporte» (Punto 3: «Acciones» cuando también hay reintentos). */
+  tituloAccionVehiculo?: string;
   /** Acción bajo la placa (corte 7: «Dictamen»). No entra en el sondeo de la grilla: quien la pinta pide el dictamen al abrirla. */
   accionEncabezado?: (vehiculo: FilaVehiculo) => ReactNode;
 }
@@ -133,6 +135,7 @@ export function GrillaSemaforos({
   accionCelda,
   marcaCelda,
   accionVehiculo,
+  tituloAccionVehiculo = "Reporte",
   accionEncabezado,
 }: GrillaSemaforosProps) {
   const pedidas = fuentesPedidas(grilla.columnas);
@@ -165,7 +168,7 @@ export function GrillaSemaforos({
             )}
             {accionVehiculo && (
               <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-                Reporte
+                {tituloAccionVehiculo}
               </th>
             )}
           </tr>

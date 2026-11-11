@@ -55,6 +55,11 @@ export interface FilaVehiculo {
   documento_declarado?: DocumentoDeclaradoFila | null;
   /** HU #14087: documentos de los propietarios del vehículo, en orden; vacío si aún no se conocen. */
   propietarios?: DocumentoPropietarioFila[];
+  /**
+   * Punto 3 (ola 2026-11-11): alguna celda en ERROR o en PENDIENTE/EN_CURSO sin respuesta hace más de 10 min. Solo entonces
+   * hay «Reintentar placa». Sin la clave (backend previo o fila sin cambios), se trata como false.
+   */
+  pegada?: boolean;
   celdas: CeldaGrilla[];
 }
 
@@ -86,6 +91,11 @@ export interface Grilla {
   vehiculos: FilaVehiculo[];
   /** Solo con estimado AL_FINALIZAR y el lote COMPLETADO o INCOMPLETO. */
   estimado_consultas?: EstimadoVsConsumido[];
+  /** Punto 3: placas pegadas del lote; viaja en cada respuesta, como el avance. Sin la clave, 0. */
+  total_pegadas?: number;
+  /** Punto 3: ids de las placas pegadas, en cada respuesta. Cubre las que se pegan solo por tiempo (> 10 min sin cambio de celda),
+   * que el sondeo incremental no reenvía. Sin la clave, se conserva el `pegada` de cada fila. */
+  vehiculos_pegados?: string[];
 }
 
 export interface PanelCerrado {
@@ -109,6 +119,38 @@ export function cerrarPanel(id: string): Promise<PanelCerrado> {
 /** POST /consultas/{cid}/reprocesar (HU #13746): la celda en ERROR vuelve a PENDIENTE y el lote a EN_PROCESO. */
 export async function reprocesarConsulta(consultaId: string): Promise<void> {
   await apiFetch<unknown>(`/consultas/${encodeURIComponent(consultaId)}/reprocesar`, { method: "POST" });
+}
+
+/** Respuesta de los dos reintentos manuales (Punto 3): cuántas celdas volvieron a PENDIENTE. */
+export interface ResultadoReintento {
+  reencoladas: number;
+}
+
+/** Rutas de los reintentos manuales, aisladas aquí por si el backend cambia el nombre. */
+export const rutaReintentarVehiculo = (id: string, vehiculoId: string) => ruta(id, `/vehiculos/${encodeURIComponent(vehiculoId)}/reintentar`);
+export const rutaReintentarPegadas = (id: string) => ruta(id, "/reintentar-pegadas");
+
+/** POST /diagnosticos/{id}/vehiculos/{vid}/reintentar: solo las celdas pegadas de la placa vuelven a PENDIENTE. */
+export function reintentarVehiculo(id: string, vehiculoId: string): Promise<ResultadoReintento> {
+  return apiFetch<ResultadoReintento>(rutaReintentarVehiculo(id, vehiculoId), { method: "POST" });
+}
+
+/** POST /diagnosticos/{id}/reintentar-pegadas: todas las celdas pegadas del lote vuelven a PENDIENTE. */
+export function reintentarPegadas(id: string): Promise<ResultadoReintento> {
+  return apiFetch<ResultadoReintento>(rutaReintentarPegadas(id), { method: "POST" });
+}
+
+/** «N consultas reenviadas» (singular con 1). */
+export function mensajeReenviadas(reencoladas: number): string {
+  const n = Number.isFinite(reencoladas) ? Math.max(0, Math.trunc(reencoladas)) : 0;
+  if (n === 0) return "No había consultas pegadas para reenviar.";
+  return n === 1 ? "1 consulta reenviada" : `${n} consultas reenviadas`;
+}
+
+/** Mensaje claro de un error de los reintentos manuales; cualquier otro, el de la API. */
+export function mensajeReintento(error: unknown): string {
+  if (error instanceof ApiError && error.status === 403) return "No tienes permiso para reintentar consultas.";
+  return error instanceof Error && error.message ? error.message : "No se pudieron reintentar las consultas.";
 }
 
 const MENSAJES_CIERRE: Record<string, string> = {

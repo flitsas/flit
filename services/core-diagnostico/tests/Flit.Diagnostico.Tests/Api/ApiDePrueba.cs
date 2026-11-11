@@ -134,6 +134,9 @@ public sealed class ApiDePrueba : IAsyncDisposable
         // HU #13727 (ADR-0075): el consumidor de resultados ni el reconciliador corren en las pruebas; cada prueba entrega los
         // resultados con su BusDePrueba (y llama al reconciliador directo).
         ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "false",
+        // Punto 3 (2026-11-11): el servicio trae 3 reintentos por defecto; las pruebas del motor se escribieron con 1 y lo fijan
+        // aquí (la que necesita otro valor lo pasa a Motor.Bus(api, maxReintentos) o a la configuración).
+        ["Diagnostico:Consultas:MaxReintentos"] = "1",
         // HU #13850: tampoco el trabajador del ZIP; cada prueba llama al empaquetador directo.
         ["Diagnostico:Evidencias:Habilitado"] = "false",
         // Corte 6: el trabajador de redacción no corre en las pruebas; cada prueba llama a la cola directo.

@@ -1,27 +1,60 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, ClipboardList, SearchX } from "lucide-react";
-import { InlineAlert } from "@flit/ui/InlineAlert";
+import { INLINE_ALERT_TONES, InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { Migas } from "@/components/comun/Migas";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
 import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
-import { cerrarPanel, mensajeCierre, type CeldaGrilla, type FilaVehiculo, type Grilla } from "@/lib/tablero/api";
-import { hayPendientes, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
+import {
+  cerrarPanel,
+  mensajeCierre,
+  mensajeReenviadas,
+  reintentarPegadas,
+  reintentarVehiculo,
+  type CeldaGrilla,
+  type FilaVehiculo,
+  type Grilla,
+  type ResultadoReintento,
+} from "@/lib/tablero/api";
+import { hayPendientes, marcarReintentada, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
 import { BotonAbrirDictamen, PanelDictamen } from "./PanelDictamen";
 import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
+import { BotonReintentar } from "./BotonReintentar";
 import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
 import { GrillaSemaforos } from "./GrillaSemaforos";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 import { rutaIlustracion } from "@flit/ui/ilustraciones";
+
+/**
+ * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert con su propio nombre accesible
+ * (InlineAlert no lo admite y anidaría otro `status`). Recibe el foco: el botón pulsado desaparece al dejar de estar pegada.
+ */
+function AvisoReenviadas({ ref, children }: { ref: React.Ref<HTMLDivElement>; children: React.ReactNode }) {
+  const { color, background, border, Icon } = INLINE_ALERT_TONES.success;
+  return (
+    <div
+      ref={ref}
+      tabIndex={-1}
+      role="status"
+      aria-live="polite"
+      aria-label="Resultado del reintento"
+      className={`flex items-center gap-3 rounded-xl p-3 text-xs font-semibold ${FOCO_CLS}`}
+      style={{ background, border: `1px solid ${border}`, color }}
+    >
+      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
 
 /** «Cerrar panel» procede con el lote EN_PROCESO, sin celdas abiertas y con alguna en error (si no, la API responde 409). */
 const puedeCerrarPanel = (g: Grilla) =>
@@ -59,6 +92,9 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     habilitado: puedeVer,
   });
   const [aviso, setAviso] = useState<string | null>(null);
+  // Punto 3: «N consultas reenviadas» tras un reintento manual; recibe el foco porque el botón pulsado desaparece.
+  const [reenviadas, setReenviadas] = useState<string | null>(null);
+  const reenviadasRef = useRef<HTMLDivElement>(null);
   const [cerrando, setCerrando] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   const volver = urlVolverAlListado(desde);
@@ -75,9 +111,40 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   }
 
   function alFallarReproceso(mensaje: string, volverALeer: boolean) {
+    setReenviadas(null);
     setAviso(mensaje);
     if (volverALeer) refrescar();
   }
+
+  /** Reintento manual (Punto 3): sin `vehiculoId`, el del lote. Oculta la acción al instante y vuelve a leer la grilla. */
+  function alReintentar(resultado: ResultadoReintento, vehiculoId?: string) {
+    setAviso(null);
+    setReenviadas(mensajeReenviadas(resultado?.reencoladas ?? 0));
+    actualizar((g) => marcarReintentada(g, vehiculoId));
+    refrescar();
+  }
+
+  useEffect(() => {
+    if (reenviadas) reenviadasRef.current?.focus();
+  }, [reenviadas]);
+
+  const accionVehiculo =
+    puedeDescargar || puedeReprocesar
+      ? (v: FilaVehiculo) => (
+          <div className="flex flex-col items-start gap-2">
+            {puedeDescargar && grilla && <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} />}
+            {puedeReprocesar && v.pegada && (
+              <BotonReintentar
+                etiqueta={`Reintentar consultas de la placa ${v.placa || v.vin || v.identificador}`}
+                texto="Reintentar placa"
+                reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
+                onReintentado={(r) => alReintentar(r, v.id)}
+                onError={alFallarReproceso}
+              />
+            )}
+          </div>
+        )
+      : undefined;
 
   async function cerrar() {
     setCerrando(true);
@@ -147,6 +214,9 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           <EstadoGlobal grilla={grilla} sondeando={sondeando} />
         </section>
         <DescargasLote diagnosticoId={diagnosticoId} estadoLote={grilla.estado} puedeDescargar={puedeDescargar} />
+        {reenviadas && (
+          <AvisoReenviadas ref={reenviadasRef}>{reenviadas}</AvisoReenviadas>
+        )}
         {aviso && (
           <InlineAlert tone="error" title="No se completó la acción">
             {aviso}
@@ -166,12 +236,23 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           </InlineAlert>
         )}
         <section aria-label="Grilla del lote" className={`${TARJETA_CLS} flex flex-col gap-4`}>
+          {puedeReprocesar && (grilla.total_pegadas ?? 0) > 0 && (
+            <BotonReintentar
+              variante="lote"
+              etiqueta={`Reintentar las ${grilla.total_pegadas} placas pegadas del lote`}
+              texto={`Reintentar pegadas (${grilla.total_pegadas})`}
+              reintentar={() => reintentarPegadas(diagnosticoId)}
+              onReintentado={(r) => alReintentar(r)}
+              onError={alFallarReproceso}
+            />
+          )}
           <GrillaSemaforos
             grilla={grilla}
             puedeReprocesar={puedeReprocesar}
             onReprocesada={alReprocesar}
             onErrorReproceso={alFallarReproceso}
-            accionVehiculo={puedeDescargar ? (v) => <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} /> : undefined}
+            accionVehiculo={accionVehiculo}
+            tituloAccionVehiculo={puedeReprocesar ? "Acciones" : "Reporte"}
             accionEncabezado={(v) => (
               <BotonAbrirDictamen
                 identificador={v.placa || v.vin || v.identificador}

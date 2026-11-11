@@ -156,7 +156,7 @@ public sealed class SimitCaidaEnAvisoTests
         var pendiente = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST103", Fuente.SimitVehiculo, ct);
         (pendiente.Estado, pendiente.IntentosAuto).Should().Be((EstadoCelda.Pendiente, 1), "un transitorio se reintenta");
 
-        reloj.Avanzar(ProgramadorReintentos.Esperas[0]);
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await bus.ProcesarTodoAsync(ct);
 
         var cerrada = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST103", Fuente.SimitVehiculo, ct);

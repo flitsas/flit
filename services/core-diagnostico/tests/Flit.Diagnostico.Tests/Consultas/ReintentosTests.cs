@@ -59,7 +59,7 @@ public sealed class ReintentosTests
             runt.TipoError.Should().BeNull();
             runt.LeaseHasta.Should().BeNull();
             runt.IntentosAuto.Should().Be(reintento);
-            runt.DisponibleDesde.Should().Be(ultimo.Fin + PoliticaReintentosEspera(reintento), "backoff 5 s × 2^(n−1) desde el fin del intento");
+            runt.DisponibleDesde.Should().Be(ultimo.Fin + PoliticaReintentosEspera(reintento), "espera fija (2 min por defecto) desde el fin del intento");
             simit.Estado.Should().Be(EstadoCelda.Pendiente, "las demás celdas siguen esperando a RUNT, sin bloquearse");
             simit.TipoError.Should().BeNull();
             (await procesador.ProcesarLoteAsync(ct)).Should().Be(0, "antes del backoff no se toma");
@@ -128,22 +128,53 @@ public sealed class ReintentosTests
         error.Which.Message.Should().Contain("Diagnostico:Consultas:MaxReintentos").And.Contain("[0, 3]");
     }
 
-    // D-12 — sin configuración, MaxReintentos vale 1; 0 y 3 son válidos.
+    // Punto 3 AC1 (2026-11-11) — por defecto 3 reintentos, 2 min de espera fija y 10 min para «pegada»; 0 y 3 son válidos.
+    [Fact]
+    public void Por_defecto_3_reintentos_2_minutos_de_espera_y_10_de_umbral()
+    {
+        var porDefecto = new OpcionesConsultas();
+        (porDefecto.MaxReintentos, porDefecto.EsperaReintento, porDefecto.UmbralPegada)
+            .Should().Be((3, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(10)));
+        porDefecto.Errores().Should().BeEmpty();
+    }
+
     [Theory]
-    [InlineData(null, 1)]
     [InlineData("0", 0)]
     [InlineData("3", 3)]
-    public async Task MaxReintentos_por_defecto_es_1_y_acepta_el_rango(string? valor, int esperado)
+    public async Task MaxReintentos_acepta_el_rango(string valor, int esperado)
     {
-        await using var api = await ApiDePrueba.SinBaseAsync(configurar: b =>
-        {
-            if (valor is not null)
-                b.Configuration["Diagnostico:Consultas:MaxReintentos"] = valor;
-        });
+        await using var api = await ApiDePrueba.SinBaseAsync(configurar: b => b.Configuration["Diagnostico:Consultas:MaxReintentos"] = valor);
         api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value.MaxReintentos.Should().Be(esperado);
     }
 
-    private static TimeSpan PoliticaReintentosEspera(int reintento) => PoliticaReintentos.Espera(reintento);
+    // Punto 3 AC1 — la espera y el umbral son configuración global (appsettings) y se leen al arrancar.
+    [Fact]
+    public async Task Espera_y_umbral_se_configuran()
+    {
+        await using var api = await ApiDePrueba.SinBaseAsync(configurar: b =>
+        {
+            b.Configuration["Diagnostico:Consultas:EsperaReintento"] = "00:01:30";
+            b.Configuration["Diagnostico:Consultas:UmbralPegada"] = "00:15:00";
+        });
+        var opciones = api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value;
+        (opciones.EsperaReintento, opciones.UmbralPegada).Should().Be((TimeSpan.FromSeconds(90), TimeSpan.FromMinutes(15)));
+    }
+
+    // Punto 3 — una espera fuera de [1 s, 1 h], o un umbral que no supera la espera (una celda que espera su reintento contaría
+    // como pegada) o pasa de 1 día, impide arrancar e indica la regla.
+    [Theory]
+    [InlineData("EsperaReintento", "00:00:00")]
+    [InlineData("EsperaReintento", "01:00:01")]
+    [InlineData("UmbralPegada", "00:02:00")]
+    [InlineData("UmbralPegada", "1.00:00:01")]
+    public async Task Espera_o_umbral_fuera_de_rango_impide_arrancar(string clave, string valor)
+    {
+        var error = await FluentActions.Awaiting(() => ApiDePrueba.SinBaseAsync(configurar: b => b.Configuration[$"Diagnostico:Consultas:{clave}"] = valor))
+            .Should().ThrowAsync<OptionsValidationException>();
+        error.Which.Message.Should().Contain($"Diagnostico:Consultas:{clave}");
+    }
+
+    private static TimeSpan PoliticaReintentosEspera(int reintento) => reintento >= 1 ? PoliticaReintentos.EsperaPorDefecto : throw new ArgumentOutOfRangeException(nameof(reintento));
 
     /// <summary>Intentos del lote en orden de inicio, leídos con el contexto de la empresa.</summary>
     internal static async Task<List<IntentoConsulta>> IntentosAsync(ApiDePrueba api, EmpresaDePrueba empresa, Guid diagnostico, CancellationToken ct)
