@@ -74,6 +74,16 @@ public sealed class ActoresExcelColumnsTests
         Cells(fila, max, Grupo.Vendedor).Should().Equal("", "", "", "");
     }
 
+    [Fact]
+    public void En_el_grupo_comprador_el_comprador_sale_antes_que_el_propietario_aunque_su_ordinal_sea_mayor()
+    {
+        // Ancho 2: el servidor lo da como max(comprador, propietario) sobre todo el filtro.
+        var max = new MaxActoresPorRolDto(2, 0, 1);
+        var fila = new[] { Actor("propietario", 1), Actor("comprador", 2) };
+
+        Cells(fila, max, Grupo.Comprador, Campos.Nombre).Should().Equal("comprador 2", "propietario 1");
+    }
+
     [Theory]
     [InlineData(0, 0, 0, 1, 1)]
     [InlineData(2, 0, 1, 2, 1)]
