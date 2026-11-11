@@ -1,3 +1,4 @@
+import { resolverGrupoPlaca } from '@/lib/tramites/plate-format';
 import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import { apiBaseForPageRoot } from './base-url';
@@ -129,6 +130,8 @@ interface PreflightPreviewDto extends PreflightSnapshotDto {
   /** Epic #12550 — `corta` | `larga` en matrícula inicial; ausente/null en el resto. */
   route?: string | null;
   transitOffice?: { id: string; code: string; name: string; cityName?: string | null } | null;
+  /** HU9 — grupo de placa de la clase consultada (catálogo del backend). */
+  grupoPlaca?: string | null;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -1736,6 +1739,8 @@ export const tramitesClient = {
             cityName: dto.transitOffice.cityName ?? null,
           }
         : null,
+      // HU9 — solo los cuatro grupos válidos; cualquier otro valor (o ausente) queda null.
+      grupoPlaca: resolverGrupoPlaca(dto.grupoPlaca, null),
     };
   },
 

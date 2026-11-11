@@ -105,6 +105,12 @@ public sealed record OtClientProcedure
     /// <summary>Detalle (GET by id): clase.</summary>
     public string? Clase { get; init; }
 
+    /// <summary>
+    /// HU8 (Caso C 2026-11-09) — grupo de placa de <see cref="Clase"/> (lista y detalle). <c>null</c> si la
+    /// clase es vacía, «SIN CLASE» o desconocida. Lo resuelve Infrastructure con el catálogo de clasificación.
+    /// </summary>
+    public Flit.Admin.Domain.PlatePreassign.PlateClassGroup? GrupoPlaca { get; init; }
+
     /// <summary>Detalle (GET by id): servicio.</summary>
     public string? Servicio { get; init; }
 

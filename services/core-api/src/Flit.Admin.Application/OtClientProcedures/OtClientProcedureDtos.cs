@@ -70,6 +70,12 @@ public sealed class OtClientProcedureResponse
     /// <summary>Color EFECTIVO: el nuevo si el trámite declara un cambio. Contrastar con <see cref="RuntSnapshot"/>.</summary>
     public string? Color { get; init; }
     public string? Clase { get; init; }
+
+    /// <summary>
+    /// HU8 (Caso C 2026-11-09) — grupo de placa de <see cref="Clase"/>: <c>CARRO</c> | <c>MOTO</c> | <c>MOTOCARRO</c> |
+    /// <c>REMOLQUE</c> | <c>MAQUINARIA</c> | <c>null</c> (clase vacía, «SIN CLASE» o desconocida ⇒ formatos actuales).
+    /// </summary>
+    public string? GrupoPlaca { get; init; }
     public string? Servicio { get; init; }
     /// <summary>Combustible EFECTIVO. Ver <see cref="Color"/>.</summary>
     public string? Combustible { get; init; }
@@ -267,6 +273,7 @@ internal static class OtClientProcedureMapper
             Modelo = procedure.Modelo,
             Color = procedure.Color,
             Clase = procedure.Clase,
+            GrupoPlaca = Domain.PlatePreassign.PlateRangeRules.ToContractValue(procedure.GrupoPlaca),
             Servicio = procedure.Servicio,
             Combustible = procedure.Combustible,
             Carroceria = procedure.Carroceria,

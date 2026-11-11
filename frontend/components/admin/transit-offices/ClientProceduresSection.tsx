@@ -111,6 +111,8 @@ import { buildWorkbook, type DataColumn } from "@/components/consultas/columns";
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/consultas/export";
 import { selloDeArchivo } from "@/components/operacion/tramites-export";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { estadoPlacaOt, grupoPlacaPideDigito, resolverGrupoPlaca } from "@/lib/tramites/plate-format";
+import { PlacaOtField } from "./PlacaOtField";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 
 // Bug #13055 — tamaño inicial; el usuario lo cambia con «Filas por página».
@@ -1189,8 +1191,17 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setAssignTarget(row);
   };
 
+  // Registro diferido 2026-11-09 (HU 2) — para carros (clase normalizada exactamente igual a una de
+  // las clases de carro) la placa solo admite 3 letras + 3 números: el input normaliza mientras se
+  // escribe y «Asignar» espera al formato. El backend aplica la misma regla (422). Otras clases, o la
+  // clase vacía, conservan la ayuda con todos los formatos. Campo compartido: `PlacaOtField`.
+  // HU6 (2026-11-09) — el formato va por grupo (CARRO / MOTO / REMOLQUE / MAQUINARIA): `grupoPlaca`
+  // del backend (catálogo de clases) y, si no viene, listas exactas por `clase`. Sin grupo, libre.
+  const assignGrupo = resolverGrupoPlaca(assignTarget?.grupoPlaca, assignTarget?.clase);
+  const assignPlacaLista = estadoPlacaOt(plateInput, assignGrupo).lista;
+
   const confirmAssignPlate = async () => {
-    if (!assignTarget || !plateInput.trim()) return;
+    if (!assignTarget || !assignPlacaLista) return;
     setActing(true);
     try {
       // HU #12852 — sin selector de modo: assignPlateToProcedure fija outOfRange=true implícito.
@@ -1361,8 +1372,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // HU #12167 (Feature #12156) — corregir la placa dentro de la ventana de 1 hora (una única vez).
   // El backend rechaza fuera de la ventana o si ya se usó la corrección; el modal solo evita el
   // roundtrip cuando el ítem del menú ya llegó deshabilitado (ver plateUpdateWindow).
+  // Decisión del usuario 2026-11-09 — «Corregir placa» aplica la misma máscara de carro que
+  // «Asignar placa» (mismo `PlacaOtField` y misma regla `estadoPlacaOt`).
+  const updateGrupo = resolverGrupoPlaca(updatePlateTarget?.grupoPlaca, updatePlateTarget?.clase);
+  const updatePlacaLista = estadoPlacaOt(updatePlateInput, updateGrupo).lista;
+
   const confirmUpdatePlate = async () => {
-    if (!updatePlateTarget || !updatePlateInput.trim()) return;
+    if (!updatePlateTarget || !updatePlacaLista) return;
     setActing(true);
     try {
       await updateProcedurePlate(updatePlateTarget.id, updatePlateInput.trim());
@@ -2001,34 +2017,48 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 que termine en ese dígito o cualquier otra.
                 HU #12852 (Feature #12846) — ya no hay lista de placas del rango que marcar con ★: la
                 guía queda como sugerencia sobre la placa libre que se va a escribir abajo. */}
-            {preferredDigit && (
+            {/* HU6 (2026-11-09) — remolque y maquinaria no llevan dígito (D2); en motos el dígito es el
+                primer número de la placa (corrección del usuario). */}
+            {preferredDigit && grupoPlacaPideDigito(assignGrupo) && (
               <div
+                data-testid="ot-guia-digito"
                 className="mt-3 rounded-lg px-3 py-2 text-xs"
                 style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
               >
-                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía para elegir la
-                placa; puedes asignar esa u otra cualquiera.
+                {assignGrupo === "MOTOCARRO" ? (
+                  <>
+                    Dígito numérico de preferencia: el cliente prefiere el número <b>{preferredDigit}</b> como
+                    primer número de la placa (ej. {preferredDigit}23ABC) — solo guía para elegir la placa;
+                    puedes asignar esa u otra cualquiera.
+                  </>
+                ) : assignGrupo === "MOTO" ? (
+                  <>
+                    Dígito numérico de preferencia: el cliente prefiere el número <b>{preferredDigit}</b> como
+                    primer número de la placa (ej. ABC{preferredDigit}2D o ABC{preferredDigit}2) — solo guía
+                    para elegir la placa; puedes asignar esa u otra cualquiera.
+                  </>
+                ) : (
+                  <>
+                    Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía para elegir la
+                    placa; puedes asignar esa u otra cualquiera.
+                  </>
+                )}
               </div>
             )}
             {/* HU #12852 (Feature #12846) — único campo de placa: el backend siempre reserva fuera de
                 rango (HU-A1), así que ya no hay selector de modo en-rango/fuera-de-rango. */}
-            <label className="mt-4 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
-              Placa
-              <input
-                type="text"
-                value={plateInput}
-                onChange={(e) => setPlateInput(e.target.value)}
-                placeholder="ABC123"
-                aria-label="Placa"
-                className={`mt-1 uppercase ${OT_INPUT_CLS}`}
-              />
-              <span className="mt-1 block text-[11px] font-normal opacity-70">
-                Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía.
-              </span>
-            </label>
+            <PlacaOtField
+              idPrefix="asignar-placa"
+              label="Placa"
+              value={plateInput}
+              onChange={setPlateInput}
+              grupo={assignGrupo}
+              ayudaSinGrupo="Formatos: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía."
+              className="mt-4"
+            />
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !assignPlacaLista} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
             </div>
           </div>
         </div>
@@ -2244,20 +2274,17 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   : `Tiempo restante: ${plateUpdateRemainingLabel(updatePlateTarget.plateAssignedAt)}`}
               </p>
             )}
-            <label className="mt-3 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
-              Placa correcta
-              <input
-                type="text"
-                value={updatePlateInput}
-                onChange={(e) => setUpdatePlateInput(e.target.value)}
-                placeholder="ABC123"
-                aria-label="Placa correcta"
-                className={`mt-1 uppercase ${OT_INPUT_CLS}`}
-              />
-            </label>
+            <PlacaOtField
+              idPrefix="corregir-placa"
+              label="Placa correcta"
+              value={updatePlateInput}
+              onChange={setUpdatePlateInput}
+              grupo={updateGrupo}
+              className="mt-3"
+            />
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setUpdatePlateTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !updatePlateInput.trim() || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !updatePlacaLista || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
             </div>
           </div>
         </div>
