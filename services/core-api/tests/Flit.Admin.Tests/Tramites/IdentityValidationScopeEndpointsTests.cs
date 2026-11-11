@@ -111,6 +111,28 @@ public sealed class IdentityValidationScopeEndpointsTests
             Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
+    // ── Búsqueda por número de radicado ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ByPerson_lleva_el_radicado_del_query_string_al_filtro_de_filas_y_KPIs()
+    {
+        var client = ClientFor(A, "SuperAdmin");
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", B.ToString());
+
+        var response = await client.GetAsync(
+            $"{ByPersonUrl}?referenceNumber=%20ft1-0001234%20", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _factory.Repo.Received(1).ListBiometricValidationsGroupedByPersonAsync(
+            Arg.Is<TenantScope>(s => IsOnly(s, B)), Arg.Is(0), Arg.Any<int>(),
+            Arg.Is<BiometricPersonGroupFilter?>(f => f != null && f.ReferenceNumber == "FT1-0001234"),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _factory.Repo.Received(1).CountBiometricPersonsByEstadoAsync(
+            Arg.Is<TenantScope>(s => IsOnly(s, B)),
+            Arg.Is<BiometricPersonGroupFilter?>(f => f != null && f.ReferenceNumber == "FT1-0001234"),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
     // ── AC5 — el Administrador de Compañía nunca obtiene «todas» ───────────────────────────────
 
     [Theory]

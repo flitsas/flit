@@ -7645,9 +7645,9 @@ paths:
       description: >
         Endpoint PROPIO de la vista agrupada: una fila por (tenant, documento Trim+Upper) con el estado
         de la validación más reciente, contador y peor alerta. No altera GET /biometric-validations
-        (Dashboard y Prevalidaciones). Los KPI (`stats`) siguen contando VALIDACIONES. Filtros de
-        semántica de validación (referenceNumber, modalidad, partyRole, provider, score, motivoRechazo)
-        no aplican.
+        (Dashboard y Prevalidaciones). Los KPI (`stats`) siguen contando VALIDACIONES. `referenceNumber`
+        filtra las validaciones por el radicado del trámite ligado antes de agrupar; el resto de filtros de
+        semántica de validación (modalidad, partyRole, provider, score, motivoRechazo) no aplican.
       security:
         - bearerAuth: []
       parameters:
@@ -7694,6 +7694,16 @@ paths:
         - name: standalone
           in: query
           schema: { type: boolean }
+        - name: referenceNumber
+          in: query
+          required: false
+          description: >
+            Número de radicado del trámite ligado a la validación (p. ej. FT1-0001234), por coincidencia
+            parcial e insensible a mayúsculas; los comodines `%` y `_` se tratan como texto literal. Una
+            prevalidación standalone no tiene radicado y no coincide. La fila muestra la validación ligada
+            a ese trámite y el contador y los KPI solo cuentan las validaciones que coinciden. El término
+            se recorta (trim) y se trunca a 100 caracteres.
+          schema: { type: string }
       responses:
         "200":
           description: Personas del tenant + KPIs de validaciones.
@@ -21244,6 +21254,15 @@ components:
             HU #14302 (Épica #14271) — `true` solo si la validación es MANUAL, está aprobada y su carta de identidad ya fue
             generada. Cuando es `true`, la carta se descarga por `GET /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado`.
             No expone la ruta, la serie ni el hash.
+        kyverumVerificationId:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: >
+            Id de la verificación en Kyverum Verify. Solo la envía el detalle por persona
+            (`GET /api/v1/tramites/biometric-validations/by-person/detail`, compañía y red); el resto de
+            endpoints no la incluye. null si el proveedor no es Kyverum, si aún no se envió o si la
+            validación se canceló.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]

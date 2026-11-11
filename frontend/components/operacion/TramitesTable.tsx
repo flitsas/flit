@@ -86,6 +86,7 @@ import {
   applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+  TRAMITES_COLUMNS_RESHOWN_ONCE,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   buildTramitesGridLayout,
   buildTramitesColWidths,
@@ -425,6 +426,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
     catalog: TRAMITES_COLUMN_KEYS,
     addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+    reshowOnce: TRAMITES_COLUMNS_RESHOWN_ONCE,
   });
   // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
   // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
@@ -3207,13 +3209,12 @@ function TramiteRow({
     );
   }
 
-  // `<tr>` conserva el onClick (comodidad de ratón) pero PIERDE role/tabIndex/onKeyDown/aria-label:
-  // un <tr role="button"> rompería la semántica de tabla. El acceso por teclado/lector de pantalla
-  // vive en el botón del radicado (ver cellsByKey.radicado), con el mismo aria-label de antes.
+  // Ajuste 2026-11-10 — la fila ya NO abre el trámite: un clic en cualquier celda (para seleccionar
+  // y copiar una placa, un nombre o un documento) abría el asistente/detalle. Solo el botón del
+  // radicado abre (ver cellsByKey.radicado), además de «Ver»/«Continuar» del menú Acciones.
   return (
     <tr
-      onClick={handleOpen}
-      className={`group cursor-pointer bg-[var(--di-surface-elevated)] text-xs [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
+      className={`group bg-[var(--di-surface-elevated)] text-xs [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}

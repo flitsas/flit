@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   AlertCircle,
+  Check,
   ChevronDown,
+  Copy,
   RefreshCw,
   ScanFace,
   X,
@@ -436,6 +438,7 @@ function ValidationAccordionItem({
               value={v.score != null ? String(v.score) : '—'}
             />
             <SessionStat label="Fecha aprobación" value={formatFecha(v.validatedAt)} />
+            <VerifyIdStat verificationId={v.kyverumVerificationId} />
             {puedeVerOrigenAprobacion(v.approvalOrigin) && v.approvalOrigin ? (
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Origen de la aprobación</p>
@@ -509,6 +512,65 @@ function ValidationAccordionItem({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ajustes 2026-11-10 — id de la verificación en Kyverum Verify, para soporte con el proveedor. Solo lectura:
+ * se ve también en solo consulta (red / mandatario). Sin id → «—» y sin botón.
+ */
+function VerifyIdStat({ verificationId }: { verificationId?: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const id = verificationId?.trim() ?? '';
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard?.writeText(id);
+      setCopied(true);
+    } catch {
+      /* clipboard no disponible: el valor sigue siendo seleccionable */
+    }
+  };
+
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">ID de Verify</p>
+      {id ? (
+        <div className="mt-0.5 flex items-start gap-1.5">
+          <span
+            className="min-w-0 select-all break-all font-mono text-[12px] font-semibold"
+            style={{ color: FLIT.brand.blue }}
+          >
+            {id}
+          </span>
+          <button
+            type="button"
+            onClick={() => void copy()}
+            aria-label="Copiar ID de Verify"
+            title="Copiar ID de Verify"
+            className="grid h-6 w-6 shrink-0 place-items-center rounded-full border hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+            style={{ borderColor: FLIT.brand.blue, color: FLIT.brand.blue }}
+          >
+            {copied ? <Check className="h-3 w-3" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+          </button>
+        </div>
+      ) : (
+        <p className="mt-0.5 text-[12px] font-semibold" style={{ color: FLIT.text.primary }}>
+          —
+        </p>
+      )}
+      {id ? (
+        <span role="status" aria-live="polite" className="text-[11px] font-semibold" style={{ color: FLIT.text.primary }}>
+          {copied ? 'Copiado' : ''}
+        </span>
+      ) : null}
     </div>
   );
 }
