@@ -90,4 +90,23 @@ describe("RangoFechas", () => {
     render(<Controlado inicial={sinRango()} onChange={onChange} />);
     expect(screen.queryByRole("option", { name: "Todo el periodo" })).not.toBeInTheDocument();
   });
+
+  it("DateRangeFilter de Reportes usa RangoFechas: sin calendario emergente", async () => {
+    const { DateRangeFilter } = await import("@/components/atom/modules/_reportes/DateRangeFilter");
+    render(<DateRangeFilter value={{ from: "2026-09-01", to: "2026-09-15" }} onChange={onChange} />);
+    expect(screen.getByTestId("rango-fechas")).toBeInTheDocument();
+    expect(screen.queryByTestId("date-range-picker")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Desde")).toHaveValue("2026-09-01");
+  });
+
+  it("Escape no descarta lo ya elegido y el foco queda en el campo que se editó", async () => {
+    const user = userEvent.setup();
+    render(<Controlado inicial={{ from: "2026-10-12", to: "2026-11-11" }} onChange={onChange} />);
+    const desde = screen.getByLabelText("Desde");
+    await user.click(desde);
+    await user.keyboard("{Escape}");
+    expect(desde).toHaveFocus();
+    expect(screen.getByLabelText("Desde")).toHaveValue("2026-10-12");
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
