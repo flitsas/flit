@@ -21,6 +21,7 @@ public sealed class EvaluadorDictamenTests
     private static readonly string[] Codigos =
     [
         "SOAT_NO_VIGENTE",
+        "SOAT_MAQUINARIA",
         "RTM_NO_VIGENTE",
         "ESTADO_VEHICULO",
         "SIMIT_VEHICULO",
@@ -404,13 +405,14 @@ public sealed class EvaluadorDictamenTests
     }
 
     [Fact]
-    public void El_catalogo_repite_las_diecisiete_reglas_en_los_tres_tipos()
+    public void El_catalogo_repite_las_dieciocho_reglas_en_los_tres_tipos()
     {
-        // v2 (punto 2): 14 reglas de v1 + SIMIT_SIN_VERIFICAR, SIMIT_LICENCIA y SIMIT_ACUERDO_PAGO.
+        // v2 (punto 2): 14 reglas de v1 + SIMIT_SIN_VERIFICAR, SIMIT_LICENCIA y SIMIT_ACUERDO_PAGO; Bug RTM/SOAT (V4/V5):
+        // + SOAT_MAQUINARIA (advierte) y la RTM advierte en el unilateral (art. 5.3.2.2).
         CatalogoReglasDictamen.Version.Should().Be(2);
         CatalogoReglasDictamen.TiposTramite.Should().Equal(
             "TRASPASO_STANDARD", "TRASPASO_UNILATERAL", "TRASPASO_TRANSFERENCIA_DE_DOMINIO");
-        CatalogoReglasDictamen.Filas.Should().HaveCount(51);
+        CatalogoReglasDictamen.Filas.Should().HaveCount(54);
         CatalogoReglasDictamen.Filas
             .Select(f => (f.CatalogoVersion, f.TipoTramiteCodigo, f.Codigo))
             .Should().OnlyHaveUniqueItems();
@@ -422,8 +424,8 @@ public sealed class EvaluadorDictamenTests
             filas.Select(f => f.Codigo).Should().Equal(Codigos);
             filas.Should().OnlyContain(f => f.CatalogoVersion == 2 && f.PlantillaTexto.Length > 0);
             filas.Single(f => f.Codigo == "SOAT_NO_VIGENTE").Efecto.Should().Be("BLOQUEA");
-            filas.Single(f => f.Codigo == "RTM_NO_VIGENTE").Efecto.Should().Be("BLOQUEA");
             var efectoMultas = tipo == "TRASPASO_UNILATERAL" ? "ADVIERTE" : "BLOQUEA";
+            filas.Single(f => f.Codigo == "RTM_NO_VIGENTE").Efecto.Should().Be(efectoMultas);
             filas.Where(f => multas.Contains(f.Codigo)).Should().OnlyContain(f => f.Efecto == efectoMultas);
             filas.Where(f => f.Codigo is not ("SOAT_NO_VIGENTE" or "RTM_NO_VIGENTE") && !multas.Contains(f.Codigo))
                 .Should().OnlyContain(f => f.Efecto == "ADVIERTE");

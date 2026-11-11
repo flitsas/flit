@@ -1755,12 +1755,23 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         },
                         new
                         {
+                            Id = new Guid("09390584-97f3-56e9-b3e2-3165d74243b9"),
+                            CatalogoVersion = 2,
+                            Codigo = "SOAT_MAQUINARIA",
+                            Condicion = "{\"codigo\":\"SOAT_MAQUINARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
                             Id = new Guid("8807ebfe-94de-55f7-b0ea-2a75f1d3cc92"),
                             CatalogoVersion = 2,
                             Codigo = "RTM_NO_VIGENTE",
                             Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
                             Efecto = "BLOQUEA",
-                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula para motos, motocarros y servicio público; 5 años para particulares), así que el traspaso queda bloqueado.",
                             TipoTramiteCodigo = "TRASPASO_STANDARD",
                             Vigente = true
                         },
@@ -1942,12 +1953,23 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         },
                         new
                         {
+                            Id = new Guid("40e1d86e-a45b-54b1-8307-c817c5f3d2b0"),
+                            CatalogoVersion = 2,
+                            Codigo = "SOAT_MAQUINARIA",
+                            Condicion = "{\"codigo\":\"SOAT_MAQUINARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
                             Id = new Guid("f723f921-6e82-55c1-82b9-5e51234d0472"),
                             CatalogoVersion = 2,
                             Codigo = "RTM_NO_VIGENTE",
                             Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
-                            Efecto = "BLOQUEA",
-                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula para motos, motocarros y servicio público; 5 años para particulares). En el traspaso unilateral es una advertencia y el trámite sigue viable.",
                             TipoTramiteCodigo = "TRASPASO_UNILATERAL",
                             Vigente = true
                         },
@@ -2129,12 +2151,23 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         },
                         new
                         {
+                            Id = new Guid("0573e03c-6239-58b0-ae95-878bc7e16270"),
+                            CatalogoVersion = 2,
+                            Codigo = "SOAT_MAQUINARIA",
+                            Condicion = "{\"codigo\":\"SOAT_MAQUINARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
                             Id = new Guid("f28ca1ae-7c69-51b6-9c93-f3833e4cd90f"),
                             CatalogoVersion = 2,
                             Codigo = "RTM_NO_VIGENTE",
                             Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
                             Efecto = "BLOQUEA",
-                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula para motos, motocarros y servicio público; 5 años para particulares), así que el traspaso queda bloqueado.",
                             TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
                             Vigente = true
                         },

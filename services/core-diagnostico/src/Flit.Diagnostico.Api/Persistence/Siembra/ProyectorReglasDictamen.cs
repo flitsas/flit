@@ -17,7 +17,7 @@ internal static class ProyectorReglasDictamen
     private static readonly Guid EspacioDns = new("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 
     /// <summary>
-    /// 42 filas v1 y 51 v2. La v1 no se toca (ni texto ni <c>vigente</c>): la usan los dictámenes ya emitidos. Cada
+    /// 42 filas v1 y 54 v2. La v1 no se toca (ni texto ni <c>vigente</c>): la usan los dictámenes ya emitidos. Cada
     /// llamada vuelve a proyectar: el id sale del nombre, no de un caché.
     /// </summary>
     public static IReadOnlyList<ReglaDictamen> Proyectar() =>

@@ -42,6 +42,8 @@ public sealed record LicenciaConductor(string? Estado, bool CertificadoAptitudVi
 /// <summary>
 /// RUNT del vehículo ya leído para el dictamen. Las listas de SOAT y RTM son los estados de cada póliza o revisión.
 /// La prenda, el gravamen y los conteos salen de esa lectura; este tipo no guarda documentos ni nombres.
+/// <see cref="Clase"/> y <see cref="Servicio"/> (ola 2026-11-11, V4/V5) fijan el plazo de la RTM y si el SOAT aplica; sin
+/// ellos quedan desconocidos y la RTM conserva los 5 años.
 /// </summary>
 public sealed record HechosRuntVehiculo(
     string? EstadoVehiculo,
@@ -54,10 +56,12 @@ public sealed record HechosRuntVehiculo(
     bool TieneGravamenes,
     int GarantiasMobiliarias,
     bool TienePrenda,
-    int Infracciones);
+    int Infracciones,
+    ClaseVehiculoDictamen Clase = ClaseVehiculoDictamen.Desconocida,
+    ServicioVehiculoDictamen Servicio = ServicioVehiculoDictamen.Desconocido);
 
 /// <summary>
-/// Entrada del evaluador. <see cref="Hoy"/> fija el corte de los 5 años de matrícula.
+/// Entrada del evaluador. <see cref="Hoy"/> fija el corte de los años de matrícula de la RTM.
 /// <see cref="ImpuestoTieneDeuda"/> dispara IMPUESTO aunque el monto sea null. <see cref="EstadoImpuesto"/> en error
 /// y dentro del alcance dispara FUENTE_PENDIENTE; null es fuera del alcance y N/A no dispara.
 /// Las cuatro fuentes obligatorias son el RUNT y el SIMIT del vehículo y del propietario; en leasing el SIMIT exigido es

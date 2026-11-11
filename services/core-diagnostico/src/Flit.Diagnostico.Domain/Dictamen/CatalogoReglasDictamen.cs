@@ -76,7 +76,8 @@ public static class CatalogoReglasDictamen
 
     /// <summary>
     /// Una regla v2. <see cref="EfectoUnilateral"/> y <see cref="PlantillaUnilateral"/> solo difieren en las reglas de
-    /// multas: el traspaso unilateral (Res. 20233040017145, art. 5.3.2.2) no exige paz y salvo, así que ahí advierten.
+    /// multas y en la RTM: el traspaso unilateral (Res. 20233040017145, art. 5.3.2.2) no exige paz y salvo ni valida la
+    /// revisión técnico-mecánica, así que ahí advierten.
     /// </summary>
     private sealed record DefinicionV2(
         string Codigo, string Efecto, string Plantilla, string? EfectoUnilateral = null, string? PlantillaUnilateral = null);
@@ -87,11 +88,21 @@ public static class CatalogoReglasDictamen
         "No se pudo verificar en el SIMIT si hay multas pendientes: la consulta falló, no respondió o falta el "
         + "documento del locatario.";
 
-    // ---- Versión 2 (2026-11-11, punto 2 «Multas bloqueantes»). ----
+    private const string PlazoRtm =
+        "La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula "
+        + "para motos, motocarros y servicio público; 5 años para particulares)";
+
+    // ---- Versión 2 (2026-11-11, punto 2 «Multas bloqueantes» y Bug RTM/SOAT por clase, hallazgos V4/V5). ----
     private static readonly DefinicionV2[] DefinicionesV2 =
     [
         new(DefinicionesV1[0].Codigo, DefinicionesV1[0].Efecto, DefinicionesV1[0].Plantilla),
-        new(DefinicionesV1[1].Codigo, DefinicionesV1[1].Efecto, DefinicionesV1[1].Plantilla),
+        // V5: a la maquinaria no se le bloquea por SOAT hasta confirmar si se le exige; el remolque está exento y no dispara.
+        new("SOAT_MAQUINARIA", Advierte,
+            "La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia "
+            + "y el traspaso sigue viable."),
+        // V4: el plazo depende de la clase y el servicio; el unilateral no valida RTM (art. 5.3.2.2) y solo advierte.
+        new("RTM_NO_VIGENTE", Bloquea, PlazoRtm + ", así que el traspaso queda bloqueado.",
+            Advierte, PlazoRtm + "." + AdvierteUnilateral),
         new(DefinicionesV1[2].Codigo, DefinicionesV1[2].Efecto, DefinicionesV1[2].Plantilla),
         // Las multas del vehículo bloquean por política de FLIT: la norma pide el paz y salvo de las personas.
         new("SIMIT_VEHICULO", Bloquea,
@@ -119,7 +130,7 @@ public static class CatalogoReglasDictamen
             .SelectMany(tipo => DefinicionesV1.Select(d => new FilaReglaDictamen(1, tipo, d.Codigo, d.Efecto, d.Plantilla)))
             .ToArray();
 
-    /// <summary>51 filas de la versión vigente: 17 reglas por cada código de la familia.</summary>
+    /// <summary>54 filas de la versión vigente: 18 reglas por cada código de la familia.</summary>
     public static IReadOnlyList<FilaReglaDictamen> Filas { get; } =
         TiposTramite
             .SelectMany(tipo => DefinicionesV2.Select(d => tipo == Unilateral

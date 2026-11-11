@@ -53,11 +53,24 @@ public static class EvaluadorDictamen
         return runt;
     }
 
+    /// <summary>
+    /// SOAT y RTM por clase (ola 2026-11-11, V4/V5): el remolque no exige SOAT y la maquinaria solo advierte
+    /// (<c>SOAT_MAQUINARIA</c>); la RTM se exige desde los años de <see cref="ClasificadorVehiculoDictamen.AniosPrimeraRtm"/>
+    /// (nunca en maquinaria ni remolque) o sin fecha de matrícula. El efecto de cada regla sale del catálogo del tipo.
+    /// </summary>
     private static void AgregarCobertura(HechosDictamen hechos, HechosRuntVehiculo runt, List<ReglaEvaluada> reglas)
     {
         if (!Cubre(runt.EstadosSoat))
-            reglas.Add(Emitir(hechos, "SOAT_NO_VIGENTE", "RUNT"));
-        if (EvaluaRtm(runt.FechaMatricula, hechos.Hoy) && !Cubre(runt.EstadosRtm))
+        {
+            if (runt.Clase == ClaseVehiculoDictamen.Maquinaria)
+                reglas.Add(Emitir(hechos, "SOAT_MAQUINARIA", "RUNT"));
+            else if (runt.Clase != ClaseVehiculoDictamen.Remolque)
+                reglas.Add(Emitir(hechos, "SOAT_NO_VIGENTE", "RUNT"));
+        }
+
+        if (ClasificadorVehiculoDictamen.AniosPrimeraRtm(runt.Clase, runt.Servicio) is { } anios
+            && EvaluaRtm(runt.FechaMatricula, hechos.Hoy, anios)
+            && !Cubre(runt.EstadosRtm))
             reglas.Add(Emitir(hechos, "RTM_NO_VIGENTE", "RUNT"));
         if (EstadoDispara(runt.EstadoVehiculo))
             reglas.Add(Emitir(hechos, "ESTADO_VEHICULO", "RUNT"));
@@ -159,8 +172,8 @@ public static class EvaluadorDictamen
     private static bool Cubre(IReadOnlyList<string?> estados) =>
         estados.Any(estado => Normalizar(estado) is "VIGENTE" or "NO REQUIERE");
 
-    private static bool EvaluaRtm(DateOnly? fechaMatricula, DateOnly hoy) =>
-        fechaMatricula is null || hoy >= fechaMatricula.Value.AddYears(5);
+    private static bool EvaluaRtm(DateOnly? fechaMatricula, DateOnly hoy, int anios) =>
+        fechaMatricula is null || hoy >= fechaMatricula.Value.AddYears(anios);
 
     private static bool EstadoDispara(string? estado)
     {

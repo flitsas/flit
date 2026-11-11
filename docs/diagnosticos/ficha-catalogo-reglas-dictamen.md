@@ -18,7 +18,17 @@ Rama `feature/ajustes-diagnostico-2026-11-11`. Decisiones 2.1–2.6 del plan y h
 | `SIMIT_ACUERDO_PAGO` | Algún SIMIT leído tiene un acuerdo con saldo pendiente distinto de cero. Una regla por fuente. Si además dice «sin paz y salvo», bloquea por la regla de multas | `ADVIERTE` | `ADVIERTE` |
 | `FUENTE_PENDIENTE` | Solo RUNT del vehículo, RUNT del propietario e impuesto en error. El SIMIT faltante ya no la dispara: lo cubre `SIMIT_SIN_VERIFICAR` | `ADVIERTE` | `ADVIERTE` |
 
-Sin cambio: `SOAT_NO_VIGENTE`, `RTM_NO_VIGENTE` (el plazo por clase va en otro commit), `ESTADO_VEHICULO`, `LIMITACION`, `GRAVAMEN`, `GARANTIA_MOBILIARIA`, `PRENDA`, `INFRACCION_RUNT`, `LICENCIA_CONDUCTOR` (sigue advirtiendo, nunca bloquea), `IMPUESTO`. En leasing no se evalúa el SIMIT del propietario, ni para multas ni para «sin verificar».
+**Bug RTM/SOAT por clase (ola 2026-11-11, hallazgos V4/V5, dictamen de expert-doc-engine; entra en la misma v2, sin v3):**
+
+| Código | Condición v2 | `TRASPASO_STANDARD` / `TRASPASO_TRANSFERENCIA_DE_DOMINIO` | `TRASPASO_UNILATERAL` |
+| --- | --- | --- | --- |
+| `SOAT_NO_VIGENTE` | SOAT no vigente en carro, moto, motocarro o clase desconocida. El remolque/semirremolque está exento y no dispara; la maquinaria dispara `SOAT_MAQUINARIA` | `BLOQUEA` | `BLOQUEA` |
+| `SOAT_MAQUINARIA` (nueva) | SOAT no vigente en maquinaria: NA con advertencia hasta confirmar si se le exige | `ADVIERTE` | `ADVIERTE` |
+| `RTM_NO_VIGENTE` | RTM no vigente desde la primera revisión: 2 años de matrícula para moto, motocarro (mototriciclo, tricimoto, cuatrimoto, cuadriciclo) y carro de servicio público; 5 para el resto de carros y para la clase desconocida. Maquinaria y remolque: no aplica. Sin fecha de matrícula se exige | `BLOQUEA` | `ADVIERTE` (art. 5.3.2.2: el unilateral no valida RTM) |
+
+Clase y servicio salen del detalle RUNT (`clase_vehiculo`, `clasificacion`, `tipo_servicio`), con el RUNT normalizado y el tipo de placa (maquinaria `AA999999`, remolque `R/S` + dígitos) como respaldo (`ClasificadorVehiculoDictamen`). Plantillas: `SOAT_MAQUINARIA` = «La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia y el traspaso sigue viable.»; `RTM_NO_VIGENTE` = «La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula para motos, motocarros y servicio público; 5 años para particulares), así que el traspaso queda bloqueado.» (en el unilateral termina en «. En el traspaso unilateral es una advertencia y el trámite sigue viable.»). Migración `P7a_DictamenV2RtmSoatPorClase`.
+
+Sin cambio: `ESTADO_VEHICULO`, `LIMITACION`, `GRAVAMEN`, `GARANTIA_MOBILIARIA`, `PRENDA`, `INFRACCION_RUNT`, `LICENCIA_CONDUCTOR` (sigue advirtiendo, nunca bloquea), `IMPUESTO`. En leasing no se evalúa el SIMIT del propietario, ni para multas ni para «sin verificar».
 
 El traspaso unilateral advierte en las reglas de multas por la Res. 20233040017145, art. 5.3.2.2 (no exige paz y salvo). Es una decisión derivada del dictamen normativo y queda pendiente de confirmación del usuario (hallazgo V2).
 
@@ -35,7 +45,7 @@ Las reglas que bloquean no dicen «Es una advertencia». Las que no cambian cons
 | `SIMIT_LICENCIA` | El SIMIT reporta una licencia de conducción suspendida o cancelada. Es una advertencia y no cambia el veredicto. | (igual) |
 | `SIMIT_ACUERDO_PAGO` | Hay un acuerdo de pago con saldo pendiente en el SIMIT. Es una advertencia y no cambia el veredicto. | (igual) |
 
-Orden de las reglas en el dictamen: `SOAT_NO_VIGENTE`, `RTM_NO_VIGENTE`, `ESTADO_VEHICULO`, `SIMIT_VEHICULO`, `SIMIT_PROPIETARIO`, `SIMIT_LOCATARIO`, `SIMIT_SIN_VERIFICAR`, `SIMIT_LICENCIA`, `SIMIT_ACUERDO_PAGO`, `LIMITACION`, `GRAVAMEN`, `GARANTIA_MOBILIARIA`, `PRENDA`, `INFRACCION_RUNT`, `LICENCIA_CONDUCTOR`, `IMPUESTO`, `FUENTE_PENDIENTE`.
+Orden de las reglas en el dictamen: `SOAT_NO_VIGENTE`, `SOAT_MAQUINARIA`, `RTM_NO_VIGENTE`, `ESTADO_VEHICULO`, `SIMIT_VEHICULO`, `SIMIT_PROPIETARIO`, `SIMIT_LOCATARIO`, `SIMIT_SIN_VERIFICAR`, `SIMIT_LICENCIA`, `SIMIT_ACUERDO_PAGO`, `LIMITACION`, `GRAVAMEN`, `GARANTIA_MOBILIARIA`, `PRENDA`, `INFRACCION_RUNT`, `LICENCIA_CONDUCTOR`, `IMPUESTO`, `FUENTE_PENDIENTE`.
 
 ---
 

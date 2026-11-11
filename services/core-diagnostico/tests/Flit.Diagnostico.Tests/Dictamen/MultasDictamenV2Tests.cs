@@ -26,6 +26,7 @@ public sealed class MultasDictamenV2Tests
     private static readonly string[] CodigosV2 =
     [
         "SOAT_NO_VIGENTE",
+        "SOAT_MAQUINARIA",
         "RTM_NO_VIGENTE",
         "ESTADO_VEHICULO",
         "SIMIT_VEHICULO",
@@ -369,10 +370,10 @@ public sealed class MultasDictamenV2Tests
     // ---- AC7 / AC8: catálogo v2 y plantillas ----
 
     [Fact]
-    public void El_catalogo_vigente_es_la_version_2_con_diecisiete_reglas_por_tipo()
+    public void El_catalogo_vigente_es_la_version_2_con_dieciocho_reglas_por_tipo()
     {
         CatalogoReglasDictamen.Version.Should().Be(2);
-        CatalogoReglasDictamen.Filas.Should().HaveCount(51);
+        CatalogoReglasDictamen.Filas.Should().HaveCount(54);
         CatalogoReglasDictamen.Filas.Should().OnlyContain(f => f.CatalogoVersion == 2 && f.PlantillaTexto.Length > 0);
         foreach (var tipo in CatalogoReglasDictamen.TiposTramite)
         {
@@ -403,7 +404,11 @@ public sealed class MultasDictamenV2Tests
     [InlineData(Standard, "LICENCIA_CONDUCTOR", "ADVIERTE")]
     [InlineData(Standard, "INFRACCION_RUNT", "ADVIERTE")]
     [InlineData(Standard, "SOAT_NO_VIGENTE", "BLOQUEA")]
-    [InlineData(Unilateral, "RTM_NO_VIGENTE", "BLOQUEA")]
+    [InlineData(Unilateral, "RTM_NO_VIGENTE", "ADVIERTE")]
+    [InlineData(Standard, "RTM_NO_VIGENTE", "BLOQUEA")]
+    [InlineData(Transferencia, "RTM_NO_VIGENTE", "BLOQUEA")]
+    [InlineData(Standard, "SOAT_MAQUINARIA", "ADVIERTE")]
+    [InlineData(Unilateral, "SOAT_MAQUINARIA", "ADVIERTE")]
     [InlineData(Standard, "FUENTE_PENDIENTE", "ADVIERTE")]
     public void Efecto_de_cada_regla_v2_por_tipo(string tipo, string codigo, string efecto)
     {
@@ -470,7 +475,7 @@ public sealed class MultasDictamenV2Tests
     [Fact]
     public void El_historico_suma_v1_y_v2_sin_repetir_clave()
     {
-        CatalogoReglasDictamen.Historico.Should().HaveCount(93);
+        CatalogoReglasDictamen.Historico.Should().HaveCount(96);
         CatalogoReglasDictamen.Historico.Select(f => (f.CatalogoVersion, f.TipoTramiteCodigo, f.Codigo))
             .Should().OnlyHaveUniqueItems();
     }
@@ -478,8 +483,11 @@ public sealed class MultasDictamenV2Tests
     private static readonly Dictionary<string, string> PlantillasStandardV2 = new(StringComparer.Ordinal)
     {
         ["SOAT_NO_VIGENTE"] = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+        ["SOAT_MAQUINARIA"] =
+            "La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia y el traspaso sigue viable.",
         ["RTM_NO_VIGENTE"] =
-            "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+            "La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula "
+            + "para motos, motocarros y servicio público; 5 años para particulares), así que el traspaso queda bloqueado.",
         ["ESTADO_VEHICULO"] = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
         ["SIMIT_VEHICULO"] =
             "El vehículo tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. "
