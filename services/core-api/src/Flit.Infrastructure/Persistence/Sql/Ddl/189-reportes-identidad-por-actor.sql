@@ -170,10 +170,14 @@ LEFT JOIN LATERAL (
             x.document_number,
             x.rol_out,
             CASE x.rol_out WHEN 'comprador' THEN 0 WHEN 'vendedor' THEN 1 ELSE 2 END AS orden_rol,
+            -- Códigos de transporte: los dos estados del flujo asistido se renombran para que esa palabra no viaje en el
+            -- JSON (la BD conserva sus valores). Lo que no se reconoce sale 'sin_validacion'.
             CASE
                 WHEN last_v.status IN ('aprobado', 'rechazado', 'en_proceso', 'enviado', 'pendiente_envio',
-                                       'error_envio', 'expirado', 'manual_activo', 'pendiente_revision_manual')
+                                       'error_envio', 'expirado')
                     THEN last_v.status
+                WHEN last_v.status = 'manual_activo' THEN 'esperando_captura'
+                WHEN last_v.status = 'pendiente_revision_manual' THEN 'pendiente_revision'
                 ELSE 'sin_validacion'
             END AS estado,
             CASE
@@ -223,11 +227,14 @@ LEFT JOIN LATERAL (
         LEFT JOIN LATERAL (
             SELECT coalesce(
                 array_agg(v.id) FILTER (WHERE
-                    (upper(trim(v.document_number)) = upper(x.sujeto_num)
+                    -- Un documento en blanco nunca coincide (igual que BiometricRules.DocumentoCoincide en C#).
+                    (nullif(trim(v.document_number), '') IS NOT NULL AND nullif(x.sujeto_num, '') IS NOT NULL
+                        AND upper(trim(v.document_number)) = upper(x.sujeto_num)
                         AND (nullif(trim(v.document_type), '') IS NULL OR nullif(x.sujeto_tipo, '') IS NULL
                              OR upper(trim(v.document_type)) = upper(x.sujeto_tipo)))
                     OR
-                    (upper(trim(v.document_number)) = upper(trim(x.document_number))
+                    (nullif(trim(v.document_number), '') IS NOT NULL AND nullif(trim(x.document_number), '') IS NOT NULL
+                        AND upper(trim(v.document_number)) = upper(trim(x.document_number))
                         AND (nullif(trim(v.document_type), '') IS NULL OR nullif(trim(x.document_type), '') IS NULL
                              OR upper(trim(v.document_type)) = upper(trim(x.document_type))))
                 ),

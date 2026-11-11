@@ -143,6 +143,46 @@ public sealed class ActorValidacionBuilderTests
             .Single().EstadoValidacion.Should().Be("sin_validacion");
     }
 
+    [Theory]
+    [InlineData(BiometricEstados.ManualActivo, "esperando_captura")]
+    [InlineData(BiometricEstados.PendienteRevisionManual, "pendiente_revision")]
+    public void Los_estados_del_flujo_asistido_viajan_con_codigo_sin_la_palabra_manual(string enBd, string esperado)
+    {
+        var v = Val("comprador", "1", enBd);
+        var dto = Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v]).Single();
+
+        dto.EstadoValidacion.Should().Be(esperado);
+        JsonSerializer.Serialize(dto).Should().NotContainEquivalentOf("manual");
+    }
+
+    [Fact]
+    public void Todos_los_codigos_de_estado_y_todas_las_etiquetas_estan_libres_de_palabras_prohibidas()
+    {
+        var codigos = typeof(ActorValidacionEstados).GetFields()
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToList();
+
+        codigos.Should().HaveCount(10);
+        foreach (var codigo in codigos)
+        {
+            IdentityRejectionReasonText.Limpio(codigo).Should().BeTrue($"el código {codigo} viaja en el JSON");
+            IdentityRejectionReasonText.Limpio(ActorValidacionEstados.Etiqueta(codigo))
+                .Should().BeTrue($"la etiqueta de {codigo} se ve en pantalla y Excel");
+        }
+    }
+
+    [Fact]
+    public void Documentos_en_blanco_nunca_coinciden_ni_entre_si()
+    {
+        // Dos actores del rol (sin respaldo a las validaciones del rol) y una validación con documento en blanco.
+        var v = Val("comprador", "  ", BiometricEstados.Aprobado, attempts: 2);
+        var r = Build(ProcedureFamilyCodes.Traspaso,
+            [Actor("comprador", 1, ""), Actor("comprador", 2, " ")], [v]);
+
+        r.Should().OnlyContain(x => x.EstadoValidacion == "sin_validacion" && x.Intentos == 0);
+    }
+
     [Fact]
     public void Estado_desconocido_sale_sin_validar()
     {
