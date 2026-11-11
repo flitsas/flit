@@ -398,6 +398,12 @@ export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
 export interface ActorListado {
   nombre: string;
   firmaEstado: FirmaParteEstado | null;
+  /**
+   * Posición del propietario dentro del lado (1 = principal) y su documento: con ellos la tabla abre
+   * el tracking de identidad de ESA persona. Opcionales para backends anteriores al campo.
+   */
+  ordinal?: number;
+  numeroDocumento?: string | null;
 }
 
 /**
