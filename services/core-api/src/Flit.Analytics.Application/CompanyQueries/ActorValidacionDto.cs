@@ -23,7 +23,7 @@ public sealed record ActorValidacionDto(
     int Intentos);
 
 /// <summary>Máximo de actores por rol sobre TODO el filtro (no solo la página); define el ancho del Excel.</summary>
-public sealed record MaxActoresPorRolDto(int Comprador, int Vendedor, int Propietario);
+public readonly record struct MaxActoresPorRolDto(int Comprador, int Vendedor, int Propietario);
 
 /// <summary>Códigos cerrados de <see cref="ActorValidacionDto.EstadoValidacion"/>.</summary>
 public static class ActorValidacionEstados
