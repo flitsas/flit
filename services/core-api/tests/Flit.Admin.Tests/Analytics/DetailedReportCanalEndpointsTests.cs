@@ -117,7 +117,7 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
         var export = await client.GetAsync($"{NetworkProcedures}/export?{Range}&channel=pn_web&channelTransitOfficeId={Office}", TestContext.Current.CancellationToken);
 
         export.StatusCode.Should().Be(HttpStatusCode.OK);
-        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name != nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync)).ToList();
+        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name is not (nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync) or nameof(INetworkDetailedReportReadRepository.GetNetworkMaxActoresPorRolAsync))).ToList();
         calls.Should().HaveCount(2);
         var listFilter = (NetworkDetailedReportFilter)calls[0].GetArguments()[0]!;
         var exportFilter = (NetworkDetailedReportFilter)calls[1].GetArguments()[0]!;
@@ -205,7 +205,7 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
 
         export.StatusCode.Should().Be(HttpStatusCode.OK);
         export.Content.Headers.ContentType!.MediaType.Should().Be(ExcelContentType);
-        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name != nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync)).ToList();
+        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name is not (nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync) or nameof(INetworkDetailedReportReadRepository.GetNetworkMaxActoresPorRolAsync))).ToList();
         calls.Should().HaveCount(2);
         ((NetworkDetailedReportFilter)calls[1].GetArguments()[0]!).Should().BeEquivalentTo((NetworkDetailedReportFilter)calls[0].GetArguments()[0]!);
 
