@@ -1127,15 +1127,18 @@ export function TramiteWizard(props: Props) {
   const esMatricula = familia === 'MATRICULAS' || familia === 'matricula_inicial';
   const placaStrip = fvOf('plate');
   const vinStrip = fvOf('vin');
-  // Matrícula sin placa: la asigna el organismo en Preasignación; el gestor solo puede dejar el
-  // dígito en que prefiere que termine (HU #10805). Con placa ya no hay preasignación que mostrar.
+  // Preasignación (solo matrícula): el trámite va por ella cuando no tiene placa (la asigna el
+  // organismo) o cuando el gestor dejó el dígito de preferencia (HU #10805). Con placa y dígito se
+  // muestran las dos; con placa y sin dígito, solo la placa; sin placa, solo la preasignación.
   const digitoPreferencia = fvOf('plate_preferred_last_digit');
   const preasignacionStrip =
-    esMatricula && !placaStrip
+    esMatricula && (!placaStrip || digitoPreferencia)
       ? digitoPreferencia
         ? `Dígito ${digitoPreferencia}`
         : 'Sin dígito de preferencia'
       : null;
+  // La placa se ve si existe; sin placa y sin preasignación (otros tipos) queda el guion.
+  const mostrarPlaca = !!placaStrip || !preasignacionStrip;
   // Fecha de radicación; mientras no se ha radicado, la de hoy (la que llevaría si se radica ya).
   const fechaStrip = formatFechaHora(
     state.detail?.submittedAt ?? franjaDetalle?.submittedAt ?? new Date(),
@@ -2088,12 +2091,14 @@ export function TramiteWizard(props: Props) {
                 <span className="font-semibold">{preasignacionStrip}</span>
               </p>
             )}
-            <p className="text-[12px]" data-testid="tramite-placa">
-              <span className="font-medium uppercase text-white/80">Placa: </span>
-              <span className="font-semibold">
-                {placaStrip ?? (esMatricula ? 'Por asignar' : '—')}
-              </span>
-            </p>
+            {/* Placa y preasignación: sin placa solo la preasignación, con placa y sin dígito solo la
+                placa, y con las dos (placa y dígito) ambas. */}
+            {mostrarPlaca && (
+              <p className="text-[12px]" data-testid="tramite-placa">
+                <span className="font-medium uppercase text-white/80">Placa: </span>
+                <span className="font-semibold">{placaStrip ?? '—'}</span>
+              </p>
+            )}
             <p className="min-w-0 max-w-full break-words text-[12px]" data-testid="tramite-organismo">
               <span className="font-medium uppercase text-white/80">Organismo de tránsito: </span>
               <span className="font-semibold">{organismoNombre ?? 'Sin definir'}</span>

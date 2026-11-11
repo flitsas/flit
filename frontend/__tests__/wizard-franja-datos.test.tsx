@@ -133,7 +133,7 @@ beforeEach(() => {
 const fv = (fieldKey: string, valueText: string) => ({ fieldKey, valueText });
 
 describe('Franja azul — datos del expediente', () => {
-  it('matrícula sin placa: preasignación con el dígito, placa por asignar, organismo, VIN y fecha de hoy', async () => {
+  it('matrícula sin placa: preasignación con el dígito y sin placa, organismo, VIN y fecha de hoy', async () => {
     detalle({
       submittedAt: null,
       fieldValues: [
@@ -147,7 +147,8 @@ describe('Franja azul — datos del expediente', () => {
     await waitFor(() =>
       expect(within(strip).getByTestId('tramite-preasignacion')).toHaveTextContent('Preasignación: Dígito 1'),
     );
-    expect(within(strip).getByTestId('tramite-placa')).toHaveTextContent('Placa: Por asignar');
+    // Va por preasignación: la placa no se muestra (una u otra, nunca las dos).
+    expect(within(strip).queryByTestId('tramite-placa')).toBeNull();
     expect(within(strip).getByTestId('tramite-organismo')).toHaveTextContent(
       'Organismo de tránsito: STRIA TTOyTTE MCPAL SABANETA',
     );
@@ -158,7 +159,7 @@ describe('Franja azul — datos del expediente', () => {
     );
   });
 
-  it('con placa no hay preasignación y la fecha es la de radicación', async () => {
+  it('con placa y dígito se ven las dos, y la fecha es la de radicación', async () => {
     detalle({
       submittedAt: '2026-11-05T15:30:00Z',
       fieldValues: [fv('plate', 'JNH38H'), fv('vin', 'VIN123'), fv('plate_preferred_last_digit', '1')],
@@ -166,11 +167,20 @@ describe('Franja azul — datos del expediente', () => {
     const strip = await abrir();
 
     await waitFor(() => expect(within(strip).getByTestId('tramite-placa')).toHaveTextContent('Placa: JNH38H'));
-    expect(within(strip).queryByTestId('tramite-preasignacion')).toBeNull();
+    // Tiene placa y dígito de preferencia: se muestran ambas.
+    expect(within(strip).getByTestId('tramite-preasignacion')).toHaveTextContent('Preasignación: Dígito 1');
     expect(within(strip).getByTestId('tramite-organismo')).toHaveTextContent(
       'Organismo de tránsito: Sin definir',
     );
     // 15:30 UTC = 10:30 en Colombia.
     expect(within(strip).getByTestId('tramite-fecha')).toHaveTextContent('Fecha: 05/11/2026 10:30');
+  });
+
+  it('con placa y sin dígito de preferencia: solo la placa', async () => {
+    detalle({ submittedAt: null, fieldValues: [fv('plate', 'JNH38H'), fv('vin', 'VIN123')] });
+    const strip = await abrir();
+
+    await waitFor(() => expect(within(strip).getByTestId('tramite-placa')).toHaveTextContent('Placa: JNH38H'));
+    expect(within(strip).queryByTestId('tramite-preasignacion')).toBeNull();
   });
 });
