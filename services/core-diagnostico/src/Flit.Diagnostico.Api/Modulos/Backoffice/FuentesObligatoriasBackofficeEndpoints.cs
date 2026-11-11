@@ -12,10 +12,12 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// <c>GET/PUT /backoffice/fuentes-obligatorias</c> (ADR-0078). Catálogo global de FLIT: la ruta va en un grupo
-/// <c>/backoffice</c> con <see cref="PoliticaBackoffice"/> y sin empresa explícita. No lee ni escribe datos de una
+/// <c>/backoffice</c> con <see cref="PoliticaBackoffice"/> de configuración (SuperAdmin de cualquier compañía, o FLIT con
+/// <c>diagnostico.backoffice.ver</c>; ajustes 2026-11-11, punto 1) y sin empresa explícita. No lee ni escribe datos de una
 /// compañía, así que no usa <c>?empresa=</c>, no inserta en <c>lecturas_backoffice</c> y no abre
 /// <c>AutorizarEscrituraDe</c>. El PUT crea la cabecera (uuid v7) si no existe y, si existe, la conserva y reemplaza
-/// las líneas. <c>fuentes: []</c> deja la cabecera. Los rechazos los decide <see cref="ResolucionFuentesObligatorias"/>.
+/// las líneas. <c>fuentes: []</c> deja la cabecera. Cada guardado deja el evento <see cref="AuditoriaConfiguracionBackoffice"/>
+/// (usuario y compañía del actor). Los rechazos los decide <see cref="ResolucionFuentesObligatorias"/>.
 /// </summary>
 internal static class FuentesObligatoriasBackofficeEndpoints
 {
@@ -43,7 +45,8 @@ internal static class FuentesObligatoriasBackofficeEndpoints
         return Results.Ok(new ListaDefinicionesDto(definiciones));
     }
 
-    private static async Task<IResult> Guardar(JsonElement cuerpo, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, CancellationToken ct)
+    private static async Task<IResult> Guardar(
+        JsonElement cuerpo, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, ILoggerFactory logs, CancellationToken ct)
     {
         if (cuerpo.ValueKind != JsonValueKind.Object)
             throw CuerpoInvalido("El cuerpo debe ser un objeto JSON.");
@@ -106,6 +109,9 @@ internal static class FuentesObligatoriasBackofficeEndpoints
 
         await ReemplazarLineasAsync(db, id, distintas, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        AuditoriaConfiguracionBackoffice.Registrar(logs.CreateLogger(typeof(FuentesObligatoriasBackofficeEndpoints)), usuario,
+            AuditoriaConfiguracionBackoffice.SeccionFuentesObligatorias, empresaObjetivo: null,
+            [familia is not null ? "familia" : "tipo_tramite_codigo", "fuentes"]);
         return Results.Ok(Definicion(familia, tipo, distintas));
     }
 

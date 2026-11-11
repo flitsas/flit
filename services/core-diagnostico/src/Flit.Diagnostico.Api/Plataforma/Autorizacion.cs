@@ -90,8 +90,14 @@ public sealed class UsuarioActual(IHttpContextAccessor http, IPlatformTenantAcce
 
     public string? TipoEmpresa => User.FindFirstValue("tenant_type");
 
-    /// <summary>La compañía del token es FLIT (requisito del backoffice, D-16).</summary>
+    /// <summary>La compañía del token es FLIT (requisito de la operación del backoffice, D-16).</summary>
     public bool EsEmpresaFlit => string.Equals(TipoEmpresa, TipoEmpresaFlit, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Pasa la política de configuración del backoffice (<see cref="PoliticaBackoffice.CumpleConfiguracion"/>).</summary>
+    public bool BackofficeConfiguracion => PoliticaBackoffice.CumpleConfiguracion(User);
+
+    /// <summary>Pasa la política de operación FLIT del backoffice (<see cref="PoliticaBackoffice.CumpleOperacion"/>).</summary>
+    public bool BackofficeOperacion => PoliticaBackoffice.CumpleOperacion(User);
 
     /// <summary>Códigos de rol del token (un claim <c>role_code</c> por rol).</summary>
     public IReadOnlyList<string> Roles => User.FindAll("role_code").Select(c => c.Value).Distinct(StringComparer.Ordinal).ToList();

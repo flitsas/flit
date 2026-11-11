@@ -66,8 +66,11 @@ tags:
       documentos completos (R-20).
   - name: Backoffice
     description: >
-      Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
-      tenant_type=FLIT a la vez, empresa explícita y auditoría de cada lectura.
+      Lectura entre compañías del backoffice (D-16, ADR-0073; ajustes 2026-11-11, punto 1). Dos políticas: la de
+      configuración (diagnostico.backoffice: SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver y
+      tenant_type=FLIT a la vez) para resumen, contrato, diagnósticos, intentos, fuentes obligatorias y empresas; y la de
+      operación FLIT (diagnostico.backoffice.operacion: compañía FLIT con el permiso o SuperAdmin de FLIT) para el
+      override del dictamen y el llenado manual. Empresa explícita y auditoría de cada lectura.
 
 paths:
   /api/v1/diagnostico/sesion:
@@ -80,7 +83,9 @@ paths:
         Usuario del producto (política diagnostico.usuario): al menos un permiso diagnostico.* o SuperAdmin;
         un token de servicio o un rol de otro producto sin permisos de Diagnóstico recibe 403 (HU #13726). No acepta parámetros: si llega un parámetro o la cabecera X-Flit-Tenant-Id con otra
         compañía, se ignora. `permisos` solo trae slugs diagnostico.* (el token también lleva los de
-        plataforma). Las capacidades del backoffice FLIT exigen además tenant_type=FLIT (D-16).
+        plataforma). `capacidades.backoffice` sigue la política de configuración del backoffice (SuperAdmin de
+        cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y `capacidades.backofficeOperacion`, la de
+        operación FLIT (override del dictamen y llenado manual; ajustes 2026-11-11, punto 1).
       responses:
         "200":
           description: Sesión de la compañía del token.
@@ -1710,7 +1715,7 @@ paths:
       operationId: listarFuentesObligatoriasBackoffice
       summary: Catálogo global de fuentes obligatorias por trámite (backoffice FLIT)
       description: >
-        ADR-0078. Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT). No pide
+        ADR-0078. Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT). No pide
         ?empresa=: el dato es de FLIT, no de una compañía. Mandar ?empresa= no cambia la respuesta y no responde
         EMPRESA_REQUERIDA. No se registra en lecturas_backoffice. Lista las cabeceras guardadas con sus líneas;
         una cabecera con fuentes vacías va en el arreglo y una definición que no existe no va (en el alta, eso es
@@ -1794,8 +1799,8 @@ paths:
       operationId: listarEmpresasBackoffice
       summary: Empresas con Diagnóstico para el selector del editor de contrato (backoffice FLIT)
       description: >
-        HU #13741 (escenarios 15 y 16). Mismos permisos que el contrato: política diagnostico.backoffice
-        (diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.configuracion.contrato.editar.
+        HU #13741 (escenarios 15 y 16). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT). Desde los ajustes 2026-11-11 (punto 6) ya no exige
+        diagnostico.configuracion.contrato.editar: también la usa el selector del listado de diagnósticos.
         Devuelve las empresas activas con Diagnóstico encendido tal como las tiene Identidad
         (EmpresasService.ListarEmpresasConProducto, producto diagnostico), ordenadas por nombre (sin distinguir
         mayúsculas ni tildes). Solo lectura de la plataforma: no lleva empresa explícita ni se registra en
@@ -1814,8 +1819,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo);
-            SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+            No cumple la política de configuración del backoffice (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o
+            PRODUCTO_NO_HABILITADO.
           content:
             application/json:
               schema:
@@ -1851,7 +1856,7 @@ paths:
       operationId: obtenerContratoEmpresaBackoffice
       summary: Contrato de una compañía para el backoffice FLIT
       description: >
-        Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además
+        Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y además
         diagnostico.configuracion.contrato.editar (HU #13741). La lectura queda en diagnostico.lecturas_backoffice
         antes de leer. Sin fila guardada devuelve los valores por defecto.
       responses:
@@ -1871,7 +1876,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); token sin
+            No cumple la política de configuración del backoffice o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); token sin
             compañía (SIN_EMPRESA) o sin usuario (SIN_USUARIO); PRODUCTO_NO_HABILITADO.
           content:
             application/json:
@@ -1918,7 +1923,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); campo que no
+            No cumple la política de configuración del backoffice o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); campo que no
             es del contrato (CAMPO_NO_EDITABLE); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
           content:
             application/json:
@@ -1940,7 +1945,7 @@ paths:
         HU #13737 (F03-H6, F03-C11, plan §6.1 fila 03). Cada ejecución de una celda deja un intento de solo
         inserción en diagnostico.intentos_consulta (disparador AUTO y usuario_id nulo cuando lo hace el
         procesador; los reintentos de errores transitorios con backoff también dejan su intento). Política
-        diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.auditoria.ver:
+        diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.auditoria.ver:
         un usuario de la compañía recibe 403. Empresa explícita en ?empresa=; la lectura queda en
         diagnostico.lecturas_backoffice. Los intentos nunca llevan documentos: solo la placa o el VIN consultado.
         Orden: inicio ascendente.
@@ -1976,7 +1981,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.auditoria.ver (sin cuerpo); token sin compañía
+            No cumple la política de configuración del backoffice o le falta diagnostico.auditoria.ver (sin cuerpo); token sin compañía
             (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
             (`code` = PRODUCTO_NO_HABILITADO).
           content:
@@ -2011,8 +2016,8 @@ paths:
       operationId: obtenerFormularioLlenadoManualBackoffice
       summary: Formulario del llenado manual de una celda (backoffice FLIT)
       description: >
-        HU #13800 (F06-H3). Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además
-        diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
+        HU #13800 (F06-H3). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT), además
+        la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
         Devuelve la versión de la celda que se manda en el PUT, si admite el llenado (`admite_manual`) y, si no, el `motivo`
         (FUENTE_NO_ADMITE_MANUAL, CELDA_NO_EN_ERROR, CELDA_BLOQUEADA_POR_RUNT o SIN_PERSONAS_EN_ERROR). En las fuentes de persona
         (RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO) trae SOLO las personas en ERROR con su
@@ -2046,7 +2051,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada."
           content:
@@ -2153,7 +2158,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada (nada cambia)."
           content:
@@ -2203,7 +2208,7 @@ paths:
       operationId: obtenerDictamenVehiculoBackoffice
       summary: Dictamen vigente de un vehículo (backoffice FLIT)
       description: >
-        Corte 7. Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y empresa explícita en
+        Corte 7. Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y empresa explícita en
         ?empresa= (la lectura queda en diagnostico.lecturas_backoffice antes de tocar la fila). El mismo cuerpo que la
         compañía más analisis_override, usuario_override_id (uuid, sin nombre) y override_en. Sin lease, intentos ni texto
         de cola. Un usuario de la compañía recibe 403.
@@ -2223,7 +2228,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de configuración del backoffice (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
           content:
             application/json:
               schema:
@@ -2241,7 +2246,8 @@ paths:
       operationId: corregirDictamenVehiculoBackoffice
       summary: Reemplazar el veredicto del dictamen vigente (backoffice FLIT)
       description: >
-        Corte 7. La misma política del GET y además diagnostico.dictamen.override. El admin de la compañía recibe 403.
+        Corte 7. La misma política del GET, además la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y
+        diagnostico.dictamen.override. El admin de la compañía recibe 403.
         No vuelve a evaluar ni redacta. El veredicto nuevo es el del cuerpo. Los alertamientos conservan codigo, efecto
         y fuente, en el mismo orden; el texto vuelve a la plantilla del catálogo del tipo de trámite (si esa fila no está,
         se conserva el texto guardado). Nace otra versión (la anterior queda vigente=false), con analisis_override, el sub
@@ -2270,7 +2276,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.dictamen.override. No se escribe.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.dictamen.override. No se escribe.
         "404":
           description: "`code` = NO_ENCONTRADO o SIN_DICTAMEN. No se escribe."
           content:
@@ -2300,7 +2306,7 @@ paths:
       operationId: listarDiagnosticosBackoffice
       summary: Lotes de una compañía para el backoffice FLIT
       description: >
-        HU #13799 (F06-H2, F06-C6). Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT):
+        HU #13799 (F06-H2, F06-C6). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT):
         el rol backoffice_diagnostico en una compañía que no es FLIT, o el admin de la compañía, reciben 403 sin cuerpo.
         Empresa explícita en ?empresa= (nunca la del token); la lectura queda en diagnostico.lecturas_backoffice con el
         usuario, la empresa consultada, la ruta y la fecha, antes de leer. Solo lotes de esa compañía, del más reciente
@@ -2359,7 +2365,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT (sin cuerpo); token sin compañía (`code` = SIN_EMPRESA) o sin usuario
+            No cumple la política de configuración del backoffice (sin cuerpo); token sin compañía (`code` = SIN_EMPRESA) o sin usuario
             (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
 
   /api/v1/diagnostico/backoffice/diagnosticos/{id}/grilla:
@@ -2434,7 +2440,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de configuración del backoffice (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: el lote no existe en la compañía indicada."
           content:
@@ -2488,7 +2494,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.auditoria.ver (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de configuración del backoffice o le falta diagnostico.auditoria.ver (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: el lote no existe en la compañía indicada."
           content:
@@ -2503,9 +2509,10 @@ paths:
       summary: Resumen de una compañía cliente para el backoffice FLIT
       description: >
         Ruta mínima de D0 (HU #13728): si la compañía indicada tiene configuración y cuántos diagnósticos y
-        vehículos tiene. Política diagnostico.backoffice: exige a la vez el permiso diagnostico.backoffice.ver
-        (o SuperAdmin) y el claim tenant_type=FLIT del token; con el rol backoffice_diagnostico en una compañía
-        que no es FLIT, o en la compañía FLIT sin el permiso, responde 403, igual que cualquier otra ruta
+        vehículos tiene. Política diagnostico.backoffice de configuración: pasa un SuperAdmin de cualquier compañía
+        (ajustes 2026-11-11, punto 1) o un usuario con el permiso diagnostico.backoffice.ver y el claim
+        tenant_type=FLIT del token; con el rol backoffice_diagnostico en una compañía que no es FLIT (sin SuperAdmin),
+        o en la compañía FLIT sin el permiso, responde 403, igual que cualquier otra ruta
         /backoffice/* (también una que no existe). La compañía nunca sale del token: se indica en ?empresa=
         (o en el segmento {empresa} de las rutas que lo lleven; si llegan los dos deben coincidir). Cada
         lectura queda en diagnostico.lecturas_backoffice con el usuario, la empresa consultada, la ruta y la
@@ -2535,7 +2542,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT (falta el permiso o tenant_type no es FLIT; sin cuerpo); token sin compañía
+            No cumple la política de configuración del backoffice (sin SuperAdmin: falta el permiso o tenant_type no es FLIT; sin cuerpo); token sin compañía
             (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
             (`code` = PRODUCTO_NO_HABILITADO).
           content:
@@ -2603,8 +2610,11 @@ components:
     Capacidades:
       type: object
       description: >
-        Ayuda para armar el menú; cada endpoint vuelve a exigir su permiso. Las seis últimas son del
-        backoffice FLIT y exigen además tenant_type=FLIT.
+        Ayuda para armar el menú; cada endpoint vuelve a exigir su permiso. Backoffice (ajustes 2026-11-11, punto 1):
+        backoffice, editarContrato y verAuditoria siguen la política de configuración (SuperAdmin de cualquier
+        compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) junto con su permiso; backofficeOperacion,
+        llenarConsultas y corregirDictamen, la de operación FLIT (compañía FLIT con el permiso o SuperAdmin de FLIT);
+        verVolumetria exige tenant_type=FLIT.
       required:
         - crearDiagnosticos
         - verDiagnosticos
@@ -2619,6 +2629,7 @@ components:
         - corregirDictamen
         - verAuditoria
         - verVolumetria
+        - backofficeOperacion
       properties:
         crearDiagnosticos:
           type: boolean
@@ -2646,6 +2657,11 @@ components:
           type: boolean
         verVolumetria:
           type: boolean
+        backofficeOperacion:
+          type: boolean
+          description: >
+            Override del dictamen y llenado manual del backoffice (política de operación FLIT). Un SuperAdmin de una
+            compañía que no es FLIT tiene backoffice=true y backofficeOperacion=false.
 
     ResumenEmpresaBackoffice:
       type: object
