@@ -620,7 +620,7 @@ function VerifyIdStat({ verificationId }: { verificationId?: string | null }) {
         <div className="mt-0.5 flex items-start gap-1.5">
           <span
             className="min-w-0 select-all break-all font-mono text-[12px] font-semibold"
-            style={{ color: FLIT.brand.blue }}
+            style={{ color: 'var(--di-action)' }}
           >
             {id}
           </span>
@@ -630,18 +630,18 @@ function VerifyIdStat({ verificationId }: { verificationId?: string | null }) {
             aria-label="Copiar ID de Verify"
             title="Copiar ID de Verify"
             className="grid h-6 w-6 shrink-0 place-items-center rounded-full border hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-            style={{ borderColor: FLIT.brand.blue, color: FLIT.brand.blue }}
+            style={{ borderColor: 'var(--di-action)', color: 'var(--di-action)' }}
           >
             {copied ? <Check className="h-3 w-3" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
           </button>
         </div>
       ) : (
-        <p className="mt-0.5 text-[12px] font-semibold" style={{ color: FLIT.text.primary }}>
+        <p className="mt-0.5 text-[12px] font-semibold" style={{ color: 'var(--foreground)' }}>
           —
         </p>
       )}
       {id ? (
-        <span role="status" aria-live="polite" className="text-[11px] font-semibold" style={{ color: FLIT.text.primary }}>
+        <span role="status" aria-live="polite" className="text-[11px] font-semibold" style={{ color: 'var(--foreground)' }}>
           {copied ? 'Copiado' : ''}
         </span>
       ) : null}

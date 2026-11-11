@@ -124,8 +124,11 @@ public sealed record InstanceSummaryDto(
 /// ADR-0053 — un propietario de un lado en el listado: su nombre y cómo está acreditado
 /// (<c>firmado</c> | <c>rechazado</c> | <c>pendiente</c>, mismos valores que <c>FirmaVendedorEstado</c>).
 /// <c>FirmaEstado</c> es <c>null</c> cuando el tipo no manda a ese lado a validar identidad.
+/// <c>Ordinal</c> y <c>NumeroDocumento</c> identifican a la persona dentro del lado: con ellos la
+/// tabla abre el tracking de identidad de ESE propietario (mismo emparejamiento que el Resumen:
+/// por ordinal de la validación y, en validaciones antiguas sin ordinal, por documento).
 /// </summary>
-public sealed record ActorListadoDto(string Nombre, string? FirmaEstado);
+public sealed record ActorListadoDto(string Nombre, string? FirmaEstado, int Ordinal = 1, string? NumeroDocumento = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -405,7 +408,9 @@ public sealed class ListProcedureInstancesHandler(
                 a.FullName.Trim(),
                 aplica
                     ? DeriveFirmaActor(e, parte, a, actoresAprobados?.Contains(a) == true, firmaBaulPorPersona)
-                    : null))
+                    : null,
+                a.Ordinal,
+                string.IsNullOrWhiteSpace(a.DocumentNumber) ? null : a.DocumentNumber.Trim()))
             .ToList();
         return lista.Count > 0 ? lista : null;
     }

@@ -160,7 +160,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
-import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
+import { IdentidadParteTrackingModal, type ActorTracking } from './IdentidadParteTrackingModal';
 
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
@@ -570,6 +570,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     item: InstanceSummary;
     parte: BiometricParte;
     rotulo: string;
+    actor?: ActorTracking | null;
   } | null>(null);
 
   // HU #12104 — exportación a Excel. `exportNotice` es el resultado (cuántas filas, cuántos
@@ -1771,6 +1772,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         tenantId={isAdmin ? identidadTracking?.item.tenantId : undefined}
         parte={identidadTracking?.parte ?? 'comprador'}
         rotulo={identidadTracking?.rotulo ?? 'Comprador'}
+        actor={identidadTracking?.actor ?? null}
       />
 
       {processTarget && (
@@ -2136,6 +2138,8 @@ function TableBody({
     item: InstanceSummary;
     parte: BiometricParte;
     rotulo: string;
+    /** ADR-0053 — copropietario concreto; sin él, el tracking es de toda la parte. */
+    actor?: ActorTracking | null;
   }) => void;
   /** HU #12196 — el usuario tiene acceso al módulo de historial por placa (gate RBAC del dock). */
   puedeVerHistorialPlaca: boolean;
@@ -2393,6 +2397,7 @@ function ActorCell({
   rotulo,
   estado,
   onOpenTracking,
+  onOpenTrackingActor,
   desplegado = false,
   onToggleDesplegado,
 }: {
@@ -2409,6 +2414,11 @@ function ActorCell({
   estado?: FirmaParteEstado | null;
   /** Click en la acreditación → modal de tracking de identidad de esta parte. */
   onOpenTracking?: () => void;
+  /**
+   * ADR-0053 — click en la firma de UN copropietario del desplegable → tracking de identidad de esa
+   * persona (no de todo el lado), igual que la línea de firma de la celda plegada.
+   */
+  onOpenTrackingActor?: (actor: ActorListado, posicion: number) => void;
   /**
    * Desplegable controlado por la fila: así el ícono «Con múltiples propietarios» de Marcas abre
    * los dos lados a la vez, y el botón de cada celda sigue abriendo solo el suyo.
@@ -2482,21 +2492,47 @@ function ActorCell({
               }
             >
               <span className="break-words">{a.nombre}</span>
-              {a.firmaEstado ? (
-                // Punto de color + texto: el color solo no puede portar el significado.
-                <span
-                  className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold"
-                  style={{ color: FIRMA_TEXTO[a.firmaEstado].color }}
-                >
-                  {/* Punto grande, como en FLIT 1: se lee de un vistazo al recorrer la lista. */}
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ background: FIRMA_TEXTO[a.firmaEstado].color }}
-                    aria-hidden="true"
-                  />
-                  {FIRMA_TEXTO[a.firmaEstado].label}
-                </span>
-              ) : null}
+              {a.firmaEstado
+                ? (() => {
+                    const firma = FIRMA_TEXTO[a.firmaEstado];
+                    // Punto de color + texto: el color solo no puede portar el significado.
+                    const contenido = (
+                      <>
+                        {/* Punto grande, como en FLIT 1: se lee de un vistazo al recorrer la lista. */}
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ background: firma.color }}
+                          aria-hidden="true"
+                        />
+                        {firma.label}
+                      </>
+                    );
+                    return onOpenTrackingActor ? (
+                      // Mismo gesto que la firma de la celda plegada: abre el tracking de identidad,
+                      // pero de ESTA persona.
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenTrackingActor(a, i + 1);
+                        }}
+                        aria-label={`Ver tracking de identidad de ${a.nombre}`}
+                        title={`Ver tracking de identidad · ${a.nombre}`}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded text-xs font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
+                        style={{ color: firma.color }}
+                      >
+                        {contenido}
+                      </button>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold"
+                        style={{ color: firma.color }}
+                      >
+                        {contenido}
+                      </span>
+                    );
+                  })()
+                : null}
             </li>
           ))}
         </ul>
@@ -2592,6 +2628,8 @@ function TramiteRow({
     item: InstanceSummary;
     parte: BiometricParte;
     rotulo: string;
+    /** ADR-0053 — copropietario concreto; sin él, el tracking es de toda la parte. */
+    actor?: ActorTracking | null;
   }) => void;
   /** HU #12196 — el usuario tiene acceso al módulo de historial por placa (gate RBAC del dock). */
   puedeVerHistorialPlaca: boolean;
@@ -2979,6 +3017,15 @@ function TramiteRow({
         onOpenTracking={() =>
           onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
         }
+        onOpenTrackingActor={(actor, posicion) => {
+          const ordinal = actor.ordinal ?? posicion;
+          onOpenIdentidadTracking({
+            item,
+            parte: 'vendedor',
+            rotulo: `Vendedor ${ordinal}`,
+            actor: { ordinal, numeroDocumento: actor.numeroDocumento ?? null, nombre: actor.nombre },
+          });
+        }}
       />
     ),
     comprador: (
@@ -2992,6 +3039,15 @@ function TramiteRow({
         onOpenTracking={() =>
           onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
         }
+        onOpenTrackingActor={(actor, posicion) => {
+          const ordinal = actor.ordinal ?? posicion;
+          onOpenIdentidadTracking({
+            item,
+            parte: 'comprador',
+            rotulo: `Comprador ${ordinal}`,
+            actor: { ordinal, numeroDocumento: actor.numeroDocumento ?? null, nombre: actor.nombre },
+          });
+        }}
       />
     ),
     vin: (
