@@ -173,6 +173,17 @@ public sealed class ActorValidacionBuilderTests
     }
 
     [Fact]
+    public void Documentos_en_blanco_nunca_coinciden_ni_entre_si()
+    {
+        // Dos actores del rol (sin respaldo a las validaciones del rol) y una validación con documento en blanco.
+        var v = Val("comprador", "  ", BiometricEstados.Aprobado, attempts: 2);
+        var r = Build(ProcedureFamilyCodes.Traspaso,
+            [Actor("comprador", 1, ""), Actor("comprador", 2, " ")], [v]);
+
+        r.Should().OnlyContain(x => x.EstadoValidacion == "sin_validacion" && x.Intentos == 0);
+    }
+
+    [Fact]
     public void Estado_desconocido_sale_sin_validar()
     {
         var v = Val("comprador", "1", "algo_raro");

@@ -144,6 +144,18 @@ public sealed class ReporteDetalladoActoresVistaTests(PostgresDatabaseFixture fi
         max.Should().Be(new MaxActoresPorRolDto(1, 2, 0));
     }
 
+    [PostgresFact]
+    public async Task Documentos_en_blanco_nunca_coinciden_ni_entre_si()
+    {
+        var id = await SeedAsync(TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        await AddActorAsync(id, "comprador", 1, "");
+        await AddActorAsync(id, "comprador", 2, " ");
+        await AddValidationAsync(id, "comprador", "", "aprobado", 0, null, attempts: 2);
+
+        (await ReadActoresAsync(id)).Should()
+            .OnlyContain(a => a.EstadoValidacion == "sin_validacion" && a.Intentos == 0);
+    }
+
     [PostgresTheory]
     [InlineData("manual_activo", "esperando_captura")]
     [InlineData("pendiente_revision_manual", "pendiente_revision")]

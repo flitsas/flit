@@ -227,11 +227,14 @@ LEFT JOIN LATERAL (
         LEFT JOIN LATERAL (
             SELECT coalesce(
                 array_agg(v.id) FILTER (WHERE
-                    (upper(trim(v.document_number)) = upper(x.sujeto_num)
+                    -- Un documento en blanco nunca coincide (igual que BiometricRules.DocumentoCoincide en C#).
+                    (nullif(trim(v.document_number), '') IS NOT NULL AND nullif(x.sujeto_num, '') IS NOT NULL
+                        AND upper(trim(v.document_number)) = upper(x.sujeto_num)
                         AND (nullif(trim(v.document_type), '') IS NULL OR nullif(x.sujeto_tipo, '') IS NULL
                              OR upper(trim(v.document_type)) = upper(x.sujeto_tipo)))
                     OR
-                    (upper(trim(v.document_number)) = upper(trim(x.document_number))
+                    (nullif(trim(v.document_number), '') IS NOT NULL AND nullif(trim(x.document_number), '') IS NOT NULL
+                        AND upper(trim(v.document_number)) = upper(trim(x.document_number))
                         AND (nullif(trim(v.document_type), '') IS NULL OR nullif(trim(x.document_type), '') IS NULL
                              OR upper(trim(v.document_type)) = upper(trim(x.document_type))))
                 ),
