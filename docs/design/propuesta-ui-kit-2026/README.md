@@ -51,8 +51,8 @@ FLIT_API=https://api.qa.flitsas.online node docs/design/propuesta-ui-kit-2026/se
 - Márgenes laterales iguales que siguen el ancho de la pantalla (16 a 32 px) y contenido hasta 1680 px.
 - Separaciones solo de la escala del manual: 4, 8, 16, 24 y 32 px.
 - Tipografía fija del manual en escritorio: 32 bold, 24 medium, 16 regular, 12 light.
-- Tres cortes: 1100 px (cifras en fila), 760 px (una columna) y 640 px (teléfono: estados y pasos se deslizan dentro de su cuadro, menú solo con íconos).
-- Medido el 11/11 en 390, 800, 1280 y 1920 px sobre 14 vistas: ninguna desborda a lo ancho.
+- Cortes: 1100 px (cifras en fila), 900 px (las tablas pasan a tarjetas), 760 px (una columna), 640 px (teléfono: estados y pasos se deslizan dentro de su cuadro, menú solo con íconos) y 380 px (cifras y tarjetas en una columna, menú compacto).
+- Medido el 11/11 en 320, 360, 390, 414, 768, 900, 1024, 1280 y 1920 px sobre las 75 pantallas y pestañas: ninguna desborda a lo ancho ni deja un control fuera de la pantalla. En 320, 390 y 768 px también se abrieron el modal de nuevo trámite, los filtros, el menú de acciones, el buscador y los menús de la cabecera y de la barra inferior.
 
 Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga después de `tokens.css` y `propuesta.css`), `assets/kit/` (recursos del repositorio de íconos) y los parches marcados con «UI Kit 2026» en `propuesta.js`.
 

@@ -644,3 +644,29 @@ td.fila-abrir { width: 1%; white-space: nowrap; }
 [data-theme="dark"] .badge.info { --c: #8fb0ff; }
 [data-theme="dark"] .badge[data-estado="radicado"], [data-theme="dark"] .badge[data-estado="entregado"] { --c: #2fd6c9; }
 [data-theme="dark"] .acciones-btn { color: #a9c9fc; }
+
+/* Adaptable: ajustes medidos de 320 a 1920 px */
+.metrica { grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
+.metrica__etiqueta, .metrica__cifra, .metrica__pie { min-width: 0; overflow-wrap: anywhere; }
+.banner-kit__punto { position: relative; }
+.banner-kit__punto::after { content: ""; position: absolute; inset: -10px -4px; }
+@media (max-width: 900px) {
+  /* En modo tarjeta la celda de acciones ocupa su fila; con el 1 % de la tabla el botón se salía por la izquierda. */
+  table:not(.matriz) td.fila-abrir { width: auto; white-space: normal; }
+}
+@media (max-width: 380px) {
+  .metricas, .inicio-tope .metricas { grid-template-columns: minmax(0, 1fr); }
+  table:not(.matriz) tbody { grid-template-columns: minmax(0, 1fr); }
+  table:not(.matriz) td { min-width: 0; }
+  table:not(.matriz) td .badge { white-space: normal; text-align: left; }
+  .dock { padding: 5px 6px; }
+  .dock__item span.kico { width: 32px; height: 32px; }
+  .dock__item span.kico svg { width: 20px; height: 20px; }
+  .dock__fab { width: 42px; height: 42px; margin: 0 2px; }
+  .filtros__panel { padding: var(--space-12); min-width: 0; }
+  .filtros__panel > *, .filtros__panel div, .filtros__panel label { min-width: 0; max-width: 100%; }
+  .filtros__panel input, .filtros__panel select { min-width: 0; max-width: 100%; }
+  .filtros__panel input[type="date"] { width: 100%; }
+  .barra-accion p { flex-basis: 100%; }
+  .barra-accion .btn { max-width: 100%; white-space: normal; height: auto; min-height: 36px; text-align: center; }
+}
