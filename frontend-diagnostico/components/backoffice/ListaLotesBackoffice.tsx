@@ -17,7 +17,7 @@ import {
   TARJETA_CLS,
 } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
-import { ESTADOS_LOTE } from "@/components/tablero/EstadoGlobal";
+import { ESTADOS_LOTE, vistaEstadoLote } from "@/components/tablero/EstadoGlobal";
 import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
@@ -173,7 +173,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
             </thead>
             <tbody>
               {lista.diagnosticos.map((d) => {
-                const estado = ESTADOS_LOTE[d.estado] ?? { texto: d.estado, tono: "neutral" as const };
+                const estado = vistaEstadoLote(d.estado, d.estado_etiqueta);
                 return (
                   <tr key={d.id} className={`${FILA_TABLA_CLS} bg-card`}>
                     <td className={CELDA_TABLA_CLS}>

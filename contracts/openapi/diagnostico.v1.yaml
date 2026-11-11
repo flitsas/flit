@@ -2865,10 +2865,12 @@ components:
 
     DefinicionFuentesObligatorias:
       type: object
-      required: [familia, tipo_tramite_codigo, fuentes]
+      required: [familia, tipo_tramite_codigo, fuentes, tipo_tramite_etiqueta, familia_etiqueta]
       description: >
         Una definición del catálogo global. familia y tipo_tramite_codigo son excluyentes; la que no aplica es null.
-        fuentes vacío con la definición presente es la lista vacía explícita.
+        fuentes vacío con la definición presente es la lista vacía explícita. tipo_tramite_etiqueta y familia_etiqueta
+        (punto 5, 2026-11-11) son los nombres que se muestran: el del tipo es el que publica Trámites y, si no responde o el
+        tipo no está publicado, el respaldo del servicio; null cuando su código es null.
       properties:
         familia:
           type: string
@@ -2882,10 +2884,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FuenteConfigurable"
+        tipo_tramite_etiqueta:
+          type: string
+          nullable: true
+          example: Traspaso
+        familia_etiqueta:
+          type: string
+          nullable: true
+          example: Traspaso
       example:
         familia: null
         tipo_tramite_codigo: TRASPASO_STANDARD
         fuentes: [SIMIT_PROPIETARIO]
+        tipo_tramite_etiqueta: Traspaso
+        familia_etiqueta: null
 
     ListaDefinicionesFuentesObligatorias:
       type: object
@@ -3532,7 +3544,7 @@ components:
 
     Grilla:
       type: object
-      required: [id, nombre, estado, version, desde, columnas, avance, vehiculos]
+      required: [id, nombre, estado, estado_etiqueta, version, desde, columnas, avance, vehiculos]
       properties:
         id:
           type: string
@@ -3541,6 +3553,10 @@ components:
           type: string
         estado:
           $ref: "#/components/schemas/EstadoDiagnostico"
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo de negocio del estado del lote (Sin lanzar, En proceso, Completado, Incompleto); el código sigue en estado.
+          example: En proceso
         version:
           type: integer
           format: int64
@@ -3591,7 +3607,7 @@ components:
 
     FilaVehiculo:
       type: object
-      required: [id, orden, identificador, tipo_identificador, placa, vin, terminado, celdas, documento_declarado, propietarios]
+      required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, documento_declarado, propietarios]
       properties:
         id:
           type: string
@@ -3604,6 +3620,10 @@ components:
         tipo_identificador:
           type: string
           example: PLACA_CARRO
+        tipo_identificador_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo del tipo de identificador (Placa de carro, Placa de moto, Placa de remolque, Placa de maquinaria, Placa de motocarro, VIN).
+          example: Placa de carro
         placa:
           type: string
           nullable: true
@@ -3671,7 +3691,7 @@ components:
     CeldaGrilla:
       type: object
       description: Sin origen, usuario manual, payload ni documentos (R-20).
-      required: [id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, version]
+      required: [id, fuente, estado, estado_etiqueta, motivo_na, motivo_na_etiqueta, tipo_error, dato_obtenido_en, reutilizada, version]
       properties:
         id:
           type: string
@@ -3681,10 +3701,19 @@ components:
         estado:
           type: string
           enum: [PENDIENTE, EN_CURSO, COMPLETADO, ERROR, NA]
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo del estado de la celda (Pendiente, En curso, Completado, Error, No aplica).
+          example: No aplica
         motivo_na:
           type: string
           nullable: true
           description: "Solo con estado NA: SERVICIO_PUBLICO, DEPARTAMENTO_NO_SOPORTADO o SIN_DOCUMENTO_LOCATARIO."
+        motivo_na_etiqueta:
+          type: string
+          nullable: true
+          description: Punto 5 (2026-11-11). Texto de negocio del motivo de N/A; null cuando motivo_na es null.
+          example: "El vehículo es de servicio público: esta consulta no aplica."
         tipo_error:
           type: string
           nullable: true
@@ -3857,7 +3886,7 @@ components:
 
     DiagnosticoListado:
       type: object
-      required: [id, nombre, creado_en, modo, tipo_tramite, estado, usuario_creador, es_express]
+      required: [id, nombre, creado_en, modo, tipo_tramite, estado, estado_etiqueta, usuario_creador, es_express]
       properties:
         id:
           type: string
@@ -3881,6 +3910,10 @@ components:
               type: string
         estado:
           $ref: "#/components/schemas/EstadoDiagnostico"
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo de negocio del estado del lote (Sin lanzar, En proceso, Completado, Incompleto); el código sigue en estado.
+          example: En proceso
         usuario_creador:
           type: object
           required: [id, nombre]
@@ -3921,11 +3954,11 @@ components:
         tamano: 10
         total: 1
         diagnosticos:
-          - { id: 0199f3a1-1111-7000-8000-000000000001, nombre: Lote octubre, estado: EN_PROCESO, creado_en: "2026-10-22T14:00:00+00:00", vehiculos: 2, celdas_en_error: 2 }
+          - { id: 0199f3a1-1111-7000-8000-000000000001, nombre: Lote octubre, estado: EN_PROCESO, estado_etiqueta: En proceso, creado_en: "2026-10-22T14:00:00+00:00", vehiculos: 2, celdas_en_error: 2 }
 
     DiagnosticoBackoffice:
       type: object
-      required: [id, nombre, estado, creado_en, vehiculos, celdas_en_error]
+      required: [id, nombre, estado, estado_etiqueta, creado_en, vehiculos, celdas_en_error]
       properties:
         id:
           type: string
@@ -3934,6 +3967,10 @@ components:
           type: string
         estado:
           $ref: "#/components/schemas/EstadoDiagnostico"
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo de negocio del estado del lote (Sin lanzar, En proceso, Completado, Incompleto); el código sigue en estado.
+          example: En proceso
         creado_en:
           type: string
           format: date-time
@@ -4030,12 +4067,23 @@ components:
     AlertaDictamen:
       type: object
       additionalProperties: false
-      required: [codigo, texto, efecto, fuente]
+      required: [codigo, texto, efecto, fuente, etiqueta, fuente_etiqueta]
       properties:
         codigo: { type: string }
         texto: { type: string }
         efecto: { type: string }
         fuente: { type: string }
+        etiqueta:
+          type: string
+          description: >
+            Punto 5 (2026-11-11). Rótulo de negocio de la regla (p. ej. «SOAT no vigente», «Multas del propietario»;
+            FUENTE_PENDIENTE da «Consulta pendiente: nombre de la fuente»). Calculado al responder; un código sin rótulo
+            da «Novedad sin clasificar», nunca el código.
+          example: SOAT no vigente
+        fuente_etiqueta:
+          type: string
+          description: Punto 5. Nombre de la fuente (RUNT, RUNT propietarios, SIMIT vehículo…); sin rótulo, «Novedad sin clasificar».
+          example: RUNT
 
     DictamenVehiculo:
       type: object

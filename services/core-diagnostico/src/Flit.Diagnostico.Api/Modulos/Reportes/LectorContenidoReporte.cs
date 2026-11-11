@@ -43,12 +43,9 @@ internal sealed class LectorContenidoReporte(
     ICatalogoTiposTramite catalogo)
 {
     /// <summary>Texto de cada motivo de N/A (los mismos del detalle de celda de la interfaz).</summary>
-    public static readonly IReadOnlyDictionary<MotivoNa, string> TextoMotivoNa = new Dictionary<MotivoNa, string>
-    {
-        [MotivoNa.ServicioPublico] = "El vehículo es de servicio público: esta consulta no aplica.",
-        [MotivoNa.DepartamentoNoSoportado] = "El departamento del vehículo todavía no está soportado.",
-        [MotivoNa.SinDocumentoLocatario] = "El vehículo está sin el documento del locatario: no hay a quién consultar.",
-    };
+    /// <remarks>Sale de <see cref="RotulosDiagnostico.MotivosNa"/> (punto 5): el mismo texto de <c>motivo_na_etiqueta</c> en la API.</remarks>
+    public static readonly IReadOnlyDictionary<MotivoNa, string> TextoMotivoNa =
+        Enum.GetValues<MotivoNa>().ToDictionary(m => m, RotulosDiagnostico.DeMotivoNa);
 
     /// <summary>El contenido del vehículo para la compañía del token, con su visibilidad y la empresa del claim.</summary>
     public async Task<ContenidoReporteVehiculo> VehiculoAsync(UsuarioActual usuario, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)

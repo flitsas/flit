@@ -8,6 +8,7 @@ import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
+import { nombreRol } from "@/lib/rotulos";
 
 /** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px. */
 const CABECERA_CLS = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider";
@@ -20,7 +21,6 @@ const TD_CLS = "px-3 py-2.5 align-top";
 
 const RESUELTAS: ReadonlySet<CeldaGrilla["estado"]> = new Set(["COMPLETADO", "NA", "ERROR"]);
 
-const ROLES: Record<string, string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
 
 /** Pilares con más de una fuente: su cabecera agrupa (colgroup) y sus fuentes van en el segundo nivel. */
 const PILARES_AGRUPADOS = PILARES.filter((p) => p.fuentes.length > 1);
@@ -88,7 +88,7 @@ function CeldaDocumentoDeclarado({ vehiculo }: { vehiculo: FilaVehiculo }) {
       {d ? (
         <span className="flex flex-col gap-0.5">
           <span className={DOCUMENTO_CLS}>{`${d.tipo_documento} ${enmascararDocumento(d.documento_enmascarado)}`}</span>
-          <span className={TEXTO_SECUNDARIO_CLS}>{ROLES[d.rol] ?? d.rol}</span>
+          <span className={TEXTO_SECUNDARIO_CLS}>{nombreRol(d.rol)}</span>
         </span>
       ) : (
         <SinDato etiqueta="Sin documento declarado" />

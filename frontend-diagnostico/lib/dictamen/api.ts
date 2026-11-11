@@ -3,13 +3,35 @@
 // /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen?empresa=. Sin compañía elegida no sale la llamada.
 import { ApiError, apiFetch } from "@/lib/api";
 import { EmpresaNoElegida } from "@/lib/backoffice/api";
-import { esEmpresaValida } from "@/lib/configuracion";
+import { esEmpresaValida, rotuloFuente } from "@/lib/configuracion";
+import { ALERTA_FUENTE_PENDIENTE, ALERTAS_DICTAMEN, EFECTOS_DICTAMEN, rotular } from "@/lib/rotulos";
 
 export interface AlertaDictamen {
   codigo: string;
+  /** Punto 5: rótulo de negocio de la regla (opcional; sin él, el diccionario de respaldo de lib/rotulos). */
+  etiqueta?: string | null;
   texto: string;
   efecto: string;
   fuente: string;
+  /** Punto 5: nombre de negocio de la fuente (opcional; sin él, `nombreFuente`). */
+  fuente_etiqueta?: string | null;
+}
+
+/** Título visible de una alerta: su etiqueta, el rótulo aprobado o «Novedad sin clasificar»; nunca el código. */
+export function rotuloAlerta(alerta: AlertaDictamen): string {
+  if (!alerta.etiqueta?.trim() && alerta.codigo === ALERTA_FUENTE_PENDIENTE)
+    return `Consulta pendiente: ${rotuloFuenteAlerta(alerta)}`;
+  return rotular({ contexto: "alerta del dictamen", codigo: alerta.codigo, etiqueta: alerta.etiqueta, respaldo: ALERTAS_DICTAMEN });
+}
+
+/** «Fuente: …» de una alerta. */
+export function rotuloFuenteAlerta(alerta: AlertaDictamen): string {
+  return rotuloFuente(alerta.fuente, alerta.fuente_etiqueta);
+}
+
+/** «Efecto: …» de una alerta (BLOQUEA / ADVIERTE). */
+export function rotuloEfecto(alerta: AlertaDictamen): string {
+  return rotular({ contexto: "efecto del dictamen", codigo: alerta.efecto, respaldo: EFECTOS_DICTAMEN });
 }
 
 export interface Dictamen {

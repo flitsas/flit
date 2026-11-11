@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
+using Flit.Diagnostico.Api.Plataforma;
 
 namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
@@ -24,6 +25,10 @@ internal sealed record GrillaBackofficeDto(
     [property: JsonPropertyName("estimado_consultas"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<EstimadoVsConsumidoDto>? EstimadoConsultas)
 {
+    /// <summary>Rótulo del estado del lote (punto 5).</summary>
+    [JsonPropertyName("estado_etiqueta")]
+    public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoLote(Estado);
+
     public static GrillaBackofficeDto De(Guid empresa, GrillaLeida g)
     {
         ArgumentNullException.ThrowIfNull(g);
@@ -48,7 +53,12 @@ internal sealed record FilaVehiculoBackofficeDto(
     [property: JsonPropertyName("terminado")] bool Terminado,
     [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaBackofficeDto> Celdas,
     [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
-    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios);
+    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios)
+{
+    /// <summary>Rótulo del tipo de identificador (punto 5).</summary>
+    [JsonPropertyName("tipo_identificador_etiqueta")]
+    public string TipoIdentificadorEtiqueta => RotulosDiagnostico.DeTipoIdentificador(TipoIdentificador);
+}
 
 /// <summary>
 /// Una celda para el backoffice: las claves de <see cref="CeldaGrillaDto"/> más <c>origen</c> (<c>API</c> consulta a la fuente,
@@ -67,6 +77,14 @@ internal sealed record CeldaGrillaBackofficeDto(
     [property: JsonPropertyName("origen")] string? Origen,
     [property: JsonPropertyName("usuario_manual_id")] Guid? UsuarioManualId)
 {
+    /// <summary>Rótulo del estado de la celda (punto 5).</summary>
+    [JsonPropertyName("estado_etiqueta")]
+    public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoCelda(Estado);
+
+    /// <summary>Texto del motivo de N/A (punto 5); null si la celda no tiene motivo.</summary>
+    [JsonPropertyName("motivo_na_etiqueta")]
+    public string? MotivoNaEtiqueta => RotulosDiagnostico.DeMotivoNa(MotivoNa);
+
     public static CeldaGrillaBackofficeDto De(CeldaLeida c)
     {
         ArgumentNullException.ThrowIfNull(c);
@@ -84,7 +102,12 @@ internal sealed record DiagnosticoBackofficeDto(
     [property: JsonPropertyName("estado")] string Estado,
     [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn,
     [property: JsonPropertyName("vehiculos")] int Vehiculos,
-    [property: JsonPropertyName("celdas_en_error")] int CeldasEnError);
+    [property: JsonPropertyName("celdas_en_error")] int CeldasEnError)
+{
+    /// <summary>Rótulo del estado del lote (punto 5).</summary>
+    [JsonPropertyName("estado_etiqueta")]
+    public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoLote(Estado);
+}
 
 /// <summary>Página de lotes de una compañía para el backoffice (HU #13799).</summary>
 internal sealed record ListaDiagnosticosBackofficeDto(

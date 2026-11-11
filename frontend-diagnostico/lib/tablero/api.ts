@@ -16,7 +16,11 @@ export interface CeldaGrilla {
   id: string;
   fuente: Fuente;
   estado: EstadoCelda;
+  /** Punto 5: nombre de negocio del estado (opcional). El chip del semáforo conserva su texto homologado (HU #14512). */
+  estado_etiqueta?: string | null;
   motivo_na: MotivoNa | null;
+  /** Punto 5: nombre de negocio del motivo de la N/A (opcional; sin él, el diccionario local). */
+  motivo_na_etiqueta?: string | null;
   tipo_error: string | null;
   /** Fecha y hora del dato; en la celda reutilizada, la del dato original (D-10). */
   dato_obtenido_en: string | null;
@@ -44,6 +48,8 @@ export interface FilaVehiculo {
   orden: number;
   identificador: string;
   tipo_identificador: string;
+  /** Punto 5: nombre de negocio del tipo de identificador (opcional; sin él, `TIPOS_IDENTIFICADOR` de lib/rotulos). */
+  tipo_identificador_etiqueta?: string | null;
   placa: string | null;
   vin: string | null;
   /** Todas sus celdas en COMPLETADO o NA (R-7), calculado con todas, no solo con las recibidas. */
@@ -84,6 +90,8 @@ export interface Grilla {
   id: string;
   nombre: string;
   estado: EstadoDiagnostico;
+  /** Punto 5: nombre de negocio del estado del lote (opcional; sin él, `ESTADOS_LOTE`). */
+  estado_etiqueta?: string | null;
   version: number;
   desde: number;
   columnas: ColumnasGrilla;

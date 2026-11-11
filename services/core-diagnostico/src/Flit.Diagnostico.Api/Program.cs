@@ -109,6 +109,10 @@ public static class Program
         });
 
         var app = builder.Build();
+        // Punto 5 (2026-11-11): un código sin rótulo de negocio deja aviso en el log técnico (sin datos de personas).
+        // Se suelta al detenerse: el estático no debe sobrevivir a la fábrica de logs de este host.
+        var soltarRotulos = RotulosDiagnostico.Conectar(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.Diagnostico.Rotulos"));
+        app.Lifetime.ApplicationStopping.Register(soltarRotulos);
         app.UseExceptionHandler();
         app.UseFlitCorrelationId();
         app.UseAuthentication();

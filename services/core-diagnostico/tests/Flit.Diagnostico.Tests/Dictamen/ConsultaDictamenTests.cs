@@ -52,7 +52,7 @@ public sealed class ConsultaDictamenTests
             ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn"]);
         Nombres(typeof(DictamenBackofficeDto)).Should().BeEquivalentTo(
             ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AnalisisOverride", "UsuarioOverrideId", "OverrideEn"]);
-        Nombres(typeof(AlertaDictamenDto)).Should().BeEquivalentTo(["Codigo", "Texto", "Efecto", "Fuente"]);
+        Nombres(typeof(AlertaDictamenDto)).Should().BeEquivalentTo(["Codigo", "Texto", "Efecto", "Fuente", "Etiqueta", "FuenteEtiqueta"]);
 
         var fila = Fila();
         fila.AnalisisOverride = true;
@@ -68,9 +68,27 @@ public sealed class ConsultaDictamenTests
             "version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en",
             "analisis_override", "usuario_override_id", "override_en",
         ]);
-        compania["alertamientos"]![0]!.AsObject().Select(p => p.Key).Should().Equal("codigo", "texto", "efecto", "fuente");
+        compania["alertamientos"]![0]!.AsObject().Select(p => p.Key).Should().Equal("codigo", "texto", "efecto", "fuente", "etiqueta", "fuente_etiqueta");
         backoffice["analisis_override"]!.GetValue<bool>().Should().BeTrue();
         backoffice["usuario_override_id"]!.GetValue<Guid>().Should().Be(fila.UsuarioOverrideId!.Value);
+    }
+
+    /// <summary>Punto 5 (2026-11-11): cada alerta lleva su rótulo y el nombre de su fuente; un código sin rótulo nunca sale crudo.</summary>
+    [Fact]
+    public void Cada_alerta_lleva_etiqueta_y_fuente_etiqueta_y_el_codigo_sin_rotulo_sale_generico()
+    {
+        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(Fila()), Web)!.AsObject();
+        var alertas = compania["alertamientos"]!.AsArray();
+
+        alertas[0]!["codigo"]!.GetValue<string>().Should().Be("SOAT_NO_VIGENTE");
+        alertas[0]!["etiqueta"]!.GetValue<string>().Should().Be("SOAT no vigente");
+        alertas[0]!["fuente"]!.GetValue<string>().Should().Be("RUNT");
+        alertas[0]!["fuente_etiqueta"]!.GetValue<string>().Should().Be("RUNT");
+        alertas[1]!["etiqueta"]!.GetValue<string>().Should().Be("Novedad sin clasificar");
+        alertas[1]!["fuente_etiqueta"]!.GetValue<string>().Should().Be("Novedad sin clasificar");
+
+        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(Fila()), Web)!.AsObject();
+        backoffice["alertamientos"]![0]!["etiqueta"]!.GetValue<string>().Should().Be("SOAT no vigente");
     }
 
     [Fact]

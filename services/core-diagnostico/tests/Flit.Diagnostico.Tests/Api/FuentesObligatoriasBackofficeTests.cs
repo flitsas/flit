@@ -28,7 +28,7 @@ namespace Flit.Diagnostico.Tests.Api;
 public sealed class FuentesObligatoriasBackofficeTests
 {
     private const string Url = Program.Prefijo + BackofficeEndpoints.Grupo + "/fuentes-obligatorias";
-    private static readonly string[] CamposDefinicion = ["familia", "tipo_tramite_codigo", "fuentes"];
+    private static readonly string[] CamposDefinicion = ["familia", "tipo_tramite_codigo", "fuentes", "tipo_tramite_etiqueta", "familia_etiqueta"];
     private const string Tipos = Program.Prefijo + "/tipos-tramite";
 
     // Sin ?empresa= es 200, no EMPRESA_REQUERIDA. Mandar ?empresa= no cambia la respuesta.

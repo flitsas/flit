@@ -260,7 +260,7 @@ internal sealed partial class EmisorDictamen(
         if (!confirmado)
             throw new ReglaException(CodigosDictamen.ConfirmadoRequerido, "Confirma el cambio de veredicto para reemplazarlo.");
         if (veredicto is not ("VIABLE" or "BLOQUEADO"))
-            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser VIABLE o BLOQUEADO.");
+            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser Viable o Bloqueado.");
         if (veredicto == vigente.Veredicto)
             throw ReglaException.Conflicto(CodigosDictamen.VeredictoSinCambio, "El veredicto pedido es el del dictamen vigente.");
 

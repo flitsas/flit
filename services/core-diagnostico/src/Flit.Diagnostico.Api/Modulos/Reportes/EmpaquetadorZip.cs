@@ -66,9 +66,9 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
 
     /// <summary>Con error si alguna celda quedó en ERROR; Terminado si todas están en COMPLETADO o N/A; si no, En proceso.</summary>
     private static string Estado(IReadOnlyCollection<EstadoCelda> celdas) =>
-        celdas.Any(e => e == EstadoCelda.Error) ? ExcelLote.ConError
-        : AvanceVehiculo.Terminado(celdas) ? ExcelLote.Terminado
-        : ExcelLote.EnProceso;
+        celdas.Any(e => e == EstadoCelda.Error) ? RotulosDiagnostico.VehiculoConError
+        : AvanceVehiculo.Terminado(celdas) ? RotulosDiagnostico.VehiculoTerminado
+        : RotulosDiagnostico.VehiculoEnProceso;
 }
 
 /// <summary>

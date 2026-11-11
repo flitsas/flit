@@ -35,6 +35,9 @@ public static class ClasificadorErrores
         "SIN_PLACA", "SIN_DOCUMENTO", "SIN_MODELO", "ORGANISMO_INCOMPLETO", "SIN_NOMBRE_PROPIETARIO",
     };
 
+    /// <summary>Todos los códigos de la tabla (transitorios y definitivos), para que cada uno tenga su rótulo de negocio.</summary>
+    public static IReadOnlyCollection<string> Codigos { get; } = [.. Transitorios.Order(StringComparer.Ordinal), .. Definitivos.Order(StringComparer.Ordinal)];
+
     /// <summary>Clase del error con el código dado; sin código o con uno desconocido, <see cref="ClaseError.Definitivo"/>.</summary>
     public static ClaseError Clasificar(string? tipoError) =>
         tipoError is not null && Transitorios.Contains(tipoError) ? ClaseError.Transitorio : ClaseError.Definitivo;

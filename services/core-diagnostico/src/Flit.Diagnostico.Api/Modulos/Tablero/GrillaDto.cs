@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Plataforma;
 
 namespace Flit.Diagnostico.Api.Modulos.Tablero;
 
@@ -28,7 +29,12 @@ public sealed record GrillaDto(
     [property: JsonPropertyName("estimado_consultas"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<EstimadoVsConsumidoDto>? EstimadoConsultas,
     [property: JsonPropertyName("total_pegadas")] int TotalPegadas,
-    [property: JsonPropertyName("vehiculos_pegados")] IReadOnlyList<Guid> VehiculosPegados);
+    [property: JsonPropertyName("vehiculos_pegados")] IReadOnlyList<Guid> VehiculosPegados)
+{
+    /// <summary>Rótulo del estado del lote (punto 5): «Sin lanzar», «En proceso», «Completado» o «Incompleto».</summary>
+    [JsonPropertyName("estado_etiqueta")]
+    public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoLote(Estado);
+}
 
 /// <summary>Avance del lote: vehículos en total y cuántos ya terminaron (todas sus celdas en COMPLETADO o NA, R-7).</summary>
 public sealed record AvanceLoteDto(
@@ -51,7 +57,12 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaDto> Celdas,
     [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
     [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios,
-    [property: JsonPropertyName("pegada")] bool Pegada);
+    [property: JsonPropertyName("pegada")] bool Pegada)
+{
+    /// <summary>Rótulo del tipo de identificador (punto 5): «Placa de carro», «Placa de motocarro», «VIN»…</summary>
+    [JsonPropertyName("tipo_identificador_etiqueta")]
+    public string TipoIdentificadorEtiqueta => RotulosDiagnostico.DeTipoIdentificador(TipoIdentificador);
+}
 
 /// <summary>
 /// El documento que declaró el cliente para el vehículo (HU #14087; hoy el locatario de la captura masiva o Express): rol
@@ -84,7 +95,16 @@ public sealed record CeldaGrillaDto(
     /// <summary>Solo impuesto COMPLETADO con deuda confirmada. Ausente si es false. El semáforo no se pinta en verde.</summary>
     [property: JsonPropertyName("tiene_deuda")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    bool TieneDeuda = false);
+    bool TieneDeuda = false)
+{
+    /// <summary>Rótulo del estado de la celda (punto 5): «Pendiente», «En curso», «Completado», «Error» o «No aplica».</summary>
+    [JsonPropertyName("estado_etiqueta")]
+    public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoCelda(Estado);
+
+    /// <summary>Texto del motivo de N/A (punto 5); null si la celda no tiene motivo.</summary>
+    [JsonPropertyName("motivo_na_etiqueta")]
+    public string? MotivoNaEtiqueta => RotulosDiagnostico.DeMotivoNa(MotivoNa);
+}
 
 /// <summary>
 /// Estimado por fuente (calculador de HU #13747) frente a las consultas consumidas: intentos con <c>desde_cache=false</c>

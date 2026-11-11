@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Flit.Diagnostico.Api.Plataforma;
 
 namespace Flit.Diagnostico.Api.Modulos.Diagnosticos;
 
@@ -26,7 +27,12 @@ public sealed record DiagnosticoListadoDto(
     [property: JsonPropertyName("tipo_tramite")] TipoTramiteListadoDto? TipoTramite,
     [property: JsonPropertyName("estado")] string Estado,
     [property: JsonPropertyName("usuario_creador")] UsuarioCreadorDto UsuarioCreador,
-    [property: JsonPropertyName("es_express")] bool EsExpress);
+    [property: JsonPropertyName("es_express")] bool EsExpress)
+{
+    /// <summary>Rótulo del estado del lote (punto 5): «Sin lanzar», «En proceso», «Completado» o «Incompleto».</summary>
+    [JsonPropertyName("estado_etiqueta")]
+    public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoLote(Estado);
+}
 
 /// <summary>Tipo de trámite del lote Con Análisis IA; si el código ya no está publicado en la etapa, el nombre es el código.</summary>
 public sealed record TipoTramiteListadoDto(

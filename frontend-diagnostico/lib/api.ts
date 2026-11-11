@@ -1,6 +1,7 @@
 // Cliente HTTP de Diagnóstico. El navegador siempre habla con este mismo host: /api/v1/* pasa por el proxy de
 // @flit/auth (app/api/v1/[...path]), que pone el Bearer de la sesión y lo reenvía al gateway.
 import { isReauthenticating, reauthenticate } from "@flit/auth/client";
+import { pareceCodigo } from "@/lib/rotulos";
 
 export class ApiError extends Error {
   constructor(
@@ -51,9 +52,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   throw new ApiError(response.status, friendlyMessage(response.status, data), data?.code, data?.campo, retryAfter(response));
 }
 
-function friendlyMessage(status: number, data: { error?: string; detail?: string; title?: string } | null): string {
+function friendlyMessage(status: number, data: { code?: string; error?: string; detail?: string; title?: string } | null): string {
   if (status >= 500) return "Diagnóstico no respondió. Intenta de nuevo en un momento.";
-  const message = data?.error ?? data?.detail ?? data?.title;
+  // Punto 5 (AC 6): un texto que es el código interno (o tiene su forma) nunca se muestra; se pasa al siguiente.
+  const deNegocio = (texto?: string) => (texto && texto.trim() && texto !== data?.code && !pareceCodigo(texto) ? texto : undefined);
+  const message = deNegocio(data?.error) ?? deNegocio(data?.detail) ?? deNegocio(data?.title);
   if (message) return message;
   if (status === 403) return "No tienes permiso para esta acción.";
   if (status === 404) return "No se encontró lo que buscas.";

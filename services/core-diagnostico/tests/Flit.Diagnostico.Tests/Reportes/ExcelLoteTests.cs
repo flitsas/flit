@@ -110,7 +110,7 @@ public sealed class ExcelLoteTests
         vehiculos.Skip(1).Select(f => f[1]).Should().Equal(placas, "en el orden de la carga");
         var fila = libro.Fila("Vehículos", "TST401");
         libro.Valor("Vehículos", fila, "Orden").Should().Be("1");
-        libro.Valor("Vehículos", fila, "Tipo de identificador").Should().Be("PLACA_CARRO");
+        libro.Valor("Vehículos", fila, "Tipo de identificador").Should().Be("Placa de carro");
         libro.Valor("Vehículos", fila, "Estado del vehículo").Should().Be("Terminado");
         libro.Valor("Vehículos", fila, "RUNT — Estado").Should().Be("Completado");
         libro.Valor("Vehículos", fila, "RUNT — Servicio").Should().Be("PARTICULAR");

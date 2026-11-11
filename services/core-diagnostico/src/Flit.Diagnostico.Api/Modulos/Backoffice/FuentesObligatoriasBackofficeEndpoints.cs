@@ -32,21 +32,23 @@ internal static class FuentesObligatoriasBackofficeEndpoints
         backofficeSinEmpresa.MapPut(Ruta, Guardar).WithName("GuardarFuentesObligatoriasBackoffice");
     }
 
-    private static async Task<IResult> Listar(DiagnosticoDb db, CancellationToken ct)
+    private static async Task<IResult> Listar(DiagnosticoDb db, ICatalogoTiposTramite catalogo, CancellationToken ct)
     {
+        var nombres = await NombresPublicadosAsync(catalogo, ct).ConfigureAwait(false);
         var cabeceras = await db.Set<DefinicionFuentesObligatorias>().AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
         var lineas = await db.Set<FuenteDefinicionObligatoria>().AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
         var porId = lineas.GroupBy(l => l.DefinicionId).ToDictionary(g => g.Key, g => g.Select(l => l.Fuente).OrderBy(f => f).ToArray());
         var definiciones = cabeceras
             .OrderBy(c => c.Familia is null)
             .ThenBy(c => c.Familia ?? c.TipoTramiteCodigo, StringComparer.Ordinal)
-            .Select(c => Definicion(c.Familia, c.TipoTramiteCodigo, porId.GetValueOrDefault(c.Id) ?? []))
+            .Select(c => Definicion(c.Familia, c.TipoTramiteCodigo, porId.GetValueOrDefault(c.Id) ?? [], nombres))
             .ToArray();
         return Results.Ok(new ListaDefinicionesDto(definiciones));
     }
 
     private static async Task<IResult> Guardar(
-        JsonElement cuerpo, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, ILoggerFactory logs, CancellationToken ct)
+        JsonElement cuerpo, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, ILoggerFactory logs, ICatalogoTiposTramite catalogo,
+        CancellationToken ct)
     {
         if (cuerpo.ValueKind != JsonValueKind.Object)
             throw CuerpoInvalido("El cuerpo debe ser un objeto JSON.");
@@ -112,7 +114,7 @@ internal static class FuentesObligatoriasBackofficeEndpoints
         AuditoriaConfiguracionBackoffice.Registrar(logs.CreateLogger(typeof(FuentesObligatoriasBackofficeEndpoints)), usuario,
             AuditoriaConfiguracionBackoffice.SeccionFuentesObligatorias, empresaObjetivo: null,
             [familia is not null ? "familia" : "tipo_tramite_codigo", "fuentes"]);
-        return Results.Ok(Definicion(familia, tipo, distintas));
+        return Results.Ok(Definicion(familia, tipo, distintas, await NombresPublicadosAsync(catalogo, ct).ConfigureAwait(false)));
     }
 
     private static async Task<DefinicionFuentesObligatorias?> BuscarAsync(DiagnosticoDb db, string? familia, string? tipo, CancellationToken ct) =>
@@ -146,8 +148,29 @@ internal static class FuentesObligatoriasBackofficeEndpoints
         return valor.ValueKind == JsonValueKind.String ? valor.GetString() : string.Empty;
     }
 
-    private static DefinicionFuentesObligatoriasDto Definicion(string? familia, string? tipo, IReadOnlyList<Fuente> fuentes) =>
-        new(familia, tipo, [.. fuentes.Select(CodigosDeEnum.Codigo)]);
+    /// <summary>
+    /// La definición con sus rótulos (punto 5, decisión 5.3): el nombre del tipo es el que publica Trámites; si no está publicado
+    /// o el catálogo no respondió, el respaldo de <see cref="RotulosDiagnostico.TiposTramite"/>.
+    /// </summary>
+    internal static DefinicionFuentesObligatoriasDto Definicion(
+        string? familia, string? tipo, IReadOnlyList<Fuente> fuentes, IReadOnlyDictionary<string, string> nombresPublicados) =>
+        new(familia, tipo, [.. fuentes.Select(CodigosDeEnum.Codigo)],
+            RotulosDiagnostico.DeTipoTramite(tipo, tipo is null ? null : nombresPublicados.GetValueOrDefault(tipo)),
+            RotulosDiagnostico.DeFamilia(familia));
+
+    /// <summary>Código → nombre de los tipos publicados; vacío si Trámites no responde (los rótulos caen al respaldo).</summary>
+    private static async Task<IReadOnlyDictionary<string, string>> NombresPublicadosAsync(ICatalogoTiposTramite catalogo, CancellationToken ct)
+    {
+        try
+        {
+            var tipos = await catalogo.ListarAsync(ct).ConfigureAwait(false);
+            return tipos.GroupBy(t => t.Codigo, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.Ordinal);
+        }
+        catch (CatalogoTiposTramiteNoDisponibleException)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+    }
 
     private static ReglaException CuerpoInvalido(string mensaje) =>
         new(CodigoCuerpoInvalido, mensaje, StatusCodes.Status400BadRequest);
@@ -161,12 +184,12 @@ internal static class FuentesObligatoriasBackofficeEndpoints
             Campo = rechazo.Campo,
         };
 
-    private static string Mensaje(string codigo) => codigo switch
+    internal static string Mensaje(string codigo) => codigo switch
     {
-        RechazoGuardadoFuentes.DefinicionAmbigua => "Indica una familia o un tipo de trámite, no los dos ni ninguno. El código solo usa mayúsculas, dígitos y guion bajo.",
-        RechazoGuardadoFuentes.FuenteRuntNoConfigurable => "RUNT no se configura en esta lista: sigue siendo obligatorio en todo diagnóstico.",
-        RechazoGuardadoFuentes.SimitProhibidoEnUnilateral => "TRASPASO_UNILATERAL no admite una fuente SIMIT.",
-        RechazoGuardadoFuentes.PisoNoDispensable => "Esta definición no puede quitar SIMIT_PROPIETARIO.",
+        RechazoGuardadoFuentes.DefinicionAmbigua => "Indica una familia o un tipo de trámite, no los dos ni ninguno.",
+        RechazoGuardadoFuentes.FuenteRuntNoConfigurable => "El RUNT no se configura en esta lista: sigue siendo obligatorio en todo diagnóstico.",
+        RechazoGuardadoFuentes.SimitProhibidoEnUnilateral => "El traspaso unilateral no admite consultas al SIMIT.",
+        RechazoGuardadoFuentes.PisoNoDispensable => "Esta definición no puede quitar la consulta de SIMIT de los propietarios.",
         _ => "La definición no se puede guardar.",
     };
 }
@@ -175,8 +198,13 @@ internal static class FuentesObligatoriasBackofficeEndpoints
 internal sealed record ListaDefinicionesDto(
     [property: JsonPropertyName("definiciones")] IReadOnlyList<DefinicionFuentesObligatoriasDto> Definiciones);
 
-/// <summary>Una definición guardada. La clave de alcance que no aplica es null. <c>fuentes</c> va en el orden del enum, sin RUNT.</summary>
+/// <summary>
+/// Una definición guardada. La clave de alcance que no aplica es null. <c>fuentes</c> va en el orden del enum, sin RUNT.
+/// <c>tipo_tramite_etiqueta</c> y <c>familia_etiqueta</c> (punto 5) son los nombres que se muestran; null con su código null.
+/// </summary>
 internal sealed record DefinicionFuentesObligatoriasDto(
     [property: JsonPropertyName("familia")] string? Familia,
     [property: JsonPropertyName("tipo_tramite_codigo")] string? TipoTramiteCodigo,
-    [property: JsonPropertyName("fuentes")] IReadOnlyList<string> Fuentes);
+    [property: JsonPropertyName("fuentes")] IReadOnlyList<string> Fuentes,
+    [property: JsonPropertyName("tipo_tramite_etiqueta")] string? TipoTramiteEtiqueta,
+    [property: JsonPropertyName("familia_etiqueta")] string? FamiliaEtiqueta);

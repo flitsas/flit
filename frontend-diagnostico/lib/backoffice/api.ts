@@ -30,6 +30,8 @@ export interface DiagnosticoBackoffice {
   id: string;
   nombre: string;
   estado: EstadoDiagnostico;
+  /** Punto 5: nombre de negocio del estado (opcional; sin él, `ESTADOS_LOTE`). */
+  estado_etiqueta?: string | null;
   creado_en: string;
   vehiculos: number;
   celdas_en_error: number;
