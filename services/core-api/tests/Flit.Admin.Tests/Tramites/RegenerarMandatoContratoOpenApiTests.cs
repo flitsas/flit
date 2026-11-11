@@ -25,6 +25,8 @@ public sealed class RegenerarMandatoContratoOpenApiTests
         foreach (var codigo in new[] { "estado_no_permite_regenerar_mandato", "migrado_solo_lectura", "organismo_requerido", "storage_unavailable" })
             bloque.Should().Contain(codigo);
         bloque.Should().Contain("#/components/schemas/RegenerarMandatoYConsolidadoResponse");
+        bloque.Should().Contain("#/components/schemas/RegenerarMandatoProblem", "el 409 declara el ProblemDetails con `error`");
+        Schema(Yaml(), "RegenerarMandatoProblem").Should().Contain("error:").And.Contain("detail:");
     }
 
     [Fact]
@@ -34,7 +36,10 @@ public sealed class RegenerarMandatoContratoOpenApiTests
 
         foreach (var campo in new[] { "mandato:", "consolidado:", "maestro:", "avisos:", "firmanteAnteriorId:", "firmanteNuevoId:", "sinFirmar:", "generadoEn:", "estado:", "codigo:", "mensaje:" })
             esquema.Should().Contain(campo);
-        foreach (var valor in new[] { "regenerado", "radicado_conservado", "fallo", "maestro_radicado_conservado", "maestro_fallo", "mandato_sin_firmar", "mandato_personalizado_conservado" })
+        // El consolidado del gestor también puede fallar tras confirmar el mandato (éxito parcial).
+        System.Text.RegularExpressions.Regex.IsMatch(esquema, @"\n        consolidado:\n(?:          .*\n)*?            estado:")
+            .Should().BeTrue("consolidado declara su propio `estado`");
+        foreach (var valor in new[] { "regenerado", "radicado_conservado", "fallo", "maestro_radicado_conservado", "maestro_fallo", "mandato_sin_firmar", "mandato_personalizado_conservado", "mandato_personalizado_aplicado", "consolidado_fallo" })
             esquema.Should().Contain(valor);
     }
 
