@@ -13,7 +13,7 @@
   var MAPA_ICONO = { auditoria: "historial", ayuda: "ayuda", banners: "megafono", biometria: "rostro", calendario: "calendario", causales: "causal", colaboradores: "usuarios",
     comparendos: "ticket", configuracion: "ajustes", "consulta-placa": "buscar", contrasena: "candado", diagnostico: "medidor", documentos: "documento", empresas: "empresas",
     filtros: "filtro", firmas: "firma", "fuentes-oficiales": "entidad", fur: "fur", "generacion-documental": "pila", "historial-placa": "reloj-doc", identidad: "identidad",
-    improntas: "impronta", inicio: "inicio", integraciones: "enchufe", mandatos: "mandato", matricula: "@tramite-matricula", notificaciones: "campana", organismos: "banco",
+    improntas: "impronta", inicio: "inicio", integraciones: "integraciones", mandatos: "mandato", matricula: "@tramite-matricula", notificaciones: "campana", organismos: "banco",
     pendientes: "espera", perfil: "persona", preasignacion: "credencial", procesos: "proceso", productos: "rejilla", reportes: "reportes", revocatorias: "deshacer", roles: "rol",
     seguridad: "escudo", tramites: "tramites", traspaso: "@tramite-traspaso", trazabilidad: "ruta", vencidos: "vencido" };
   var kico = function (nombre, cls) { return '<span class="kico ' + (cls || "") + '" aria-hidden="true">' + (KI[nombre] || KI.documento || "") + "</span>"; };
@@ -677,15 +677,21 @@
       vConfigForm([["nombre", "Nombres y apellidos", "Laura Gómez"], ["correo", "Correo", "laura.gomez@flitsas.com"], ["celular", "Celular", "300 555 0101"], ["idioma", "Idioma", "", ["Español"]]], "Perfil actualizado");
   }
 
-  var LOGOS = [["logo-claro", "Logo, fondo claro", "claro"], ["logo-oscuro", "Logo, fondo oscuro", "oscuro"], ["isotipo", "Isotipo sobre el degradado", "claro"], ["favicon", "Favicon", "claro"]];
+  var LOGOS = [["logo-claro", "Logo, fondo claro", "claro"], ["logo-oscuro", "Logo, fondo oscuro", "oscuro"], ["isotipo", "Isotipo sobre el degradado", "claro"], ["isotipo-blanco", "Isotipo en blanco", "oscuro"], ["favicon", "Favicon", "claro"]];
   var ILUSTRACIONES = ["inicio", "tramites", "traspaso", "matricula", "consulta-placa", "comparendos", "diagnostico", "colaboradores", "empresas", "documentos", "firmas", "biometria", "notificaciones", "reportes", "configuracion", "perfil", "seguridad", "fuentes-oficiales", "trazabilidad", "ayuda", "pendientes", "vencidos", "organismos", "improntas", "integraciones", "auditoria", "procesos", "mandatos", "fur", "banners", "historial-placa", "causales", "preasignacion", "revocatorias", "generacion-documental", "roles", "contrasena", "identidad"];
   var NOMBRES_ILUS = { inicio: "Inicio", tramites: "Trámites", traspaso: "Traspaso", matricula: "Matrícula", "consulta-placa": "Consulta de placa", comparendos: "Comparendos", diagnostico: "Diagnóstico", colaboradores: "Colaboradores", empresas: "Empresas", documentos: "Documentos", firmas: "Firmas", biometria: "Biometría", notificaciones: "Notificaciones", reportes: "Reportes", configuracion: "Configuración", perfil: "Perfil", seguridad: "Seguridad", "fuentes-oficiales": "Fuentes oficiales", trazabilidad: "Trazabilidad", ayuda: "Ayuda", pendientes: "Pendientes", vencidos: "Vencidos", organismos: "Organismos", improntas: "Improntas", integraciones: "Integraciones", auditoria: "Auditoría", procesos: "Procesos", mandatos: "Mandatos", fur: "FUR", banners: "Banners", "historial-placa": "Historial por placa", causales: "Causales", preasignacion: "Preasignación", revocatorias: "Revocatorias", "generacion-documental": "Generación documental", roles: "Roles", contrasena: "Contraseña", identidad: "Identidad" };
+  var ICONOS_APOYO = [["integraciones", "Integraciones"], ["asistente", "Asistente"], ["robot", "Automatización"], ["destello", "Destello"], ["varita", "Autocompletar"], ["pago", "Pago"], ["archivo", "Archivo"], ["marcador", "Marcador"], ["lista", "Lista"], ["archivo-subir", "Subir archivo"], ["nube-subir", "Subir a la nube"], ["nube-bajar", "Bajar de la nube"], ["nube-agregar", "Agregar a la nube"], ["nube-alerta", "Nube con alerta"], ["nube-sin", "Sin conexión"]];
+  var INTERRUPTORES = [["interruptor-encendido", "Encendido"], ["interruptor-apagado", "Apagado"], ["interruptor-tema-claro", "Tema claro"], ["interruptor-tema-oscuro", "Tema oscuro"]];
   function vMarca() {
     return cabecera({ il: "configuracion", ante: "Marca", titulo: "Juego de marca", texto: "Logo, isotipo, favicon e íconos tomados del repositorio de íconos de FLIT, con los colores del Manual UI Kit 2026." }) +
       '<section class="card"><div class="card__cabeza"><div><h2>Logos</h2><p>La logometría del repositorio de íconos, sin cambios de forma ni de proporción.</p></div></div><div class="marca-rejilla">' +
       LOGOS.map(function (l) { return '<figure class="marca-item"><div class="sobre-' + l[2] + '"><img src="assets/kit/' + l[0] + '.svg" alt="Logo FLIT: ' + l[1] + '"></div><figcaption>' + l[1] + "</figcaption></figure>"; }).join("") +
-      '</div></section><section class="card"><div class="card__cabeza"><div><h2>Íconos de módulo</h2><p>' + ILUSTRACIONES.length + ' íconos de línea para cabeceras, menú, buscador y cifras.</p></div></div><div class="ilus-rejilla">' +
-      ILUSTRACIONES.map(function (n) { return "<figure>" + ilus(n) + "<figcaption>" + (NOMBRES_ILUS[n] || n.replace(/-/g, " ")) + "</figcaption></figure>"; }).join("") + "</div></section>";
+      '</div></section><section class="card"><div class="card__cabeza"><div><h2>Íconos de módulo</h2><p>' + ILUSTRACIONES.length + ' íconos para cabeceras, menú, buscador y cifras.</p></div></div><div class="ilus-rejilla">' +
+      ILUSTRACIONES.map(function (n) { return "<figure>" + ilus(n) + "<figcaption>" + (NOMBRES_ILUS[n] || n.replace(/-/g, " ")) + "</figcaption></figure>"; }).join("") + "</div></section>" +
+      '<section class="card"><div class="card__cabeza"><div><h2>Íconos de apoyo</h2><p>' + ICONOS_APOYO.length + ' íconos para archivos, integraciones y el asistente.</p></div></div><div class="ilus-rejilla">' +
+      ICONOS_APOYO.map(function (i) { return "<figure>" + kico(i[0]) + "<figcaption>" + i[1] + "</figcaption></figure>"; }).join("") + "</div></section>" +
+      '<section class="card"><div class="card__cabeza"><div><h2>Interruptores</h2><p>Las cuatro posiciones del interruptor del kit.</p></div></div><div class="ilus-rejilla">' +
+      INTERRUPTORES.map(function (i) { return '<figure><img src="assets/kit/' + i[0] + '.svg" alt="" width="67" height="36"><figcaption>' + i[1] + "</figcaption></figure>"; }).join("") + "</div></section>";
   }
   function vIngreso() {
     var correoGuardado = almacen.getItem("flit-correo") || "";

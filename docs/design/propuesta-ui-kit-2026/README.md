@@ -18,8 +18,8 @@ python3 -m http.server 8733
 
 | Pieza | Antes (Diseño Inteligente) | Ahora (Manual UI Kit 2026) |
 |---|---|---|
-| Logo e isotipo | Logos reconstruidos en vector | Los del repositorio de íconos (`assets/kit/logo-*.svg`, `isotipo.svg`, `favicon.svg`) |
-| Íconos | 45 ilustraciones | Íconos de línea del repositorio (propios de FLIT y biblioteca compartida) en `assets/kit/kit-iconos.js` |
+| Logo e isotipo | Logos reconstruidos en vector | Los del repositorio de íconos (`assets/kit/logo-*.svg`, `isotipo.svg`, `isotipo-blanco.svg`, `favicon.svg`) |
+| Íconos | 45 ilustraciones | 75 íconos en color heredado en `assets/kit/kit-iconos.js`: los glifos propios de FLIT y, donde FLIT no tiene uno, la biblioteca compartida |
 | Estados | Pastillas cielo, sin verde ni rojo | Etiqueta con punta, ícono de estado del repositorio y color semántico al 10 % |
 | Botones | Degradado azul a turquesa | Píldora plana: azul avanza, verde confirma, azul oscuro navega, naranja alerta |
 | Bordes y radios | `#DFE5ED`, radios 8 a 28 px | `#A9C9FC` de 1 px y radio 9 px |
@@ -47,6 +47,14 @@ python3 -m http.server 8733
 - Medido el 11/11 en 390, 800, 1280 y 1920 px sobre 14 vistas: ninguna desborda a lo ancho.
 
 Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga después de `tokens.css` y `propuesta.css`), `assets/kit/` (recursos del repositorio de íconos) y los parches marcados con «UI Kit 2026» en `propuesta.js`.
+
+## Recursos del kit (`assets/kit/`)
+
+- Los estados borrador, preparado, entregado, revocado, subsanado, placa preasignada y sin placa usan el dibujo vigente del paquete de íconos de FLIT. Pendiente y la alerta conservan el trazo de mayor precisión del repositorio: es el mismo dibujo y la exportación a un decimal deforma el signo de admiración.
+- Los SVG se guardan sin hojas de estilo internas, identificadores ni capas repetidas, con el color como atributo, para poder incrustarlos sin que choquen entre sí. Los fondos circulares caben completos en su lienzo.
+- En `kit-iconos.js` el azul y la tinta del glifo pasan a `currentColor`, el naranja y el verde de acento se conservan y los detalles blancos se vuelven recortes (máscara), de modo que el mismo ícono sirve sobre claro, oscuro y botones de color. El candado se encuadra a su dibujo.
+- `interruptor-*.svg` son las cuatro posiciones del interruptor (encendido, apagado, tema claro, tema oscuro).
+- La pantalla «Juego de marca» (`#marca`) muestra todo el juego.
 
 ## Lo que el manual no define y aquí se derivó
 
