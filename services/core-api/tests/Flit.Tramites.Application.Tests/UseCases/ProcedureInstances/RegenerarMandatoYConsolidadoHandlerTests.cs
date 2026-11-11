@@ -47,6 +47,11 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
         ["compraventa", "tramite_virtual", "certificado_soat_rtm", "certificado_identidad", "escritura"];
 
     private readonly List<ProcedureInstanceEvent> _eventos = [];
+    private readonly IPersonalizedDocumentResolver _personalizados = Substitute.For<IPersonalizedDocumentResolver>();
+
+    /// <summary>Por cada SaveChanges: ¿ya estaba el mandato nuevo? ¿y el evento mandato_regenerado_admin?</summary>
+    private readonly List<(bool MandatoNuevo, bool Evento)> _guardados = [];
+    private ProcedureInstance? _instancia;
 
     private Directorio _directorio = new()
     {
@@ -68,6 +73,16 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
             .Returns((IReadOnlyList<string>)["fur", "mandato"]);
         _repo.When(r => r.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>()))
             .Do(c => _eventos.Add(c.Arg<ProcedureInstanceEvent>()));
+        _personalizados.ResolveAsync(Arg.Any<Guid>(), Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(PersonalizedDocumentResolution.Empty);
+        _repo.When(r => r.SaveChangesAsync(Arg.Any<CancellationToken>())).Do(_ =>
+        {
+            if (_instancia is null)
+                return;
+            _guardados.Add((
+                _instancia.Attachments.Any(a => a.Tipo == "mandato" && a.StoragePath.Contains("_nuevo_", StringComparison.Ordinal)),
+                _instancia.Events.Any(e => e.Tipo == RegenerarMandatoYConsolidadoHandler.EventoMandatoRegenerado)));
+        });
     }
 
     // ── AC1 — el mandatario se recalcula y sobrescribe MandateSignerId ─────────────────────────────
@@ -105,6 +120,21 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
         evento.Payload.Should().Contain(Ana.ToString()).And.Contain(Carlos.ToString());
         evento.Payload.Should().NotContain("Ana Restrepo").And.NotContain("111000111")
             .And.NotContain("Carlos Pérez").And.NotContain("222000222");
+    }
+
+    [Fact]
+    public async Task AC1_ElEventoViajaEnElMismoGuardadoQueElNuevoMandato()
+    {
+        Seed(TramiteEstado.Entregado, guardado: Ana);
+
+        var (_, error) = await Handler().HandleAsync(InstanceId, TenantId, UserId, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        _guardados.Should().Contain(g => g.MandatoNuevo, "el mandato nuevo se confirma en un SaveChanges");
+        _guardados.First(g => g.MandatoNuevo).Evento.Should().BeTrue(
+            "la bitácora del cambio de firmante se confirma en el MISMO guardado que el documento (atómico)");
+        _eventos.Should().NotContain(e => e.Tipo == RegenerarMandatoYConsolidadoHandler.EventoMandatoRegenerado,
+            "no se registra en un SaveChanges posterior");
     }
 
     [Theory]
@@ -177,6 +207,34 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "mandato").Which.Id.Should().Be(personalizado.Id);
         result!.Mandato.AttachmentId.Should().Be(personalizado.Id);
         result.Avisos.Should().Contain(a => a.Codigo == RegenerarMandatoYConsolidadoHandler.AvisoMandatoPersonalizadoConservado);
+        instance.MandateSignerId.Should().Be(Ana, "el personalizado no nombra mandatario: la referencia no se toca");
+        result.Mandato.FirmanteNuevoId.Should().Be(Ana);
+        _eventos.Concat(instance.Events).Should().NotContain(e => e.Tipo == RegenerarMandatoYConsolidadoHandler.EventoMandatoRegenerado);
+    }
+
+    [Fact]
+    public async Task AC2_PersonalizadoVigenteDeLaCompania_SeAplica_SinTocarElFirmante_ConAvisoDeAplicado()
+    {
+        var instance = Seed(TramiteEstado.Entregado, guardado: Ana);
+        var personalizadoId = Guid.NewGuid();
+        _personalizados.ResolveAsync(TenantId, Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new PersonalizedDocumentResolution(
+                [new ResolvedPersonalizedDocument("mandato", "mandato_compania.pdf", Encoding.UTF8.GetBytes("%PDF C"), personalizadoId, 3, "sha-c", 1)],
+                []));
+
+        var (result, error) = await Handler().HandleAsync(InstanceId, TenantId, UserId, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        var mandato = instance.Attachments.Should().ContainSingle(a => a.Tipo == "mandato").Which;
+        mandato.Source.Should().Be("company");
+        mandato.SourcePersonalizedDocumentId.Should().Be(personalizadoId);
+        result!.Mandato.AttachmentId.Should().Be(mandato.Id);
+        instance.MandateSignerId.Should().Be(Ana);
+        _mandatoGenerator.Captured.Should().BeNull("con personalizado no se emite (ni se capturan rúbricas para) el del sistema");
+        result.Avisos.Should().Contain(a => a.Codigo == RegenerarMandatoYConsolidadoHandler.AvisoMandatoPersonalizadoAplicado
+            && a.Mensaje.Contains("Se aplicó el mandato personalizado de la compañía", StringComparison.Ordinal));
+        result.Avisos.Should().NotContain(a => a.Codigo == RegenerarMandatoYConsolidadoHandler.AvisoMandatoPersonalizadoConservado);
+        _eventos.Concat(instance.Events).Should().NotContain(e => e.Tipo == RegenerarMandatoYConsolidadoHandler.EventoMandatoRegenerado);
     }
 
     // ── AC3 — consolidados: wizard sin cascada, maestro respetando la radicación ─────────────────────
@@ -191,8 +249,9 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
 
         error.Should().BeNull();
         await _hotDocs.DidNotReceive().RegenerateHotDocumentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        result!.Consolidado.Estado.Should().Be(RegenerarMandatoYConsolidadoHandler.ConsolidadoRegenerado);
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "consolidado")
-            .Which.Id.Should().Be(result!.Consolidado.AttachmentId);
+            .Which.Id.Should().Be(result.Consolidado.AttachmentId!.Value);
         instance.ConsolidadoWizardVigente.Should().BeTrue();
     }
 
@@ -259,6 +318,26 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
         instance.ConsolidadoMaestroVigente.Should().BeFalse("se rearma de forma perezosa en la próxima vista");
         result.Mandato.FirmanteNuevoId.Should().Be(Carlos);
         result.Consolidado.AttachmentId.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task AC3_SiFallaElWizard_EsExitoParcial_ConAviso_YAunAsiSeRearmaElMaestro()
+    {
+        var instance = Seed(TramiteEstado.Entregado, guardado: Ana);
+        instance.ConsolidadoWizardVigente = true;
+
+        var (result, error) = await Handler(wizardMerger: new ThrowingMerger())
+            .HandleAsync(InstanceId, TenantId, UserId, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull("el mandato ya cambió: responder error escondería un cambio confirmado");
+        result!.Consolidado.Estado.Should().Be(RegenerarMandatoYConsolidadoHandler.ConsolidadoFallo);
+        result.Consolidado.AttachmentId.Should().BeNull();
+        result.Consolidado.GeneradoEn.Should().BeNull();
+        result.Avisos.Should().Contain(a => a.Codigo == RegenerarMandatoYConsolidadoHandler.AvisoConsolidadoFallo
+            && a.Mensaje == "El mandato se regeneró, pero no se pudo armar el consolidado; se rearmará al abrirlo.");
+        instance.ConsolidadoWizardVigente.Should().BeFalse();
+        result.Mandato.FirmanteNuevoId.Should().Be(Carlos);
+        result.Maestro.Estado.Should().Be(RegenerarMandatoYConsolidadoHandler.MaestroRegenerado, "el maestro se intenta igual");
     }
 
     // ── AC4 — estados finales y migrados ────────────────────────────────────────────────────────────
@@ -354,11 +433,13 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
         NullLogger<GenerarFurHandler>.Instance,
         mandatoGenerator: _mandatoGenerator,
         mandatePolicy: _policy,
-        mandateDirectory: _directorio);
+        mandateDirectory: _directorio,
+        personalizedDocumentResolver: _personalizados);
 
-    private RegenerarMandatoYConsolidadoHandler Handler(IExpedienteConsolidadoMerger? maestroMerger = null)
+    private RegenerarMandatoYConsolidadoHandler Handler(
+        IExpedienteConsolidadoMerger? maestroMerger = null, IExpedienteConsolidadoMerger? wizardMerger = null)
     {
-        var wizard = new GenerarConsolidadoHandler(_repo, _merger, _storage, hotDocsRegenerator: _hotDocs);
+        var wizard = new GenerarConsolidadoHandler(_repo, wizardMerger ?? _merger, _storage, hotDocsRegenerator: _hotDocs);
         var maestro = new GenerarConsolidadoMaestroHandler(
             _repo, maestroMerger ?? _merger, _storage, maestroRadicado: _radicado, hotDocsRegenerator: _hotDocs);
         return new RegenerarMandatoYConsolidadoHandler(_repo, FurHandler(), wizard, maestro, _precedencia);
@@ -406,6 +487,7 @@ public sealed class RegenerarMandatoYConsolidadoHandlerTests
         _repo.GetByIdWithAttachmentsAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.GetByIdWithChecklistGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _instancia = instance;
         return instance;
     }
 

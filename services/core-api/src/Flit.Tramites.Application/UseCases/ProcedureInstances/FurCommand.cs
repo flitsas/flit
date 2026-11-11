@@ -154,7 +154,7 @@ public sealed class GenerarFurHandler(
         Guid tenantId,
         CancellationToken ct = default)
     {
-        var (result, _, error) = await GenerarAsync(id, tenantId, soloMandato: false, ct).ConfigureAwait(false);
+        var (result, _, error) = await GenerarAsync(id, tenantId, soloMandato: false, userId: null, ct).ConfigureAwait(false);
         return (result, error);
     }
 
@@ -166,9 +166,10 @@ public sealed class GenerarFurHandler(
     public async Task<(MandatoRegenerado? Result, string? Error)> RegenerarMandatoAsync(
         Guid id,
         Guid tenantId,
+        Guid? userId,
         CancellationToken ct = default)
     {
-        var (_, mandato, error) = await GenerarAsync(id, tenantId, soloMandato: true, ct).ConfigureAwait(false);
+        var (_, mandato, error) = await GenerarAsync(id, tenantId, soloMandato: true, userId, ct).ConfigureAwait(false);
         return (mandato, error);
     }
 
@@ -176,6 +177,7 @@ public sealed class GenerarFurHandler(
         Guid id,
         Guid tenantId,
         bool soloMandato,
+        Guid? userId,
         CancellationToken ct)
     {
         var instance = await repo.GetByIdWithFurGraphAsync(id, tenantId, ct);
@@ -196,6 +198,11 @@ public sealed class GenerarFurHandler(
         // HU #14547 (R4) — la regeneración del mandato no toca la documentación definitiva de un estado final.
         if (soloMandato && TramiteEstado.EsFinal(instance.Status))
             return (null, null, RegenerarMandatoYConsolidadoHandler.EstadoNoPermite);
+
+        // HU #14547 — el mandato personalizado de la compañía no nombra mandatario: se conserva (o se aplica) ANTES de
+        // armar nada, sin capturar rúbricas ni tocar el firmante del trámite.
+        if (soloMandato && await TryMandatoPersonalizadoAsync(instance, tenantId, userId, ct).ConfigureAwait(false) is { } personal)
+            return (null, personal.Mandato, personal.Error);
 
         var codigo = instance.TypeCode;
         // HU #10856 — matrícula inicial no tiene revisión técnico-mecánica: se oculta la tabla RTM.
@@ -396,7 +403,7 @@ public sealed class GenerarFurHandler(
         // HU #14547 — a partir de aquí solo el mandato: ni FUR, ni compraventa, ni solicitud, ni certificados.
         if (soloMandato)
         {
-            var (mandato, errorMandato) = await RegenerarSoloMandatoAsync(instance, tenantId, data, fv, ct).ConfigureAwait(false);
+            var (mandato, errorMandato) = await RegenerarSoloMandatoAsync(instance, tenantId, userId, data, fv, ct).ConfigureAwait(false);
             return (null, mandato, errorMandato);
         }
 
@@ -815,25 +822,18 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// HU #14547 — emite el mandato con <see cref="ModoFirmanteMandato.RecalcularSiempre"/> y sustituye SOLO el adjunto
-    /// <c>mandato</c> del sistema, con el reemplazo seguro de HU #12797 (sube, guarda y solo entonces borra el binario
-    /// anterior). El mandato personalizado de la compañía (<c>Source='company'</c>, HU #11313) se conserva tal cual y el
-    /// cargado por el usuario no se toca. Baja las dos marcas de vigencia: los consolidados embeben el mandato.
+    /// HU #14547 — emite el mandato del SISTEMA con <see cref="ModoFirmanteMandato.RecalcularSiempre"/> y lo sustituye con
+    /// <see cref="ReemplazarMandatoAsync"/>. El evento <c>mandato_regenerado_admin</c> viaja en el mismo guardado.
     /// </summary>
     private async Task<(MandatoRegenerado? Mandato, string? Error)> RegenerarSoloMandatoAsync(
         ProcedureInstance instance,
         Guid tenantId,
+        Guid? userId,
         FurDocumentData data,
         Dictionary<string, string?> fv,
         CancellationToken ct)
     {
         var anterior = instance.MandateSignerId;
-
-        var personalizado = instance.Attachments.FirstOrDefault(a =>
-            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase));
-        if (personalizado is not null)
-            return (new MandatoRegenerado(personalizado.Id, anterior, anterior, SinFirmar: false, PersonalizadoConservado: true), null);
 
         var emitido = await MandatoEmisor.EmitirAsync(
             instance,
@@ -850,14 +850,92 @@ public sealed class GenerarFurHandler(
             return (null, MandatoRegenerado.NoDisponible);
         }
 
-        // HU #11316 — mismo punto de sustitución por documento personalizado que el FUR.
-        var doc = emitido.Document;
-        var resolucion = await _personalizedDocumentResolver.ResolveAsync(tenantId, [doc.Tipo], ct).ConfigureAwait(false);
-        var sustituto = resolucion.Resolved.FirstOrDefault(
-            r => string.Equals(r.Tipo, doc.Tipo, StringComparison.OrdinalIgnoreCase));
-        if (sustituto is not null)
-            doc = new GeneratedDocument(sustituto.Tipo, sustituto.Filename, "application/pdf", sustituto.Content);
+        var nuevo = instance.MandateSignerId;
+        var sinFirmar = emitido.RequiereFirmantePersona && emitido.Firmante is null;
+        var (adjunto, error) = await ReemplazarMandatoAsync(
+            instance, tenantId, userId, emitido.Document, "system", personalizadoId: null, emitido.FormatCode, emitido.FormatVersion,
+            (_, att) => (RegenerarMandatoYConsolidadoHandler.EventoMandatoRegenerado, JsonSerializer.Serialize(new
+            {
+                // Solo ids: el nombre y el documento del mandatario viven en el directorio (sin PII de más).
+                firmante_anterior_id = anterior,
+                firmante_nuevo_id = nuevo,
+                mandato_attachment_id = att.Id,
+                sin_firmar = sinFirmar,
+            })),
+            anterior, ct).ConfigureAwait(false);
 
+        return adjunto is null
+            ? (null, error)
+            : (new MandatoRegenerado(adjunto.Id, anterior, nuevo, sinFirmar, PersonalizadoConservado: false), null);
+    }
+
+    /// <summary>
+    /// HU #14547 — el mandato personalizado de la compañía (HU #11313/#11316) manda y no nombra mandatario, así que ni
+    /// se recalcula ni se sobrescribe <c>MandateSignerId</c>, ni se registra <c>mandato_regenerado_admin</c>:
+    /// <list type="bullet">
+    ///   <item>Ya hay uno (<c>Source='company'</c>): se conserva tal cual.</item>
+    ///   <item>La compañía tiene uno vigente y el trámite aún no: se aplica (mismo punto de sustitución que el FUR) con el
+    ///   evento <c>documento_personalizado_emitido</c>.</item>
+    /// </list>
+    /// <c>null</c> = no aplica; sigue la emisión del sistema.
+    /// </summary>
+    private async Task<(MandatoRegenerado? Mandato, string? Error)?> TryMandatoPersonalizadoAsync(
+        ProcedureInstance instance, Guid tenantId, Guid? userId, CancellationToken ct)
+    {
+        var actual = instance.MandateSignerId;
+        var conservado = instance.Attachments.FirstOrDefault(a =>
+            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase));
+        if (conservado is not null)
+            return (new MandatoRegenerado(conservado.Id, actual, actual, SinFirmar: false, PersonalizadoConservado: true), null);
+
+        if (!MandatoEmisor.Disponible)
+            return null;
+
+        var resolucion = await _personalizedDocumentResolver.ResolveAsync(tenantId, ["mandato"], ct).ConfigureAwait(false);
+        var sustituto = resolucion.Resolved.FirstOrDefault(
+            r => string.Equals(r.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
+        if (sustituto is null)
+            return null;
+
+        var doc = new GeneratedDocument(sustituto.Tipo, sustituto.Filename, "application/pdf", sustituto.Content);
+        var (adjunto, error) = await ReemplazarMandatoAsync(
+            instance, tenantId, userId, doc, "company", sustituto.PersonalizedDocumentId, formatCode: null, formatVersion: null,
+            (stored, _) => ("documento_personalizado_emitido", JsonSerializer.Serialize(new
+            {
+                tipo = doc.Tipo,
+                company_personalized_document_id = sustituto.PersonalizedDocumentId,
+                version = sustituto.Version,
+                sha256 = stored.Sha256,
+                paginas = sustituto.PageCount,
+            })),
+            actual, ct).ConfigureAwait(false);
+
+        return adjunto is null
+            ? (null, error)
+            : (new MandatoRegenerado(adjunto.Id, actual, actual, SinFirmar: false, PersonalizadoConservado: false, PersonalizadoAplicado: true), null);
+    }
+
+    /// <summary>
+    /// HU #14547 — sustituye SOLO el adjunto <c>mandato</c> del sistema con el reemplazo seguro de HU #12797 (sube, guarda
+    /// y solo entonces borra el binario anterior); el cargado por el usuario no se toca. El evento de bitácora se agrega
+    /// al grafo ANTES de <see cref="ConsolidadoReemplazoSeguro.ConfirmarAsync"/>, así que viaja en el mismo
+    /// <c>SaveChanges</c> que el documento (atómico). Baja las dos marcas de vigencia: los consolidados embeben el mandato.
+    /// Si algo falla, el firmante vuelve a <paramref name="firmanteAnterior"/>.
+    /// </summary>
+    private async Task<(ProcedureInstanceAttachment? Adjunto, string? Error)> ReemplazarMandatoAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        Guid? userId,
+        GeneratedDocument doc,
+        string source,
+        Guid? personalizadoId,
+        string? formatCode,
+        int? formatVersion,
+        Func<StoredFile, ProcedureInstanceAttachment, (string Tipo, string Payload)> evento,
+        Guid? firmanteAnterior,
+        CancellationToken ct)
+    {
         StoredFile stored;
         try
         {
@@ -868,9 +946,10 @@ public sealed class GenerarFurHandler(
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            instance.MandateSignerId = anterior;
+            GenerarFurLog.MandatoNoGuardado(logger, ex, instance.Id);
+            instance.MandateSignerId = firmanteAnterior;
             return (null, "storage_unavailable");
         }
 
@@ -881,6 +960,7 @@ public sealed class GenerarFurHandler(
                 .Where(a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase))
                 .ToList());
+        var now = DateTimeOffset.UtcNow;
         var attachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -892,14 +972,28 @@ public sealed class GenerarFurHandler(
             SizeBytes = stored.SizeBytes,
             Sha256 = stored.Sha256,
             StoragePath = stored.StoragePath,
-            Source = sustituto is null ? "system" : "company",
-            UploadedAt = DateTimeOffset.UtcNow,
-            SourcePersonalizedDocumentId = sustituto?.PersonalizedDocumentId,
-            MandateFormatCode = sustituto is null ? emitido.FormatCode : null,
-            MandateFormatVersion = sustituto is null ? emitido.FormatVersion : null,
+            Source = source,
+            UploadedAt = now,
+            SourcePersonalizedDocumentId = personalizadoId,
+            MandateFormatCode = formatCode,
+            MandateFormatVersion = formatVersion,
         };
         instance.Attachments.Add(attachment);
         repo.Add(attachment);
+
+        var (tipoEvento, payload) = evento(stored, attachment);
+        var registro = new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = tipoEvento,
+            Payload = payload,
+            CreatedAt = now,
+            CreatedBy = userId,
+        };
+        instance.Events.Add(registro);
+        repo.Add(registro);
 
         var wizardAntes = instance.ConsolidadoWizardVigente;
         var maestroAntes = instance.ConsolidadoMaestroVigente;
@@ -911,13 +1005,12 @@ public sealed class GenerarFurHandler(
             {
                 instance.ConsolidadoWizardVigente = wizardAntes;
                 instance.ConsolidadoMaestroVigente = maestroAntes;
-                instance.MandateSignerId = anterior;
+                instance.MandateSignerId = firmanteAnterior;
+                instance.Events.Remove(registro);
             },
             logger, ct).ConfigureAwait(false);
 
-        var sinFirmar = sustituto is null && emitido.RequiereFirmantePersona && emitido.Firmante is null;
-        return (new MandatoRegenerado(
-            attachment.Id, anterior, instance.MandateSignerId, sinFirmar, PersonalizadoConservado: sustituto is not null), null);
+        return (attachment, null);
     }
 
     /// <summary>
@@ -1393,7 +1486,6 @@ public sealed class GenerarFurHandler(
 
         return [.. keys];
     }
-
 
     /// <summary>
     /// HU #10589 / HU #10990 — Genera UN certificado RUES por cada actor persona jurídica del trámite.
@@ -2132,6 +2224,10 @@ public sealed class GenerarFurHandler(
 /// <summary>Logging source-generated (CA1848) de la generación del FUR. No incluye PII ni secretos.</summary>
 internal static partial class GenerarFurLog
 {
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Regenerar mandato (HU #14547): no se pudo guardar el mandato del trámite {InstanceId} en el almacenamiento; no cambió nada.")]
+    public static partial void MandatoNoGuardado(ILogger logger, Exception ex, Guid instanceId);
+
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Kyverum no tiene certificado para la validación {ValidationId} (instancia {InstanceId}); se omite del expediente.")]
     public static partial void CertificadoNoDisponible(ILogger logger, Guid validationId, Guid instanceId);

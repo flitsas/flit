@@ -12,7 +12,7 @@ import {
   UserCog,
 } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
-import { InlineAlert } from '@/components/atom/InlineAlert';
+import { INLINE_ALERT_TONES, InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import {
   SeccionCargando,
@@ -375,7 +375,14 @@ function ConsolidadoModal({
     try {
       const res = await tramitesClient.regenerarMandatoYConsolidado(item.id, tenantId);
       setAvisosRegenerar((res.avisos ?? []).map((a) => a.mensaje).filter(Boolean));
-      onSuccess('Mandato y consolidado regenerados.');
+      // Éxito parcial (200 con consolidado o maestro en `fallo`): el mandato sí cambió, así que también
+      // se relee el detalle, pero el toast no anuncia un éxito total; los avisos dicen qué faltó.
+      const parcial = res.consolidado?.estado === 'fallo' || res.maestro?.estado === 'fallo';
+      onSuccess(
+        parcial
+          ? 'Mandato regenerado con avisos: revisa el detalle.'
+          : 'Mandato y consolidado regenerados.',
+      );
     } catch (e) {
       const msg = mensajeErrorRegenerarMandato(e);
       setError(msg);
@@ -511,8 +518,9 @@ function ConsolidadoModal({
             <p id={regenerarDescId} className="text-xs text-muted-foreground">
               Vuelve a generar el contrato de mandato con el mandatario que indique hoy la
               configuración de Mandatos y arma de nuevo los consolidados del gestor y del organismo
-              de tránsito. El FUR y los demás documentos no cambian. No está disponible en trámites
-              aprobados, anulados o revocados.
+              de tránsito. El FUR y los demás documentos no cambian. Si el consolidado fue cargado a
+              mano, se reemplaza por uno generado. No está disponible en trámites aprobados, anulados
+              o revocados.
             </p>
             {!regenerarPermitido ? (
               <p
@@ -532,19 +540,35 @@ function ConsolidadoModal({
             >
               {busyRegenerar ? 'Regenerando…' : 'Regenerar mandato'}
             </SecondaryButton>
-            {avisosRegenerar.length > 0 ? (
-              <InlineAlert tone="warning" title="Avisos de la regeneración">
-                <ul
-                  id={regenerarAvisosId}
-                  aria-label="Avisos de la regeneración"
-                  className="list-disc space-y-1 pl-4"
+            {/* Región viva SIEMPRE montada (vacía hasta que llegan avisos): así el lector de pantalla
+                anuncia los avisos asíncronos sin interrumpir. No usa `InlineAlert` porque el tono
+                warning la convertiría en `role="alert"` anidado. Colores del tono warning. */}
+            <div role="status" aria-live="polite">
+              {avisosRegenerar.length > 0 ? (
+                <div
+                  className="flex items-start gap-3 rounded-xl p-3"
+                  style={{
+                    background: INLINE_ALERT_TONES.warning.background,
+                    border: `1px solid ${INLINE_ALERT_TONES.warning.border}`,
+                    color: INLINE_ALERT_TONES.warning.color,
+                  }}
                 >
-                  {avisosRegenerar.map((m) => (
-                    <li key={m}>{m}</li>
-                  ))}
-                </ul>
-              </InlineAlert>
-            ) : null}
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div className="min-w-0 flex-1 text-xs leading-relaxed">
+                    <p className="font-semibold">Avisos de la regeneración</p>
+                    <ul
+                      id={regenerarAvisosId}
+                      aria-label="Avisos de la regeneración"
+                      className="mt-0.5 list-disc space-y-1 pl-4"
+                    >
+                      {avisosRegenerar.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </section>
         ) : null}
 
@@ -577,7 +601,12 @@ function ConsolidadoModal({
               color: 'var(--badge-warning-fg)',
             }}
           >
-            El mandatario puede cambiar según la configuración actual de Mandatos.
+            <span className="block">
+              El mandatario puede cambiar según la configuración actual de Mandatos.
+            </span>
+            <span className="block">
+              Si el consolidado fue cargado a mano, se reemplaza por uno generado.
+            </span>
           </p>
           <div className="flex gap-3 pt-1">
             <SecondaryButton

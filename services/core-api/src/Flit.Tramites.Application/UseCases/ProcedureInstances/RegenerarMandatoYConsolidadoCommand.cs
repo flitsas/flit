@@ -1,5 +1,3 @@
-using System.Text.Json;
-using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
@@ -9,8 +7,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <summary>Mandato resultante de la acción (HU #14547). <c>AttachmentId</c> null si no se pudo emitir.</summary>
 public sealed record MandatoRegeneradoDto(Guid? AttachmentId, Guid? FirmanteAnteriorId, Guid? FirmanteNuevoId, bool SinFirmar);
 
-/// <summary>Consolidado del wizard rearmado (HU #14547).</summary>
-public sealed record ConsolidadoRegeneradoDto(Guid AttachmentId, DateTimeOffset GeneradoEn);
+/// <summary>
+/// Consolidado del wizard (HU #14547). <c>Estado</c>: <c>regenerado</c> | <c>fallo</c>; con <c>fallo</c> no hay adjunto
+/// ni sello y el consolidado queda invalidado para rearmarse al abrirlo.
+/// </summary>
+public sealed record ConsolidadoRegeneradoDto(string Estado, Guid? AttachmentId, DateTimeOffset? GeneradoEn);
 
 /// <summary>
 /// Consolidado maestro del OT (HU #14547). <c>Estado</c>: <c>regenerado</c> | <c>radicado_conservado</c> | <c>fallo</c>.
@@ -43,12 +44,14 @@ public interface IConsolidadoMaestroPrecedenciaProvider
 ///   <item>Gate: no existe → <c>not_found</c>; migrado de V1 en estado final → <c>migrado_solo_lectura</c>;
 ///   aprobado/anulado/revocado → <see cref="EstadoNoPermite"/>; sin FUR → <c>fur_requerido</c>. Ninguno toca nada.</item>
 ///   <item>Mandato con el mandatario recalculado (R1, <see cref="IMandatoRegenerador"/>). El FUR y el resto del
-///   expediente NO se regeneran (R2). El personalizado de la compañía se conserva.</item>
-///   <item>Evento <see cref="EventoMandatoRegenerado"/> con los ids del firmante anterior y el nuevo.</item>
+///   expediente NO se regeneran (R2). El personalizado de la compañía se conserva o se aplica sin tocar el firmante.
+///   El evento <see cref="EventoMandatoRegenerado"/> se confirma en el MISMO guardado que el documento.</item>
 ///   <item>Consolidado del wizard sin cascada del FUR y sin la protección de <c>Source='user'</c>.</item>
-///   <item>Maestro respetando la radicación ante Quipux y la matriz del OT. Si falla, éxito parcial: el maestro
-///   queda invalidado (la emisión del mandato bajó su marca) y se rearma en la próxima vista.</item>
+///   <item>Maestro respetando la radicación ante Quipux y la matriz del OT.</item>
 /// </list>
+/// Una vez confirmado el mandato, un fallo de cualquiera de los dos consolidados es ÉXITO PARCIAL (200 con
+/// <c>estado=fallo</c> y aviso): responder error escondería un cambio de firmante ya hecho. El consolidado que falla
+/// queda invalidado (la emisión del mandato bajó ambas marcas) y se rearma de forma perezosa al abrirlo.
 /// </summary>
 public sealed partial class RegenerarMandatoYConsolidadoHandler(
     IProcedureInstanceRepository repo,
@@ -63,14 +66,19 @@ public sealed partial class RegenerarMandatoYConsolidadoHandler(
     public const string EstadoNoPermite = "estado_no_permite_regenerar_mandato";
     public const string EventoMandatoRegenerado = "mandato_regenerado_admin";
 
+    public const string ConsolidadoRegenerado = "regenerado";
+    public const string ConsolidadoFallo = "fallo";
+
     public const string MaestroRegenerado = "regenerado";
     public const string MaestroRadicadoConservado = "radicado_conservado";
     public const string MaestroFallo = "fallo";
 
+    public const string AvisoConsolidadoFallo = "consolidado_fallo";
     public const string AvisoMaestroRadicadoConservado = "maestro_radicado_conservado";
     public const string AvisoMaestroFallo = "maestro_fallo";
     public const string AvisoMandatoSinFirmar = "mandato_sin_firmar";
     public const string AvisoMandatoPersonalizadoConservado = "mandato_personalizado_conservado";
+    public const string AvisoMandatoPersonalizadoAplicado = "mandato_personalizado_aplicado";
 
     public async Task<(RegenerarMandatoYConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id, Guid tenantId, Guid? userId, CancellationToken ct = default)
@@ -89,44 +97,30 @@ public sealed partial class RegenerarMandatoYConsolidadoHandler(
         var procedureTypeId = instance.ProcedureTypeId;
         var transitOfficeId = instance.TransitOfficeId;
 
-        var (mandato, errorMandato) = await mandatoRegenerador.RegenerarMandatoAsync(id, tenantId, ct).ConfigureAwait(false);
+        // Emite, sustituye el adjunto y registra la bitácora en un solo guardado (atómico).
+        var (mandato, errorMandato) = await mandatoRegenerador
+            .RegenerarMandatoAsync(id, tenantId, userId, ct).ConfigureAwait(false);
         if (errorMandato is not null || mandato is null)
-            return (null, errorMandato ?? "mandato_no_disponible");
+            return (null, errorMandato ?? MandatoRegenerado.NoDisponible);
 
         var avisos = new List<AvisoRegeneracionDto>();
         if (mandato.PersonalizadoConservado)
             avisos.Add(new(AvisoMandatoPersonalizadoConservado,
                 "La compañía tiene un mandato personalizado: se conservó y no se regeneró."));
+        if (mandato.PersonalizadoAplicado)
+            avisos.Add(new(AvisoMandatoPersonalizadoAplicado, "Se aplicó el mandato personalizado de la compañía."));
         if (mandato.SinFirmar)
             avisos.Add(new(AvisoMandatoSinFirmar,
                 "La configuración de Mandatos no resuelve hoy un mandatario para este trámite: el mandato salió «Sin firmar»."));
 
-        await repo.AddEventAsync(new ProcedureInstanceEvent
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ProcedureInstanceId = id,
-            Tipo = EventoMandatoRegenerado,
-            // Solo ids: el nombre y el documento del mandatario ya viven en el directorio (sin PII de más).
-            Payload = JsonSerializer.Serialize(new
-            {
-                firmante_anterior_id = mandato.FirmanteAnteriorId,
-                firmante_nuevo_id = mandato.FirmanteNuevoId,
-                mandato_attachment_id = mandato.AttachmentId,
-                sin_firmar = mandato.SinFirmar,
-                personalizado_conservado = mandato.PersonalizadoConservado,
-            }),
-            CreatedAt = DateTimeOffset.UtcNow,
-            CreatedBy = userId,
-        }, ct).ConfigureAwait(false);
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-
         // row_version nuevo tras el guardado del mandato (mismo motivo que ReloadAsync de la cascada).
         repo.ResetTracking();
-        var (wizard, errorWizard) = await consolidado.RegenerarSinCascadaAsync(id, tenantId, ct).ConfigureAwait(false);
-        if (errorWizard is not null || wizard is null)
-            return (null, errorWizard ?? "consolidado_no_generado");
+        var wizardId = await RearmarWizardAsync(id, tenantId, ct).ConfigureAwait(false);
+        if (wizardId is null)
+            avisos.Add(new(AvisoConsolidadoFallo,
+                "El mandato se regeneró, pero no se pudo armar el consolidado; se rearmará al abrirlo."));
 
+        // El maestro se intenta aunque el wizard haya fallado: no depende de él.
         repo.ResetTracking();
         var (maestroDto, avisoMaestro) = await RearmarMaestroAsync(id, tenantId, procedureTypeId, transitOfficeId, ct)
             .ConfigureAwait(false);
@@ -134,9 +128,14 @@ public sealed partial class RegenerarMandatoYConsolidadoHandler(
             avisos.Add(avisoMaestro);
 
         var final = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).ConfigureAwait(false);
-        var generadoWizard = final?.Attachments.FirstOrDefault(a => a.Id == wizard.Document.AttachmentId)?.UploadedAt
-            ?? final?.ConsolidadoWizardGeneradoEn
-            ?? DateTimeOffset.UtcNow;
+        var consolidadoDto = wizardId is { } wId
+            ? new ConsolidadoRegeneradoDto(
+                ConsolidadoRegenerado,
+                wId,
+                final?.Attachments.FirstOrDefault(a => a.Id == wId)?.UploadedAt
+                    ?? final?.ConsolidadoWizardGeneradoEn
+                    ?? DateTimeOffset.UtcNow)
+            : new ConsolidadoRegeneradoDto(ConsolidadoFallo, null, null);
         if (maestroDto.AttachmentId is { } maestroId)
         {
             maestroDto = maestroDto with
@@ -148,9 +147,32 @@ public sealed partial class RegenerarMandatoYConsolidadoHandler(
 
         return (new RegenerarMandatoYConsolidadoResult(
             new MandatoRegeneradoDto(mandato.AttachmentId, mandato.FirmanteAnteriorId, mandato.FirmanteNuevoId, mandato.SinFirmar),
-            new ConsolidadoRegeneradoDto(wizard.Document.AttachmentId, generadoWizard),
+            consolidadoDto,
             maestroDto,
             avisos), null);
+    }
+
+    /// <summary>Id del consolidado del wizard rearmado, o <c>null</c> si falló (código de error o excepción).</summary>
+    private async Task<Guid?> RearmarWizardAsync(Guid id, Guid tenantId, CancellationToken ct)
+    {
+        try
+        {
+            var (result, error) = await consolidado.RegenerarSinCascadaAsync(id, tenantId, ct).ConfigureAwait(false);
+            if (error is null && result is not null)
+                return result.Document.AttachmentId;
+
+            LogWizardFallo(_logger, id, error ?? "sin_resultado");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogWizardExcepcion(_logger, ex, id);
+        }
+
+        return null;
     }
 
     private async Task<(MaestroRegeneradoDto Maestro, AvisoRegeneracionDto? Aviso)> RearmarMaestroAsync(
@@ -192,6 +214,14 @@ public sealed partial class RegenerarMandatoYConsolidadoHandler(
             new AvisoRegeneracionDto(AvisoMaestroFallo,
                 "El mandato y el consolidado del gestor se regeneraron, pero el consolidado del organismo no: se rearmará al abrirlo."));
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Regenerar mandato (HU #14547): el consolidado del wizard del trámite {InstanceId} no se rearmó ({Error}); queda invalidado.")]
+    private static partial void LogWizardFallo(ILogger logger, Guid instanceId, string error);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Regenerar mandato (HU #14547): el consolidado del wizard del trámite {InstanceId} falló; queda invalidado.")]
+    private static partial void LogWizardExcepcion(ILogger logger, Exception ex, Guid instanceId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Regenerar mandato (HU #14547): el consolidado maestro del trámite {InstanceId} no se rearmó ({Error}); queda invalidado.")]

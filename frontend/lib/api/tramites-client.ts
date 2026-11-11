@@ -2838,6 +2838,7 @@ export interface RegenerarMandatoAviso {
     | 'maestro_fallo'
     | 'mandato_sin_firmar'
     | 'mandato_personalizado_conservado'
+    | 'consolidado_fallo'
     | (string & {});
   mensaje: string;
 }
@@ -2850,7 +2851,12 @@ export interface RegenerarMandatoYConsolidadoResult {
     firmanteNuevoId: string | null;
     sinFirmar: boolean;
   };
-  consolidado: { attachmentId: string; generadoEn: string };
+  /** `fallo` = éxito parcial (200): el mandato sí se regeneró; llega el aviso `consolidado_fallo`. */
+  consolidado: {
+    estado: 'regenerado' | 'fallo';
+    attachmentId: string | null;
+    generadoEn: string | null;
+  };
   maestro: {
     estado: 'regenerado' | 'radicado_conservado' | 'fallo';
     attachmentId: string | null;

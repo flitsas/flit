@@ -1,5 +1,7 @@
 using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Infrastructure.OtClientProcedures;
 
@@ -10,9 +12,13 @@ namespace Flit.Infrastructure.OtClientProcedures;
 /// vacía: el maestro cae al orden por modalidad.
 /// <para>Uso de ejemplo: <c>await provider.ResolverAsync(instance.ProcedureTypeId, instance.TransitOfficeId, ct)</c>.</para>
 /// </summary>
-public sealed class ConsolidadoMaestroPrecedenciaProvider(IResolvedDocumentMatrixResolver matrixResolver)
+public sealed partial class ConsolidadoMaestroPrecedenciaProvider(
+    IResolvedDocumentMatrixResolver matrixResolver,
+    ILogger<ConsolidadoMaestroPrecedenciaProvider>? logger = null)
     : IConsolidadoMaestroPrecedenciaProvider
 {
+    private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
+
     private readonly IResolvedDocumentMatrixResolver _matrixResolver =
         matrixResolver ?? throw new ArgumentNullException(nameof(matrixResolver));
 
@@ -28,9 +34,15 @@ public sealed class ConsolidadoMaestroPrecedenciaProvider(IResolvedDocumentMatri
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            // Sin PII: solo los ids de la tipología y del organismo.
+            LogMatrizNoResuelta(_logger, ex, procedureTypeId, transitOfficeId);
             return [];
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Regenerar mandato (HU #14547): no se resolvió la matriz del OT (tipo {ProcedureTypeId}, organismo {TransitOfficeId}); el maestro usa el orden por modalidad.")]
+    private static partial void LogMatrizNoResuelta(ILogger logger, Exception ex, Guid procedureTypeId, Guid? transitOfficeId);
 }

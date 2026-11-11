@@ -32,7 +32,7 @@ describe('tramites-client — regenerarMandatoYConsolidado', () => {
 
   const ok = {
     mandato: { attachmentId: 'm-1', firmanteAnteriorId: 'f-0', firmanteNuevoId: 'f-1', sinFirmar: false },
-    consolidado: { attachmentId: 'c-1', generadoEn: '2026-11-11T10:00:00Z' },
+    consolidado: { estado: 'regenerado', attachmentId: 'c-1', generadoEn: '2026-11-11T10:00:00Z' },
     maestro: { estado: 'radicado_conservado', attachmentId: 'x-1', generadoEn: null },
     avisos: [{ codigo: 'maestro_radicado_conservado', mensaje: 'El OT conserva el expediente radicado.' }],
   };
@@ -46,6 +46,7 @@ describe('tramites-client — regenerarMandatoYConsolidado', () => {
     expect(headers.get('X-Tenant-Id')).toBe('t-1');
     expect(res.avisos[0].mensaje).toBe('El OT conserva el expediente radicado.');
     expect(res.maestro.estado).toBe('radicado_conservado');
+    expect(res.consolidado.estado).toBe('regenerado');
   });
 
   it('un 409 llega como TramitesApiError con status y problem', async () => {
@@ -74,6 +75,35 @@ describe('mensajeErrorRegenerarMandato — textos de negocio, nunca códigos cru
     const msg = mensajeErrorRegenerarMandato(err);
     expect(msg).toMatch(esperado);
     expect(msg).not.toMatch(/[a-z]+_[a-z_]+/);
+  });
+
+  // Ronda post-review PR #871 (2): `problem.error` es el código estable y manda sobre `detail`/`title`.
+  it.each([
+    ['mandato_no_disponible', 'La compañía o el organismo no tiene configurado el mandato.'],
+    ['fur_requerido', 'El trámite aún no tiene FUR; genera el FUR antes de regenerar el mandato.'],
+    ['sin_adjuntos', 'El trámite no tiene adjuntos para armar el consolidado.'],
+    ['adjunto_no_disponible', 'Un documento del expediente no está disponible en el almacenamiento. Intenta de nuevo en unos minutos.'],
+    ['migrado_solo_lectura', 'Este trámite se migró de la versión anterior y es de solo lectura: no se puede regenerar el mandato.'],
+  ])('problem.error=%s se traduce a texto propio', (codigo, esperado) => {
+    expect(
+      mensajeErrorRegenerarMandato(e(409, { title: 'Conflict', detail: 'Texto fijo del backend.', error: codigo }, 'Texto fijo del backend.')),
+    ).toBe(esperado);
+  });
+
+  it('problem.error prevalece sobre un código distinto en detail', () => {
+    const msg = mensajeErrorRegenerarMandato(
+      e(409, { title: 'Conflict', detail: 'migrado_solo_lectura', error: 'fur_requerido' }, 'migrado_solo_lectura'),
+    );
+    expect(msg).toBe('El trámite aún no tiene FUR; genera el FUR antes de regenerar el mandato.');
+  });
+
+  it('problem.error desconocido no se muestra crudo: cae al detail legible o al genérico', () => {
+    expect(mensajeErrorRegenerarMandato(e(409, { detail: 'Texto fijo del backend.', error: 'codigo_nuevo' }))).toBe(
+      'Texto fijo del backend.',
+    );
+    expect(mensajeErrorRegenerarMandato(e(409, { detail: 'codigo_nuevo', error: 'codigo_nuevo' }))).toBe(
+      'No se pudo regenerar el mandato y el consolidado.',
+    );
   });
 
   it('un 409 con detalle legible del backend se muestra tal cual', () => {

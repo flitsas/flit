@@ -64,11 +64,11 @@ const base = {
 
 const TITULO = 'Regenerar mandato y consolidado';
 const DESCRIPCION =
-  'Vuelve a generar el contrato de mandato con el mandatario que indique hoy la configuración de Mandatos y arma de nuevo los consolidados del gestor y del organismo de tránsito. El FUR y los demás documentos no cambian. No está disponible en trámites aprobados, anulados o revocados.';
+  'Vuelve a generar el contrato de mandato con el mandatario que indique hoy la configuración de Mandatos y arma de nuevo los consolidados del gestor y del organismo de tránsito. El FUR y los demás documentos no cambian. Si el consolidado fue cargado a mano, se reemplaza por uno generado. No está disponible en trámites aprobados, anulados o revocados.';
 
 const okResponse = {
   mandato: { attachmentId: 'm-1', firmanteAnteriorId: 'f-0', firmanteNuevoId: 'f-1', sinFirmar: false },
-  consolidado: { attachmentId: 'c-1', generadoEn: '2026-11-11T10:00:00Z' },
+  consolidado: { estado: 'regenerado', attachmentId: 'c-1', generadoEn: '2026-11-11T10:00:00Z' },
   maestro: { estado: 'radicado_conservado', attachmentId: 'x-1', generadoEn: null },
   avisos: [
     { codigo: 'maestro_radicado_conservado', mensaje: 'El OT conserva el expediente radicado.' },
@@ -148,6 +148,10 @@ describe('HU #14547 — Regenerar mandato y consolidado', () => {
     expect(
       within(confirm).getByText('El mandatario puede cambiar según la configuración actual de Mandatos.'),
     ).toBeInTheDocument();
+    // Ronda post-review PR #871 (3): la nota advierte también el reemplazo del consolidado cargado a mano.
+    expect(within(confirm).getByRole('note')).toHaveTextContent(
+      'Si el consolidado fue cargado a mano, se reemplaza por uno generado.',
+    );
     expect(regenerar).not.toHaveBeenCalled();
     await userEvent.click(within(confirm).getByRole('button', { name: 'Cancelar' }));
     await waitFor(() =>
@@ -176,6 +180,9 @@ describe('HU #14547 — Regenerar mandato y consolidado', () => {
 
     expect(await screen.findByText('Mandato y consolidado regenerados.')).toBeInTheDocument();
     const avisos = await within(dialog).findByRole('list', { name: 'Avisos de la regeneración' });
+    // Ronda post-review PR #871 (4): los avisos llegan dentro de una región viva cortés.
+    expect(avisos.closest('[role="status"]')).not.toBeNull();
+    expect(avisos.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
     expect(within(avisos).getByText('El OT conserva el expediente radicado.')).toBeInTheDocument();
     expect(within(avisos).getByText('El mandato quedó sin firmar.')).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
@@ -210,6 +217,56 @@ describe('HU #14547 — Regenerar mandato y consolidado', () => {
     const confirm = await screen.findByRole('dialog', { name: /Confirmar regeneración del mandato/ });
     await userEvent.click(within(confirm).getByRole('button', { name: 'Sí, regenerar' }));
     expect((await within(dialog).findAllByText(/Solo un SuperAdmin/)).length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    [
+      'consolidado',
+      {
+        ...okResponse,
+        consolidado: { estado: 'fallo', attachmentId: null, generadoEn: null },
+        maestro: { estado: 'regenerado', attachmentId: 'x-2', generadoEn: '2026-11-11T10:00:00Z' },
+        avisos: [{ codigo: 'consolidado_fallo', mensaje: 'No se pudo armar el consolidado del gestor.' }],
+      },
+      'No se pudo armar el consolidado del gestor.',
+    ],
+    [
+      'maestro',
+      {
+        ...okResponse,
+        maestro: { estado: 'fallo', attachmentId: null, generadoEn: null },
+        avisos: [{ codigo: 'maestro_fallo', mensaje: 'No se pudo armar el consolidado del organismo.' }],
+      },
+      'No se pudo armar el consolidado del organismo.',
+    ],
+  ])('éxito parcial (%s en fallo): muestra los avisos, relee el detalle y no anuncia éxito total', async (_c, res, aviso) => {
+    regenerar.mockResolvedValue(res);
+    const onChanged = renderHarness();
+    const dialog = await abrirConsolidado();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Regenerar mandato' }));
+    const confirm = await screen.findByRole('dialog', { name: /Confirmar regeneración del mandato/ });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Sí, regenerar' }));
+
+    const avisos = await within(dialog).findByRole('list', { name: 'Avisos de la regeneración' });
+    expect(within(avisos).getByText(aviso)).toBeInTheDocument();
+    expect(onChanged).toHaveBeenCalled();
+    expect(await screen.findByText('Mandato regenerado con avisos: revisa el detalle.')).toBeInTheDocument();
+    expect(screen.queryByText('Mandato y consolidado regenerados.')).not.toBeInTheDocument();
+  });
+
+  it('error con extensión `error`: usa el código estable aunque el detail sea otro texto', async () => {
+    regenerar.mockRejectedValue(
+      new TramitesApiError(409, 'Texto fijo', { title: 'Conflict', detail: 'Texto fijo', error: 'mandato_no_disponible' }),
+    );
+    renderHarness();
+    const dialog = await abrirConsolidado();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Regenerar mandato' }));
+    const confirm = await screen.findByRole('dialog', { name: /Confirmar regeneración del mandato/ });
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Sí, regenerar' }));
+    expect(
+      (await within(dialog).findAllByText('La compañía o el organismo no tiene configurado el mandato.')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/mandato_no_disponible/)).not.toBeInTheDocument();
   });
 
   it('Limpiar sigue llamando a su propio endpoint, sin confirmación (R6)', async () => {
