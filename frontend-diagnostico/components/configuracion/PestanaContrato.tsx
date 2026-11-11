@@ -1,20 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Building2, FileText, Lock, Save, TriangleAlert } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
-import { SearchableSelect, type SearchableSelectOption } from "@flit/ui/SearchableSelect";
 import { ApiError } from "@/lib/api";
 import {
   AVISO_FUENTE_YA_NO_DISPONIBLE,
   AYUDA_FUENTE_NO_DISPONIBLE,
-  CODIGO_IDENTIDAD_NO_CONFIGURADA,
   FUENTES,
   estaDisponible,
   etiquetaNit,
   guardarContratoEmpresa,
-  listarEmpresasBackoffice,
   nombreFuente,
   obtenerContratoEmpresa,
   ordenarFuentes,
@@ -35,6 +32,7 @@ import {
   TARJETA_CLS,
 } from "./estilos";
 import { TOOLTIP_CLS } from "@/components/parametrizacion/estilos";
+import { SelectorEmpresaBackoffice } from "@/components/backoffice/SelectorEmpresaBackoffice";
 
 /** Código del 422 al habilitar una fuente que el backend no declara disponible (HU #13863). */
 const CODIGO_FUENTE_NO_DISPONIBLE = "FUENTE_NO_DISPONIBLE";
@@ -42,9 +40,10 @@ const CODIGO_FUENTE_NO_DISPONIBLE = "FUENTE_NO_DISPONIBLE";
 /**
  * Pestaña Contrato. Lo contratado por la compañía del token va siempre en solo lectura. Con la capacidad editarContrato
  * (backoffice FLIT: permiso diagnostico.configuracion.contrato.editar y tenant_type=FLIT) se suma el editor del contrato
- * de la empresa elegida en el selector de empresas (GET /backoffice/empresas, HU #13741; escenarios 7 y 8): se busca por
- * nombre o NIT, sin escribir su identificador, y el editor no se abre sin una empresa elegida. Solo ese perfil pide la
- * lista: un admin de compañía nunca llama al endpoint.
+ * de la empresa elegida en el selector de empresas (SelectorEmpresaBackoffice, compartido con el listado de diagnósticos
+ * del backoffice; GET /backoffice/empresas, HU #13741; escenarios 7 y 8): se busca por nombre o NIT, sin escribir su
+ * identificador, y el editor no se abre sin una empresa elegida. Solo ese perfil pide la lista: un admin de compañía nunca
+ * llama al endpoint.
  * La disponibilidad de cada fuente sale solo de `fuentes_disponibles` del contrato (HU #13865, gate Q7 = a): una no
  * disponible y no habilitada queda bloqueada con su ayuda; una habilitada que dejó de estar disponible se conserva
  * marcada, con aviso, y se puede quitar.
@@ -101,12 +100,6 @@ type Carga =
   | { tipo: "error"; mensaje: string }
   | { tipo: "listo"; contrato: ContratoBackoffice };
 
-type Listado =
-  | { tipo: "cargando" }
-  | { tipo: "error"; noConfigurado: boolean; mensaje: string }
-  | { tipo: "vacio" }
-  | { tipo: "listo"; empresas: EmpresaBackoffice[] };
-
 type Guardado = { tipo: "inactivo" } | { tipo: "guardando" } | { tipo: "guardado"; recortadas: Fuente[] } | { tipo: "error"; mensaje: string; reintentable: boolean };
 
 interface Borrador {
@@ -120,8 +113,6 @@ function borradorDe(c: ContratoBackoffice): Borrador {
 }
 
 function EditorContratoBackoffice() {
-  const [listado, setListado] = useState<Listado>({ tipo: "cargando" });
-  const [intentoListado, setIntentoListado] = useState(0);
   const [elegida, setElegida] = useState<EmpresaBackoffice | null>(null);
   const [carga, setCarga] = useState<Carga>({ tipo: "vacio" });
   const [borrador, setBorrador] = useState<Borrador | null>(null);
@@ -130,34 +121,6 @@ function EditorContratoBackoffice() {
   const [errorFuentes, setErrorFuentes] = useState<string | null>(null);
   const empresaCargada = useRef("");
   const peticion = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    listarEmpresasBackoffice(controller.signal).then(
-      (empresas) => {
-        if (!controller.signal.aborted) setListado(empresas.length > 0 ? { tipo: "listo", empresas } : { tipo: "vacio" });
-      },
-      (e: unknown) => {
-        if (controller.signal.aborted) return;
-        setListado({
-          tipo: "error",
-          noConfigurado: e instanceof ApiError && e.code === CODIGO_IDENTIDAD_NO_CONFIGURADA,
-          mensaje: e instanceof Error ? e.message : "Intenta de nuevo en un momento.",
-        });
-      },
-    );
-    return () => controller.abort();
-  }, [intentoListado]);
-
-  const opciones = useMemo<SearchableSelectOption[]>(
-    () => (listado.tipo === "listo" ? listado.empresas.map((e) => ({ value: e.id, label: e.nombre, hint: etiquetaNit(e.nit) })) : []),
-    [listado],
-  );
-
-  function reintentarListado() {
-    setListado({ tipo: "cargando" });
-    setIntentoListado((n) => n + 1);
-  }
 
   async function cargar(id: string) {
     peticion.current?.abort();
@@ -178,10 +141,7 @@ function EditorContratoBackoffice() {
     }
   }
 
-  function alElegir(id: string) {
-    if (listado.tipo !== "listo") return;
-    const empresa = listado.empresas.find((e) => e.id === id);
-    if (!empresa) return;
+  function alElegir(empresa: EmpresaBackoffice) {
     setElegida(empresa);
     void cargar(empresa.id);
   }
@@ -239,38 +199,14 @@ function EditorContratoBackoffice() {
         <p className={AYUDA_CLS}>Busca la empresa por nombre o NIT para ver y editar su contrato.</p>
       </div>
 
-      {listado.tipo === "cargando" && <VehicleLoader label="Cargando empresas…" />}
-      {listado.tipo === "error" && (
-        <InlineAlert
-          tone="error"
-          title={listado.noConfigurado ? "El listado de empresas no está configurado" : "No se pudo cargar el listado de empresas"}
-          action={
-            listado.noConfigurado ? undefined : (
-              <button type="button" onClick={reintentarListado} className={BOTON_REINTENTAR_CLS}>
-                Reintentar
-              </button>
-            )
-          }
-        >
-          {listado.noConfigurado ? "Diagnóstico no tiene configurada la conexión con Identidad. Avisa a soporte FLIT." : listado.mensaje}
-        </InlineAlert>
-      )}
-      {listado.tipo === "vacio" && <p className={AYUDA_CLS}>No hay empresas con Diagnóstico habilitado</p>}
-      {listado.tipo === "listo" && (
-        <SearchableSelect
-          id="contrato-empresa"
-          label="Empresa"
-          options={opciones}
-          value={elegida?.id ?? ""}
-          onChange={alElegir}
-          placeholder="Busca por nombre o NIT"
-          noResultsLabel="Ninguna empresa coincide"
-          disabled={ocupado}
-          className="max-w-xl"
-        />
-      )}
+      <SelectorEmpresaBackoffice
+        id="contrato-empresa"
+        value={elegida?.id ?? ""}
+        onChange={alElegir}
+        disabled={ocupado}
+        avisoSinElegir="Todavía no has elegido una empresa."
+      />
 
-      {listado.tipo === "listo" && !elegida && <p className={AYUDA_CLS}>Todavía no has elegido una empresa.</p>}
       {elegida && (
         <div className="flex items-start gap-3">
           <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />

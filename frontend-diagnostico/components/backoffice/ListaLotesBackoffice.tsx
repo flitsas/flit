@@ -29,7 +29,7 @@ import { ApiError } from "@/lib/api";
 import { listarLotesBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
-import { SelectorEmpresa } from "./SelectorEmpresa";
+import { SelectorEmpresaBackoffice } from "./SelectorEmpresaBackoffice";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
@@ -75,8 +75,9 @@ function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; ch
 
 /**
  * Lotes de una compañía para el backoffice FLIT (HU #13802, F06-H5; F06-C6, C14) en /backoffice/diagnosticos: selector
- * explícito de la compañía, filtros por estado y «con errores» y la tabla de lotes (orden de creación, el más reciente
- * primero) con enlace a la grilla de cada uno. Sin compañía elegida no consulta. Los filtros viven en la URL. Cuatro estados:
+ * de la compañía con búsqueda por nombre o NIT (SelectorEmpresaBackoffice, el mismo del editor de contrato; Punto 6 de la
+ * ola 2026-11-11), filtros por estado y «con errores» y la tabla de lotes (orden de creación, el más reciente primero) con
+ * enlace a la grilla de cada uno. Sin compañía elegida no consulta. Los filtros viven en la URL. Cuatro estados:
  * cargando, error con Reintentar (403 a la página 403), vacío (sin compañía o sin lotes con esos filtros) y lleno.
  */
 export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
@@ -221,7 +222,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         ilustracion={rutaIlustracion("diagnostico")}
       />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-        <SelectorEmpresa valor={filtros.empresa} onElegir={(empresa) => aplicar({ empresa, pagina: 1 })} />
+        <SelectorEmpresaBackoffice id={`${id}-empresa`} value={filtros.empresa} onChange={(empresa) => aplicar({ empresa: empresa.id, pagina: 1 })} />
         {hayEmpresa && (
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1">
