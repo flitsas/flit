@@ -104,6 +104,17 @@ describe("Excel de Consulta: bloques por persona, en su sitio", () => {
     expect(hoja().rows[0]).toEqual(["Dueño Uno", "Aprobado", 1, "", null, null, null, null]);
   });
 
+  it("un maxActoresPorRol incompleto no hace desaparecer la columna Comprador", () => {
+    const incompleto = (m: Partial<MaxActoresPorRol>) => m as MaxActoresPorRol;
+    buildCompanyQueryXlsx([fila([])], COMPRADOR, [], incompleto({ comprador: 2 }));
+    expect(hoja().columns).toHaveLength(8); // sin propietario: 2 bloques
+    buildCompanyQueryXlsx([fila([])], COMPRADOR, [], incompleto({ propietario: 3 }));
+    expect(hoja().columns).toHaveLength(12); // sin comprador: 3 bloques
+    buildCompanyQueryXlsx([fila([])], OCHO, [], incompleto({}));
+    expect(hoja().columns.map((c) => c.header)).toEqual([...BLOQUE("comprador"), ...BLOQUE("vendedor")]);
+    expect(hoja().columns.every((c) => c.header && !/NaN/.test(c.header))).toBe(true);
+  });
+
   it("el ancho del grupo comprador es max(comprador, propietario), mínimo 1", () => {
     buildCompanyQueryXlsx([fila([])], COMPRADOR, [], max(1, 0, 3));
     expect(hoja().columns).toHaveLength(12);
@@ -201,6 +212,7 @@ describe("nada revela cómo se validó", () => {
     expect(motivoVisible("Rechazado por Kyverum")).toBe("Validación rechazada");
     expect(motivoVisible("Revisión manual fallida")).toBe("Validación rechazada");
     expect(motivoVisible("Error en webhook del scorer mock")).toBe("Validación rechazada");
+    expect(motivoVisible("Rechazado según la fuente")).toBe("Validación rechazada");
     expect(motivoVisible("Documento ilegible")).toBe("Documento ilegible");
     expect(motivoVisible("  ")).toBeNull();
     // Las frases reales del servidor se muestran tal cual, con su punto final.
