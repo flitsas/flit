@@ -28,7 +28,7 @@ public sealed record ActivarIdentidadManualResult(
 
 /// <summary>
 /// Activa el flujo manual sobre una validación que NO esté aprobada y vigente: la MISMA fila pasa a proveedor
-/// <c>manual</c> / estado <c>manual_activo</c> con un token de 24 h guardado solo como hash (mismo patrón que el magic-link de
+/// <c>manual</c> / estado <c>manual_activo</c> con un token de 24 h guardado como hash y, además, cifrado (HU #14305: permite copiar el enlace; mismo patrón de hash que el magic-link de
 /// la biométrica, <see cref="BiometricToken"/>), cancela la verificación Kyverum en curso y deja auditoría (una fila por paso,
 /// sin PII ni secretos ni token). El token en claro se entrega UNA vez al puerto <see cref="IManualCaptureLinkNotifier"/>.
 /// <para>Errores: <c>not_found</c> (404), <c>identidad_aprobada_vigente</c> (409), <c>tramite_inactivo</c> (409; trámite anulado
@@ -38,6 +38,7 @@ public sealed class ActivarIdentidadManualHandler(
     IProcedureInstanceRepository repo,
     IIdentityValidationAuditLog audit,
     IManualCaptureLinkNotifier notifier,
+    IManualCaptureTokenProtector tokenProtector,
     TimeProvider? clock = null)
 {
     public const string NoEncontrada = "not_found";
@@ -75,7 +76,7 @@ public sealed class ActivarIdentidadManualHandler(
         var proveedorPrevio = v.Provider;
 
         var token = BiometricToken.Generate();
-        v.ActivarFlujoManual(command.ActivatedByUserId, now, BiometricToken.Hash(token));
+        v.ActivarFlujoManual(command.ActivatedByUserId, now, BiometricToken.Hash(token), tokenProtector.Protect(token));
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // Bitácora técnica: una fila por paso. El id de Kyverum queda SOLO aquí (trazabilidad); nunca el token.

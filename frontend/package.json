@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "dev:turbo": "next dev --turbopack",
-    "dev:webpack": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "node scripts/copiar-motores-fotos.mjs && next dev --webpack",
+    "dev:turbo": "node scripts/copiar-motores-fotos.mjs && next dev --turbopack",
+    "dev:webpack": "node scripts/copiar-motores-fotos.mjs && next dev --webpack",
+    "build": "node scripts/copiar-motores-fotos.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "motores:fotos": "node scripts/copiar-motores-fotos.mjs",
     "typecheck": "tsc --noEmit",
     "manual:screenshots": "node scripts/manual-screenshots.mjs",
     "manual:diagrams": "node scripts/manual-diagrams.mjs",
@@ -23,6 +24,7 @@
     "@flit/brand": "workspace:*",
     "@flit/shell": "workspace:*",
     "@flit/ui": "workspace:*",
+    "@mediapipe/tasks-vision": "1.2.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.20.0",
@@ -34,7 +36,8 @@
     "recharts": "^2.15.4",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.6.0",
-    "tw-animate-css": "^1.3.4"
+    "tw-animate-css": "^1.3.4",
+    "zxing-wasm": "3.1.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

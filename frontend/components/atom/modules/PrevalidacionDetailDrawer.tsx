@@ -26,6 +26,7 @@ import {
   IdentityCaptureLinkBlock,
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
+import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { FLIT } from '@/lib/flit-design-tokens';
@@ -247,6 +248,10 @@ export function PrevalidacionDetailDrawer({
                   <AssociatedProceduresList procedures={associated} collapsible />
                 ) : null;
               })()}
+
+              {detail.provider === 'manual' && !detail.procedureInstanceId ? (
+                <CertificadoIdentidadAccion validation={detail} />
+              ) : null}
 
               {detail.status === 'rechazado' && detail.rejectionReason && (
                 <p

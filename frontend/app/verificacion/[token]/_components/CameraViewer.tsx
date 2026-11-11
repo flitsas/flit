@@ -3,9 +3,45 @@
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CameraOff, Loader2, RefreshCw } from "lucide-react";
+import {
+  MAX_INTENTOS,
+  RESULTADO_VERIFICADA,
+  mensajeRechazo,
+  noVerificada,
+  validarFoto,
+  type FotoKind,
+  type MotivoFoto,
+  type MotorFotos,
+  type ResultadoFoto,
+} from "@/lib/captura-manual/validacionFotos";
 import { useLiveCamera, type CameraFacing } from "@/lib/captura-manual/useLiveCamera";
 import { CROP_PADDING, DOC_FRAME, GUIDANCE_HINT, frameRectInVideo } from "@/lib/captura-manual/documentDetection";
 import { useDocumentAutoCapture } from "@/lib/captura-manual/useDocumentAutoCapture";
+
+/** Validación de la foto en el dispositivo (Feature #14307). Sin esta propiedad el visor no valida. */
+export interface ValidacionVisor {
+  kind: FotoKind;
+  motor: MotorFotos;
+  /** Documento sin reverso (p. ej. pasaporte): se valida que sea un documento, no el lado. */
+  sinReverso: boolean;
+  /** Intentos fallidos ya acumulados en este lado (vive en el Flow para sobrevivir a «Atrás»). */
+  fallosIniciales: number;
+  /** Resultado de la foto ya confirmada (al volver con «Atrás»). */
+  resultadoInicial?: ResultadoFoto;
+  /** Se llama con el total de intentos fallidos cada vez que una foto no pasa. */
+  onFallo: (fallos: number) => void;
+}
+
+type Revision =
+  | { fase: "revisando" }
+  | { fase: "lista"; resultado: ResultadoFoto; aviso?: string }
+  | {
+      fase: "rechazada";
+      motivo: Exclude<MotivoFoto, "sin_soporte" | "sin_resultado">;
+      mensaje: string;
+      puedeContinuar: boolean;
+      fallos: number;
+    };
 
 export interface CameraViewerProps {
   /** «oval» para rostro, «rect» para documento. */
@@ -18,7 +54,8 @@ export interface CameraViewerProps {
   /** Pista de encuadre sobre el visor (sin detección facial: es solo texto fijo). */
   hint?: string;
   /** Se llama con el Blob JPEG cuando el cliente pulsa «Confirmar» sobre la vista previa. */
-  onContinue: (blob: Blob) => void;
+  onContinue: (blob: Blob, resultado?: ResultadoFoto) => void;
+  validacion?: ValidacionVisor;
   /** Captura ya tomada (al volver con «Atrás»): abre directo la vista previa, sin reabrir la cámara. */
   initialBlob?: Blob;
 }
@@ -39,11 +76,18 @@ export function CameraViewer({
   hint,
   onContinue,
   initialBlob,
+  validacion,
 }: CameraViewerProps) {
   const [facing, setFacing] = useState<CameraFacing>(initialFacing);
   const [notice, setNotice] = useState<string | null>(null);
   const [captured, setCaptured] = useState<Blob | null>(initialBlob ?? null);
   const previewRef = useRef<HTMLImageElement | null>(null);
+  // Foto ya confirmada (al volver con «Atrás»): conserva su resultado; sin él, queda «sin_resultado».
+  const [revision, setRevision] = useState<Revision | null>(
+    validacion && initialBlob ? { fase: "lista", resultado: validacion.resultadoInicial ?? noVerificada("sin_resultado") } : null,
+  );
+  const fallos = useRef(validacion?.fallosIniciales ?? 0);
+  const corrida = useRef(0); // descarta el resultado de una foto que ya se repitió
   const { videoRef, status, restart, capture, actualFacing } = useLiveCamera({ facing, enabled: !captured });
 
   // La URL blob vive exactamente lo que dura el efecto que la creó: se revoca en su cleanup (al
@@ -62,6 +106,45 @@ export function CameraViewer({
 
   const isDocShape = shape === "rect";
 
+  // Carga diferida de los motores: solo en estos pasos, mientras la persona encuadra.
+  const motorValidacion = validacion?.motor;
+  const kindValidacion = validacion?.kind;
+  const sinReversoValidacion = validacion?.sinReverso ?? false;
+  useEffect(() => {
+    if (motorValidacion && kindValidacion) motorValidacion.precargar?.(kindValidacion, sinReversoValidacion);
+  }, [motorValidacion, kindValidacion, sinReversoValidacion]);
+  useEffect(
+    () => () => {
+      corrida.current++;
+    },
+    [],
+  );
+
+  async function revisar(foto: Blob) {
+    if (!validacion) return;
+    const id = ++corrida.current;
+    setRevision({ fase: "revisando" });
+    const v = await validarFoto({ kind: validacion.kind, foto, motor: validacion.motor, sinReverso: validacion.sinReverso });
+    if (id !== corrida.current) return;
+    if (v.tipo === "ok") {
+      setRevision({ fase: "lista", resultado: RESULTADO_VERIFICADA });
+    } else if (v.tipo === "sin_soporte") {
+      setRevision({ fase: "lista", resultado: noVerificada(v.motivo), aviso: "No pudimos revisar esta foto. Puedes continuar." });
+    } else {
+      const previos = fallos.current;
+      fallos.current = previos + 1;
+      validacion.onFallo(fallos.current);
+      // Con 3 fotos que no pasaron, la siguiente ya puede continuar aunque tampoco pase.
+      setRevision({
+        fase: "rechazada",
+        motivo: v.motivo,
+        mensaje: mensajeRechazo(validacion.kind, v.motivo),
+        puedeContinuar: previos >= MAX_INTENTOS,
+        fallos: fallos.current,
+      });
+    }
+  }
+
   async function take() {
     // Documento: se guarda solo lo que está dentro del marco guía (más una holgura mínima), no toda la escena.
     const blob = await capture(isDocShape ? (w, h) => frameRectInVideo(w, h, CROP_PADDING) : undefined);
@@ -71,6 +154,7 @@ export function CameraViewer({
     }
     setNotice(null);
     setCaptured(blob);
+    void revisar(blob);
   }
 
   // Documento: detección automática; al estar bien encuadrado, enfocado y quieto ~1 s, se captura solo.
@@ -81,25 +165,74 @@ export function CameraViewer({
   });
 
   function repeat() {
+    corrida.current++;
+    setRevision(null);
     setCaptured(null);
     setNotice(null);
     restart();
   }
 
   if (captured) {
+    const revisando = revision?.fase === "revisando";
+    const rechazada = revision?.fase === "rechazada" ? revision : null;
+    const confirmar = () => {
+      if (!validacion) return onContinue(captured);
+      if (revision?.fase === "lista") return onContinue(captured, revision.resultado);
+      if (rechazada?.puedeContinuar) return onContinue(captured, noVerificada(rechazada.motivo));
+    };
     return (
       <div className="flex flex-col gap-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img ref={previewRef} alt="Vista previa de la foto capturada" className="block h-auto w-full rounded-2xl bg-slate-900" />
-        {/* Dos botones lado a lado (Repetir | Confirmar), mismo alto y sin desborde en 360 px. */}
-        <div className="flex gap-3">
-          <button type="button" onClick={repeat} className={`${btnBase} min-w-0 flex-1 border-2 border-flit-brand text-base font-semibold text-flit-brand`}>
-            Repetir
-          </button>
-          <button type="button" onClick={() => onContinue(captured)} className={`${btnBase} min-w-0 flex-1 ${BRAND_BTN}`}>
-            Confirmar
-          </button>
-        </div>
+        {revisando ? (
+          <p role="status" className="flex items-center justify-center gap-2 text-base text-muted-foreground">
+            <Loader2 aria-hidden="true" className="size-5 motion-safe:animate-spin" />
+            Revisando tu foto…
+          </p>
+        ) : null}
+        {rechazada ? (
+          <div role="alert" aria-live="assertive" data-testid="rechazo-foto" className="flex flex-col items-center gap-1 text-center">
+            <p className="flex items-center gap-2 text-base font-semibold text-flit-alert">
+              <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
+              {rechazada.mensaje}
+            </p>
+            {!rechazada.puedeContinuar && rechazada.fallos >= MAX_INTENTOS ? (
+              <p className="text-sm text-muted-foreground">Si no pasa otra vez, podrás continuar.</p>
+            ) : null}
+          </div>
+        ) : null}
+        {revision?.fase === "lista" && revision.aviso ? (
+          <p role="status" aria-live="polite" className="text-center text-sm text-muted-foreground">
+            {revision.aviso}
+          </p>
+        ) : null}
+        {rechazada ? (
+          <div className="flex flex-col gap-3">
+            <button type="button" onClick={repeat} className={`${btnBase} ${BRAND_BTN}`}>
+              Repetir
+            </button>
+            {rechazada.puedeContinuar ? (
+              <button type="button" onClick={confirmar} className={`${btnBase} border-2 border-flit-brand text-base font-semibold text-flit-brand`}>
+                Continuar sin verificar
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          /* Dos botones lado a lado (Repetir | Confirmar), mismo alto y sin desborde en 360 px. */
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={repeat}
+              disabled={revisando}
+              className={`${btnBase} min-w-0 flex-1 border-2 border-flit-brand text-base font-semibold text-flit-brand`}
+            >
+              Repetir
+            </button>
+            <button type="button" onClick={confirmar} disabled={revisando} className={`${btnBase} min-w-0 flex-1 ${BRAND_BTN}`}>
+              Confirmar
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -2,6 +2,8 @@
 
 import { CameraViewer } from "./CameraViewer";
 import type { CameraFacing } from "@/lib/captura-manual/useLiveCamera";
+import type { EstadoFoto } from "@/lib/captura-manual/captures";
+import type { MotorFotos, ResultadoFoto } from "@/lib/captura-manual/validacionFotos";
 
 export interface CapturaConfig {
   title: string;
@@ -13,8 +15,9 @@ export interface CapturaConfig {
 }
 
 // Rostro, Anverso y Reverso replican el flujo real de Kyverum (capturas del PO, 2026-10-06): títulos,
-// textos y aviso de encuadre. En el flujo manual no hay verificación automática, por eso «Confirmar»
-// siempre está habilitado tras capturar.
+// textos y aviso de encuadre. A diferencia de Kyverum, aquí cada foto se revisa EN EL DISPOSITIVO (Feature
+// #14307; ninguna imagen sale a la red): si no pasa se muestra el motivo y se repite; tras 3 intentos fallidos
+// de un lado, o si el dispositivo no puede revisar, la persona continúa y la foto queda «no verificada».
 const DOC_HINT = "Encuadra el documento completo, sin reflejos ni dedos sobre los datos, y toca Capturar";
 
 export const CAPTURA_CONFIG = {
@@ -51,10 +54,21 @@ export function PasoCaptura({
   kind,
   blob,
   onCaptured,
+  motor,
+  sinReverso,
+  foto,
+  onFallo,
 }: {
   kind: CapturaKind;
   blob?: Blob;
-  onCaptured: (blob: Blob) => void;
+  onCaptured: (blob: Blob, resultado?: ResultadoFoto) => void;
+  /** Motor de validación en el dispositivo. */
+  motor: MotorFotos;
+  /** El documento no tiene reverso (p. ej. pasaporte): se valida que sea un documento, no el lado. */
+  sinReverso: boolean;
+  /** Intentos fallidos y resultado de esta foto, guardados por el Flow. */
+  foto?: EstadoFoto;
+  onFallo: (fallos: number) => void;
 }) {
   const cfg: CapturaConfig = CAPTURA_CONFIG[kind];
   return (
@@ -73,6 +87,14 @@ export function PasoCaptura({
         hint={cfg.hint}
         initialBlob={blob}
         onContinue={onCaptured}
+        validacion={{
+          kind,
+          motor,
+          sinReverso,
+          fallosIniciales: foto?.fallos ?? 0,
+          resultadoInicial: foto?.resultado,
+          onFallo,
+        }}
       />
     </section>
   );
