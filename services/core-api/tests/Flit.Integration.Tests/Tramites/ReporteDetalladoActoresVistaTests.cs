@@ -144,6 +144,24 @@ public sealed class ReporteDetalladoActoresVistaTests(PostgresDatabaseFixture fi
         max.Should().Be(new MaxActoresPorRolDto(1, 2, 0));
     }
 
+    [PostgresTheory]
+    [InlineData("manual_activo", "esperando_captura")]
+    [InlineData("pendiente_revision_manual", "pendiente_revision")]
+    public async Task Los_estados_del_flujo_asistido_viajan_con_codigo_sin_la_palabra_manual(string enBd, string esperado)
+    {
+        var id = await SeedAsync(TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        await AddActorAsync(id, "comprador", 1, "1001");
+        await AddValidationAsync(id, "comprador", "1001", enBd, 0);
+
+        await using var read = NewContext();
+        var json = await read.Database
+            .SqlQuery<string>($"SELECT actors::text AS \"Value\" FROM analytics.v_procedure_detail_report WHERE id = {id}")
+            .SingleAsync(TestContext.Current.CancellationToken);
+
+        json.Should().Contain($"\"estadoValidacion\": \"{esperado}\"");
+        json.Should().NotContainEquivalentOf("manual", "ni el código de estado ni nada del JSON de la vista delata el mecanismo");
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────────────────────
 
     private async Task<IReadOnlyList<ActorValidacionDto>> ReadActoresAsync(Guid instanceId)

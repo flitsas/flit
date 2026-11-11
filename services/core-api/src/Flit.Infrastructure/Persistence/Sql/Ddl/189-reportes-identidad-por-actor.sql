@@ -170,10 +170,14 @@ LEFT JOIN LATERAL (
             x.document_number,
             x.rol_out,
             CASE x.rol_out WHEN 'comprador' THEN 0 WHEN 'vendedor' THEN 1 ELSE 2 END AS orden_rol,
+            -- Códigos de transporte: los dos estados del flujo asistido se renombran para que esa palabra no viaje en el
+            -- JSON (la BD conserva sus valores). Lo que no se reconoce sale 'sin_validacion'.
             CASE
                 WHEN last_v.status IN ('aprobado', 'rechazado', 'en_proceso', 'enviado', 'pendiente_envio',
-                                       'error_envio', 'expirado', 'manual_activo', 'pendiente_revision_manual')
+                                       'error_envio', 'expirado')
                     THEN last_v.status
+                WHEN last_v.status = 'manual_activo' THEN 'esperando_captura'
+                WHEN last_v.status = 'pendiente_revision_manual' THEN 'pendiente_revision'
                 ELSE 'sin_validacion'
             END AS estado,
             CASE

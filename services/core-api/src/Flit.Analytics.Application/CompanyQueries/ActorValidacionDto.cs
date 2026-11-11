@@ -35,8 +35,8 @@ public static class ActorValidacionEstados
     public const string PendienteEnvio = "pendiente_envio";
     public const string ErrorEnvio = "error_envio";
     public const string Expirado = "expirado";
-    public const string ManualActivo = "manual_activo";
-    public const string PendienteRevisionManual = "pendiente_revision_manual";
+    public const string EsperandoCaptura = "esperando_captura";
+    public const string PendienteRevision = "pendiente_revision";
     public const string SinValidacion = "sin_validacion";
 
     /// <summary>
@@ -52,8 +52,8 @@ public static class ActorValidacionEstados
         PendienteEnvio => "Pendiente de envío",
         ErrorEnvio => "Error de envío",
         Expirado => "Expirado",
-        ManualActivo => "Esperando captura del cliente",
-        PendienteRevisionManual => "Pendiente de revisión",
+        EsperandoCaptura => "Esperando captura del cliente",
+        PendienteRevision => "Pendiente de revisión",
         _ => "Sin validar",
     };
 }

@@ -142,8 +142,8 @@ public static class ActorValidacionBuilder
         BiometricEstados.PendienteEnvio => ActorValidacionEstados.PendienteEnvio,
         BiometricEstados.ErrorEnvio => ActorValidacionEstados.ErrorEnvio,
         BiometricEstados.Expirado => ActorValidacionEstados.Expirado,
-        BiometricEstados.ManualActivo => ActorValidacionEstados.ManualActivo,
-        BiometricEstados.PendienteRevisionManual => ActorValidacionEstados.PendienteRevisionManual,
+        BiometricEstados.ManualActivo => ActorValidacionEstados.EsperandoCaptura,
+        BiometricEstados.PendienteRevisionManual => ActorValidacionEstados.PendienteRevision,
         _ => ActorValidacionEstados.SinValidacion,
     };
 

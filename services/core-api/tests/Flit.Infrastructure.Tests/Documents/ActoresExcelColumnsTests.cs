@@ -80,8 +80,10 @@ public sealed class ActoresExcelColumnsTests
     [Fact]
     public void Etiquetas_en_espanol_y_codigo_desconocido_sale_sin_validar()
     {
-        ActorValidacionEstados.Etiqueta("manual_activo").Should().Be("Esperando captura del cliente");
-        ActorValidacionEstados.Etiqueta("pendiente_revision_manual").Should().Be("Pendiente de revisión");
+        ActorValidacionEstados.Etiqueta("esperando_captura").Should().Be("Esperando captura del cliente");
+        ActorValidacionEstados.Etiqueta("pendiente_revision").Should().Be("Pendiente de revisión");
+        // El código viejo ya no es de transporte: lo desconocido sale «Sin validar», nunca crudo.
+        ActorValidacionEstados.Etiqueta("manual_activo").Should().Be("Sin validar");
         ActorValidacionEstados.Etiqueta("algo_raro").Should().Be("Sin validar");
         ActorValidacionEstados.Etiqueta(null).Should().Be("Sin validar");
     }
