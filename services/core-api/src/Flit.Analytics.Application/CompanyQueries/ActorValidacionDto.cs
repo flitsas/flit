@@ -38,6 +38,24 @@ public static class ActorValidacionEstados
     public const string ManualActivo = "manual_activo";
     public const string PendienteRevisionManual = "pendiente_revision_manual";
     public const string SinValidacion = "sin_validacion";
+
+    /// <summary>
+    /// Etiqueta en español para personas. Una sola tabla para el Excel del servidor y los reportes programados
+    /// (la pantalla tiene la suya, con los mismos textos). Un código desconocido sale «Sin validar», nunca crudo.
+    /// </summary>
+    public static string Etiqueta(string? codigo) => codigo switch
+    {
+        Aprobado => "Aprobado",
+        Rechazado => "Rechazado",
+        EnProceso => "En proceso",
+        Enviado => "Enviado",
+        PendienteEnvio => "Pendiente de envío",
+        ErrorEnvio => "Error de envío",
+        Expirado => "Expirado",
+        ManualActivo => "Esperando captura del cliente",
+        PendienteRevisionManual => "Pendiente de revisión",
+        _ => "Sin validar",
+    };
 }
 
 /// <summary>Roles que emiten los reportes.</summary>

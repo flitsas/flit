@@ -40,21 +40,32 @@ public static class IdentityRejectionReasonText
         if (!string.Equals(v.Status, BiometricEstados.Rechazado, StringComparison.Ordinal))
             return null;
 
-        var porCodigo = ManualRejectionReasons.LabelFor(v.RejectionReasonCode);
+        var (documentoOk, nombreOk) = LeerCoincidencias(v.ProviderPayload);
+        return ForParts(v.RejectionReasonCode, Leer(v.Detail, "motivo"), Leer(v.ProviderPayload, "subject_motivo"),
+            documentoOk, nombreOk);
+    }
+
+    /// <summary>
+    /// Mismo resultado que <see cref="For"/> a partir de las piezas ya extraídas del rechazo (las usa la vista SQL del
+    /// reporte detallado, que no trae el JSON completo). Siempre devuelve texto: el llamador ya sabe que hubo rechazo.
+    /// </summary>
+    public static string ForParts(
+        string? codigo, string? motivo, string? subjectMotivo, bool? documentoOk, bool? nombreOk)
+    {
+        var porCodigo = ManualRejectionReasons.LabelFor(codigo);
         if (porCodigo is not null)
             return Limpio(porCodigo) ? porCodigo + "." : Generico;
 
-        foreach (var origen in new[] { Leer(v.Detail, "motivo"), Leer(v.ProviderPayload, "subject_motivo") })
+        foreach (var origen in new[] { motivo, subjectMotivo })
         {
             var traducido = Traducir(origen);
             if (traducido is not null)
                 return traducido;
         }
 
-        var coincidencias = LeerCoincidencias(v.ProviderPayload);
-        if (coincidencias.Documento == false)
+        if (documentoOk == false)
             return DocumentoNoVerificado;
-        if (coincidencias.Nombre == false)
+        if (nombreOk == false)
             return DatosNoCoinciden;
 
         return Generico;
