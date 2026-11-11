@@ -2,7 +2,7 @@
 
 Rama `diseno/ui-kit-2026`, 2026-11-11. Ejecutor: Johan Jimenez.
 
-Es la propuesta navegable de todo FLIT 2.0 (vista de Super Admin, 62 pantallas y pestañas; el árbol de módulos sale de `docs/arbol-menu-por-rol.md`) vestida con el Manual UI Kit Ecosistema FLIT 2026 y con la logometría y los íconos del repositorio de íconos de FLIT (`github.com/yulojiar91/ICONOSFLIT`). No toca `frontend/` ni `packages/ui`: sirve para ver cómo pinta el manual sobre las pantallas reales antes de pasarlo a producción.
+Es la propuesta navegable de todo FLIT 2.0 (vista de Super Admin, 62 pantallas y pestañas; el árbol de módulos sale de `docs/arbol-menu-por-rol.md`) vestida con el Manual UI Kit Ecosistema FLIT 2026, con la logometría del repositorio de íconos de FLIT (`github.com/yulojiar91/ICONOSFLIT`) y con un juego de íconos redibujado para la propuesta a partir de ese paquete. No toca `frontend/` ni `packages/ui`: sirve para ver cómo pinta el manual sobre las pantallas reales antes de pasarlo a producción.
 
 ## Cómo verla
 
@@ -27,7 +27,7 @@ FLIT_API=https://api.qa.flitsas.online node docs/design/propuesta-ui-kit-2026/se
 | Pieza | Antes (Diseño Inteligente) | Ahora (Manual UI Kit 2026) |
 |---|---|---|
 | Logo e isotipo | Logos reconstruidos en vector | Los del repositorio de íconos (`assets/kit/logo-*.svg`, `isotipo.svg`, `isotipo-blanco.svg`, `favicon.svg`) |
-| Íconos | 45 ilustraciones | Los del paquete de íconos de FLIT, en color heredado, en `assets/kit/kit-iconos.js` (40 glifos más las flechas y la marca de verificación, que son controles de interfaz) |
+| Íconos | 45 ilustraciones | Juego de relleno plano en color heredado en `assets/kit/kit-iconos.js`: 41 módulos con 41 íconos distintos, más los de apoyo; las flechas y la marca de verificación son controles de interfaz |
 | Estados | Pastillas cielo, sin verde ni rojo | Etiqueta con punta, ícono de estado del repositorio y color semántico al 10 % |
 | Botones | Degradado azul a turquesa | Píldora plana: azul avanza, verde confirma, azul oscuro navega, naranja alerta |
 | Bordes y radios | `#DFE5ED`, radios 8 a 28 px | `#A9C9FC` de 1 px y radio 9 px |
@@ -58,11 +58,11 @@ Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga despu�
 
 ## Recursos del kit (`assets/kit/`)
 
-- Los estados borrador, preparado, entregado, revocado, subsanado, placa preasignada y sin placa usan el dibujo vigente del paquete de íconos de FLIT. La alerta conserva el trazo de mayor precisión del repositorio: es el mismo dibujo y la exportación a un decimal deforma el signo de admiración.
-- Los módulos sin glifo propio en el paquete usan el más cercano: inicio el tablero; comparendos el pago; diagnóstico la consulta; empresas, organismos y fuentes oficiales el edificio; biometría la huella; configuración y colaboradores el engranaje; trazabilidad el marcador; auditoría y causales las listas; procesos la automatización; mandatos el lápiz; FUR el documento; banners el destello; historial por placa el calendario; improntas la carga de archivo; generación documental el archivo; vencidos la nube con alerta; pendientes y revocatorias su ícono de estado.
-- Los SVG se guardan sin hojas de estilo internas, identificadores ni capas repetidas, con el color como atributo, para poder incrustarlos sin que choquen entre sí. Los fondos circulares caben completos en su lienzo.
-- En `kit-iconos.js` el azul y la tinta del glifo pasan a `currentColor`, el naranja y el verde de acento se conservan y los detalles blancos se vuelven recortes (máscara), de modo que el mismo ícono sirve sobre claro, oscuro y botones de color. El candado se encuadra a su dibujo.
-- `interruptor-*.svg` son las cuatro posiciones del interruptor del paquete: encendido y apagado en los formularios, tema claro y tema oscuro en la cabecera.
+- Logo, isotipo, favicon e interruptores son los del paquete de íconos de FLIT, sin cambios.
+- Íconos de módulo y de apoyo (`kit-iconos.js`): relleno plano de construcción geométrica, un solo color principal por ícono. Cada módulo tiene un ícono propio: Compañías, Organismos de tránsito y Fuentes oficiales ya no comparten edificio; Biometría (silueta con marco de lectura) se separa de Identidad (huella); Configuración (engranaje) de Usuarios (grupo de personas); Roles y permisos (llave) de Seguridad (escudo); FUR (formulario) de Documentos.
+- En `kit-iconos.js` el azul del glifo es `currentColor`, el naranja y el verde de acento se conservan y los detalles blancos son recortes (máscara), de modo que el mismo ícono sirve sobre claro, oscuro y botones de color. Cada ícono se encuadra a su dibujo.
+- Estados, avisos y trámites (`estado-*.svg`, `aviso-*.svg`, `tramite-*.svg`, `persona-nueva.svg`): dibujo blanco sobre disco de 100 × 100 con el color de cada estado. Matrícula, Otros trámites y Transformación comparten el mismo carro de frente.
+- Los SVG se guardan sin hojas de estilo internas, títulos ni identificadores, con el color como atributo.
 - La pantalla «Juego de marca» (`#marca`) muestra todo el juego.
 
 ## Lo que el manual no define y aquí se derivó
