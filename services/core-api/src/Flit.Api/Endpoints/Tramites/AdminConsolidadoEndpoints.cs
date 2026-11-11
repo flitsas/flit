@@ -126,7 +126,7 @@ internal static class AdminConsolidadoEndpoints
                 "mimetype_no_soportado" => Problem(409, "Conflict", error, "Un adjunto tiene un formato no soportado para el consolidado."),
                 "storage_unavailable" => Problem(503, "Service Unavailable", error,
                     "No se pudo guardar el documento en el almacenamiento de archivos. Intenta de nuevo en unos minutos."),
-                _ => Problem(409, "Conflict", error, $"No se pudo regenerar el mandato y el consolidado: {error}."),
+                _ => Problem(409, "Conflict", error, "No se pudo regenerar el mandato y el consolidado."),
             };
         })
         .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)

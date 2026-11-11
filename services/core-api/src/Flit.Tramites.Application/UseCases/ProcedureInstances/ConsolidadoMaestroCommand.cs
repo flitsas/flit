@@ -85,6 +85,10 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// HU #14547 (R3) — rearma el maestro tras regenerar SOLO el mandato: respeta el radicado ante Quipux y la matriz
     /// del OT, fuerza la reconstrucción y NO regenera el FUR aunque esté desactualizado.
     /// </summary>
+    /// <param name="id">Trámite.</param>
+    /// <param name="tenantId">Compañía dueña del trámite.</param>
+    /// <param name="matrizPrecedencia">Orden de la matriz documental del OT; vacío = orden por modalidad.</param>
+    /// <param name="ct">Cancelación.</param>
     public Task<(GenerarConsolidadoResult? Result, string? Error)> RegenerarSinCascadaRespetandoRadicacionAsync(
         Guid id,
         Guid tenantId,
@@ -92,10 +96,19 @@ public sealed class GenerarConsolidadoMaestroHandler(
         CancellationToken ct = default) =>
         HandleRespetandoRadicacionAsync(id, tenantId, matrizPrecedencia, true, false, sinCascadaFur: true, ct);
 
+    /// <summary>
+    /// Núcleo de las sobrecargas de arriba: maestro radicado ante Quipux ⇒ se sirve fijo; si no, se genera.
+    /// </summary>
+    /// <param name="id">Trámite.</param>
+    /// <param name="tenantId">Compañía dueña del trámite.</param>
+    /// <param name="matrizPrecedencia">Orden de la matriz documental del OT (ver <see cref="HandleAsync(Guid, Guid, IReadOnlyList{string}?, bool, CancellationToken)"/>).</param>
+    /// <param name="force">Reconstruir aunque el maestro esté vigente.</param>
+    /// <param name="soloSiNoExiste">HU #13371 — exclusivo del lote de descarga masiva.</param>
     /// <param name="sinCascadaFur">
     /// HU #14547 (R3) — la regeneración del mandato del SuperAdmin rearma el maestro SIN regenerar el FUR aunque esté
     /// desactualizado (Bug #13055): solo cambió el mandato. Con <c>false</c>, el comportamiento de siempre.
     /// </param>
+    /// <param name="ct">Cancelación.</param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
         Guid id,
         Guid tenantId,

@@ -25,6 +25,11 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   organismo_requerido:
     'El organismo de tránsito del trámite no está seleccionado o no está activo. Selecciónalo antes de regenerar.',
   storage_unavailable: MENSAJE_ALMACENAMIENTO,
+  mandato_no_disponible: 'La compañía o el organismo no tiene configurado el mandato.',
+  fur_requerido: 'El trámite aún no tiene FUR; genera el FUR antes de regenerar el mandato.',
+  sin_adjuntos: 'El trámite no tiene adjuntos para armar el consolidado.',
+  adjunto_no_disponible:
+    'Un documento del expediente no está disponible en el almacenamiento. Intenta de nuevo en unos minutos.',
 };
 
 const MENSAJES_POR_STATUS: Record<number, string> = {
@@ -38,10 +43,10 @@ const MENSAJES_POR_STATUS: Record<number, string> = {
 const PARECE_CODIGO = /[a-z0-9]+_[a-z0-9_]+/i;
 
 /**
- * Traduce el error del `POST …/mandato/regenerar` a un texto de negocio. El código puede venir en
- * `code`, `error`, `title` o `detail` del ProblemDetails (el endpoint de limpiar usa `detail` legible);
- * se buscan todos. Si no hay código conocido, manda el status; un 409 con `detail` legible se muestra
- * tal cual; todo lo demás cae al texto genérico.
+ * Traduce el error del `POST …/mandato/regenerar` a un texto de negocio. El código estable viaja en la
+ * extensión `error` del ProblemDetails y manda (ronda post-review PR #871). Por tolerancia se buscan
+ * después `code`, `title` y `detail`. Si no hay código conocido, manda el status; un 409 con `detail`
+ * legible se muestra tal cual; todo lo demás cae al texto genérico.
  */
 export function mensajeErrorRegenerarMandato(err: unknown): string {
   if (!err || typeof err !== 'object') return MENSAJE_GENERICO;
@@ -49,6 +54,9 @@ export function mensajeErrorRegenerarMandato(err: unknown): string {
   if (typeof status !== 'number') return MENSAJE_GENERICO;
 
   const p = problem && typeof problem === 'object' ? (problem as Record<string, unknown>) : {};
+  if (typeof p.error === 'string' && Object.prototype.hasOwnProperty.call(MENSAJES_POR_CODIGO, p.error)) {
+    return MENSAJES_POR_CODIGO[p.error];
+  }
   const candidatos = [p.code, p.error, p.title, p.detail, message].filter(
     (v): v is string => typeof v === 'string',
   );

@@ -42,12 +42,14 @@ public enum ModoFirmanteMandato
 /// HU #14547 — resultado de regenerar solo el mandato. <c>PersonalizadoConservado</c>: manda el documento personalizado
 /// de la compañía (HU #11313), que no se reemplaza.
 /// </summary>
+/// <param name="PersonalizadoAplicado">La compañía tenía un mandato personalizado vigente y se aplicó en esta acción.</param>
 public sealed record MandatoRegenerado(
     Guid? AttachmentId,
     Guid? FirmanteAnteriorId,
     Guid? FirmanteNuevoId,
     bool SinFirmar,
-    bool PersonalizadoConservado)
+    bool PersonalizadoConservado,
+    bool PersonalizadoAplicado = false)
 {
     /// <summary>Sin generador de mandato en la composición: no hay nada que emitir.</summary>
     public const string NoDisponible = "mandato_no_disponible";
@@ -60,7 +62,9 @@ public sealed record MandatoRegenerado(
 /// </summary>
 public interface IMandatoRegenerador
 {
-    Task<(MandatoRegenerado? Result, string? Error)> RegenerarMandatoAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+    /// <param name="userId">Quien pide la acción: queda en <c>CreatedBy</c> del evento de bitácora.</param>
+    Task<(MandatoRegenerado? Result, string? Error)> RegenerarMandatoAsync(
+        Guid id, Guid tenantId, Guid? userId, CancellationToken ct = default);
 }
 
 /// <summary>Contrato de mandato generado, el formato/versión de plantilla con que salió (HU #13172) y su firmante.</summary>
@@ -120,7 +124,7 @@ internal sealed class MandatoEmisor(
     }
 
     /// <summary>
-    /// Respaldo de la rúbrica del MANDATARIO, como <see cref="TryCaptureIdentitySignatureAsync"/> para las partes. La
+    /// Respaldo de la rúbrica del MANDATARIO, como <c>GenerarFurHandler.TryCaptureIdentitySignatureAsync</c> para las partes. La
     /// captura al terminar la validación puede no guardar la imagen (certificado aún no disponible, o un recorte que no
     /// la reconocía) y la outbox no reintenta. Solo actúa si firma con su validación propia vigente, sin baúl y sin
     /// rúbrica: toma su validación propia más reciente con el documento actual (la misma que decide su vigencia),
