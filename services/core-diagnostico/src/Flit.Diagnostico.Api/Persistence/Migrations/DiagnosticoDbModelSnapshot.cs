@@ -1741,6 +1741,567 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
                             TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
                             Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("9912f466-b596-5ae8-a5ac-e0f38eeff0bc"),
+                            CatalogoVersion = 2,
+                            Codigo = "SOAT_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"SOAT_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("8807ebfe-94de-55f7-b0ea-2a75f1d3cc92"),
+                            CatalogoVersion = 2,
+                            Codigo = "RTM_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("0f15e299-f7d0-55bc-a2f4-b14ea2d23852"),
+                            CatalogoVersion = 2,
+                            Codigo = "ESTADO_VEHICULO",
+                            Condicion = "{\"codigo\":\"ESTADO_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("fe9b3a30-4b2f-50eb-8454-18e50549fa23"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_VEHICULO",
+                            Condicion = "{\"codigo\":\"SIMIT_VEHICULO\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El vehículo tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. Por política de FLIT el traspaso queda bloqueado hasta que se pongan al día.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("e4831343-6ddb-58e2-8773-5a768bcef3d5"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_PROPIETARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_PROPIETARIO\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El propietario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. El traspaso queda bloqueado hasta que se ponga al día.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("9397c48a-0c22-507a-aafd-fdae7cf37c25"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_LOCATARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_LOCATARIO\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El locatario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. El traspaso queda bloqueado hasta que se ponga al día.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("9f74b3be-4414-5718-b881-c0f70ddde30b"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_SIN_VERIFICAR",
+                            Condicion = "{\"codigo\":\"SIMIT_SIN_VERIFICAR\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "No se pudo verificar en el SIMIT si hay multas pendientes: la consulta falló, no respondió o falta el documento del locatario. El traspaso queda bloqueado hasta completar la consulta.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("d8291b0f-5f69-5755-b14d-055ce73c84ad"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_LICENCIA",
+                            Condicion = "{\"codigo\":\"SIMIT_LICENCIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El SIMIT reporta una licencia de conducción suspendida o cancelada. Es una advertencia y no cambia el veredicto.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("902a35c2-bbcd-534e-8912-6ae2f6082206"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_ACUERDO_PAGO",
+                            Condicion = "{\"codigo\":\"SIMIT_ACUERDO_PAGO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Hay un acuerdo de pago con saldo pendiente en el SIMIT. Es una advertencia y no cambia el veredicto.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("151f02ce-0e95-589e-82ce-58e866b03415"),
+                            CatalogoVersion = 2,
+                            Codigo = "LIMITACION",
+                            Condicion = "{\"codigo\":\"LIMITACION\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una limitación a la propiedad. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("c5b801aa-6b9d-5807-b39d-2510dfcfb053"),
+                            CatalogoVersion = 2,
+                            Codigo = "GRAVAMEN",
+                            Condicion = "{\"codigo\":\"GRAVAMEN\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene un gravamen registrado. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("c3d09a54-4ece-5bb5-ad31-d6a457583ac4"),
+                            CatalogoVersion = 2,
+                            Codigo = "GARANTIA_MOBILIARIA",
+                            Condicion = "{\"codigo\":\"GARANTIA_MOBILIARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una garantía mobiliaria registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("10edd35a-1116-51f1-90fb-e717a3204694"),
+                            CatalogoVersion = 2,
+                            Codigo = "PRENDA",
+                            Condicion = "{\"codigo\":\"PRENDA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una prenda registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a0bd4ecc-79f3-528f-bf95-085f6d41af92"),
+                            CatalogoVersion = 2,
+                            Codigo = "INFRACCION_RUNT",
+                            Condicion = "{\"codigo\":\"INFRACCION_RUNT\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El RUNT del vehículo registra infracciones. Es una advertencia, además de lo que informe el SIMIT.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("ea107048-75e5-5254-9208-e4cac25c4f99"),
+                            CatalogoVersion = 2,
+                            Codigo = "LICENCIA_CONDUCTOR",
+                            Condicion = "{\"codigo\":\"LICENCIA_CONDUCTOR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La licencia de conducción está suspendida, vencida o cancelada, o no hay certificado de aptitud vigente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("e825d85e-e0da-5e8f-ad7f-ece615cb4935"),
+                            CatalogoVersion = 2,
+                            Codigo = "IMPUESTO",
+                            Condicion = "{\"codigo\":\"IMPUESTO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene impuesto departamental pendiente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("ff7022a7-28bf-51d1-b77b-043c27aac994"),
+                            CatalogoVersion = 2,
+                            Codigo = "FUENTE_PENDIENTE",
+                            Condicion = "{\"codigo\":\"FUENTE_PENDIENTE\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("800a5ecd-fcb6-5e48-b0a8-84aeb262099b"),
+                            CatalogoVersion = 2,
+                            Codigo = "SOAT_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"SOAT_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f723f921-6e82-55c1-82b9-5e51234d0472"),
+                            CatalogoVersion = 2,
+                            Codigo = "RTM_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("19ed6bb7-022d-56e1-9ab5-a2b823c27951"),
+                            CatalogoVersion = 2,
+                            Codigo = "ESTADO_VEHICULO",
+                            Condicion = "{\"codigo\":\"ESTADO_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a2d2e03b-2e68-5b2d-84b0-84c695bfb7a6"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_VEHICULO",
+                            Condicion = "{\"codigo\":\"SIMIT_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. En el traspaso unilateral es una advertencia y el trámite sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("05819e81-3811-537f-9b87-b3906e5118c6"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_PROPIETARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_PROPIETARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El propietario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. En el traspaso unilateral es una advertencia y el trámite sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("7961f7d1-686f-5b94-9789-92a9b8952ae5"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_LOCATARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_LOCATARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El locatario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. En el traspaso unilateral es una advertencia y el trámite sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("45e9c3e7-c3f8-5fb0-a736-768f11be8a54"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_SIN_VERIFICAR",
+                            Condicion = "{\"codigo\":\"SIMIT_SIN_VERIFICAR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "No se pudo verificar en el SIMIT si hay multas pendientes: la consulta falló, no respondió o falta el documento del locatario. En el traspaso unilateral es una advertencia y el trámite sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("358b3948-0ecf-5ed8-aa26-5c1431584e25"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_LICENCIA",
+                            Condicion = "{\"codigo\":\"SIMIT_LICENCIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El SIMIT reporta una licencia de conducción suspendida o cancelada. Es una advertencia y no cambia el veredicto.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("40f48ba9-52b4-5e9d-8d5c-9280c92738ec"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_ACUERDO_PAGO",
+                            Condicion = "{\"codigo\":\"SIMIT_ACUERDO_PAGO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Hay un acuerdo de pago con saldo pendiente en el SIMIT. Es una advertencia y no cambia el veredicto.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("78645093-9bfb-5ebd-947f-546cc85809da"),
+                            CatalogoVersion = 2,
+                            Codigo = "LIMITACION",
+                            Condicion = "{\"codigo\":\"LIMITACION\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una limitación a la propiedad. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("802f2eb0-4ac8-5ece-add1-0b089567d02a"),
+                            CatalogoVersion = 2,
+                            Codigo = "GRAVAMEN",
+                            Condicion = "{\"codigo\":\"GRAVAMEN\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene un gravamen registrado. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f10342c5-ddb9-581f-92cb-3b791d011734"),
+                            CatalogoVersion = 2,
+                            Codigo = "GARANTIA_MOBILIARIA",
+                            Condicion = "{\"codigo\":\"GARANTIA_MOBILIARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una garantía mobiliaria registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("5853b614-4621-5074-91e9-4a7810dcc2b0"),
+                            CatalogoVersion = 2,
+                            Codigo = "PRENDA",
+                            Condicion = "{\"codigo\":\"PRENDA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una prenda registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("d009dccf-c777-5ce6-bbde-ccf5ee70a20a"),
+                            CatalogoVersion = 2,
+                            Codigo = "INFRACCION_RUNT",
+                            Condicion = "{\"codigo\":\"INFRACCION_RUNT\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El RUNT del vehículo registra infracciones. Es una advertencia, además de lo que informe el SIMIT.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("66cbe0ff-91cc-581b-8c5c-e0e9cae1543e"),
+                            CatalogoVersion = 2,
+                            Codigo = "LICENCIA_CONDUCTOR",
+                            Condicion = "{\"codigo\":\"LICENCIA_CONDUCTOR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La licencia de conducción está suspendida, vencida o cancelada, o no hay certificado de aptitud vigente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a4c12367-b0d1-5c66-85ac-b4bd0e8ca0c6"),
+                            CatalogoVersion = 2,
+                            Codigo = "IMPUESTO",
+                            Condicion = "{\"codigo\":\"IMPUESTO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene impuesto departamental pendiente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("3f31c25d-3c25-5577-bab6-7e4903050824"),
+                            CatalogoVersion = 2,
+                            Codigo = "FUENTE_PENDIENTE",
+                            Condicion = "{\"codigo\":\"FUENTE_PENDIENTE\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("dac6c1c5-6f4f-5fc2-afe4-6cfd5de36db4"),
+                            CatalogoVersion = 2,
+                            Codigo = "SOAT_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"SOAT_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f28ca1ae-7c69-51b6-9c93-f3833e4cd90f"),
+                            CatalogoVersion = 2,
+                            Codigo = "RTM_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("8403e8eb-8fba-5b23-a448-2ddfe856adeb"),
+                            CatalogoVersion = 2,
+                            Codigo = "ESTADO_VEHICULO",
+                            Condicion = "{\"codigo\":\"ESTADO_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f7502f2a-5a35-5838-ac46-2e03c4138aab"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_VEHICULO",
+                            Condicion = "{\"codigo\":\"SIMIT_VEHICULO\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El vehículo tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. Por política de FLIT el traspaso queda bloqueado hasta que se pongan al día.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("524600ad-438f-58ba-a637-ebb2e0529381"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_PROPIETARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_PROPIETARIO\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El propietario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. El traspaso queda bloqueado hasta que se ponga al día.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("c3d54ec5-f899-59b3-9ef4-00b89d4db033"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_LOCATARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_LOCATARIO\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El locatario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. El traspaso queda bloqueado hasta que se ponga al día.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("65d39996-95e6-56e1-bf2f-33aa74b66976"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_SIN_VERIFICAR",
+                            Condicion = "{\"codigo\":\"SIMIT_SIN_VERIFICAR\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "No se pudo verificar en el SIMIT si hay multas pendientes: la consulta falló, no respondió o falta el documento del locatario. El traspaso queda bloqueado hasta completar la consulta.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("41632168-d509-5154-96f3-7a26261b9c48"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_LICENCIA",
+                            Condicion = "{\"codigo\":\"SIMIT_LICENCIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El SIMIT reporta una licencia de conducción suspendida o cancelada. Es una advertencia y no cambia el veredicto.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("9fc7fdd2-ed27-5f24-a27a-6f1c9d6c87c4"),
+                            CatalogoVersion = 2,
+                            Codigo = "SIMIT_ACUERDO_PAGO",
+                            Condicion = "{\"codigo\":\"SIMIT_ACUERDO_PAGO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Hay un acuerdo de pago con saldo pendiente en el SIMIT. Es una advertencia y no cambia el veredicto.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("46a35c3f-10b1-57bf-9667-b083ca0c21e1"),
+                            CatalogoVersion = 2,
+                            Codigo = "LIMITACION",
+                            Condicion = "{\"codigo\":\"LIMITACION\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una limitación a la propiedad. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a33870e5-846c-56dd-bbc9-85e2a174f012"),
+                            CatalogoVersion = 2,
+                            Codigo = "GRAVAMEN",
+                            Condicion = "{\"codigo\":\"GRAVAMEN\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene un gravamen registrado. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("07ef8030-c000-5a28-8a56-36b2678568fc"),
+                            CatalogoVersion = 2,
+                            Codigo = "GARANTIA_MOBILIARIA",
+                            Condicion = "{\"codigo\":\"GARANTIA_MOBILIARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una garantía mobiliaria registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("eff7957e-b0fb-5f4c-92f7-a8676516db93"),
+                            CatalogoVersion = 2,
+                            Codigo = "PRENDA",
+                            Condicion = "{\"codigo\":\"PRENDA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una prenda registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("ffa1995b-f144-5975-8698-9f02504f8939"),
+                            CatalogoVersion = 2,
+                            Codigo = "INFRACCION_RUNT",
+                            Condicion = "{\"codigo\":\"INFRACCION_RUNT\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El RUNT del vehículo registra infracciones. Es una advertencia, además de lo que informe el SIMIT.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("120c745d-6e51-50c4-86d2-0e50ea862222"),
+                            CatalogoVersion = 2,
+                            Codigo = "LICENCIA_CONDUCTOR",
+                            Condicion = "{\"codigo\":\"LICENCIA_CONDUCTOR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La licencia de conducción está suspendida, vencida o cancelada, o no hay certificado de aptitud vigente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("87ec78c9-4dbe-580e-be33-8eeb6b034692"),
+                            CatalogoVersion = 2,
+                            Codigo = "IMPUESTO",
+                            Condicion = "{\"codigo\":\"IMPUESTO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene impuesto departamental pendiente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("e7a50020-71b5-56ce-94bf-68afa6b27a54"),
+                            CatalogoVersion = 2,
+                            Codigo = "FUENTE_PENDIENTE",
+                            Condicion = "{\"codigo\":\"FUENTE_PENDIENTE\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
                         });
                 });
 
