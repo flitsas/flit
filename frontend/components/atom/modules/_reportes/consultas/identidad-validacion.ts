@@ -59,7 +59,7 @@ export function etiquetaValidacion(estado: string): string {
 
 // Defensa extra: la normalización real la hace el servidor, pero si algún texto con el nombre de la
 // fuente se colara, no debe llegar al usuario ni al archivo.
-const MOTIVO_PROHIBIDO = /kyverum|manual|proveedor|simulad|migraci[oó]n|mock|webhook|scorer/i;
+const MOTIVO_PROHIBIDO = /kyverum|manual|proveedor|simulad|migraci[oó]n|mock|webhook|scorer|fuente/i;
 
 /** Motivo apto para mostrar, o `null`. */
 export function motivoVisible(motivo: string | null | undefined): string | null {
@@ -103,7 +103,11 @@ export function actoresDelGrupo(
  */
 export function bloquesDelGrupo(max: MaxActoresPorRol | undefined, grupo: GrupoPersonas): number {
   if (!max) return 1;
-  const n = grupo === "comprador" ? Math.max(max.comprador, max.propietario) : max.vendedor;
+  // Cada campo con `?? 0`: un objeto incompleto daría NaN y la columna desaparecería del archivo.
+  const n =
+    grupo === "comprador"
+      ? Math.max(max.comprador ?? 0, max.propietario ?? 0)
+      : (max.vendedor ?? 0);
   return Math.max(1, n);
 }
 
