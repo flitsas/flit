@@ -180,11 +180,16 @@ LEFT JOIN LATERAL (
                 WHEN last_v.status = 'pendiente_revision_manual' THEN 'pendiente_revision'
                 ELSE 'sin_validacion'
             END AS estado,
-            CASE
-                WHEN vm.ids IS NULL THEN 0
-                WHEN aud.hay THEN aud.cuenta
-                ELSE coalesce(att.total, 0)
-            END AS intentos,
+            -- Aprobado o rechazado implica al menos un intento aunque no quede rastro (bitácora ausente y attempts en 0:
+            -- validaciones simuladas o migradas); los demás estados conservan el conteo real.
+            greatest(
+                CASE
+                    WHEN vm.ids IS NULL THEN 0
+                    WHEN aud.hay THEN aud.cuenta
+                    ELSE coalesce(att.total, 0)
+                END,
+                CASE WHEN last_v.status IN ('aprobado', 'rechazado') THEN 1 ELSE 0 END
+            ) AS intentos,
             CASE WHEN rej.id IS NULL THEN NULL ELSE jsonb_build_object(
                 'codigo', rej.rejection_reason_code,
                 'motivo', rej.detail ->> 'motivo',

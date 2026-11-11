@@ -144,6 +144,34 @@ public sealed class ReporteDetalladoActoresVistaTests(PostgresDatabaseFixture fi
         max.Should().Be(new MaxActoresPorRolDto(1, 2, 0));
     }
 
+    [PostgresTheory]
+    [InlineData("aprobado", 1)]
+    [InlineData("rechazado", 1)]
+    [InlineData("expirado", 0)]
+    [InlineData("en_proceso", 0)]
+    public async Task Aprobado_o_rechazado_sin_rastro_cuenta_al_menos_un_intento_los_demas_estados_el_conteo_real(
+        string estado, int esperado)
+    {
+        var id = await SeedAsync(TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        await AddActorAsync(id, "comprador", 1, "1001");
+        await AddValidationAsync(id, "comprador", "1001", estado, 0, null, attempts: 0);
+
+        (await ReadActoresAsync(id)).Single().Intentos.Should().Be(esperado);
+    }
+
+    [PostgresFact]
+    public async Task El_minimo_de_un_intento_no_cambia_los_conteos_con_bitacora()
+    {
+        var id = await SeedAsync(TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        await AddActorAsync(id, "comprador", 1, "1001");
+        var v = await AddValidationAsync(id, "comprador", "1001", "aprobado", 0);
+        await AddAuditAsync(v, "webhook_applied", "aprobado");
+        await AddAuditAsync(v, "webhook_applied", "aprobado");
+        await AddAuditAsync(v, "webhook_applied", "aprobado");
+
+        (await ReadActoresAsync(id)).Single().Intentos.Should().Be(3);
+    }
+
     [PostgresFact]
     public async Task Documentos_en_blanco_nunca_coinciden_ni_entre_si()
     {
