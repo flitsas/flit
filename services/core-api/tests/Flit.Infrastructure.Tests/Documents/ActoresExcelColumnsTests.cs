@@ -15,12 +15,14 @@ using Flit.Infrastructure.Documents;
 using Flit.Tramites.Domain.Identity;
 using NSubstitute;
 using Xunit;
+using static Flit.Infrastructure.Documents.ActoresExcelColumns;
 
 namespace Flit.Infrastructure.Tests.Documents;
 
 /// <summary>
-/// Bloques de validación de identidad por persona en el Excel del servidor: encabezados planos con el rol, 5 columnas por
-/// actor, al final de la hoja, ancho común a todas las partes y ninguna mención al mecanismo de validación.
+/// Contrato v3 — columnas de validación de identidad POR ROL en el Excel del servidor: grupo comprador (incluye al
+/// propietario) y grupo vendedor, agrupado por persona, sin documento, mínimo un bloque por rol, ancho común a todas las
+/// partes y ninguna mención al mecanismo de validación.
 /// </summary>
 public sealed class ActoresExcelColumnsTests
 {
@@ -35,61 +37,98 @@ public sealed class ActoresExcelColumnsTests
     ];
 
     [Fact]
-    public void Con_cero_actores_no_agrega_columnas()
+    public void Sin_actores_sale_un_bloque_por_rol_con_los_encabezados_exactos()
     {
         var max = new MaxActoresPorRolDto(0, 0, 0);
-        ActoresExcelColumns.Headers(max).Should().BeEmpty();
-        ActoresExcelColumns.Cells([], max).Should().BeEmpty();
-        ActoresExcelColumns.Width(max).Should().Be(0);
+
+        Headers(max, Grupo.Comprador).Should().Equal(
+            "Comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador");
+        Headers(max, Grupo.Vendedor).Should().Equal(
+            "Vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor");
+        Cells([], max, Grupo.Comprador).Should().Equal("", "", "", "");
     }
 
     [Fact]
-    public void Un_actor_por_rol_trae_el_bloque_de_cinco_columnas_sin_numero()
+    public void Traspaso_dos_compradores_y_un_vendedor_numera_desde_el_segundo()
     {
-        var max = new MaxActoresPorRolDto(1, 1, 0);
+        var max = new MaxActoresPorRolDto(2, 1, 0);
 
-        ActoresExcelColumns.Headers(max).Should().Equal(
-            "Comprador", "Documento comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
-            "Vendedor", "Documento vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor");
-        ActoresExcelColumns.Cells(Actores(1, 1, 0), max).Should().HaveCount(10);
+        Headers(max, Grupo.Comprador).Should().Equal(
+            "Comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
+            "Comprador 2", "Validación comprador 2", "Intentos comprador 2", "Motivo rechazo comprador 2");
+        Headers(max, Grupo.Vendedor).Should().HaveCount(4);
+
+        var fila = Actores(2, 1, 0);
+        Cells(fila, max, Grupo.Comprador).Should().Equal(
+            "comprador 1", "Aprobado", "1", "", "comprador 2", "Aprobado", "1", "");
+        Cells(fila, max, Grupo.Vendedor).Should().Equal("vendedor 1", "Aprobado", "1", "");
     }
 
     [Fact]
-    public void Cuatro_actores_por_rol_numeran_desde_el_segundo_y_no_truncan()
+    public void Matricula_el_propietario_va_en_el_grupo_comprador_y_el_vendedor_queda_vacio()
     {
-        var max = new MaxActoresPorRolDto(4, 4, 4);
-        var headers = ActoresExcelColumns.Headers(max);
+        var max = new MaxActoresPorRolDto(0, 0, 1);
+        var fila = new[] { Actor("propietario", 1, "rechazado", 2, "Imagen borrosa.") };
 
-        headers.Should().HaveCount(60);
-        headers.Should().Contain(["Comprador", "Comprador 2", "Documento comprador 2", "Validación comprador 2",
-            "Intentos comprador 2", "Motivo rechazo comprador 2", "Propietario 4", "Motivo rechazo propietario 4"]);
-        headers.Should().NotContain("Comprador 1");
-        ActoresExcelColumns.Cells(Actores(4, 4, 4), max).Should().HaveCount(60);
+        Cells(fila, max, Grupo.Comprador).Should().Equal("propietario 1", "Rechazado", "2", "Imagen borrosa.");
+        Cells(fila, max, Grupo.Vendedor).Should().Equal("", "", "", "");
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 1, 1)]
+    [InlineData(2, 0, 1, 2, 1)]
+    [InlineData(1, 0, 3, 3, 1)]
+    [InlineData(4, 4, 4, 4, 4)]
+    public void El_ancho_del_grupo_comprador_es_max_de_comprador_y_propietario(int c, int v, int p, int anchoC, int anchoV)
+    {
+        var max = new MaxActoresPorRolDto(c, v, p);
+
+        Ancho(max, Grupo.Comprador).Should().Be(anchoC);
+        Ancho(max, Grupo.Vendedor).Should().Be(anchoV);
+        Headers(max, Grupo.Comprador).Should().HaveCount(4 * anchoC);
+        Cells(Actores(c, v, p), max, Grupo.Comprador).Should().HaveCount(4 * anchoC);
+    }
+
+    [Fact]
+    public void Cuatro_por_rol_no_trunca_y_no_hay_columna_de_documento()
+    {
+        var max = new MaxActoresPorRolDto(4, 4, 0);
+        var headers = Headers(max, Grupo.Comprador).Concat(Headers(max, Grupo.Vendedor)).ToList();
+
+        headers.Should().HaveCount(32);
+        headers.Should().Contain(["Comprador 4", "Motivo rechazo vendedor 4"]);
+        headers.Should().NotContain(h => h.StartsWith("Documento"));
     }
 
     [Fact]
     public void Actor_ausente_deja_celdas_vacias_y_sin_validar_sale_con_cero_intentos()
     {
         var max = new MaxActoresPorRolDto(2, 0, 0);
-        var cells = ActoresExcelColumns.Cells([Actor("comprador", 1, "sin_validacion", 0)], max);
+        var cells = Cells([Actor("comprador", 1, "sin_validacion", 0)], max, Grupo.Comprador);
 
-        cells.Take(5).Should().Equal("comprador 1", "CC 100", "Sin validar", "0", "");
-        cells.Skip(5).Should().OnlyContain(c => c == "");
+        cells.Take(4).Should().Equal("comprador 1", "Sin validar", "0", "");
+        cells.Skip(4).Should().OnlyContain(c => c == "");
     }
 
-    [Theory]
-    [InlineData("CC", "1000098455", "CC 1000098455")]
-    [InlineData("NIT", "890903938", "NIT 890903938")]
-    [InlineData(null, "1000098455", "1000098455")]
-    [InlineData("  ", "1000098455", "1000098455")]
-    [InlineData("CC", null, "")]
-    [InlineData("CC", "  ", "")]
-    public void El_documento_va_con_su_tipo_separados_por_un_espacio(string? tipo, string? numero, string esperado)
+    [Fact]
+    public void Sin_actores_la_columna_cae_al_nombre_viejo_del_tramite()
     {
-        var actor = new ActorValidacionDto("comprador", 1, "Persona", tipo, numero, "aprobado", null, 1);
+        Cells([], new MaxActoresPorRolDto(0, 0, 0), Grupo.Comprador, Campos.Todos, "Ana Pérez")
+            .Should().Equal("Ana Pérez", "", "", "");
+        // Con actores en la fila el nombre viejo ya no se usa.
+        Cells([Actor("vendedor", 1)], new MaxActoresPorRolDto(0, 1, 0), Grupo.Comprador, Campos.Todos, "Ana Pérez")
+            .Should().OnlyContain(c => c == "");
+    }
 
-        ActoresExcelColumns.Documento(actor).Should().Be(esperado);
-        ActoresExcelColumns.Cells([actor], new MaxActoresPorRolDto(1, 0, 0))[1].Should().Be(esperado);
+    [Fact]
+    public void Solo_los_campos_elegidos_se_exportan()
+    {
+        var max = new MaxActoresPorRolDto(1, 0, 0);
+        var campos = Campos.Validacion | Campos.Motivo;
+
+        Headers(max, Grupo.Comprador, campos).Should().Equal("Validación comprador", "Motivo rechazo comprador");
+        Cells([Actor("comprador", 1)], max, Grupo.Comprador, campos).Should().Equal("Aprobado", "");
+        Headers(max, Grupo.Comprador, Campos.Nombre).Should().Equal("Comprador");
     }
 
     [Fact]
@@ -97,20 +136,9 @@ public sealed class ActoresExcelColumnsTests
     {
         ActorValidacionEstados.Etiqueta("esperando_captura").Should().Be("Esperando captura del cliente");
         ActorValidacionEstados.Etiqueta("pendiente_revision").Should().Be("Pendiente de revisión");
-        // El código viejo ya no es de transporte: lo desconocido sale «Sin validar», nunca crudo.
         ActorValidacionEstados.Etiqueta("manual_activo").Should().Be("Sin validar");
         ActorValidacionEstados.Etiqueta("algo_raro").Should().Be("Sin validar");
         ActorValidacionEstados.Etiqueta(null).Should().Be("Sin validar");
-    }
-
-    [Fact]
-    public void Solo_los_campos_elegidos_se_exportan()
-    {
-        var max = new MaxActoresPorRolDto(1, 0, 0);
-        var campos = ActoresExcelColumns.Campos.Validacion | ActoresExcelColumns.Campos.Motivo;
-
-        ActoresExcelColumns.Headers(max, campos).Should().Equal("Validación comprador", "Motivo rechazo comprador");
-        ActoresExcelColumns.Cells([Actor("comprador", 1)], max, campos).Should().Equal("Aprobado", "");
     }
 
     // ── Excel del servidor del reporte detallado ─────────────────────────────────────────────
@@ -157,19 +185,33 @@ public sealed class ActoresExcelColumnsTests
     private const int ColumnasBase = 16;
 
     [Theory]
-    [InlineData(0, 0, 0)]
-    [InlineData(1, 1, 0)]
-    [InlineData(4, 4, 4)]
-    public async Task Excel_detallado_pone_los_bloques_al_final_con_el_ancho_del_maximo(int c, int v, int p)
+    [InlineData(0, 0, 0, 8)]
+    [InlineData(2, 1, 0, 12)]
+    [InlineData(0, 0, 1, 8)]
+    [InlineData(4, 4, 4, 32)]
+    public async Task Excel_detallado_pone_el_bloque_por_rol_despues_de_las_columnas_de_siempre(int c, int v, int p, int extra)
     {
         var max = new MaxActoresPorRolDto(c, v, p);
         var hoja = await ExportAsync([Fila(Actores(c, v, p))], max);
 
         hoja.Should().HaveCount(2);
-        hoja[0].Should().HaveCount(ColumnasBase + 5 * (c + v + p));
+        hoja[0].Should().HaveCount(ColumnasBase + extra);
         hoja[1].Should().HaveCount(hoja[0].Count);
         hoja[0].Take(ColumnasBase).Should().StartWith(["Referencia", "Tipo de trámite"]);
-        hoja[0].Skip(ColumnasBase).Should().Equal(ActoresExcelColumns.Headers(max));
+        hoja[0][ColumnasBase - 2].Should().Be("Canal");
+        hoja[0][ColumnasBase].Should().Be("Comprador");
+        hoja[0].Skip(ColumnasBase).Should().Equal(
+            [.. Headers(max, Grupo.Comprador), .. Headers(max, Grupo.Vendedor)]);
+    }
+
+    [Fact]
+    public async Task Excel_detallado_matricula_con_propietario_lo_pone_en_comprador_y_deja_vacio_el_vendedor()
+    {
+        var max = new MaxActoresPorRolDto(0, 0, 1);
+        var hoja = await ExportAsync([Fila([Actor("propietario", 1, "aprobado", 1)])], max);
+
+        hoja[1].Skip(ColumnasBase).Take(4).Should().Equal("propietario 1", "Aprobado", "1", "");
+        hoja[1].Skip(ColumnasBase + 4).Should().OnlyContain(c => c == "");
     }
 
     [Fact]
@@ -195,7 +237,6 @@ public sealed class ActoresExcelColumnsTests
 
         datos[colsIntentos[0]].CellValue!.Text.Should().Be("3");
         datos[colsIntentos[1]].CellValue!.Text.Should().Be("0");
-        // El resto del archivo conserva su convención: texto en línea (incluidos los encabezados).
         datos.Where((_, i) => !colsIntentos.Contains(i)).Should()
             .OnlyContain(c => c.DataType != null && c.DataType.Value == CellValues.InlineString);
         filas[0].Elements<Cell>().Should().OnlyContain(c => c.DataType != null && c.DataType.Value == CellValues.InlineString);
@@ -204,20 +245,21 @@ public sealed class ActoresExcelColumnsTests
     [Fact]
     public async Task Dos_partes_de_un_export_con_maximos_distintos_salen_con_el_mismo_ancho()
     {
-        // El máximo lo calcula el servidor sobre TODO el filtro: una parte con 1 actor y otra con 3 comparten ancho.
+        // El máximo lo calcula el servidor sobre TODO el filtro: una parte con 1 vendedor y otra con 3 comparten ancho.
         var max = new MaxActoresPorRolDto(1, 3, 0);
         var parteA = await ExportAsync([Fila(Actores(1, 1, 0))], max);
         var parteB = await ExportAsync([Fila(Actores(1, 3, 0))], max);
 
         parteA[0].Should().Equal(parteB[0]);
         parteA[1].Should().HaveCount(parteB[1].Count);
-        parteA[1].Skip(ColumnasBase + 10 + 5).Take(5).Should().OnlyContain(c => c == "", "el vendedor 2 no existe en la parte A");
+        // El vendedor 2 y 3 no existen en la parte A: celdas vacías.
+        parteA[1].Skip(ColumnasBase + 4 + 4 + 4).Should().OnlyContain(c => c == "");
     }
 
     [Fact]
     public async Task Ninguna_celda_menciona_el_mecanismo_de_validacion()
     {
-        var actor = Actor("vendedor", 1, "rechazado", 2, "No se pudo verificar la identidad con las imágenes recibidas.");
+        var actor = Actor("vendedor", 1, "esperando_captura", 2, "No se pudo verificar la identidad con las imágenes recibidas.");
         var max = new MaxActoresPorRolDto(0, 1, 0);
         var hoja = await ExportAsync([Fila([actor])], max);
 

@@ -28,7 +28,7 @@ public static class IdentityRejectionReasonText
     /// Palabras que nunca pueden salir en un reporte. Si el texto de origen las trae, no se reutiliza ni parcialmente.
     /// </summary>
     public static readonly string[] Prohibidas =
-        ["kyverum", "manual", "proveedor", "simulad", "migraci", "mock", "webhook", "scorer"];
+        ["kyverum", "manual", "proveedor", "fuente", "simulad", "migraci", "mock", "webhook", "scorer"];
 
     /// <summary>
     /// Motivo de la validación, o <c>null</c> si no está rechazada. Orden: código de la lista cerrada de revisión
