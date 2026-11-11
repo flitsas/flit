@@ -83,10 +83,10 @@ function Contenido({ actor, campo }: { actor: ActorValidacionDto; campo: CampoAc
 }
 
 const CAMPO_POR_COLUMNA: Record<string, CampoActor> = {
-  id_persona: "persona",
-  id_validacion: "validacion",
-  id_intentos: "intentos",
-  id_motivo: "motivo",
+  validacion_persona: "persona",
+  validacion_estado: "validacion",
+  validacion_intentos: "intentos",
+  validacion_motivo: "motivo",
 };
 
 /** Para el `renderCell` de la consola: pinta las 4 columnas de identidad, `null` en el resto. */

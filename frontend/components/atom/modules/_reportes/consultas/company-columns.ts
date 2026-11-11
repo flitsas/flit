@@ -178,7 +178,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     width: 26,
   },
   {
-    id: "id_persona",
+    id: "validacion_persona",
     label: "Persona",
     group: GRUPO_IDENTIDAD,
     value: (r) =>
@@ -198,7 +198,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     },
   },
   {
-    id: "id_validacion",
+    id: "validacion_estado",
     label: "Validación",
     group: GRUPO_IDENTIDAD,
     value: (r) => textoPorActor(r.actores, (a) => etiquetaValidacion(a.estadoValidacion)),
@@ -216,7 +216,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     },
   },
   {
-    id: "id_intentos",
+    id: "validacion_intentos",
     label: "Intentos",
     group: GRUPO_IDENTIDAD,
     value: (r) => textoPorActor(r.actores, (a) => String(a.intentos)),
@@ -235,7 +235,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     },
   },
   {
-    id: "id_motivo",
+    id: "validacion_motivo",
     label: "Motivo de rechazo",
     group: GRUPO_IDENTIDAD,
     value: (r) => textoPorActor(r.actores, (a) => motivoVisible(a.motivoRechazo) ?? "—"),

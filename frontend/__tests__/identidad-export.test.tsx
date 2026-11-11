@@ -34,7 +34,7 @@ import {
 } from "@/components/atom/modules/_reportes/consultas/identidad-validacion";
 import { exportarPorLotes } from "@/components/consultas/export";
 
-const IDENTIDAD = ["id_persona", "id_validacion", "id_intentos", "id_motivo"];
+const IDENTIDAD = ["validacion_persona", "validacion_estado", "validacion_intentos", "validacion_motivo"];
 
 function actor(rol: RolActor, ordinal: number, over: Partial<ActorValidacionDto> = {}): ActorValidacionDto {
   return {
@@ -113,7 +113,7 @@ describe("Excel de Consulta: bloques de 5 columnas por persona", () => {
   });
 
   it("si el usuario oculta una columna, no se exporta", () => {
-    buildCompanyQueryXlsx([fila([actor("comprador", 1)])], ["id_validacion", "id_intentos"], [], max(1, 0, 0));
+    buildCompanyQueryXlsx([fila([actor("comprador", 1)])], ["validacion_estado", "validacion_intentos"], [], max(1, 0, 0));
     expect(hoja().columns.map((c) => c.header)).toEqual(["Validación comprador", "Intentos comprador"]);
   });
 
