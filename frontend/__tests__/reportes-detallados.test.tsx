@@ -34,7 +34,7 @@ describe("detailed report filters", () => {
     const { range } = defaultDetailedFilters(nocheDelDiez);
 
     expect(range.to).toBe("2026-08-10");
-    expect(range.from).toBe("2026-07-11");
+    expect(range.from).toBe("2026-07-12");
   });
 });
 

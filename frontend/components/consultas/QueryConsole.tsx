@@ -568,6 +568,7 @@ export function QueryConsole<TRow>({
                 <DateField
                   label="Desde"
                   value={definition.fechas.from ?? ""}
+                  max={definition.fechas.to ?? undefined}
                   onChange={(from) =>
                     setDefinition((prev) => ({ ...prev, fechas: { ...prev.fechas, from } }))
                   }
@@ -575,6 +576,7 @@ export function QueryConsole<TRow>({
                 <DateField
                   label="Hasta"
                   value={definition.fechas.to ?? ""}
+                  min={definition.fechas.from ?? undefined}
                   onChange={(to) =>
                     setDefinition((prev) => ({ ...prev, fechas: { ...prev.fechas, to } }))
                   }
@@ -927,10 +929,15 @@ function DateField({
   label,
   value,
   onChange,
+  min,
+  max,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** Límites cruzados: Desde no pasa de Hasta y Hasta no baja de Desde. */
+  min?: string;
+  max?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -938,6 +945,8 @@ function DateField({
       <input
         type="date"
         value={value}
+        min={min || undefined}
+        max={max || undefined}
         onChange={(e) => onChange(e.target.value)}
         className={FIELD_CLS}
       />
