@@ -1,0 +1,306 @@
+"use client";
+
+// HU #14074 AC3 — Crear una tarifa o versionar una existente. Modal normal (no lateral): lote por concepto con una
+// misma fecha de inicio (hoy o futura). Los valores son pesos enteros; un valor negativo o no numérico se marca en su
+// campo. Una excepción por organismo se registra eligiendo el organismo sobre el mismo tipo (prevalece sobre el valor
+// general). Al versionar, el ámbito (tipo y organismo) queda fijo y solo se envían los conceptos que cambiaron.
+import { useMemo, useState } from "react";
+import { ReceiptText, Save } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import { formatFechaCalendario } from "@/lib/format/date";
+import { Modal } from "@/components/atom/Modal";
+import { SearchableSelect } from "@/components/atom/SearchableSelect";
+import {
+  CONCEPTOS_QUE_EXIGEN_TIPO,
+  CONCEPTOS_TARIFA,
+  CONCEPTO_LABEL,
+  caretTrasDigitos,
+  formatPesos,
+  hoyColombiaIso,
+  parsePesos,
+  textoPesos,
+  type ConceptoTarifa,
+  type GrupoTarifa,
+  type TarifaPn,
+} from "@/lib/api/admin-pn-tarifas";
+import type { OrganismoPn } from "@/lib/api/admin-pn-config";
+import { TARIFAS_API_PLATAFORMA, type TarifasApi, type TarifasModo, type TipoTarifa } from "./tarifas-api";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
+import { PnButton } from "./pn-componentes";
+import { pnError } from "./pnErrors";
+
+export type TarifaFormMode =
+  // `tipoTramiteId`: trámite que llega preseleccionado (p. ej. desde «Definir precio» en Medios de pago).
+  | { kind: "create"; tipoTramiteId?: string }
+  | { kind: "version"; grupo: GrupoTarifa };
+
+export interface TarifaFormModalProps {
+  mode: TarifaFormMode;
+  tipos: readonly TipoTarifa[];
+  organismos: readonly OrganismoPn[];
+  /** Cliente de API; por defecto el de Plataforma. */
+  api?: TarifasApi;
+  /** Hub del OT: sin selector de organismo, trámite obligatorio y cargos bloqueados. Por defecto, Plataforma. */
+  modo?: TarifasModo;
+  onClose: () => void;
+  /** Se invoca con las versiones nuevas que devolvió la API. */
+  onSaved: (nuevas: TarifaPn[]) => void;
+}
+
+type Errores = Partial<Record<ConceptoTarifa | "tipo" | "fecha" | "valores" | "general", string>>;
+
+export function TarifaFormModal({
+  mode,
+  tipos,
+  organismos,
+  api = TARIFAS_API_PLATAFORMA,
+  modo,
+  onClose,
+  onSaved,
+}: TarifaFormModalProps) {
+  const fijo = modo?.organismoFijo === true;
+  const versionando = mode.kind === "version";
+  const grupo = versionando ? mode.grupo : null;
+  const hoy = useMemo(() => hoyColombiaIso(), []);
+
+  const [tipoId, setTipoId] = useState(grupo?.tipoTramiteId ?? (mode.kind === "create" ? (mode.tipoTramiteId ?? "") : ""));
+  const [organismoId, setOrganismoId] = useState(grupo?.organismoId ?? "");
+  const [fecha, setFecha] = useState(hoy);
+  const [valores, setValores] = useState<Record<ConceptoTarifa, string>>(() => {
+    const inicial = {} as Record<ConceptoTarifa, string>;
+    for (const c of CONCEPTOS_TARIFA) {
+      const actual = grupo?.porConcepto[c];
+      inicial[c] = actual ? String(actual.valorCop) : "";
+    }
+    return inicial;
+  });
+  const [errores, setErrores] = useState<Errores>({});
+  const [busy, setBusy] = useState(false);
+
+  /** Un cargo no se puede cambiar si el modo lo bloquea o si el servidor lo marcó como no editable. */
+  const bloqueado = (c: ConceptoTarifa): boolean =>
+    (modo?.conceptosBloqueados?.includes(c) ?? false) || grupo?.porConcepto[c]?.editable === false;
+
+  const opcionesOrganismo = useMemo(
+    () => organismos.map((o) => ({ value: o.id, label: o.nombre, hint: `${o.municipio} · ${o.departamento}` })),
+    [organismos],
+  );
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const nuevos: Errores = {};
+    const enviar: { concepto: ConceptoTarifa; valorCop: number }[] = [];
+
+    if (!fecha) nuevos.fecha = "Indica desde qué fecha rige la tarifa.";
+    else if (fecha < hoy) nuevos.fecha = "La fecha de inicio no puede ser anterior a hoy.";
+
+    for (const concepto of CONCEPTOS_TARIFA) {
+      const texto = valores[concepto];
+      if (bloqueado(concepto) || texto.trim() === "") continue;
+      const r = parsePesos(texto);
+      if (!r.ok) {
+        nuevos[concepto] = r.mensaje;
+        continue;
+      }
+      // Al versionar solo viajan los conceptos que cambiaron: repetir el vigente chocaría con su propia vigencia.
+      const vigente = grupo?.porConcepto[concepto]?.valorCop;
+      if (versionando && vigente === r.valor) continue;
+      if (!tipoId && (fijo || CONCEPTOS_QUE_EXIGEN_TIPO.includes(concepto))) {
+        nuevos.tipo = fijo
+          ? "Elige el trámite al que corresponde el precio."
+          : "Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.";
+      }
+      enviar.push({ concepto, valorCop: r.valor });
+    }
+
+    if (enviar.length === 0 && Object.keys(nuevos).length === 0) {
+      nuevos.valores = versionando
+        ? "Cambia al menos un valor para registrar el cambio."
+        : "Escribe el valor de al menos un cargo.";
+    }
+    setErrores(nuevos);
+    if (Object.keys(nuevos).length > 0) return;
+
+    setBusy(true);
+    try {
+      const nuevas = await api.registrar({
+        tipoTramiteId: tipoId || null,
+        organismoId: fijo ? undefined : organismoId || null,
+        vigenteDesde: fecha,
+        valores: enviar,
+      });
+      onSaved(nuevas);
+    } catch (err) {
+      const info = pnError(err);
+      // `tarifa_solapada` y la fecha pasada se marcan en el campo de la fecha; el resto, arriba del pie.
+      if (info.code === "tarifa_solapada" || info.code === "fecha_inicio_pasada") {
+        setErrores({ fecha: info.message });
+      } else {
+        setErrores({ general: info.message });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const actualizaValor = (concepto: ConceptoTarifa, texto: string) =>
+    setValores((v) => ({ ...v, [concepto]: texto }));
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      busy={busy}
+      title={versionando ? "Cambiar valores de la tarifa" : "Nueva tarifa"}
+      description={
+        versionando
+          ? fijo
+            ? (grupo?.tipoTramiteNombre ?? "Todos los trámites")
+            : `${grupo?.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo?.organismoNombre ?? "Todos los organismos"}`
+          : "Elige el trámite, escribe los valores en pesos y la fecha desde la que rigen."
+      }
+      icon={ReceiptText}
+      size="xl"
+      panelClassName="h-[calc(100dvh-2rem)] min-h-0 overflow-hidden"
+      bodyClassName="[scrollbar-gutter:stable] px-1"
+      footer={
+        <div className="flex justify-end gap-2">
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
+            Cancelar
+          </PnButton>
+          <PnButton type="submit" form="pn-tarifa-form" variant="primary" icon={Save} loading={busy}>
+            Guardar tarifa
+          </PnButton>
+        </div>
+      }
+    >
+      <form id="pn-tarifa-form" onSubmit={handleSubmit} className="flex flex-col gap-3 pb-1" noValidate>
+        <InlineAlert tone="info">
+          Las cotizaciones ya emitidas no cambian: la tarifa nueva solo aplica desde su fecha de inicio. La tarifa
+          anterior deja de regir el día anterior; con la misma fecha de inicio, la reemplaza.
+        </InlineAlert>
+
+        <div className="grid items-end gap-4 sm:grid-cols-2">
+          <label className={PN_LABEL_CLS}>
+            Trámite
+            <select
+              value={tipoId}
+              onChange={(e) => setTipoId(e.target.value)}
+              disabled={versionando}
+              aria-invalid={Boolean(errores.tipo)}
+              className={`${PN_INPUT_CLS} ${errores.tipo ? PN_INPUT_ERROR_CLS : ""}`}
+            >
+              <option value="">{fijo ? "Elige el trámite" : "Todos los trámites (solo cargos adicionales)"}</option>
+              {tipos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nombre}
+                </option>
+              ))}
+            </select>
+            {errores.tipo && (
+              <span role="alert" className={PN_FIELD_ERROR_CLS}>
+                {errores.tipo}
+              </span>
+            )}
+          </label>
+
+          {!fijo && (
+          <div className={PN_LABEL_CLS}>
+            <span id="pn-tarifa-organismo">Organismo</span>
+            <SearchableSelect
+              label="Organismo"
+              hideLabel
+              options={opcionesOrganismo}
+              value={organismoId}
+              onChange={setOrganismoId}
+              defaultLabel="Todos los organismos (valor general)"
+              disabled={versionando}
+              placeholder="Buscar organismo…"
+              className="[&_input]:h-11 [&_input]:rounded-[10px] [&_input]:border-[#DFE5ED] [&_input]:text-sm [&_input]:focus:border-flit-brand [&_input]:focus:ring-2 [&_input]:focus:ring-inset [&_input]:focus:ring-flit-brand"
+            />
+          </div>
+          )}
+        </div>
+        {!versionando && !fijo && (
+          <p className={PN_HINT_CLS}>
+            Si el valor es distinto en un organismo, elígelo aquí: su valor tiene prioridad sobre el valor general del trámite.
+          </p>
+        )}
+
+        <div className="grid items-end gap-4 sm:grid-cols-2">
+        <label className={PN_LABEL_CLS}>
+          Rige desde
+          <input
+            type="date"
+            value={fecha}
+            min={hoy}
+            onChange={(e) => setFecha(e.target.value)}
+            aria-invalid={Boolean(errores.fecha)}
+            className={`${PN_INPUT_CLS} ${errores.fecha ? PN_INPUT_ERROR_CLS : ""}`}
+          />
+          {errores.fecha ? (
+            <span role="alert" className={PN_FIELD_ERROR_CLS}>
+              {errores.fecha}
+            </span>
+          ) : (
+            fecha && (
+              <span className={PN_HINT_CLS}>
+                Desde el {formatFechaCalendario(fecha)} el portal cotiza con estos valores.
+              </span>
+            )
+          )}
+        </label>
+        </div>
+
+        <fieldset className="flex flex-col gap-3">
+          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Valores en pesos colombianos</legend>
+          <div className="grid items-end gap-x-4 gap-y-3 sm:grid-cols-2">
+            {CONCEPTOS_TARIFA.map((concepto) => {
+              const actual = grupo?.porConcepto[concepto];
+              const sinPermiso = bloqueado(concepto);
+              return (
+                <label key={concepto} className={PN_LABEL_CLS}>
+                  {CONCEPTO_LABEL[concepto]}
+                  <input
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={valores[concepto]}
+                    disabled={sinPermiso}
+                    onChange={(e) => {
+                      const entrada = e.target.value;
+                      const cursor = e.target.selectionStart ?? entrada.length;
+                      const digitosAntes = entrada.slice(0, cursor).replace(/\D/g, "").length;
+                      const formateado = textoPesos(entrada);
+                      actualizaValor(concepto, formateado);
+                      const pos = caretTrasDigitos(formateado, digitosAntes);
+                      requestAnimationFrame(() => e.target.setSelectionRange(pos, pos));
+                    }}
+                    placeholder={versionando ? "Sin cambios" : "Ej.: 250.000"}
+                    aria-invalid={Boolean(errores[concepto])}
+                    className={`${PN_INPUT_CLS} ${errores[concepto] ? PN_INPUT_ERROR_CLS : ""}`}
+                  />
+                  {sinPermiso && <span className={PN_HINT_CLS}>Solo lo cambia FLIT.</span>}
+                  {actual && versionando && (
+                    <span className={PN_HINT_CLS}>Hoy: {formatPesos(actual.valorCop)}</span>
+                  )}
+                  {errores[concepto] && (
+                    <span role="alert" className={PN_FIELD_ERROR_CLS}>
+                      {errores[concepto]}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+          {errores.valores && (
+            <p role="alert" className={PN_FIELD_ERROR_CLS}>
+              {errores.valores}
+            </p>
+          )}
+        </fieldset>
+
+        {errores.general && <InlineAlert tone="error">{errores.general}</InlineAlert>}
+      </form>
+    </Modal>
+  );
+}

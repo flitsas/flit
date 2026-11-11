@@ -5,6 +5,7 @@ using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
 using Flit.Analytics.Application.Queries;
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Domain.Tramites.Enums;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -28,6 +29,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         "Referencia", "Tipo de trámite", "Categoría", "Estado", "Radicado por",
         "Persona documento", "Persona nombre", "Transformación", "Detalle transformación",
         "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado",
+        // HU #14319 — al final, para no mover las columnas que ya existían.
+        "Canal", "OT del canal",
     ];
 
     /// <summary>Cabeceras del reporte de red: «Compañía» + las de siempre, en el mismo orden.</summary>
@@ -98,12 +101,13 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
     /// archivo temporal y lo copia a <paramref name="output"/>. Devuelve si hubo filas. Con
     /// <paramref name="requireRows"/> y sin filas no copia nada (el llamador decide el error).
     /// </summary>
-    private static async Task<bool> WriteWorkbookAsync(
+    internal static async Task<bool> WriteWorkbookAsync(
         Stream output,
         IReadOnlyList<string> headers,
         Func<Action<IReadOnlyList<string>>, CancellationToken, Task> writeRowsAsync,
         bool requireRows,
-        CancellationToken ct)
+        CancellationToken ct,
+        string sheetName = "Reporte detallado")
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"flit-detailed-report-{Guid.NewGuid():N}.xlsx");
         var wroteRows = false;
@@ -141,7 +145,7 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                     {
                         Id = workbookPart.GetIdOfPart(worksheetPart),
                         SheetId = 1U,
-                        Name = "Reporte detallado",
+                        Name = sheetName,
                     }));
                 workbookPart.Workbook.Save();
             }
@@ -174,6 +178,9 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         r.TransferType ?? string.Empty,
         FormatoFecha.Instante(r.SubmittedAt),
         FormatoFecha.Instante(r.CompletedAt),
+        // HU #14319 — nombre visible del catálogo; un código ajeno al catálogo se muestra tal cual en vez de ocultarse.
+        TramiteCanal.NombreVisible(TramiteCanal.Efectivo(r.Channel)) ?? r.Channel,
+        r.ChannelTransitOfficeName ?? string.Empty,
     ];
 
     /// <summary>«Compañía» + las mismas celdas de siempre (AC1/AC6: ningún enlace ni contenido de documentos).</summary>

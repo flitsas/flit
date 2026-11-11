@@ -1,0 +1,242 @@
+using Flit.PersonaNatural.Api.Consultas;
+using Flit.PersonaNatural.Api.Cotizaciones;
+using Flit.PersonaNatural.Api.Definiciones;
+using Flit.PersonaNatural.Api.Identidad;
+using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Solicitudes;
+using Flit.Platform.Sdk;
+using Flit.Platform.Sdk.Messaging;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Npgsql;
+
+namespace Flit.PersonaNatural.Api.Radicacion;
+
+/// <summary>Resultado de radicar: lo que se le responde al ciudadano con el <c>202</c>.</summary>
+public sealed record RadicacionAceptada(Guid SolicitudId, string CodigoPublico, string Estado);
+
+/// <summary>
+/// Radicar el trámite (HU #14049, ADR-0075): valida que la solicitud esté completa contra su snapshot y que la compuerta de
+/// identidad la deje pasar, la pasa a <c>en_cola</c> y deja el trabajo <c>tramites.persona_natural.radicacion_solicitada</c> en
+/// la outbox del SDK en LA MISMA transacción: o quedan las dos cosas o ninguna. El broker no está en el camino de la
+/// respuesta: si está caído, la solicitud ya quedó encolada y el publicador de la outbox entrega cuando vuelva. La llave de
+/// idempotencia hace que reintentar no cree un segundo evento ni cambie el resultado.
+/// </summary>
+public sealed class RadicacionService(
+    PersonaNaturalDb db,
+    SolicitudesService solicitudes,
+    DefinicionesService definiciones,
+    ICompuertaDeRadicacion compuerta,
+    IOptions<IdentidadOptions> identidad,
+    IPlatformOutbox outbox,
+    TimeProvider reloj,
+    VerificadorDeOrganismo verificadorDeOrganismo,
+    IGravamenDelBorrador? gravamen = null,
+    IFachadaMediosPago? medios = null)
+{
+    public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
+    public const int VersionEvento = 1;
+    public const string CodigoIdempotenciaRequerida = "idempotency_key_requerida";
+    public const string CodigoIdempotenciaConflicto = "idempotency_conflicto";
+    public const string CodigoRequisitosIncompletos = "requisitos_incompletos";
+    public const string CodigoIdentidadPendiente = "identity_pending";
+    public const int MaxLlave = 100;
+    public const string CodigoCotizacionCambio = "cotizacion_cambio";
+    public const string CodigoMedioNoDisponible = "medio_no_disponible";
+    private const string IndiceLlave = "uq_procedure_request_idempotency";
+
+    public Task<RadicacionAceptada> RadicarAsync(Guid id, string? llave, CancellationToken ct) => RadicarAsync(id, llave, null, ct);
+
+    /// <summary>
+    /// HU #14395: con <paramref name="cobro"/> (medio elegido) la cotización se calcula en este momento con el medio y queda
+    /// congelada en la solicitud, en la MISMA transacción que la deja en cola. Sin él, radica exactamente como antes.
+    /// </summary>
+    public async Task<RadicacionAceptada> RadicarAsync(Guid id, string? llave, CobroAlRadicar? cobro, CancellationToken ct)
+    {
+        llave = llave?.Trim();
+        if (string.IsNullOrEmpty(llave) || llave.Length > MaxLlave)
+            throw new ReglaDeNegocioException(StatusCodes.Status400BadRequest, CodigoIdempotenciaRequerida, "Falta la clave", $"Envíe una Idempotency-Key de hasta {MaxLlave} caracteres.");
+
+        try
+        {
+            return await EnTransaccionAsync(ct2 => RadicarEnTransaccionAsync(id, llave, cobro, ct2), ct).ConfigureAwait(false);
+        }
+        catch (ReglaDeNegocioException ex) when (ex.Codigo == SolicitudesService.CodigoConflictoVersion)
+        {
+            // Dos peticiones a la vez con la misma llave: la que perdió vuelve a mirar y encuentra el resultado de la ganadora.
+            return await EnTransaccionAsync(ct2 => RadicarEnTransaccionAsync(id, llave, cobro, ct2), ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: IndiceLlave })
+        {
+            throw LlaveEnUso();
+        }
+    }
+
+    private async Task<RadicacionAceptada> RadicarEnTransaccionAsync(Guid id, string llave, CobroAlRadicar? cobro, CancellationToken ct)
+    {
+        var s = await db.Set<SolicitudTramite>().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw SolicitudesService.NoEncontrada();
+
+        // Misma llave sobre la misma solicitud ya aceptada: el mismo resultado y ningún evento nuevo.
+        if (s.IdempotencyKey == llave && !SolicitudesService.EsEditable(s.Estado))
+            return new RadicacionAceptada(s.Id, s.CodigoPublico, s.Estado);
+        if (!SolicitudesService.EsEditable(s.Estado))
+            throw SolicitudesService.NoPermiteCambio(s.Estado);
+        if (s.OrganismoId == Guid.Empty)
+            throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, SolicitudesService.CodigoOrganismoRequerido, "Falta el organismo", "Elige el organismo de tránsito antes de enviar el trámite.");
+        if (await db.Set<SolicitudTramite>().AnyAsync(x => x.TenantId == s.TenantId && x.IdempotencyKey == llave && x.Id != s.Id, ct).ConfigureAwait(false))
+            throw LlaveEnUso();
+
+        // El tipo tiene que seguir siendo elegible. Si FLIT 2 no responde no se bloquea: la cola existe para eso.
+        DefinicionTipoDto? vigente = null;
+        try
+        {
+            vigente = await definiciones.ObtenerAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), ct).ConfigureAwait(false);
+        }
+        catch (FachadaException ex) when (ex.Codigo == DefinicionesService.CodigoTipoNoDisponible)
+        {
+            throw SolicitudesService.TipoNoDisponible();
+        }
+        catch (FachadaException)
+        {
+        }
+
+        // Una placa de un organismo no se radica en otro: el borrador debe tener el organismo verificado contra el RUNT. Si no lo está
+        // (borradores anteriores, o se saltó el diagnóstico) se verifica ahora, con la caché de core-consultas; no se radica sin verificar.
+        var def = DefinicionesService.Leer(s.DefinicionSnapshot) ?? vigente;
+        if (def is not null)
+        {
+            var verificados = await verificadorDeOrganismo.VerificarAsync(s, def, null, exigir: true, ct).ConfigureAwait(false);
+            if (verificados is not null)
+                s.Datos = verificados.Serializar();
+        }
+
+        // Con prenda o gravamen en el RUNT, el traspaso no se radica sin decisión explícita. Con el RUNT caído no se decide en falso.
+        if (def is not null)
+        {
+            try
+            {
+                if (await DecisionDePrendaObligatoria.FaltaAsync(def, DatosSolicitud.Leer(s.Datos), s.Id, gravamen, ct).ConfigureAwait(false))
+                {
+                    throw new ReglaDeNegocioException(
+                        StatusCodes.Status422UnprocessableEntity, DecisionDePrendaObligatoria.Codigo, "Falta la decisión de la prenda", DecisionDePrendaObligatoria.Mensaje,
+                        new Dictionary<string, object?> { ["referencia"] = DecisionDePrendaObligatoria.Referencia });
+                }
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                throw new ReglaDeNegocioException(
+                    StatusCodes.Status503ServiceUnavailable, ConsultasEndpoints.CodigoProveedor, "Consulta no disponible",
+                    "No pudimos consultar el RUNT en este momento. Intente de nuevo en unos minutos.");
+            }
+        }
+
+        var borrador = await solicitudes.ConstruirAsync(s, conPersonas: false, null, ct).ConfigureAwait(false);
+        if (borrador.Pendientes.Count > 0)
+        {
+            throw new ReglaDeNegocioException(
+                StatusCodes.Status422UnprocessableEntity, CodigoRequisitosIncompletos, "Falta información", "Complete lo que falta para enviar el trámite.",
+                new Dictionary<string, object?> { ["pendientes"] = borrador.Pendientes });
+        }
+
+        if (identidad.Value.ExigirAlRadicar)
+        {
+            var veredicto = await compuerta.EvaluarAsync(s.Id, ct).ConfigureAwait(false);
+            if (!veredicto.Permite)
+            {
+                throw new ReglaDeNegocioException(
+                    StatusCodes.Status409Conflict, CodigoIdentidadPendiente, "Falta validar la identidad", "Todas las partes del trámite deben validar su identidad antes de enviarlo.",
+                    new Dictionary<string, object?> { ["motivo"] = veredicto.Motivo, ["partes"] = veredicto.Partes });
+            }
+        }
+
+        if (cobro?.Medio is not null)
+            db.Add(await CongelarCotizacionAsync(s, cobro, ct).ConfigureAwait(false));
+
+        var evento = await ArmarEventoAsync(s, borrador, llave, ct).ConfigureAwait(false);
+        var ahora = reloj.GetUtcNow();
+        db.Add(new HistorialEstado { Id = Guid.CreateVersion7(), SolicitudId = s.Id, Desde = s.Estado, Hasta = EstadoSolicitud.EnCola, Origen = "bff", Motivo = "radicada", OcurrioEn = ahora });
+        s.Estado = EstadoSolicitud.EnCola;
+        s.IdempotencyKey = llave;
+        s.ExpiraBorradorEn = null;
+        outbox.EnqueueJob(TipoEvento, VersionEvento, PlatformTenants.PersonaNatural, evento);
+        await solicitudes.GuardarAsync(s, ct).ConfigureAwait(false);
+        return new RadicacionAceptada(s.Id, s.CodigoPublico, s.Estado);
+    }
+
+    /// <summary>
+    /// Arma el aviso para FLIT 2: solo identificadores y referencias, sin datos personales (ni cifrados). Los datos de las
+    /// partes los lee core-api por RPC (<c>RadicacionGrpcService</c>), que deja cada lectura en la auditoría.
+    /// </summary>
+    private async Task<RadicacionSolicitada> ArmarEventoAsync(SolicitudTramite s, SolicitudDto borrador, string llave, CancellationToken ct)
+    {
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
+        var comprobante = adjuntos.LastOrDefault(a => a.Tipo == SolicitudesService.TipoComprobantePago);
+        return new RadicacionSolicitada(
+            s.Id, s.CodigoPublico, s.TipoTramiteCodigo, s.DefinicionVersion, borrador.DefinicionHuella, s.OrganismoId,
+            [.. adjuntos.Select(a => new AdjuntoRadicado(a.Id, a.Tipo, a.Sha256))],
+            comprobante?.Id, llave, s.CorrelationId);
+    }
+
+    /// <summary>
+    /// HU #14395 (regla 9) — cotiza con el medio elegido y deja el resultado guardado. Si la persona vio un total y ya cambió,
+    /// no se radica: se le avisa para que confirme el nuevo valor. Lo guardado es lo que se cobra a ese trámite; ningún cambio
+    /// posterior de precio o de switch lo altera (nada actualiza la fila).
+    /// </summary>
+    private async Task<CotizacionCongelada> CongelarCotizacionAsync(SolicitudTramite s, CobroAlRadicar cobro, CancellationToken ct)
+    {
+        if (medios is null)
+            throw new ReglaDeNegocioException(StatusCodes.Status503ServiceUnavailable, "servicio_no_disponible", "No disponible", "El cobro no está disponible por ahora.");
+
+        var ambito = SolicitudesService.EsCanalPunto(s.Datos) ? s.OrganismoId : (Guid?)null;
+        CotizacionDto cotizacion;
+        try
+        {
+            cotizacion = await medios.CotizarConMedioAsync(
+                s.TipoTramiteCodigo, s.OrganismoId.ToString(), cobro.Adicionales, cobro.Medio!, ambito?.ToString(), ct).ConfigureAwait(false);
+        }
+        catch (FachadaException ex) when (ex.Codigo == CodigoMedioNoDisponible)
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, CodigoMedioNoDisponible, "Medio no disponible", "Ese medio de pago ya no está disponible. Elija otro.");
+        }
+        catch (FachadaException ex)
+        {
+            throw new ReglaDeNegocioException(ex.EstadoHttp, ex.Codigo, "No se pudo cotizar", ex.Message);
+        }
+
+        if (cobro.TotalCopVisto is { } visto && visto != cotizacion.TotalCop)
+        {
+            throw new ReglaDeNegocioException(
+                StatusCodes.Status409Conflict, CodigoCotizacionCambio, "El valor cambió", "El valor del trámite cambió mientras lo revisaba. Confirme el nuevo total para continuar.",
+                new Dictionary<string, object?> { ["totalCop"] = cotizacion.TotalCop });
+        }
+
+        return new CotizacionCongelada
+        {
+            SolicitudId = s.Id,
+            Medio = cobro.Medio!,
+            AmbitoOrganismoId = ambito,
+            Lineas = System.Text.Json.JsonSerializer.Serialize(
+                cotizacion.Lineas.Select(l => new { codigo = l.Codigo, nombre = l.Nombre, subtitulo = l.Subtitulo, valorCop = l.ValorCop })),
+            TotalCop = cotizacion.TotalCop,
+            VersionTarifa = cotizacion.VersionTarifa,
+            CongeladaEn = reloj.GetUtcNow(),
+        };
+    }
+
+    private static ReglaDeNegocioException LlaveEnUso() =>
+        new(StatusCodes.Status409Conflict, CodigoIdempotenciaConflicto, "Clave ya usada", "Esa Idempotency-Key ya se usó con otro trámite.");
+
+    /// <summary>La transacción propia exige correr dentro de la estrategia de ejecución (reintentos de Npgsql).</summary>
+    private Task<T> EnTransaccionAsync<T>(Func<CancellationToken, Task<T>> trabajo, CancellationToken ct) =>
+        db.Database.CreateExecutionStrategy().ExecuteAsync(async ct2 =>
+        {
+            db.ChangeTracker.Clear();
+            await using var tx = await db.Database.BeginTransactionAsync(ct2).ConfigureAwait(false);
+            var resultado = await trabajo(ct2).ConfigureAwait(false);
+            await tx.CommitAsync(ct2).ConfigureAwait(false);
+            return resultado;
+        }, ct);
+}
+
+/// <summary>Cobro elegido al radicar: el medio, los adicionales que se cotizaron y, si se quiere, el total que la persona vio.</summary>
+public sealed record CobroAlRadicar(string? Medio, IReadOnlyCollection<string> Adicionales, long? TotalCopVisto);

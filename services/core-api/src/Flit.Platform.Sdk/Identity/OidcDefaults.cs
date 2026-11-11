@@ -29,6 +29,10 @@ public static class OidcDefaults
         ["platform.tramites.ict"] = ServiceAudiences.Tramites,
         // HU #13459: catálogos de la plataforma por gRPC (organismos de tránsito para la réplica de Comparendos).
         ["platform.tramites.catalogos"] = ServiceAudiences.Tramites,
+        // HU #14033 (Épica #14021): fachada gRPC del portal de persona natural (identidad, requisitos, cotización y estado).
+        ["platform.tramites.persona_natural"] = ServiceAudiences.Tramites,
+        // HU #14050 (Épica #14021): lectura por pull de las solicitudes radicadas en core-personanatural (la usa core-api, svc-tramites).
+        ["platform.personanatural.leer"] = ServiceAudiences.PersonaNatural,
     };
 
     /// <summary>Prefijo de los clientes de servicio (contrato §3, <c>svc-&lt;código&gt;</c>): su <c>sub</c> en el token.</summary>
@@ -78,4 +82,7 @@ public static class ServiceAudiences
     public const string Consultas = "consultas";
     public const string Notificaciones = "notificaciones";
     public const string Tramites = "tramites";
+
+    /// <summary>core-personanatural (portal de persona natural, ADR-0075). Mismo código que <c>ServicioSettings.Codigo</c> del servicio.</summary>
+    public const string PersonaNatural = "personanatural";
 }

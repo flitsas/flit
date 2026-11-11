@@ -1,6 +1,7 @@
 'use client';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
 import { AvisoDigitoPlacaOt } from '@/components/operacion/AvisoDigitoPlacaOt';
 import { PLATE_PREFERRED_LAST_DIGIT_KEY } from '@/lib/tramites/plate-digit-preference';
@@ -15,13 +16,17 @@ import { DETALLE_CARD, DETALLE_META, DETALLE_NAVY, DETALLE_BORDER } from './deta
  * o vacío) y el dígito de preferencia del gestor se pinta el aviso de coincidencia bajo la placa.
  * Tras la asignación el gestor ya no abre el asistente desde el listado (el trámite dejó de ser
  * borrador): esta columna es lo que ve.
+ * HU #14322 — del mismo detalle sale el canal. `null` (aún cargando o con error) pinta «—»: no se
+ * asume «Trámites» hasta saber que el backend no trae el dato.
  */
 export function DetalleVehiculoSidebar({
   item,
   canal = null,
 }: {
   item: InstanceSummary;
-  canal?: { fieldValues?: ProcedureInstanceDetail['fieldValues'] } | null;
+  canal?: (Partial<Pick<ProcedureInstanceDetail, 'channel' | 'channelTransitOfficeName'>> & {
+    fieldValues?: ProcedureInstanceDetail['fieldValues'];
+  }) | null;
 }) {
   const modelo = [item.vehiculoMarca, item.vehiculoLinea].filter(Boolean).join(' ') || '—';
   const fieldValues = canal?.fieldValues ?? [];
@@ -63,6 +68,15 @@ export function DetalleVehiculoSidebar({
       >
         <p>Creado: {formatFechaHora(item.createdAt)}</p>
         <p>Actualizado: {item.updatedAt ? formatFechaHora(item.updatedAt) : '—'}</p>
+        {/* HU #14322 — solo lectura: texto, sin control para cambiarlo (ningún rol lo edita). */}
+        <p data-testid="detalle-canal">
+          Canal: <span className="font-semibold">{canal ? canalLabel(canal.channel) : '—'}</span>
+        </p>
+        {canal?.channel === 'pn_punto' && canal.channelTransitOfficeName ? (
+          <p data-testid="detalle-canal-ot">
+            OT del punto: <span className="font-semibold">{canal.channelTransitOfficeName}</span>
+          </p>
+        ) : null}
       </div>
     </aside>
   );

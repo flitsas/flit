@@ -243,7 +243,8 @@ public sealed class NetworkReportsEndpointsTests : IClassFixture<NetworkReportsE
         rows[0][0].Should().Be("Compañía");
         rows[0].Skip(1).Should().Equal(
             "Referencia", "Tipo de trámite", "Categoría", "Estado", "Radicado por", "Persona documento", "Persona nombre",
-            "Transformación", "Detalle transformación", "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado");
+            "Transformación", "Detalle transformación", "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado",
+            "Canal", "OT del canal"); // HU #14319
         rows.Should().HaveCount(2, "cabecera + la única fila que la consulta entrega para C2");
         rows[1][0].Should().Be($"Cliente {C2:N}"[..14]);
         rows[1][1].Should().Be(ReportsFactory.ReferenceOf(C2));

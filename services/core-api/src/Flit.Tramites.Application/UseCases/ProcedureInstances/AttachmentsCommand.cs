@@ -534,11 +534,29 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
     /// instancia (mismo patrón de lista que PutActorsHandler/PatchFieldValuesHandler). Devuelve los DTOs
     /// registrados y la lista de warnings por adjunto (no fatales: el borrador ya existe).
     /// </summary>
-    public async Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
+    public Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<RegisterAttachmentInput> inputs,
         Guid? uploadedBy = null,
+        CancellationToken ct = default) =>
+        HandleBatchAsync(id, tenantId, inputs, "ict", uploadedBy, ct: ct);
+
+    /// <summary>
+    /// Igual que el lote de ICT, con el origen (<c>source</c>) del adjunto elegido por quien llama. HU #14050: el portal de
+    /// persona natural registra «portal»; ICT sigue con «ict» (el otro método).
+    /// <para><paramref name="dedupPorTipo"/> (apagado por defecto = comportamiento histórico, dedup solo por sha256): con
+    /// <c>true</c> la clave de idempotencia es (tipo + sha256), así el MISMO archivo se registra una vez por cada tipo
+    /// documental (p. ej. el portal sube el mismo PDF como <c>tarjeta_propiedad</c> y <c>soporte_cambio_color</c>) y un
+    /// reintento del mismo (tipo + sha256) sigue sin duplicar.</para>
+    /// </summary>
+    public async Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<RegisterAttachmentInput> inputs,
+        string source,
+        Guid? uploadedBy = null,
+        bool dedupPorTipo = false,
         CancellationToken ct = default)
     {
         var registered = new List<AttachmentDto>();
@@ -554,9 +572,11 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
 
         // Dedup por sha256 (idempotencia): arranca con lo ya presente en la instancia y va agregando los
         // de este lote; un objeto repetido (mismo hash) no se duplica.
+        static string Clave(string? tipo, string sha, bool porTipo) =>
+            porTipo ? $"{(tipo ?? string.Empty).Trim().ToLowerInvariant()}|{sha}" : sha;
         var seenSha = instance.Attachments
             .Where(a => !string.IsNullOrEmpty(a.Sha256))
-            .Select(a => a.Sha256!)
+            .Select(a => Clave(a.Tipo, a.Sha256!, dedupPorTipo))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var now = DateTimeOffset.UtcNow;
@@ -581,7 +601,7 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
             }
 
             var sha = input.Sha256.Trim().ToLowerInvariant();
-            if (!seenSha.Add(sha))
+            if (!seenSha.Add(Clave(input.Tipo, sha, dedupPorTipo)))
                 continue; // ya registrado (dentro del lote o en un intento previo) — idempotente.
 
             var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -598,7 +618,8 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
                 SizeBytes = input.SizeBytes,
                 Sha256 = sha,
                 StoragePath = input.StoragePath.Trim(),
-                Source = "ict",
+                // Por defecto «ict» (único llamador hasta HU #14050); el portal de persona natural registra «portal».
+                Source = string.IsNullOrWhiteSpace(source) ? "ict" : source.Trim().ToLowerInvariant(),
                 UploadedAt = now,
                 UploadedBy = uploadedBy,
             };

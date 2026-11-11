@@ -740,4 +740,120 @@ export const OT_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "2-ot/14-portal-persona-natural",
+    title: "Portal Persona Natural del organismo: reportes, cobro, diseño y dominios",
+    audience: "Organismo de Tránsito",
+    sectionId: "ot",
+    keywords: [
+      "portal persona natural",
+      "punto de atencion",
+      "marca blanca",
+      "logo del portal",
+      "colores del portal",
+      "banner del portal",
+      "banners del portal",
+      "varios banners",
+      "publicar diseno",
+      "retirar diseno",
+      "precios del portal",
+      "medios de pago",
+      "pasarela de pago",
+      "pin en caja",
+      "valor del tramite",
+      "valor de la gestion",
+      "reportes del portal",
+      "descargar excel portal",
+      "dominio propio",
+      "varios dominios",
+      "dominio principal",
+      "comprobar dominio",
+      "registros dns",
+      "enlace y qr",
+    ],
+    summary:
+      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, le pone su marca y lo publica en sus propios dominios.",
+    blocks: [
+      {
+        id: "entrada",
+        title: "1. Dónde está",
+        paragraphs: [
+          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene tres secciones: «Reportes», «Cobro» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
+          "Los cambios de cobro, de diseño publicado y de dominios llegan al portal sin pasos adicionales: quien lo abra después del cambio ya lo ve. Un trámite ya radicado conserva el valor con el que se radicó.",
+        ],
+      },
+      {
+        id: "reportes",
+        title: "2. Reportes",
+        paragraphs: [
+          "«Trámites del portal Persona Natural» lista los trámites que llegaron por el portal de tu organismo, con su canal, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Solo ves los de tu organismo.",
+          "Filtra por los campos de la barra y descarga el resultado en Excel: el archivo trae las mismas filas y columnas que ves en pantalla. Si nada coincide, verás «No hay trámites del portal en FLIT 2.0 con esos filtros.».",
+        ],
+      },
+      {
+        id: "cobro",
+        title: "3. Cobro: medios de pago y precios",
+        paragraphs: [
+          "La subpestaña «Cobro» tiene dos pasos, que ves como pestañas: «1 · Precios» (cuánto cuesta cada trámite) y «2 · Medios de pago» (en qué medio se cobra). Empieza por el paso 1 y sigue con el 2; solo ves una tabla a la vez.",
+          "«Medios de pago» (paso 2) muestra una tarjeta por medio («Pasarela de pago» y «PIN en caja») con su interruptor y cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», que son los mismos en todos los medios y se definen en Precios. Al lado, por cada medio, eliges si cada valor se cobra y ves el total de ese medio y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican.",
+          "«Precios» (paso 1) muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general.",
+        ],
+        bullets: [
+          "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
+          "Dejar de cobrar un valor en un medio: apaga su interruptor en la columna de ese medio; pasa a «No se cobra» solo ahí. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
+          "Encender un valor sin monto: no se guarda. Junto a ese valor aparece «Definir precio», que abre el formulario del trámite en Precios; al guardar o cerrar, vuelves a Medios de pago con el monto ya cargado.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El valor de la gestión (servicio FLIT y envío) solo lo cambia el superadministrador de FLIT.",
+          },
+        ],
+      },
+      {
+        id: "diseno",
+        title: "4. Diseño: tu marca en el portal",
+        paragraphs: [
+          "Aquí le pones al portal el nombre, el logo, los banners y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
+        ],
+        bullets: [
+          "Colores: elige el principal y el secundario. Si con ellos el portal no se leería bien, un mensaje lo dice y no deja publicar; «Ajustar automáticamente» los corrige por ti.",
+          "Logo: cárgalo desde su recuadro, donde se indican los formatos y el tamaño máximo. Es opcional.",
+          "Banners: es el banner principal que ve la persona arriba de tu portal; si agregas varios, rotan como carrusel. Puedes tener hasta 6. Usa «Agregar banner», elige el archivo (PNG, JPEG o WebP, máximo 2 MB cada uno) y escribe el texto alternativo, que describe el banner para quien no puede verlo. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 1600 × 366 px (proporción cercana a 4,4:1); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados. Si la proporción es muy distinta, te avisamos, pero puedes subirlo igual.",
+          "Orden y cambios de los banners: en el botón «Acciones» de cada banner puedes editarlo, subirlo, bajarlo o quitarlo (pide confirmación). Si no hay banners, el portal usa el banner de FLIT. Estos cambios van al borrador y se ven en el portal cuando publiques.",
+          "Carrusel de imágenes: se muestra en la columna derecha del portal, en lugar de «Servicios Adicionales». Puedes tener hasta 6 imágenes. Usa «Agregar imagen», elige el archivo (JPG, PNG o WebP, máximo 512 KB) y escribe el texto alternativo, que describe la imagen para quien no puede verla. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 900 × 600 px (proporción 3:2); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados.",
+          "Orden y cambios del carrusel: en el botón «Acciones» de cada imagen puedes editarla, subirla, bajarla o quitarla (pide confirmación). Si no hay imágenes, el portal muestra los servicios de siempre. Estos cambios van al borrador y se ven en el portal cuando publicas.",
+          "Publicar: el portal muestra tu marca desde la siguiente carga. La vista previa y la confirmación de publicar solo dicen que se usa lo de FLIT para lo que te falte (logo o banners).",
+          "Retirar: el portal vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            title: "Si otra persona editó al mismo tiempo",
+            text: "El borrador no se guarda sobre el cambio de la otra persona. Vuelve a cargar la pantalla y aplica de nuevo tus cambios.",
+          },
+        ],
+      },
+      {
+        id: "dominios",
+        title: "5. Dominios del organismo",
+        paragraphs: [
+          "En «Diseño» también están los dominios: las direcciones web propias por las que se abre tu portal. Un organismo puede tener varios, hasta 10, y todos llevan al mismo portal. Por estas direcciones solo se abre el portal: no hay inicio de sesión de FLIT.",
+          "Cada dominio tiene su propio estado. Si uno falla, los demás siguen funcionando. Uno de los activos es el principal: el enlace y el QR del punto usan ese.",
+        ],
+        bullets: [
+          "Agregar un dominio: escribe la dirección y regístrala. Queda pendiente de comprobación y la pantalla muestra los registros DNS que debes crear con tu proveedor del dominio.",
+          "Comprobar: cuando crees los registros, pulsa «Comprobar ahora». Si no se puede confirmar, verás el motivo y podrás intentarlo de nuevo.",
+          "Principal: el primero que se activa queda como principal. Para cambiarlo, usa «Hacer principal» en otro dominio activo.",
+          "Retirar: pulsa «Retirar» y confirma. El portal sigue en tus otros dominios y en el enlace del punto. Si retiras el principal, otro dominio activo toma su lugar.",
+        ],
+        callouts: [
+          {
+            variant: "tip",
+            text: "Si no tienes ningún dominio activo, el portal sigue disponible en el enlace del punto de atención.",
+          },
+        ],
+      },
+    ],
+  },
 ];

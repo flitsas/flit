@@ -205,6 +205,8 @@ public static class DependencyInjection
         // el correo) y reenviar manualmente una prevalidación standalone.
         services.AddScoped<UseCases.Persons.EditarPrevalidacionHandler>();
         services.AddScoped<UseCases.Persons.ReenviarPrevalidacionHandler>();
+        // HU #14045 (Feature #14023, Épica #14021) — reenvío de la validación de una parte del portal de Persona Natural.
+        services.AddScoped<UseCases.Persons.ReenviarValidacionPortalHandler>();
         // CF-06 (Feature #11004, ADR-0036) — detalle de UNA validación por id (poll), tenant-scoped,
         // sirve tanto a standalone como a trámite.
         services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();

@@ -18,6 +18,8 @@ public sealed class ServiceTokenAudienceTests
     [InlineData("platform.notificaciones.send", "notificaciones")]
     [InlineData("platform.tramites.ict", "tramites")]
     [InlineData("platform.tramites.catalogos", "tramites")]
+    [InlineData("platform.tramites.persona_natural", "tramites")]
+    [InlineData("platform.personanatural.leer", "personanatural")]
     public void CadaScopeVaASuServicio(string scope, string audiencia) =>
         OidcDefaults.AudiencesForServiceScopes([scope]).Should().Equal(audiencia);
 
@@ -33,5 +35,5 @@ public sealed class ServiceTokenAudienceTests
     [Fact]
     public void LosScopesRegistradosSonExactamenteLosDelMapa() =>
         OidcDefaults.ServiceScopes.Should().BeEquivalentTo(
-            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.identidad.empresas", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.notificaciones.admin", "platform.tramites.ict", "platform.tramites.catalogos"]);
+            ["platform.manifest", "platform.me.read", "platform.identidad.read", "platform.identidad.empresas", "platform.consultas", "platform.consultas.admin", "platform.notificaciones.send", "platform.notificaciones.admin", "platform.tramites.ict", "platform.tramites.catalogos", "platform.tramites.persona_natural", "platform.personanatural.leer"]);
 }

@@ -6,6 +6,12 @@ export interface DetailedReportFilters {
   from: string;
   to: string;
   tenantId?: string;
+  /** Épica #14296 — SuperAdmin: consulta todas las compañías (sin `tenantId`). */
+  allCompanies?: boolean;
+  /** Épica #14296 — código de canal. */
+  channel?: string;
+  /** Épica #14296 — OT del punto; solo con canal `pn_punto`. */
+  channelTransitOfficeId?: string;
   transitOfficeId?: string;
   procedureTypeId?: string;
   category?: string;
@@ -35,6 +41,13 @@ export interface DetailedProcedureRow {
   isLeasing: boolean;
   paymentType: string;
   transferType: string;
+  /** Épica #14296 — ausente en un backend anterior: se lee como «Trámites». */
+  channel?: string | null;
+  channelTransitOfficeId?: string | null;
+  channelTransitOfficeName?: string | null;
+  /** Solo con `allCompanies=true` (SuperAdmin). */
+  tenantId?: string;
+  tenantName?: string;
 }
 
 export interface LabelCount {
@@ -88,7 +101,7 @@ export function exportDetailedReport(params: DetailedReportFilters): Promise<voi
 const networkBase = "/api/v1/tramites/network/reports";
 
 /** Filtros del reporte de red: los del propio sin `tenantId` + hijo opcional. */
-export type NetworkDetailedReportFilters = Omit<DetailedReportFilters, "tenantId"> & {
+export type NetworkDetailedReportFilters = Omit<DetailedReportFilters, "tenantId" | "allCompanies"> & {
   /** Acota a un cliente de la red; vacío ⇒ agregado del padre y sus hijos. */
   childTenantId?: string;
 };
@@ -108,7 +121,7 @@ export function toNetworkDetailedReportFilters(
   params: DetailedReportFilters,
   childTenantId?: string,
 ): NetworkDetailedReportFilters {
-  const { tenantId: _t, ...rest } = params;
+  const { tenantId: _t, allCompanies: _a, ...rest } = params;
   return childTenantId ? { ...rest, childTenantId } : rest;
 }
 

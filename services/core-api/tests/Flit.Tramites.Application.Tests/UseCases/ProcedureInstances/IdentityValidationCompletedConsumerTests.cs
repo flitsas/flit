@@ -515,6 +515,28 @@ public sealed class IdentityValidationCompletedConsumerTests
     }
 
     [Fact]
+    public async Task ValidacionDelPortal_AprobadaNoDisparaFirmaDeTramitesDeLaMismaCedula()
+    {
+        // HU #14044 — la validación del portal Persona Natural no se reutiliza entre trámites.
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var validationId = Guid.NewGuid();
+        var v = AprobadaValidation(validationId, tenant);
+        v.ProcedureInstanceId = null;
+        v.PortalSolicitudRef = "solicitud-portal-1";
+        v.PortalParte = "vendedor";
+        _repo.ListPendientesDeFirmaPorSujetoAsync(tenant, TipoDoc, Documento, ct)
+            .Returns([Lean(Guid.NewGuid(), tenant, "TRM-2026-000777", traspaso: true)]);
+
+        var result = await _sut.HandleAsync(Event(validationId, tenant), ct);
+
+        result.Matched.Should().Be(0);
+        result.Processed.Should().Be(0);
+        await _repo.DidNotReceive().ListPendientesDeFirmaPorSujetoAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task NotApproved_IsNoOp()
     {
         var ct = TestContext.Current.CancellationToken;

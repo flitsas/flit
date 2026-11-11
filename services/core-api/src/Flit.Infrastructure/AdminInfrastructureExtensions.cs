@@ -120,6 +120,13 @@ public static class AdminInfrastructureExtensions
         // se registra siempre para que encender/apagar por configuración no requiera reiniciar el DI.
         services.AddHostedService<Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor>();
 
+        // Feature #14380 (Epica #14297) - dominio del portal de cada organismo: mismo ciclo, sobre su tabla propia (DDL 183).
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioVerificador>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioAdminHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioPuntoHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioCertificadoHandler>();
+        services.AddHostedService<Flit.Infrastructure.Domains.PortalDomainVerificationSchedulerProcessor>();
+
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
@@ -289,6 +296,29 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Persistence.Repositories.BannerRepository>();
         services.AddScoped<Flit.Admin.Application.Banners.Ports.IBannerImageStorage,
             Flit.Infrastructure.Storage.BannerImageStorage>();
+
+        // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (admin.persona_natural_tariffs).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalTarifaRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalTarifaRepository>();
+            // HU #14393 (Feature #14392) — banderas de medios y switches de cobro del portal (DDL 182).
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCobroRepository,
+                Flit.Infrastructure.PersonaNatural.PersonaNaturalCobroRepository>();
+        // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
+            // HU #14397 / #14398 (Feature #14396, Épica #14297) — reporte de los trámites del portal por alcance y su Excel.
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IReportePortalReadRepository,
+                Flit.Infrastructure.PersonaNatural.ReportePortalReadRepository>();
+            services.AddScoped<Flit.Admin.Application.Plataforma.PersonaNatural.IReportePortalExcelExporter,
+                Flit.Infrastructure.Documents.ReportePortalExcelExporter>();
+        // Feature #14374 (Épica #14297) — marca del portal por organismo (DDL 180), sin tablas de marca blanca.
+        services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.PortalMarca.IPortalMarcaRepository,
+            Flit.Infrastructure.PortalMarca.PortalMarcaRepository>();
+        services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.PortalMarca.IPortalMarcaImagenStorage,
+            Flit.Infrastructure.PortalMarca.PortalMarcaImagenStorage>();
+        // HU #14073 — contenido administrable del portal (preguntas, banners, enlaces y versiones publicadas).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalContenidoRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalContenidoRepository>();
 
         // HU #13084 (Épica #12737) — clientes de integración externos (integrations.external_clients).
         // Entidad de plataforma sin tenant: la administra el SuperAdmin y el login la busca por client_id.

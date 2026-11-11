@@ -2,16 +2,22 @@
 
 import { X } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
+import { PORTAL_PN_MODULE_ID } from "@/lib/nav/module-access";
 
 /** Texto único del aviso: lo muestran tanto `/?m=` sin permiso como la redirección del middleware (ADR-0074 §4). */
 export const ACCESO_DENEGADO_MENSAJE = "No tienes acceso a este módulo.";
+
+/** Módulos con un motivo más preciso que el texto único. */
+const MENSAJE_POR_MODULO: Record<string, string> = {
+  [PORTAL_PN_MODULE_ID]: "Solo el SuperAdmin o el administrador del organismo pueden configurar el portal Persona Natural.",
+};
 
 /**
  * AlertCard de acceso denegado (HU #13650, Feature #13102). Aparece en el inicio cuando se intentó entrar por URL a un
  * módulo sin permiso efectivo; el módulo nunca se monta. Tono de aviso (ámbar FLIT, `InlineAlert`), anunciado como
  * `alert` para lectores de pantalla, con botón de cierre alcanzable por teclado.
  */
-export function AccesoDenegadoAlert({ onClose }: { onClose: () => void }) {
+export function AccesoDenegadoAlert({ onClose, modulo }: { onClose: () => void; modulo?: string | null }) {
   return (
     <InlineAlert
       tone="warning"
@@ -29,7 +35,7 @@ export function AccesoDenegadoAlert({ onClose }: { onClose: () => void }) {
         </button>
       }
     >
-      {ACCESO_DENEGADO_MENSAJE}
+      {(modulo && MENSAJE_POR_MODULO[modulo]) || ACCESO_DENEGADO_MENSAJE}
     </InlineAlert>
   );
 }

@@ -526,6 +526,163 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResendCooldownErrorResponse"
 
+  /api/v1/admin/companies/{companyId}/external-integrations:
+    get:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationList
+      summary: Integraciones externas de la compañía (HU 14067)
+      description: >
+        Lista las integraciones (activas o no, no dadas de baja) ligadas a la compañía, las más recientes primero.
+        Solo SuperAdmin (403 al resto). Ninguna fila lleva secreto ni hashes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integraciones de la compañía.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La compañía no existe (`error=company_not_found`). }
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationCreate
+      summary: Alta de una integración externa ligada a la compañía (HU 14067)
+      description: >
+        Crea una integración de tipo `persona_natural` con `clientId` generado (`pn-` + 16 hex) y secreto de
+        un solo uso (`clientSecret`, con `Cache-Control: no-store`). El alcance lo fija el tipo: solo
+        `platform.tramites.persona_natural` (la fachada del portal), nunca los permisos de lectura externa.
+        Solo una integración ACTIVA por tipo y compañía: la segunda responde 409 `integracion_ya_activa`.
+        Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo]
+              properties:
+                tipo: { type: string, enum: [persona_natural] }
+                displayName: { type: string, maxLength: 120, description: "Opcional; por defecto «Portal Persona Natural»." }
+                purpose: { type: string, maxLength: 300, description: "Opcional; finalidad del tratamiento de datos (Ley 1581)." }
+      responses:
+        '201':
+          description: Integración creada; el secreto se muestra una sola vez.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegrationSecret' }
+        '400': { description: "Tipo, nombre o finalidad inválidos (`invalid_integration_type`, `invalid_display_name`, `invalid_purpose`)." }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La compañía no existe (`company_not_found`). }
+        '409': { description: Ya hay una integración activa de ese tipo en la compañía (`integracion_ya_activa`). }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/rotate-secret:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationRotateSecret
+      summary: Rota el secreto de la integración (HU 14067)
+      description: >
+        Genera un secreto nuevo (se devuelve una sola vez). Por defecto el anterior sigue valiendo 24 horas;
+        con `revocarAnterior=true` se anula al instante. 409 si la integración está desactivada
+        (`integracion_inactiva`) o bloqueada (`integracion_bloqueada`). Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                revocarAnterior: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Secreto nuevo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegrationSecret' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía (`integration_not_found`). }
+        '409': { description: Integración desactivada o bloqueada. }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/block:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationBlock
+      summary: Bloquea la integración (HU 14067)
+      description: >
+        Bloqueo indefinido: no emite pases hasta `unblock` y sigue ocupando el cupo de una activa por tipo.
+        El cambio queda en la auditoría con el autor. Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integración bloqueada (`lockedUntil` en el año 9999).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía. }
+        '409': { description: La integración está desactivada (`integracion_inactiva`). }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/unblock:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationUnblock
+      summary: Quita el bloqueo de la integración (HU 14067)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integración sin bloqueo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía. }
+        '409': { description: La integración está desactivada (`integracion_inactiva`). }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/deactivate:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationDeactivate
+      summary: Desactiva la integración (HU 14067)
+      description: >
+        `isActive=false`: deja de emitir pases y libera el cupo para dar de alta otra integración del mismo tipo.
+        No se reactiva (se crea otra). Idempotente. Queda auditado con el autor. Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integración desactivada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía. }
+
   /api/v1/admin/companies/index:
     get:
       tags: [Admin · Compañías]
@@ -6647,6 +6804,131 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/detailed-report/procedures:
+    get:
+      operationId: detailedReportProcedures
+      tags: [Analytics]
+      summary: Consulta paginada del reporte detallado con filtros por atributos del trámite
+      description: >
+        Feature #10813. Con una compañía (`tenantId` obligatorio para SuperAdmin; el resto usa la de su token).
+        HU #14319 — cada fila trae el canal efectivo (`channel`; sin dato se lee como `tramites`, incluido el
+        migrado de FLIT 1.0) y el organismo del canal; `channel` y `channelTransitOfficeId` filtran con el mismo
+        predicado en listado, conteo y resumen. Un canal fuera del catálogo responde 400 con el motivo.
+        HU #14320 — `allCompanies=true` (solo SuperAdmin; otro rol responde 403 sin datos) consulta TODAS las
+        compañías en la misma pantalla: `tenantId` no se envía (enviarlo es 400), cada fila agrega `tenantId` y
+        `tenantName` y la respuesta es `AllCompaniesDetailedProceduresPage`. El acceso queda auditado en la
+        auditoría de acceso consolidado (`network.reports.procedures`). Sin `allCompanies`, el comportamiento con
+        una compañía elegida no cambia (SuperAdmin sin `tenantId` sigue en 400). Sin permiso nuevo:
+        `reportes.detallados.read`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Compañía a consultar (SuperAdmin). No se envía con `allCompanies=true`.
+        - $ref: "#/components/parameters/ReportAllCompanies"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Página del reporte (`DetailedProceduresPage`; con `allCompanies=true`, `AllCompaniesDetailedProceduresPage`).
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/DetailedProceduresPage"
+                  - $ref: "#/components/schemas/AllCompaniesDetailedProceduresPage"
+        "400":
+          description: Fechas ausentes, rango inválido, canal fuera del catálogo, falta `tenantId` (SuperAdmin sin `allCompanies`) o `allCompanies` con `tenantId`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin permiso de reportes detallados, tenant ajeno, o `allCompanies=true` de un rol distinto de SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/detailed-report/procedures/export:
+    get:
+      operationId: detailedReportExportExcel
+      tags: [Analytics]
+      summary: Exporta a Excel el reporte detallado filtrado
+      description: >
+        Feature #10816. Mismos filtros que `GET /api/v1/detailed-report/procedures` (sin paginación). HU #14319 —
+        el archivo termina con las columnas «Canal» (nombre visible del catálogo) y «OT del canal». HU #14320 —
+        con `allCompanies=true` (solo SuperAdmin) exporta las mismas filas que el listado e incluye «Compañía» como
+        primera columna; sin registros deja solo la cabecera; el acceso queda auditado (`network.reports.export`).
+        Sin permiso nuevo: `reportes.detallados.export`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/ReportAllCompanies"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
+      responses:
+        "200":
+          description: Archivo `reporte_detallado_{from}_{to}.xlsx` (o `reporte_detallado_todas_las_companias_{from}_{to}.xlsx` con `allCompanies`).
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Fechas ausentes, rango inválido, canal fuera del catálogo, `allCompanies` con `tenantId` o sin registros (modo una compañía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin permiso de exportación, tenant ajeno, o `allCompanies=true` de un rol distinto de SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network/reports/procedures:
     get:
       operationId: tramitesNetworkReportsProcedures
@@ -6663,7 +6945,8 @@ paths:
         (AC3). El conjunto viaja a la base como un único parámetro de arreglo (`tenant_id = ANY(@tenants)`);
         un conjunto vacío produce un reporte sin registros, nunca uno sin filtro (AC4). Ni el listado ni la
         exportación incluyen contenido ni enlaces de documentos generados o anexos (AC6). Las rutas de
-        `/api/v1/detailed-report` no cambian ni reciben parámetros nuevos (AC7). Cada petición deja un
+        `/api/v1/detailed-report` no reciben `childTenantId` ni el alcance de red (AC7; HU #14319 agrega
+        `channel` y `channelTransitOfficeId` a ambas familias). Cada petición deja un
         registro en la auditoría de acceso consolidado (`network.reports.procedures`, HU #12361) con los
         filtros de texto libre registrados solo por nombre.
       security:
@@ -6681,6 +6964,8 @@ paths:
         - $ref: "#/components/parameters/NetworkReportPersonName"
         - $ref: "#/components/parameters/NetworkReportHasTransformation"
         - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
         - name: page
           in: query
           required: false
@@ -6692,7 +6977,7 @@ paths:
           description: Tamaño de página (por defecto 20; por encima de 100 cae al tope).
       responses:
         "200":
-          description: Página del reporte detallado de la red.
+          description: Página del reporte detallado de la red (cada fila con `channel`, `channelTransitOfficeId` y `channelTransitOfficeName`, HU #14319).
           content:
             application/json:
               schema:
@@ -6740,9 +7025,13 @@ paths:
         - $ref: "#/components/parameters/NetworkReportPersonName"
         - $ref: "#/components/parameters/NetworkReportHasTransformation"
         - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
       responses:
         "200":
-          description: Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»).
+          description: >
+            Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»); desde HU #14319 termina con las
+            columnas «Canal» (nombre visible) y «OT del canal».
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema:
@@ -13590,6 +13879,1675 @@ paths:
         "400": { description: Falta la versión o X-Tenant-Id. }
         "401": { description: No autenticado. }
         "409": { description: "La versión enviada no es la vigente (code consent_version_mismatch, version vigente en el cuerpo)." }
+  /api/v1/admin/plataforma/persona-natural/tarifas:
+    get:
+      operationId: adminPnTarifasList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Tarifas del portal de Persona Natural — HU #14071, Épica #14021
+      description: >
+        Versiones de tarifa del portal (todas, o solo las vigentes a una fecha con `soloVigentes=true`). Una fila es UNA
+        versión de UN concepto para un ámbito (tipo de trámite y organismo; `null` = valor general). `estado` se mide a
+        `fecha` (por defecto hoy en Colombia): `vigente`, `futura` o `cerrada` (historial, inmutable). Exclusivo del Super
+        Admin FLIT (rol + permiso `platform.persona_natural.manage`); configuración global, no usa X-Tenant-Id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: soloVigentes, in: query, schema: { type: boolean, default: false } }
+        - { name: tipoTramiteId, in: query, schema: { type: string, format: uuid } }
+        - { name: organismoId, in: query, schema: { type: string, format: uuid } }
+        - name: concepto
+          in: query
+          schema: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+        - { name: fecha, in: query, description: Fecha de referencia (yyyy-MM-dd); por defecto hoy en Colombia., schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Versiones de tarifa.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    post:
+      operationId: adminPnTarifasVersionar
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Registrar una versión nueva de tarifa — HU #14071, Épica #14021
+      description: >
+        Registra, en UNA transacción, una versión nueva por cada concepto de `valores` para el ámbito (`tipoTramiteId`,
+        `organismoId` opcionales). Cierra la versión abierta anterior el día anterior a `vigenteDesde` y abre la nueva; la
+        anterior queda en el historial y ya no se edita. Valores en pesos enteros 0 a 1.000.000.000. `DERECHOS_TRANSITO` y
+        `SERVICIO_FLIT` exigen tipo; los demás conceptos pueden valer para cualquier tipo (`tipoTramiteId` nulo). Un
+        organismo con valor propio manda sobre el general. `vigenteDesde` no puede ser anterior a hoy (las cotizaciones ya
+        emitidas no cambian: la solicitud congela las versiones con las que cotizó). Cada concepto queda en la auditoría
+        con actor, valor anterior y valor nuevo.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalVersionarTarifasRequest" }
+      responses:
+        "201":
+          description: Versiones creadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "400":
+          description: "valores_vacios | concepto_invalido | concepto_repetido | valor_invalido | tipo_obligatorio | fecha_inicio_invalida | fecha_inicio_pasada (cuerpo `{ error, message }`)."
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: "tipo_no_existe | organismo_no_existe." }
+        "409": { description: "tarifa_solapada — ya existe una versión del mismo ámbito que se cruza con esas fechas; no se guarda nada." }
+  /api/v1/admin/plataforma/persona-natural/tarifas/vigente:
+    get:
+      operationId: adminPnTarifaVigente
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Tarifa vigente de un tipo en un organismo — HU #14071, Épica #14021
+      description: >
+        Por cada concepto, el valor que se aplicaría a una fecha, con la misma precedencia que la cotización del portal
+        (tipo+organismo, tipo, organismo, general). Un concepto sin valor no aparece; sin `DERECHOS_TRANSITO` y `SERVICIO_FLIT`
+        el portal responde `tarifa_no_vigente` y no ofrece el organismo para ese tipo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tipoTramiteId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: organismoId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: fecha, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Valores vigentes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "400": { description: parametros_obligatorios. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/tarifas/{id}/historial:
+    get:
+      operationId: adminPnTarifaHistorial
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Historial de versiones de una tarifa — HU #14071, Épica #14021
+      description: Todas las versiones del mismo ámbito (concepto, tipo y organismo) de la versión indicada, de la más reciente a la más antigua. Solo lectura.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Versiones del ámbito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: tarifa_no_encontrada. }
+  /api/v1/admin/ot/portal-tarifas:
+    get:
+      operationId: adminOtPortalTarifasList
+      tags: [Admin · OT · Precios del portal]
+      summary: Precios del portal del organismo — HU #14388, Feature #14387, Épica #14297
+      description: >
+        Tarifas del organismo y los valores generales (organismo nulo) que le aplican. `editable` es falso en los valores
+        generales y en los conceptos que el usuario no puede cambiar. El `ot_admin` trabaja con el organismo de su token; el
+        SuperAdmin envía `transitOfficeId`. Si un `ot_admin` envía el identificador de otro organismo, responde 403. En los
+        valores generales, el `ot_admin` ve «FLIT» como autor y no recibe los ids de quien los fijó. Rol `ot_admin` o
+        SuperAdmin, sin permiso nuevo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio). Para ot_admin solo se acepta el propio., schema: { type: string, format: uuid } }
+        - { name: soloVigentes, in: query, schema: { type: boolean, default: false } }
+        - { name: tipoTramiteId, in: query, description: Filtro opcional., schema: { type: string, format: uuid } }
+        - name: concepto
+          in: query
+          schema: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+        - { name: fecha, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Versiones de tarifa.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TarifaOt" }
+        "400": { description: "PORTAL_TARIFAS_ORGANISMO_REQUERIDO (cuerpo `{ code, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "Otro rol, PORTAL_TARIFAS_OTRO_ORGANISMO o PORTAL_TARIFAS_SIN_ORGANISMO." }
+    post:
+      operationId: adminOtPortalTarifasVersionar
+      tags: [Admin · OT · Precios del portal]
+      summary: Registrar una versión de precio del organismo — HU #14388 y #14389, Épica #14297
+      description: >
+        Registra una versión por cada concepto de `valores` para el organismo (tomado del token del `ot_admin`; del
+        `transitOfficeId` en el SuperAdmin). El `ot_admin` solo escribe `DERECHOS_TRANSITO`, `CAMBIO_COLOR`,
+        `CONVERSION_COMBUSTIBLE` y `CAMBIO_CARROCERIA`; `SERVICIO_FLIT` y `ENVIO_DOCUMENTO` responden 403 y no cambia nada.
+        Un valor con el mismo `vigenteDesde` que una versión del mismo ámbito la reemplaza (la fila reemplazada se conserva
+        por las cotizaciones que la congelaron); los dos valores quedan en la auditoría con autor y hora.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio)., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionarTarifasOtRequest" }
+      responses:
+        "201":
+          description: Versiones creadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TarifaOt" }
+        "400": { description: "Validación del valor o la fecha, PORTAL_TARIFAS_TIPO_OBLIGATORIO o PORTAL_TARIFAS_ORGANISMO_REQUERIDO (cuerpo `{ code, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "PORTAL_TARIFAS_CONCEPTO_AJENO, PORTAL_TARIFAS_OTRO_ORGANISMO o PORTAL_TARIFAS_SIN_ORGANISMO." }
+        "404": { description: tipo_no_existe | organismo_no_existe. }
+        "409": { description: tarifa_solapada (la vigencia se cruza con otra versión de un día distinto). }
+  /api/v1/admin/ot/portal-tarifas/tipos:
+    get:
+      operationId: adminOtPortalTarifasTipos
+      tags: [Admin · OT · Precios del portal]
+      summary: Tipos de trámite del portal para el formulario de precios — HU #14388
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio)., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Tipos habilitados para el portal, por nombre.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    codigo: { type: string }
+                    nombre: { type: string }
+                  required: [id, codigo, nombre]
+        "400": { description: PORTAL_TARIFAS_ORGANISMO_REQUERIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Otro rol. }
+  /api/v1/admin/ot/portal-tarifas/{id}/historial:
+    get:
+      operationId: adminOtPortalTarifasHistorial
+      tags: [Admin · OT · Precios del portal]
+      summary: Historial de un precio, con quién hizo cada cambio — HU #14388
+      description: Versiones del mismo ámbito, de la más reciente a la más antigua. No incluye las versiones reemplazadas el mismo día (quedan en la auditoría).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio)., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Versiones del ámbito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TarifaOt" }
+        "401": { description: Sin sesión. }
+        "403": { description: La tarifa es de otro organismo (PORTAL_TARIFAS_OTRO_ORGANISMO). }
+        "404": { description: tarifa_no_encontrada. }
+  /api/v1/admin/plataforma/persona-natural/configuracion/parametros:
+    get:
+      operationId: adminPnParametrosGet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Parámetros generales del portal — HU #14072, Épica #14021
+      description: >
+        Parámetros de uso y protección del portal y contacto de soporte, con la versión (`rowVersion`) para el control de
+        concurrencia. Un valor nulo = rige el predeterminado del BFF. NO incluye datos bancarios (el pago está en otra épica).
+        Exclusivo del Super Admin FLIT (rol + permiso `platform.persona_natural.manage`).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Parámetros vigentes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalParametros" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    put:
+      operationId: adminPnParametrosPut
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Guardar los parámetros generales del portal — HU #14072, Épica #14021
+      description: >
+        Reemplaza los parámetros (nulo = predeterminado). Cada valor se valida contra su rango: sesión 15 a 1440 minutos,
+        borrador 1 a 90 días, tope por ciudadano 1 a 100 consultas/día, tope global 1 a 100000 consultas/día; el mensaje de un
+        valor fuera de rango indica el rango. `rowVersion` es obligatorio: si otra persona guardó antes, responde 409 con la
+        configuración vigente en `actual` y no se pierde ningún cambio. El cambio queda en la auditoría con actor y valores
+        anterior y nuevo.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarParametrosRequest" }
+      responses:
+        "200":
+          description: Parámetros guardados (con la versión nueva).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalParametros" }
+        "400": { description: "valor_fuera_de_rango | correo_invalido | telefono_invalido | texto_demasiado_largo (cuerpo `{ error, campo, message }`) o row_version_obligatorio." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "409": { description: "conflicto_de_version — cuerpo `{ error, message, actual }`." }
+  /api/v1/admin/plataforma/persona-natural/organismos:
+    get:
+      operationId: adminPnOrganismosList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Organismos y su habilitación para el portal — HU #14072, Épica #14021
+      description: >
+        Organismos de tránsito activos con `habilitado` (el grant de la empresa Persona Natural, el mismo que usa
+        `ListarOrganismos` del portal) y `tiposConTarifaVigente` (cuántos tipos ofrecibles tienen derechos de tránsito y
+        servicio FLIT vigentes ahí hoy). Un organismo habilitado con 0 se avisa «Sin tarifa vigente» y el portal no ofrece
+        ningún tipo en él.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: soloHabilitados, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Organismos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalOrganismo" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/organismos/{organismoId}:
+    put:
+      operationId: adminPnOrganismoSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Habilitar o deshabilitar un organismo para el portal — HU #14072, Épica #14021
+      description: Crea o actualiza el grant del organismo para la empresa Persona Natural (origen SYSTEM). Cada cambio queda auditado; repetir el estado no cambia nada.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: organismoId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalHabilitarRequest" }
+      responses:
+        "204": { description: Aplicado. }
+        "400": { description: habilitado_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: organismo_no_existe (inexistente o inactivo). }
+  /api/v1/admin/plataforma/persona-natural/organismos/{organismoId}/canal-punto:
+    put:
+      operationId: adminPnCanalPuntoSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Encender o apagar el canal del punto de atención — HU #14216, Épica #14186
+      description: >
+        Escribe admin.persona_natural_point_channel. No modifica is_enabled del grant del portal
+        (admin.tenant_transit_office_grants). Encender exige que el organismo sea operable en FLIT (la misma regla que
+        habilitarlo para el portal). Apagar un canal ya apagado responde 204. 404 si el organismo no existe o está inactivo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: organismoId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalCanalPuntoRequest" }
+      responses:
+        "204": { description: Aplicado. }
+        "400": { description: encendido_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: organismo_no_existe (inexistente o inactivo). }
+        "422": { description: organismo_no_operable — no está activo en FLIT. }
+  /api/v1/admin/plataforma/persona-natural/tipos:
+    get:
+      operationId: adminPnTiposList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Tipos de trámite candidatos para el portal — HU #14072, Épica #14021
+      description: >
+        Tipos elegibles para persona natural (regla K2: publicados, con el wizard encendido y sin capacidades que el portal no
+        soporta) con `habilitado` (la lista blanca del superadministrador) y `ofrecible` (= elegible Y habilitado). Un tipo
+        habilitado que dejó de ser elegible sigue en la lista, con su `motivo`, para poder apagarlo; el portal ya no lo ofrece.
+        Un tipo no elegible o con el wizard apagado no aparece para habilitar. «Habilitado = elegible + habilitado + tarifa
+        vigente».
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Tipos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTipo" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/tipos/{tipoTramiteId}:
+    put:
+      operationId: adminPnTipoSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Habilitar o deshabilitar un tipo de trámite para el portal — HU #14072, Épica #14021
+      description: Habilitar solo es posible para tipos elegibles (422 `tipo_no_elegible` en otro caso); deshabilitar siempre. Cada cambio queda auditado. La lista nace vacía (el portal no ofrece ningún tipo hasta que se habilite alguno).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tipoTramiteId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalHabilitarRequest" }
+      responses:
+        "204": { description: Aplicado. }
+        "400": { description: habilitado_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: tipo_no_existe (al deshabilitar un tipo inexistente). }
+        "422": { description: tipo_no_elegible — solo se habilitan tipos elegibles con el asistente encendido. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas:
+    get:
+      operationId: adminPnFaqList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Preguntas frecuentes del borrador — HU #14073, Épica #14021
+      description: >
+        Preguntas del contenido de TRABAJO (borrador), en su orden, activas e inactivas. El portal solo ve lo publicado
+        (`POST .../contenido/publicar`). Texto plano: no se acepta HTML. Exclusivo del Super Admin FLIT (rol + permiso
+        `platform.persona_natural.manage`).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Preguntas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    post:
+      operationId: adminPnFaqCreate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Crear una pregunta frecuente — HU #14073, Épica #14021
+      description: La pregunta nueva va al final de la lista. Pregunta hasta 300 caracteres y respuesta hasta 2000; texto simple (sin HTML). Queda auditada.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarPreguntaRequest" }
+      responses:
+        "201":
+          description: Pregunta creada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "400": { description: "texto_invalido | html_no_permitido (cuerpo `{ error, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas/orden:
+    put:
+      operationId: adminPnFaqReorder
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Ordenar las preguntas — HU #14073, Épica #14021
+      description: La lista debe traer TODAS las preguntas, cada una una sola vez; el orden pasa a ser la posición en la lista.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalOrdenRequest" }
+      responses:
+        "204": { description: Ordenadas. }
+        "400": { description: orden_invalido. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas/{id}:
+    put:
+      operationId: adminPnFaqUpdate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Editar una pregunta frecuente — HU #14073, Épica #14021
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarPreguntaRequest" }
+      responses:
+        "200":
+          description: Pregunta editada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "400": { description: "texto_invalido | html_no_permitido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas/{id}/activa:
+    patch:
+      operationId: adminPnFaqSetActive
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Activar o desactivar una pregunta — HU #14073, Épica #14021
+      description: "Una pregunta desactivada no se borra: deja de publicarse en la próxima publicación."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                activa: { type: boolean }
+              required: [activa]
+      responses:
+        "200":
+          description: Pregunta con su estado nuevo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "400": { description: activa_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners:
+    get:
+      operationId: adminPnBannerList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Banners del borrador — HU #14073, Épica #14021
+      description: Banners del contenido de trabajo, en su orden. La ruta del archivo en el almacenamiento no sale por la API; la imagen se pide en `.../banners/{id}/imagen`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Banners.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    post:
+      operationId: adminPnBannerCreate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Crear un banner — HU #14073, Épica #14021
+      description: >
+        Multipart. La imagen es obligatoria: JPG, PNG o WEBP de hasta 2 MB (se valida el tipo declarado, el tamaño y los
+        primeros bytes del archivo) y se guarda en el almacenamiento de banners de FLIT 2. El texto alternativo es obligatorio
+        (una imagen sin él se rechaza). La vigencia (`vigenteDesde` y `vigenteHasta`) es opcional pero van las dos o ninguna.
+        Queda en el borrador hasta que se publique.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarBannerForm" }
+      responses:
+        "201":
+          description: Banner creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "400": { description: "banner_invalido | imagen_obligatoria | imagen_invalida | texto_invalido | html_no_permitido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/orden:
+    put:
+      operationId: adminPnBannerReorder
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Ordenar los banners — HU #14073, Épica #14021
+      description: La lista debe traer TODOS los banners, cada uno una sola vez.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalOrdenRequest" }
+      responses:
+        "204": { description: Ordenados. }
+        "400": { description: orden_invalido. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/{id}:
+    put:
+      operationId: adminPnBannerUpdate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Editar un banner — HU #14073, Épica #14021
+      description: Multipart como la creación; la imagen es opcional (sin ella se conserva la actual).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarBannerForm" }
+      responses:
+        "200":
+          description: Banner editado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "400": { description: "banner_invalido | imagen_invalida | texto_invalido | html_no_permitido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/{id}/activo:
+    patch:
+      operationId: adminPnBannerSetActive
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Activar o desactivar un banner — HU #14073, Épica #14021
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                activo: { type: boolean }
+              required: [activo]
+      responses:
+        "200":
+          description: Banner con su estado nuevo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "400": { description: activo_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/{id}/imagen:
+    get:
+      operationId: adminPnBannerImage
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Imagen del banner del borrador — HU #14073, Épica #14021
+      description: Bytes de la imagen del banner de trabajo (vista previa del administrador), con ETag = sha256.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Imagen (image/png, image/jpeg o image/webp).
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/enlaces:
+    get:
+      operationId: adminPnLinkList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Enlaces del portal — HU #14073, Épica #14021
+      description: Siempre los cuatro (`POLITICA_DATOS`, `TERMINOS`, `CONTACTO_VENTAS`, `VIDEO`); `url` nula = sin documento oficial / sin valor.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Enlaces.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalEnlace" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/enlaces/{codigo}:
+    put:
+      operationId: adminPnLinkSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Guardar un enlace del portal — HU #14073, Épica #14021
+      description: >
+        URL absoluta http/https (el contacto de ventas admite además `mailto:` y `tel:`). Una URL vacía deja el enlace «sin
+        documento oficial»: el portal conserva su aviso actual y NO se inventa texto legal.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string, enum: [POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS, VIDEO] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, nullable: true, maxLength: 2048 }
+      responses:
+        "200":
+          description: Enlace guardado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalEnlace" }
+        "400": { description: "enlace_invalido | codigo_enlace_invalido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/borrador:
+    get:
+      operationId: adminPnContentDraft
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Vista previa del contenido — HU #14073, Épica #14021
+      description: >
+        El contenido tal como lo vería el portal si se publicara hoy (preguntas y banners ACTIVOS, en su orden, y los cuatro
+        enlaces), `versionPublicada` (nulo si nada se ha publicado) y `hayCambiosSinPublicar`. Las imágenes de la vista previa
+        se piden en `.../banners/{id}/imagen`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBorrador" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/publicar:
+    post:
+      operationId: adminPnContentPublish
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Publicar el contenido — HU #14073, Épica #14021
+      description: >
+        Congela el borrador como una versión nueva e inmutable (número, fecha y usuario); la versión anterior sigue consultable.
+        El portal lee solo lo publicado, y filtra la vigencia de los banners al leer. Sin cambios respecto de lo publicado
+        responde 409 `sin_cambios_por_publicar`.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Versión publicada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalVersionContenido" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "409": { description: sin_cambios_por_publicar. }
+  /api/v1/admin/plataforma/persona-natural/contenido/versiones:
+    get:
+      operationId: adminPnContentVersions
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Versiones publicadas del contenido — HU #14073, Épica #14021
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Versiones, de la más reciente a la más antigua.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalResumenVersion" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/versiones/{version}:
+    get:
+      operationId: adminPnContentVersion
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Una versión publicada del contenido — HU #14073, Épica #14021
+      description: "Solo lectura: una versión publicada es historial y no se edita ni se borra."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Versión.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalVersionContenido" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+
+  # ── Admin OT · Dominios del portal Persona Natural (Feature #14380, Epica #14297) ─────────
+  /api/v1/admin/ot/portal-dominio:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Dominios del portal del organismo (estado, motivo, principal e instrucciones de DNS)
+      description: >-
+        Rol ot_admin o SuperAdmin. Un organismo tiene varios dominios (hasta Domains:PortalMaxPorOrganismo, por defecto 10), cada uno con su
+        propio estado, verificación y certificado. El principal va primero. Sin dominios responde 200 con lista vacía. El ot_admin trabaja
+        siempre con el organismo de su perfil (id de catalogs.transit_offices) y si nombra otro recibe 403. El SuperAdmin envía transitOfficeId.
+      operationId: AdminOtPortalDominioGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Lista de dominios del organismo (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DominioPortal" }
+        "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "No es ot_admin ni SuperAdmin, o el organismo no es el propio." }
+        "404": { description: PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Registra un dominio del portal (queda pendiente con su token de verificación)
+      description: >-
+        Se rechaza con el motivo exacto un host inválido (400 PORTAL_DOMINIO_INVALIDO), reservado (409 PORTAL_DOMINIO_RESERVADO), ya
+        registrado por otro organismo o red de marca blanca (409 PORTAL_DOMINIO_EN_USO) o un organismo que ya llegó al tope
+        (409 PORTAL_DOMINIO_LIMITE). Repetir un host propio es idempotente.
+      operationId: AdminOtPortalDominioPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host]
+              properties:
+                host: { type: string, description: "Nombre de dominio sin esquema, puerto ni ruta." }
+      responses:
+        "200":
+          description: Dominio pendiente con sus instrucciones de DNS.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "400": { description: PORTAL_DOMINIO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: "No es ot_admin ni SuperAdmin, o el organismo no es el propio." }
+        "409": { description: "PORTAL_DOMINIO_RESERVADO, PORTAL_DOMINIO_EN_USO o PORTAL_DOMINIO_LIMITE." }
+  /api/v1/admin/ot/portal-dominio/{id}/verificar:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Comprueba ahora el TXT de DNS de ese dominio
+      description: >-
+        Solo afecta a ese dominio. Con el TXT correcto pasa a verificado; si falta o no coincide queda fallido con el motivo. El certificado
+        emitido lo pasa a activo (sin activación manual); el primero en activarse queda como principal. 429 PORTAL_DOMINIO_VERIFICACION_ESPERAR
+        con Retry-After si se pide antes del enfriamiento. Un id de otro organismo da 403.
+      operationId: AdminOtPortalDominioVerificar
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Dominio con su estado actual.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "401": { description: Sin sesión. }
+        "403": { description: "Rol ajeno, organismo ajeno o dominio de otro organismo." }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO (el id no existe o fue retirado). }
+        "429": { description: PORTAL_DOMINIO_VERIFICACION_ESPERAR. }
+  /api/v1/admin/ot/portal-dominio/{id}/principal:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Hace principal a un dominio activo (enlace, QR y correos)
+      description: >-
+        Solo un dominio activo puede ser el principal; si no, 409 PORTAL_DOMINIO_PRINCIPAL_NO_ACTIVO con el estado actual. Repetir sobre el
+        principal es idempotente. Un id de otro organismo da 403.
+      operationId: AdminOtPortalDominioPrincipal
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Dominio principal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "401": { description: Sin sesión. }
+        "403": { description: "Rol ajeno, organismo ajeno o dominio de otro organismo." }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
+        "409": { description: PORTAL_DOMINIO_PRINCIPAL_NO_ACTIVO. }
+  /api/v1/admin/ot/portal-dominio/{id}:
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Retira el dominio; si era el principal lo releva el activo más antiguo
+      operationId: AdminOtPortalDominioDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "204": { description: "Dominio retirado, sin cuerpo." }
+        "401": { description: Sin sesión. }
+        "403": { description: "Rol ajeno, organismo ajeno o dominio de otro organismo." }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
+
+  # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
+  /api/v1/admin/plataforma/persona-natural/marca-web:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Marca de la web de persona natural (borrador, publicado y versión)
+      operationId: AdminPlataformaPnMarcaWebGet
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Marca de la web.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Guarda el borrador de la marca web con control de versión
+      operationId: AdminPlataformaPnMarcaWebPut
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca con el borrador guardado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS. }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/publish:
+    post:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Publica el borrador de la marca web
+      operationId: AdminPlataformaPnMarcaWebPublish
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca publicada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "422": { description: PORTAL_MARCA_INCOMPLETA o PORTAL_MARCA_CONTRASTE con el motivo exacto. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/retire:
+    post:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Retira la marca web publicada y conserva el borrador
+      operationId: AdminPlataformaPnMarcaWebRetire
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca sin publicado (la web usa la marca FLIT).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/logo:
+    post:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Carga el logo de la marca web (PNG, JPEG o WebP, hasta 512 KB)
+      operationId: AdminPlataformaPnMarcaWebLogoPost
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Marca con el logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_ARCHIVO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+    delete:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Quita el logo del borrador de la marca web
+      operationId: AdminPlataformaPnMarcaWebLogoDelete
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Marca sin logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/imagenes/{id}:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Imagen de la marca web, también de borrador (solo con sesión)
+      operationId: AdminPlataformaPnMarcaWebImagen
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binario de la imagen.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/ot/portal-marca:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Marca del portal del organismo (borrador, publicado y versión)
+      description: >-
+        Rol ot_admin o SuperAdmin. El ot_admin trabaja siempre con el organismo de su perfil y si nombra otro recibe 403.
+        El SuperAdmin envía transitOfficeId (obligatorio). Sin fila devuelve un registro vacío con rowVersion 0.
+      operationId: AdminOtPortalMarcaGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca del organismo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "No es ot_admin ni SuperAdmin, o el organismo no es el propio." }
+        "404": { description: PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Guarda el borrador (nombre y colores) con control de versión
+      description: >-
+        No toca logo ni banner. El contraste (4,5:1) se exige al publicar, no al guardar. Si rowVersion no coincide,
+        409 PORTAL_MARCA_CONFLICTO. Con rowVersion 0 crea la marca si nadie la creó antes.
+      operationId: AdminOtPortalMarcaPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca con el borrador guardado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_DATOS_INVALIDOS (nombre o color con formato inválido)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CONFLICTO (la versión cambió). }
+  /api/v1/admin/ot/portal-marca/publish:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Publica el borrador
+      description: >-
+        Exige nombre y los tres colores (PORTAL_MARCA_INCOMPLETA) y contraste mínimo 4,5:1 entre el texto sobre el principal
+        y el principal y el secundario (PORTAL_MARCA_CONTRASTE, con el motivo exacto). Logo y banner son opcionales.
+        Sube publishedVersion y deja auditoría con quién y qué cambió.
+      operationId: AdminOtPortalMarcaPublish
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca publicada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "422": { description: PORTAL_MARCA_INCOMPLETA o PORTAL_MARCA_CONTRASTE con el motivo exacto. }
+  /api/v1/admin/ot/portal-marca/retire:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Retira la marca publicada y conserva el borrador
+      operationId: AdminOtPortalMarcaRetire
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca sin publicado (el portal usa la marca FLIT).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+  /api/v1/admin/ot/portal-marca/logo:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Carga el logo (PNG, JPEG o WebP, hasta 512 KB)
+      description: >-
+        Multipart, campo file. Se valida el contenido real y que coincida con la extensión. Cada carga es una versión nueva con
+        id propio y la anterior se conserva. Error: 400 PORTAL_MARCA_ARCHIVO_INVALIDO con el motivo exacto.
+      operationId: AdminOtPortalMarcaLogoPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Marca con el logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_ARCHIVO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita el logo del borrador (las versiones se conservan)
+      operationId: AdminOtPortalMarcaLogoDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/banner:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Carga el banner (PNG, JPEG o WebP, hasta 2 MB)
+      description: >-
+        LEGACY (banner único). Opera sobre el PRIMER banner de la lista `banners`: lo reemplaza conservando su texto alternativo y enlace; si no hay ninguno, crea el primero con texto «Banner del organismo». Para varios banners use /banners.
+      operationId: AdminOtPortalMarcaBannerPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Marca con el banner en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_ARCHIVO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita el banner del borrador (las versiones se conservan)
+      description: >-
+        LEGACY (banner único). Quita el PRIMER banner de la lista `banners`; sin banners no hace nada.
+      operationId: AdminOtPortalMarcaBannerDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin banner en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/carrusel:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Agrega una imagen AL FINAL del carrusel de la columna lateral (PNG, JPEG o WebP, hasta 512 KB; máximo 6)
+      description: Solo organismos; el ámbito web responde PORTAL_MARCA_DATOS_INVALIDOS. Borrador → publicar, igual que logo y banner.
+      operationId: AdminOtPortalMarcaCarruselPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, alt]
+              properties:
+                file: { type: string, format: binary }
+                alt: { type: string, minLength: 1, maxLength: 120, description: "Texto alternativo, texto plano sin caracteres de control." }
+                linkUrl: { type: string, maxLength: 500, description: "Opcional; solo http o https." }
+      responses:
+        "200":
+          description: Marca con la imagen al final del carrusel del borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_ARCHIVO_INVALIDO o PORTAL_MARCA_DATOS_INVALIDOS (alt o enlace inválidos)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CARRUSEL_LLENO (ya hay 6 imágenes). }
+  /api/v1/admin/ot/portal-marca/carrusel/orden:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Reordena el carrusel con una permutación exacta de las imágenes actuales
+      operationId: AdminOtPortalMarcaCarruselOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imageIds]
+              properties:
+                imageIds: { type: array, items: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Marca con el carrusel en el nuevo orden.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS (no es una permutación exacta de las actuales). }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-marca/carrusel/{imageId}:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Cambia el texto alternativo y el enlace de una imagen del carrusel
+      operationId: AdminOtPortalMarcaCarruselPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alt]
+              properties:
+                alt: { type: string, minLength: 1, maxLength: 120 }
+                linkUrl: { type: string, nullable: true, maxLength: 500, description: "Solo http o https; vacío o nulo = sin enlace." }
+      responses:
+        "200":
+          description: Marca con la imagen actualizada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA (la imagen no está en el carrusel). }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita una imagen del carrusel del borrador (las versiones del binario se conservan)
+      operationId: AdminOtPortalMarcaCarruselDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin esa imagen en el carrusel del borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
+  /api/v1/admin/ot/portal-marca/banners:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Agrega un banner AL FINAL de la lista de banners del portal (PNG, JPEG o WebP, hasta 2 MB; máximo 6)
+      description: Solo organismos; el ámbito web responde PORTAL_MARCA_DATOS_INVALIDOS. Borrador → publicar. Sin rowVersion, igual que el carrusel.
+      operationId: AdminOtPortalMarcaBannersPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, alt]
+              properties:
+                file: { type: string, format: binary }
+                alt: { type: string, minLength: 1, maxLength: 120, description: "Texto alternativo obligatorio, texto plano sin caracteres de control." }
+                linkUrl: { type: string, maxLength: 500, description: "Opcional; solo http o https." }
+      responses:
+        "200":
+          description: Marca con el banner al final de la lista del borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_ARCHIVO_INVALIDO o PORTAL_MARCA_DATOS_INVALIDOS (alt o enlace inválidos)." }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO (sin alcance sobre el organismo). }
+        "409": { description: BANNERS_LLENO (ya hay 6 banners). }
+  /api/v1/admin/ot/portal-marca/banners/orden:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Reordena los banners con una permutación exacta de los actuales
+      operationId: AdminOtPortalMarcaBannersOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imageIds]
+              properties:
+                imageIds: { type: array, items: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Marca con los banners en el nuevo orden (el primero pasa a ser `bannerUrl`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS (no es una permutación exacta de los actuales). }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO. }
+  /api/v1/admin/ot/portal-marca/banners/{imageId}:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Cambia el texto alternativo y el enlace de un banner
+      operationId: AdminOtPortalMarcaBannersPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [alt]
+              properties:
+                alt: { type: string, minLength: 1, maxLength: 120 }
+                linkUrl: { type: string, nullable: true, maxLength: 500, description: "Solo http o https; vacío o nulo = sin enlace." }
+      responses:
+        "200":
+          description: Marca con el banner actualizado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS. }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA (el banner no está en la lista). }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Quita un banner del borrador (las versiones del binario se conservan)
+      operationId: AdminOtPortalMarcaBannersDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: imageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca sin ese banner en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: PORTAL_MARCA_PROHIBIDO. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
+  /api/v1/admin/ot/portal-marca/imagenes/{id}:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Imagen de la marca, también de borrador (solo con sesión)
+      description: El ot_admin solo ve las imágenes de su organismo (otro organismo, 403). Cache-Control private.
+      operationId: AdminOtPortalMarcaImagen
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binario de la imagen.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { description: Sin sesión. }
+        "403": { description: La imagen es de otro organismo. }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
+
+  /api/v1/admin/ot/portal-cobro:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Banderas de los medios y, por tipo y medio, los switches de trámite y gestión con su monto
+      description: >-
+        Rol ot_admin o SuperAdmin (HU #14393). El ot_admin trabaja con el organismo de su perfil y si nombra otro recibe 403; el SuperAdmin envía transitOfficeId (obligatorio). Sin caché: lo guardado se ve en la siguiente consulta.
+      operationId: AdminOtPortalCobroGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Configuración de cobro del portal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CobroPortal" }
+        "400": { description: "PORTAL_COBRO_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId en la ruta del OT)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-cobro/medios:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Habilita o deshabilita un medio de pago en el portal; no toca otros portales
+      operationId: AdminOtPortalCobroPutMedio
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarMedioCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_MEDIO_INVALIDO, o PORTAL_COBRO_PIN_EN_WEB (el PIN no existe en la web)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-cobro/switches:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Enciende o apaga el cobro del trámite o de la gestión para un tipo y un medio
+      description: >-
+        Encender exige monto mayor que cero para el concepto en el tipo y el organismo (400 PORTAL_COBRO_SIN_MONTO y no
+        guarda). Apagar conserva el monto, que vive en las tarifas. El ot_admin solo mueve TRAMITE: GESTION da 403
+        PORTAL_COBRO_GESTION_AJENA.
+      operationId: AdminOtPortalCobroPutSwitch
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarSwitchCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_SIN_MONTO, PORTAL_COBRO_PIN_EN_WEB, PORTAL_COBRO_MEDIO_INVALIDO o PORTAL_COBRO_CONCEPTO_INVALIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: "PORTAL_COBRO_GESTION_AJENA (ot_admin sobre GESTION) o sin alcance sobre el organismo." }
+        "404": { description: PORTAL_COBRO_TIPO_NO_EXISTE o PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/plataforma/persona-natural/cobro:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Banderas de los medios y, por tipo y medio, los switches de trámite y gestión con su monto
+      description: >-
+        Solo SuperAdmin (HU #14393). Sin transitOfficeId es la web de persona (no ofrece PIN); con él, el portal de ese organismo. Sin caché: lo guardado se ve en la siguiente consulta.
+      operationId: AdminPlataformaPortalCobroGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Configuración de cobro del portal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CobroPortal" }
+        "400": { description: "PORTAL_COBRO_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId en la ruta del OT)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/plataforma/persona-natural/cobro/medios:
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Habilita o deshabilita un medio de pago en el portal; no toca otros portales
+      operationId: AdminPlataformaPortalCobroPutMedio
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarMedioCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_MEDIO_INVALIDO, o PORTAL_COBRO_PIN_EN_WEB (el PIN no existe en la web)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/plataforma/persona-natural/cobro/switches:
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Enciende o apaga el cobro del trámite o de la gestión para un tipo y un medio
+      description: >-
+        Encender exige monto mayor que cero para el concepto en el tipo y el organismo (400 PORTAL_COBRO_SIN_MONTO y no
+        guarda). Apagar conserva el monto, que vive en las tarifas. El ot_admin solo mueve TRAMITE: GESTION da 403
+        PORTAL_COBRO_GESTION_AJENA.
+      operationId: AdminPlataformaPortalCobroPutSwitch
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarSwitchCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_SIN_MONTO, PORTAL_COBRO_PIN_EN_WEB, PORTAL_COBRO_MEDIO_INVALIDO o PORTAL_COBRO_CONCEPTO_INVALIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: "PORTAL_COBRO_GESTION_AJENA (ot_admin sobre GESTION) o sin alcance sobre el organismo." }
+        "404": { description: PORTAL_COBRO_TIPO_NO_EXISTE o PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/ot/portal-reportes:
+    get:
+      operationId: adminOtPortalReportesList
+      tags: [Admin · OT · Reportes del portal]
+      summary: Trámites del portal que cayeron a FLIT 2.0 en el organismo — HU #14397, Feature #14396, Épica #14297
+      description: >
+        Web y punto del organismo del token (`ot_admin`); el SuperAdmin envía un solo `transitOfficeId` (obligatorio) y ve la
+        misma vista. Nunca aparecen los trámites del gestor, de integración ni los rechazados al crearse. `canal`, `tipoTramiteId`
+        y `transitOfficeId` aceptan listas separadas por comas; si un `ot_admin` incluye un organismo ajeno, responde 403 sin datos.
+        Orden: del más reciente al más antiguo. Rol `ot_admin` o SuperAdmin, sin permiso nuevo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: canal, in: query, description: "Lista separada por comas de pn_web, pn_punto (aplicacion no trae filas aquí).", schema: { type: string } }
+        - { name: tipoTramiteId, in: query, description: Lista de GUID separada por comas., schema: { type: string } }
+        - { name: transitOfficeId, in: query, description: "Lista de GUID separada por comas. ot_admin: solo el propio. SuperAdmin: uno.", schema: { type: string } }
+        - { name: desde, in: query, description: "Día de Bogotá, incluido.", schema: { type: string, format: date } }
+        - { name: hasta, in: query, description: "Día de Bogotá, incluido.", schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Página del reporte.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaReportePortal" }
+        "400": { description: "PORTAL_REPORTES_ORGANISMO_REQUERIDO, _CANAL_INVALIDO, _RANGO_INVALIDO, _PAGINA_INVALIDA o _FILTRO_INVALIDO (cuerpo `{ code, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "Otro rol, PORTAL_REPORTES_OTRO_ORGANISMO o PORTAL_REPORTES_SIN_ORGANISMO." }
+  /api/v1/admin/ot/portal-reportes/export:
+    get:
+      operationId: adminOtPortalReportesExport
+      tags: [Admin · OT · Reportes del portal]
+      summary: Excel del reporte del organismo — HU #14398, Feature #14396, Épica #14297
+      description: >
+        Mismos parámetros, alcance y orden que el listado. Sin `page` ni `pageSize` exporta todo el conjunto filtrado; con
+        ellos, solo esa página. Columnas: Canal, Organismo, Tipo de trámite, Radicado, Estado, Fecha en que cayó, Modalidad de
+        cobro, Valor del trámite, Valor de la gestión. Sin filas, el archivo trae solo la cabecera.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: canal, in: query, schema: { type: string } }
+        - { name: tipoTramiteId, in: query, schema: { type: string } }
+        - { name: transitOfficeId, in: query, schema: { type: string } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Libro de Excel.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+        "400": { description: Igual que el listado. }
+        "401": { description: Sin sesión. }
+        "403": { description: Igual que el listado. }
+  /api/v1/admin/plataforma/persona-natural/reportes:
+    get:
+      operationId: adminPnReportesList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Trámites del portal que cayeron a FLIT 2.0, de todos los organismos — HU #14397, Épica #14297
+      description: >
+        SuperAdmin con el permiso de administración del portal. Ve pn_web, pn_punto y aplicacion de todos los organismos;
+        `transitOfficeId` (lista separada por comas) solo filtra. Mismos filtros y respuesta que la vista del organismo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: canal, in: query, description: "Lista separada por comas de pn_web, pn_punto, aplicacion.", schema: { type: string } }
+        - { name: tipoTramiteId, in: query, schema: { type: string } }
+        - { name: transitOfficeId, in: query, schema: { type: string } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Página del reporte.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaginaReportePortal" }
+        "400": { description: Códigos PORTAL_REPORTES_* de validación. }
+        "401": { description: Sin sesión. }
+        "403": { description: Otro rol o sin el permiso. }
+  /api/v1/admin/plataforma/persona-natural/reportes/export:
+    get:
+      operationId: adminPnReportesExport
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Excel del reporte del portal — HU #14398, Épica #14297
+      description: Mismos parámetros y conjunto que el listado de Plataforma; sin `page` exporta todo lo filtrado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: canal, in: query, schema: { type: string } }
+        - { name: tipoTramiteId, in: query, schema: { type: string } }
+        - { name: transitOfficeId, in: query, schema: { type: string } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Libro de Excel.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
+        "400": { description: Igual que el listado. }
+        "401": { description: Sin sesión. }
+        "403": { description: Otro rol o sin el permiso. }
 
 components:
   securitySchemes:
@@ -13614,6 +15572,12 @@ components:
             error: SESSION_DOMAIN_MISMATCH
 
   parameters:
+    PortalMarcaTransitOfficeId:
+      name: transitOfficeId
+      in: query
+      required: false
+      description: Organismo (obligatorio para SuperAdmin; el ot_admin usa el de su perfil y si nombra otro recibe 403).
+      schema: { type: string, format: uuid }
     AiToolCodePath:
       name: toolCode
       in: path
@@ -13694,6 +15658,30 @@ components:
       in: query
       required: false
       schema: { type: boolean }
+    ReportAllCompanies:
+      name: allCompanies
+      in: query
+      required: false
+      schema: { type: boolean, default: false }
+      description: >
+        Solo SuperAdmin (HU #14320): consulta todas las compañías; otro rol responde 403 sin datos. No se envía
+        junto con `tenantId`. Cada fila agrega `tenantId` y `tenantName`. El acceso queda auditado.
+    ReportChannel:
+      name: channel
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/TramiteCanal"
+      description: >
+        Canal del trámite (HU #14319). Sin dato, todos. Una fila sin canal cuenta como `tramites`; `integracion` (ICT)
+        solo aparece al filtrar por ese canal. `aplicacion` responde vacío sin error. Un código fuera del catálogo
+        responde 400 con el motivo. Sin permiso adicional: se rige por el de reportes detallados.
+    ReportChannelTransitOfficeId:
+      name: channelTransitOfficeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Organismo del punto de atención del canal Persona Natural OT (HU #14319). Distinto de `transitOfficeId`.
     NetworkAccessAuditFrom:
       name: from
       in: query
@@ -13734,6 +15722,257 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    CobroPortal:
+      type: object
+      required: [medios, tipos]
+      properties:
+        medios:
+          type: array
+          items:
+            type: object
+            required: [method, enabled]
+            properties:
+              method: { type: string, enum: [PASARELA, PIN] }
+              enabled: { type: boolean }
+        tipos:
+          type: array
+          items:
+            type: object
+            required: [tipoTramiteId, nombre, medios]
+            properties:
+              tipoTramiteId: { type: string, format: uuid }
+              nombre: { type: string }
+              medios:
+                type: array
+                items:
+                  type: object
+                  required: [method, ofrecido, conceptos]
+                  properties:
+                    method: { type: string, enum: [PASARELA, PIN] }
+                    ofrecido: { type: boolean, description: Bandera encendida y al menos un concepto encendido. }
+                    conceptos:
+                      type: array
+                      items:
+                        type: object
+                        required: [charge, enabled, montoCop, editable]
+                        properties:
+                          charge: { type: string, enum: [TRAMITE, GESTION] }
+                          enabled: { type: boolean, description: "Sin fila guardada vale encendido si montoCop > 0." }
+                          montoCop: { type: integer, format: int64, description: Monto del renglón base (derechos de tránsito; servicio FLIT). }
+                          editable: { type: boolean }
+    GuardarMedioCobroRequest:
+      type: object
+      required: [method, enabled]
+      properties:
+        method: { type: string, enum: [PASARELA, PIN] }
+        enabled: { type: boolean }
+    GuardarSwitchCobroRequest:
+      type: object
+      required: [tipoTramiteId, method, charge, enabled]
+      properties:
+        tipoTramiteId: { type: string, format: uuid }
+        method: { type: string, enum: [PASARELA, PIN] }
+        charge: { type: string, enum: [TRAMITE, GESTION] }
+        enabled: { type: boolean }
+    FilaReportePortal:
+      type: object
+      description: Un trámite del portal que cayó a FLIT 2.0 (HU #14397). Modalidad y valores son nulos mientras no exista el pago.
+      required: [canal, tipo, estado, fechaCaida]
+      properties:
+        canal: { type: string, enum: [pn_web, pn_punto, aplicacion] }
+        organismo: { type: string, nullable: true, description: "pn_punto: organismo del punto (fijo). pn_web y aplicacion: organismo del trámite." }
+        tipo: { type: string }
+        radicado: { type: string, nullable: true }
+        estado: { type: string }
+        fechaCaida: { type: string, format: date-time }
+        modalidad: { type: string, nullable: true }
+        valorTramite: { type: integer, format: int64, nullable: true }
+        valorGestion: { type: integer, format: int64, nullable: true }
+    PaginaReportePortal:
+      type: object
+      required: [items, totalCount, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/FilaReportePortal" } }
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
+    PortalMarcaSnapshot:
+      type: object
+      required: [platformName, colors, logoId, bannerId]
+      properties:
+        platformName: { type: string, nullable: true }
+        colors:
+          nullable: true
+          type: object
+          required: [primary, secondary, onPrimary]
+          properties:
+            primary: { type: string, example: "#0B3D91" }
+            secondary: { type: string, example: "#0F5132" }
+            onPrimary: { type: string, example: "#FFFFFF" }
+        logoId: { type: string, format: uuid, nullable: true }
+        bannerId: { type: string, format: uuid, nullable: true }
+        carousel:
+          type: array
+          maxItems: 6
+          description: Carrusel de la columna lateral, en orden. Ausente en documentos viejos = vacío.
+          items:
+            type: object
+            required: [imageId, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              alt: { type: string, minLength: 1, maxLength: 120 }
+              linkUrl: { type: string, nullable: true, maxLength: 500, description: Solo http o https. }
+        banners:
+          type: array
+          maxItems: 6
+          description: >-
+            Banners principales del portal del organismo, en orden. `bannerId` es siempre el primero. Un documento con el banner único
+            legacy (sin esta clave) se lee como un solo banner con texto alternativo «Banner del organismo».
+          items:
+            type: object
+            required: [imageId, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              alt: { type: string, minLength: 1, maxLength: 120 }
+              linkUrl: { type: string, nullable: true, maxLength: 500, description: Solo http o https. }
+    DominioPortal:
+      type: object
+      required: [id, host, principal, estado, motivo, dns, rowVersion]
+      properties:
+        id: { type: string, format: uuid }
+        host: { type: string }
+        principal: { type: boolean, description: "Dominio que usan el enlace, el QR y los correos. A lo más uno por organismo; solo un activo." }
+        estado: { type: string, enum: [pendiente, verificado, activo, fallido] }
+        motivo: { type: string, nullable: true, description: "Motivo exacto en español cuando el estado es fallido." }
+        dns:
+          type: array
+          items:
+            type: object
+            required: [tipo, nombre, valor]
+            properties:
+              tipo: { type: string, enum: [TXT, A], description: "El A solo viene si el ambiente tiene Domains:EdgeIp." }
+              nombre: { type: string }
+              valor: { type: string }
+        rowVersion: { type: integer, format: int64 }
+    PortalMarca:
+      type: object
+      required: [transitOfficeId, draft, published, publishedVersion, publishedAt, publishedBy, hasUnpublishedChanges, logoUrl, bannerUrl, completeness, rowVersion, carousel, banners]
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        draft: { $ref: "#/components/schemas/PortalMarcaSnapshot" }
+        published:
+          type: object
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/PortalMarcaSnapshot" }]
+        publishedVersion: { type: integer, description: Sube en cada publicación y no baja al retirar. }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        publishedBy:
+          nullable: true
+          type: object
+          required: [userId]
+          properties:
+            userId: { type: string, format: uuid }
+        hasUnpublishedChanges: { type: boolean }
+        logoUrl: { type: string, nullable: true, description: Ruta de la imagen del borrador (solo con sesión). }
+        bannerUrl: { type: string, nullable: true }
+        carousel:
+          type: array
+          maxItems: 6
+          description: Carrusel del BORRADOR, en orden (vacío si no hay). Solo organismos; la marca web siempre lo devuelve vacío.
+          items:
+            type: object
+            required: [imageId, imageUrl, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              imageUrl: { type: string, description: "Ruta de la imagen del borrador (solo con sesión), como bannerUrl." }
+              alt: { type: string }
+              linkUrl: { type: string, nullable: true }
+        banners:
+          type: array
+          maxItems: 6
+          description: >-
+            Banners principales del BORRADOR, en orden (vacío si no hay). Solo organismos; la marca web siempre lo devuelve vacío.
+            `bannerUrl` es la URL del primero (compatibilidad con el banner único).
+          items:
+            type: object
+            required: [imageId, imageUrl, alt, linkUrl]
+            properties:
+              imageId: { type: string, format: uuid }
+              imageUrl: { type: string, description: Ruta de la imagen del borrador (solo con sesión). }
+              alt: { type: string }
+              linkUrl: { type: string, nullable: true }
+        completeness:
+          type: object
+          required: [isComplete, missing]
+          properties:
+            isComplete: { type: boolean }
+            missing:
+              type: array
+              items: { type: string, enum: [platformName, colors.primary, colors.secondary, colors.onPrimary] }
+        rowVersion: { type: integer, format: int64 }
+    GuardarPortalMarcaRequest:
+      type: object
+      required: [platformName, colors, rowVersion]
+      properties:
+        platformName: { type: string, minLength: 2, maxLength: 40 }
+        colors:
+          type: object
+          required: [primary, secondary, onPrimary]
+          properties:
+            primary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+            secondary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+            onPrimary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        rowVersion: { type: integer, format: int64 }
+    VersionPortalMarcaRequest:
+      type: object
+      required: [rowVersion]
+      properties:
+        rowVersion: { type: integer, format: int64 }
+    # ── Trámites · Canal del trámite (HU #14317, Feature #14315, Épica #14296) ────
+    TramiteCanal:
+      type: string
+      description: >-
+        Canal por el que entró el trámite. Nombres visibles: tramites = Trámites, pn_web = Persona Natural Web,
+        pn_punto = Persona Natural OT, integracion = Integración, aplicacion = Aplicación (reservado, hoy no se
+        asigna). Lo devuelven el detalle del trámite (`ProcedureInstanceDetail.channel`, HU #14318) y los reportes
+        detallados, que además lo filtran (HU #14319). Un trámite sin dato, incluido el migrado, se lee como `tramites`.
+        El cliente nunca lo envía al crear: lo fija el servidor.
+      enum: [tramites, pn_web, pn_punto, integracion, aplicacion]
+
+    # ── Admin · Integraciones externas por compañía (HU #14067, Épica #14021, ADR-0075) ────
+    ExternalIntegration:
+      type: object
+      description: Integración ligada a una compañía. Nunca incluye el secreto ni sus hashes.
+      required: [id, clientId, displayName, purpose, scopes, isActive, mustRotate, createdAt, tipo, companyId]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, example: pn-0123456789abcdef }
+        displayName: { type: string }
+        purpose: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+          description: Fijo por tipo; para `persona_natural` solo `platform.tramites.persona_natural`.
+        isActive: { type: boolean }
+        mustRotate: { type: boolean }
+        lockedUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Con año 9999, bloqueo indefinido; si no, bloqueo temporal por intentos fallidos.
+        lastTokenAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        tipo: { type: string, enum: [persona_natural] }
+        companyId: { type: string, format: uuid }
+    ExternalIntegrationSecret:
+      type: object
+      required: [client, clientSecret]
+      properties:
+        client: { $ref: '#/components/schemas/ExternalIntegration' }
+        clientSecret:
+          type: string
+          description: Secreto en claro, 43 caracteres base64url. Se muestra UNA sola vez; no se guarda ni se vuelve a devolver.
     # ── Admin · Identidad de marca (HU #12412, Feature #12366, ADR-0060 D1) ────
     BrandColors:
       type: object
@@ -18114,7 +20353,116 @@ components:
         isLeasing: { type: boolean }
         paymentType: { type: string }
         transferType: { type: string, nullable: true }
-      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType]
+        channel:
+          $ref: "#/components/schemas/TramiteCanal"
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo del punto de atención (HU #14319); solo con `channel = pn_punto`.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: Nombre del organismo del canal (HU #14319).
+      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType, channel]
+
+    DetailedProcedureRow:
+      type: object
+      description: >
+        Fila del reporte detallado (`GET /api/v1/detailed-report/procedures`, Feature #10813). HU #14319 agrega el
+        canal efectivo y el organismo del canal.
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        procedureTypeName: { type: string }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        status: { type: string }
+        createdByDisplayName: { type: string }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        personDocument: { type: string }
+        personFullName: { type: string }
+        hasTransformation: { type: boolean }
+        transformationDetail: { type: string, nullable: true }
+        isLeasing: { type: boolean }
+        paymentType: { type: string }
+        transferType: { type: string, nullable: true }
+        channel:
+          $ref: "#/components/schemas/TramiteCanal"
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo del punto de atención (HU #14319); solo con `channel = pn_punto`.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: Nombre del organismo del canal (HU #14319).
+      required: [id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType, channel]
+
+    DetailedReportSummary:
+      type: object
+      description: Totales del reporte detallado (HU #10819).
+      properties:
+        totalCount: { type: integer }
+        byStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              count: { type: integer }
+            required: [status, count]
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byProcedureType:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+      required: [totalCount, byStatus, byCategory, byProcedureType]
+
+    DetailedProceduresPage:
+      type: object
+      description: Respuesta de `GET /api/v1/detailed-report/procedures` con una compañía (Feature #10813).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/DetailedReportSummary"
+      required: [items, totalCount, page, pageSize, summary]
+
+    AllCompaniesDetailedProceduresPage:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/detailed-report/procedures?allCompanies=true` (HU #14320, solo SuperAdmin): las
+        mismas filas con `tenantId` y `tenantName` de la compañía dueña, y los totales con desglose por compañía
+        (`summary.byTenant`). Sin `scope`: en este modo el alcance es el universo completo.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkDetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/NetworkDetailedReportSummary"
+      required: [items, totalCount, page, pageSize, summary]
 
     NetworkTenantCount:
       type: object
@@ -18312,9 +20660,26 @@ components:
       description: >
         Detalle de `GET /api/v1/tramites/instances/{id}` (gestor y SuperAdmin) y objeto `instance` de
         `GET /api/v1/tramites/network/instances/{id}`. Aquí se documentan solo los campos de vigencia de
-        la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
+        la HU #12791 y el canal (HU #14318); el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
       additionalProperties: true
       properties:
+        channel:
+          allOf:
+            - $ref: "#/components/schemas/TramiteCanal"
+          description: >
+            HU #14318 (Feature #14315, Épica #14296) — canal por el que entró el trámite. Solo lectura: se
+            fija al crear. Un trámite sin dato (histórico o migrado de V1) devuelve `tramites`. Aditivo.
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            HU #14318 — organismo de tránsito del punto de atención; solo con `channel = pn_punto`, `null` en
+            los demás. Distinto del organismo del trámite, que puede cambiar al enviarlo al OT. Aditivo.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: HU #14318 — nombre del organismo de `channelTransitOfficeId`; `null` si no aplica. Aditivo.
         improntaGeneracionHabilitada:
           type: boolean
           description: >
@@ -20336,3 +22701,251 @@ components:
           type: boolean
           description: true = encendido; false = apagado (degradación segura, sin tocar la jerarquía).
       required: [isEnabled]
+
+    # ── Admin · Plataforma · Persona Natural (Feature J, Épica #14021) ─────────
+    PersonaNaturalTarifa:
+      type: object
+      description: Una versión de un concepto de tarifa del portal para un ámbito (tipo y organismo; null = valor general).
+      properties:
+        id: { type: string, format: uuid }
+        concepto: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+        tipoTramiteId: { type: string, format: uuid, nullable: true }
+        tipoTramiteCodigo: { type: string, nullable: true }
+        tipoTramiteNombre: { type: string, nullable: true }
+        organismoId: { type: string, format: uuid, nullable: true }
+        organismoCodigo: { type: string, nullable: true }
+        organismoNombre: { type: string, nullable: true }
+        valorCop: { type: integer, format: int64, minimum: 0, description: Pesos colombianos enteros. }
+        vigenteDesde: { type: string, format: date }
+        vigenteHasta: { type: string, format: date, nullable: true, description: Nulo = abierta. }
+        estado: { type: string, enum: [vigente, futura, cerrada] }
+        creadaEn: { type: string, format: date-time }
+        creadaPor: { type: string, format: uuid, nullable: true }
+        actualizadaEn: { type: string, format: date-time, nullable: true }
+        actualizadaPor: { type: string, format: uuid, nullable: true }
+        creadaPorNombre: { type: string, nullable: true, description: Nombre de quien creó la versión (HU 14388). }
+      required: [id, concepto, valorCop, vigenteDesde, estado]
+    PersonaNaturalVersionarTarifasRequest:
+      type: object
+      properties:
+        tipoTramiteId: { type: string, format: uuid, nullable: true, description: Obligatorio con DERECHOS_TRANSITO o SERVICIO_FLIT. }
+        organismoId: { type: string, format: uuid, nullable: true, description: Nulo = valor general; con valor = excepción de ese organismo. }
+        vigenteDesde: { type: string, format: date, description: No anterior a hoy (hora de Colombia). }
+        valores:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              concepto: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+              valorCop: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+            required: [concepto, valorCop]
+      required: [vigenteDesde, valores]
+    TarifaOt:
+      description: Una versión de tarifa (PersonaNaturalTarifa) más si quien consulta puede cambiarla.
+      allOf:
+        - $ref: "#/components/schemas/PersonaNaturalTarifa"
+        - type: object
+          properties:
+            editable: { type: boolean, description: Falso en los valores generales y en los conceptos que el usuario no puede cambiar. }
+          required: [editable]
+    VersionarTarifasOtRequest:
+      type: object
+      properties:
+        tipoTramiteId: { type: string, format: uuid, description: Obligatorio para ot_admin. }
+        vigenteDesde: { type: string, format: date, description: No anterior a hoy (hora de Colombia). Igual al de una versión existente del ámbito = la reemplaza. }
+        organismoId: { type: string, format: uuid, nullable: true, description: Opcional; un ot_admin que envía otro organismo recibe 403. }
+        valores:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              concepto: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+              valorCop: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+            required: [concepto, valorCop]
+      required: [vigenteDesde, valores]
+
+    PersonaNaturalParametros:
+      type: object
+      description: Parámetros generales del portal (nulo = predeterminado del BFF). Sin datos bancarios.
+      properties:
+        sesionVigenciaMinutos: { type: integer, nullable: true, minimum: 15, maximum: 1440 }
+        borradorVigenciaDias: { type: integer, nullable: true, minimum: 1, maximum: 90 }
+        topeConsultasCiudadanoDia: { type: integer, nullable: true, minimum: 1, maximum: 100 }
+        topeConsultasGlobalDia: { type: integer, nullable: true, minimum: 1, maximum: 100000 }
+        captchaActivo: { type: boolean, nullable: true }
+        soporteCorreo: { type: string, nullable: true, maxLength: 254 }
+        soporteTelefono: { type: string, nullable: true, maxLength: 30 }
+        soporteHorario: { type: string, nullable: true, maxLength: 120 }
+        rowVersion: { type: integer, format: int64, description: Versión para el control de concurrencia (409 si está desactualizada). }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+        actualizadoPor: { type: string, format: uuid, nullable: true }
+      required: [rowVersion]
+    PersonaNaturalGuardarParametrosRequest:
+      type: object
+      properties:
+        sesionVigenciaMinutos: { type: integer, nullable: true }
+        borradorVigenciaDias: { type: integer, nullable: true }
+        topeConsultasCiudadanoDia: { type: integer, nullable: true }
+        topeConsultasGlobalDia: { type: integer, nullable: true }
+        captchaActivo: { type: boolean, nullable: true }
+        soporteCorreo: { type: string, nullable: true }
+        soporteTelefono: { type: string, nullable: true }
+        soporteHorario: { type: string, nullable: true }
+        rowVersion: { type: integer, format: int64, description: La versión leída; obligatoria. }
+      required: [rowVersion]
+    PersonaNaturalOrganismo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        municipio: { type: string }
+        departamento: { type: string }
+        habilitado: { type: boolean }
+        tiposConTarifaVigente: { type: integer, description: Tipos ofrecibles con derechos de tránsito y servicio FLIT vigentes en este organismo hoy. }
+        canalPuntoEncendido: { type: boolean, description: "Canal del punto de atención (HU #14216). Independiente de habilitado." }
+      required: [id, codigo, nombre, habilitado, tiposConTarifaVigente, canalPuntoEncendido]
+    PersonaNaturalCanalPuntoRequest:
+      type: object
+      properties:
+        encendido: { type: boolean }
+      required: [encendido]
+    PersonaNaturalTipo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        familia: { type: string }
+        elegible: { type: boolean, description: "Regla K2 (perfil del tipo, publicado, wizard encendido)." }
+        motivo: { type: string, description: Por qué no es elegible (vacío si lo es). }
+        habilitado: { type: boolean, description: Lista blanca del superadministrador. }
+        ofrecible: { type: boolean, description: elegible Y habilitado. }
+        organismosConTarifaVigente: { type: integer, description: Organismos habilitados donde el tipo tiene tarifa base vigente hoy. }
+      required: [id, codigo, nombre, elegible, habilitado, ofrecible]
+    PersonaNaturalHabilitarRequest:
+      type: object
+      properties:
+        habilitado: { type: boolean }
+      required: [habilitado]
+
+    PersonaNaturalPregunta:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pregunta: { type: string, maxLength: 300 }
+        respuesta: { type: string, maxLength: 2000 }
+        orden: { type: integer }
+        activa: { type: boolean }
+        rowVersion: { type: integer, format: int64 }
+        creadaEn: { type: string, format: date-time }
+        actualizadaEn: { type: string, format: date-time, nullable: true }
+      required: [id, pregunta, respuesta, orden, activa]
+    PersonaNaturalGuardarPreguntaRequest:
+      type: object
+      properties:
+        pregunta: { type: string, maxLength: 300, description: Texto simple (sin HTML). }
+        respuesta: { type: string, maxLength: 2000, description: Texto simple (sin HTML). }
+        activa: { type: boolean, nullable: true }
+      required: [pregunta, respuesta]
+    PersonaNaturalOrdenRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: Todos los ids, en el orden deseado.
+      required: [ids]
+    PersonaNaturalBanner:
+      type: object
+      description: Banner del contenido de trabajo. La ruta del archivo en el almacenamiento no se expone.
+      properties:
+        id: { type: string, format: uuid }
+        titulo: { type: string, maxLength: 200 }
+        textoAlternativo: { type: string, maxLength: 250 }
+        enlaceUrl: { type: string, nullable: true, maxLength: 2048 }
+        orden: { type: integer }
+        vigenteDesde: { type: string, format: date-time, nullable: true }
+        vigenteHasta: { type: string, format: date-time, nullable: true }
+        activo: { type: boolean }
+        imagenSha256: { type: string }
+        imagenContentType: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        imagenBytes: { type: integer, format: int64, maximum: 2097152 }
+        rowVersion: { type: integer, format: int64 }
+        creadoEn: { type: string, format: date-time }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+      required: [id, titulo, textoAlternativo, orden, activo, imagenSha256, imagenContentType]
+    PersonaNaturalGuardarBannerForm:
+      type: object
+      properties:
+        titulo: { type: string, maxLength: 200 }
+        textoAlternativo: { type: string, maxLength: 250, description: Obligatorio. }
+        enlaceUrl: { type: string, nullable: true, description: URL http/https. }
+        orden: { type: integer, nullable: true }
+        vigenteDesde: { type: string, format: date-time, nullable: true }
+        vigenteHasta: { type: string, format: date-time, nullable: true, description: Van las dos fechas o ninguna; la segunda posterior a la primera. }
+        activo: { type: boolean, nullable: true }
+        file: { type: string, format: binary, description: "JPG, PNG o WEBP de hasta 2 MB. Obligatoria al crear; opcional al editar." }
+      required: [titulo, textoAlternativo]
+    PersonaNaturalEnlace:
+      type: object
+      properties:
+        codigo: { type: string, enum: [POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS, VIDEO] }
+        url: { type: string, nullable: true, description: Nula = sin documento oficial / sin valor. }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+      required: [codigo]
+    PersonaNaturalContenido:
+      type: object
+      properties:
+        preguntas:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              pregunta: { type: string }
+              respuesta: { type: string }
+              orden: { type: integer }
+        banners:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              titulo: { type: string }
+              textoAlternativo: { type: string }
+              enlaceUrl: { type: string, nullable: true }
+              orden: { type: integer }
+              vigenteDesde: { type: string, format: date-time, nullable: true }
+              vigenteHasta: { type: string, format: date-time, nullable: true }
+              imagenSha256: { type: string }
+              imagenContentType: { type: string }
+        enlaces:
+          type: array
+          items: { $ref: "#/components/schemas/PersonaNaturalEnlace" }
+    PersonaNaturalBorrador:
+      type: object
+      properties:
+        contenido: { $ref: "#/components/schemas/PersonaNaturalContenido" }
+        versionPublicada: { type: integer, nullable: true }
+        hayCambiosSinPublicar: { type: boolean }
+      required: [contenido, hayCambiosSinPublicar]
+    PersonaNaturalVersionContenido:
+      type: object
+      properties:
+        version: { type: integer, minimum: 1 }
+        publicadoEn: { type: string, format: date-time }
+        publicadoPor: { type: string, format: uuid, nullable: true }
+        contenido: { $ref: "#/components/schemas/PersonaNaturalContenido" }
+      required: [version, publicadoEn, contenido]
+    PersonaNaturalResumenVersion:
+      type: object
+      properties:
+        version: { type: integer }
+        publicadoEn: { type: string, format: date-time }
+        publicadoPor: { type: string, format: uuid, nullable: true }
+        preguntas: { type: integer }
+        banners: { type: integer }
+      required: [version, publicadoEn, preguntas, banners]

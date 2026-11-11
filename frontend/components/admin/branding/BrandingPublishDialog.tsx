@@ -8,18 +8,27 @@ export interface BrandingPublishDialogProps {
   busy: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  // Feature #14374 (portal del OT): otro alcance y otro texto. Sin ellos, el de marca blanca.
+  title?: string;
+  description?: string;
+  note?: string;
 }
 
 /** HU #12414 AC5 — confirmación de publicación con el alcance explícito. */
-export function BrandingPublishDialog({ open, busy, onClose, onConfirm }: BrandingPublishDialogProps) {
+export function BrandingPublishDialog({
+  open,
+  busy,
+  onClose,
+  onConfirm,
+  title = "Publicar identidad de marca",
+  description = "Al publicar, estos cambios se aplican de inmediato a las sesiones nuevas y a los correos nuevos que se envíen desde esta red.",
+  note = "Las comunicaciones ya enviadas no cambian.",
+}: BrandingPublishDialogProps) {
   return (
-    <Modal open={open} onClose={onClose} busy={busy} size="sm" icon={Rocket} title="Publicar identidad de marca">
-      <p className="text-sm opacity-80">
-        Al publicar, estos cambios se aplican de inmediato a las sesiones nuevas y a los correos
-        nuevos que se envíen desde esta red.
-      </p>
+    <Modal open={open} onClose={onClose} busy={busy} size="sm" icon={Rocket} title={title}>
+      <p className="text-sm opacity-80">{description}</p>
       <p className="mt-2 text-sm font-medium" style={{ color: "#8a6000" }} role="note">
-        Las comunicaciones ya enviadas no cambian.
+        {note}
       </p>
 
       <div className="mt-5 flex gap-3">

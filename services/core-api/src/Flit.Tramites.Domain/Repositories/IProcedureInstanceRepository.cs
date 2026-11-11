@@ -133,6 +133,13 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14318 — nombre de cada organismo de tránsito indicado (<c>catalogs.transit_offices</c>), para
+    /// mostrar el OT del canal en el detalle. Mapa id→nombre en una consulta; ids sin organismo se omiten.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetTransitOfficeNamesAsync(
+        IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
     /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
     /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
@@ -503,6 +510,21 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdWithPersonAsync(
         Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14044 (Épica #14021) — la validación MÁS RECIENTE del portal de Persona Natural para (solicitud, rol, documento),
+    /// en cualquier estado, aislada por tenant y TRACKEADA. Solo mira lo de ESA solicitud: una validación de otra solicitud
+    /// de la misma cédula nunca se devuelve (decisión del PO: no se reutiliza entre trámites).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14044 — una validación del portal por id (solo las que tienen <c>portal_solicitud_ref</c>), aislada por tenant y
+    /// TRACKEADA (para reenviar). Null si no existe, es de otro tenant o no es del portal.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default);
 
     /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>

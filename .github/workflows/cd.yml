@@ -24,6 +24,8 @@ env:
   CORE_CONSULTAS_IMAGE: ghcr.io/flitsas/flitdev/core-consultas
   CORE_NOTIFICACIONES_IMAGE: ghcr.io/flitsas/flitdev/core-notificaciones
   CORE_ICT_IMAGE: ghcr.io/flitsas/flitdev/core-ict
+  CORE_PERSONANATURAL_IMAGE: ghcr.io/flitsas/flitdev/core-personanatural
+  FRONTEND_PERSONANATURAL_IMAGE: ghcr.io/flitsas/flitdev/frontend-personanatural
   FRONTEND_IMAGE: ghcr.io/flitsas/flitdev/frontend
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
   # FLIT Suite (B-09): hub en flitsas.online. Una sola imagen por ambiente, sin build-args (config en runtime).
@@ -215,6 +217,9 @@ jobs:
             services/core-notificaciones/Directory.Build.props
             services/core-notificaciones/Directory.Packages.props
             services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
+            services/core-personanatural/Directory.Build.props
+            services/core-personanatural/Directory.Packages.props
+            services/core-personanatural/src/Flit.PersonaNatural.Grpc.Contracts
             contracts/proto
 
       - name: Extract metadata — core-api
@@ -424,6 +429,92 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=core-consultas
           cache-to: type=gha,mode=max,scope=core-consultas
+
+
+  # Epic #14021 (HU #14038): core-personanatural, el BFF del portal Persona Natural.
+  # deploy-gitops solo escribe digest si la imagen ya está en flit2-<ambiente>/kustomization.yaml
+  # (DEV primero; docs/host-177/personanatural/ en flit-gitops). Un fallo de este build no frena el deploy.
+  build-core-personanatural:
+    name: Build & push core-personanatural (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_PERSONANATURAL_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-personanatural
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-personanatural
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_PERSONANATURAL_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-personanatural
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK de plataforma de core-api (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-personanatural/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-personanatural
+          cache-to: type=gha,mode=max,scope=core-personanatural
 
 
   # Epic #12878 (GDC): core-comparendos (perfil «comparendos»; ver docs/suite/servicio-nuevo.md).
@@ -697,6 +788,10 @@ jobs:
             # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
             # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
             NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online,!tramites.marcablancadag1.flitsas.online
+            # HU #14217 — origen del portal Persona Natural para Enlace y QR. Vacío mientras el
+            # vhost del portal no esté definido (docs/suite/handoff-vps-personanatural.md §5).
+            # Cuando exista, añadir personanatural_domain en setup y hornearlo aquí.
+            NEXT_PUBLIC_CANAL_OT_ORIGEN=
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -864,6 +959,85 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend-comparendos
           cache-to: type=gha,mode=max,scope=frontend-comparendos
+
+  # Epic #14021 (HU #14052): app web del portal Persona Natural (config en runtime, sin build-args).
+  # Mismo criterio que core-personanatural: digest en GitOps solo si la kustomization ya lista la imagen.
+  build-frontend-personanatural:
+    name: Build & push frontend-personanatural image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_PERSONANATURAL_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-personanatural
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
+      - name: Extract metadata — frontend-personanatural
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_PERSONANATURAL_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-personanatural
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-personanatural/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-personanatural
+          cache-to: type=gha,mode=max,scope=frontend-personanatural
 
   build-python-ml:
     name: Build & push python-ml image
@@ -1037,7 +1211,7 @@ jobs:
   # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
   deploy-gitops:
     name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1067,6 +1241,10 @@ jobs:
       D_FRONTEND_HUB: ${{ needs.build-frontend-hub.outputs.digest }}
       R_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.result }}
       D_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.outputs.digest }}
+      R_CORE_PERSONANATURAL: ${{ needs.build-core-personanatural.result }}
+      D_CORE_PERSONANATURAL: ${{ needs.build-core-personanatural.outputs.digest }}
+      R_FRONTEND_PERSONANATURAL: ${{ needs.build-frontend-personanatural.result }}
+      D_FRONTEND_PERSONANATURAL: ${{ needs.build-frontend-personanatural.outputs.digest }}
       R_PYTHON_ML: ${{ needs.build-python-ml.result }}
       D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
@@ -1102,6 +1280,8 @@ jobs:
           FAILED=""
           MSG=""
           # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
+          # Persona Natural: si la imagen aún no está en la kustomization del ambiente (QA/PDN), se omite
+          # sin fallar — el portal se enciende por ambiente (DEV primero).
           for entry in \
               "core-api:${{ env.CORE_API_IMAGE }}:CORE_API" \
               "core-identity:${{ env.CORE_IDENTITY_IMAGE }}:CORE_IDENTITY" \
@@ -1112,6 +1292,8 @@ jobs:
               "frontend:${{ env.FRONTEND_IMAGE }}:FRONTEND" \
               "frontend-hub:${{ env.FRONTEND_HUB_IMAGE }}:FRONTEND_HUB" \
               "frontend-comparendos:${{ env.FRONTEND_COMPARENDOS_IMAGE }}:FRONTEND_COMPARENDOS" \
+              "core-personanatural:${{ env.CORE_PERSONANATURAL_IMAGE }}:CORE_PERSONANATURAL" \
+              "frontend-personanatural:${{ env.FRONTEND_PERSONANATURAL_IMAGE }}:FRONTEND_PERSONANATURAL" \
               "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
             svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
             r="R_$var"; d="D_$var"
@@ -1120,8 +1302,18 @@ jobs:
               FAILED="$FAILED $svc"
               continue
             fi
-            # Falla si la imagen no esta en la kustomization (evita un despliegue a medias).
-            yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null
+            if ! yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null 2>&1; then
+              case "$svc" in
+                core-personanatural|frontend-personanatural)
+                  echo "::notice::$svc: no listado en $K; omitido (portal no encendido en ${AMBIENTE})"
+                  continue
+                  ;;
+                *)
+                  # Falla si una imagen obligatoria no esta (evita un despliegue a medias).
+                  yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null
+                  ;;
+              esac
+            fi
             yq -i "(.images[] | select(.name == \"$img\")).digest = \"${!d}\"" "$K"
             yq -i "del((.images[] | select(.name == \"$img\")).newTag)" "$K"
             MSG="$MSG"$'\n'"$svc ${!d}"

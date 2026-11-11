@@ -67,7 +67,7 @@ public sealed class TenantDomainConstraintsTests(PostgresDatabaseFixture fixture
             "SELECT string_agg(tgname, ',' ORDER BY tgname) FROM pg_trigger WHERE tgrelid = 'admin.tenant_domains'::regclass AND NOT tgisinternal AND tgenabled = 'O'",
             connection))
         {
-            (await cmd.ExecuteScalarAsync()).Should().Be("tr_tenant_domains_audit,tr_tenant_domains_marca_blanca,tr_tenant_domains_purpose_product,tr_tenant_domains_row_version" /* HU #12968 */);
+            (await cmd.ExecuteScalarAsync()).Should().Be("tr_tenant_domains_audit,tr_tenant_domains_host_unico,tr_tenant_domains_marca_blanca,tr_tenant_domains_purpose_product,tr_tenant_domains_row_version" /* HU #12968; host_unico: HU #14381 (aditivo, solo valida) */);
         }
 
         await using (var cmd = new NpgsqlCommand(

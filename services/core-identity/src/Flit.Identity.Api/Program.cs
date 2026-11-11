@@ -128,6 +128,7 @@ public static class Program
     {
         app.UseRateLimiter();
         app.UseMiddleware<DomainContextMiddleware>();
+        app.UseMiddleware<PortalDomainGuardMiddleware>();
         app.UseAuthentication();
         app.UseMiddleware<DomainBindingMiddleware>();
         app.UseAuthorization();

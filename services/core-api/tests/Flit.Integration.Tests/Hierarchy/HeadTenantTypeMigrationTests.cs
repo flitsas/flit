@@ -63,7 +63,10 @@ public sealed class HeadTenantTypeMigrationTests(PostgresDatabaseFixture fixture
         await using var check = NewContext();
         // Se compara por Id y no por código: al bajar por debajo de la migración 136 (HU #13604) su Down devuelve los
         // códigos IT-LONE…, y al volver a subir su Up los recodifica a COMP-XXXX. Ese cambio es el de la HU #13604, no del 109.
-        var tenants = await check.Tenants.AsNoTracking().ToListAsync();
+        // La HU #14033 vuelve a insertar la empresa Persona Natural al subir a la última: no es poblado de esta HU.
+        var tenants = await check.Tenants.AsNoTracking()
+            .Where(t => t.Id != Flit.Platform.Sdk.PlatformTenants.PersonaNatural)
+            .ToListAsync();
         tenants.Select(t => (t.Id, t.TenantType, t.IsGroupParent)).Should().BeEquivalentTo(
         [
             (TenantSeed.LoneId, "CONCESIONARIO", false),
