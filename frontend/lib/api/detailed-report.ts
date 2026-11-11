@@ -50,7 +50,7 @@ export interface DetailedProcedureRow {
   tenantId?: string;
   tenantName?: string;
   /** Validación de identidad por actor. Ausente en un backend anterior: se lee como lista vacía. */
-  actores?: ActorValidacionDto[];
+  actores?: ActorValidacionDto[] | null;
 }
 
 export interface LabelCount {
