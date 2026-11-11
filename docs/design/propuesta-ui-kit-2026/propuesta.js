@@ -10,12 +10,7 @@
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   // UI Kit 2026: cada ilustración de la propuesta anterior se resuelve a un ícono del repositorio de íconos de FLIT.
   var KIT = "assets/kit/", KI = window.KIT_ICONOS || {};
-  var MAPA_ICONO = { auditoria: "historial", ayuda: "ayuda", banners: "megafono", biometria: "rostro", calendario: "calendario", causales: "causal", colaboradores: "usuarios",
-    comparendos: "ticket", configuracion: "ajustes", "consulta-placa": "buscar", contrasena: "candado", diagnostico: "medidor", documentos: "documento", empresas: "empresas",
-    filtros: "filtro", firmas: "firma", "fuentes-oficiales": "entidad", fur: "fur", "generacion-documental": "pila", "historial-placa": "reloj-doc", identidad: "identidad",
-    improntas: "impronta", inicio: "inicio", integraciones: "integraciones", mandatos: "mandato", matricula: "@tramite-matricula", notificaciones: "campana", organismos: "banco",
-    pendientes: "espera", perfil: "persona", preasignacion: "credencial", procesos: "proceso", productos: "rejilla", reportes: "reportes", revocatorias: "deshacer", roles: "rol",
-    seguridad: "escudo", tramites: "tramites", traspaso: "@tramite-traspaso", trazabilidad: "ruta", vencidos: "vencido" };
+  var MAPA_ICONO = {"auditoria": "portapapeles", "ayuda": "ayuda", "banners": "destello", "biometria": "identidad", "calendario": "calendario", "causales": "lista", "colaboradores": "usuarios", "comparendos": "pago", "configuracion": "usuarios", "consulta-placa": "buscar", "contrasena": "candado", "diagnostico": "consulta", "documentos": "documento", "empresas": "banco", "filtros": "filtro", "firmas": "firma", "fuentes-oficiales": "banco", "fur": "documento", "generacion-documental": "archivo", "historial-placa": "calendario", "identidad": "identidad", "improntas": "archivo-subir", "inicio": "carpeta", "integraciones": "integraciones", "mandatos": "lapiz", "matricula": "@tramite-matricula", "notificaciones": "campana", "organismos": "banco", "pendientes": "@estado-pendiente", "perfil": "persona", "preasignacion": "credencial", "procesos": "robot", "productos": "asterisco", "reportes": "reportes", "revocatorias": "@estado-revocado", "roles": "rol", "seguridad": "escudo", "tramites": "tramites", "traspaso": "@tramite-traspaso", "trazabilidad": "marcador", "vencidos": "nube-alerta"};
   var kico = function (nombre, cls) { return '<span class="kico ' + (cls || "") + '" aria-hidden="true">' + (KI[nombre] || KI.documento || "") + "</span>"; };
   var ilus = function (n, cls) {
     var m = MAPA_ICONO[n] || "documento";
