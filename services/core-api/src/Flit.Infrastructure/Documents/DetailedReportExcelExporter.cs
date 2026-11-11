@@ -2,6 +2,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Analytics.Application.Abstractions;
+using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.Dtos;
 using Flit.Analytics.Application.Queries;
 using Flit.Queries.Domain.Time;
@@ -56,18 +57,18 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
 
         var wroteRows = await WriteWorkbookAsync(
             output,
-            [.. Headers, .. ActoresExcelColumns.Headers(max)],
+            DetalleHeaders(Headers, max),
             (writeRow, token) => _repo.ExportProceduresAsync(
                 filter,
                 (row, _) =>
                 {
-                    writeRow([.. ToCells(row), .. ActoresExcelColumns.Cells(row.Actores, max)]);
+                    writeRow([.. ToCells(row), .. ActoresCells(row, max)]);
                     return Task.CompletedTask;
                 },
                 token),
             requireRows: true,
             ct,
-            numericColumns: ActoresExcelColumns.IntentosColumns(max, Headers.Length)).ConfigureAwait(false);
+            numericColumns: IntentosColumns(DetalleHeaders(Headers, max))).ConfigureAwait(false);
 
         if (!wroteRows)
             throw new InvalidOperationException("no_records");
@@ -82,7 +83,7 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         var max = await _networkRepo.GetNetworkMaxActoresPorRolAsync(filter, ct).ConfigureAwait(false);
         await WriteWorkbookAsync(
             output,
-            [.. NetworkHeaders, .. ActoresExcelColumns.Headers(max)],
+            DetalleHeaders(NetworkHeaders, max),
             async (writeRow, token) =>
             {
                 // AC5 — la misma consulta y el mismo filtro resuelto que el listado; AC4 — un conjunto
@@ -91,14 +92,14 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                     filter,
                     (row, _) =>
                     {
-                        writeRow([.. ToNetworkCells(row), .. ActoresExcelColumns.Cells(row.Actores, max)]);
+                        writeRow([.. ToNetworkCells(row), .. ActoresCells(row.ToRow(), max)]);
                         return Task.CompletedTask;
                     },
                     token).ConfigureAwait(false);
             },
             requireRows: false,
             ct,
-            numericColumns: ActoresExcelColumns.IntentosColumns(max, NetworkHeaders.Length)).ConfigureAwait(false);
+            numericColumns: IntentosColumns(DetalleHeaders(NetworkHeaders, max))).ConfigureAwait(false);
 
         return reached;
     }
@@ -169,6 +170,28 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                 File.Delete(tempPath);
         }
     }
+
+    /// <summary>
+    /// Cabeceras de la hoja: las de siempre + (después de Canal / OT del canal) los dos grupos de validación de
+    /// identidad, Comprador y Vendedor, cada uno agrupado por persona. Contrato v3.
+    /// </summary>
+    private static IReadOnlyList<string> DetalleHeaders(IReadOnlyList<string> baseHeaders, MaxActoresPorRolDto max) =>
+    [
+        .. baseHeaders,
+        .. ActoresExcelColumns.Headers(max, ActoresExcelColumns.Grupo.Comprador),
+        .. ActoresExcelColumns.Headers(max, ActoresExcelColumns.Grupo.Vendedor),
+    ];
+
+    private static IReadOnlyList<string> ActoresCells(DetailedProcedureRowDto row, MaxActoresPorRolDto max) =>
+    [
+        .. ActoresExcelColumns.Cells(row.Actores, max, ActoresExcelColumns.Grupo.Comprador),
+        .. ActoresExcelColumns.Cells(row.Actores, max, ActoresExcelColumns.Grupo.Vendedor),
+    ];
+
+    /// <summary>Posiciones de las columnas «Intentos …»: son las únicas que se escriben como número.</summary>
+    private static HashSet<int> IntentosColumns(IReadOnlyList<string> headers) =>
+        headers.Select((h, i) => (h, i)).Where(x => x.h.StartsWith("Intentos ", StringComparison.Ordinal))
+            .Select(x => x.i).ToHashSet();
 
     private static string[] ToCells(DetailedProcedureRowDto r) =>
     [
