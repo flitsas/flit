@@ -233,7 +233,7 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("parent_tenant_id_at_creation")
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
-        // HU #14317 — canal del trámite y OT del canal (169-HU14317). Van en el INSERT y nunca en un UPDATE
+        // HU #14317 — canal del trámite y OT del canal (172-HU14317). Van en el INSERT y nunca en un UPDATE
         // (mismo criterio que el snapshot del padre). CHECK, FK e índice viven en el DDL crudo.
         builder.Property(x => x.Channel)
             .HasColumnName("channel")
