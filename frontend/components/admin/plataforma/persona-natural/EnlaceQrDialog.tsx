@@ -122,8 +122,7 @@ export function EnlaceQrDialog({
         )}
         {origen === "" && !hostActivo && (
           <p role="status" className={PN_FIELD_ERROR_CLS}>
-            Falta el origen público del canal. Configura NEXT_PUBLIC_CANAL_OT_ORIGEN para completar
-            la dirección.
+            Aún no está configurada la dirección pública del portal. Avisa a soporte.
           </p>
         )}
         <label
