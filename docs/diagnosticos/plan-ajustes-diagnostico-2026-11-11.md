@@ -438,7 +438,7 @@ Reverificado contra la rama (explore-agent) y dictamen normativo (expert-doc-eng
 | # | Hallazgo | Efecto en el plan |
 |---|---|---|
 | V1 | `DisparaSimit` hoy **también** dispara con cualquier acuerdo con saldo ≠ 0 (`EvaluadorDictamen.cs:151-160`). | Se retira esa condición de la regla de multas (decisión 2.5) y el acuerdo pasa a regla propia que advierte. |
-| V2 | **Unilateral (Res. 20233040017145, art. 5.3.2.2):** no se valida paz y salvo de multas ni RTM. | **Decisión derivada del dictamen (a confirmar por el usuario):** en `TRASPASO_UNILATERAL` las reglas de multas, «multas sin verificar» y `RTM_NO_VIGENTE` **advierten** (no bloquean). STANDARD y TRANSFERENCIA_DE_DOMINIO bloquean según 2.1/2.4. |
+| V2 | **Unilateral (Res. 20233040017145, art. 5.3.2.2):** no se valida paz y salvo de multas ni RTM. | **Decisión derivada del dictamen, confirmada por el usuario el 2026-11-11:** en `TRASPASO_UNILATERAL` las reglas de multas, «multas sin verificar» y `RTM_NO_VIGENTE` **advierten** (no bloquean). STANDARD y TRANSFERENCIA_DE_DOMINIO bloquean según 2.1/2.4. |
 | V3 | Multas «del vehículo»: la norma exige paz y salvo del **propietario** (o del locatario en leasing), no del vehículo. | Se mantiene el bloqueo (decisión 2.1) como **política FLIT**; el texto de la regla no la atribuye a la norma. El comprador no se evalúa (correcto). |
 | V4 | **RTM por clase (Ley 769 art. 52, mod. Decreto 019/2012 art. 202):** público, moto y motocarro desde los **2 años**; particular desde los **5**; maquinaria y remolque NA. Hoy `EvaluaRtm` usa 5 años para todos → **defecto confirmado (Caso B)**. | Se corrige dentro del punto 7, en un commit propio de Bug (registro diferido como Bug). Requiere sumar `Clase` y `Servicio` a `HechosRuntVehiculo` y al mapeo del RUNT (hoy no llegan). Clase desconocida → 5 años (comportamiento actual). |
 | V5 | SOAT: remolque/semirremolque exento (NA); maquinaria NA con advertencia hasta confirmar. | Entra en la matriz del punto 7. |
@@ -477,4 +477,5 @@ Los puntos que tocan los mismos archivos van en serie; el resto en paralelo en w
 
 ## Pendientes que no resuelve esta ola (gates)
 
-- Registrar los work items (`/register-work`) antes del merge; visto bueno del LT (motocarro y acceso entre compañías); revisión de seguridad/Habeas Data de P1 y P4; aceptación del ADR del P4 por el LT; prueba de carga del P4 y QA con placas reales del P7 en ambiente QA; confirmación del usuario de la decisión derivada V2 (unilateral).
+- Registrar los work items (`/register-work`) antes del merge; visto bueno del LT (motocarro y acceso entre compañías); revisión de seguridad/Habeas Data de P1 y P4; aceptación del ADR del P4 por el LT; prueba de carga del P4 y QA con placas reales del P7 en ambiente QA.
+- **Un solo PR** para toda la ola, por decisión del usuario (2026-11-11), aunque supere las 800 líneas de la regla 9: justificarlo en la descripción del PR.

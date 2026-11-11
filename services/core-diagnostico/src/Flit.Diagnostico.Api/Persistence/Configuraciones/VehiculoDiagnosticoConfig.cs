@@ -84,6 +84,12 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
         // Reutilización del mismo día por compañía y placa (D-10, HU #13723).
         builder.HasIndex(x => new { x.TenantId, x.Placa }).HasDatabaseName("ix_vehiculos_tenant_placa");
 
+        // Punto 4 (ADR-0084): el borrador creado en Trámites; se fija una vez y es la fuente de «Ver trámite #N» (y del índice del ZIP).
+        builder.Property(x => x.TramiteId)
+            .HasComment("Borrador creado en Trámites (origin=diagnostico, external_ref=id). Se fija una vez (R-16).");
+        builder.Property(x => x.TramiteNumero).HasMaxLength(32).HasComment("Número (reference_number) del borrador en Trámites.");
+        builder.Property(x => x.TramiteCreadoEn).HasComment("Instante en que Diagnóstico registró el borrador.");
+
         // Concurrencia optimista con la columna de sistema xmin: no agrega columnas a la tabla.
         builder.Property(x => x.Version).IsRowVersion();
     }

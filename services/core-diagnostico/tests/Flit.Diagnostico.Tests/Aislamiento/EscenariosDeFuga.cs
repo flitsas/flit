@@ -158,6 +158,19 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaDictamen = Program.Prefijo + DictamenEndpoints.Ruta;
 
+    /// <summary>
+    /// Operaciones «Crear trámite» del lote (Punto 4, incremento 3; ADR-0072 (d)8): cada empresa siembra un lote con un vehículo, una
+    /// operación MASIVA y su ítem; el listado devuelve el id de la operación, y con el token de A el de B responde 404 sin el id de la
+    /// operación ni el del vehículo de B.
+    /// </summary>
+    public const string RutaOperacionesDerivacion = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Derivacion.DerivacionEndpoints.RutaOperaciones;
+
+    /// <summary>
+    /// Detalle de una operación «Crear trámite» (Punto 4, incremento 3): devuelve el id de la operación y el vehículo de su ítem; con
+    /// el token de A el de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaOperacionDerivacion = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Derivacion.DerivacionEndpoints.RutaOperacion;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -237,7 +250,32 @@ public static class EscenariosDeFuga
             await db.SaveChangesAsync(ct);
             return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote.Id}/vehiculos/{vehiculo}/dictamen", [exclusivo]);
         }),
+        new EscenarioDeFuga(RutaOperacionesDerivacion, async (empresa, ct) =>
+        {
+            var (lote, operacion, vehiculo) = await OperacionSembradaAsync(empresa, "TST910", ct);
+            return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote}/tramites/operaciones", [operacion.ToString()],
+                Exclusivos: [operacion.ToString(), vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaOperacionDerivacion, async (empresa, ct) =>
+        {
+            var (lote, operacion, vehiculo) = await OperacionSembradaAsync(empresa, "TST911", ct);
+            return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote}/tramites/operaciones/{operacion}", [operacion.ToString(), vehiculo.ToString()]);
+        }),
     ];
+
+    /// <summary>Lote con un vehículo y una operación MASIVA con su ítem PENDIENTE, sembrados por el contexto de la empresa.</summary>
+    private static async Task<(Guid Lote, Guid Operacion, Guid Vehiculo)> OperacionSembradaAsync(EmpresaDePrueba empresa, string placa, CancellationToken ct)
+    {
+        var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new(placa, [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var ahora = DateTimeOffset.UtcNow;
+        await using var db = empresa.Db();
+        var operacion = global::Flit.Diagnostico.Api.Modulos.Derivacion.OperacionDerivacion.Masiva(empresa.Id, lote.Id, "TRASPASO_STANDARD", Guid.NewGuid(), 1, ahora);
+        db.Add(operacion);
+        db.Add(global::Flit.Diagnostico.Api.Modulos.Derivacion.ItemDerivacion.Pendiente(operacion, vehiculo, 1, ahora));
+        await db.SaveChangesAsync(ct);
+        return (lote.Id, operacion.Id, vehiculo);
+    }
 
     /// <summary>Lote con un vehículo terminado y su ZIP pedido (y generado por la cola si <paramref name="procesar"/>).</summary>
     private static async Task<(Guid Lote, Guid Evidencia)> ZipSembradoAsync(EmpresaDePrueba empresa, string placa, bool procesar, CancellationToken ct)

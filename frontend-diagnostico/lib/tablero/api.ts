@@ -4,7 +4,7 @@
 // manual. La API vuelve a validar cada permiso.
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
-import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
+import type { EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
 
 export type EstadoCelda = "PENDIENTE" | "EN_CURSO" | "COMPLETADO" | "ERROR" | "NA";
 export type MotivoNa = "SERVICIO_PUBLICO" | "DEPARTAMENTO_NO_SOPORTADO" | "SIN_DOCUMENTO_LOCATARIO";
@@ -66,7 +66,34 @@ export interface FilaVehiculo {
    * hay «Reintentar placa». Sin la clave (backend previo o fila sin cambios), se trata como false.
    */
   pegada?: boolean;
+  /**
+   * Punto 4 (incremento 2, contrato provisional; ver lib/tablero/derivacion.ts): el borrador en Trámites que originó la placa,
+   * si existe. Sin la clave (backend previo), no hay acción de trámite.
+   */
+  tramite?: TramiteFila | null;
+  /** Punto 4: la placa se puede derivar (VIABLE, terminada y sin trámite). */
+  elegible_tramite?: boolean;
+  /** Punto 4: código o texto del motivo por el que no es elegible (NO_VIABLE, NO_TERMINADO, YA_TIENE_TRAMITE, EN_CURSO…). */
+  motivo_no_elegible?: string | null;
+  /**
+   * Punto 4 (contrato del incremento 2): derivación de la fila; null con la derivación apagada. Manda sobre las claves planas
+   * de arriba (que se conservan por compatibilidad). Se lee con `derivacionDeFila` (lib/tablero/derivacion.ts).
+   */
+  derivacion?: {
+    elegible: boolean;
+    motivo_no_elegible: string | null;
+    estado: "PENDIENTE" | "ENVIADO" | "CREADO" | "OMITIDO" | "FALLIDO" | null;
+    tramite: TramiteFila | null;
+  } | null;
   celdas: CeldaGrilla[];
+}
+
+/** Trámite creado desde el diagnóstico (Punto 4): id del borrador en Trámites y su número visible. */
+export interface TramiteFila {
+  id: string;
+  numero: string | number;
+  /** Enlace al borrador que arma el backend ({UrlTramites}/tramites/{id}?t={empresa}); puede ser relativo o faltar. */
+  url?: string;
 }
 
 export interface ColumnasGrilla {
@@ -104,6 +131,8 @@ export interface Grilla {
   /** Punto 3: ids de las placas pegadas, en cada respuesta. Cubre las que se pegan solo por tiempo (> 10 min sin cambio de celda),
    * que el sondeo incremental no reenvía. Sin la clave, se conserva el `pegada` de cada fila. */
   vehiculos_pegados?: string[];
+  /** Punto 4 (provisional): modo del lote; en SIMPLE, «Crear trámite» pide el tipo. Sin la clave, se pregunta solo si la API lo exige. */
+  modo?: ModoDiagnostico;
 }
 
 export interface PanelCerrado {

@@ -101,3 +101,25 @@ export const ROLES_PERSONA: Readonly<Record<string, string>> = {
 export function nombreRol(rol: string | null | undefined): string {
   return rotular({ contexto: "rol de la persona", codigo: rol, respaldo: ROLES_PERSONA });
 }
+
+/**
+ * Motivos de «Crear trámite» (Punto 4): por qué una placa no es elegible (grilla y encolado) y por qué se omitió o falló al
+ * ejecutar (rechazos del rpc CrearBorradorDesdeDiagnostico de Trámites). Propuestos (5.3), a revisar en el PR.
+ */
+export const MOTIVOS_DERIVACION: Readonly<Record<string, string>> = {
+  NO_TERMINADO: "Las consultas de la placa no han terminado",
+  NO_VIABLE: "El dictamen no es viable",
+  YA_TIENE_TRAMITE: "La placa ya tenía trámite",
+  EN_CURSO: "Ya se está creando el trámite de esta placa",
+  TIPO_NO_DISPONIBLE: "El tipo de trámite no está disponible para la compañía",
+  FAMILIA_BLOQUEADA: "La compañía tiene bloqueado este tipo de trámite",
+  USUARIO_SIN_PERMISO: "No tienes permiso para crear este trámite en Trámites",
+  OT_NO_HABILITADO: "OT no habilitado para la compañía",
+  REGLA_COMPANIA: "Una regla de la compañía impide crear el trámite",
+  TRAMITE_ACTIVO_DUPLICADO: "La placa ya tiene otro trámite activo en Trámites",
+  EMPRESA_INACTIVA: "La compañía no está activa en Trámites",
+  REFERENCIA_DE_OTRO_ORIGEN: "La placa ya está asociada a un trámite creado por otra vía",
+  DATOS_INVALIDOS: "Faltan datos de la placa o no son válidos para crear el trámite",
+  TRAMITES_NO_DISPONIBLE: "Trámites no está disponible en este momento",
+  RECHAZO_TRAMITES: "Trámites no aceptó crear el trámite",
+};

@@ -21,9 +21,11 @@ export interface EstadoSesion {
   cargando: boolean;
   error: string | null;
   recargar: () => void;
+  /** Origen de Trámites (TRAMITES_URL): enlaces «Ver trámite #N» del tablero (Punto 4). Vacío fuera del shell. */
+  tramitesUrl?: string;
 }
 
-const SesionContext = createContext<EstadoSesion>({ sesion: null, cargando: true, error: null, recargar: () => {} });
+const SesionContext = createContext<EstadoSesion>({ sesion: null, cargando: true, error: null, recargar: () => {}, tramitesUrl: "" });
 
 /** Sesión de Diagnóstico (GET /api/v1/diagnostico/sesion) para cualquier pantalla dentro del shell. */
 export function useSesion(): EstadoSesion {
@@ -101,7 +103,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
     setIntento((i) => i + 1);
   }, []);
 
-  const valor = useMemo(() => ({ ...estado, recargar }), [estado, recargar]);
+  const valor = useMemo(() => ({ ...estado, recargar, tramitesUrl }), [estado, recargar, tramitesUrl]);
   const usuario = useMemo(() => ({ ...user, tenantName: estado.sesion?.empresa.nombre || user.tenantName }), [user, estado.sesion]);
 
   let contenido: ReactNode = children;

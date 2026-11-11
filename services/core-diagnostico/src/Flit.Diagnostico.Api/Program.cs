@@ -72,6 +72,8 @@ public static class Program
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
         // HU #13743: tablero del lote (grilla incremental, cierre del panel e historial de estados).
         Modulos.Tablero.EndpointsTablero.AddTablero(builder.Services);
+        // Punto 4 (ADR-0084): «Crear trámite» individual, apagado por defecto (Diagnostico:Derivacion:Habilitada).
+        Modulos.Derivacion.DerivacionEndpoints.AddDerivacion(builder.Services, builder.Configuration);
         // HU #13746: reproceso de una celda en ERROR (POST /consultas/{cid}/reprocesar).
         Modulos.Consultas.EndpointsReproceso.AddReproceso(builder.Services);
         // HU #13800: llenado manual de una celda en ERROR desde el backoffice (PUT /backoffice/consultas/{cid}/manual).

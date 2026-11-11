@@ -139,7 +139,22 @@ public sealed class IndiceZipTests
         libro.Dato(0)[7].Should().Be("TRM-2026-000123");
         libro.Dato(1)[7].Should().BeEmpty();
         new VehiculoDelZip(Guid.NewGuid(), 1, "TST807", "Terminado", Incluido: true).Tramite
-            .Should().BeNull("hasta el punto 4 el vehículo del ZIP no trae número de trámite");
+            .Should().BeNull("sin borrador el vehículo del ZIP no trae número de trámite");
+    }
+
+    // Punto 4 (incremento 3) → punto 8 — el número del trámite de cada vehículo entra en la huella del ZIP (zip/tramites), ordenado por
+    // vehículo: un borrador nuevo cambia la huella y el ZIP no se reutiliza con la columna Trámite vieja; sin trámites, vacía.
+    [Fact]
+    public void La_huella_del_zip_suma_el_tramite_de_cada_vehiculo_en_orden_estable()
+    {
+        var a = Guid.Parse("0199f3a1-0000-7000-8000-00000000000a");
+        var b = Guid.Parse("0199f3a1-0000-7000-8000-00000000000b");
+
+        PlanZip.ClaveTramites([(b, "TR-2"), (a, "TR-1")]).Should().Be($"{a:D}:TR-1,{b:D}:TR-2");
+        PlanZip.ClaveTramites([(a, "TR-1"), (b, "TR-2")]).Should().Be(PlanZip.ClaveTramites([(b, "TR-2"), (a, "TR-1")]), "el orden de lectura no cambia la huella");
+        PlanZip.ClaveTramites([(a, "TR-1")]).Should().NotBe(PlanZip.ClaveTramites([(a, "TR-1"), (b, "TR-2")]), "un borrador nuevo cambia la huella");
+        PlanZip.ClaveTramites([]).Should().BeEmpty();
+        PlanZip.ClaveHuellaTramites.Should().Be("zip/tramites");
     }
 
     // AC6 (endurecimiento) — el paquete armado a mano en streaming pasa el validador de OpenXml (esquema de Office 2019): Excel lo abre sin reparar.

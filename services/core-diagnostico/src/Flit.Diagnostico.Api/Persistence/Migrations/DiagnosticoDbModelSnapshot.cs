@@ -888,6 +888,244 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Derivacion.ItemDerivacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en")
+                        .HasComment("Último cambio de estado.");
+
+                    b.Property<DateTimeOffset?>("DisponibleDesde")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("disponible_desde")
+                        .HasComment("Espera del reintento programado (masivo); null si no espera.");
+
+                    b.Property<DateTimeOffset?>("EnviadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enviado_en")
+                        .HasComment("Instante en que salió hacia Trámites (en vuelo).");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado")
+                        .HasComment("PENDIENTE, ENVIADO, CREADO, OMITIDO o FALLIDO.");
+
+                    b.Property<short>("Intentos")
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("intentos")
+                        .HasComment("Llamadas al rpc hechas por este ítem.");
+
+                    b.Property<string>("MotivoCodigo")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("motivo_codigo")
+                        .HasComment("Motivo de OMITIDO o FALLIDO: NO_VIABLE, YA_TIENE_TRAMITE, OT_NO_HABILITADO, TRAMITES_NO_DISPONIBLE…; null en los demás.");
+
+                    b.Property<Guid>("OperacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operacion_id")
+                        .HasComment("Operación a la que pertenece.");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("integer")
+                        .HasColumnName("orden")
+                        .HasComment("Orden de liberación dentro de la operación (el de la selección).");
+
+                    b.Property<Guid?>("ReintentadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reintentado_por")
+                        .HasComment("@pii:low Usuario que reabrió el ítem con «reintentar fallidas» (claim sub, seudónimo); autor del borrador reintentado. Null si nunca se reintentó.");
+
+                    b.Property<short>("Republicaciones")
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("republicaciones")
+                        .HasComment("Veces que el reconciliador re-publicó el ítem colgado (incremento 3); a la segunda queda FALLIDO.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña de la operación y del vehículo.");
+
+                    b.Property<Guid?>("TramiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tramite_id")
+                        .HasComment("Borrador creado en Trámites; solo en CREADO.");
+
+                    b.Property<string>("TramiteNumero")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tramite_numero")
+                        .HasComment("Número (reference_number) del borrador.");
+
+                    b.Property<Guid>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo a derivar (external_ref del borrador en Trámites).");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_derivaciones");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_derivaciones_tenant_id");
+
+                    b.HasIndex("TenantId", "EnviadoEn")
+                        .HasDatabaseName("ix_derivaciones_en_vuelo")
+                        .HasFilter("estado = 'ENVIADO'");
+
+                    b.HasIndex("TenantId", "VehiculoId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_derivaciones_vehiculo_vivo")
+                        .HasFilter("estado IN ('PENDIENTE', 'ENVIADO', 'CREADO')");
+
+                    b.HasIndex("TenantId", "OperacionId", "Estado")
+                        .HasDatabaseName("ix_derivaciones_operacion");
+
+                    b.HasIndex("TenantId", "OperacionId", "Orden")
+                        .HasDatabaseName("ix_derivaciones_pendientes")
+                        .HasFilter("estado = 'PENDIENTE'");
+
+                    b.HasIndex(new[] { "TenantId", "VehiculoId" }, "ix_derivaciones_vehiculo")
+                        .HasDatabaseName("ix_derivaciones_vehiculo");
+
+                    b.ToTable("derivaciones", "diagnostico", t =>
+                        {
+                            t.HasComment("Ítem de una operación «Crear trámite» (Punto 4, ADR-0084): un vehículo, su estado, motivo e intentos y el trámite creado.");
+
+                            t.HasCheckConstraint("ck_derivaciones_creado", "(estado = 'CREADO') = (tramite_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_derivaciones_estado", "estado IN ('PENDIENTE', 'ENVIADO', 'CREADO', 'OMITIDO', 'FALLIDO')");
+
+                            t.HasCheckConstraint("ck_derivaciones_intentos", "intentos >= 0");
+
+                            t.HasCheckConstraint("ck_derivaciones_motivo", "estado NOT IN ('OMITIDO', 'FALLIDO') OR motivo_codigo IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_derivaciones_republicaciones", "republicaciones >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Derivacion.OperacionDerivacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset>("CreadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creada_en")
+                        .HasComment("Instante de creación de la operación.");
+
+                    b.Property<int>("Creadas")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("creadas")
+                        .HasComment("Ítems CREADO.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Lote del que salen los vehículos.");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado")
+                        .HasComment("EN_CURSO o TERMINADA (creadas + omitidas + fallidas = total).");
+
+                    b.Property<int>("Fallidas")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("fallidas")
+                        .HasComment("Ítems FALLIDO.");
+
+                    b.Property<int>("Omitidas")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("omitidas")
+                        .HasComment("Ítems OMITIDO.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote y de la operación.");
+
+                    b.Property<DateTimeOffset?>("TerminadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("terminada_en")
+                        .HasComment("Instante en que cerró su último ítem; null mientras está EN_CURSO.");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("tipo")
+                        .HasComment("INDIVIDUAL (síncrona, una placa) o MASIVA (encolada).");
+
+                    b.Property<string>("TipoTramiteCodigo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("tipo_tramite_codigo")
+                        .HasComment("Tipo de trámite de los borradores (tramites.procedure_types.code).");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer")
+                        .HasColumnName("total")
+                        .HasComment("Ítems de la operación.");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Usuario que lanzó la operación (claim sub, seudónimo); autor de los borradores (4.6).");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_derivacion_operaciones");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_derivacion_operaciones_tenant_id");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "CreadaEn")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_derivacion_operaciones_lote");
+
+                    b.ToTable("derivacion_operaciones", "diagnostico", t =>
+                        {
+                            t.HasComment("Operación «Crear trámite» (Punto 4, ADR-0084): individual o masiva, de un lote y un usuario, con contadores de sus ítems.");
+
+                            t.HasCheckConstraint("ck_derivacion_operaciones_contadores", "creadas >= 0 AND omitidas >= 0 AND fallidas >= 0 AND creadas + omitidas + fallidas <= total");
+
+                            t.HasCheckConstraint("ck_derivacion_operaciones_estado", "estado IN ('EN_CURSO', 'TERMINADA')");
+
+                            t.HasCheckConstraint("ck_derivacion_operaciones_terminada", "(estado = 'TERMINADA') = (terminada_en IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_derivacion_operaciones_tipo", "tipo IN ('INDIVIDUAL', 'MASIVA')");
+
+                            t.HasCheckConstraint("ck_derivacion_operaciones_total", "total > 0");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2630,6 +2868,22 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("tipo_identificador")
                         .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO o VIN (R-19).");
 
+                    b.Property<DateTimeOffset?>("TramiteCreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tramite_creado_en")
+                        .HasComment("Instante en que Diagnóstico registró el borrador.");
+
+                    b.Property<Guid?>("TramiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tramite_id")
+                        .HasComment("Borrador creado en Trámites (origin=diagnostico, external_ref=id). Se fija una vez (R-16).");
+
+                    b.Property<string>("TramiteNumero")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tramite_numero")
+                        .HasComment("Número (reference_number) del borrador en Trámites.");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -2867,6 +3121,36 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_personas_vehiculo_vehiculos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Derivacion.ItemDerivacion", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Derivacion.OperacionDerivacion", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "OperacionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_derivaciones_operacion");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_derivaciones_vehiculo");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Derivacion.OperacionDerivacion", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_derivacion_operaciones_diagnostico");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.HistorialEstadoDiagnostico", b =>

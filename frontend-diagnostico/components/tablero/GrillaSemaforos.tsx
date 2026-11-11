@@ -47,6 +47,11 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   tituloAccionVehiculo?: string;
   /** Acción bajo la placa (corte 7: «Dictamen»). No entra en el sondeo de la grilla: quien la pinta pide el dictamen al abrirla. */
   accionEncabezado?: (vehiculo: FilaVehiculo) => ReactNode;
+  /**
+   * Casilla de selección al inicio de cada fila (Punto 4, masivo: solo con la capacidad `derivar` y la derivación encendida).
+   * Sin ella la columna no existe.
+   */
+  casillaVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
 }
 
 /** «—» con nombre accesible cuando el dato no existe. */
@@ -137,6 +142,7 @@ export function GrillaSemaforos({
   accionVehiculo,
   tituloAccionVehiculo = "Reporte",
   accionEncabezado,
+  casillaVehiculo,
 }: GrillaSemaforosProps) {
   const pedidas = fuentesPedidas(grilla.columnas);
 
@@ -145,7 +151,12 @@ export function GrillaSemaforos({
       <table aria-label="Semáforo de consultas del lote" className="w-full min-w-[1280px] border-collapse text-sm">
         <thead>
           <tr>
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} align-bottom`} style={CABECERA_ESTILO}>
+            {casillaVehiculo && (
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} w-10 align-bottom`} style={CABECERA_ESTILO}>
+                <span className="sr-only">Seleccionar</span>
+              </th>
+            )}
+            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`} style={CABECERA_ESTILO}>
               Placa o VIN
             </th>
             <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
@@ -185,6 +196,11 @@ export function GrillaSemaforos({
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
               <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-card">
+                {casillaVehiculo && (
+                  <td data-columna="seleccion" className={TD_CLS}>
+                    {casillaVehiculo(v)}
+                  </td>
+                )}
                 <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} accion={accionEncabezado?.(v)} />
                 <CeldaDocumentoDeclarado vehiculo={v} />
                 <CeldaDocumentosPropietario vehiculo={v} />

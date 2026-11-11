@@ -54,6 +54,10 @@ tags:
       Tablero del lote (MOD04, HU #13743): grilla incremental por versión (polling cada 3 s), estado global, cierre
       del panel e historial de estados. Todo con diagnostico.diagnosticos.ver y la visibilidad de la compañía
       (visibilidad_usuario=PROPIOS limita al creador; el admin de la compañía ve todos). Campos en snake_case.
+  - name: Derivacion
+    description: >
+      Crear trámite desde el diagnóstico (Punto 4, ADR-0084): borrador en Trámites servidor a servidor, sin wizard.
+      Incremento 2: individual síncrono. Apagado por defecto (Diagnostico:Derivacion:Habilitada).
   - name: Express
     description: >
       Diagnóstico Express de un solo vehículo (MOD02, HU #13753): cabecera y vehículo en una transacción, con las mismas
@@ -1660,6 +1664,350 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
         "409":
           description: "`code` = CELDA_MODIFICADA: una celda cambió mientras se pedía el reintento; volver a leer la grilla."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/tramite:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Derivacion]
+      operationId: crearTramiteDesdeVehiculo
+      summary: Crea el borrador del trámite de una placa (individual, síncrono)
+      description: >
+        Punto 4, incremento 2 (ADR-0084, diseño §5.1). Permiso diagnostico.derivacion.crear (el rol de backoffice no lo tiene).
+        Solo existe con Diagnostico:Derivacion:Habilitada=true (apagada por defecto: 404). Desde el contexto de backoffice
+        (petición con la empresa explícita ?empresa=) responde 403 DERIVACION_DESDE_BACKOFFICE aunque se tenga el permiso.
+        Revalida en el servidor la misma regla de la grilla (fila derivacion): vehículo terminado, dictamen vigente VIABLE
+        (solo en lotes CON_ANALISIS; los SIMPLE no tienen dictamen), sin trámite y sin otro intento en curso. Tipo de trámite:
+        en CON_ANALISIS el del lote (se ignora el del cuerpo); en SIMPLE el tipo_tramite_codigo del cuerpo, validado contra
+        GET /tipos-tramite. Llama al rpc CrearBorradorDesdeDiagnostico de core-api con la empresa del lote, el usuario que
+        lanza como autor, external_ref = id del vehículo y el OT de matrícula del RUNT (nombre y código de la réplica). Es
+        idempotente en Trámites: si el borrador ya existía responde 201 con ya_existia=true. Un rechazo de Trámites deja el
+        intento OMITIDO (la placa se puede volver a intentar); Trámites caído lo deja FALLIDO. Al crearse, el vehículo guarda
+        el trámite (id y número) una sola vez.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrearTramiteEntrada"
+      responses:
+        "201":
+          description: Borrador creado (o ya existente en Trámites).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TramiteCreado"
+        "400":
+          description: >
+            code = TIPO_TRAMITE_REQUERIDO (lote SIMPLE sin tipo_tramite_codigo, campo = tipo_tramite_codigo),
+            TIPO_TRAMITE_INVALIDO (no está en el catálogo de la etapa) o CUERPO_INVALIDO (JSON inválido).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.derivacion.crear; desde el backoffice (code = DERIVACION_DESDE_BACKOFFICE); sin compañía
+            (code = SIN_EMPRESA); compañía sin Diagnóstico activo (code = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            code = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario, o el vehículo no es
+            del lote. También si la derivación está apagada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "code = YA_TIENE_TRAMITE: el vehículo ya tiene su trámite; no se llama a Trámites."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictoTramite"
+        "422":
+          description: >
+            code = NO_ELEGIBLE. motivo_codigo: NO_TERMINADO, NO_VIABLE, EN_CURSO (otro intento del vehículo en vuelo, p. ej.
+            doble clic) o un rechazo de Trámites (TIPO_NO_DISPONIBLE, FAMILIA_BLOQUEADA, USUARIO_SIN_PERMISO, OT_NO_HABILITADO,
+            REGLA_COMPANIA, TRAMITE_ACTIVO_DUPLICADO, EMPRESA_INACTIVA, REFERENCIA_DE_OTRO_ORIGEN, DATOS_INVALIDOS,
+            RECHAZO_TRAMITES). motivo en lenguaje claro, sin datos personales.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoElegibleDerivacion"
+        "503":
+          description: >
+            code = TRAMITES_NO_DISPONIBLE (o CATALOGO_NO_DISPONIBLE si en un lote SIMPLE el catálogo no responde). Con
+            Retry-After solo si es transitorio (UNAVAILABLE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED, INTERNAL); sin él si es de
+            configuración (cliente de servicio rechazado o derivación apagada en core-api). El intento queda FALLIDO y se puede
+            volver a pedir. Incremento 3: con el freno hacia Trámites abierto (varios transitorios seguidos) responde 503 sin
+            llamar ni crear el intento, con Retry-After = lo que falta de la pausa.
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar (solo transitorio).
+              schema:
+                type: integer
+                example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Derivacion]
+      operationId: crearTramitesDesdeDiagnostico
+      summary: Crea los borradores de trámite de una selección del lote (masivo, encolado)
+      description: >
+        Punto 4, incremento 3 (ADR-0084, diseño §5.1 y §5.3). Permiso diagnostico.derivacion.crear; 403
+        DERIVACION_DESDE_BACKOFFICE desde el contexto de backoffice. Solo existe con Diagnostico:Derivacion:Habilitada=true.
+        vehiculo_ids son los vehículos elegidos, en el orden de la selección (los repetidos cuentan una vez), entre 1 y
+        Diagnostico:Derivacion:MaxItemsPorOperacion (5000). Todos deben ser del lote (si no, 400 VEHICULO_FUERA_DEL_LOTE y no
+        se crea nada). Tipo de trámite: el del lote en CON_ANALISIS (se ignora el del cuerpo); en SIMPLE el del cuerpo,
+        validado contra GET /tipos-tramite. En una transacción crea la operación MASIVA con un ítem por vehículo: los
+        elegibles PENDIENTE y los no elegibles OMITIDO de inmediato con su motivo (no_elegibles); luego libera como mucho
+        Diagnostico:Derivacion:CreditoPorCompania ítems de la compañía (2 por defecto) publicando por la outbox el evento
+        diagnostico.derivacion.solicitada (solo ids). Cada ítem que cierra libera el siguiente de la compañía. No llama a
+        Trámites en la petición. Idempotente ante el doble clic: un vehículo con un ítem vivo (de este envío o de otro) queda
+        en no_elegibles con EN_CURSO; nunca hay dos ítems vivos del mismo vehículo. El progreso se lee en Location.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrearTramitesEntrada"
+      responses:
+        "202":
+          description: Operación creada y encolada.
+          headers:
+            Location:
+              description: /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones/{operacion_id}
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperacionEncolada"
+        "400":
+          description: >
+            code = VEHICULOS_REQUERIDOS (lista vacía o ausente, campo = vehiculo_ids), DEMASIADOS_VEHICULOS (más de
+            MaxItemsPorOperacion), VEHICULO_FUERA_DEL_LOTE (algún vehículo no es del lote), TIPO_TRAMITE_REQUERIDO,
+            TIPO_TRAMITE_INVALIDO o CUERPO_INVALIDO. Las dos primeras y CUERPO_INVALIDO se deciden sin tocar la base.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.derivacion.crear o desde el backoffice (code = DERIVACION_DESDE_BACKOFFICE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no existe o no es visible para el usuario. También con la derivación apagada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: "code = CATALOGO_NO_DISPONIBLE: lote SIMPLE y el catálogo de tipos no responde (con Retry-After)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: ultima
+        in: query
+        required: false
+        description: Con true, las operaciones EN_CURSO del lote y la más reciente (para retomar al volver a la pantalla).
+        schema:
+          type: boolean
+    get:
+      tags: [Derivacion]
+      operationId: listarOperacionesDerivacion
+      summary: Operaciones «Crear trámite» del lote
+      description: >
+        Punto 4, incremento 3. Permiso diagnostico.diagnosticos.ver. De la más reciente a la más antigua (20). Lee solo los
+        contadores propios de Diagnóstico; nunca llama a core-api.
+      responses:
+        "200":
+          description: Operaciones del lote.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProgresoOperacion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no existe o no es visible. También con la derivación apagada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones/{opId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: opId
+        in: path
+        required: true
+        description: Id de la operación.
+        schema:
+          type: string
+          format: uuid
+      - name: estado
+        in: query
+        required: false
+        description: Filtra los ítems por estado.
+        schema:
+          type: string
+          enum: [PENDIENTE, ENVIADO, CREADO, OMITIDO, FALLIDO]
+      - name: pagina
+        in: query
+        required: false
+        description: Página de ítems (50 por página), desde 1.
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+    get:
+      tags: [Derivacion]
+      operationId: leerOperacionDerivacion
+      summary: Progreso de una operación «Crear trámite»
+      description: >
+        Punto 4, incremento 3. Permiso diagnostico.diagnosticos.ver. Contadores (pendientes = total − creadas − omitidas −
+        fallidas, incluye los en vuelo), motivos agrupados de OMITIDO y FALLIDO y una página de ítems por orden de la
+        selección. El front lo sondea cada 3 s mientras está EN_CURSO. Lee solo tablas de Diagnóstico; nunca llama a core-api.
+      responses:
+        "200":
+          description: Progreso.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetalleOperacionDerivacion"
+        "400":
+          description: "code = ESTADO_INVALIDO: el filtro estado no es uno de los cinco."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no es visible o la operación no es de ese lote."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones/{opId}/reintentar-fallidas:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: opId
+        in: path
+        required: true
+        description: Id de la operación.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Derivacion]
+      operationId: reintentarFallidasDerivacion
+      summary: Vuelve a encolar los ítems FALLIDO de una operación
+      description: >
+        Punto 4, incremento 3. Permiso diagnostico.derivacion.crear; 403 DERIVACION_DESDE_BACKOFFICE desde el backoffice.
+        Solo con la operación sin ítems PENDIENTE ni ENVIADO (si no, 409 OPERACION_EN_CURSO). Cada FALLIDO se revalida:
+        si sigue elegible se reabre el MISMO ítem a PENDIENTE (sin motivo ni intentos) y la operación vuelve a EN_CURSO; si ya
+        no lo es, queda OMITIDO con su motivo. Luego se libera el crédito de la compañía. Sin fallidos responde 202 con 0.
+      responses:
+        "202":
+          description: Fallidos reencolados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintentoFallidas"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.derivacion.crear o desde el backoffice (code = DERIVACION_DESDE_BACKOFFICE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no es visible o la operación no es de ese lote."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "code = OPERACION_EN_CURSO: quedan ítems en vuelo, otro reintento corre a la vez o algún vehículo ya tiene otro ítem vivo."
           content:
             application/json:
               schema:
@@ -3662,6 +4010,274 @@ components:
             Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): la placa tiene alguna consulta que
             «Reintentar placa» reencolaría. Solo viaja en las filas de la respuesta; para las que no viajan, usar
             vehiculos_pegados del lote.
+        derivacion:
+          allOf:
+            - $ref: "#/components/schemas/DerivacionFila"
+          nullable: true
+          description: >
+            Punto 4 (ADR-0084). Crear trámite de la fila; null con Diagnostico:Derivacion:Habilitada=false. Solo viaja en las
+            filas de la respuesta (en el sondeo incremental, las que cambiaron celdas): tras crear el trámite, el cliente
+            actualiza la fila con la respuesta del POST.
+
+    DerivacionFila:
+      type: object
+      required: [elegible, motivo_no_elegible, estado, tramite]
+      properties:
+        elegible:
+          type: boolean
+          description: Se puede crear el trámite ahora (misma regla que revalida el POST).
+        motivo_no_elegible:
+          type: string
+          nullable: true
+          enum: [NO_TERMINADO, NO_VIABLE, YA_TIENE_TRAMITE, EN_CURSO, null]
+          description: Null si es elegible. En orden de prioridad YA_TIENE_TRAMITE, EN_CURSO, NO_TERMINADO, NO_VIABLE.
+        estado:
+          type: string
+          nullable: true
+          enum: [PENDIENTE, ENVIADO, CREADO, OMITIDO, FALLIDO, null]
+          description: Estado del último intento del vehículo; null si nunca se intentó. OMITIDO y FALLIDO no impiden volver a intentar.
+        tramite:
+          allOf:
+            - $ref: "#/components/schemas/TramiteFila"
+          nullable: true
+          description: El borrador creado (Ver trámite #N); null si no hay.
+
+    TramiteFila:
+      type: object
+      required: [id, numero, url]
+      properties:
+        id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+          description: reference_number del trámite en Trámites.
+          example: TR-000123
+        url:
+          type: string
+          description: >
+            Enlace al borrador en Trámites ({Diagnostico:Derivacion:UrlTramites}/tramites/{id}?t={empresa}); relativo
+            (/tramites/{id}?t={empresa}) si no hay base configurada.
+
+    CrearTramiteEntrada:
+      type: object
+      properties:
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          description: Obligatorio en lotes SIMPLE (código de GET /tipos-tramite); ignorado en CON_ANALISIS.
+          example: TRASPASO_STANDARD
+
+    CrearTramitesEntrada:
+      type: object
+      required: [vehiculo_ids]
+      properties:
+        vehiculo_ids:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          description: Vehículos elegidos del lote, en el orden de la selección (Diagnostico:Derivacion:MaxItemsPorOperacion).
+          items:
+            type: string
+            format: uuid
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          description: Obligatorio en lotes SIMPLE (código de GET /tipos-tramite); ignorado en CON_ANALISIS.
+          example: TRASPASO_STANDARD
+
+    OperacionEncolada:
+      type: object
+      required: [operacion_id, total, encolados, no_elegibles]
+      properties:
+        operacion_id:
+          type: string
+          format: uuid
+        total:
+          type: integer
+          description: Vehículos de la operación (sin repetidos).
+        encolados:
+          type: integer
+          description: Ítems PENDIENTE (los primeros, hasta el crédito de la compañía, ya salieron hacia Trámites).
+        no_elegibles:
+          type: array
+          description: Vehículos que quedaron OMITIDO de inmediato.
+          items:
+            type: object
+            required: [vehiculo_id, motivo_codigo]
+            properties:
+              vehiculo_id:
+                type: string
+                format: uuid
+              motivo_codigo:
+                type: string
+                enum: [NO_TERMINADO, NO_VIABLE, YA_TIENE_TRAMITE, EN_CURSO]
+      example:
+        operacion_id: 0199f3a1-0000-7000-8000-0000000000a1
+        total: 3
+        encolados: 2
+        no_elegibles:
+          - { vehiculo_id: 0199f3a1-0000-7000-8000-0000000000b3, motivo_codigo: NO_VIABLE }
+
+    ProgresoOperacion:
+      type: object
+      required: [operacion_id, tipo, estado, tipo_tramite_codigo, total, creadas, omitidas, fallidas, pendientes, creada_en, terminada_en]
+      properties:
+        operacion_id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [INDIVIDUAL, MASIVA]
+        estado:
+          type: string
+          enum: [EN_CURSO, TERMINADA]
+        tipo_tramite_codigo:
+          type: string
+        total:
+          type: integer
+        creadas:
+          type: integer
+        omitidas:
+          type: integer
+        fallidas:
+          type: integer
+        pendientes:
+          type: integer
+          description: total − creadas − omitidas − fallidas (PENDIENTE y ENVIADO).
+        creada_en:
+          type: string
+          format: date-time
+        terminada_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    DetalleOperacionDerivacion:
+      allOf:
+        - $ref: "#/components/schemas/ProgresoOperacion"
+        - type: object
+          required: [motivos, pagina, tamano_pagina, total_items, items]
+          properties:
+            motivos:
+              type: array
+              description: Ítems OMITIDO y FALLIDO por motivo (resumen «omitidas por motivo»), de más a menos.
+              items:
+                type: object
+                required: [estado, motivo_codigo, motivo, cantidad]
+                properties:
+                  estado:
+                    type: string
+                    enum: [OMITIDO, FALLIDO]
+                  motivo_codigo:
+                    type: string
+                  motivo:
+                    type: string
+                    description: Texto claro, sin datos personales.
+                  cantidad:
+                    type: integer
+            pagina:
+              type: integer
+            tamano_pagina:
+              type: integer
+              example: 50
+            total_items:
+              type: integer
+              description: Ítems que cumplen el filtro estado.
+            items:
+              type: array
+              items:
+                type: object
+                required: [vehiculo_id, orden, placa, estado, motivo_codigo, motivo, tramite_id, tramite_numero, tramite_url]
+                properties:
+                  vehiculo_id:
+                    type: string
+                    format: uuid
+                  orden:
+                    type: integer
+                  placa:
+                    type: string
+                    description: Placa (o VIN, o el identificador cargado).
+                  estado:
+                    type: string
+                    enum: [PENDIENTE, ENVIADO, CREADO, OMITIDO, FALLIDO]
+                  motivo_codigo:
+                    type: string
+                    nullable: true
+                  motivo:
+                    type: string
+                    nullable: true
+                  tramite_id:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  tramite_numero:
+                    type: string
+                    nullable: true
+                  tramite_url:
+                    type: string
+                    nullable: true
+                    description: Igual que TramiteFila.url.
+
+    ReintentoFallidas:
+      type: object
+      required: [reencolados, omitidas]
+      properties:
+        reencolados:
+          type: integer
+          description: FALLIDO que volvieron a PENDIENTE (el mismo ítem).
+        omitidas:
+          type: integer
+          description: FALLIDO que ya no eran elegibles y quedaron OMITIDO.
+
+    TramiteCreado:
+      type: object
+      required: [tramite_id, numero, url, ya_existia]
+      properties:
+        tramite_id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+          example: TR-000123
+        url:
+          type: string
+          description: Igual que TramiteFila.url.
+        ya_existia:
+          type: boolean
+          description: Trámites ya tenía el borrador de este vehículo (idempotencia por empresa y external_ref).
+
+    ConflictoTramite:
+      type: object
+      required: [code, error, tramite_id, numero]
+      properties:
+        code:
+          type: string
+          example: YA_TIENE_TRAMITE
+        error:
+          type: string
+        tramite_id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+
+    NoElegibleDerivacion:
+      type: object
+      required: [code, error, motivo_codigo, motivo]
+      properties:
+        code:
+          type: string
+          example: NO_ELEGIBLE
+        error:
+          type: string
+          description: Igual a motivo.
+        motivo_codigo:
+          type: string
+          example: OT_NO_HABILITADO
+        motivo:
+          type: string
+          example: OT no habilitado para la compañía
 
     DocumentoDeclaradoGrilla:
       type: object

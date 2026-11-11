@@ -279,6 +279,41 @@ public sealed class ZipLoteTests
         PdfDePrueba.Tiene(zip.TextoPdf("TST533"), "TST-C-0502").Should().BeTrue("el PDF nuevo trae el dato del llenado manual");
     }
 
+    // Punto 4 (incremento 3) → punto 8 — el borrador creado desde el diagnóstico sale en la columna Trámite del índice
+    // (vehiculos.tramite_numero) y entra en la huella: con un trámite nuevo, el pedido no reutiliza el ZIP anterior.
+    [Fact]
+    public async Task El_tramite_del_vehiculo_sale_en_el_indice_y_cambia_la_huella_del_zip()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ZipDePrueba.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteTerminadoAsync(empresa, "TST536", ct);
+        var cliente = api.Cliente(PdfDePrueba.Token(api, empresa.Id));
+        var (_, primero) = await ZipDePrueba.PedirAsync(cliente, lote.Id, ct);
+        await ZipDePrueba.DrenarAsync(api, ct);
+        var anterior = primero.GetProperty("id").GetGuid();
+        (await ZipDePrueba.ArchivoOkAsync(cliente, lote.Id, anterior, ct)).Indice.Should().NotContain("TR-000536");
+
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.DiagnosticoId == lote.Id, ct);
+            vehiculo.TramiteId = Guid.NewGuid();
+            vehiculo.TramiteNumero = "TR-000536";
+            vehiculo.TramiteCreadoEn = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var (respuesta, segundo) = await ZipDePrueba.PedirAsync(cliente, lote.Id, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, "el trámite nuevo cambia la huella: no se reutiliza el ZIP anterior");
+        var nuevo = segundo.GetProperty("id").GetGuid();
+        nuevo.Should().NotBe(anterior);
+        await ZipDePrueba.DrenarAsync(api, ct);
+        var zip = await ZipDePrueba.ArchivoOkAsync(cliente, lote.Id, nuevo, ct);
+        zip.Indice.Split('\n').Should().Contain(l => l.Contains("TST536", StringComparison.Ordinal) && l.Contains("TR-000536", StringComparison.Ordinal), zip.Indice);
+    }
+
     // AC5 (F07-C7) — lote sin vehículos terminados: 409 SIN_VEHICULOS_TERMINADOS y no se crea evidencia.
     [Fact]
     public async Task Sin_vehiculos_terminados_responde_409()

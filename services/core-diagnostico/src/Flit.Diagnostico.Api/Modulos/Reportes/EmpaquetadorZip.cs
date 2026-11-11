@@ -21,8 +21,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// <summary>
 /// Un vehículo del lote en el ZIP: su identificación, el estado que sale en el índice (rótulo del punto 5) y si su PDF va dentro.
 /// <see cref="Tramite"/> es el número del borrador de trámite creado desde el diagnóstico, columna «Trámite» de <c>indice.xlsx</c>
-/// (ajustes 2026-11-11, punto 8). Hoy siempre null: el punto 4 lo llena en <see cref="PlanZip.LeerAsync"/> (donde se arma cada
-/// <see cref="VehiculoDelZip"/>) con el <c>tramite_ref</c> del vehículo, y suma ese valor a la huella del ZIP.
+/// (ajustes 2026-11-11, punto 8): <see cref="PlanZip.LeerAsync"/> lo llena con <c>vehiculos.tramite_numero</c> (punto 4) y lo suma a
+/// la huella del ZIP (<see cref="PlanZip.ClaveHuellaTramites"/>); null si el vehículo no tiene borrador.
 /// </summary>
 internal sealed record VehiculoDelZip(Guid Id, int Orden, string Identificador, string Estado, bool Incluido, string? Tramite = null);
 
@@ -53,11 +53,16 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
                 .Select(c => new { c.VehiculoId, c.Estado })
                 .ToListAsync(ct).ConfigureAwait(false))
             .ToLookup(c => c.VehiculoId, c => c.Estado);
+        // Punto 4: el número del borrador creado desde el diagnóstico (vehiculos.tramite_numero) sale en la columna Trámite del índice.
+        var tramites = (await db.Set<VehiculoDiagnostico>().AsNoTracking()
+                .Where(v => v.DiagnosticoId == cabecera.Id && v.TenantId == cabecera.TenantId && v.TramiteNumero != null)
+                .Select(v => new { v.Id, v.TramiteNumero })
+                .ToListAsync(ct).ConfigureAwait(false))
+            .ToDictionary(v => v.Id, v => v.TramiteNumero!);
         var vehiculos = lote.Vehiculos.Select(v =>
         {
             var celdas = estados[v.VehiculoId].ToList();
-            // Punto 4: aquí entra el número del borrador (Tramite: tramite_ref del vehículo) y su clave en la huella de abajo.
-            return new VehiculoDelZip(v.VehiculoId, v.Orden, v.Identificador, Estado(celdas), EmisionPdf.Puede(cabecera, celdas), Tramite: null);
+            return new VehiculoDelZip(v.VehiculoId, v.Orden, v.Identificador, Estado(celdas), EmisionPdf.Puede(cabecera, celdas), Tramite: tramites.GetValueOrDefault(v.VehiculoId));
         }).ToList();
 
         // El dictamen vigente de cada vehículo sale en el índice (Dictamen y Motivos de bloqueo, punto 8): su versión y su veredicto
@@ -74,11 +79,20 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
             ["zip/version_pdf"] = PdfVehiculo.VersionPlantilla.ToString(CultureInfo.InvariantCulture),
             ["zip/incluidos"] = string.Join(',', vehiculos.Where(v => v.Incluido).Select(v => v.Id.ToString("D"))),
             ["zip/dictamenes"] = string.Join(',', dictamenes.Select(d => string.Create(CultureInfo.InvariantCulture, $"{d.VehiculoId:D}:{d.Version}:{d.Veredicto}"))),
+            // Punto 4: un borrador nuevo cambia la columna Trámite del índice, así que cambia la huella.
+            [ClaveHuellaTramites] = ClaveTramites(tramites.Select(t => (t.Key, t.Value))),
         };
         var entrada = await HuellaEvidencia.LeerEntradaAsync(db, ClaveEvidencia.Zip(cabecera.Id), EmpaquetadorZip.VersionPlantilla, encabezado, ct)
             .ConfigureAwait(false);
         return new PlanZip(HuellaEvidencia.Calcular(entrada), vehiculos);
     }
+
+    /// <summary>Clave de la huella del ZIP con el trámite de cada vehículo.</summary>
+    public const string ClaveHuellaTramites = "zip/tramites";
+
+    /// <summary>Valor de <see cref="ClaveHuellaTramites"/>: <c>vehiculo:numero</c> ordenado por vehículo (vacío sin trámites).</summary>
+    public static string ClaveTramites(IEnumerable<(Guid Vehiculo, string Numero)> tramites) =>
+        string.Join(',', (tramites ?? []).OrderBy(t => t.Vehiculo).Select(t => $"{t.Vehiculo:D}:{t.Numero}"));
 
     /// <summary>Con error si alguna celda quedó en ERROR; Terminado si todas están en COMPLETADO o N/A; si no, En proceso.</summary>
     private static string Estado(IReadOnlyCollection<EstadoCelda> celdas) =>

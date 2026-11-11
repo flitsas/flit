@@ -26,6 +26,11 @@ export interface EstadoGrilla {
   reanudar: () => void;
   /** Pide una vez, de inmediato, los cambios desde la última versión. */
   refrescar: () => void;
+  /**
+   * Pide una vez, de inmediato, la grilla completa (?desde=0) y la fusiona sin quitarla de la pantalla. Para datos de la fila
+   * que cambian sin cambiar celdas (Punto 4: el trámite creado por el masivo), que el sondeo incremental no reenvía.
+   */
+  recargar: () => void;
   /** Cambia la grilla en memoria sin pedirla (reproceso optimista, estado tras cerrar el panel). */
   actualizar: (cambio: (grilla: Grilla) => Grilla) => void;
 }
@@ -37,7 +42,7 @@ interface Opciones {
 }
 
 /** Cada ciclo arranca un sondeo: de inmediato (primera carga, reintento, refresco) o tras el intervalo (reanudar). */
-type Ciclo = { n: number; inmediato: boolean };
+type Ciclo = { n: number; inmediato: boolean; completo?: boolean };
 
 export function useGrillaIncremental(id: string, { habilitado = true, intervaloMs = INTERVALO_SONDEO_MS }: Opciones = {}): EstadoGrilla {
   const [grilla, setGrilla] = useState<Grilla | null>(null);
@@ -53,9 +58,12 @@ export function useGrillaIncremental(id: string, { habilitado = true, intervaloM
     let temporizador: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
 
+    let completo = ciclo.completo === true;
     async function pedir() {
       try {
-        const cambios = await obtenerGrilla(id, grillaRef.current?.version ?? 0, controller.signal);
+        const desde = completo ? 0 : (grillaRef.current?.version ?? 0);
+        completo = false;
+        const cambios = await obtenerGrilla(id, desde, controller.signal);
         if (!vivo) return;
         const vigente = fusionarCeldas(grillaRef.current, cambios);
         grillaRef.current = vigente;
@@ -82,10 +90,10 @@ export function useGrillaIncremental(id: string, { habilitado = true, intervaloM
     };
   }, [id, habilitado, intervaloMs, ciclo]);
 
-  const arrancar = useCallback((inmediato: boolean) => {
+  const arrancar = useCallback((inmediato: boolean, completo = false) => {
     setSondeando(true);
     setErrorSondeo(null);
-    setCiclo((c) => ({ n: c.n + 1, inmediato }));
+    setCiclo((c) => ({ n: c.n + 1, inmediato, completo }));
   }, []);
 
   const reintentar = useCallback(() => {
@@ -97,6 +105,7 @@ export function useGrillaIncremental(id: string, { habilitado = true, intervaloM
 
   const reanudar = useCallback(() => arrancar(false), [arrancar]);
   const refrescar = useCallback(() => arrancar(true), [arrancar]);
+  const recargar = useCallback(() => arrancar(true, true), [arrancar]);
 
   const actualizar = useCallback((cambio: (g: Grilla) => Grilla) => {
     if (!grillaRef.current) return;
@@ -113,6 +122,7 @@ export function useGrillaIncremental(id: string, { habilitado = true, intervaloM
     reintentar,
     reanudar,
     refrescar,
+    recargar,
     actualizar,
   };
 }
