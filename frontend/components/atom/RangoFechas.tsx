@@ -67,6 +67,10 @@ export interface RangoFechasProps {
   /** Día de referencia; se inyecta en tests para no depender del reloj. */
   hoy?: Date;
   idPrefix?: string;
+  /** Rótulo del selector de periodo. */
+  etiqueta?: string;
+  /** Texto de la opción de rango vacío. */
+  etiquetaTodo?: string;
 }
 
 /**
@@ -85,6 +89,8 @@ export function RangoFechas({
   permiteSinRango = false,
   hoy,
   idPrefix,
+  etiqueta = "Periodo",
+  etiquetaTodo = "Todo el periodo",
 }: RangoFechasProps) {
   const autoId = useId();
   const id = idPrefix ?? autoId;
@@ -112,7 +118,7 @@ export function RangoFechas({
   return (
     <div className="flex flex-wrap items-end gap-3" data-testid="rango-fechas">
       <label className="flex flex-col gap-1 text-xs font-semibold" htmlFor={`${id}-periodo`}>
-        Periodo
+        {etiqueta}
         <select
           id={`${id}-periodo`}
           value={modo}
@@ -120,7 +126,7 @@ export function RangoFechas({
           onChange={(e) => elegirModo(e.target.value as Modo)}
           className={FIELD_CLS}
         >
-          {permiteSinRango && <option value={TODO}>Todo el periodo</option>}
+          {permiteSinRango && <option value={TODO}>{etiquetaTodo}</option>}
           {RANGE_PRESETS.map((preset) => (
             <option key={preset.value} value={preset.value}>
               {preset.label}
