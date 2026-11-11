@@ -112,9 +112,8 @@ export function DetailedReportGrid({
                     <span className="block text-[11px] opacity-70">{row.channelTransitOfficeName}</span>
                   ) : null}
                 </td>
-                {/* Ocho columnas, cuatro por rol, alineadas por actor (46 px cada uno). El propietario va con los compradores. Backend anterior sin `actores`: la persona de siempre bajo «Comprador». */}
+                {/* Ocho columnas, cuatro por rol, alineadas por actor (46 px cada uno). El propietario va con los compradores. Sin `actores` (ausente, null o vacío): «—» en las ocho; la «persona» vieja era de cualquier rol y no se puede etiquetar como comprador. */}
                 {(() => {
-                  const sinActores = (row.actores?.length ?? 0) === 0;
                   const compradores = actoresDelGrupo(row.actores, "comprador");
                   const vendedores = actoresDelGrupo(row.actores, "vendedor");
                   const celda = (label: string, actores: ActorValidacionDto[], campo: CampoActor) => (
@@ -123,13 +122,7 @@ export function DetailedReportGrid({
                     </td>
                   );
                   return [
-                    sinActores ? (
-                      <td key="Comprador" data-label="Comprador" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
-                        {row.personFullName || row.personDocument || "—"}
-                      </td>
-                    ) : (
-                      celda("Comprador", compradores, "persona")
-                    ),
+                    celda("Comprador", compradores, "persona"),
                     celda("Validación comprador", compradores, "validacion"),
                     celda("Intentos comprador", compradores, "intentos"),
                     celda("Motivo rechazo comprador", compradores, "motivo"),

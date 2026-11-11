@@ -102,10 +102,15 @@ describe("DetailedReportGrid — columnas por rol", () => {
   });
 
   it.each([[undefined], [null], [[]]])(
-    "un backend anterior (actores = %s) sigue mostrando la persona de siempre",
+    "sin actores (%s): «—» en las 8 columnas y la persona vieja no se etiqueta como comprador",
     (actores) => {
       grid(pagina([item({ actores: actores as ActorValidacionDto[] | null | undefined })]));
-      expect(screen.getByText("Persona Vieja")).toBeTruthy();
+      const fila = screen.getAllByRole("row")[1];
+      const cabeceras = screen.getAllByRole("columnheader").map((h) => h.textContent);
+      const i = cabeceras.indexOf("Comprador");
+      const celdas = within(fila).getAllByRole("cell");
+      expect(celdas.slice(i, i + 8).map((c) => c.textContent)).toEqual(Array(8).fill("—"));
+      expect(screen.queryByText("Persona Vieja")).toBeNull();
     },
   );
 });
