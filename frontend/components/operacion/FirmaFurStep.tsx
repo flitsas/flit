@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { improntaObligatoriaEnChecklist } from './DocumentChecklist';
-import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
+import MatriculaResumen, { ResumenCard, type ResolverEdicion } from './MatriculaResumen';
 import { ExpedienteCronologicoAccordion } from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
@@ -72,6 +72,8 @@ interface Props {
   rotulosPorRol?: Partial<Record<'comprador' | 'vendedor' | 'locatario', string>>;
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
+  /** Botón «Editar» de cada tarjeta del resumen (solo en borrador editable). */
+  resolverEdicion?: ResolverEdicion;
 }
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
@@ -296,6 +298,7 @@ export function FirmaFurStep({
   partesBiometricas,
   rotulosPorRol,
   biometricForceEditable = false,
+  resolverEdicion,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
@@ -747,6 +750,7 @@ export function FirmaFurStep({
   return (
     <div className="space-y-8">
       <MatriculaResumen
+        resolverEdicion={resolverEdicion}
         modalidad={modalidad}
         partesBiometricas={partesBiometricas}
         rotulosPorRol={rotulosPorRol}
@@ -853,6 +857,7 @@ export function FirmaFurStep({
       />
 
       <ExpedienteVisor
+        editarDocumentos={resolverEdicion?.('documentos') ?? null}
         instanceId={instanceId}
         attachments={attachments}
         checklist={checklist}
