@@ -39,14 +39,6 @@ export const ESTADO_VALIDACION_COLOR: Record<EstadoValidacion, string> = {
   sin_validacion: "var(--border)",
 };
 
-export const ROLES_ACTOR: RolActor[] = ["comprador", "vendedor", "propietario"];
-
-export const ROL_LABEL: Record<RolActor, string> = {
-  comprador: "Comprador",
-  vendedor: "Vendedor",
-  propietario: "Propietario",
-};
-
 /**
  * Fondo y color de TEXTO del chip. Los estados con color propio usan su tinta sobre un fondo tenue
  * de la misma; «Sin validar» (y cualquier estado desconocido) usa el par neutro del rediseño, porque
@@ -81,40 +73,57 @@ export function documentoActor(a: ActorValidacionDto): string {
   return [a.tipoDocumento, a.documento].filter(Boolean).join(" ").trim();
 }
 
-/** Actores en el orden de la pantalla: rol (comprador, vendedor, propietario) y luego ordinal. */
-export function actoresOrdenados(actores: ActorValidacionDto[] | undefined): ActorValidacionDto[] {
-  const peso = (r: string) => {
-    const i = ROLES_ACTOR.indexOf(r as RolActor);
-    return i < 0 ? ROLES_ACTOR.length : i;
-  };
-  return [...(actores ?? [])].sort((a, b) => peso(a.rol) - peso(b.rol) || a.ordinal - b.ordinal);
-}
+/** Los dos grupos de columnas: el propietario (matrícula, OTROS) va con los compradores. */
+export type GrupoPersonas = "comprador" | "vendedor";
 
-/** El actor n-ésimo (1-based) de un rol, por ordinal. */
-export function actorDeRol(
-  actores: ActorValidacionDto[] | undefined,
-  rol: RolActor,
-  n: number,
-): ActorValidacionDto | undefined {
-  return actoresOrdenados(actores).filter((a) => a.rol === rol)[n - 1];
-}
-
-export const SIN_ACTORES: MaxActoresPorRol = { comprador: 0, vendedor: 0, propietario: 0 };
+const ROLES_DEL_GRUPO: Record<GrupoPersonas, RolActor[]> = {
+  comprador: ["comprador", "propietario"],
+  vendedor: ["vendedor"],
+};
 
 /**
- * Encabezado plano de una columna de actor en el archivo: «Comprador», «Documento comprador»,
- * «Validación vendedor 2»… El primer actor de un rol va sin número; desde el segundo, con él.
+ * Los actores de un grupo, en el orden de la pantalla y del archivo: por rol (comprador antes que
+ * propietario) y dentro del rol por ordinal. La línea i de las cuatro columnas del grupo es el
+ * mismo actor.
  */
-export function encabezadoActor(base: string | null, rol: RolActor, n: number): string {
-  const sufijo = n > 1 ? ` ${n}` : "";
-  return base === null ? `${ROL_LABEL[rol]}${sufijo}` : `${base} ${rol}${sufijo}`;
+export function actoresDelGrupo(
+  actores: ActorValidacionDto[] | null | undefined,
+  grupo: GrupoPersonas,
+): ActorValidacionDto[] {
+  const roles = ROLES_DEL_GRUPO[grupo];
+  return (actores ?? [])
+    .filter((a) => roles.includes(a.rol))
+    .sort((a, b) => roles.indexOf(a.rol) - roles.indexOf(b.rol) || a.ordinal - b.ordinal);
 }
 
-/** Texto de varias líneas (una por actor) para el valor de respaldo de una columna de pantalla. */
-export function textoPorActor(
-  actores: ActorValidacionDto[] | undefined,
+/**
+ * Cuántos bloques de persona lleva un grupo en el archivo: el máximo del servidor (sobre todo el
+ * filtro), con un mínimo de 1 porque la columna «Comprador»/«Vendedor» siempre existió. El grupo
+ * comprador cuenta también los propietarios.
+ */
+export function bloquesDelGrupo(max: MaxActoresPorRol | undefined, grupo: GrupoPersonas): number {
+  if (!max) return 1;
+  const n = grupo === "comprador" ? Math.max(max.comprador, max.propietario) : max.vendedor;
+  return Math.max(1, n);
+}
+
+/**
+ * Encabezado plano de un bloque: «Comprador», «Validación comprador», «Motivo rechazo vendedor 2»…
+ * El primer bloque va sin número; desde el segundo, con él.
+ */
+export function encabezadoBloque(base: string | null, grupo: GrupoPersonas, n: number): string {
+  const sufijo = n > 1 ? ` ${n}` : "";
+  return base === null
+    ? `${grupo === "comprador" ? "Comprador" : "Vendedor"}${sufijo}`
+    : `${base} ${grupo}${sufijo}`;
+}
+
+/** Una línea por actor del grupo para el valor de respaldo de una columna; «—» si no hay ninguno. */
+export function textoDelGrupo(
+  actores: ActorValidacionDto[] | null | undefined,
+  grupo: GrupoPersonas,
   f: (a: ActorValidacionDto) => string,
 ): string {
-  const lista = actoresOrdenados(actores);
+  const lista = actoresDelGrupo(actores, grupo);
   return lista.length === 0 ? "—" : lista.map(f).join("\n");
 }

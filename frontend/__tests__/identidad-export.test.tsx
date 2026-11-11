@@ -27,14 +27,25 @@ import {
   buildCompanyQueryCsv,
   buildCompanyQueryXlsx,
 } from "@/components/atom/modules/_reportes/consultas/company-columns";
-import { ActoresValidacionCell } from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
+import {
+  ActoresValidacionCell,
+  renderCeldaIdentidad,
+} from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
 import {
   ESTADO_VALIDACION_LABEL,
   motivoVisible,
 } from "@/components/atom/modules/_reportes/consultas/identidad-validacion";
 import { exportarPorLotes } from "@/components/consultas/export";
 
-const IDENTIDAD = ["validacion_persona", "validacion_estado", "validacion_intentos", "validacion_motivo"];
+const COMPRADOR = ["comprador", "validacion_comprador", "intentos_comprador", "motivo_comprador"];
+const VENDEDOR = ["vendedor", "validacion_vendedor", "intentos_vendedor", "motivo_vendedor"];
+const OCHO = [...COMPRADOR, ...VENDEDOR];
+
+const BLOQUE = (rol: string, n = 1) => {
+  const sufijo = n > 1 ? ` ${n}` : "";
+  const nombre = rol[0].toUpperCase() + rol.slice(1);
+  return [`${nombre}${sufijo}`, `Validación ${rol}${sufijo}`, `Intentos ${rol}${sufijo}`, `Motivo rechazo ${rol}${sufijo}`];
+};
 
 function actor(rol: RolActor, ordinal: number, over: Partial<ActorValidacionDto> = {}): ActorValidacionDto {
   return {
@@ -50,8 +61,8 @@ function actor(rol: RolActor, ordinal: number, over: Partial<ActorValidacionDto>
   };
 }
 
-function fila(actores: ActorValidacionDto[]): CompanyQueryRow {
-  return { procedureInstanceId: "p1", referenceNumber: "R-1", actores } as CompanyQueryRow;
+function fila(actores: ActorValidacionDto[], over: Partial<CompanyQueryRow> = {}): CompanyQueryRow {
+  return { procedureInstanceId: "p1", referenceNumber: "R-1", placa: "ABC123", actores, ...over } as CompanyQueryRow;
 }
 
 function max(c: number, v: number, p: number): MaxActoresPorRol {
@@ -62,75 +73,100 @@ function hoja() {
   return capturado.sheet as XlsxSheet;
 }
 
-describe("Excel de Consulta: bloques de 5 columnas por persona", () => {
-  it.each([
-    ["0 actores", max(0, 0, 0), 0],
-    ["1 por rol", max(1, 1, 1), 15],
-    ["2 por rol", max(2, 2, 2), 30],
-    ["4 por rol", max(4, 4, 4), 60],
-  ])("%s → %i columnas de identidad, al final", (_n, m, esperadas) => {
-    buildCompanyQueryXlsx([fila([actor("comprador", 1)])], ["referencia", ...IDENTIDAD], [], m);
-    const h = hoja().columns.map((c) => c.header);
-    expect(h[0]).toBe("Radicado");
-    expect(h.length - 1).toBe(esperadas);
-  });
+describe("Excel de Consulta: bloques por persona, en su sitio", () => {
+  const traspaso = fila([
+    actor("comprador", 2, { estadoValidacion: "rechazado", intentos: 3, motivoRechazo: "El rostro no coincide con el documento." }),
+    actor("comprador", 1),
+    actor("vendedor", 1, { estadoValidacion: "sin_validacion", intentos: 0 }),
+  ]);
 
-  it("un traspaso 1+1 trae solo Comprador y Vendedor, con los encabezados exactos", () => {
-    buildCompanyQueryXlsx([fila([actor("comprador", 1), actor("vendedor", 1)])], ["referencia", ...IDENTIDAD], [], max(1, 1, 0));
+  it("traspaso 2 compradores + 1 vendedor: cada bloque donde va su columna, no al final", () => {
+    buildCompanyQueryXlsx([traspaso], ["referencia", ...OCHO, "prenda"], [], max(2, 1, 0));
     expect(hoja().columns.map((c) => c.header)).toEqual([
       "Radicado",
-      "Comprador", "Documento comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
-      "Vendedor", "Documento vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor",
+      ...BLOQUE("comprador"),
+      ...BLOQUE("comprador", 2),
+      ...BLOQUE("vendedor"),
+      "Prenda",
     ]);
-  });
-
-  it("desde el segundo actor de un rol el encabezado lleva número", () => {
-    buildCompanyQueryXlsx([fila([])], IDENTIDAD, [], max(0, 0, 2));
-    const h = hoja().columns.map((c) => c.header);
-    expect(h).toContain("Propietario");
-    expect(h).toContain("Motivo rechazo propietario");
-    expect(h).toContain("Propietario 2");
-    expect(h).toContain("Documento propietario 2");
-    expect(h).toContain("Intentos propietario 2");
-  });
-
-  it("agrupa por persona y deja vacío el actor que no existe en la fila", () => {
-    const f = fila([
-      actor("vendedor", 2, { estadoValidacion: "rechazado", intentos: 3, motivoRechazo: "Documento ilegible" }),
-      actor("vendedor", 1),
-      actor("comprador", 1, { estadoValidacion: "sin_validacion", intentos: 0 }),
-    ]);
-    buildCompanyQueryXlsx([f], IDENTIDAD, [], max(1, 2, 1));
     const celdas = hoja().rows[0];
-    // comprador: nombre, doc, validación, intentos, motivo
-    expect(celdas.slice(0, 5)).toEqual(["comprador 1", "CC 10001", "Sin validar", 0, ""]);
-    // vendedor 1 y vendedor 2 (por ordinal, aunque llegaron al revés)
-    expect(celdas[5]).toBe("vendedor 1");
-    expect(celdas[10]).toBe("vendedor 2");
-    expect(celdas.slice(12, 15)).toEqual(["Rechazado", 3, "Documento ilegible"]);
-    // propietario: no existe en la fila → celdas vacías
-    expect(celdas.slice(15, 20)).toEqual([null, null, null, null, null]);
+    expect(celdas[0]).toBe("R-1");
+    expect(celdas.slice(1, 5)).toEqual(["comprador 1", "Aprobado", 1, ""]);
+    expect(celdas.slice(5, 9)).toEqual(["comprador 2", "Rechazado", 3, "El rostro no coincide con el documento."]);
+    expect(celdas.slice(9, 13)).toEqual(["vendedor 1", "Sin validar", 0, ""]);
+    expect(celdas[13]).toBe("No");
   });
 
-  it("si el usuario oculta una columna, no se exporta", () => {
-    buildCompanyQueryXlsx([fila([actor("comprador", 1)])], ["validacion_estado", "validacion_intentos"], [], max(1, 0, 0));
-    expect(hoja().columns.map((c) => c.header)).toEqual(["Validación comprador", "Intentos comprador"]);
+  it("matrícula con propietario: va en las columnas de comprador y Vendedor queda vacío", () => {
+    const matricula = fila([actor("propietario", 1, { nombre: "Dueño Uno" })]);
+    buildCompanyQueryXlsx([matricula], OCHO, [], max(0, 0, 1));
+    expect(hoja().columns.map((c) => c.header)).toEqual([...BLOQUE("comprador"), ...BLOQUE("vendedor")]);
+    expect(hoja().rows[0]).toEqual(["Dueño Uno", "Aprobado", 1, "", null, null, null, null]);
   });
 
-  it("sin maxActoresPorRol no inventa el ancho: deja fuera las columnas de identidad", () => {
-    buildCompanyQueryXlsx([fila([actor("comprador", 1)])], ["referencia", ...IDENTIDAD], []);
-    expect(hoja().columns.map((c) => c.header)).toEqual(["Radicado"]);
+  it("el ancho del grupo comprador es max(comprador, propietario), mínimo 1", () => {
+    buildCompanyQueryXlsx([fila([])], COMPRADOR, [], max(1, 0, 3));
+    expect(hoja().columns).toHaveLength(12);
+    buildCompanyQueryXlsx([fila([])], OCHO, [], max(0, 0, 0));
+    expect(hoja().columns.map((c) => c.header)).toEqual([...BLOQUE("comprador"), ...BLOQUE("vendedor")]);
+  });
+
+  it.each([
+    ["0", max(0, 0, 0), 8],
+    ["1+1", max(1, 1, 0), 8],
+    ["2+2", max(2, 2, 0), 16],
+    ["4+4", max(4, 4, 0), 32],
+  ])("ancho con máximos %s → %i columnas", (_n, m, esperadas) => {
+    buildCompanyQueryXlsx([fila([])], OCHO, [], m);
+    expect(hoja().columns).toHaveLength(esperadas);
+  });
+
+  it("una columna oculta no sale en ningún bloque", () => {
+    buildCompanyQueryXlsx([traspaso], ["comprador", "validacion_comprador", "motivo_comprador", "vendedor"], [], max(2, 1, 0));
+    const h = hoja().columns.map((c) => c.header);
+    expect(h).toEqual([
+      "Comprador", "Validación comprador", "Motivo rechazo comprador",
+      "Comprador 2", "Validación comprador 2", "Motivo rechazo comprador 2",
+      "Vendedor",
+    ]);
+    expect(h.some((x) => /Intentos/.test(x))).toBe(false);
+  });
+
+  it("una consulta vieja que solo pide «comprador» sale con Comprador, Comprador 2…", () => {
+    buildCompanyQueryXlsx([traspaso], ["referencia", "comprador"], [], max(2, 1, 0));
+    expect(hoja().columns.map((c) => c.header)).toEqual(["Radicado", "Comprador", "Comprador 2"]);
+    expect(hoja().rows[0]).toEqual(["R-1", "comprador 1", "comprador 2"]);
+  });
+
+  it("solo con el rol validación visible, el bloque va en el sitio de la primera visible", () => {
+    buildCompanyQueryXlsx([traspaso], ["referencia", "intentos_comprador", "prenda"], [], max(1, 0, 0));
+    expect(hoja().columns.map((c) => c.header)).toEqual(["Radicado", "Intentos comprador", "Prenda"]);
+  });
+
+  it("sin maxActoresPorRol no inventa el ancho: queda «Comprador»/«Vendedor» con el texto de siempre", () => {
+    const vieja = fila([], { comprador: "Texto Comprador", vendedor: "Texto Vendedor" });
+    buildCompanyQueryXlsx([vieja], ["referencia", ...OCHO], []);
+    expect(hoja().columns.map((c) => c.header)).toEqual(["Radicado", "Comprador", "Vendedor"]);
+    expect(hoja().rows[0]).toEqual(["R-1", "Texto Comprador", "Texto Vendedor"]);
+  });
+
+  it("sin actores en la fila, el primer bloque cae al texto viejo y no hay Documento", () => {
+    const vieja = fila([], { comprador: "Texto Comprador", vendedor: null });
+    buildCompanyQueryXlsx([vieja], OCHO, [], max(1, 1, 0));
+    expect(hoja().rows[0]).toEqual(["Texto Comprador", null, null, null, null, null, null, null]);
+    expect(hoja().columns.some((c) => /Documento/.test(c.header))).toBe(false);
   });
 });
 
 describe("CSV de Consulta", () => {
-  it("usa los mismos encabezados y el mismo orden que el Excel", () => {
-    const csv = buildCompanyQueryCsv([fila([actor("comprador", 1)])], ["referencia", ...IDENTIDAD], [], max(1, 0, 0));
-    const [cabecera, datos] = csv.replace("﻿", "").split("\r\n");
+  it("usa los mismos encabezados, el mismo orden y el mismo sitio que el Excel", () => {
+    const f = fila([actor("comprador", 1), actor("vendedor", 1)]);
+    const csv = buildCompanyQueryCsv([f], ["referencia", ...OCHO, "prenda"], [], max(1, 1, 0));
+    const [cabecera, datos] = csv.replace("\ufeff", "").split("\r\n");
     expect(cabecera).toBe(
-      '"Radicado";"Comprador";"Documento comprador";"Validación comprador";"Intentos comprador";"Motivo rechazo comprador"',
+      ["Radicado", ...BLOQUE("comprador"), ...BLOQUE("vendedor"), "Prenda"].map((h) => `"${h}"`).join(";"),
     );
-    expect(datos).toBe('"R-1";"comprador 1";"CC 10001";"Aprobado";"1";""');
+    expect(datos).toBe('"R-1";"comprador 1";"Aprobado";"1";"";"vendedor 1";"Aprobado";"1";"";"No"');
   });
 });
 
@@ -176,7 +212,7 @@ describe("nada revela cómo se validó", () => {
     );
     const csv = buildCompanyQueryCsv(
       [fila([actor("comprador", 1, { estadoValidacion: "rechazado", motivoRechazo: "Proveedor sin respuesta" })])],
-      IDENTIDAD,
+      OCHO,
       [],
       max(1, 0, 0),
     );
@@ -185,9 +221,10 @@ describe("nada revela cómo se validó", () => {
 });
 
 describe("pantalla: una línea de 46 px por actor", () => {
+  // Dos compradores en el mismo rol: una celda por columna, una línea por actor.
   const actores = [
     actor("comprador", 1, { nombre: "Ana Pérez" }),
-    actor("vendedor", 1, { estadoValidacion: "rechazado", intentos: 2, motivoRechazo: "Documento ilegible" }),
+    actor("comprador", 2, { estadoValidacion: "rechazado", intentos: 2, motivoRechazo: "Documento ilegible" }),
   ];
 
   it("las cuatro columnas pintan el mismo número de líneas, en el mismo orden", () => {
@@ -200,11 +237,26 @@ describe("pantalla: una línea de 46 px por actor", () => {
     }
   });
 
-  it("Persona: nombre y debajo «Rol · documento»", () => {
+  it("Comprador: nombre y debajo el documento, sin el rol", () => {
     render(<ActoresValidacionCell actores={actores} campo="persona" />);
     const [primera] = screen.getAllByTestId("actor-persona");
     expect(within(primera).getByText("Ana Pérez")).toBeTruthy();
-    expect(within(primera).getByText(/^Comprador · CC /)).toBeTruthy();
+    expect(within(primera).getByText("CC 10001")).toBeTruthy();
+  });
+
+  it("renderCeldaIdentidad: el propietario va en Comprador, Vendedor dice «—»", () => {
+    const f = { actores: [actor("propietario", 1, { nombre: "Dueño Uno" })] };
+    const { unmount } = render(<>{renderCeldaIdentidad("comprador", f)}</>);
+    expect(screen.getByText("Dueño Uno")).toBeTruthy();
+    unmount();
+    render(<>{renderCeldaIdentidad("vendedor", f)}</>);
+    expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("renderCeldaIdentidad: sin actores deja el texto de siempre en Comprador/Vendedor", () => {
+    expect(renderCeldaIdentidad("comprador", { actores: [] })).toBeNull();
+    expect(renderCeldaIdentidad("vendedor", {})).toBeNull();
+    expect(renderCeldaIdentidad("placa", { actores: [] })).toBeNull();
   });
 
   it("Validación, Intentos y Motivo; «—» cuando no hay motivo", () => {

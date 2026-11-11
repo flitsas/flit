@@ -15,12 +15,13 @@ import {
 import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
 import type { CompanyQueryRow, MaxActoresPorRol } from "@/lib/api/company-queries";
 import {
-  documentoActor,
-  encabezadoActor,
+  actoresDelGrupo,
+  bloquesDelGrupo,
+  encabezadoBloque,
   etiquetaValidacion,
   motivoVisible,
-  ROLES_ACTOR,
-  textoPorActor,
+  textoDelGrupo,
+  type GrupoPersonas,
 } from "./identidad-validacion";
 import { bogotaClock } from "@/lib/xlsx";
 
@@ -82,10 +83,87 @@ const GRUPO_PERSONAS = "Personas";
 const GRUPO_CARACTERISTICAS = "Características";
 const GRUPO_COMERCIAL = "Comercial";
 const GRUPO_TIEMPOS = "Tiempos";
-const GRUPO_IDENTIDAD = "Validación de identidad";
 
-/** Las cuatro columnas de identidad se abren por actor en el archivo; en pantalla son una cada una. */
-const actoresDe = (r: CompanyQueryRow) => r.actores;
+/**
+ * Las cuatro columnas de un rol: la persona y su validación, intentos y motivo de rechazo. En
+ * pantalla son cuatro columnas juntas, con una línea de 46 px por actor; en el archivo se escriben
+ * persona por persona, en el sitio de la primera visible (ver `expandirPorBloque`).
+ *
+ * `comprador` y `vendedor` conservan sus ids de siempre: los filtros, las consultas guardadas y los
+ * reportes programados los usan.
+ */
+function columnasDelRol(grupo: GrupoPersonas): DataColumn<CompanyQueryRow>[] {
+  const nombre = grupo === "comprador" ? "Comprador" : "Vendedor";
+  const bloques = (max: MaxActoresPorRol | undefined) => bloquesDelGrupo(max, grupo);
+  // Las columnas nuevas no existían: sin el máximo del servidor no se inventa su ancho.
+  const soloConMax = (max: MaxActoresPorRol | undefined) => (max ? bloques(max) : 0);
+  const actorN = (r: CompanyQueryRow, n: number) => actoresDelGrupo(r.actores, grupo)[n - 1];
+
+  return [
+    {
+      id: grupo,
+      label: nombre,
+      group: GRUPO_PERSONAS,
+      value: (r) => r[grupo] ?? "—",
+      raw: (r) => r[grupo],
+      width: 26,
+      expandirPorBloque: {
+        grupo,
+        bloques,
+        header: (n) => encabezadoBloque(null, grupo, n),
+        // Backend anterior (sin `actores`): el texto de siempre en el primer bloque.
+        cell: (r, n) =>
+          (r.actores?.length ?? 0) === 0 ? (n === 1 ? r[grupo] : null) : (actorN(r, n)?.nombre ?? null),
+      },
+    },
+    {
+      id: `validacion_${grupo}`,
+      label: `Validación ${grupo}`,
+      group: GRUPO_PERSONAS,
+      value: (r) => textoDelGrupo(r.actores, grupo, (a) => etiquetaValidacion(a.estadoValidacion)),
+      width: 24,
+      expandirPorBloque: {
+        grupo,
+        bloques: soloConMax,
+        header: (n) => encabezadoBloque("Validación", grupo, n),
+        cell: (r, n) => {
+          const a = actorN(r, n);
+          return a ? etiquetaValidacion(a.estadoValidacion) : null;
+        },
+      },
+    },
+    {
+      id: `intentos_${grupo}`,
+      label: `Intentos ${grupo}`,
+      group: GRUPO_PERSONAS,
+      value: (r) => textoDelGrupo(r.actores, grupo, (a) => String(a.intentos)),
+      numeric: true,
+      width: 10,
+      expandirPorBloque: {
+        grupo,
+        bloques: soloConMax,
+        header: (n) => encabezadoBloque("Intentos", grupo, n),
+        cell: (r, n) => actorN(r, n)?.intentos ?? null,
+      },
+    },
+    {
+      id: `motivo_${grupo}`,
+      label: `Motivo rechazo ${grupo}`,
+      group: GRUPO_PERSONAS,
+      value: (r) => textoDelGrupo(r.actores, grupo, (a) => motivoVisible(a.motivoRechazo) ?? "—"),
+      width: 36,
+      expandirPorBloque: {
+        grupo,
+        bloques: soloConMax,
+        header: (n) => encabezadoBloque("Motivo rechazo", grupo, n),
+        cell: (r, n) => {
+          const a = actorN(r, n);
+          return a ? (motivoVisible(a.motivoRechazo) ?? "") : null;
+        },
+      },
+    },
+  ];
+}
 
 export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   {
@@ -161,97 +239,8 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     value: (r) => r.radicadoPor,
     width: 22,
   },
-  {
-    id: "comprador",
-    label: "Comprador",
-    group: GRUPO_PERSONAS,
-    value: (r) => r.comprador ?? "—",
-    raw: (r) => r.comprador,
-    width: 26,
-  },
-  {
-    id: "vendedor",
-    label: "Vendedor",
-    group: GRUPO_PERSONAS,
-    value: (r) => r.vendedor ?? "—",
-    raw: (r) => r.vendedor,
-    width: 26,
-  },
-  {
-    id: "validacion_persona",
-    label: "Persona",
-    group: GRUPO_IDENTIDAD,
-    value: (r) =>
-      textoPorActor(r.actores, (a) => [a.nombre, documentoActor(a)].filter(Boolean).join(" · ")),
-    width: 26,
-    expandirPorActor: {
-      roles: ROLES_ACTOR,
-      actoresDe,
-      campos: [
-        { header: (rol, n) => encabezadoActor(null, rol, n), width: 26, cell: (a) => a.nombre },
-        {
-          header: (rol, n) => encabezadoActor("Documento", rol, n),
-          width: 18,
-          cell: (a) => documentoActor(a),
-        },
-      ],
-    },
-  },
-  {
-    id: "validacion_estado",
-    label: "Validación",
-    group: GRUPO_IDENTIDAD,
-    value: (r) => textoPorActor(r.actores, (a) => etiquetaValidacion(a.estadoValidacion)),
-    width: 24,
-    expandirPorActor: {
-      roles: ROLES_ACTOR,
-      actoresDe,
-      campos: [
-        {
-          header: (rol, n) => encabezadoActor("Validación", rol, n),
-          width: 24,
-          cell: (a) => etiquetaValidacion(a.estadoValidacion),
-        },
-      ],
-    },
-  },
-  {
-    id: "validacion_intentos",
-    label: "Intentos",
-    group: GRUPO_IDENTIDAD,
-    value: (r) => textoPorActor(r.actores, (a) => String(a.intentos)),
-    numeric: true,
-    width: 10,
-    expandirPorActor: {
-      roles: ROLES_ACTOR,
-      actoresDe,
-      campos: [
-        {
-          header: (rol, n) => encabezadoActor("Intentos", rol, n),
-          width: 10,
-          cell: (a) => a.intentos,
-        },
-      ],
-    },
-  },
-  {
-    id: "validacion_motivo",
-    label: "Motivo de rechazo",
-    group: GRUPO_IDENTIDAD,
-    value: (r) => textoPorActor(r.actores, (a) => motivoVisible(a.motivoRechazo) ?? "—"),
-    width: 36,
-    expandirPorActor: {
-      roles: ROLES_ACTOR,
-      actoresDe,
-      campos: [
-        {
-          header: (rol, n) => encabezadoActor("Motivo rechazo", rol, n),
-          width: 36,
-          cell: (a) => motivoVisible(a.motivoRechazo) ?? "",
-        },
-      ],
-    },
-  },
+  ...columnasDelRol("comprador"),
+  ...columnasDelRol("vendedor"),
   {
     id: "prenda",
     label: "Prenda",
