@@ -163,46 +163,81 @@ internal static class IdentityApprovalResolver
             if (actores.Count == 0)
                 continue;
 
-            var todosCubiertos = true;
-            foreach (var actor in actores)
-            {
-                var (tipoDoc, documento) = ActorDoc(actor);
-
-                // 0) BAÚL — mismo orden y mismo predicado que ResolveApprovedPartiesAsync.
-                if (firmaBaulVigentePorPersona is not null
-                    && FirmaBaulCobertura.Aplica(actor)
-                    && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
-                    && firmaBaulVigentePorPersona.TryGetValue(
-                        BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento), out var baulVigente)
-                    && baulVigente)
-                    continue;
-
-                if (HasLocalVigente(instance, parte, tipoDoc, documento, now, salidaDeBorradorAt))
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(documento))
-                {
-                    todosCubiertos = false;
-                    break;
-                }
-
-                var key = BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento);
-                if (!approvedKeys.Contains(key)
-                    // HU #13824 — ver ResolveApprovedPartiesAsync: fuera de borrador se conserva la firma.
-                    && !(protegidasKeys is not null
-                         && protegidasKeys.TryGetValue(key, out var vencidas)
-                         && BiometricRules.ConservaFirmaTrasVencimientoManual(instance.Status, salidaDeBorradorAt, vencidas)))
-                {
-                    todosCubiertos = false;
-                    break;
-                }
-            }
+            var todosCubiertos = actores.TrueForAll(actor => ActorCubiertoPorClaves(
+                instance, parte, actor, approvedKeys, now, firmaBaulVigentePorPersona, protegidasKeys, salidaDeBorradorAt));
 
             if (todosCubiertos)
                 approved.Add(parte);
         }
 
         return approved;
+    }
+
+    /// <summary>
+    /// ADR-0053 — actores (de cualquier lado) con identidad acreditada, uno por uno, con EXACTAMENTE la
+    /// comprobación de <see cref="ApprovedPartiesFromKeys"/>. Lo usa el desplegable de copropietarios
+    /// del listado para pintar la firma de cada persona; el set por parte sigue siendo «todos firman».
+    /// Comparación por referencia: los actores son los mismos objetos del grafo cargado.
+    /// </summary>
+    public static IReadOnlySet<ProcedureInstanceActor> ApprovedActorsFromKeys(
+        ProcedureInstance instance,
+        IReadOnlySet<string> approvedKeys,
+        DateTimeOffset now,
+        IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona = null,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>? protegidasKeys = null,
+        DateTimeOffset? salidaDeBorradorAt = null)
+    {
+        var cubiertos = new HashSet<ProcedureInstanceActor>(ReferenceEqualityComparer.Instance);
+        foreach (var parte in Partes)
+        {
+            foreach (var actor in ActoresDe(instance, parte))
+            {
+                if (ActorCubiertoPorClaves(
+                        instance, parte, actor, approvedKeys, now, firmaBaulVigentePorPersona, protegidasKeys, salidaDeBorradorAt))
+                    cubiertos.Add(actor);
+            }
+        }
+
+        return cubiertos;
+    }
+
+    /// <summary>
+    /// ¿Este actor tiene identidad acreditada, según las claves precomputadas del listado? Orden: baúl →
+    /// fila propia vigente → identidad referenciada (o protegida tras vencimiento manual, HU #13824).
+    /// </summary>
+    private static bool ActorCubiertoPorClaves(
+        ProcedureInstance instance,
+        string parte,
+        ProcedureInstanceActor actor,
+        IReadOnlySet<string> approvedKeys,
+        DateTimeOffset now,
+        IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>? protegidasKeys,
+        DateTimeOffset? salidaDeBorradorAt)
+    {
+        var (tipoDoc, documento) = ActorDoc(actor);
+
+        // 0) BAÚL — mismo orden y mismo predicado que ResolveApprovedPartiesAsync.
+        if (firmaBaulVigentePorPersona is not null
+            && FirmaBaulCobertura.Aplica(actor)
+            && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
+            && firmaBaulVigentePorPersona.TryGetValue(
+                BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento), out var baulVigente)
+            && baulVigente)
+            return true;
+
+        if (HasLocalVigente(instance, parte, tipoDoc, documento, now, salidaDeBorradorAt))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(documento))
+            return false;
+
+        var key = BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento);
+        return approvedKeys.Contains(key)
+            // HU #13824 — ver ResolveApprovedPartiesAsync: fuera de borrador se conserva la firma.
+            || (protegidasKeys is not null
+                && protegidasKeys.TryGetValue(key, out var vencidas)
+                && BiometricRules.ConservaFirmaTrasVencimientoManual(instance.Status, salidaDeBorradorAt, vencidas));
     }
 
     /// <summary>
