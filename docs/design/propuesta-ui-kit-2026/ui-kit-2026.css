@@ -158,11 +158,9 @@ small, .cap { font-weight: 300; }
 .icono-btn .kico { width: 26px; height: 26px; background: none; color: inherit; border-radius: 0; }
 .icono-btn .kico svg { width: 100%; height: 100%; }
 .icono-btn .punto { top: 2px; right: 2px; background: var(--kit-naranja); color: #fff; min-width: 16px; height: 16px; line-height: 16px; font-size: 0.625rem; }
-.tema-kit { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: space-between; width: 66px; height: 32px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--kit-turquesa); color: #fff; }
-.tema-kit span { position: relative; z-index: 1; display: grid; width: 18px; height: 18px; }
-.tema-kit span svg { width: 100%; height: 100%; }
-.tema-kit::before { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #ffffff61; transition: transform var(--motion-base) var(--ease); }
-.tema-kit[aria-pressed="true"]::before { transform: translateX(34px); }
+/* Cambio de tema: las dos posiciones del interruptor del paquete de íconos. */
+.tema-kit { flex: none; width: 60px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: url("assets/kit/interruptor-tema-claro.svg") center / contain no-repeat; }
+.tema-kit[aria-pressed="true"] { background-image: url("assets/kit/interruptor-tema-oscuro.svg"); }
 .usuario { flex-direction: row-reverse; padding-left: 0; }
 button.usuario { padding: 2px 4px 2px 10px; border-radius: 9px; }
 button.usuario:hover, button.usuario[aria-expanded="true"] { background: var(--kit-hover); }
@@ -293,12 +291,10 @@ button.usuario:hover, button.usuario[aria-expanded="true"] { background: var(--k
 .carga:hover { background: var(--kit-hover); }
 .carga .kico { width: 44px; height: 44px; background: none; }
 .carga--lista { border-style: solid; border-color: var(--kit-verde); background: #8cc63f1a; color: var(--color-text-primary); }
-.interruptor { width: 68px; height: 32px; border: 0; background: var(--kit-gris); }
-.interruptor::after { content: "OFF"; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: #fff; font-size: 0.6875rem; font-weight: 700; }
-.interruptor span { top: 4px; left: 4px; width: 24px; height: 24px; border: 0; box-shadow: none; background: #fff; }
-.interruptor[aria-checked="true"] { background: var(--kit-verde); }
-.interruptor[aria-checked="true"]::after { content: "ON"; right: auto; left: 11px; }
-.interruptor[aria-checked="true"] span { transform: translateX(36px); }
+/* Interruptor: encendido y apagado del paquete de íconos. */
+.interruptor { width: 68px; height: 36px; border: 0; border-radius: 999px; background: url("assets/kit/interruptor-apagado.svg") center / contain no-repeat; }
+.interruptor span { display: none; }
+.interruptor[aria-checked="true"] { background: url("assets/kit/interruptor-encendido.svg") center / contain no-repeat; }
 .clave button:hover { background: var(--kit-hover); }
 
 /* ---------- Tablas: contenedor con borde y radio, encabezado #A9C9FC ---------- */
