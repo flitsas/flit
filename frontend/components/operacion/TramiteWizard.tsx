@@ -194,7 +194,6 @@ import { estadoLabel, revocationRequestLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { InlineAlert } from '@/components/atom/InlineAlert';
-import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -603,12 +602,6 @@ export function TramiteWizard(props: Props) {
   const [referenceNumber, setReferenceNumber] = useState<string | null>(
     () => state.detail?.referenceNumber ?? null,
   );
-  // HU #14322 — canal y OT del punto del trámite existente, solo lectura. Salen del mismo `getInstance`
-  // que ya se pide (sin llamada extra) o, antes de que responda, del detalle del reducer.
-  const [canalInfo, setCanalInfo] = useState<{
-    channel?: string | null;
-    channelTransitOfficeName?: string | null;
-  } | null>(null);
   // Datos de la franja azul (placa, VIN, organismo, dígito y fecha de radicación) del mismo
   // `getInstance`. El detalle del reducer (`state.detail`) solo existe tras guardar algo en esta
   // sesión: al reabrir un trámite estaba vacío y la franja no tenía de dónde leer.
@@ -635,7 +628,6 @@ export function TramiteWizard(props: Props) {
         setImprontaGeneracionHabilitada(d.improntaGeneracionHabilitada !== false);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
-        setCanalInfo({ channel: d.channel, channelTransitOfficeName: d.channelTransitOfficeName });
         setFranjaDetalle({ fieldValues: d.fieldValues ?? [], submittedAt: d.submittedAt ?? null });
         setActiveRevocationRequest(d.activeRevocationRequest ?? null);
         setInstanceDetailError(null);
@@ -1100,13 +1092,6 @@ export function TramiteWizard(props: Props) {
       ? 'Radica el registro inicial del vehículo ante el organismo de tránsito.'
       : 'Registra el cambio sobre el vehículo ante el organismo de tránsito.';
   const refLabel = referenceNumber ?? state.detail?.referenceNumber ?? null;
-  // Sin trámite creado (`/tramites/nuevo/{tipo}`) no hay dato: no se muestra nada. Con trámite y sin
-  // dato (histórico o backend anterior) `canalLabel` cae a «Trámites».
-  const canalStrip =
-    canalInfo ??
-    (state.detail
-      ? { channel: state.detail.channel, channelTransitOfficeName: state.detail.channelTransitOfficeName }
-      : null);
   // Identificador del expediente: el dato por el que el tipo consulta el vehículo. Un trámite que
   // entra por VIN es uno cuyo vehículo aún no tiene placa; el resto entra por placa.
   // Primero lo guardado en esta sesión (más reciente); si no hay, lo que trajo `getInstance` al abrir.
@@ -2067,18 +2052,6 @@ export function TramiteWizard(props: Props) {
               <p className="text-[12px]">
                 <span className="font-medium uppercase text-white/80">ID trámite: </span>
                 <span className="font-semibold">{refLabel}</span>
-              </p>
-            )}
-            {canalStrip && (
-              <p className="min-w-0 max-w-full break-words text-[12px]" data-testid="tramite-canal">
-                <span className="font-medium uppercase text-white/80">Canal: </span>
-                <span className="font-semibold">{canalLabel(canalStrip.channel)}</span>
-                {canalStrip.channel === 'pn_punto' && canalStrip.channelTransitOfficeName ? (
-                  <span className="font-semibold" data-testid="tramite-canal-ot">
-                    {' · '}
-                    {canalStrip.channelTransitOfficeName}
-                  </span>
-                ) : null}
               </p>
             )}
             <p className="text-[12px]">
