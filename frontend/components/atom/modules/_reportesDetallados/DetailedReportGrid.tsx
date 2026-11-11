@@ -1,6 +1,11 @@
 "use client";
 
-import { ActoresValidacionCell } from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
+import {
+  ActoresValidacionCell,
+  type CampoActor,
+} from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
+import { actoresDelGrupo } from "@/components/atom/modules/_reportes/consultas/identidad-validacion";
+import type { ActorValidacionDto } from "@/lib/api/company-queries";
 import { Pagination } from "@/components/atom/Pagination";
 import {
   CARDLIST_CELL,
@@ -24,7 +29,12 @@ import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/de
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
 import { statusLabel } from "../_reportes/categories";
 
-const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", "Persona", "Validación", "Intentos", "Motivo de rechazo", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
+const COLUMNAS_ROL = [
+  "Comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
+  "Vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor",
+] as const;
+
+const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", ...COLUMNAS_ROL, "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
 
 interface DetailedReportGridProps {
   data: DetailedReportPage | NetworkDetailedReportPage | null;
@@ -102,19 +112,33 @@ export function DetailedReportGrid({
                     <span className="block text-[11px] opacity-70">{row.channelTransitOfficeName}</span>
                   ) : null}
                 </td>
-                {/* Cuatro columnas alineadas por actor (46 px cada uno). Backend anterior sin `actores`: cae a la persona de siempre. */}
-                <td data-label="Persona" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
-                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="persona" /> : row.personFullName || row.personDocument || "—"}
-                </td>
-                <td data-label="Validación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
-                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="validacion" /> : "—"}
-                </td>
-                <td data-label="Intentos" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
-                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="intentos" /> : "—"}
-                </td>
-                <td data-label="Motivo de rechazo" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
-                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="motivo" /> : "—"}
-                </td>
+                {/* Ocho columnas, cuatro por rol, alineadas por actor (46 px cada uno). El propietario va con los compradores. Backend anterior sin `actores`: la persona de siempre bajo «Comprador». */}
+                {(() => {
+                  const sinActores = (row.actores?.length ?? 0) === 0;
+                  const compradores = actoresDelGrupo(row.actores, "comprador");
+                  const vendedores = actoresDelGrupo(row.actores, "vendedor");
+                  const celda = (label: string, actores: ActorValidacionDto[], campo: CampoActor) => (
+                    <td key={label} data-label={label} className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                      <ActoresValidacionCell actores={actores} campo={campo} />
+                    </td>
+                  );
+                  return [
+                    sinActores ? (
+                      <td key="Comprador" data-label="Comprador" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                        {row.personFullName || row.personDocument || "—"}
+                      </td>
+                    ) : (
+                      celda("Comprador", compradores, "persona")
+                    ),
+                    celda("Validación comprador", compradores, "validacion"),
+                    celda("Intentos comprador", compradores, "intentos"),
+                    celda("Motivo rechazo comprador", compradores, "motivo"),
+                    celda("Vendedor", vendedores, "persona"),
+                    celda("Validación vendedor", vendedores, "validacion"),
+                    celda("Intentos vendedor", vendedores, "intentos"),
+                    celda("Motivo rechazo vendedor", vendedores, "motivo"),
+                  ];
+                })()}
                 <td data-label="Transformación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
                 <td data-label="Leasing" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.isLeasing ? "Sí" : "No"}</td>
                 <td data-label="Pago" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.paymentType || "—"}</td>
