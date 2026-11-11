@@ -188,6 +188,45 @@ public sealed class CompanyQueryRepositoryTests
         result.Filas.Should().ContainSingle();
     }
 
+    [Fact] // Validación de identidad por persona: dos vendedores, uno rechazado y luego aprobado. Cada línea es una
+           // persona y los intentos salen de la bitácora, no del contador de la fila (que se reinicia al reenviar).
+    public async Task LaFilaTraeLosActoresConSuValidacion_YElMaximoPorRolEsDeTodoElFiltro()
+    {
+        var db = NewDbName();
+        Guid traspaso;
+        await using (var seed = NewContext(db))
+        {
+            SeedCatalogos(seed);
+            traspaso = Tramite(seed, "REF-T", placa: "ABC123", creadoEn: Hace(3), modalidad: "traspaso");
+            Actor(seed, traspaso, "comprador", "Cándida Compradora", "100");
+            Actor(seed, traspaso, "vendedor", "Víctor Vendedor", "200");
+            Actor(seed, traspaso, "vendedor", "Valeria Vendedora", "300");
+            var matricula = Tramite(seed, "REF-M", placa: "XYZ987", creadoEn: Hace(2));
+            Actor(seed, matricula, "comprador", "Pedro Propietario", "400");
+
+            var rechazada = Validacion(seed, traspaso, "vendedor", "200", "rechazado", Hace(3),
+                "{\"motivo\":\"Coincidencia facial insuficiente\"}");
+            var aprobada = Validacion(seed, traspaso, "vendedor", "200", "aprobado", Hace(2));
+            Auditoria(seed, rechazada, "webhook_applied", "rechazado");
+            Auditoria(seed, aprobada, "webhook_applied", "aprobado");
+            Auditoria(seed, aprobada, "send", "ok");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var result = await RunAsync(db, Definir());
+
+        result.MaxActoresPorRol.Should().Be(new MaxActoresPorRolDto(1, 2, 1));
+        var fila = result.Filas.Single(f => f.ReferenceNumber == "REF-T");
+        fila.Actores.Select(a => (a.Rol, a.Ordinal)).Should().Equal(("comprador", 1), ("vendedor", 1), ("vendedor", 1));
+        var victor = fila.Actores.Single(a => a.Documento == "200");
+        victor.EstadoValidacion.Should().Be("aprobado");
+        victor.Intentos.Should().Be(2);
+        victor.MotivoRechazo.Should().Be("El rostro no coincide con el documento.");
+        fila.Actores.Single(a => a.Documento == "300").EstadoValidacion.Should().Be("sin_validacion");
+        result.Filas.Single(f => f.ReferenceNumber == "REF-M").Actores.Should().ContainSingle()
+            .Which.Rol.Should().Be("propietario");
+    }
+
     // ── Fechas ────────────────────────────────────────────────────────────────────────────────
 
     [Fact] // «Lo entregado en julio» no puede incluir lo que sigue en borrador. Sin fecha de envío,
@@ -586,6 +625,43 @@ public sealed class CompanyQueryRepositoryTests
             DocumentType = "CC",
             DocumentNumber = documento,
             FullName = nombre,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+    private static Guid Validacion(
+        FlitDbContext ctx, Guid instanceId, string rol, string documento, string status, DateTimeOffset at,
+        string? detail = null)
+    {
+        var id = Guid.NewGuid();
+        ctx.ProcedureInstanceBiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = id,
+            TenantId = Empresa,
+            ProcedureInstanceId = instanceId,
+            PartyRole = rol,
+            DocumentType = "CC",
+            DocumentNumber = documento,
+            Name = "Persona",
+            Email = $"{id:N}@flit.test",
+            Status = status,
+            TokenHash = id.ToString("N"),
+            ExpiresAt = at.AddDays(1),
+            Detail = detail,
+            CreatedAt = at,
+            UpdatedAt = at,
+        });
+        return id;
+    }
+
+    private static void Auditoria(FlitDbContext ctx, Guid validationId, string stage, string outcome) =>
+        ctx.IdentityValidationAudits.Add(new IdentityValidationAuditEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Empresa,
+            ValidationId = validationId,
+            Stage = stage,
+            Outcome = outcome,
+            OccurredAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
