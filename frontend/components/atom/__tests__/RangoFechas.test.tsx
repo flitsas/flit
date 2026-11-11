@@ -109,4 +109,12 @@ describe("RangoFechas", () => {
     expect(screen.getByLabelText("Desde")).toHaveValue("2026-10-12");
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("el rango por defecto del Detallado abre como «Últimos 30 días» y se puede editar", async () => {
+    const { defaultDetailedFilters } = await import("@/components/atom/modules/_reportesDetallados/filters");
+    const { range } = defaultDetailedFilters(HOY);
+    expect(range).toEqual({ from: "2026-10-13", to: "2026-11-11" });
+    render(<Controlado inicial={range} onChange={onChange} />);
+    expect(screen.getByLabelText("Periodo")).toHaveValue("ultimos_30");
+  });
 });
