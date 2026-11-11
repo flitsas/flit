@@ -1,5 +1,6 @@
 "use client";
 
+import { ActoresValidacionCell } from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
 import { Pagination } from "@/components/atom/Pagination";
 import {
   CARDLIST_CELL,
@@ -23,7 +24,7 @@ import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/de
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
 import { statusLabel } from "../_reportes/categories";
 
-const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", "Persona", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
+const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", "Persona", "Validación", "Intentos", "Motivo de rechazo", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
 
 interface DetailedReportGridProps {
   data: DetailedReportPage | NetworkDetailedReportPage | null;
@@ -101,7 +102,19 @@ export function DetailedReportGrid({
                     <span className="block text-[11px] opacity-70">{row.channelTransitOfficeName}</span>
                   ) : null}
                 </td>
-                <td data-label="Persona" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.personFullName || row.personDocument || "—"}</td>
+                {/* Cuatro columnas alineadas por actor (46 px cada uno). Backend anterior sin `actores`: cae a la persona de siempre. */}
+                <td data-label="Persona" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="persona" /> : row.personFullName || row.personDocument || "—"}
+                </td>
+                <td data-label="Validación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="validacion" /> : "—"}
+                </td>
+                <td data-label="Intentos" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="intentos" /> : "—"}
+                </td>
+                <td data-label="Motivo de rechazo" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                  {row.actores ? <ActoresValidacionCell actores={row.actores} campo="motivo" /> : "—"}
+                </td>
                 <td data-label="Transformación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
                 <td data-label="Leasing" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.isLeasing ? "Sí" : "No"}</td>
                 <td data-label="Pago" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.paymentType || "—"}</td>
