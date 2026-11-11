@@ -72,12 +72,37 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// HU #13371 — se propaga a <see cref="HandleAsync(Guid, Guid, IReadOnlyList{string}?, bool, bool, CancellationToken)"/>
     /// después de la precedencia del maestro radicado, que no cambia. Solo lo pasa el lote.
     /// </param>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia,
+        bool force,
+        bool soloSiNoExiste,
+        CancellationToken ct = default) =>
+        HandleRespetandoRadicacionAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste, sinCascadaFur: false, ct);
+
+    /// <summary>
+    /// HU #14547 (R3) — rearma el maestro tras regenerar SOLO el mandato: respeta el radicado ante Quipux y la matriz
+    /// del OT, fuerza la reconstrucción y NO regenera el FUR aunque esté desactualizado.
+    /// </summary>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> RegenerarSinCascadaRespetandoRadicacionAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia,
+        CancellationToken ct = default) =>
+        HandleRespetandoRadicacionAsync(id, tenantId, matrizPrecedencia, true, false, sinCascadaFur: true, ct);
+
+    /// <param name="sinCascadaFur">
+    /// HU #14547 (R3) — la regeneración del mandato del SuperAdmin rearma el maestro SIN regenerar el FUR aunque esté
+    /// desactualizado (Bug #13055): solo cambió el mandato. Con <c>false</c>, el comportamiento de siempre.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleRespetandoRadicacionAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<string>? matrizPrecedencia,
         bool force,
         bool soloSiNoExiste,
+        bool sinCascadaFur,
         CancellationToken ct = default)
     {
         var radicadoId = await _maestroRadicado.AttachmentRadicadoAsync(tenantId, id, ct).ConfigureAwait(false);
@@ -91,7 +116,8 @@ public sealed class GenerarConsolidadoMaestroHandler(
             return fijo.Error is null ? (fijo.Result, null) : (null, fijo.Error);
         }
 
-        return await HandleAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste, ct).ConfigureAwait(false);
+        return await HandleCoreAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste, sinCascadaFur, ct)
+            .ConfigureAwait(false);
     }
 
     /// <param name="matrizPrecedencia">
@@ -120,13 +146,23 @@ public sealed class GenerarConsolidadoMaestroHandler(
     /// antes del atajo de caché y de la regeneración del FUR. Con <c>false</c> (la otra sobrecarga) el
     /// comportamiento es el de siempre.
     /// </param>
-    public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<string>? matrizPrecedencia,
         bool force,
         bool soloSiNoExiste,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, matrizPrecedencia, force, soloSiNoExiste, sinCascadaFur: false, ct);
+
+    private async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleCoreAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<string>? matrizPrecedencia,
+        bool force,
+        bool soloSiNoExiste,
+        bool sinCascadaFur,
+        CancellationToken ct)
     {
         // Graph con FieldValues (HU #10857): necesarios para los datos de la portada (placa, secretaría).
         var instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct);
@@ -165,7 +201,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // Bug #13055 — el maestro solo fusiona lo persistido: si el FUR no refleja el último cambio del
         // expediente (datos o placa), se regenera antes de fusionar. Best-effort: si falla, se fusiona el FUR
         // que hay, igual que antes de esta corrección.
-        if (furDesactualizado && hotDocsRegenerator is not null)
+        if (furDesactualizado && !sinCascadaFur && hotDocsRegenerator is not null)
         {
             try
             {

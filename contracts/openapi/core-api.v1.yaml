@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.5"
+  version: "1.0.6"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -11523,6 +11523,49 @@ paths:
 
   # ── Admin · Trámites · Cambiar estado sin restricción de flujo (Feature #12155, HU #12159) ─────
 
+  /api/v1/admin/tramites/{id}/mandato/regenerar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Regenerar el mandato y los consolidados de un trámite (solo SuperAdmin)
+      operationId: adminTramiteRegenerarMandatoYConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        HU #14547. Vuelve a generar el contrato de mandato con el mandatario que indica HOY la configuración de
+        Mandatos (prelación de ADR-0066, en cualquier estado no final) y sobrescribe el mandatario del trámite; la
+        bitácora registra el evento `mandato_regenerado_admin` con los ids del firmante anterior y el nuevo. El FUR,
+        la compraventa, la solicitud virtual, los certificados, las escrituras y los personalizados NO se regeneran;
+        el mandato personalizado de la compañía se conserva. Después rearma el consolidado del gestor (sin cascada
+        del FUR, descartando también uno cargado a mano) y el maestro del organismo con su matriz de precedencia. El
+        maestro ya radicado en Quipux se conserva (`maestro.estado=radicado_conservado`); si el maestro falla, la
+        respuesta es un éxito parcial (`maestro.estado=fallo`) y el maestro queda invalidado para rearmarse al
+        abrirlo. Solo el rol SuperAdmin: ningún permiso delegable la habilita (los 6 slugs de
+        `admin-tramites-avanzado` no bastan). Sin cuerpo.
+      responses:
+        "200":
+          description: Mandato y consolidado del gestor regenerados; el maestro según `maestro.estado`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegenerarMandatoYConsolidadoResponse" }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "El usuario no tiene el rol SuperAdmin." }
+        "404": { description: "Trámite no encontrado (`error=not_found`)." }
+        "409":
+          description: >
+            ProblemDetails con el código estable en `error`: `estado_no_permite_regenerar_mandato` (aprobado,
+            anulado o revocado; no cambia nada), `migrado_solo_lectura` (migrado de V1 en estado final),
+            `organismo_requerido` (sin organismo de tránsito no se puede emitir), `fur_requerido` (sin FUR no se
+            puede armar el consolidado; no cambia nada), `sin_adjuntos`, `adjunto_no_disponible`,
+            `mimetype_no_soportado` o `mandato_no_disponible`.
+        "503": { description: "`storage_unavailable`: no se pudo guardar el documento en el almacenamiento de archivos." }
+
   /api/v1/admin/tramites/{id}/estado:
     parameters:
       - $ref: "#/components/parameters/TenantIdHeader"
@@ -15153,6 +15196,44 @@ components:
           enum: [adjunto_bloqueado_flito]
           description: Solo presente cuando el bloqueo es por el adjunto de FLITO (con `not_draft` solo viene detail).
 
+    RegenerarMandatoYConsolidadoResponse:
+      type: object
+      description: HU #14547 — resultado de «Regenerar mandato y consolidado».
+      required: [mandato, consolidado, maestro, avisos]
+      properties:
+        mandato:
+          type: object
+          required: [attachmentId, firmanteAnteriorId, firmanteNuevoId, sinFirmar]
+          properties:
+            attachmentId: { type: string, format: uuid, nullable: true, description: "Adjunto `mandato` vigente tras la acción." }
+            firmanteAnteriorId: { type: string, format: uuid, nullable: true, description: "Mandatario que tenía el trámite (id del directorio)." }
+            firmanteNuevoId: { type: string, format: uuid, nullable: true, description: "Mandatario recalculado; null si hoy no resuelve a nadie." }
+            sinFirmar: { type: boolean, description: "El mandato salió con el recuadro «Sin firmar»." }
+        consolidado:
+          type: object
+          required: [attachmentId, generadoEn]
+          properties:
+            attachmentId: { type: string, format: uuid }
+            generadoEn: { type: string, format: date-time }
+        maestro:
+          type: object
+          required: [estado, attachmentId, generadoEn]
+          properties:
+            estado:
+              type: string
+              enum: [regenerado, radicado_conservado, fallo]
+            attachmentId: { type: string, format: uuid, nullable: true }
+            generadoEn: { type: string, format: date-time, nullable: true }
+        avisos:
+          type: array
+          items:
+            type: object
+            required: [codigo, mensaje]
+            properties:
+              codigo:
+                type: string
+                enum: [maestro_radicado_conservado, maestro_fallo, mandato_sin_firmar, mandato_personalizado_conservado]
+              mensaje: { type: string, description: "Texto en español, sin datos personales." }
     AttachmentDto:
       type: object
       properties:
