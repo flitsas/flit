@@ -646,6 +646,7 @@ function biometricPersonParams(filters: TenantBiometricPersonFilters): URLSearch
   add('name', filters.name);
   add('documentType', filters.documentType);
   add('documentNumber', filters.documentNumber);
+  add('referenceNumber', filters.referenceNumber);
   add('status', filters.status);
   add('createdFrom', filters.createdFrom);
   add('createdTo', filters.createdTo);

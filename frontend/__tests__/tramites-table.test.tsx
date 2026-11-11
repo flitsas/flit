@@ -65,6 +65,8 @@ import { TramitesTable } from '@/components/operacion/TramitesTable';
 // (`app/page.tsx` y `app/tramites/layout.tsx` ya envuelven la pantalla con él).
 import { ToastProvider } from '@/components/admin/Toast';
 import { TOKEN_STORAGE_KEY } from '@/lib/auth/jwt';
+import { uiPreferencesClient } from '@/lib/api/ui-preferences';
+import { TRAMITES_COLUMN_KEYS } from '@/lib/tramites/tramites-table-columns';
 
 /** Genera n instancias draft con placa única (P0001, P0002, …). */
 /**
@@ -717,8 +719,7 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('AAA111');
-    // Gestor está fuera del default de la pantalla: el gestor la enciende desde "Columnas".
-    await activarColumnas('Gestor');
+    // Ajuste 2026-11-10 (D2=a) — Gestor viene en el default: no hace falta encenderla.
     // `getByRole('row')` ya no es único: la cabecera y cada fila de datos son `<tr>` (role="row"
     // implícito), así que se acota a la cabecera con `getAllByRole('row')[0]`.
     const table = screen.getByRole('table', { name: 'Trámites en curso' });
@@ -738,8 +739,10 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     );
     await userEvent.keyboard('{Escape}');
 
-    // Abrir una fila navega con ?t=<tenant de la fila>.
-    await userEvent.click(screen.getByText('AAA111'));
+    // Abrir una fila navega con ?t=<tenant de la fila>. Desde el ajuste 2026-11-10 solo el
+    // radicado abre (el resto de la fila se puede seleccionar y copiar).
+    const filaA = screen.getByText('AAA111').closest('tr') as HTMLElement;
+    await userEvent.click(within(filaA).getByRole('button', { name: /^Abrir trámite/ }));
     expect(routerPush).toHaveBeenCalledWith('/tramites/a?t=ten-a');
   });
 });
@@ -788,6 +791,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
       'Vehículo',
       'Vendedor',
       'Comprador',
+      'Gestor',
       'Trámite',
       'Organismo de tránsito',
       'Acciones',
@@ -804,8 +808,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     expect(within(header).queryByText('Fecha radicación')).not.toBeInTheDocument();
     // La acreditación de cada parte va dentro de su columna de actor: no hay columna "Firmas".
     expect(within(header).queryByText('Firmas')).not.toBeInTheDocument();
-    // Fuera del default por decisión de producto: el gestor las enciende desde "Columnas".
-    expect(within(header).queryByText('Gestor')).not.toBeInTheDocument();
+    // Fuera del default por decisión de producto: el gestor la enciende desde "Columnas".
     expect(within(header).queryByText('Fuente')).not.toBeInTheDocument();
   });
 
@@ -860,9 +863,9 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
-    // Ninguna de las tres viene en el default: Gestor y Fuente están fuera por decisión de
-    // producto, y la fecha de actualización viaja apilada dentro del radicado.
-    await activarColumnas('Gestor', 'Fuente', 'Fecha de actualización');
+    // Gestor viene en el default (ajuste 2026-11-10); Fuente está fuera por decisión de producto
+    // y la fecha de actualización viaja apilada dentro del radicado.
+    await activarColumnas('Fuente', 'Fecha de actualización');
 
     const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
@@ -986,6 +989,89 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
 });
 
 // HU #11054 — documentos del expediente desde el listado; HU #11055 — consolidado en la fila.
+// Ajuste 2026-11-10 (D2=a) — Gestor visible por defecto para todos, y re-mostrada UNA vez a quien
+// ya tenía preferencia guardada sin ella. Después, si la oculta, se respeta.
+describe('TramitesTable — Gestor visible por defecto (ajuste 2026-11-10)', () => {
+  const cabecera = () =>
+    within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole('row')[0];
+  // `clearAllMocks` no borra la implementación: sin esto la preferencia sembrada aquí se filtraría a
+  // los describes siguientes (p. ej. ocultaría «Marcas»).
+  afterEach(() => {
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({ scope: 'tramites.columns', value: {} });
+  });
+
+  it('re-muestra Gestor a una preferencia guardada que no la traía (sin marca reshown)', async () => {
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+      scope: 'tramites.columns',
+      value: {
+        visible: ['radicado', 'placa', 'propietario', 'comprador', 'tramite', 'secretaria'],
+        known: TRAMITES_COLUMN_KEYS.filter((k) => k !== 'cliente'),
+      },
+    });
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+    await waitFor(() => expect(within(cabecera()).getByText('Gestor')).toBeInTheDocument());
+  });
+
+  it('respeta que la ocultó después de re-mostrarla (marca reshown presente)', async () => {
+    vi.mocked(uiPreferencesClient.get).mockResolvedValue({
+      scope: 'tramites.columns',
+      value: {
+        visible: ['radicado', 'placa', 'propietario', 'comprador', 'tramite', 'secretaria'],
+        known: [...TRAMITES_COLUMN_KEYS],
+        reshown: ['gestor'],
+      },
+    });
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+    // La preferencia guardada no trae «Marcas» (y `known` la conoce): cuando desaparece de la
+    // cabecera es que la preferencia ya se aplicó.
+    await waitFor(() => expect(within(cabecera()).queryByText('Marcas')).not.toBeInTheDocument());
+    expect(within(cabecera()).queryByText('Gestor')).not.toBeInTheDocument();
+  });
+});
+
+// Ajuste 2026-11-10 — copiar datos sin abrir el asistente/detalle: la fila deja de ser clicable y
+// solo el radicado (un <button>) abre el trámite, con ratón o teclado.
+describe('TramitesTable — solo el radicado abre el trámite (ajuste 2026-11-10)', () => {
+  it('clic en una celda que no es el radicado NO abre el trámite', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await userEvent.click(await screen.findByText('Comprador 0001'));
+    await userEvent.click(screen.getByText('P0001'));
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('la fila no lleva cursor de enlace ni bloquea la selección de texto', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    const fila = (await screen.findByText('P0001')).closest('tr') as HTMLElement;
+    expect(fila.className).not.toMatch(/cursor-pointer/);
+    expect(fila.className).not.toMatch(/select-none/);
+  });
+
+  it('clic en el radicado abre el trámite', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir trámite TR-0001' }));
+    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-0001');
+  });
+
+  it('Enter y Espacio sobre el radicado abren el trámite', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await screen.findByText('P0001');
+    screen.getByRole('button', { name: 'Abrir trámite TR-0001' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.keyboard(' ');
+    expect(routerPush).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('TramitesTable — documentos y consolidado desde el listado', () => {
   it('abre el panel de documentos sin navegar al wizard', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
@@ -1089,7 +1175,7 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
 describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radicado', () => {
   const [base] = makeInstances(1);
 
-  it('un trámite radicado abre el modal de detalle al hacer clic en la fila, sin navegar', async () => {
+  it('un trámite radicado abre el modal de detalle al hacer clic en el radicado, sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-1', referenceNumber: 'TR-RAD1', placa: 'RAD001', estado: 'entregado' },
     ]);
@@ -1097,7 +1183,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await userEvent.click(await screen.findByText('RAD001'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD1' }));
 
     expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
     expect(routerPush).not.toHaveBeenCalled();
@@ -1115,7 +1201,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       { ...base, id: 'rad-p', referenceNumber: 'TR-P', placa: 'PASO01', estado: 'entregado' },
     ]);
     const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
-    await userEvent.click(await screen.findByText('PASO01'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-P' }));
     // Se comparan los NOMBRES ACCESIBLES: ordinal + rótulo (el estado visual lo lleva el círculo).
     const tabsTraspaso = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
@@ -1140,7 +1226,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       },
     ]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
-    await userEvent.click(await screen.findByText('PASO02'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite MI-P' }));
     const tabsMatricula = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
@@ -1188,7 +1274,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await userEvent.click(await screen.findByText('BRW001'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-BRW1' }));
 
     expect(routerPush).toHaveBeenCalledWith('/tramites/brw-1');
     expect(screen.queryByRole('dialog', { name: /Detalle de/ })).toBeNull();
@@ -1209,7 +1295,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await userEvent.click(await screen.findByText('RAD004'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD4' }));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
     expect(within(dialog).getByText('Borrador')).toBeInTheDocument();
     expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
@@ -1321,7 +1407,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await userEvent.click(await screen.findByText('RAD005'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD5' }));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
     expect(await within(dialog).findByText('fur-generado.pdf')).toBeInTheDocument();
     expect(
@@ -1348,7 +1434,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await userEvent.click(await screen.findByText('RAD006'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD6' }));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
     expect(within(dialog).getByRole('status', { name: 'Cargando historial' })).toBeInTheDocument();
 
@@ -1366,7 +1452,7 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await userEvent.click(await screen.findByText('RAD007'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD7' }));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
     expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
 

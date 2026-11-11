@@ -1046,9 +1046,11 @@ internal sealed partial class ProcedureInstanceRepository(
     /// <summary>
     /// CTE compartida del listado agrupado por persona (HU #11270): normaliza el documento, cuenta el
     /// grupo, se queda con la validación más reciente de cada persona (DISTINCT ON) y aplica los filtros
-    /// de estado/fecha/vigencia sobre ESA fila. La usan tanto la página de filas como el conteo por
-    /// estado de los KPIs, para que ambos hablen exactamente del mismo conjunto (si divergieran, los
-    /// contadores no cuadrarían con las filas que el gestor tiene delante).
+    /// de estado/fecha/vigencia sobre ESA fila. El número de radicado ({15}) filtra en <c>base</c>, antes de
+    /// agrupar: se muestra la validación ligada a ese trámite y el contador solo cuenta las que coinciden.
+    /// La usan tanto la página de filas como el conteo por estado de los KPIs, para que ambos hablen
+    /// exactamente del mismo conjunto (si divergieran, los contadores no cuadrarían con las filas que el
+    /// gestor tiene delante).
     /// </summary>
     private const string GroupedByPersonCteSql = """
             WITH base AS (
@@ -1107,6 +1109,10 @@ internal sealed partial class ProcedureInstanceRepository(
                   AND ({4}::boolean IS NULL
                        OR ({4} = TRUE AND v.procedure_instance_id IS NULL)
                        OR ({4} = FALSE AND v.procedure_instance_id IS NOT NULL))
+                  -- Radicado por COINCIDENCIA PARCIAL, igual que el listado plano (ILIKE + ESCAPE). Una
+                  -- prevalidación standalone no tiene trámite (pi.reference_number NULL): no coincide.
+                  AND ({15}::text IS NULL
+                       OR pi.reference_number ILIKE '%' || {15} || '%' ESCAPE '\')
             ),
             counted AS (
                 -- La persona es compañía + documento: la misma cédula en dos compañías son dos personas
@@ -1163,7 +1169,7 @@ internal sealed partial class ProcedureInstanceRepository(
             )
         """;
 
-    /// <summary>Página de personas ordenada por registro. Params propios: {14} skip, {15} take.</summary>
+    /// <summary>Página de personas ordenada por registro. Params propios: {16} skip, {17} take.</summary>
     private const string GroupedByPersonRowsSql = GroupedByPersonCteSql + "\n" + """
             -- Columnas en snake_case SIN alias PascalCase: UseSnakeCaseNamingConvention
             -- mapea CreatedAt→created_at. AS "CreatedAt" hacía que EF buscara created_at
@@ -1196,7 +1202,7 @@ internal sealed partial class ProcedureInstanceRepository(
                 COUNT(*) OVER() AS total_persons
             FROM filtered
             ORDER BY created_at DESC
-            OFFSET {15} LIMIT {16}
+            OFFSET {16} LIMIT {17}
         """;
 
     /// <summary>
@@ -1218,8 +1224,8 @@ internal sealed partial class ProcedureInstanceRepository(
         """;
 
     /// <summary>
-    /// Parámetros {0}..{14} compartidos por ambas colas de <see cref="GroupedByPersonCteSql"/>
-    /// ({14} = <c>now</c>, que solo usa la cola de conteo). La página añade {15} skip y {16} take.
+    /// Parámetros {0}..{15} compartidos por ambas colas de <see cref="GroupedByPersonCteSql"/>
+    /// ({14} = <c>now</c>; {15} = radicado escapado para LIKE). La página añade {16} skip y {17} take.
     /// </summary>
     private static object[] BuildGroupedByPersonParams(
         TenantScope scope,
@@ -1244,6 +1250,10 @@ internal sealed partial class ProcedureInstanceRepository(
         var expiraHasta = filter?.ExpiraHasta;
         var venceEnDias = filter?.VenceEnDias;
         var standalone = filter?.Standalone;
+        // Va dentro de un ILIKE '%…%': se escapan los comodines para tratarlos como literales.
+        var referenceNumber = string.IsNullOrWhiteSpace(filter?.ReferenceNumber)
+            ? null
+            : EscapeLike(filter!.ReferenceNumber!.Trim().ToUpperInvariant());
 
         var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
         var cortePorVencer = now.AddDays(-(BiometricRules.VigenciaDias - BiometricRules.VigenciaPorVencerDias));
@@ -1282,6 +1292,7 @@ internal sealed partial class ProcedureInstanceRepository(
             Db(cortePorVencer),
             Db(corteVenceEn),
             Db(now),
+            Db(referenceNumber),
         ];
     }
 
@@ -1363,6 +1374,17 @@ internal sealed partial class ProcedureInstanceRepository(
                 all = standalone
                     ? all.Where(v => v.ProcedureInstanceId is null).ToList()
                     : all.Where(v => v.ProcedureInstanceId is not null).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.ReferenceNumber))
+            {
+                // Coincidencia parcial sin distinguir mayúsculas, igual que el ILIKE de la consulta Npgsql;
+                // antes de agrupar, para que la fila y el contador hablen de las validaciones de ese trámite.
+                var radicado = filter.ReferenceNumber.Trim();
+                all = all
+                    .Where(v => v.ProcedureInstance?.ReferenceNumber is { } rn
+                        && rn.Contains(radicado, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
         }
 
