@@ -2,7 +2,7 @@
 
 Rama `diseno/ui-kit-2026`, 2026-11-11. Ejecutor: Johan Jimenez.
 
-Es la propuesta navegable de todo FLIT 2.0 (la de `docs/design/propuesta-diseno-inteligente`, vista de Super Admin, 62 pantallas y pestañas) vestida con el Manual UI Kit Ecosistema FLIT 2026 y con la logometría y los íconos del repositorio de íconos de FLIT (`github.com/yulojiar91/ICONOSFLIT`). No toca `frontend/` ni `packages/ui`: sirve para ver cómo pinta el manual sobre las pantallas reales antes de pasarlo a producción.
+Es la propuesta navegable de todo FLIT 2.0 (vista de Super Admin, 62 pantallas y pestañas; el árbol de módulos sale de `docs/arbol-menu-por-rol.md`) vestida con el Manual UI Kit Ecosistema FLIT 2026 y con la logometría y los íconos del repositorio de íconos de FLIT (`github.com/yulojiar91/ICONOSFLIT`). No toca `frontend/` ni `packages/ui`: sirve para ver cómo pinta el manual sobre las pantallas reales antes de pasarlo a producción.
 
 ## Cómo verla
 
@@ -12,9 +12,17 @@ python3 -m http.server 8733
 # abrir http://127.0.0.1:8733/
 ```
 
-`servidor-local.mjs` sigue sirviendo la misma carpeta con datos reales de FLIT en solo lectura (ver el README de la propuesta anterior).
+Con datos reales de FLIT, en solo lectura:
 
-## Qué cambia frente a la propuesta anterior
+```bash
+node docs/design/propuesta-ui-kit-2026/servidor-local.mjs            # producción (api.flitsas.com)
+FLIT_API=https://api.qa.flitsas.online node docs/design/propuesta-ui-kit-2026/servidor-local.mjs   # QA
+# abrir http://127.0.0.1:8732/ e ingresar con tu usuario de FLIT
+```
+
+`servidor-local.mjs` (Node 18 o más, sin dependencias) escucha solo en este equipo y reenvía a la API real el ingreso y las consultas `GET`. Cualquier otro método hacia `/api` responde 405 ahí mismo, así que la propuesta no puede cambiar nada en FLIT. Con datos reales, Inicio, Trámites y el detalle de cada trámite leen la API; los demás módulos muestran la pastilla «Datos de muestra».
+
+## Qué cambia frente a la primera versión de la propuesta
 
 | Pieza | Antes (Diseño Inteligente) | Ahora (Manual UI Kit 2026) |
 |---|---|---|
@@ -60,7 +68,7 @@ Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga despu�
 ## Lo que el manual no define y aquí se derivó
 
 - Tema oscuro: el manual trae el interruptor de sol y luna pero no la paleta oscura. Los valores oscuros de `ui-kit-2026.css` son una derivación propia.
-- La placa amarilla con ciudad se conserva de la propuesta anterior; el manual solo muestra la placa como texto espaciado en los modales.
+- La placa amarilla con ciudad se conserva de la primera versión; el manual solo muestra la placa como texto espaciado en los modales.
 - La escena del ingreso (`heroe-ingreso.webp`) se conserva; el manual no trae pantalla de ingreso.
 - El logo del repositorio viene solo en blanco. En el encabezado claro se usa el mismo trazo en tinta `#162744`.
 
