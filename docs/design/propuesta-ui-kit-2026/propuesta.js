@@ -10,7 +10,7 @@
   var esc = function (t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   // UI Kit 2026: cada módulo se resuelve a un ícono del paquete de íconos de FLIT.
   var KIT = "assets/kit/", KI = window.KIT_ICONOS || {};
-  var MAPA_ICONO = {"auditoria": "portapapeles", "ayuda": "ayuda", "banners": "megafono", "biometria": "biometria", "calendario": "calendario", "causales": "causal", "colaboradores": "usuarios", "comparendos": "comparendos", "configuracion": "ajustes", "consulta-placa": "buscar", "contrasena": "candado", "diagnostico": "consulta", "documentos": "documento", "empresas": "empresas", "filtros": "filtro", "firmas": "firma", "fuentes-oficiales": "fuentes-oficiales", "fur": "fur", "generacion-documental": "archivo", "historial-placa": "historial-placa", "identidad": "identidad", "improntas": "impronta", "inicio": "carpeta", "integraciones": "integraciones", "mandatos": "mandato", "matricula": "@tramite-matricula", "notificaciones": "campana", "organismos": "banco", "pendientes": "espera", "perfil": "persona", "preasignacion": "placa", "procesos": "procesos", "productos": "rejilla", "reportes": "reportes", "revocatorias": "@estado-revocado", "roles": "rol", "seguridad": "escudo", "tramites": "tramites", "traspaso": "@tramite-traspaso", "trazabilidad": "ruta", "vencidos": "vencido"};
+  var MAPA_ICONO = {"auditoria": "portapapeles", "ayuda": "ayuda", "banners": "megafono", "biometria": "biometria", "calendario": "calendario", "causales": "causal", "colaboradores": "usuarios", "comparendos": "comparendos", "configuracion": "ajustes", "consulta-placa": "buscar", "contrasena": "candado", "diagnostico": "consulta", "documentos": "documento", "empresas": "empresas", "filtros": "filtro", "firmas": "firma", "fuentes-oficiales": "fuentes-oficiales", "fur": "fur", "generacion-documental": "archivo", "historial-placa": "historial-placa", "identidad": "identidad", "improntas": "impronta", "inicio": "carpeta", "integraciones": "integraciones", "mandatos": "mandato", "matricula": "@tramite-matricula", "notificaciones": "campana", "organismos": "banco", "pendientes": "espera", "perfil": "persona", "preasignacion": "placa", "procesos": "procesos", "productos": "rejilla", "reportes": "reportes", "revocatorias": "@estado-revocado", "roles": "rol", "seguridad": "escudo", "tramites": "tramites", "traspaso": "@tramite-traspaso", "trazabilidad": "ruta", "vencidos": "vencido", "reportes-detallados": "reporte-detallado", "reportes-ict": "reporte-ict", "quipux": "radicacion", "log-qx": "log-mensajes", "log-ict": "log-llamadas", "tipos-tramite": "tipos-tramite", "tiempo": "cronometro", "finalizados": "finalizado", "en-curso": "avance", "rapido": "medidor", "devoluciones": "devolucion", "ingresos": "ingreso", "celular": "celular", "destacado": "medalla", "llamadas": "intercambio", "marca": "destello", "cargar": "archivo-subir", "correcciones": "lapiz", "errores": "nube-alerta"};
   var kico = function (nombre, cls) { return '<span class="kico ' + (cls || "") + '" aria-hidden="true">' + (KI[nombre] || KI.documento || "") + "</span>"; };
   var ilus = function (n, cls) {
     var m = MAPA_ICONO[n] || "documento";
@@ -114,8 +114,8 @@
         var c = (r[0] && r[0].counts) || {}, items = (r[1] && r[1].items) || [];
         items.forEach(function (t) { CACHE_TRAMITES[t.id] = t; });
         var enCurso = EN_CURSO.reduce(function (a, k) { return a + (c[k] || 0); }, 0);
-        var m = [["Trámites en curso", enCurso, "tramites", "#tramites", "Ver todos"], ["En subsanación", c.subsanacion || 0, "pendientes", "#tramites?vista=subsanacion", "Corregirlos", true],
-          ["Entregados al organismo", c.entregado || 0, "organismos", "#tramites?vista=entregado", "Ver entregados"], ["Aprobados", c.aprobado || 0, "trazabilidad", "#tramites?vista=aprobado", "Ver aprobados"]];
+        var m = [["Trámites en curso", enCurso, "en-curso", "#tramites", "Ver todos"], ["En subsanación", c.subsanacion || 0, "pendientes", "#tramites?vista=subsanacion", "Corregirlos", true],
+          ["Entregados al organismo", c.entregado || 0, "organismos", "#tramites?vista=entregado", "Ver entregados"], ["Aprobados", c.aprobado || 0, "finalizados", "#tramites?vista=aprobado", "Ver aprobados"]];
         var cif = $("#cifras-reales"); if (!cif) return;
         cif.innerHTML = m.map(function (x) {
           return '<a class="metrica' + (x[5] && x[1] ? " metrica--pendiente" : "") + '" href="' + x[3] + '"><span class="metrica__etiqueta">' + x[0] + '</span><span class="metrica__cifra">' + x[1].toLocaleString("es-CO") + "</span>" + ilus(x[2], "metrica__ilus") + '<span class="metrica__pie">' + x[4] + "</span></a>";
@@ -231,7 +231,7 @@
   // Rutas: módulos propios + los definidos en datos.js
   var PROPIAS = {
     inicio: ["Inicio", "inicio"], tramites: ["Trámites", "tramites"], traspaso: ["Nuevo traspaso", "traspaso"], tramite: ["Traspaso KLM 482", "traspaso"],
-    reportes: ["Reportes", "reportes"], marca: ["Juego de marca", "configuracion"], ingreso: ["Ingreso", "seguridad"], ayuda: ["Ayuda", "ayuda"], perfil: ["Mi perfil", "perfil"]
+    reportes: ["Reportes", "reportes"], marca: ["Juego de marca", "marca"], ingreso: ["Ingreso", "seguridad"], ayuda: ["Ayuda", "ayuda"], perfil: ["Mi perfil", "perfil"]
   };
   function titulo(id) { return PROPIAS[id] ? PROPIAS[id][0] : D.MODULOS[id] ? D.MODULOS[id].titulo : "Inicio"; }
 
@@ -411,9 +411,9 @@
   // ---------- Pantallas propias ----------
   function vInicio() {
     var m = [
-      ["Trámites en curso", D.TRAMITES.filter(function (t) { return t.estado !== "finalizado" && t.estado !== "rechazado"; }).length, "tramites", "#tramites", "Ver todos"],
+      ["Trámites en curso", D.TRAMITES.filter(function (t) { return t.estado !== "finalizado" && t.estado !== "rechazado"; }).length, "en-curso", "#tramites", "Ver todos"],
       ["Esperan firma", cuantos("firma"), "firmas", "#tramites?vista=firma", "Enviar recordatorio", true],
-      ["En validación", cuantos("validacion"), "documentos", "#tramites?vista=validacion", "Revisar documentos"],
+      ["En validación", cuantos("validacion"), "diagnostico", "#tramites?vista=validacion", "Revisar documentos"],
       ["Comparendos por vencer", 2, "comparendos", "#comparendos?vista=descuento", "Pagar con descuento", true]
     ];
     return '<div class="inicio-tope">' + bannerInicio() +
@@ -570,6 +570,8 @@
   }
 
 
+  // Un ícono por cifra según lo que mide, en el orden de D.REPORTES.
+  var ICONOS_REPORTE = { resumen: ["tramites", "finalizados", "tiempo", "causales"], operacion: ["en-curso", "firmas", "diagnostico", "documentos"], organismo: ["organismos", "rapido", "pendientes", "devoluciones"], uso: ["colaboradores", "ingresos", "celular", "firmas"], productividad: ["perfil", "destacado", "tiempo", "correcciones"] };
   function vReportes(q) {
     var actual = D.REPORTES.filter(function (r) { return r[0] === q.tab; })[0] || D.REPORTES[0];
     // Cada reporte: [id, nombre, cifras, barras]
@@ -578,7 +580,7 @@
     return cabecera({ il: "reportes", ante: "Reportes", titulo: "Reportes", texto: "La operación en cifras. Cada reporte se descarga o se programa para que llegue al correo.", acciones: [["Descargar", "descargar:" + actual[1] + ".xlsx"], ["Programar envío", "form:programar-reporte"]] }) +
       pestanas({ id: "reportes", titulo: "Reportes" }, D.REPORTES.map(function (r) { return [r[0], r[1]]; }), actual[0]) +
       '<section class="metricas" aria-label="' + actual[1] + '">' + cifras.map(function (c, i) {
-        return '<a class="metrica" href="#reportes-detallados"><span class="metrica__etiqueta">' + c[0] + '</span><span class="metrica__cifra">' + c[1] + "</span>" + ilus(["tramites", "trazabilidad", "procesos", "causales"][i], "metrica__ilus") + '<span class="metrica__pie">Ver el detalle</span></a>';
+        return '<a class="metrica" href="#reportes-detallados"><span class="metrica__etiqueta">' + c[0] + '</span><span class="metrica__cifra">' + c[1] + "</span>" + ilus((ICONOS_REPORTE[actual[0]] || [])[i] || "reportes", "metrica__ilus") + '<span class="metrica__pie">Ver el detalle</span></a>';
       }).join("") + "</section>" +
       '<div class="rejilla rejilla--3 espacio-abajo">' + [["Matrículas", function (t) { return t.tipo === "Matrícula inicial"; }], ["Traspasos", function (t) { return t.tipo === "Traspaso"; }], ["Otros", function (t) { return t.tipo !== "Matrícula inicial" && t.tipo !== "Traspaso"; }]].map(function (g) {
         return '<section class="card"><div class="card__cabeza"><h2>' + g[0] + '</h2><strong class="grafico-total">' + D.TRAMITES.filter(g[1]).length + "</strong></div>" + dona(porEstado(g[1]), g[0] + " por estado") + "</section>";
@@ -608,8 +610,8 @@
     return '<section class="card"><div class="card__cabeza"><div><h2>Generar impronta</h2><p>Carga la foto del motor y del chasis. La plataforma lee los números y arma el documento.</p></div></div>' +
       '<form class="formulario" novalidate data-form-simple="Impronta generada para KLM 482"><div class="campo"><label for="imp-placa">Placa</label><input class="control placa-input" id="imp-placa" value="KLM482" maxlength="6"></div>' +
       '<div class="campo"><label for="imp-motor">Número de motor</label><input class="control" id="imp-motor" value="PE30123456"></div><div class="campo"><label for="imp-chasis">Número de chasis</label><input class="control" id="imp-chasis" value="3MVDM2W7XNL1234"></div>' +
-      '<div class="campo"><span class="etiqueta">Foto del motor</span><button class="carga" type="button" data-cargar>' + ilus("improntas") + "<strong>Cargar foto</strong><small>JPG o PNG</small></button></div>" +
-      '<div class="campo"><span class="etiqueta">Foto del chasis</span><button class="carga" type="button" data-cargar>' + ilus("improntas") + "<strong>Cargar foto</strong><small>JPG o PNG</small></button></div>" +
+      '<div class="campo"><span class="etiqueta">Foto del motor</span><button class="carga" type="button" data-cargar>' + ilus("cargar") + "<strong>Cargar foto</strong><small>JPG o PNG</small></button></div>" +
+      '<div class="campo"><span class="etiqueta">Foto del chasis</span><button class="carga" type="button" data-cargar>' + ilus("cargar") + "<strong>Cargar foto</strong><small>JPG o PNG</small></button></div>" +
       '<div class="campo campo--ancho pie-acciones"><span></span><div><button class="btn" type="submit">Generar impronta</button></div></div></form></section>';
   }
 
@@ -639,8 +641,8 @@
   function vReportesIct() {
     var c = [["Centro de soporte", 214, 2], ["Integración Andino", 132, 9], ["Valle pruebas", 18, 0]];
     var max = 214;
-    return '<section class="metricas"><a class="metrica" href="#ict-logs"><span class="metrica__etiqueta">Llamadas este mes</span><span class="metrica__cifra">364</span>' + ilus("integraciones", "metrica__ilus") + '<span class="metrica__pie">Ver el log</span></a>' +
-      '<a class="metrica metrica--pendiente" href="#ict-logs?vista=error"><span class="metrica__etiqueta">Con error</span><span class="metrica__cifra">11</span>' + ilus("causales", "metrica__ilus") + '<span class="metrica__pie">Revisar errores</span></a>' +
+    return '<section class="metricas"><a class="metrica" href="#ict-logs"><span class="metrica__etiqueta">Llamadas este mes</span><span class="metrica__cifra">364</span>' + ilus("llamadas", "metrica__ilus") + '<span class="metrica__pie">Ver el log</span></a>' +
+      '<a class="metrica metrica--pendiente" href="#ict-logs?vista=error"><span class="metrica__etiqueta">Con error</span><span class="metrica__cifra">11</span>' + ilus("errores", "metrica__ilus") + '<span class="metrica__pie">Revisar errores</span></a>' +
       '<a class="metrica" href="#ict-trazabilidad?vista=materializado"><span class="metrica__etiqueta">Convertidos en trámite</span><span class="metrica__cifra">58</span>' + ilus("trazabilidad", "metrica__ilus") + '<span class="metrica__pie">Ver la trazabilidad</span></a></section>' +
       '<section class="card"><div class="card__cabeza"><div><h2>Llamadas por cliente</h2><p>Este mes. Entre paréntesis, las que fallaron.</p></div><button class="btn sm secondary" type="button" data-hacer="descargar:reportes-ict.xlsx">Descargar</button></div><ul class="barras">' +
       c.map(function (x) { return '<li><span class="barras__et">' + x[0] + '</span><span class="barras__pista"><span style="width:' + Math.round(x[1] / max * 100) + '%"></span></span><span class="barras__val">' + x[1] + " (" + x[2] + ")</span></li>"; }).join("") + "</ul></section>";
@@ -679,7 +681,7 @@
   var DISCOS = [["estado-borrador", "Borrador"], ["estado-preparado", "Preparado"], ["estado-pendiente", "Pendiente"], ["estado-entregado", "Entregado"], ["estado-aprobado", "Aprobado"], ["estado-rechazado", "Rechazado"], ["estado-subsanado", "Subsanado"], ["estado-revocado", "Revocado"], ["estado-anulado", "Anulado"], ["estado-placa", "Placa preasignada"], ["estado-sin-placa", "Sin placa"], ["aviso-info", "Informativo"], ["aviso-alerta", "Alerta"], ["tramite-traspaso", "Traspaso"], ["tramite-matricula", "Matrícula"], ["tramite-prenda", "Prenda"], ["tramite-transformacion", "Transformación"], ["tramite-novedad", "Novedad"], ["tramite-otros", "Otros trámites"], ["persona-nueva", "Persona nueva"]];
   var INTERRUPTORES = [["interruptor-encendido", "Encendido"], ["interruptor-apagado", "Apagado"], ["interruptor-tema-claro", "Tema claro"], ["interruptor-tema-oscuro", "Tema oscuro"]];
   function vMarca() {
-    return cabecera({ il: "configuracion", ante: "Marca", titulo: "Juego de marca", texto: "Logo, isotipo y favicon del repositorio de íconos de FLIT, y el juego de íconos de la propuesta: uno distinto por módulo, con los colores del Manual UI Kit 2026." }) +
+    return cabecera({ il: "marca", ante: "Marca", titulo: "Juego de marca", texto: "Logo, isotipo y favicon del repositorio de íconos de FLIT, y el juego de íconos de la propuesta: uno distinto por módulo, con los colores del Manual UI Kit 2026." }) +
       '<section class="card"><div class="card__cabeza"><div><h2>Logos</h2><p>La logometría del repositorio de íconos, sin cambios de forma ni de proporción.</p></div></div><div class="marca-rejilla">' +
       LOGOS.map(function (l) { return '<figure class="marca-item"><div class="sobre-' + l[2] + '"><img src="assets/kit/' + l[0] + '.svg" alt="Logo FLIT: ' + l[1] + '"></div><figcaption>' + l[1] + "</figcaption></figure>"; }).join("") +
       '</div></section><section class="card"><div class="card__cabeza"><div><h2>Íconos de módulo</h2><p>' + ILUSTRACIONES.length + ' íconos para cabeceras, menú, buscador y cifras.</p></div></div><div class="ilus-rejilla">' +
@@ -1103,7 +1105,7 @@
     { g: "Acciones", t: "Trámites que esperan firma", d: cuantos("firma") + " trámites", il: "firmas", h: "#tramites?vista=firma" },
     { g: "Cuenta", t: "Mi perfil", d: "Datos y contraseña", il: "perfil", h: "#perfil" },
     { g: "Cuenta", t: "Ayuda", d: "Manual de usuario", il: "ayuda", h: "#ayuda" },
-    { g: "Cuenta", t: "Juego de marca", d: "Logos e ilustraciones", il: "configuracion", h: "#marca" }
+    { g: "Cuenta", t: "Juego de marca", d: "Logos e íconos", il: "marca", h: "#marca" }
   ], D.TRAMITES.map(function (t) { return { g: "Placas", t: placaTxt(t.placa), d: t.tipo + " · " + ET[t.estado][0], il: "consulta-placa", h: "#tramites?q=" + t.placa, placa: t.placa }; }));
   var activos = [], sel = 0;
   function pintarResultados(q) {

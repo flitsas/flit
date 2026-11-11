@@ -60,6 +60,8 @@ Todo vive en tres archivos: `ui-kit-2026.css` (valores y formas, se carga despu�
 
 - Logo, isotipo, favicon e interruptores son los del paquete de íconos de FLIT, sin cambios.
 - Íconos de módulo y de apoyo (`kit-iconos.js`): relleno plano de construcción geométrica, un solo color principal por ícono. Cada módulo tiene un ícono propio: Compañías, Organismos de tránsito y Fuentes oficiales ya no comparten edificio; Biometría (silueta con marco de lectura) se separa de Identidad (huella); Configuración (engranaje) de Usuarios (grupo de personas); Roles y permisos (llave) de Seguridad (escudo); FUR (formulario) de Documentos.
+- Las pantallas que compartían ícono con su módulo tienen el suyo: Reportes detallados (tabla), Reportes ICT (gráfico con nodos), Quipux (bandeja de radicación), Log QX (mensajes), Log ICT (ventana de llamadas) y Tipos de trámite (capas).
+- Cada cifra de Reportes usa un ícono según lo que mide (finalizados, tiempo, en curso, más rápido, devoluciones, ingresos, celular, más productivo, correcciones); el reparto está en `ICONOS_REPORTE` de `propuesta.js`.
 - En `kit-iconos.js` el azul del glifo es `currentColor`, el naranja y el verde de acento se conservan y los detalles blancos son recortes (máscara), de modo que el mismo ícono sirve sobre claro, oscuro y botones de color. Cada ícono se encuadra a su dibujo.
 - Estados, avisos y trámites (`estado-*.svg`, `aviso-*.svg`, `tramite-*.svg`, `persona-nueva.svg`): dibujo blanco sobre disco de 100 × 100 con el color de cada estado. Matrícula, Otros trámites y Transformación comparten el mismo carro de frente.
 - Los SVG se guardan sin hojas de estilo internas, títulos ni identificadores, con el color como atributo.
