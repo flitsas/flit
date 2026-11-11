@@ -50,6 +50,7 @@ internal sealed class CompanyQueryReportDocumentBuilder(
         SavedQueryDto saved, Func<QueryRequest, Task<CompanyQueryResultDto>> execute)
     {
         var rows = new List<CompanyQueryRowDto>();
+        var maxActores = default(MaxActoresPorRolDto);
         var total = 0;
         var page = 1;
         while (rows.Count < RowCap)
@@ -58,6 +59,11 @@ internal sealed class CompanyQueryReportDocumentBuilder(
                 CompanyQueryFieldCatalog.Instance, saved.Definition, page, QueryLimits.MaxPageSize);
             var result = await execute(request);
             total = result.Total;
+            // El máximo es del filtro completo (igual en todas las páginas); se toma el mayor por si cambia.
+            maxActores = new MaxActoresPorRolDto(
+                Math.Max(maxActores.Comprador, result.MaxActoresPorRol.Comprador),
+                Math.Max(maxActores.Vendedor, result.MaxActoresPorRol.Vendedor),
+                Math.Max(maxActores.Propietario, result.MaxActoresPorRol.Propietario));
             rows.AddRange(result.Filas);
 
             if (result.Filas.Count == 0 || rows.Count >= total)
@@ -69,7 +75,7 @@ internal sealed class CompanyQueryReportDocumentBuilder(
         if (rows.Count > RowCap)
             rows = rows.Take(RowCap).ToList();
 
-        var sheet = CompanyQueryReportColumns.BuildSheet("Consulta", saved.Definition.Columnas, rows);
+        var sheet = CompanyQueryReportColumns.BuildSheet("Consulta", saved.Definition.Columnas, rows, maxActores);
         var bytes = TabularWorkbookWriter.Write([sheet]);
         return new Result(bytes, saved.Nombre, total, truncated);
     }

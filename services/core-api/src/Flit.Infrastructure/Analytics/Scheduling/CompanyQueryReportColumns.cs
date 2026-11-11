@@ -1,4 +1,5 @@
 using Flit.Analytics.Application.CompanyQueries;
+using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Reports;
 using Flit.Queries.Domain.Time;
 
@@ -93,8 +94,12 @@ internal static class CompanyQueryReportColumns
     /// después de guardar la consulta) se ignora en vez de reventar el informe completo.
     /// </summary>
     public static TabularWorkbookWriter.Sheet BuildSheet(
-        string sheetName, IReadOnlyList<string> columnIds, IReadOnlyList<CompanyQueryRowDto> rows)
+        string sheetName, IReadOnlyList<string> columnIds, IReadOnlyList<CompanyQueryRowDto> rows,
+        MaxActoresPorRolDto maxActores = default)
     {
+        // Validación de identidad por persona: las cuatro columnas de pantalla se expanden en bloques por actor AL
+        // FINAL de la hoja; si el usuario no eligió ninguna (o no hay actores en el filtro) no se agrega nada.
+        var campos = CamposDeValidacion(columnIds);
         var ids = columnIds.Count == 0 ? DefaultColumns : columnIds;
         var columns = ids.Where(Definitions.ContainsKey).Select(id => Definitions[id]).ToList();
         if (columns.Count == 0)
@@ -107,7 +112,40 @@ internal static class CompanyQueryReportColumns
             .Select(r => (IReadOnlyList<TabularWorkbookWriter.Cell>)columns.Select(c => c.Cell(r)).ToList())
             .ToList();
 
+        if (campos != ActoresExcelColumns.Campos.None && ActoresExcelColumns.Width(maxActores, campos) > 0)
+        {
+            sheetColumns.AddRange(ActoresExcelColumns.Headers(maxActores, campos)
+                .Select(h => new TabularWorkbookWriter.Column(h, ActorColumnWidth)));
+            dataRows = dataRows
+                .Select((cells, i) => (IReadOnlyList<TabularWorkbookWriter.Cell>)[
+                    .. cells,
+                    .. ActoresExcelColumns.CellsTyped(rows[i].Actores, maxActores, campos)
+                        .Select(c => c.Number is int n
+                            ? TabularWorkbookWriter.Cell.Of(n)
+                            : TabularWorkbookWriter.Cell.Of(c.Text)),
+                ])
+                .ToList();
+        }
+
         return new TabularWorkbookWriter.Sheet(sheetName, sheetColumns, dataRows);
+    }
+
+    /// <summary>Ids de las cuatro columnas de pantalla del grupo «Validación de identidad» (company-columns.ts).</summary>
+    internal const string ColumnaPersona = "validacion_persona";
+    internal const string ColumnaValidacion = "validacion_estado";
+    internal const string ColumnaIntentos = "validacion_intentos";
+    internal const string ColumnaMotivo = "validacion_motivo";
+
+    private const int ActorColumnWidth = 22;
+
+    private static ActoresExcelColumns.Campos CamposDeValidacion(IReadOnlyList<string> columnIds)
+    {
+        var campos = ActoresExcelColumns.Campos.None;
+        if (columnIds.Contains(ColumnaPersona)) campos |= ActoresExcelColumns.Campos.Persona;
+        if (columnIds.Contains(ColumnaValidacion)) campos |= ActoresExcelColumns.Campos.Validacion;
+        if (columnIds.Contains(ColumnaIntentos)) campos |= ActoresExcelColumns.Campos.Intentos;
+        if (columnIds.Contains(ColumnaMotivo)) campos |= ActoresExcelColumns.Campos.Motivo;
+        return campos;
     }
 
     private static string Label(Dictionary<string, string> map, string value) =>

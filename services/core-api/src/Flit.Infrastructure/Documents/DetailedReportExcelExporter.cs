@@ -50,14 +50,18 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(filter);
 
+        // Paso previo: el máximo de actores por rol sobre TODO el filtro fija el ancho del bloque de validación de
+        // identidad (igual para toda la hoja). Crece solo si hace falta.
+        var max = await _repo.GetMaxActoresPorRolAsync(filter, ct).ConfigureAwait(false);
+
         var wroteRows = await WriteWorkbookAsync(
             output,
-            Headers,
+            [.. Headers, .. ActoresExcelColumns.Headers(max)],
             (writeRow, token) => _repo.ExportProceduresAsync(
                 filter,
                 (row, _) =>
                 {
-                    writeRow(ToCells(row));
+                    writeRow([.. ToCells(row), .. ActoresExcelColumns.Cells(row.Actores, max)]);
                     return Task.CompletedTask;
                 },
                 token),
@@ -74,9 +78,10 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         ArgumentNullException.ThrowIfNull(filter);
 
         IReadOnlyList<Guid> reached = [];
+        var max = await _networkRepo.GetNetworkMaxActoresPorRolAsync(filter, ct).ConfigureAwait(false);
         await WriteWorkbookAsync(
             output,
-            NetworkHeaders,
+            [.. NetworkHeaders, .. ActoresExcelColumns.Headers(max)],
             async (writeRow, token) =>
             {
                 // AC5 — la misma consulta y el mismo filtro resuelto que el listado; AC4 — un conjunto
@@ -85,7 +90,7 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                     filter,
                     (row, _) =>
                     {
-                        writeRow(ToNetworkCells(row));
+                        writeRow([.. ToNetworkCells(row), .. ActoresExcelColumns.Cells(row.Actores, max)]);
                         return Task.CompletedTask;
                     },
                     token).ConfigureAwait(false);
