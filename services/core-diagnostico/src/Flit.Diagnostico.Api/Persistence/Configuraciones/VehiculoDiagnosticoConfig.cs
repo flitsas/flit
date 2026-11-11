@@ -46,7 +46,7 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
         builder.Property(x => x.IdentificadorNorm).HasMaxLength(17).HasComment("@pii:low Identificador en mayúsculas y sin espacios; único en el lote.");
         builder.Property(x => x.TipoIdentificador)
             .HasConversion(CodigosDeEnum.Convertidor<TipoIdentificador>()).HasMaxLength(16)
-            .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA o VIN (R-19).");
+            .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO o VIN (R-19).");
         builder.Property(x => x.Placa).HasMaxLength(10).HasComment("@pii:low Placa del vehículo.");
         builder.Property(x => x.Vin).HasMaxLength(17).HasComment("@pii:low VIN del vehículo.");
         builder.Property(x => x.Servicio).HasMaxLength(32).HasComment("Servicio normalizado (vehicle_service del RUNT).");

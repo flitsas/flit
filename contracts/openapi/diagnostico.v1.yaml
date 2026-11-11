@@ -3279,7 +3279,7 @@ components:
         tipo_identificador:
           type: string
           nullable: true
-          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, VIN, null]
+          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO, VIN, null]
         tipo_documento_locatario:
           type: string
           nullable: true
@@ -3442,7 +3442,7 @@ components:
           type: string
         tipo_identificador:
           type: string
-          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, VIN]
+          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO, VIN]
         tipo_documento_locatario:
           type: string
           nullable: true

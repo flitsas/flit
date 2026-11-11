@@ -2628,7 +2628,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("tipo_identificador")
-                        .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA o VIN (R-19).");
+                        .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO o VIN (R-19).");
 
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
@@ -2671,7 +2671,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_vehiculos_locatario_doc_origen", "locatario_doc_origen IS NULL OR locatario_doc_origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
 
-                            t.HasCheckConstraint("ck_vehiculos_tipo_identificador", "tipo_identificador IN ('PLACA_CARRO', 'PLACA_MOTO', 'PLACA_REMOLQUE', 'PLACA_MAQUINARIA', 'VIN')");
+                            t.HasCheckConstraint("ck_vehiculos_tipo_identificador", "tipo_identificador IN ('PLACA_CARRO', 'PLACA_MOTO', 'PLACA_REMOLQUE', 'PLACA_MAQUINARIA', 'PLACA_MOTOCARRO', 'VIN')");
                         });
                 });
 
