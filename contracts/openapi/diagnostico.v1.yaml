@@ -1502,9 +1502,13 @@ paths:
       description: >
         HU #13850 (F07-H5, F07-C9/C11). Permiso diagnostico.reportes.descargar y la visibilidad de la grilla. Un PDF por vehículo
         incluido (diagnostico-{8 primeros del id}-{placa o VIN}.pdf, el mismo PDF del vehículo: si su huella coincide se reutiliza el
-        PDF vigente) e indice.txt (UTF-8, separado por tabuladores) con todos los vehículos del lote en el orden de la carga: orden,
-        identificador (placa o VIN), estado (Terminado, En proceso o Con error) y si su PDF va en el ZIP (Incluido / No incluido) con
-        el nombre del archivo. Sin documentos completos, nombres de personas, origen, usuario manual, proveedor ni transacción
+        PDF vigente) e indice.xlsx (ajustes 2026-11-11, punto 8; reemplaza a indice.txt), una sola hoja: arriba el nombre del
+        diagnóstico, la fecha y hora de generación (Colombia) y «N de M vehículos con PDF»; debajo una tabla con encabezado y
+        autofiltro con todos los vehículos del lote en el orden de la carga: Orden, Placa/VIN (texto), Estado (Terminado, En proceso
+        o Con error), En el ZIP (Sí / No), Archivo (nombre del PDF con vínculo relativo dentro del ZIP; vacío si no va), Dictamen
+        (Viable, Bloqueado o Pendiente si no hay dictamen emitido), Motivos de bloqueo (rótulos de las reglas que bloquean,
+        separados por «; », solo con Bloqueado) y Trámite (número del borrador creado desde el diagnóstico; vacío si no hay).
+        Sin documentos completos, nombres de personas, origen, usuario manual, proveedor ni transacción
         (R-20). Un ZIP LISTA que ya no es el vigente se sigue pudiendo descargar por su id.
       responses:
         "200":

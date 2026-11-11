@@ -1,10 +1,11 @@
 using System.Globalization;
 using System.IO.Compression;
-using System.Text;
 using Flit.Diagnostico.Api.Infraestructura.Archivos;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Trabajos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Api.Plataforma;
@@ -17,8 +18,13 @@ using Npgsql;
 
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
 
-/// <summary>Un vehículo del lote en el ZIP: su identificación, el estado que sale en el índice y si su PDF va dentro.</summary>
-internal sealed record VehiculoDelZip(Guid Id, int Orden, string Identificador, string Estado, bool Incluido);
+/// <summary>
+/// Un vehículo del lote en el ZIP: su identificación, el estado que sale en el índice (rótulo del punto 5) y si su PDF va dentro.
+/// <see cref="Tramite"/> es el número del borrador de trámite creado desde el diagnóstico, columna «Trámite» de <c>indice.xlsx</c>
+/// (ajustes 2026-11-11, punto 8). Hoy siempre null: el punto 4 lo llena en <see cref="PlanZip.LeerAsync"/> (donde se arma cada
+/// <see cref="VehiculoDelZip"/>) con el <c>tramite_ref</c> del vehículo, y suma ese valor a la huella del ZIP.
+/// </summary>
+internal sealed record VehiculoDelZip(Guid Id, int Orden, string Identificador, string Estado, bool Incluido, string? Tramite = null);
 
 /// <summary>
 /// Lo que contendría el ZIP del lote hoy (HU #13850): los vehículos en el orden de la carga, cuáles pueden emitir su PDF
@@ -50,14 +56,24 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
         var vehiculos = lote.Vehiculos.Select(v =>
         {
             var celdas = estados[v.VehiculoId].ToList();
-            return new VehiculoDelZip(v.VehiculoId, v.Orden, v.Identificador, Estado(celdas), EmisionPdf.Puede(cabecera, celdas));
+            // Punto 4: aquí entra el número del borrador (Tramite: tramite_ref del vehículo) y su clave en la huella de abajo.
+            return new VehiculoDelZip(v.VehiculoId, v.Orden, v.Identificador, Estado(celdas), EmisionPdf.Puede(cabecera, celdas), Tramite: null);
         }).ToList();
+
+        // El dictamen vigente de cada vehículo sale en el índice (Dictamen y Motivos de bloqueo, punto 8): su versión y su veredicto
+        // entran en la huella para que un dictamen nuevo o un override no reutilicen un ZIP con el índice viejo.
+        var dictamenes = await db.Set<DictamenVehiculo>().AsNoTracking()
+            .Where(d => d.Vigente && db.Set<VehiculoDiagnostico>().Any(v => v.Id == d.VehiculoId && v.DiagnosticoId == cabecera.Id))
+            .OrderBy(d => d.VehiculoId)
+            .Select(d => new { d.VehiculoId, d.Version, d.Veredicto })
+            .ToListAsync(ct).ConfigureAwait(false);
 
         var encabezado = new Dictionary<string, string?>(lote.ParaHuella(), StringComparer.Ordinal)
         {
             ["lote/estado"] = CodigosDeEnum.Codigo(cabecera.Estado),
             ["zip/version_pdf"] = PdfVehiculo.VersionPlantilla.ToString(CultureInfo.InvariantCulture),
             ["zip/incluidos"] = string.Join(',', vehiculos.Where(v => v.Incluido).Select(v => v.Id.ToString("D"))),
+            ["zip/dictamenes"] = string.Join(',', dictamenes.Select(d => string.Create(CultureInfo.InvariantCulture, $"{d.VehiculoId:D}:{d.Version}:{d.Veredicto}"))),
         };
         var entrada = await HuellaEvidencia.LeerEntradaAsync(db, ClaveEvidencia.Zip(cabecera.Id), EmpaquetadorZip.VersionPlantilla, encabezado, ct)
             .ConfigureAwait(false);
@@ -80,8 +96,10 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
 /// <item>Recalcula el plan con lo actual (<see cref="PlanZip"/>); si nada se puede emitir, ERROR <see cref="ErrorSinVehiculos"/>.</item>
 /// <item>Por cada vehículo incluido, el PDF por <see cref="ServicioEvidencias"/>: si su huella coincide con la del PDF vigente se
 /// reutilizan esos bytes; si no, se genera (<see cref="PdfVehiculo.Generar"/>) y queda como su evidencia PDF vigente.</item>
-/// <item>Escribe el ZIP en streaming a un archivo temporal (nunca entero en memoria): un PDF por vehículo y <c>indice.txt</c> con
-/// todos los vehículos (orden, identificador, estado y si van dentro; sin documentos). El temporal se borra siempre.</item>
+/// <item>Escribe el ZIP en streaming a un archivo temporal (nunca entero en memoria): un PDF por vehículo y <c>indice.xlsx</c>
+/// (<see cref="IndiceZip"/>, punto 8) con todos los vehículos (orden, placa/VIN, estado, si van dentro con vínculo al PDF, dictamen,
+/// motivos de bloqueo y trámite; sin documentos), también en streaming y con los dictámenes leídos por páginas. El temporal se
+/// borra siempre.</item>
 /// <item>Lo sube al almacén desde el disco y deja la evidencia LISTA y vigente, con <c>generado_en</c>; la anterior vigente pasa a no
 /// vigente (se conserva), salvo que la vigente sea de un pedido posterior.</item>
 /// </list>
@@ -93,11 +111,12 @@ internal sealed partial class EmpaquetadorZip(
     IServiceScopeFactory scopes, IOptions<OpcionesEvidencias> opciones, TimeProvider reloj, ILogger<EmpaquetadorZip> log)
 {
     /// <summary>Versión de la plantilla del ZIP (estructura de entradas e índice); súbela al cambiar su diseño (entra en la huella).</summary>
-    public const int VersionPlantilla = 1;
+    /// <remarks>2: el índice pasó de <c>indice.txt</c> a <c>indice.xlsx</c> (punto 8, 2026-11-11).</remarks>
+    public const int VersionPlantilla = 2;
 
     public const string ContentType = "application/zip";
 
-    public const string NombreIndice = "indice.txt";
+    public const string NombreIndice = IndiceZip.NombreArchivo;
 
     /// <summary>El almacén no guardó el ZIP.</summary>
     public const string ErrorAlmacen = "ALMACEN_NO_DISPONIBLE";
@@ -231,34 +250,24 @@ internal sealed partial class EmpaquetadorZip(
 
             await using (var destino = zip.CreateEntry(NombreIndice, CompressionLevel.Optimal).Open())
             {
-                var indice = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(Indice(cabecera.Id, plan, archivos));
-                await destino.WriteAsync(indice, ct).ConfigureAwait(false);
+                var filas = IndiceZip.FilasAsync(plan.Vehiculos, archivos, (ids, c) => DictamenesAsync(db, ids, c), IndiceZip.TamanoPagina, ct);
+                var encabezado = new CabeceraIndiceZip(cabecera.Nombre, reloj.GetUtcNow(), archivos.Count, plan.Vehiculos.Count);
+                await IndiceZip.EscribirAsync(destino, encabezado, filas, ct).ConfigureAwait(false);
             }
         }
 
         await archivo.FlushAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// El índice del ZIP: todos los vehículos en el orden de la carga con su identificador (placa o VIN), su estado y si su PDF va
-    /// dentro. Sin documentos de personas, sin nombres, sin origen ni causas de error.
-    /// </summary>
-    private string Indice(Guid diagnosticoId, PlanZip plan, Dictionary<Guid, string> archivos)
+    /// <summary>Una página del índice: el dictamen vigente (veredicto y alertamientos) de cada vehículo de <paramref name="ids"/> que lo tenga.</summary>
+    private static async Task<IReadOnlyDictionary<Guid, DictamenDelIndice>> DictamenesAsync(DiagnosticoDb db, IReadOnlyList<Guid> ids, CancellationToken ct)
     {
-        var texto = new StringBuilder();
-        var generado = reloj.GetUtcNow().ToOffset(VigenciaDelDia.OffsetColombia);
-        texto.Append(CultureInfo.InvariantCulture, $"Diagnóstico {diagnosticoId:D}\n");
-        texto.Append(CultureInfo.InvariantCulture, $"Generado el {generado:yyyy-MM-dd HH:mm} (hora Colombia)\n");
-        texto.Append(CultureInfo.InvariantCulture, $"Vehículos con PDF en este archivo: {archivos.Count} de {plan.Vehiculos.Count}\n\n");
-        texto.Append("Orden\tIdentificador\tEstado\tEn el ZIP\tArchivo\n");
-        foreach (var vehiculo in plan.Vehiculos)
-        {
-            var dentro = archivos.TryGetValue(vehiculo.Id, out var nombre);
-            texto.Append(CultureInfo.InvariantCulture,
-                $"{vehiculo.Orden}\t{vehiculo.Identificador}\t{vehiculo.Estado}\t{(dentro ? "Incluido" : "No incluido")}\t{nombre}\n");
-        }
-
-        return texto.ToString();
+        var pagina = ids.ToArray();
+        var filas = await db.Set<DictamenVehiculo>().AsNoTracking()
+            .Where(d => d.Vigente && pagina.Contains(d.VehiculoId))
+            .Select(d => new { d.VehiculoId, d.Veredicto, d.Alertamientos })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return filas.ToDictionary(d => d.VehiculoId, d => new DictamenDelIndice(d.Veredicto, d.Alertamientos));
     }
 
     /// <summary>
