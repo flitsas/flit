@@ -15,6 +15,7 @@ import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValid
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { useReconcileIdentity } from '@/hooks/useReconcileIdentity';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import {
@@ -1132,9 +1133,7 @@ function ReconcileAction({
 }) {
   const readOnly = useWizardReadOnly();
   const [visible, setVisible] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const { submitting, message, run } = useReconcileIdentity();
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 15000);
@@ -1145,20 +1144,8 @@ function ReconcileAction({
 
   const handleReconcile = async () => {
     if (!instanceId) return;
-    setError(null);
-    setInfo(null);
-    setSubmitting(true);
-    try {
-      const res = await tramitesClient.reconcileBiometric(instanceId, validationId);
-      if (res.updated) onReconciled();
-      else setInfo('El proveedor aún no resuelve la validación. Intenta de nuevo en unos segundos.');
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudo actualizar el estado.',
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    const res = await run(() => tramitesClient.reconcileBiometric(instanceId, validationId));
+    if (res?.updated) onReconciled();
   };
 
   return (
@@ -1177,12 +1164,12 @@ function ReconcileAction({
         <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
         {submitting ? 'Consultando…' : 'Actualizar estado'}
       </button>
-      {info && (
+      {message?.tone === 'info' && (
         <p className="text-xs opacity-70" role="status" aria-live="polite">
-          {info}
+          {message.text}
         </p>
       )}
-      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      {message?.tone === 'error' && <InlineAlert tone="error">{message.text}</InlineAlert>}
     </div>
   );
 }
