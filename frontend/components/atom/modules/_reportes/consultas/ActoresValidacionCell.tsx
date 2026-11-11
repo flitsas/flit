@@ -5,7 +5,7 @@
 import type { ActorValidacionDto } from "@/lib/api/company-queries";
 import {
   actoresOrdenados,
-  colorValidacion,
+  estiloChipValidacion,
   documentoActor,
   etiquetaValidacion,
   motivoVisible,
@@ -16,6 +16,17 @@ export type CampoActor = "persona" | "validacion" | "intentos" | "motivo";
 
 /** Alto fijo por actor: es lo que alinea las cuatro columnas entre sí. */
 const ALTO_ACTOR = "h-[46px]";
+
+/**
+ * Ancho máximo de las columnas de texto libre. Sin él, el `<td>` crece al ancho del nombre más largo
+ * (razones sociales de 100+ caracteres) y desborda la tabla: el truncado no funciona si nada acota.
+ */
+const ANCHO_MAX: Record<CampoActor, string> = {
+  persona: "max-w-[250px]",
+  validacion: "",
+  intentos: "",
+  motivo: "max-w-[260px]",
+};
 
 export function ActoresValidacionCell({
   actores,
@@ -30,7 +41,7 @@ export function ActoresValidacionCell({
   }
 
   return (
-    <div data-testid={`actores-${campo}`}>
+    <div data-testid={`actores-${campo}`} className={ANCHO_MAX[campo]}>
       {lista.map((a) => (
         <div
           key={`${a.rol}-${a.ordinal}`}
@@ -59,12 +70,11 @@ function Contenido({ actor, campo }: { actor: ActorValidacionDto; campo: CampoAc
     );
   }
   if (campo === "validacion") {
-    const color = colorValidacion(actor.estadoValidacion);
     const label = etiquetaValidacion(actor.estadoValidacion);
     return (
       <span
         className="w-fit max-w-full truncate rounded-full px-2 py-0.5 text-[11px] font-semibold"
-        style={{ background: `color-mix(in srgb, ${color} 10%, transparent)`, color }}
+        style={estiloChipValidacion(actor.estadoValidacion)}
         title={label}
       >
         {label}

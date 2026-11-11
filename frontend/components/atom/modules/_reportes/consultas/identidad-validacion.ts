@@ -47,15 +47,22 @@ export const ROL_LABEL: Record<RolActor, string> = {
   propietario: "Propietario",
 };
 
+/**
+ * Fondo y color de TEXTO del chip. Los estados con color propio usan su tinta sobre un fondo tenue
+ * de la misma; «Sin validar» (y cualquier estado desconocido) usa el par neutro del rediseño, porque
+ * `--border` es un color de línea y como texto sobre blanco es casi invisible.
+ */
+export function estiloChipValidacion(estado: string): { background: string; color: string } {
+  if (!(estado in ESTADO_VALIDACION_COLOR) || estado === "sin_validacion") {
+    return { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" };
+  }
+  const color = ESTADO_VALIDACION_COLOR[estado as EstadoValidacion];
+  return { background: `color-mix(in srgb, ${color} 10%, transparent)`, color };
+}
+
 /** Un estado que el front no conoce (backend más nuevo) se ve como «Sin validar», nunca crudo. */
 export function etiquetaValidacion(estado: string): string {
   return ESTADO_VALIDACION_LABEL[estado as EstadoValidacion] ?? ESTADO_VALIDACION_LABEL.sin_validacion;
-}
-
-export function colorValidacion(estado: string): string {
-  return (
-    ESTADO_VALIDACION_COLOR[estado as EstadoValidacion] ?? ESTADO_VALIDACION_COLOR.sin_validacion
-  );
 }
 
 // Defensa extra: la normalización real la hace el servidor, pero si algún texto con el nombre de la
