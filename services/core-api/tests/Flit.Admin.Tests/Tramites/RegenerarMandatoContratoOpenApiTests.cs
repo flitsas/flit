@@ -47,7 +47,7 @@ public sealed class RegenerarMandatoContratoOpenApiTests
     public void Contrato_InfoVersionSubioDePatch()
     {
         Regex.Match(Yaml(), "^  version: \"(?<v>[^\"]+)\"", RegexOptions.Multiline).Groups["v"].Value
-            .Should().Be("1.1.3", "cambiar el contrato sube el patch de info.version");
+            .Should().Be("1.0.6", "cambiar el contrato sube el patch de info.version (secuencia propia de release)");
     }
 
     private static string Yaml()
