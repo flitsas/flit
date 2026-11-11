@@ -126,6 +126,7 @@ import {
 } from './wizard-actores-coalesce';
 import { useToast } from '@/components/admin/Toast';
 import { formatDateOnly } from '@/lib/format/date-only';
+import { formatFechaHora } from '@/lib/format/date';
 import {
   tramitesClient,
   getDuplicateActiveProcedureId,
@@ -193,7 +194,6 @@ import { estadoLabel, revocationRequestLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { InlineAlert } from '@/components/atom/InlineAlert';
-import { canalLabel } from '@/lib/tramites/tramites-row-labels';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -602,11 +602,12 @@ export function TramiteWizard(props: Props) {
   const [referenceNumber, setReferenceNumber] = useState<string | null>(
     () => state.detail?.referenceNumber ?? null,
   );
-  // HU #14322 — canal y OT del punto del trámite existente, solo lectura. Salen del mismo `getInstance`
-  // que ya se pide (sin llamada extra) o, antes de que responda, del detalle del reducer.
-  const [canalInfo, setCanalInfo] = useState<{
-    channel?: string | null;
-    channelTransitOfficeName?: string | null;
+  // Datos de la franja azul (placa, VIN, organismo, dígito y fecha de radicación) del mismo
+  // `getInstance`. El detalle del reducer (`state.detail`) solo existe tras guardar algo en esta
+  // sesión: al reabrir un trámite estaba vacío y la franja no tenía de dónde leer.
+  const [franjaDetalle, setFranjaDetalle] = useState<{
+    fieldValues: { fieldKey: string; valueText?: string | null }[];
+    submittedAt: string | null;
   } | null>(null);
   useEffect(() => {
     const fromDetail = state.detail?.referenceNumber;
@@ -627,7 +628,7 @@ export function TramiteWizard(props: Props) {
         setImprontaGeneracionHabilitada(d.improntaGeneracionHabilitada !== false);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
-        setCanalInfo({ channel: d.channel, channelTransitOfficeName: d.channelTransitOfficeName });
+        setFranjaDetalle({ fieldValues: d.fieldValues ?? [], submittedAt: d.submittedAt ?? null });
         setActiveRevocationRequest(d.activeRevocationRequest ?? null);
         setInstanceDetailError(null);
       })
@@ -1091,24 +1092,42 @@ export function TramiteWizard(props: Props) {
       ? 'Radica el registro inicial del vehículo ante el organismo de tránsito.'
       : 'Registra el cambio sobre el vehículo ante el organismo de tránsito.';
   const refLabel = referenceNumber ?? state.detail?.referenceNumber ?? null;
-  // Sin trámite creado (`/tramites/nuevo/{tipo}`) no hay dato: no se muestra nada. Con trámite y sin
-  // dato (histórico o backend anterior) `canalLabel` cae a «Trámites».
-  const canalStrip =
-    canalInfo ??
-    (state.detail
-      ? { channel: state.detail.channel, channelTransitOfficeName: state.detail.channelTransitOfficeName }
-      : null);
   // Identificador del expediente: el dato por el que el tipo consulta el vehículo. Un trámite que
   // entra por VIN es uno cuyo vehículo aún no tiene placa; el resto entra por placa.
+  // Primero lo guardado en esta sesión (más reciente); si no hay, lo que trajo `getInstance` al abrir.
   const fvOf = (key: string) =>
-    state.detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText?.trim() || null;
+    (state.detail?.fieldValues ?? franjaDetalle?.fieldValues)
+      ?.find((f) => f.fieldKey === key)
+      ?.valueText?.trim() || null;
   // Organismo real del trámite, para el texto del modal "Confirmar radicación" (propuesta:
   // MatriculaInicial.tsx:1114) — nunca un literal de maqueta.
   const organismoNombre = fvOf('transit_office_name');
   const identificador = caps.entraPorVin
     ? (fvOf('vin') ?? fvOf('plate'))
     : (fvOf('plate') ?? fvOf('vin'));
-  const identificadorLabel = caps.entraPorVin ? 'VIN' : 'PLACA';
+
+  // Datos del expediente en la franja azul (placa, VIN, organismo, fecha y, en matrícula, la
+  // preasignación). Placa y VIN van por separado: el antiguo «Identificador» repetía uno de los dos.
+  // `familia` puede llegar aún con el valor heredado de la modalidad (`matricula_inicial`).
+  const esMatricula = familia === 'MATRICULAS' || familia === 'matricula_inicial';
+  const placaStrip = fvOf('plate');
+  const vinStrip = fvOf('vin');
+  // Preasignación (solo matrícula): el trámite va por ella cuando no tiene placa (la asigna el
+  // organismo) o cuando el gestor dejó el dígito de preferencia (HU #10805). Con placa y dígito se
+  // muestran las dos; con placa y sin dígito, solo la placa; sin placa, solo la preasignación.
+  const digitoPreferencia = fvOf('plate_preferred_last_digit');
+  const preasignacionStrip =
+    esMatricula && (!placaStrip || digitoPreferencia)
+      ? digitoPreferencia
+        ? `Dígito ${digitoPreferencia}`
+        : 'Sin dígito de preferencia'
+      : null;
+  // La placa se ve si existe; sin placa y sin preasignación (otros tipos) queda el guion.
+  const mostrarPlaca = !!placaStrip || !preasignacionStrip;
+  // Fecha de radicación; mientras no se ha radicado, la de hoy (la que llevaría si se radica ya).
+  const fechaStrip = formatFechaHora(
+    state.detail?.submittedAt ?? franjaDetalle?.submittedAt ?? new Date(),
+  );
 
   // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
   // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
@@ -2035,30 +2054,36 @@ export function TramiteWizard(props: Props) {
                 <span className="font-semibold">{refLabel}</span>
               </p>
             )}
-            {canalStrip && (
-              <p className="min-w-0 max-w-full break-words text-[12px]" data-testid="tramite-canal">
-                <span className="font-medium uppercase text-white/80">Canal: </span>
-                <span className="font-semibold">{canalLabel(canalStrip.channel)}</span>
-                {canalStrip.channel === 'pn_punto' && canalStrip.channelTransitOfficeName ? (
-                  <span className="font-semibold" data-testid="tramite-canal-ot">
-                    {' · '}
-                    {canalStrip.channelTransitOfficeName}
-                  </span>
-                ) : null}
-              </p>
-            )}
             <p className="text-[12px]">
               <span className="font-medium uppercase text-white/80">Tipo: </span>
               <span className="font-semibold">{modalidadLabel}</span>
             </p>
-            {identificador && (
-              <p className="text-[12px]">
-                <span className="font-medium uppercase text-white/80">Identificador: </span>
-                <span className="font-semibold">
-                  {identificadorLabel}: {identificador}
-                </span>
+            {preasignacionStrip && (
+              <p className="text-[12px]" data-testid="tramite-preasignacion">
+                <span className="font-medium uppercase text-white/80">Preasignación: </span>
+                <span className="font-semibold">{preasignacionStrip}</span>
               </p>
             )}
+            {/* Placa y preasignación: sin placa solo la preasignación, con placa y sin dígito solo la
+                placa, y con las dos (placa y dígito) ambas. */}
+            {mostrarPlaca && (
+              <p className="text-[12px]" data-testid="tramite-placa">
+                <span className="font-medium uppercase text-white/80">Placa: </span>
+                <span className="font-semibold">{placaStrip ?? '—'}</span>
+              </p>
+            )}
+            <p className="min-w-0 max-w-full break-words text-[12px]" data-testid="tramite-organismo">
+              <span className="font-medium uppercase text-white/80">Organismo de tránsito: </span>
+              <span className="font-semibold">{organismoNombre ?? 'Sin definir'}</span>
+            </p>
+            <p className="min-w-0 max-w-full break-all text-[12px]" data-testid="tramite-vin">
+              <span className="font-medium uppercase text-white/80">VIN: </span>
+              <span className="font-semibold">{vinStrip ?? '—'}</span>
+            </p>
+            <p className="text-[12px]" data-testid="tramite-fecha">
+              <span className="font-medium uppercase text-white/80">Fecha: </span>
+              <span className="font-semibold">{fechaStrip}</span>
+            </p>
             {estadoTramite && (
               <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">
                 {estadoTramite === 'borrador' ? 'En borrador' : estadoLabel(estadoTramite)}
