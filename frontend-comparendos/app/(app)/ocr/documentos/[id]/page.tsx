@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Download, RefreshCcw, RotateCcw, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, RefreshCcw, RotateCcw, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -29,7 +29,7 @@ import {
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
-import { errorNit } from "@/lib/nit";
+import { errorNit, mascaraNit } from "@/lib/nit";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
 
@@ -72,6 +72,7 @@ interface Documento {
   mensajeError: string | null;
   reintentable: boolean;
   avisoNumero: string | null;
+  numeroPorConfirmar: boolean;
   reprocesos: number;
   maximoReprocesos: number;
   motivoNoReprocesable: string | null;
@@ -182,7 +183,7 @@ function CampoEntrada({
         placeholder={esNit ? "900.123.456-7" : undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={esNit ? `${campo}-nit-ayuda` : undefined}
-        onChange={(e) => onCambio(e.target.value)}
+        onChange={(e) => onCambio(esNit ? mascaraNit(e.target.value) : e.target.value)}
       />
       {esNit && (
         <span id={`${campo}-nit-ayuda`} className={`text-[11px] font-normal ${error ? "text-[#B42318]" : "opacity-70"}`}>
@@ -210,7 +211,14 @@ function Formulario({
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
   const marcas = marcasRevision(d);
   const porRevisar = Object.keys(marcas).length;
-  const iniciales = Object.fromEntries(d.campos.map((c) => [c.nombreCampo, valorInicial(c.nombreCampo, c.valorFinal)]));
+  // GDC punto 6: el NIT guardado (base sin puntos) se muestra con la misma máscara con que se escribe.
+  const tipoGuardado = d.campos.find((c) => c.nombreCampo === "tipo_documento_infractor")?.valorFinal;
+  const iniciales = Object.fromEntries(
+    d.campos.map((c) => {
+      const v = valorInicial(c.nombreCampo, c.valorFinal);
+      return [c.nombreCampo, c.nombreCampo === "numero_documento_infractor" && tipoGuardado?.trim().toUpperCase() === "NIT" && /^[\d.\s,-]+$/.test(v) ? mascaraNit(v) : v];
+    }),
+  );
   const [editados, setEditados] = useState<Record<string, string>>(iniciales);
   const [motivo, setMotivo] = useState("");
   const [modal, setModal] = useState<"guardar" | "descartar" | "reprocesar" | null>(null);
@@ -218,6 +226,15 @@ function Formulario({
   const cambios = cambiosCampos(iniciales, editados);
   const sucio = Object.keys(cambios).length > 0;
   const editable = opera && acciones.editar;
+  const nitInvalido = editados.tipo_documento_infractor === "NIT" && !!errorNit(editados.numero_documento_infractor ?? "");
+  // Por qué no se puede registrar todavía (la API lo exige igual; esto lo explica en el botón).
+  const bloqueoRegistro = sucio
+    ? "Guarda los cambios antes de registrar"
+    : d.numeroPorConfirmar
+      ? "Corrige el número o confirma que está bien antes de registrar"
+      : nitInvalido
+        ? "Corrige el dígito de verificación del NIT antes de registrar"
+        : undefined;
 
   const ejecutar = async (hacer: () => Promise<void>) => {
     setOcupado(true);
@@ -243,6 +260,17 @@ function Formulario({
         r.estado === "Completo" ? "Cambios guardados: el documento quedó completo." : r.estado === "Duplicado" ? "Cambios guardados: el número ya existe." : "Cambios guardados.",
         r.estado === "Duplicado" ? "error" : "success",
       );
+    });
+
+  // GDC punto 14: confirmar es guardar el número tal cual; queda en el historial con este motivo.
+  const confirmarNumero = () =>
+    ejecutar(async () => {
+      const numero = d.campos.find((c) => c.nombreCampo === "numero_comparendo")?.valorFinal ?? null;
+      await apiFetch(`/ocr/documentos/${d.id}/campos`, {
+        method: "PUT",
+        body: { campos: { numero_comparendo: numero }, motivo: "Número confirmado por el operador" },
+      });
+      toast.show("Número confirmado: ya puedes registrar el comparendo.", "success");
     });
 
   const registrar = () =>
@@ -305,7 +333,7 @@ function Formulario({
         </button>
       )}
       {acciones.registrar && (
-        <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sucio} title={sucio ? "Guarda los cambios antes de registrar" : undefined} onClick={registrar}>
+        <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !!bloqueoRegistro} title={bloqueoRegistro} onClick={registrar}>
           {ocupado ? "Registrando…" : "Registrar comparendo"}
         </button>
       )}
@@ -321,6 +349,27 @@ function Formulario({
             (acciones.reprocesar && !d.motivoNoReprocesable
               ? " Puedes reprocesarlo para leerlo de nuevo, o descartarlo."
               : " No se reintenta: revisa el archivo y descártalo, o cárgalo de nuevo en otro paquete.")}
+        </InlineAlert>
+      )}
+
+      {d.numeroPorConfirmar && d.avisoNumero && ["Completo", "Incompleto"].includes(d.estado) && (
+        <InlineAlert tone="warning" title="Verifica el número antes de registrar">
+          <p>{d.avisoNumero}</p>
+          {editable && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={controlCls(false)}
+                disabled={ocupado || sucio}
+                title={sucio ? "Guarda o deshaz los cambios antes de confirmar" : undefined}
+                onClick={confirmarNumero}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                El número está bien
+              </button>
+              <span className="text-[11px] opacity-70">Si está mal, corrígelo en el campo y guarda.</span>
+            </div>
+          )}
         </InlineAlert>
       )}
 

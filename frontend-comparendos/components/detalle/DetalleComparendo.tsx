@@ -193,7 +193,15 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
           <StatusBadge label={consulta.texto} tone={consulta.tono} />
         </div>
       )}
-      {sesion?.usuario.esSuperAdmin && d.estadoConsultaContraventor === "Error" && d.errorConsultaContraventor && (
+      {!k && d.estadoConsultaContraventor === "SinHora" && (
+        <p className="text-xs opacity-70">
+          El comparendo no trae hora y ese día el vehículo no tuvo el mismo conductor todo el día: revisa quién conducía y asígnalo a mano.
+        </p>
+      )}
+      {!k && d.estadoConsultaContraventor === "Agotada" && (
+        <p className="text-xs opacity-70">La consulta automática se intentó 3 veces sin respuesta: asigna el conductor a mano.</p>
+      )}
+      {sesion?.usuario.esSuperAdmin && (d.estadoConsultaContraventor === "Error" || d.estadoConsultaContraventor === "Agotada") && d.errorConsultaContraventor && (
         <details className="text-xs">
           <summary className="cursor-pointer opacity-70">Qué respondió la consulta (solo FLIT)</summary>
           <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[#F4F7FC] p-2 dark:bg-white/5">{d.errorConsultaContraventor}</pre>

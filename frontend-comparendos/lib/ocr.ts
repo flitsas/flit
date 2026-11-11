@@ -239,12 +239,14 @@ export function marcasRevision(d: {
   campos: { nombreCampo: string; confianza: number | null; valorFinal: string | null; valorCorregido: string | null }[];
   camposFaltantes: string[];
   avisoNumero?: string | null;
+  numeroPorConfirmar?: boolean;
 }): Record<string, string> {
   const marcas: Record<string, string> = {};
   for (const c of d.campos) {
     // El aviso del número vale también si lo escribió el operador: se calcula sobre el valor que quedó.
     if (d.camposFaltantes.includes(c.nombreCampo)) marcas[c.nombreCampo] = "Falta o no es válido.";
-    else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero) marcas[c.nombreCampo] = d.avisoNumero;
+    // GDC punto 14: una vez corregido o confirmado por el operador, el número deja de marcarse.
+    else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero && d.numeroPorConfirmar !== false) marcas[c.nombreCampo] = d.avisoNumero;
     else if (c.valorCorregido !== null) continue;
     else if (c.nombreCampo === "fecha_notificacion" && c.valorFinal) marcas[c.nombreCampo] = "Confírmala: de ella cuentan los plazos.";
     else if (c.valorFinal && c.confianza !== null && c.confianza < CONFIANZA_DUDOSA) marcas[c.nombreCampo] = "La lectura de este campo es dudosa.";
@@ -264,7 +266,22 @@ export interface DocumentoPaquete {
   motivoDescarte?: string | null;
   comparendoId: string | null;
   avisoNumero?: string | null;
+  /** GDC punto 14: el número tiene aviso y nadie lo ha corregido ni confirmado; no se registra. */
+  numeroPorConfirmar?: boolean;
   reprocesos?: number;
+}
+
+/**
+ * GDC punto 14: «Registrar los N completos» no cuenta los completos con el número por confirmar (el servidor los omite).
+ * Devuelve cuántos sí se registran y, si hay retenidos, qué tiene que hacer el operador.
+ */
+export function registroEnLote(completos: number, porConfirmar: number): { registrables: number; aviso: string | null } {
+  const retenidos = Math.min(Math.max(porConfirmar, 0), completos);
+  const aviso =
+    retenidos === 0
+      ? null
+      : `${retenidos === 1 ? "1 documento completo tiene" : `${retenidos} documentos completos tienen`} el número por verificar y no se ${retenidos === 1 ? "registra" : "registran"} en lote. Ábrelo desde la tabla («Verificar número»), compara el número con el documento y corrígelo o confirma que está bien.`;
+  return { registrables: completos - retenidos, aviso };
 }
 
 /** Fallo, duplicado, descarte o faltantes: lo que explica el estado de un documento, en una frase. */
@@ -295,7 +312,7 @@ export function hojaPaquete(p: { nombre: string; creadoEn: string }, docs: Docum
       d.nombreArchivo,
       ESTADO_DOCUMENTO[d.estado]?.texto ?? d.estado,
       d.numeroComparendoExtraido,
-      d.avisoNumero ?? null,
+      d.avisoNumero ? (d.numeroPorConfirmar === false ? "Revisado por el operador" : d.avisoNumero) : null,
       motivoDocumento(d) || null,
       d.reprocesos ?? 0,
       d.comparendoId ? "Sí" : "No",

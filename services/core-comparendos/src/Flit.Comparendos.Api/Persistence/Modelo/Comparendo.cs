@@ -57,6 +57,12 @@ public sealed class Comparendo : Auditada
     public short IntentosConsultaContraventor { get; set; }
 
     /// <summary>
+    /// GDC punto 20: día (Colombia) de la última consulta a la API de contratos, manual o automática. El trabajo diario
+    /// y el ciclo de ingesta gastan como máximo un intento por día.
+    /// </summary>
+    public DateOnly? UltimoIntentoConsultaContraventor { get; set; }
+
+    /// <summary>
     /// Si la última consulta a la API de contratos falló: el mensaje y el comienzo de lo que respondió (4000 caracteres),
     /// para diagnosticar. Mismo criterio que las fuentes: la respuesta de una consulta exitosa no se guarda.
     /// </summary>

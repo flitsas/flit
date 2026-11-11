@@ -42,7 +42,7 @@ public sealed class SincronizacionOrganismosTests(ApiDePrueba api) : IClassFixtu
             .Append(new OrganismoPlataforma(cambia, "99100001", "OT DE PRUEBA RENOMBRADO", "99100", "NUEVO", "DEPTO", false))
             .Append(new OrganismoPlataforma(nuevo, "99100003", "OT NUEVO EN LA PLATAFORMA", "99100", "NUEVO", "DEPTO", true))
             .ToList();
-        var sincronizacion = new SincronizacionOrganismos(db, new PlataformaFalsa(lista), scope.ServiceProvider.GetRequiredService<Reloj>(), NullLogger<SincronizacionOrganismos>.Instance);
+        var sincronizacion = new SincronizacionOrganismos(db, new PlataformaFalsa(lista), scope.ServiceProvider.GetRequiredService<Reloj>(), scope.ServiceProvider.GetRequiredService<RemapeoOrganismos>(), NullLogger<SincronizacionOrganismos>.Instance);
 
         var r = await sincronizacion.SincronizarAsync(ct);
 
@@ -65,8 +65,8 @@ public sealed class SincronizacionOrganismosTests(ApiDePrueba api) : IClassFixtu
         var reloj = scope.ServiceProvider.GetRequiredService<Reloj>();
         var activos = await db.OrganismosTransito.CountAsync(o => o.ActivoPlataforma, ct);
 
-        (await new SincronizacionOrganismos(db, new PlataformaFalsa(null), reloj, NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct)).Should().BeNull();
-        (await new SincronizacionOrganismos(db, new PlataformaFalsa([]), reloj, NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct))
+        (await new SincronizacionOrganismos(db, new PlataformaFalsa(null), reloj, scope.ServiceProvider.GetRequiredService<RemapeoOrganismos>(), NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct)).Should().BeNull();
+        (await new SincronizacionOrganismos(db, new PlataformaFalsa([]), reloj, scope.ServiceProvider.GetRequiredService<RemapeoOrganismos>(), NullLogger<SincronizacionOrganismos>.Instance).SincronizarAsync(ct))
             .Should().BeNull("una lista vacía sería borrar el catálogo");
         (await db.OrganismosTransito.CountAsync(o => o.ActivoPlataforma, ct)).Should().Be(activos);
     }

@@ -1794,17 +1794,6 @@
   ]
  },
  {
-  "id": "dd68d155-3b43-56d4-b93c-aeb18fbaf0da",
-  "codigo": "50606001",
-  "nombre": "INST DPTAL TTOyTTE  META/RESTREPO",
-  "departamentoCodigo": "50",
-  "municipioCodigo": "50606",
-  "activo": true,
-  "municipio": "RESTREPO",
-  "departamento": "META",
-  "correosRadicacion": []
- },
- {
   "id": "6e96c215-2443-5666-8ed6-c4749ac3861c",
   "codigo": "5079000",
   "nombre": "DIR TTEyTTO  MCPAL BARBOSA",
@@ -3505,17 +3494,6 @@
   "correosRadicacion": [
    "notificacionjudicial@arauca-arauca.gov.co"
   ]
- },
- {
-  "id": "65375663-6f46-524d-ab70-09faf7a170e3",
-  "codigo": "81001001",
-  "nombre": "INST TTOyTTE  ARAUCA/ARAUCA",
-  "departamentoCodigo": "81",
-  "municipioCodigo": "81001",
-  "activo": true,
-  "municipio": "ARAUCA",
-  "departamento": "ARAUCA",
-  "correosRadicacion": []
  },
  {
   "id": "695a3686-cd4a-52f7-8075-8f69d0b04027",
