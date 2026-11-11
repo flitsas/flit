@@ -20,8 +20,8 @@ export const ESTADO_VALIDACION_LABEL: Record<EstadoValidacion, string> = {
   pendiente_envio: "Pendiente de envío",
   error_envio: "Error de envío",
   expirado: "Expirado",
-  manual_activo: "Esperando captura del cliente",
-  pendiente_revision_manual: "Pendiente de revisión",
+  esperando_captura: "Esperando captura del cliente",
+  pendiente_revision: "Pendiente de revisión",
   sin_validacion: "Sin validar",
 };
 
@@ -34,8 +34,8 @@ export const ESTADO_VALIDACION_COLOR: Record<EstadoValidacion, string> = {
   pendiente_envio: "var(--estado-borrador-fg)",
   error_envio: "var(--estado-anulado-fg)",
   expirado: "var(--estado-revocado-fg)",
-  manual_activo: "var(--estado-asignado-fg)",
-  pendiente_revision_manual: "var(--estado-subsanacion-fg)",
+  esperando_captura: "var(--estado-asignado-fg)",
+  pendiente_revision: "var(--estado-subsanacion-fg)",
   sin_validacion: "var(--border)",
 };
 
@@ -60,7 +60,7 @@ export function colorValidacion(estado: string): string {
 
 // Defensa extra: la normalización real la hace el servidor, pero si algún texto con el nombre de la
 // fuente se colara, no debe llegar al usuario ni al archivo.
-const MOTIVO_PROHIBIDO = /kyverum|manual|proveedor|simulad|migraci[oó]n/i;
+const MOTIVO_PROHIBIDO = /kyverum|manual|proveedor|simulad|migraci[oó]n|mock|webhook|scorer/i;
 
 /** Motivo apto para mostrar, o `null`. */
 export function motivoVisible(motivo: string | null | undefined): string | null {

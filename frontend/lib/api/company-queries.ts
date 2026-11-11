@@ -46,8 +46,8 @@ export type EstadoValidacion =
   | "pendiente_envio"
   | "error_envio"
   | "expirado"
-  | "manual_activo"
-  | "pendiente_revision_manual"
+  | "esperando_captura"
+  | "pendiente_revision"
   | "sin_validacion";
 
 /**

@@ -155,11 +155,16 @@ describe("nada revela cómo se validó", () => {
     const todo = Object.values(ESTADO_VALIDACION_LABEL).join(" ");
     expect(todo).not.toMatch(/kyverum|manual|proveedor|simulad|migraci/i);
     expect(ESTADO_VALIDACION_LABEL.aprobado).toBe("Aprobado");
+    // Los códigos que viajan en el JSON tampoco dicen «manual».
+    expect(Object.keys(ESTADO_VALIDACION_LABEL).join(" ")).not.toMatch(/manual/);
+    expect(ESTADO_VALIDACION_LABEL.esperando_captura).toBe("Esperando captura del cliente");
+    expect(ESTADO_VALIDACION_LABEL.pendiente_revision).toBe("Pendiente de revisión");
   });
 
   it("un motivo que nombre la fuente no llega a pantalla ni a archivo", () => {
     expect(motivoVisible("Rechazado por Kyverum")).toBe("Validación rechazada");
     expect(motivoVisible("Revisión manual fallida")).toBe("Validación rechazada");
+    expect(motivoVisible("Error en webhook del scorer mock")).toBe("Validación rechazada");
     expect(motivoVisible("Documento ilegible")).toBe("Documento ilegible");
     expect(motivoVisible("  ")).toBeNull();
     // Las frases reales del servidor se muestran tal cual, con su punto final.
