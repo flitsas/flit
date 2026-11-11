@@ -112,7 +112,9 @@ public static class ActoresExcelColumns
     {
         var delGrupo = (actores ?? [])
             .Where(a => PerteneceAlGrupo(a.Rol, grupo))
-            .OrderBy(a => a.Ordinal)
+            // Primero el rol (comprador antes que propietario) y luego el ordinal, igual que el navegador.
+            .OrderBy(a => a.Rol == ActorValidacionRoles.Propietario ? 1 : 0)
+            .ThenBy(a => a.Ordinal)
             .ToList();
 
         var cells = new List<ActorCell>();
