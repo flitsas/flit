@@ -68,6 +68,24 @@ public sealed class CompanyQueryReportColumnsActoresTests
     }
 
     [Fact]
+    public void El_documento_va_con_su_tipo_y_los_intentos_son_numero_en_los_reportes_programados()
+    {
+        var actores = new List<ActorValidacionDto>
+        {
+            new("comprador", 1, "Ana", "CC", "1000098455", "aprobado", null, 2),
+            new("vendedor", 1, "Banco", "NIT", "890903938", "aprobado", null, 1),
+            new("vendedor", 2, "Sin tipo", null, "55", "aprobado", null, 1),
+        };
+        var sheet = CompanyQueryReportColumns.BuildSheet("Consulta", Todas, [Row(actores)], new MaxActoresPorRolDto(1, 2, 0));
+
+        var fila = sheet.Rows.Single();
+        fila[2].Should().Be(TabularWorkbookWriter.Cell.Of("CC 1000098455"));
+        fila[4].Should().Be(TabularWorkbookWriter.Cell.Of(2), "Intentos va como número");
+        fila[7].Should().Be(TabularWorkbookWriter.Cell.Of("NIT 890903938"));
+        fila[12].Should().Be(TabularWorkbookWriter.Cell.Of("55"));
+    }
+
+    [Fact]
     public void Dos_paginas_con_maximos_distintos_comparten_el_ancho_que_les_da_el_servidor()
     {
         var max = new MaxActoresPorRolDto(1, 2, 0);

@@ -100,6 +100,30 @@ public sealed class ActorValidacionBuilderTests
             .Single().Intentos.Should().Be(2);
     }
 
+    [Theory]
+    [InlineData(BiometricEstados.Aprobado, 1)]
+    [InlineData(BiometricEstados.Rechazado, 1)]
+    [InlineData(BiometricEstados.Expirado, 0)]
+    [InlineData(BiometricEstados.EnProceso, 0)]
+    [InlineData(BiometricEstados.Enviado, 0)]
+    [InlineData(BiometricEstados.ManualActivo, 0)]
+    public void Aprobado_o_rechazado_sin_rastro_cuenta_al_menos_un_intento_los_demas_estados_el_conteo_real(
+        string estado, int esperado)
+    {
+        var v = Val("comprador", "1", estado, attempts: 0);
+        Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v])
+            .Single().Intentos.Should().Be(esperado);
+    }
+
+    [Fact]
+    public void El_minimo_de_un_intento_no_baja_ni_cambia_los_conteos_con_bitacora()
+    {
+        var v = Val("comprador", "1", BiometricEstados.Aprobado, attempts: 0);
+        Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v],
+                new Dictionary<Guid, int> { [v.Id] = 4 }, new HashSet<Guid> { v.Id })
+            .Single().Intentos.Should().Be(4);
+    }
+
     [Fact]
     public void Con_auditoria_manda_la_auditoria_aunque_attempts_se_reinicie()
     {

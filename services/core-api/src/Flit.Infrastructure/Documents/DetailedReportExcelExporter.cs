@@ -66,7 +66,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                 },
                 token),
             requireRows: true,
-            ct).ConfigureAwait(false);
+            ct,
+            numericColumns: ActoresExcelColumns.IntentosColumns(max, Headers.Length)).ConfigureAwait(false);
 
         if (!wroteRows)
             throw new InvalidOperationException("no_records");
@@ -96,7 +97,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                     token).ConfigureAwait(false);
             },
             requireRows: false,
-            ct).ConfigureAwait(false);
+            ct,
+            numericColumns: ActoresExcelColumns.IntentosColumns(max, NetworkHeaders.Length)).ConfigureAwait(false);
 
         return reached;
     }
@@ -112,7 +114,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         Func<Action<IReadOnlyList<string>>, CancellationToken, Task> writeRowsAsync,
         bool requireRows,
         CancellationToken ct,
-        string sheetName = "Reporte detallado")
+        string sheetName = "Reporte detallado",
+        IReadOnlySet<int>? numericColumns = null)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"flit-detailed-report-{Guid.NewGuid():N}.xlsx");
         var wroteRows = false;
@@ -127,13 +130,13 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                 {
                     writer.WriteStartElement(new Worksheet());
                     writer.WriteStartElement(new SheetData());
-                    WriteRow(writer, headers);
+                    WriteRow(writer, headers, null);
 
                     await writeRowsAsync(
                         cells =>
                         {
                             wroteRows = true;
-                            WriteRow(writer, cells);
+                            WriteRow(writer, cells, numericColumns);
                         },
                         ct).ConfigureAwait(false);
 
@@ -191,11 +194,25 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
     /// <summary>«Compañía» + las mismas celdas de siempre (AC1/AC6: ningún enlace ni contenido de documentos).</summary>
     private static string[] ToNetworkCells(NetworkDetailedProcedureRowDto r) => [r.TenantName, .. ToCells(r.ToRow())];
 
-    private static void WriteRow(OpenXmlWriter writer, IReadOnlyList<string> values)
+    private static void WriteRow(OpenXmlWriter writer, IReadOnlyList<string> values, IReadOnlySet<int>? numericColumns)
     {
         writer.WriteStartElement(new Row());
-        foreach (var value in values)
+        for (var i = 0; i < values.Count; i++)
         {
+            var value = values[i];
+            // Solo las columnas marcadas (Intentos) van como número, para poder sumarlas y filtrarlas; el resto del
+            // archivo conserva su convención de texto. Un valor vacío o no numérico se queda como texto.
+            if (numericColumns is not null && numericColumns.Contains(i)
+                && double.TryParse(value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var number))
+            {
+                writer.WriteElement(new Cell
+                {
+                    CellValue = new CellValue(number.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                });
+                continue;
+            }
+
             var cell = new Cell { DataType = CellValues.InlineString };
             cell.AppendChild(new InlineString(new Text(value)));
             writer.WriteElement(cell);

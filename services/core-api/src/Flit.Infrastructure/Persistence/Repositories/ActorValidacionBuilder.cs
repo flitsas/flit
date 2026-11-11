@@ -121,15 +121,22 @@ public static class ActorValidacionBuilder
             .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
             .FirstOrDefault();
 
+        var estado = Estado(ultima);
+        var intentos = ContarIntentos(propias, intentosAuditoria, conAuditoria);
+        // Un actor aprobado o rechazado pasó por al menos un intento aunque no quede rastro (bitácora ausente y
+        // attempts en 0: validaciones simuladas o migradas). Los demás estados conservan el conteo real.
+        if (estado is ActorValidacionEstados.Aprobado or ActorValidacionEstados.Rechazado)
+            intentos = Math.Max(intentos, 1);
+
         return new ActorValidacionDto(
             Rol: rol,
             Ordinal: actor.Ordinal,
             Nombre: actor.FullName,
             TipoDocumento: NullSiVacio(actor.DocumentType),
             Documento: NullSiVacio(actor.DocumentNumber),
-            EstadoValidacion: Estado(ultima),
+            EstadoValidacion: estado,
             MotivoRechazo: ultimoRechazo is null ? null : IdentityRejectionReasonText.For(ultimoRechazo),
-            Intentos: ContarIntentos(propias, intentosAuditoria, conAuditoria));
+            Intentos: intentos);
     }
 
     /// <summary>Estado en código cerrado; todo lo que no se reconoce sale «sin_validacion», nunca un texto crudo.</summary>
