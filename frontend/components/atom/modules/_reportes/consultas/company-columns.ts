@@ -13,7 +13,15 @@ import {
   type DataColumn,
 } from "@/components/consultas/columns";
 import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
-import type { CompanyQueryRow } from "@/lib/api/company-queries";
+import type { CompanyQueryRow, MaxActoresPorRol } from "@/lib/api/company-queries";
+import {
+  documentoActor,
+  encabezadoActor,
+  etiquetaValidacion,
+  motivoVisible,
+  ROLES_ACTOR,
+  textoPorActor,
+} from "./identidad-validacion";
 import { bogotaClock } from "@/lib/xlsx";
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -74,6 +82,10 @@ const GRUPO_PERSONAS = "Personas";
 const GRUPO_CARACTERISTICAS = "Características";
 const GRUPO_COMERCIAL = "Comercial";
 const GRUPO_TIEMPOS = "Tiempos";
+const GRUPO_IDENTIDAD = "Validación de identidad";
+
+/** Las cuatro columnas de identidad se abren por actor en el archivo; en pantalla son una cada una. */
+const actoresDe = (r: CompanyQueryRow) => r.actores;
 
 export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   {
@@ -164,6 +176,81 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     value: (r) => r.vendedor ?? "—",
     raw: (r) => r.vendedor,
     width: 26,
+  },
+  {
+    id: "validacion_persona",
+    label: "Persona",
+    group: GRUPO_IDENTIDAD,
+    value: (r) =>
+      textoPorActor(r.actores, (a) => [a.nombre, documentoActor(a)].filter(Boolean).join(" · ")),
+    width: 26,
+    expandirPorActor: {
+      roles: ROLES_ACTOR,
+      actoresDe,
+      campos: [
+        { header: (rol, n) => encabezadoActor(null, rol, n), width: 26, cell: (a) => a.nombre },
+        {
+          header: (rol, n) => encabezadoActor("Documento", rol, n),
+          width: 18,
+          cell: (a) => documentoActor(a),
+        },
+      ],
+    },
+  },
+  {
+    id: "validacion_estado",
+    label: "Validación",
+    group: GRUPO_IDENTIDAD,
+    value: (r) => textoPorActor(r.actores, (a) => etiquetaValidacion(a.estadoValidacion)),
+    width: 24,
+    expandirPorActor: {
+      roles: ROLES_ACTOR,
+      actoresDe,
+      campos: [
+        {
+          header: (rol, n) => encabezadoActor("Validación", rol, n),
+          width: 24,
+          cell: (a) => etiquetaValidacion(a.estadoValidacion),
+        },
+      ],
+    },
+  },
+  {
+    id: "validacion_intentos",
+    label: "Intentos",
+    group: GRUPO_IDENTIDAD,
+    value: (r) => textoPorActor(r.actores, (a) => String(a.intentos)),
+    numeric: true,
+    width: 10,
+    expandirPorActor: {
+      roles: ROLES_ACTOR,
+      actoresDe,
+      campos: [
+        {
+          header: (rol, n) => encabezadoActor("Intentos", rol, n),
+          width: 10,
+          cell: (a) => a.intentos,
+        },
+      ],
+    },
+  },
+  {
+    id: "validacion_motivo",
+    label: "Motivo de rechazo",
+    group: GRUPO_IDENTIDAD,
+    value: (r) => textoPorActor(r.actores, (a) => motivoVisible(a.motivoRechazo) ?? "—"),
+    width: 36,
+    expandirPorActor: {
+      roles: ROLES_ACTOR,
+      actoresDe,
+      campos: [
+        {
+          header: (rol, n) => encabezadoActor("Motivo rechazo", rol, n),
+          width: 36,
+          cell: (a) => motivoVisible(a.motivoRechazo) ?? "",
+        },
+      ],
+    },
   },
   {
     id: "prenda",
@@ -375,8 +462,9 @@ export function buildCompanyQueryCsv(
   rows: CompanyQueryRow[],
   visibleColumnIds: string[],
   notas: string[] = [],
+  maxActoresPorRol?: MaxActoresPorRol,
 ): string {
-  const csv = buildCsv(COMPANY_QUERY_COLUMNS, rows, visibleColumnIds);
+  const csv = buildCsv(COMPANY_QUERY_COLUMNS, rows, visibleColumnIds, maxActoresPorRol);
   return notas.length > 0
     ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
     : csv;
@@ -386,6 +474,14 @@ export function buildCompanyQueryXlsx(
   rows: CompanyQueryRow[],
   visibleColumnIds: string[],
   notas: string[] = [],
+  maxActoresPorRol?: MaxActoresPorRol,
 ): Uint8Array<ArrayBuffer> {
-  return buildWorkbook("Consulta", COMPANY_QUERY_COLUMNS, rows, visibleColumnIds, notas);
+  return buildWorkbook(
+    "Consulta",
+    COMPANY_QUERY_COLUMNS,
+    rows,
+    visibleColumnIds,
+    notas,
+    maxActoresPorRol,
+  );
 }
