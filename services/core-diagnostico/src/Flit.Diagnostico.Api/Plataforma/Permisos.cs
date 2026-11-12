@@ -54,7 +54,8 @@ public static class Permisos
     /// <summary>
     /// Roles por defecto (§6.2). <c>admin_diagnostico</c> es el rol de sistema que la plataforma ya asigna a todo
     /// AdminCompany (DDL 126, R-12): el manifiesto solo le pone permisos. <c>backoffice_diagnostico</c> no crea
-    /// diagnósticos ni deriva (R-6) y su <c>PoliticaBackoffice</c> exige además <c>tenant_type=FLIT</c> (D-16).
+    /// diagnósticos ni deriva (R-6) y su <c>PoliticaBackoffice</c> exige además <c>tenant_type=FLIT</c> (D-16; el SuperAdmin
+    /// de cualquier compañía entra a la configuración del backoffice, ajustes 2026-11-11 punto 1).
     /// </summary>
     public static IReadOnlyList<(string Codigo, string Nombre, string[] Permisos)> RolesPorDefecto { get; } =
     [

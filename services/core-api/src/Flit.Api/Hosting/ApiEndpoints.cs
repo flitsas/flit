@@ -31,6 +31,10 @@ internal static class ApiEndpoints
                 .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.PersonaNaturalServicioPolicy);
         }
 
+        // ADR-0084 (Punto 4): creación de borradores desde Diagnóstico. APAGADA por defecto (Tramites:Derivacion:Habilitada);
+        // solo la atiende svc-diagnostico con el scope platform.tramites.derivacion.
+        Flit.Api.Derivacion.DerivacionExtensions.MapDerivacionDiagnostico(app);
+
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
         app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token

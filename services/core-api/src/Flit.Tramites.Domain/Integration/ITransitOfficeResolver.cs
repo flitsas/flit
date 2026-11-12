@@ -45,6 +45,18 @@ public interface ITransitOfficeResolver
         string transitOfficeName,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(false);
+
+    /// <summary>
+    /// ADR-0084 — devuelve el OT habilitado cuyo código del catálogo es <paramref name="transitOfficeCode"/>, con el mismo
+    /// criterio que <see cref="ResolveEnabledByNameAsync"/> (grant de la lista efectiva + catálogo activo), o <c>null</c>.
+    /// Lo usa la creación de borradores desde Diagnóstico cuando el nombre RUNT no casa y su réplica sí identificó el
+    /// organismo por código. Implementación por defecto: no resuelve nada (fail-closed para los dobles de prueba).
+    /// </summary>
+    Task<ResolvedTransitOffice?> ResolveEnabledByCodeAsync(
+        Guid tenantId,
+        string transitOfficeCode,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ResolvedTransitOffice?>(null);
 }
 
 /// <summary>
@@ -64,6 +76,12 @@ public sealed class NullTransitOfficeResolver : ITransitOfficeResolver
     public Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
         Guid tenantId,
         Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ResolvedTransitOffice?>(null);
+
+    public Task<ResolvedTransitOffice?> ResolveEnabledByCodeAsync(
+        Guid tenantId,
+        string transitOfficeCode,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<ResolvedTransitOffice?>(null);
 }

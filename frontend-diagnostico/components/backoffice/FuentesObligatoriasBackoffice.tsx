@@ -11,6 +11,7 @@ import {
   FUENTES_CONFIGURABLES,
   guardarFuentesObligatorias,
   listarFuentesObligatorias,
+  tituloDefinicion,
   type DefinicionFuentesObligatorias,
   type FuenteConfigurable,
 } from "@/lib/backoffice/fuentes-obligatorias";
@@ -35,6 +36,8 @@ interface Borrador {
   clave: string;
   familia: string | null;
   tipo_tramite_codigo: string | null;
+  /** Título con el nombre de la familia o del tipo (Punto 5); se calcula una vez al leer, no viaja en el PUT. */
+  titulo: string;
   fuentes: FuenteConfigurable[];
   guardando: boolean;
   error: string | null;
@@ -44,12 +47,6 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: 
 
 function codigoAlcance(def: { familia: string | null; tipo_tramite_codigo: string | null }): string {
   return def.familia ?? def.tipo_tramite_codigo ?? "";
-}
-
-function tituloDefinicion(def: { familia: string | null; tipo_tramite_codigo: string | null }): string {
-  if (def.familia) return `Familia ${def.familia}`;
-  if (def.tipo_tramite_codigo) return `Tipo ${def.tipo_tramite_codigo}`;
-  return "Definición";
 }
 
 function motivoBloqueo(alcance: string, fuente: FuenteConfigurable): string | null {
@@ -76,6 +73,7 @@ function aBorrador(def: DefinicionFuentesObligatorias): Borrador {
     clave: def.familia ?? def.tipo_tramite_codigo ?? "sin-alcance",
     familia: def.familia,
     tipo_tramite_codigo: def.tipo_tramite_codigo,
+    titulo: tituloDefinicion(def),
     fuentes: FUENTES_CONFIGURABLES.filter((f) => presentes.has(f)),
     guardando: false,
     error: null,
@@ -223,7 +221,7 @@ function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlter
   const baseId = useId();
   const tituloId = `${baseId}-titulo`;
   const alcance = codigoAlcance(def);
-  const titulo = tituloDefinicion(def);
+  const titulo = def.titulo;
   const seleccion = fuentesSeleccionadas(alcance, def.fuentes);
 
   return (

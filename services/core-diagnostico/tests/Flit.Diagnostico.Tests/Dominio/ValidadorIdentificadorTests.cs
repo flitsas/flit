@@ -38,6 +38,7 @@ public sealed class ValidadorIdentificadorTests
     [InlineData("ABC12", TipoIdentificador.PlacaMoto)]
     [InlineData("R12345", TipoIdentificador.PlacaRemolque)]
     [InlineData("MC029554", TipoIdentificador.PlacaMaquinaria)]
+    [InlineData("123ABC", TipoIdentificador.PlacaMotocarro)]
     [InlineData("9FBTEST1234567890", TipoIdentificador.Vin)]
     public void Detecta_el_tipo_de_placa_y_VIN(string identificador, TipoIdentificador esperado)
     {
@@ -82,24 +83,52 @@ public sealed class ValidadorIdentificadorTests
         resultado.EsValido.Should().Be(valido);
     }
 
+    // Punto 7.1 (ola 2026-11-11): la placa de motocarro 123ABC, con su propia lista en la tabla compartida.
+    [Theory]
+    [MemberData(nameof(CasosMotocarro))]
+    public void Cada_caso_de_motocarro_de_la_tabla_compartida_da_el_resultado_esperado(string entrada, string normalizado, string tipo, bool valido)
+    {
+        var resultado = ValidadorIdentificador.Validar(entrada);
+
+        resultado.Normalizado.Should().Be(normalizado);
+        Codigo(resultado).Should().Be(tipo);
+        resultado.EsValido.Should().Be(valido);
+    }
+
+    [Theory]
+    [InlineData("123-abc", "123ABC")]
+    [InlineData(" 987 zyx ", "987ZYX")]
+    public void La_placa_de_motocarro_acepta_espacios_guiones_y_minusculas(string entrada, string normalizado)
+    {
+        ValidadorIdentificador.Validar(entrada).Should().Be(new ResultadoValidacion(normalizado, TipoIdentificador.PlacaMotocarro));
+    }
+
     // DoD: la tabla no se adelgaza ni pierde tipos sin que falle un test.
     [Fact]
-    public void La_tabla_tiene_al_menos_20_casos_y_los_seis_tipos()
+    public void La_tabla_tiene_al_menos_20_casos_y_los_siete_tipos()
     {
         var casos = LeerCasos();
-        var seisTipos = Enum.GetValues<TipoIdentificador>().Select(t => JsonNamingPolicy.SnakeCaseUpper.ConvertName(t.ToString()))
+        var motocarro = LeerCasos("casos_motocarro");
+        var sieteTipos = Enum.GetValues<TipoIdentificador>().Select(t => JsonNamingPolicy.SnakeCaseUpper.ConvertName(t.ToString()))
             .Append(ResultadoValidacion.CodigoInvalido).ToList();
 
         casos.Should().HaveCountGreaterThanOrEqualTo(20);
-        seisTipos.Should().HaveCount(6);
-        casos.Select(c => c.Tipo).Distinct().Should().BeEquivalentTo(seisTipos);
-        casos.Should().OnlyContain(c => c.Valido == (c.Tipo != ResultadoValidacion.CodigoInvalido));
+        motocarro.Should().HaveCountGreaterThanOrEqualTo(10);
+        sieteTipos.Should().HaveCount(7);
+        casos.Concat(motocarro).Select(c => c.Tipo).Distinct().Should().BeEquivalentTo(sieteTipos);
+        casos.Should().NotContain(c => c.Tipo == "PLACA_MOTOCARRO", "Trámites valida la tabla «casos» solo con PLATE_PATTERN");
+        motocarro.Select(c => c.Tipo).Distinct().Should().BeEquivalentTo("PLACA_MOTOCARRO", ResultadoValidacion.CodigoInvalido);
+        casos.Concat(motocarro).Should().OnlyContain(c => c.Valido == (c.Tipo != ResultadoValidacion.CodigoInvalido));
     }
 
-    public static TheoryData<string, string, string, bool> Casos()
+    public static TheoryData<string, string, string, bool> Casos() => Datos(LeerCasos());
+
+    public static TheoryData<string, string, string, bool> CasosMotocarro() => Datos(LeerCasos("casos_motocarro"));
+
+    private static TheoryData<string, string, string, bool> Datos(List<Caso> casos)
     {
         var datos = new TheoryData<string, string, string, bool>();
-        foreach (var c in LeerCasos())
+        foreach (var c in casos)
             datos.Add(c.Entrada, c.Normalizado, c.Tipo, c.Valido);
         return datos;
     }
@@ -107,10 +136,10 @@ public sealed class ValidadorIdentificadorTests
     private static string Codigo(ResultadoValidacion r) =>
         r.Tipo is { } t ? JsonNamingPolicy.SnakeCaseUpper.ConvertName(t.ToString()) : ResultadoValidacion.CodigoInvalido;
 
-    private static List<Caso> LeerCasos()
+    private static List<Caso> LeerCasos(string lista = "casos")
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(RutaTabla));
-        return doc.RootElement.GetProperty("casos").EnumerateArray()
+        return doc.RootElement.GetProperty(lista).EnumerateArray()
             .Select(c => new Caso(
                 c.GetProperty("entrada").GetString()!,
                 c.GetProperty("normalizado").GetString()!,

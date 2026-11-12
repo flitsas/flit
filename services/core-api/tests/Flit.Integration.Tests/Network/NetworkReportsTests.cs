@@ -1,3 +1,4 @@
+using Flit.Analytics.Application.CompanyQueries;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Analytics.Application.Dtos;
@@ -178,7 +179,8 @@ public sealed class NetworkReportsTests(PostgresDatabaseFixture fixture) : Postg
         var xlsx = await ExportXlsxAsync(ctx, exportFilter!);
         var hojas = ReadSheet(xlsx);
         hojas[0][0].Should().Be(DetailedReportExcelExporter.NetworkCompanyHeader);
-        hojas[0].Should().Equal(DetailedReportExcelExporter.NetworkHeaders);
+        // Contrato v3: tras las columnas de siempre van los grupos Comprador y Vendedor (mínimo 1 bloque por rol).
+        hojas[0].Should().Equal([.. DetailedReportExcelExporter.NetworkHeaders, .. ActoresExcelColumns.Headers(default, ActoresExcelColumns.Grupo.Comprador), .. ActoresExcelColumns.Headers(default, ActoresExcelColumns.Grupo.Vendedor)]);
         hojas.Skip(1).Select(r => r[1]).Should().Equal(exportadas.Select(r => r.ReferenceNumber));
         hojas.Skip(1).Select(r => r[0]).Should().Equal(exportadas.Select(r => r.TenantName));
     }
@@ -200,7 +202,7 @@ public sealed class NetworkReportsTests(PostgresDatabaseFixture fixture) : Postg
         // AC4 — conjunto vacío: reporte sin registros, sin consulta.
         await using var sinBase = UnreachableContext();
         var vacio = await ExportXlsxAsync(sinBase, Filter(Nadie));
-        ReadSheet(vacio).Should().ContainSingle().Which.Should().Equal(DetailedReportExcelExporter.NetworkHeaders);
+        ReadSheet(vacio).Should().ContainSingle().Which.Should().Equal([.. DetailedReportExcelExporter.NetworkHeaders, .. ActoresExcelColumns.Headers(default, ActoresExcelColumns.Grupo.Comprador), .. ActoresExcelColumns.Headers(default, ActoresExcelColumns.Grupo.Vendedor)]);
     }
 
     [PostgresFact]

@@ -4,6 +4,7 @@ using Flit.Diagnostico.Api.Modulos.Reportes;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Dictamen;
+using Flit.Diagnostico.Domain.Vehiculos;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 
@@ -82,8 +83,23 @@ public static class LectorHechosDictamen
             Si(detalle.General.TieneGravamenes),
             detalle.GarantiasMobiliarias?.Count ?? 0,
             Si(detalle.General.Prendas),
-            detalle.Infracciones?.Count ?? 0);
+            detalle.Infracciones?.Count ?? 0,
+            Clase(detalle.Vehiculo, normalizado),
+            ClasificadorVehiculoDictamen.Servicio(Texto(detalle.Vehiculo.TipoServicio) ?? normalizado?.Servicio));
     }
+
+    /// <summary>
+    /// Clase del dictamen (ola 2026-11-11, V4/V5): la clase del detalle RUNT o, si viene vacía, la del RUNT normalizado; luego
+    /// la clasificación; y si nada dice, el tipo de la placa (maquinaria o remolque).
+    /// </summary>
+    private static ClaseVehiculoDictamen Clase(DetalleRuntVehiculo vehiculo, VehiculoRunt? normalizado)
+    {
+        var placa = Texto(vehiculo.Placa) ?? normalizado?.Placa;
+        var tipoPlaca = placa is null ? null : ValidadorIdentificador.Validar(placa).Tipo;
+        return ClasificadorVehiculoDictamen.Clase(Texto(vehiculo.Clase) ?? normalizado?.Clase, vehiculo.Clasificacion, tipoPlaca);
+    }
+
+    private static string? Texto(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor;
 
     private static HechosSimit ResumirSimit(IReadOnlyList<ResultadoSimitDetalle> personas)
     {

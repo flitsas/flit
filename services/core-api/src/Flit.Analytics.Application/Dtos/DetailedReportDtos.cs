@@ -1,3 +1,5 @@
+using Flit.Analytics.Application.CompanyQueries;
+
 namespace Flit.Analytics.Application.Dtos;
 
 /// <summary>Fila del reporte detallado de trámites (Feature #10813).</summary>
@@ -21,7 +23,9 @@ public sealed record DetailedProcedureRowDto(
     // HU #14319 — canal efectivo (los trámites sin dato, incluido el migrado, llegan como «tramites») y OT del canal.
     string Channel = "tramites",
     Guid? ChannelTransitOfficeId = null,
-    string? ChannelTransitOfficeName = null);
+    string? ChannelTransitOfficeName = null,
+    // Validación de identidad por persona (compradores, vendedores, propietarios); null = no cargada.
+    IReadOnlyList<ActorValidacionDto>? Actores = null);
 
 /// <summary>Totales agregados para KPIs del reporte detallado (HU #10819).</summary>
 public sealed record DetailedReportSummaryDto(
@@ -39,7 +43,9 @@ public sealed record DetailedProceduresPageDto(
     int TotalCount,
     int Page,
     int PageSize,
-    DetailedReportSummaryDto Summary);
+    DetailedReportSummaryDto Summary,
+    // Máximo de actores por rol sobre TODO el filtro (no la página): ancho de las columnas del Excel.
+    MaxActoresPorRolDto MaxActoresPorRol = default);
 
 /// <summary>Filtros del reporte detallado (HU #10815).</summary>
 public sealed record DetailedReportFilter(

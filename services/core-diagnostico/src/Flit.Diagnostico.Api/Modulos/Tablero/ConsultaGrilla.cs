@@ -49,7 +49,8 @@ internal sealed class LecturaDeLaCompania(DiagnosticoDb db) : ILecturaTablero
 /// vehículos del lote, por rol y solo de la compañía del lote; lo consumido ya es un intento por persona
 /// (<c>intentos_consulta.persona_id</c>).
 /// </summary>
-internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector)
+internal sealed class ConsultaGrilla(
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, TimeProvider reloj, Microsoft.Extensions.Options.IOptions<OpcionesConsultas> opciones)
 {
     public const string CodigoDesdeInvalido = "DESDE_INVALIDO";
 
@@ -58,14 +59,40 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario, IP
     {
         ValidarDesde(desde);
         var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, id, seguir: false, ct).ConfigureAwait(false);
-        var grilla = await LeerAsync(new LecturaDeLaCompania(db), cabecera, desde, protector, ct).ConfigureAwait(false);
+        var lectura = new LecturaDeLaCompania(db);
+        var grilla = await LeerAsync(lectura, cabecera, desde, protector, ct).ConfigureAwait(false);
+        var pegados = await VehiculosPegadosAsync(lectura, cabecera.Id, reloj.GetUtcNow(), opciones.Value.UmbralPegada, ct).ConfigureAwait(false);
+        var esPegado = pegados.ToHashSet();
         return new GrillaDto(
             grilla.Cabecera.Id, grilla.Cabecera.Nombre, CodigosDeEnum.Codigo(grilla.Cabecera.Estado), grilla.Cabecera.VersionTablero,
             grilla.Desde, grilla.Columnas, grilla.Avance,
             [.. grilla.Vehiculos.Select(v => new FilaVehiculoDto(
                 v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(Dto)],
-                v.DocumentoDeclarado, v.Propietarios))],
-            grilla.Estimado);
+                v.DocumentoDeclarado, v.Propietarios, esPegado.Contains(v.Id)))],
+            grilla.Estimado, pegados.Count, pegados);
+    }
+
+    /// <summary>
+    /// Vehículos del lote con alguna celda que el reintento reencolaría (<see cref="CriterioPegada.Reencolables"/>, Punto 3), en el
+    /// orden del lote. Lee solo la RUNT y las celdas no cerradas (ERROR, PENDIENTE, EN_CURSO), sin el payload.
+    /// </summary>
+    internal static async Task<IReadOnlyList<Guid>> VehiculosPegadosAsync(
+        ILecturaTablero lectura, Guid diagnosticoId, DateTimeOffset ahora, TimeSpan umbral, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(lectura);
+        var celdas = await lectura.Filas<CeldaConsulta>()
+            .Where(c => c.DiagnosticoId == diagnosticoId
+                && (c.Fuente == Fuente.Runt || c.Estado == EstadoCelda.Error || c.Estado == EstadoCelda.Pendiente || c.Estado == EstadoCelda.EnCurso))
+            .Select(c => new CeldaParaReintento(c.Id, c.VehiculoId, c.Fuente, c.Estado, c.ActualizadoEn))
+            .ToListAsync(ct).ConfigureAwait(false);
+        var pegados = CriterioPegada.Reencolables(celdas, ahora, umbral).Select(c => c.VehiculoId).Distinct().ToList();
+        if (pegados.Count == 0)
+            return [];
+        var orden = await lectura.Filas<VehiculoDiagnostico>()
+            .Where(v => v.DiagnosticoId == diagnosticoId && pegados.Contains(v.Id))
+            .OrderBy(v => v.Orden).Select(v => v.Id)
+            .ToListAsync(ct).ConfigureAwait(false);
+        return orden;
     }
 
     /// <summary><c>desde</c> es la versión que ya tiene el cliente: 0 o mayor; si no, 400 <c>DESDE_INVALIDO</c>.</summary>

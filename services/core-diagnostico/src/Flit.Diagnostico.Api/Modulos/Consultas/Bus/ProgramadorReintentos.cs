@@ -8,16 +8,17 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 
 /// <summary>
 /// Reintentos de las consultas por el bus (ADR-0075, Q4, U2 = a; HU #13737, D-12): los decide Diagnóstico con
-/// <see cref="PoliticaReintentos"/> (<c>Diagnostico:Consultas:MaxReintentos</c>, 0..3) y core-consultas consulta una sola vez.
+/// <see cref="PoliticaReintentos"/> (<c>Diagnostico:Consultas:MaxReintentos</c>, 0..3, por defecto 3, y <c>EsperaReintento</c>, espera fija,
+/// por defecto 2 min; ajuste 2026-11-11 Punto 3) y core-consultas consulta una sola vez.
 /// Un resultado transitorio con reintentos disponibles sigue tres pasos:
 /// <list type="number">
 /// <item><see cref="ProgramarAsync"/>: en un scope PROPIO (el del mensaje se revierte) la celda vuelve a PENDIENTE con su intento
-/// auditable, <c>intentos_auto + 1</c> y <c>disponible_desde = fin + Espera(n)</c>, y lanza
+/// auditable, <c>intentos_auto + 1</c> y <c>disponible_desde = fin + Espera</c>, y lanza
 /// <see cref="ReintentoProgramadoException"/>.</item>
-/// <item>El SDK lleva el resultado a <c>diagnostico.consultas-resultados.retry.n</c> (<see cref="Esperas"/>: 5, 10 y 20 s).</item>
-/// <item><see cref="ReanudarAsync"/>: el resultado demorado vuelve; si la espera de la celda no venció (un segundo o tercer
-/// reintento espera más que la cola en que cayó) da otra vuelta, y si venció publica el trabajo nuevo (<c>trabajo_id</c> nuevo) y
-/// se confirma.</item>
+/// <item>El SDK lleva el resultado a <c>diagnostico.consultas-resultados.retry.n</c> (<see cref="Esperas"/>: tres colas con la espera
+/// configurada).</item>
+/// <item><see cref="ReanudarAsync"/>: el resultado demorado vuelve; si la espera de la celda no venció da otra vuelta, y si venció
+/// publica el trabajo nuevo (<c>trabajo_id</c> nuevo) y se confirma.</item>
 /// </list>
 /// Un definitivo o los reintentos agotados cierran la celda en ERROR con su <c>tipo_error</c>; eso lo hace el consumidor. Los logs
 /// llevan ids, fuente y tipo de error; nunca documentos ni datos de la fuente.
@@ -32,11 +33,19 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 internal sealed partial class ProgramadorReintentos(
     IServiceScopeFactory scopes, TimeProvider reloj, IOptions<OpcionesConsultas> opciones, ILogger<ProgramadorReintentos> log)
 {
-    /// <summary>Esperas de la cola de reintentos del consumidor de resultados: <c>PoliticaReintentos.Espera(1..3)</c>.</summary>
-    public static IReadOnlyList<TimeSpan> Esperas { get; } = [.. Enumerable.Range(1, PoliticaReintentos.Maximo).Select(PoliticaReintentos.Espera)];
+    /// <summary>
+    /// Esperas de la cola de reintentos del consumidor de resultados para una espera dada: <see cref="PoliticaReintentos.Maximo"/>
+    /// colas con la misma espera (un resultado demorado normalmente usa una; las demás cubren otra vuelta o un conflicto de
+    /// concurrencia). Cambiar la espera cambia el TTL de las colas <c>.retry.n</c>: ver el runbook de
+    /// <c>docs/diagnosticos/diseno-consultas-por-rabbitmq.md</c>.
+    /// </summary>
+    public static IReadOnlyList<TimeSpan> EsperasDe(TimeSpan espera) => [.. Enumerable.Repeat(espera, PoliticaReintentos.Maximo)];
 
-    /// <summary>La política con los reintentos configurados.</summary>
-    public PoliticaReintentos Politica { get; } = new(opciones.Value.MaxReintentos);
+    /// <summary>La política con los reintentos y la espera configurados.</summary>
+    public PoliticaReintentos Politica { get; } = new(opciones.Value.MaxReintentos, opciones.Value.EsperaReintento);
+
+    /// <summary>Esperas de la cola de reintentos con la espera configurada (<see cref="EsperasDe"/>).</summary>
+    public IReadOnlyList<TimeSpan> Esperas => EsperasDe(Politica.Espera);
 
     /// <summary>
     /// Deja la celda PENDIENTE con su reintento programado, en un scope propio, y lanza <see cref="ReintentoProgramadoException"/>.

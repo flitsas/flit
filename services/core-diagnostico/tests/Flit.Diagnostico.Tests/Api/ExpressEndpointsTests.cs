@@ -53,7 +53,7 @@ public sealed class ExpressEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         var id = json.GetProperty("id").GetGuid();
         json.GetProperty("es_express").GetBoolean().Should().BeTrue();
         json.GetProperty("estado").GetString().Should().Be("CREADO");
@@ -99,7 +99,7 @@ public sealed class ExpressEndpointsTests
         {
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, json.GetProperty("id").GetGuid(), ct);
             cabecera.Nombre.Should().Be($"Express {identificador}");
             json.GetProperty("nombre").GetString().Should().Be(cabecera.Nombre);
@@ -107,7 +107,7 @@ public sealed class ExpressEndpointsTests
 
         var textoLargo = await largo.Content.ReadAsStringAsync(ct);
         largo.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, textoLargo);
-        var error = JsonDocument.Parse(textoLargo).RootElement;
+        var error = JsonElement.Parse(textoLargo);
         error.GetProperty("code").GetString().Should().Be(ValidadorCabecera.CodigoNombreInvalido);
         error.GetProperty("campo").GetString().Should().Be("nombre");
         (await Cabeceras.ContarAsync(api, empresa.Id, ct)).Should().Be(2, "el nombre de 151 caracteres no crea nada");
@@ -143,7 +143,7 @@ public sealed class ExpressEndpointsTests
 
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, $"{cuerpo} → {texto}");
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be(codigo, cuerpo);
             json.GetProperty("campo").GetString().Should().Be(campo, cuerpo);
             json.GetProperty("error").GetString().Should().NotBeNullOrWhiteSpace();
@@ -184,15 +184,15 @@ public sealed class ExpressEndpointsTests
         var textoCon = await conDocumento.Content.ReadAsStringAsync(ct);
         conDocumento.StatusCode.Should().Be(HttpStatusCode.OK, textoCon);
         textoCon.Should().NotContain("1020304050");
-        var jsonCon = JsonDocument.Parse(textoCon).RootElement;
+        var jsonCon = JsonElement.Parse(textoCon);
         jsonCon.GetProperty("mostrar_estimado").GetBoolean().Should().BeTrue();
         Estimado(jsonCon).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 1 });
         var textoSin = await sinDocumento.Content.ReadAsStringAsync(ct);
         sinDocumento.StatusCode.Should().Be(HttpStatusCode.OK, textoSin);
-        Estimado(JsonDocument.Parse(textoSin).RootElement).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 0 });
+        Estimado(JsonElement.Parse(textoSin)).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 0 });
         var textoNo = await noMostrar.Content.ReadAsStringAsync(ct);
         noMostrar.StatusCode.Should().Be(HttpStatusCode.OK, textoNo);
-        var jsonNo = JsonDocument.Parse(textoNo).RootElement;
+        var jsonNo = JsonElement.Parse(textoNo);
         jsonNo.GetProperty("mostrar_estimado").GetBoolean().Should().BeFalse("B tiene NO_MOSTRAR: no se usa la configuración de A");
         jsonNo.TryGetProperty("estimado_consultas", out _).Should().BeFalse();
         fueraDeConjunto.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await fueraDeConjunto.Content.ReadAsStringAsync(ct));
@@ -227,7 +227,7 @@ public sealed class ExpressEndpointsTests
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
         texto.Should().NotContain(Documento).And.Contain("****4050");
-        var id = JsonDocument.Parse(texto).RootElement.GetProperty("id").GetGuid();
+        var id = JsonElement.Parse(texto).GetProperty("id").GetGuid();
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
         vehiculo.LocatarioDocTipo.Should().Be("CC");
         vehiculo.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
@@ -274,9 +274,9 @@ public sealed class ExpressEndpointsTests
         conFuenteDeB.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "AVALUO está habilitada en B, no en A");
         (await Codigo(conFuenteDeB, ct)).Should().Be(ValidadorCabecera.CodigoFuenteNoHabilitada);
         creada.StatusCode.Should().Be(HttpStatusCode.Created, await creada.Content.ReadAsStringAsync(ct));
-        var id = JsonDocument.Parse(await creada.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("id").GetGuid();
+        var id = JsonElement.Parse(await creada.Content.ReadAsStringAsync(ct)).GetProperty("id").GetGuid();
         var cabecera = await Cabeceras.LeerAsync(api, empresas.A.Id, id, ct);
-        JsonDocument.Parse(cabecera.Configuracion).RootElement.GetProperty("limite_vehiculos_lote").GetInt32().Should().Be(111);
+        JsonElement.Parse(cabecera.Configuracion).GetProperty("limite_vehiculos_lote").GetInt32().Should().Be(111);
         (await Lotes.VehiculosAsync(api, empresas.A.Id, id, ct)).Should().ContainSingle().Which.TenantId.Should().Be(empresas.A.Id);
         (await Cabeceras.ContarAsync(api, empresas.B.Id, ct)).Should().Be(0);
         (await Lotes.VehiculosAsync(api, empresas.B.Id, id, ct)).Should().BeEmpty();

@@ -134,6 +134,12 @@ public sealed class ApiDePrueba : IAsyncDisposable
         // HU #13727 (ADR-0075): el consumidor de resultados ni el reconciliador corren en las pruebas; cada prueba entrega los
         // resultados con su BusDePrueba (y llama al reconciliador directo).
         ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "false",
+        // Punto 4, incremento 3 (ADR-0084): tampoco el consumidor de diagnostico.derivaciones ni su reconciliador; cada prueba
+        // entrega el evento con DerivacionDePrueba.ConsumirAsync y llama al reconciliador directo.
+        ["Diagnostico:Derivacion:ConsumidorHabilitado"] = "false",
+        // Punto 3 (2026-11-11): el servicio trae 3 reintentos por defecto; las pruebas del motor se escribieron con 1 y lo fijan
+        // aquí (la que necesita otro valor lo pasa a Motor.Bus(api, maxReintentos) o a la configuración).
+        ["Diagnostico:Consultas:MaxReintentos"] = "1",
         // HU #13850: tampoco el trabajador del ZIP; cada prueba llama al empaquetador directo.
         ["Diagnostico:Evidencias:Habilitado"] = "false",
         // Corte 6: el trabajador de redacción no corre en las pruebas; cada prueba llama a la cola directo.
@@ -154,18 +160,19 @@ public sealed class ApiDePrueba : IAsyncDisposable
     /// <summary>
     /// Token de producto firmado con la llave del JWKS de prueba (usuario ficticio; empresa ficticia si no se da). Como el
     /// de Identidad: un <c>role_code</c> por rol, <c>permissions</c> como arreglo JSON y <c>tenant_type</c> si se da
-    /// (HU #13724).
+    /// (HU #13724). <c>sujeto</c> reemplaza el <c>sub</c>: con <c>svc-&lt;código&gt;</c> es un token de servicio.
     /// </summary>
     public string Token(
         string audiencia = ServicioSettings.Codigo,
         Guid? empresa = null,
         IReadOnlyList<string>? permisos = null,
         IReadOnlyList<string>? roles = null,
-        string? tipoEmpresa = null)
+        string? tipoEmpresa = null,
+        string? sujeto = null)
     {
         var claims = new List<Claim>
         {
-            new("sub", Guid.NewGuid().ToString()),
+            new("sub", sujeto ?? Guid.NewGuid().ToString()),
             new("email", "operador@empresa.test"),
             new("tenant_id", (empresa ?? Guid.NewGuid()).ToString()),
             new("company_name", "Empresa de prueba"),

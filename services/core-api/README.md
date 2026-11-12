@@ -21,6 +21,25 @@ OpenAPI versionado en el monorepo:
 - `contracts/openapi/core-api.v1.yaml` (cuando exista en el branch)
 - CI: `.github/workflows/contracts.yml`
 
+### gRPC: borradores desde Diagnóstico (ADR-0084)
+
+`contracts/proto/flit/tramites/v1/derivacion.proto` — `DerivacionTramitesService`, servidor a servidor, sin wizard.
+
+- **Quién**: solo `svc-diagnostico`, `aud=tramites`, scope `platform.tramites.derivacion`; la empresa en `x-flit-tenant-id`.
+- **Encendido**: `Tramites:Derivacion:Habilitada` (apagado por defecto: el servicio no se mapea y responde `UNIMPLEMENTED`).
+- **Techo**: `Tramites:Derivacion:ConcurrenciaMaxima` (8). Lleno → `RESOURCE_EXHAUSTED` inmediato; debe ser ≥ la suma de
+  `Diagnostico:Derivacion:Concurrencia` de las réplicas de Diagnóstico.
+- **`CrearBorradorDesdeDiagnostico`**: idempotente por `(empresa, external_ref = vehiculo_id)`. Mismo trámite con
+  `ya_existia=true` si ya es de `origin=diagnostico`; `REFERENCIA_DE_OTRO_ORIGEN` si es de otro canal. Autor = el usuario
+  real (`usuario_id`): activo, miembro de la empresa, sin suspensión, con `tramites.create` + Crear de la familia (permisos
+  efectivos calculados de la base, `Flit.Api/Derivacion/AutorDerivacion.cs`). OT de la lista efectiva por nombre RUNT y,
+  si no casa, por código; nunca se crea sin OT. Canal `tramites`. Fallos de siembra van a `advertencias`.
+- **Rechazos** (`rechazo.codigo`, no reintentables): `TIPO_NO_DISPONIBLE`, `FAMILIA_BLOQUEADA`, `USUARIO_SIN_PERMISO`,
+  `OT_NO_HABILITADO`, `REGLA_COMPANIA`, `TRAMITE_ACTIVO_DUPLICADO`, `EMPRESA_INACTIVA`, `REFERENCIA_DE_OTRO_ORIGEN`,
+  `DATOS_INVALIDOS`. Técnicos como status: `RESOURCE_EXHAUSTED`, `UNAVAILABLE`, `INTERNAL`.
+- **`ObtenerTramitesPorReferencia`**: hasta 500 referencias (`INVALID_ARGUMENT` si hay más); solo los de `origin=diagnostico`.
+- **Logs**: ids, código y duración; nunca placa, VIN ni documentos.
+
 ## Convenciones de datos
 
 - Checklist schema y repositorio: [`.cursor/skills/db-schema-validator/checklist-validacion-schema.md`](../../.cursor/skills/db-schema-validator/checklist-validacion-schema.md)

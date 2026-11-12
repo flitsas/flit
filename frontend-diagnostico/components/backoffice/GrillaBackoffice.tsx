@@ -23,6 +23,7 @@ import {
   type RespuestaLlenado,
 } from "@/lib/backoffice/api";
 import { nombreFuente } from "@/lib/configuracion";
+import { puedeOperarBackoffice } from "@/lib/sesion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
@@ -77,15 +78,18 @@ function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; ch
  * Lee GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde= y reutiliza GrillaSemaforos (HU #13748) con la marca «Manual»
  * en las celdas de origen MANUAL, visible solo aquí (Q5). Cada semáforo abre en una pestaña nueva la página del detalle del
  * backoffice (HU #14087, con ?empresa=) y, en una celda en ERROR llenable (no RUNT ni impuesto, no bloqueada por el RUNT) y con
- * la capacidad llenarConsultas, la celda ofrece «Llenar a mano», que abre FormularioLlenadoManual como modal. Al
+ * las capacidades llenarConsultas y backofficeOperacion (solo FLIT), la celda ofrece «Llenar a mano», que abre FormularioLlenadoManual como modal. Al
  * confirmar, la celda pasa a verde con la marca y el lote se vuelve a leer desde su versión. Cuatro estados: cargando, error
  * (404 no encontrado en la compañía, 403 a la página 403, otro con Reintentar), vacío (sin vehículos) y lleno.
  */
 export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficeProps) {
   const router = useRouter();
   const { sesion } = useSesion();
-  const puedeLlenar = sesion?.capacidades.llenarConsultas ?? false;
-  const puedeCorregir = sesion?.capacidades.corregirDictamen ?? false;
+  // Override y llenado manual son operación FLIT: además de su capacidad exigen `backofficeOperacion`. El SuperAdmin de otra
+  // compañía abre la grilla pero no los ve; la API responde 403 de todos modos.
+  const opera = puedeOperarBackoffice(sesion?.capacidades);
+  const puedeLlenar = opera && (sesion?.capacidades.llenarConsultas ?? false);
+  const puedeCorregir = opera && (sesion?.capacidades.corregirDictamen ?? false);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
   const [llenado, setLlenado] = useState<Llenado | null>(null);

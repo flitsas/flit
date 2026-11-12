@@ -177,7 +177,20 @@ excepción de la HU #13723. `reglas_dictamen` ya tiene la suya en esta sección 
   redacción reclama filas de todas las empresas con `FOR UPDATE SKIP LOCKED` y después fija la empresa de la fila en su
   contexto (Tradeoff aceptado, «jobs sin usuario»). Es la tercera lectura entre empresas, junto con el reconciliador de
   consultas y `ix_evidencias_cola`. `TomaEntreEmpresasSoloEnColaTests` permite el SQL crudo solo en `ColaConsultas.cs`,
-  `ColaEvidencias.cs` y `ColaRedaccion.cs`. Los demás índices de `dictamenes` empiezan por `tenant_id`.
+  `ColaEvidencias.cs` y `ColaRedaccion.cs` (y, desde el Punto 4, `ColaDerivacion.cs`). Los demás índices de `dictamenes`
+  empiezan por `tenant_id`.
+- **`derivacion_operaciones` y `derivaciones`, clase (a) (Punto 4, ajustes del 2026-11-11, [ADR-0084](ADR-0084-diagnostico-crear-tramite-borrador-encolado-con-credito-por-compania.md)).**
+  Cabecera e ítems de «Crear trámite» desde el diagnóstico. Llevan `tenant_id`, filtro global, `xmin` y FK compuestas
+  `RESTRICT` (al lote, a la operación y al vehículo), sin borrado lógico. Todos sus índices empiezan por `tenant_id`:
+  `ux_derivaciones_vehiculo_vivo` (parcial, un solo ítem PENDIENTE/ENVIADO/CREADO por vehículo), `ix_derivaciones_vehiculo` (sin
+  filtro: cubre `fk_derivaciones_vehiculo`, que el parcial no cubre), `ix_derivaciones_pendientes`,
+  `ix_derivaciones_en_vuelo`, `ix_derivaciones_operacion` e `ix_derivacion_operaciones_lote`. PII: solo
+  `derivacion_operaciones.usuario_id` y `derivaciones.reintentado_por` (`@pii:low`, seudónimo uuid del claim `sub`). Los
+  GET de progreso (`…/tramites/operaciones` y `…/tramites/operaciones/{opId}`) tienen escenario en `EscenariosDeFuga`,
+  con la derivación encendida en esa prueba porque por defecto está apagada.
+  Es la **cuarta** lectura entre empresas: `ColaDerivacion.SqlColgados` busca, para el reconciliador, ítems ENVIADO
+  pasados del margen en todas las empresas. Devuelve solo id y empresa, y cada ítem se trabaja después con su empresa
+  fijada (Tradeoff aceptado, «jobs sin usuario»). `TomaEntreEmpresasSoloEnColaTests` lo autoriza junto con las otras tres.
 
 ## Retención de datos personales
 

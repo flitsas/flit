@@ -9,11 +9,12 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// <c>GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato</c> (HU #13741, plan §6.1, ADR-0073). Cuelgan del grupo
-/// <c>/backoffice</c>: <see cref="PoliticaBackoffice"/> (permiso <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>),
+/// <c>/backoffice</c>: <see cref="PoliticaBackoffice"/> de configuración (SuperAdmin de cualquier compañía, o FLIT con
+/// <c>diagnostico.backoffice.ver</c>; ajustes 2026-11-11, punto 1),
 /// la empresa explícita del segmento <c>{empresa}</c> (la lectura queda en <c>lecturas_backoffice</c>) y, encima,
 /// <c>diagnostico.configuracion.contrato.editar</c>. La escritura sobre la fila de la otra compañía va por
 /// <see cref="EscrituraEntreEmpresas"/> (solo <c>configuracion_empresa</c> y <c>cambios_contrato</c> de esa empresa) y deja
-/// cada cambio en <c>cambios_contrato</c>. Las reglas las pone <see cref="ServicioConfiguracion.AplicarContrato"/>. El GET y el PUT
+/// cada cambio en <c>cambios_contrato</c> y en el evento <see cref="AuditoriaConfiguracionBackoffice"/> (con la compañía del actor). Las reglas las pone <see cref="ServicioConfiguracion.AplicarContrato"/>. El GET y el PUT
 /// traen <c>fuentes_disponibles</c> (HU #13863) con la misma regla del 422 <c>FUENTE_NO_DISPONIBLE</c>.
 /// </summary>
 internal static class ContratoBackofficeEndpoints
@@ -38,7 +39,8 @@ internal static class ContratoBackofficeEndpoints
     }
 
     private static async Task<IResult> Editar(
-        HttpContext http, JsonElement cuerpo, DiagnosticoDb db, ServicioConfiguracion servicio, Consultas.FuentesDisponibles fuentes, CancellationToken ct)
+        HttpContext http, JsonElement cuerpo, DiagnosticoDb db, ServicioConfiguracion servicio, Consultas.FuentesDisponibles fuentes,
+        UsuarioActual usuario, ILoggerFactory logs, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var configuracion = await db.ParaEditarDeLaEmpresa<ConfiguracionEmpresa>(empresa).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -52,6 +54,8 @@ internal static class ContratoBackofficeEndpoints
                 db.Add(configuracion);
             db.AddRange(cambios);
             await db.GuardarDeLaEmpresaAsync(empresa, TiposDelContrato, ct).ConfigureAwait(false);
+            AuditoriaConfiguracionBackoffice.Registrar(logs.CreateLogger(typeof(ContratoBackofficeEndpoints)), usuario,
+                AuditoriaConfiguracionBackoffice.SeccionContrato, empresa, cambios.Select(c => c.Campo));
         }
 
         return Results.Ok(ContratoBackofficeDto.De(configuracion, fuentes.Todas()));

@@ -46,7 +46,7 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
         builder.Property(x => x.IdentificadorNorm).HasMaxLength(17).HasComment("@pii:low Identificador en mayúsculas y sin espacios; único en el lote.");
         builder.Property(x => x.TipoIdentificador)
             .HasConversion(CodigosDeEnum.Convertidor<TipoIdentificador>()).HasMaxLength(16)
-            .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA o VIN (R-19).");
+            .HasComment("PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO o VIN (R-19).");
         builder.Property(x => x.Placa).HasMaxLength(10).HasComment("@pii:low Placa del vehículo.");
         builder.Property(x => x.Vin).HasMaxLength(17).HasComment("@pii:low VIN del vehículo.");
         builder.Property(x => x.Servicio).HasMaxLength(32).HasComment("Servicio normalizado (vehicle_service del RUNT).");
@@ -83,6 +83,12 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
         builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId, x.IdentificadorNorm }).IsUnique().HasDatabaseName("ux_vehiculo_por_lote");
         // Reutilización del mismo día por compañía y placa (D-10, HU #13723).
         builder.HasIndex(x => new { x.TenantId, x.Placa }).HasDatabaseName("ix_vehiculos_tenant_placa");
+
+        // Punto 4 (ADR-0084): el borrador creado en Trámites; se fija una vez y es la fuente de «Ver trámite #N» (y del índice del ZIP).
+        builder.Property(x => x.TramiteId)
+            .HasComment("Borrador creado en Trámites (origin=diagnostico, external_ref=id). Se fija una vez (R-16).");
+        builder.Property(x => x.TramiteNumero).HasMaxLength(32).HasComment("Número (reference_number) del borrador en Trámites.");
+        builder.Property(x => x.TramiteCreadoEn).HasComment("Instante en que Diagnóstico registró el borrador.");
 
         // Concurrencia optimista con la columna de sistema xmin: no agrega columnas a la tabla.
         builder.Property(x => x.Version).IsRowVersion();

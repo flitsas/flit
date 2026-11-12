@@ -55,7 +55,7 @@ public sealed class ConfiguracionOperativaTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var json = JsonDocument.Parse(cuerpo).RootElement;
+        var json = JsonElement.Parse(cuerpo);
         json.GetProperty("empresa").GetGuid().Should().Be(empresas.A.Id);
         var contrato = json.GetProperty("contrato");
         contrato.GetProperty("solo_lectura").GetBoolean().Should().BeTrue("el nivel contractual es de solo lectura para la compañía");
@@ -88,7 +88,7 @@ public sealed class ConfiguracionOperativaTests
         {
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             Codigos(json.GetProperty("fuentes_disponibles")).Should().Equal(esperadas, texto);
             Codigos(json.GetProperty("contrato").GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "AVALUO", "IMPUESTO_DEPARTAMENTAL");
         }

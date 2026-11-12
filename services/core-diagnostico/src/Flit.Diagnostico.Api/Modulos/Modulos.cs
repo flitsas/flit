@@ -48,7 +48,7 @@ public static class Modulos
     /// <see cref="Consultas.OpcionesConsultas"/> validada al arrancar), el registro de adaptadores y el catálogo de fuentes
     /// disponibles (HU #13733). El consumidor de <c>consultas.resultado.diagnostico</c> (cola <see cref="Consultas.Bus.OpcionesBus.Cola"/>,
     /// solo del productor <c>consultas</c>, con la concurrencia y el prefetch de <see cref="Consultas.Bus.OpcionesBus"/> y la cola de
-    /// reintentos de 5, 10 y 20 s) y el reconciliador (<see cref="Trabajos.ReconciliadorConsultas"/>, D3, con
+    /// reintentos con la espera fija configurada) y el reconciliador (<see cref="Trabajos.ReconciliadorConsultas"/>, D3, con
     /// <see cref="Trabajos.OpcionesReconciliador"/> validada al arrancar) se registran solo con
     /// <c>Diagnostico:Consultas:Bus:ConsumidorHabilitado=true</c>; no mira <c>IHostEnvironment</c>.
     /// </summary>
@@ -102,7 +102,8 @@ public static class Modulos
         services.AddScoped<Consultas.Bus.PublicadorCeldas>();
         // HU #13737 (ADR-0075, Q4): los reintentos los decide Diagnóstico; core-consultas consulta una sola vez.
         services.AddSingleton<Consultas.Bus.ProgramadorReintentos>();
-        // HU #13737 (D-12): reintentos de transitorios, configuración global validada al arrancar en [0, 3].
+        // HU #13737 (D-12) y Punto 3 (2026-11-11): reintentos de transitorios (3 por defecto, espera fija de 2 min) y umbral de
+        // «pegada», configuración global validada al arrancar.
         services.AddOptions<Consultas.OpcionesConsultas>()
             .Bind(configuration.GetSection(Consultas.OpcionesConsultas.Seccion))
             .Validate(o => o.EsValida(), Consultas.OpcionesConsultas.MensajeFueraDeRango)
@@ -119,6 +120,10 @@ public static class Modulos
         configuration.GetSection(Consultas.Bus.OpcionesBus.Seccion).Bind(bus);
         if (bus.Errores() is { Count: > 0 } errores)
             throw new InvalidOperationException($"{Consultas.Bus.OpcionesBus.Seccion} tiene valores fuera de rango: {string.Join("; ", errores)}.");
+        // La espera de reintento fija el TTL de las colas .retry.n al declararlas; si la configuración es inválida el arranque falla
+        // igual (ValidateOnStart), así que aquí basta con no declarar colas con un TTL fuera de rango.
+        var consultas = configuration.GetSection(Consultas.OpcionesConsultas.Seccion).Get<Consultas.OpcionesConsultas>() ?? new();
+        var esperaReintento = consultas.EsValida() ? consultas.EsperaReintento : Domain.Consultas.PoliticaReintentos.EsperaPorDefecto;
         if (bus.ConsumidorHabilitado)
         {
             services.AddFlitConsumer<Persistence.DiagnosticoDb, Consultas.Bus.ConsumidorResultados, Consultas.Bus.ResultadoConsultaDiagnostico>(
@@ -128,9 +133,9 @@ public static class Modulos
                     o.Prefetch = bus.Prefetch;
                     // Q3 = 3a: solo core-consultas (user_id validado por el broker) publica los resultados.
                     o.ProductoresPermitidos.Add(Consultas.Bus.OpcionesBus.Productor);
-                    // Q4 (U2 = a): la espera del resultado demorado es la de PoliticaReintentos (5, 10 y 20 s).
+                    // Q4 (U2 = a) y Punto 3: la espera del resultado demorado es la de PoliticaReintentos (fija, EsperaReintento).
                     o.RetryDelays.Clear();
-                    foreach (var espera in Consultas.Bus.ProgramadorReintentos.Esperas)
+                    foreach (var espera in Consultas.Bus.ProgramadorReintentos.EsperasDe(esperaReintento))
                         o.RetryDelays.Add(espera);
                 });
             // D3 (6r-i, U4 = a): la red de seguridad de los trabajos perdidos corre con el consumidor.
@@ -184,6 +189,7 @@ public static class Modulos
         Vehiculos.VehiculosEndpoints.Map(api);
         Express.ExpressEndpoints.Map(api);
         Tablero.EndpointsTablero.Map(api);
+        Derivacion.DerivacionEndpoints.Map(api);
         Dictamen.DictamenEndpoints.Map(api);
         Consultas.EndpointsReproceso.Map(api);
         Reportes.ReportesEndpoints.Map(api);

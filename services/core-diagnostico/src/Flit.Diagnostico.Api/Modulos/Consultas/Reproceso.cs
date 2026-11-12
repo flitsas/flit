@@ -68,16 +68,9 @@ internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimePro
             var version = await SubirVersionAsync(celda.DiagnosticoId, ct).ConfigureAwait(false);
             var cabecera = await db.Set<CabeceraDiagnostico>().SingleAsync(c => c.Id == celda.DiagnosticoId, ct).ConfigureAwait(false);
             if (cabecera.Estado is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto)
-                Reabrir(cabecera, autor, ahora);
+                Reabrir(db, cabecera, autor, ahora);
 
-            celda.Estado = EstadoCelda.Pendiente;
-            celda.TipoError = null;
-            celda.IntentosAuto = 0;
-            celda.DisponibleDesde = ahora;
-            celda.LeaseHasta = null;
-            celda.ReprocesoUsuarioId = autor;
-            celda.ActualizadoEn = ahora;
-            celda.VersionTablero = version;
+            PrepararReencolado(celda, autor, ahora, version);
             try
             {
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -112,9 +105,30 @@ internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimePro
             throw ReglaException.Conflicto(CodigoBloqueadaPorRunt, "Esta consulta depende del RUNT del vehículo, que no se ha completado: reprocesa primero el RUNT.");
     }
 
-    /// <summary>R-8: el lote cerrado vuelve a EN_PROCESO con historial REPROCESO y el usuario.</summary>
-    private void Reabrir(CabeceraDiagnostico cabecera, Guid autor, DateTimeOffset ahora)
+    /// <summary>
+    /// La celda vuelve a PENDIENTE para que el publicador la saque con un <c>trabajo_id</c> nuevo: <c>intentos_auto=0</c> (sus
+    /// automáticos se reinician), <c>disponible_desde=ahora</c>, sin tipo de error y con el usuario del reproceso (su intento queda con
+    /// <c>disparador=REPROCESO</c> y no reutiliza el dato del mismo día). No guarda ni publica. Lo comparten el reproceso por celda y
+    /// el reintento de las pegadas (<see cref="ReintentoPegadas"/>, Punto 3).
+    /// </summary>
+    internal static void PrepararReencolado(CeldaConsulta celda, Guid autor, DateTimeOffset ahora, long version)
     {
+        ArgumentNullException.ThrowIfNull(celda);
+        celda.Estado = EstadoCelda.Pendiente;
+        celda.TipoError = null;
+        celda.IntentosAuto = 0;
+        celda.DisponibleDesde = ahora;
+        celda.LeaseHasta = null;
+        celda.ReprocesoUsuarioId = autor;
+        celda.ActualizadoEn = ahora;
+        celda.VersionTablero = version;
+    }
+
+    /// <summary>R-8: el lote cerrado vuelve a EN_PROCESO con historial REPROCESO y el usuario.</summary>
+    internal static void Reabrir(DiagnosticoDb db, CabeceraDiagnostico cabecera, Guid autor, DateTimeOffset ahora)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(cabecera);
         var transicion = TransicionesLote.Transicionar(cabecera.Estado, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso);
         cabecera.Estado = transicion.Nuevo;
         cabecera.CerradoEn = null;

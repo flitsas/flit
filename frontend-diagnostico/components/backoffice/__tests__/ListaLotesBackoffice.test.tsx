@@ -4,8 +4,9 @@ import { ListaLotesBackoffice } from "@/components/backoffice/ListaLotesBackoffi
 import { EMPRESA_A, listaLotes, lote, simularApi } from "@/lib/backoffice/__tests__/datos";
 
 // Uso de ejemplo: <ListaLotesBackoffice empresa="" estado={null} conErrores={false} pagina={1} /> en /backoffice/diagnosticos:
-// sin compañía elegida no consulta; al elegirla en el selector (identificador uuid) pide GET /backoffice/diagnosticos?empresa=
-// con los filtros de estado y «con errores» y lista los lotes con un enlace a su grilla (?empresa= incluido).
+// sin compañía elegida no consulta lotes; la compañía se elige en el selector con búsqueda por nombre o NIT (GET
+// /backoffice/empresas, el mismo del editor de contrato) y entonces pide GET /backoffice/diagnosticos?empresa= con los
+// filtros de estado y «con errores» y lista los lotes con un enlace a su grilla (?empresa= incluido).
 
 const h = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/backoffice/diagnosticos", useRouter: () => ({ replace: h.replace, push: vi.fn(), refresh: vi.fn() }) }));
@@ -13,42 +14,48 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/backoffice/diagnosticos
 beforeEach(() => h.replace.mockReset());
 afterEach(() => vi.unstubAllGlobals());
 
+const EMPRESA_B = "00000000-0000-7000-8000-0000000000b2";
+/** GET /backoffice/empresas (inventadas, ya ordenadas por nombre): A y B. */
+const EMPRESAS = [
+  { id: EMPRESA_B, nombre: "Carga del Norte SAS", nit: null },
+  { id: EMPRESA_A, nombre: "Transportes A SAS", nit: "900000010" },
+];
+const conEmpresas = (rutas: Parameters<typeof simularApi>[0] = {}) =>
+  simularApi({ "GET /backoffice/empresas": () => Response.json(EMPRESAS), ...rutas });
+
 const montar = (props: Partial<Parameters<typeof ListaLotesBackoffice>[0]> = {}) =>
   render(<ListaLotesBackoffice empresa="" estado={null} conErrores={false} pagina={1} {...props} />);
 
-const elegir = (empresa: string) => {
-  fireEvent.change(screen.getByLabelText("Identificador de la compañía"), { target: { value: empresa } });
-  fireEvent.click(screen.getByRole("button", { name: "Ver lotes" }));
+/** Busca la compañía por nombre o NIT en el selector y la elige con un clic. */
+const elegir = async (busqueda: string, opcion: RegExp) => {
+  const selector = await screen.findByRole("combobox", { name: "Empresa" });
+  fireEvent.change(selector, { target: { value: busqueda } });
+  fireEvent.click(screen.getByRole("option", { name: opcion }));
 };
 
+/** Parámetros de cada GET /backoffice/diagnosticos (el listado de empresas no cuenta). */
 const consultas = (fetchMock: { mock: { calls: unknown[][] } }) =>
-  fetchMock.mock.calls.map(([u]) => Object.fromEntries(new URL(String(u), "http://localhost").searchParams));
+  fetchMock.mock.calls
+    .map(([u]) => new URL(String(u), "http://localhost"))
+    .filter((u) => u.pathname.endsWith("/backoffice/diagnosticos"))
+    .map((u) => Object.fromEntries(u.searchParams));
 
 describe("ListaLotesBackoffice — AC1: compañía elegida y filtro «con errores»", () => {
-  it("sin compañía elegida no consulta y lo dice", () => {
-    const fetchMock = simularApi({});
+  it("sin compañía elegida no consulta lotes y lo dice", async () => {
+    const fetchMock = conEmpresas();
     montar();
     expect(screen.getByText(/elige una compañía/i)).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("un identificador inválido muestra el error junto al campo y no consulta", () => {
-    const fetchMock = simularApi({});
-    montar();
-    elegir("compania-a");
-    const campo = screen.getByLabelText("Identificador de la compañía");
-    expect(campo).toHaveAttribute("aria-invalid", "true");
-    expect(document.getElementById(campo.getAttribute("aria-describedby")!)).toHaveTextContent(/uuid/i);
-    expect(fetchMock).not.toHaveBeenCalled();
+    await screen.findByRole("combobox", { name: "Empresa" });
+    expect(consultas(fetchMock)).toHaveLength(0);
   });
 
   it("elige A y filtra «con errores»: pide con empresa=A y con_errores=true y ve solo los lotes devueltos", async () => {
-    const fetchMock = simularApi({
+    const fetchMock = conEmpresas({
       "GET /backoffice/diagnosticos": (url) =>
         Response.json(url.searchParams.get("con_errores") === "true" ? listaLotes([lote(1, { nombre: "Lote con fallas", celdas_en_error: 3 })]) : listaLotes([lote(1, { nombre: "Lote con fallas", celdas_en_error: 3 }), lote(2, { nombre: "Lote limpio", celdas_en_error: 0, estado: "COMPLETADO" })])),
     });
     montar();
-    elegir(EMPRESA_A);
+    await elegir("Transportes", /Transportes A SAS/);
     const tabla = await screen.findByRole("table", { name: /lotes de la compañía/i });
     expect(within(tabla).getByText("Lote limpio")).toBeInTheDocument();
 
@@ -65,14 +72,14 @@ describe("ListaLotesBackoffice — AC1: compañía elegida y filtro «con errore
   });
 
   it("con la compañía en la URL consulta de entrada con sus filtros", async () => {
-    const fetchMock = simularApi({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1)])) });
+    const fetchMock = conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1)])) });
     montar({ empresa: EMPRESA_A, estado: "INCOMPLETO", conErrores: true });
     await screen.findByRole("table", { name: /lotes de la compañía/i });
     expect(consultas(fetchMock)[0]).toEqual({ empresa: EMPRESA_A, estado: "INCOMPLETO", con_errores: "true", pagina: "1" });
   });
 
   it("paginación estándar (HU #13916): selector 10/20/30/50; 10 es el defecto y no viaja, 30 sí", async () => {
-    const fetchMock = simularApi({
+    const fetchMock = conEmpresas({
       "GET /backoffice/diagnosticos": (url) => Response.json(listaLotes([lote(1)], { tamano: Number(url.searchParams.get("tamano") ?? 10), total: 60 })),
     });
     montar({ empresa: EMPRESA_A });
@@ -90,16 +97,76 @@ describe("ListaLotesBackoffice — AC1: compañía elegida y filtro «con errore
   });
 
   it("vacío: la compañía no tiene lotes con esos filtros", async () => {
-    simularApi({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([])) });
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([])) });
     montar({ empresa: EMPRESA_A });
     expect(await screen.findByText(/no tiene lotes con estos filtros/i)).toBeInTheDocument();
   });
 
   it("falla: aviso con Reintentar", async () => {
     let n = 0;
-    simularApi({ "GET /backoffice/diagnosticos": () => (++n === 1 ? Response.json({ error: "x" }, { status: 500 }) : Response.json(listaLotes([lote(1)]))) });
+    conEmpresas({ "GET /backoffice/diagnosticos": () => (++n === 1 ? Response.json({ error: "x" }, { status: 500 }) : Response.json(listaLotes([lote(1)]))) });
     montar({ empresa: EMPRESA_A });
     fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
     expect(await screen.findByRole("table", { name: /lotes de la compañía/i })).toBeInTheDocument();
+  });
+});
+
+// Punto 6 (ola 2026-11-11): la compañía se elige en el selector compartido con el editor de contrato, no pegando su uuid.
+describe("ListaLotesBackoffice — Punto 6: selector de compañía", () => {
+  it("AC1: el selector busca por nombre o NIT (como el editor de contrato) y no hay campo para pegar el uuid", async () => {
+    conEmpresas();
+    montar();
+    const selector = await screen.findByRole("combobox", { name: "Empresa" });
+    expect(screen.queryByLabelText("Identificador de la compañía")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ver lotes" })).toBeNull();
+    expect(screen.queryByPlaceholderText(/0000-0000/)).toBeNull();
+
+    fireEvent.change(selector, { target: { value: "900000010" } });
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Transportes A SASNIT 900000010"]);
+    fireEvent.change(selector, { target: { value: "norte" } });
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Carga del Norte SASsin NIT"]);
+  });
+
+  it("AC2: al elegir otra compañía consulta con ?empresa={id} y vuelve a la página 1", async () => {
+    const fetchMock = conEmpresas({
+      "GET /backoffice/diagnosticos": (url) => Response.json(listaLotes([lote(1)], { pagina: Number(url.searchParams.get("pagina") ?? 1), total: 60 })),
+    });
+    montar({ empresa: EMPRESA_A, pagina: 3 });
+    await screen.findByRole("table", { name: /lotes de la compañía/i });
+    expect(consultas(fetchMock)[0]).toMatchObject({ empresa: EMPRESA_A, pagina: "3" });
+
+    await elegir("Norte", /Carga del Norte SAS/);
+    await waitFor(() => expect(consultas(fetchMock).at(-1)).toMatchObject({ empresa: EMPRESA_B, pagina: "1" }));
+    const url = String(h.replace.mock.calls.at(-1)![0]);
+    expect(url).toContain(`empresa=${EMPRESA_B}`);
+    expect(url).not.toContain("pagina=");
+  });
+
+  it("AC2: con la compañía en la URL (recarga o vuelta del detalle) el selector la muestra ya elegida", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1)])) });
+    montar({ empresa: EMPRESA_A });
+    expect(await screen.findByRole("combobox", { name: "Empresa" })).toHaveValue("Transportes A SAS");
+  });
+
+  it("AC3: si Identidad no responde, el selector muestra el error con Reintentar y los lotes de la URL siguen visibles", async () => {
+    let intento = 0;
+    conEmpresas({
+      "GET /backoffice/empresas": () =>
+        ++intento === 1 ? Response.json({ code: "IDENTIDAD_NO_DISPONIBLE", error: "Identidad no respondió." }, { status: 503 }) : Response.json(EMPRESAS),
+      "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1)])),
+    });
+    montar({ empresa: EMPRESA_A });
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se pudo cargar el listado de empresas");
+    expect(await screen.findByRole("table", { name: /lotes de la compañía/i })).toBeInTheDocument();
+    fireEvent.click(within(alerta).getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("combobox", { name: "Empresa" })).toHaveValue("Transportes A SAS");
+  });
+
+  it("AC3: sin empresas con Diagnóstico habilitado lo dice y no consulta lotes", async () => {
+    const fetchMock = conEmpresas({ "GET /backoffice/empresas": () => Response.json([]) });
+    montar();
+    expect(await screen.findByText("No hay empresas con Diagnóstico habilitado")).toBeInTheDocument();
+    expect(consultas(fetchMock)).toHaveLength(0);
   });
 });

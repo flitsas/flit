@@ -63,7 +63,7 @@ public sealed class ReutilizacionTests
         reutilizada.Estado.Should().Be(EstadoCelda.Completado);
         reutilizada.Origen.Should().Be(OrigenCelda.Api);
         reutilizada.ReutilizadaDeId.Should().Be(original.Id);
-        JsonDocument.Parse(reutilizada.Payload!).RootElement.GetRawText().Should().Be(JsonDocument.Parse(original.Payload!).RootElement.GetRawText());
+        JsonElement.Parse(reutilizada.Payload!).GetRawText().Should().Be(JsonElement.Parse(original.Payload!).GetRawText());
         reutilizada.LeaseHasta.Should().BeNull();
         reutilizada.VersionTablero.Should().BeGreaterThan(0, "pasa por el cierre normal y sube la versión del tablero");
 
@@ -86,8 +86,8 @@ public sealed class ReutilizacionTests
         vNuevo.OrganismoNombre.Should().Be(vOriginal.OrganismoNombre);
         vNuevo.DepartamentoCodigo.Should().Be(vOriginal.DepartamentoCodigo);
         vNuevo.RuntConsultadoEn.Should().BeCloseTo(original.DatoObtenidoEn!.Value, TimeSpan.FromMilliseconds(1), "el RUNT se consultó cuando el original");
-        JsonDocument.Parse(vNuevo.DatosConsolidados).RootElement.GetProperty("vehiculo").GetRawText()
-            .Should().Be(JsonDocument.Parse(vOriginal.DatosConsolidados).RootElement.GetProperty("vehiculo").GetRawText());
+        JsonElement.Parse(vNuevo.DatosConsolidados).GetProperty("vehiculo").GetRawText()
+            .Should().Be(JsonElement.Parse(vOriginal.DatosConsolidados).GetProperty("vehiculo").GetRawText());
         vNuevo.PropietarioDocTipo.Should().Be(vOriginal.PropietarioDocTipo);
         vNuevo.PropietarioDocCifrado.Should().Equal(vOriginal.PropietarioDocCifrado!, "se copia el cifrado, no se descifra para copiar");
         api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vNuevo.PropietarioDocCifrado!).Should().Be(PropietarioNatural);

@@ -35,6 +35,11 @@ export function fusionarCeldas(actual: Grilla | null, cambios: Grilla): Grilla {
     ...cambios.vehiculos.filter((v) => !conocidos.has(v.id)),
   ].sort(porOrden);
 
+  // Punto 3: la lista de pegadas viaja siempre y manda sobre el `pegada` de cada fila (las que se pegan solo por tiempo no se reenvían).
+  if (cambios.vehiculos_pegados) {
+    const pegados = new Set(cambios.vehiculos_pegados);
+    return { ...cambios, vehiculos: vehiculos.map((v) => ({ ...v, pegada: pegados.has(v.id) })) };
+  }
   return { ...cambios, vehiculos };
 }
 
@@ -64,5 +69,19 @@ export function marcarReprocesada(grilla: Grilla, celdaId: string): Grilla {
           }
         : v,
     ),
+  };
+}
+
+/**
+ * Reintento manual optimista (Punto 3): la placa (o todas, sin `vehiculoId`) deja de estar pegada y el contador del lote
+ * baja, para que la acción desaparezca al instante; el refresco inmediato trae enseguida el estado del servidor.
+ */
+export function marcarReintentada(grilla: Grilla, vehiculoId?: string): Grilla {
+  if (!vehiculoId) return { ...grilla, total_pegadas: 0, vehiculos: grilla.vehiculos.map((v) => (v.pegada ? { ...v, pegada: false } : v)) };
+  const estaba = grilla.vehiculos.some((v) => v.id === vehiculoId && v.pegada);
+  return {
+    ...grilla,
+    total_pegadas: estaba ? Math.max(0, (grilla.total_pegadas ?? 0) - 1) : grilla.total_pegadas,
+    vehiculos: grilla.vehiculos.map((v) => (v.id === vehiculoId ? { ...v, pegada: false } : v)),
   };
 }

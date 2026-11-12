@@ -1,3 +1,4 @@
+using Flit.Analytics.Application.CompanyQueries;
 namespace Flit.Analytics.Application.Dtos;
 
 // HU #12360 (Feature #12257, épica #12235) — reporte detallado de la RED de una cabeza de grupo. Las
@@ -30,13 +31,14 @@ public sealed record NetworkDetailedProcedureRowDto(
     // HU #14319 — canal efectivo y OT del canal.
     string Channel = "tramites",
     Guid? ChannelTransitOfficeId = null,
-    string? ChannelTransitOfficeName = null)
+    string? ChannelTransitOfficeName = null,
+    IReadOnlyList<ActorValidacionDto>? Actores = null)
 {
     /// <summary>La misma fila en la forma de la ruta de siempre (sin el cliente dueño).</summary>
     public DetailedProcedureRowDto ToRow() => new(
         Id, ReferenceNumber, ProcedureTypeName, Category, Status, CreatedByDisplayName, SubmittedAt, CompletedAt,
         PersonDocument, PersonFullName, HasTransformation, TransformationDetail, IsLeasing, PaymentType, TransferType,
-        Channel, ChannelTransitOfficeId, ChannelTransitOfficeName);
+        Channel, ChannelTransitOfficeId, ChannelTransitOfficeName, Actores);
 }
 
 /// <summary>
@@ -49,7 +51,8 @@ public sealed record AllCompaniesDetailedProceduresPageDto(
     int TotalCount,
     int Page,
     int PageSize,
-    NetworkDetailedReportSummaryDto Summary);
+    NetworkDetailedReportSummaryDto Summary,
+    MaxActoresPorRolDto MaxActoresPorRol = default);
 
 /// <summary>Conteo por cliente de la red (AC1/AC2: los totales dicen de quién son).</summary>
 public sealed record TenantCountDto(Guid TenantId, string TenantName, int Count);
@@ -73,7 +76,8 @@ public sealed record NetworkDetailedProceduresPageDto(
     int Page,
     int PageSize,
     NetworkDetailedReportSummaryDto Summary,
-    NetworkScopeDto Scope);
+    NetworkScopeDto Scope,
+    MaxActoresPorRolDto MaxActoresPorRol = default);
 
 /// <summary>
 /// Filtro RESUELTO del reporte de red: el conjunto de clientes ya es la intersección del

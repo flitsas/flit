@@ -42,7 +42,7 @@ import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
 import { estadoAcentoVar, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { rutaIlustracion } from "@flit/ui/ilustraciones";
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { RangoFechas } from "@/components/atom/RangoFechas";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
@@ -680,12 +680,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           data-testid="dashboard-hero-column"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end" data-testid="dashboard-filter-row">
-            <DateRangePicker
+            <RangoFechas
               value={range}
               onChange={setRange}
-              disabled={status === "loading"}
-              label="Rango de fechas"
-              className={`min-w-0 ${FILTRO_CONTROL_CLS}`}
+              permiteSinRango
+              idPrefix="dashboard-rango"
             />
             {isSuper && (
               <CompanySelector

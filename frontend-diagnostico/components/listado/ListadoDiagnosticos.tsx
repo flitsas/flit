@@ -25,6 +25,7 @@ import {
   idCorto,
   listarDiagnosticos,
   nombreModo,
+  nombreTipoTramite,
   traducirErrorListado,
   urlListado,
   type ErrorListado,
@@ -174,7 +175,7 @@ export function ListadoDiagnosticos() {
             <tbody>
               {lista.diagnosticos.map((d) => {
                 const destino = destinoConFiltros(destinoDiagnostico(d), filtros);
-                const estado = etiquetaEstado(d.estado);
+                const estado = etiquetaEstado(d.estado, d.estado_etiqueta);
                 return (
                   <tr
                     key={d.id}
@@ -201,7 +202,7 @@ export function ListadoDiagnosticos() {
                     <td className={CELDA_TABLA_CLS}>{nombreModo(d.modo)}</td>
                     <td className={CELDA_TABLA_CLS}>
                       {d.tipo_tramite ? (
-                        d.tipo_tramite.nombre
+                        nombreTipoTramite(d.tipo_tramite)
                       ) : (
                         <span role="img" aria-label="Sin trámite">
                           —
