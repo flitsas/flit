@@ -73,13 +73,15 @@ BEGIN
                     OR plate ~* '^[A-Z]{2}\d{6}$' OR plate ~* '^[A-Z]{1}\d{5}$' OR plate ~* '^\d{3}[A-Z]{3}$');
         END IF;
 
-        IF rec.transaction_type IN (1, 2) THEN
-            UPDATE ict.external_integration_master eim
-            SET business_comments_validation = business_comments_validation || ' traffic_secretary_code no es valido o no esta activo;'
-            WHERE eim.id = rec.id_master AND eim.traffic_secretary_code <> ''
-              AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices ts
-                              WHERE ts.code = eim.traffic_secretary_code AND ts.is_active = true);
+        -- Organismo de tránsito (traffic_secretary_code): se valida en TODOS los tipos cuando llega no vacío.
+        -- En traspaso (3, 4) el código es opcional: si no llega, core-api deriva el OT del RUNT.
+        UPDATE ict.external_integration_master eim
+        SET business_comments_validation = business_comments_validation || ' traffic_secretary_code no es valido o no esta activo;'
+        WHERE eim.id = rec.id_master AND eim.traffic_secretary_code <> ''
+          AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices ts
+                          WHERE ts.code = eim.traffic_secretary_code AND ts.is_active = true);
 
+        IF rec.transaction_type IN (1, 2) THEN
             UPDATE ict.external_integration_master
             SET business_comments_validation = business_comments_validation || ' vin tiene caracteres no validos;'
             WHERE id = rec.id_master AND length(COALESCE(vin, '')) NOT BETWEEN 16 AND 18;
@@ -272,28 +274,48 @@ BEGIN
                 SET business_comments_validation = business_comments_validation || ' Ya existe un tramite activo para el VIN;'
                 WHERE id = rec.id_master;
             END IF;
-
-            -- Secretaría habilitada para la compañía (grant positivo v2, HU #12517).
-            -- Si el código existe y está activo en catálogo (bloque de tipos 1/2 más arriba) pero no hay
-            -- grant is_enabled para el tenant del lote, es novedad distinta a "no es valido o no esta activo".
-            UPDATE ict.external_integration_master eim
-            SET business_comments_validation = business_comments_validation
-                || ' traffic_secretary_code no esta habilitado para la compania;'
-            WHERE eim.id = rec.id_master
-              AND eim.traffic_secretary_code <> ''
-              AND EXISTS (
-                    SELECT 1 FROM catalogs.transit_offices ts
-                    WHERE ts.code = eim.traffic_secretary_code AND ts.is_active = true)
-              AND NOT EXISTS (
-                    SELECT 1
-                    FROM catalogs.transit_offices ts
-                    JOIN admin.tenant_transit_office_grants g
-                      ON g.transit_office_id = ts.id
-                     AND g.tenant_id = rec.tenant_id
-                     AND g.is_enabled = true
-                    WHERE ts.code = eim.traffic_secretary_code
-                      AND ts.is_active = true);
         END IF;
+
+        -- Secretaría habilitada para la compañía (grant positivo v2, HU #12517), en TODOS los tipos cuando
+        -- el código llega no vacío. Si el código existe y está activo en catálogo (bloque de arriba) pero no
+        -- hay grant is_enabled para el tenant del lote, es novedad distinta a "no es valido o no esta activo".
+        UPDATE ict.external_integration_master eim
+        SET business_comments_validation = business_comments_validation
+            || ' traffic_secretary_code no esta habilitado para la compania;'
+        WHERE eim.id = rec.id_master
+          AND eim.traffic_secretary_code <> ''
+          AND EXISTS (
+                SELECT 1 FROM catalogs.transit_offices ts
+                WHERE ts.code = eim.traffic_secretary_code AND ts.is_active = true)
+          AND NOT EXISTS (
+                SELECT 1
+                FROM catalogs.transit_offices ts
+                JOIN admin.tenant_transit_office_grants g
+                  ON g.transit_office_id = ts.id
+                 AND g.tenant_id = rec.tenant_id
+                 AND g.is_enabled = true
+                WHERE ts.code = eim.traffic_secretary_code
+                  AND ts.is_active = true);
+
+        -- Estado operativo del organismo (misma lógica que core-api OtOperabilityGate): oficina activa en
+        -- catálogo + perfil OT (admin.transit_office_profiles) + tenant del OT activo (identity.tenants).
+        -- Solo si el código existe y está activo en catálogo (si no, ya hay otra novedad).
+        UPDATE ict.external_integration_master eim
+        SET business_comments_validation = business_comments_validation
+            || ' traffic_secretary_code corresponde a un organismo de transito que no esta operativo;'
+        WHERE eim.id = rec.id_master
+          AND eim.traffic_secretary_code <> ''
+          AND EXISTS (
+                SELECT 1 FROM catalogs.transit_offices ts
+                WHERE ts.code = eim.traffic_secretary_code AND ts.is_active = true)
+          AND NOT EXISTS (
+                SELECT 1
+                FROM catalogs.transit_offices ts
+                JOIN admin.transit_office_profiles p ON p.transit_office_id = ts.id
+                JOIN identity.tenants t ON t.id = p.tenant_id AND t.is_active = true
+                WHERE ts.code = eim.traffic_secretary_code
+                  AND ts.is_active = true);
+
 
         -- Organismo por código (Bug #13109, punto 1): el id que resuelve traffic_secretary_code con el
         -- mismo criterio que la validación de arriba (activo en catálogo + grant is_enabled del tenant) queda
