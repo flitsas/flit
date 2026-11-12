@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Play } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { useToast } from "@/components/Toast";
@@ -234,7 +233,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
             </button>
           ) : (
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={v.productoHabilitado === false || encendidos === 0} onClick={() => setConfirmar("activar")}>
-              <Play className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="avance" className="h-3.5 w-3.5" />
               Activar
             </button>
           )}
@@ -259,7 +258,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
       </div>
 
       {confirmar && (
-        <Modal
+        <Modal icono="consulta"
           open
           onClose={() => setConfirmar(null)}
           busy={ocupado}

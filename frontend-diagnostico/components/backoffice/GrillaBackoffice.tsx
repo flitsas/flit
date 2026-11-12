@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SearchX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
@@ -61,7 +60,7 @@ export function MarcaManual() {
   );
 }
 
-/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (iconoComo("buscar")). */
 type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
 const ICONO_VACIO = iconoComo("portapapeles");
 
@@ -181,7 +180,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     const { error } = carga;
     contenido =
       error instanceof ApiError && error.status === 404 ? (
-        <Vacio titulo="No encontramos este lote en la compañía elegida" Icono={SearchX}>
+        <Vacio titulo="No encontramos este lote en la compañía elegida" Icono={iconoComo("buscar")}>
           <p className="max-w-md text-sm text-muted-foreground">Revisa la compañía o vuelve a la lista de sus lotes.</p>
           <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>
             Volver a los lotes

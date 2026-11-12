@@ -1,6 +1,5 @@
 "use client";
 
-import { Network } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
 import { rutaKit } from "@flit/ui/iconos-mapas";
@@ -21,7 +20,7 @@ export function hubNav(tramitesUrl: string): NavCatalog {
     items: [
       { key: "empresa", label: "Mi empresa", href: `${tramitesUrl}/admin/companies`, section: "administracion", icon: iconoComo("empresas"), ilustracion: rutaKit("modulo/empresas"), roles: ["AdminCompany"] },
       { key: "usuarios", label: "Usuarios y roles", href: `${tramitesUrl}/?m=usuarios`, section: "administracion", icon: iconoComo("usuarios"), ilustracion: rutaKit("modulo/colaboradores"), permission: "usuarios.manage" },
-      { key: "companias", label: "Compañías", href: `${tramitesUrl}/admin/companies`, section: "administracion", icon: Network, ilustracion: rutaKit("modulo/organismos"), superAdminOnly: true },
+      { key: "companias", label: "Compañías", href: `${tramitesUrl}/admin/companies`, section: "administracion", icon: iconoComo("integraciones"), ilustracion: rutaKit("modulo/organismos"), superAdminOnly: true },
       { key: "rbac", label: "Roles y permisos", href: `${tramitesUrl}/admin/rbac`, section: "administracion", icon: iconoComo("rol"), ilustracion: rutaKit("modulo/roles"), superAdminOnly: true },
       { key: "jobs", label: "Tareas programadas", href: `${tramitesUrl}/admin/jobs`, section: "administracion", icon: iconoComo("reloj"), ilustracion: rutaKit("modulo/procesos"), superAdminOnly: true },
     ],

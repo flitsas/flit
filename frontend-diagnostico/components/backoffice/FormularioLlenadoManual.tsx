@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Plus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
@@ -202,7 +201,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
 function Agregar({ texto, onClick, deshabilitado }: { texto: string; onClick: () => void; deshabilitado?: boolean }) {
   return (
     <button type="button" onClick={onClick} disabled={deshabilitado} className={BOTON_FILA_CLS}>
-      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="mas" className="h-3.5 w-3.5" />
       {texto}
     </button>
   );
@@ -526,7 +525,7 @@ export function FormularioLlenadoManual({ consultaId, empresa, nombreFuente, ide
   }
 
   return (
-    <Modal
+    <Modal icono="lapiz"
       open
       onClose={onClose}
       busy={enviando}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Save, ZoomIn, ZoomOut } from "lucide-react";
+import { ZoomOut } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -113,7 +113,7 @@ function Original({ d }: { d: Documento }) {
               </button>
               <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)} %</span>
               <button type="button" className={controlCls(false)} aria-label="Acercar" disabled={zoom >= 4} onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>
-                <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="buscar" className="h-3.5 w-3.5" />
               </button>
             </>
           )}
@@ -329,7 +329,7 @@ function Formulario({
       )}
       {editable && (
         <button type="button" className={controlCls(sucio)} disabled={ocupado || !sucio} onClick={() => setModal("guardar")}>
-          <Save className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           Guardar cambios
         </button>
       )}
@@ -464,7 +464,7 @@ function Formulario({
 
       {botones && <div className="border-t border-border pt-3">{botones}</div>}
 
-      <Modal
+      <Modal icono="documento"
         open={modal !== null}
         onClose={() => setModal(null)}
         busy={ocupado}

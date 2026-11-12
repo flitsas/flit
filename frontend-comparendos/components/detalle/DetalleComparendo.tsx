@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { FileWarning } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Timeline, type SeccionDetalle } from "@/components/detalle/Timeline";
@@ -377,10 +377,10 @@ function Inactivar({ d, onHecho }: { d: Detalle; onHecho: () => void }) {
   return (
     <>
       <button type="button" className={controlCls(false)} onClick={() => setPaso(1)}>
-        <FileWarning className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="documento" className="h-3.5 w-3.5" />
         Inactivar
       </button>
-      <Modal
+      <Modal icono="alerta"
         open={paso > 0}
         onClose={() => setPaso(0)}
         busy={enviando}
@@ -470,7 +470,7 @@ export function DetalleComparendo({
   };
 
   return (
-    <Modal open={id !== null} onClose={onCerrar} title={d ? `Comparendo ${d.numero}` : "Comparendo"} size="2xl">
+    <Modal icono="comparendos" open={id !== null} onClose={onCerrar} title={d ? `Comparendo ${d.numero}` : "Comparendo"} size="2xl">
       {carga.estado === "loading" && <p className="text-sm opacity-60">Cargando comparendo…</p>}
       {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
       {d && ctx && (

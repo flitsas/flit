@@ -395,7 +395,7 @@ function ContenidoBandeja() {
         }}
       />
       {confirmarPartes !== null && (
-        <Modal
+        <Modal icono="nube-bajar"
           open
           onClose={() => setConfirmarPartes(null)}
           title="Exportar en varios archivos"

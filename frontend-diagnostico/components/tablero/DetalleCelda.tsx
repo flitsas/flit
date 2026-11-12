@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, type ReactNode } from "react";
-import { Info } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
 import type { EstadoCelda } from "@/lib/tablero/api";
@@ -165,7 +165,7 @@ function Auditoria({ detalle }: { detalle: Detalle }) {
             <span className="text-sm font-medium tabular-nums text-flit-primary">{fechaOGuion(detalle.dato_obtenido_en)}</span>
             {detalle.reutilizada && (
               <span className={`inline-flex items-center gap-1 ${ROTULO_CLS}`}>
-                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
                 Fecha del dato original: reutilizado de una consulta del mismo día
               </span>
             )}

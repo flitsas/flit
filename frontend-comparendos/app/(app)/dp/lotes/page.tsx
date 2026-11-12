@@ -75,7 +75,7 @@ function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const items = l?.items ?? [];
 
   return (
-    <Modal open onClose={onCerrar} size="2xl" title="Envío masivo de derechos de petición" description={l ? `Creado ${formatoFechaHora(l.creadoEn)}` : undefined}>
+    <Modal icono="radicacion" open onClose={onCerrar} size="2xl" title="Envío masivo de derechos de petición" description={l ? `Creado ${formatoFechaHora(l.creadoEn)}` : undefined}>
       {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
       {l && (
         <div className="flex flex-col gap-3">

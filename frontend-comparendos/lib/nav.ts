@@ -1,7 +1,7 @@
 // Catálogo de navegación de Comparendos para @flit/shell (especificación GDC §7.0). Dice QUÉ existe y QUIÉN lo ve; el
 // dock lo filtra por permiso y lo dibuja. Las capacidades de la empresa (OCR, reportes) no van en el token: las trae
 // /api/v1/comparendos/sesion y se aplican aquí antes de entregarle el catálogo al dock.
-import { FileSearch, FileStack, MailWarning, MapPinned, ScanText } from "lucide-react";
+import { MapPinned, ScanText } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavCatalog, NavItem, NavSection } from "@flit/shell/nav";
 import type { Ilustracion } from "@flit/ui/ilustraciones";
@@ -92,14 +92,14 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
       ? [{ key: "dp-lotes", label: "Envíos masivos de DP", href: "/dp/lotes", section: "operacion", icon: iconoComo("radicacion"), permission: P.dpEnviarMasivo }]
       : []),
     { key: "pagos", label: "Carga de pagos", href: "/pagos", section: "operacion", icon: iconoComo("pago"), permission: P.pagosCargarMasivo },
-    { key: "mensajes", label: "Centro de mensajes", href: "/mensajes", section: "operacion", icon: MailWarning, permission: P.mensajesVer },
+    { key: "mensajes", label: "Centro de mensajes", href: "/mensajes", section: "operacion", icon: iconoComo("correo"), permission: P.mensajesVer },
     ...(caps.reportes
       ? [
           { key: "dashboard", label: "Dashboard", href: "/reportes", section: "reportes", icon: iconoComo("medidor"), permission: P.reportesVer },
           { key: "productividad", label: "Productividad", href: "/reportes/productividad", section: "reportes", icon: iconoComo("usuarios"), permission: P.productividadVer },
         ]
       : []),
-    { key: "monitoreo", label: "NITs y placas", href: "/configuracion/monitoreo", section: "configuracion", icon: FileSearch, permission: P.monitoreoVer },
+    { key: "monitoreo", label: "NITs y placas", href: "/configuracion/monitoreo", section: "configuracion", icon: iconoComo("consulta"), permission: P.monitoreoVer },
     { key: "representantes", label: "Representantes legales", href: "/configuracion/representantes", section: "configuracion", icon: iconoComo("escudo"), permission: P.representantesVer },
     { key: "ots", label: "Organismos de tránsito", href: "/configuracion/organismos", section: "configuracion", icon: iconoComo("banco"), permission: P.otsGestionar },
     { key: "correo", label: "Empresa y correo", href: "/configuracion/empresa", section: "configuracion", icon: iconoComo("ajustes"), permission: P.configuracionVer },
@@ -114,7 +114,7 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
       children: [
         { key: "adm-empresas", label: "Parametrizador por empresa", href: "/admin/empresas", section: "administracion", icon: iconoComo("rol"), superAdminOnly: true },
         { key: "adm-tipologias", label: "Tipologías de DP", href: "/admin/tipologias", section: "administracion", icon: iconoComo("ayuda"), superAdminOnly: true },
-        { key: "adm-plantillas", label: "Editor de plantillas", href: "/admin/plantillas", section: "administracion", icon: FileStack, superAdminOnly: true },
+        { key: "adm-plantillas", label: "Editor de plantillas", href: "/admin/plantillas", section: "administracion", icon: iconoComo("archivo"), superAdminOnly: true },
         { key: "adm-ingesta", label: "Trabajos e ingesta", href: "/admin/ingesta", section: "administracion", icon: iconoComo("integraciones"), superAdminOnly: true },
         { key: "adm-log", label: "Log de migración", href: "/admin/log-migracion", section: "administracion", icon: iconoComo("lista"), superAdminOnly: true },
         { key: "adm-organismos", label: "Catálogo de organismos", href: "/admin/organismos", section: "administracion", icon: MapPinned, superAdminOnly: true },

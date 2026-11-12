@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react";
 import type { ComponentType } from "react";
-import { UserX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { Contadores } from "@/lib/tipos";
@@ -10,7 +9,7 @@ import { TEXTO_JURIDICO, TEXTO_RAPIDO, type FiltroJuridico, type FiltroRapido } 
 
 const RAPIDOS: { id: FiltroRapido; color: string; icono: ComponentType<{ className?: string; "aria-hidden"?: boolean }>; contador: "proximosAVencer" | "sinContraventor" | "rechazadosOt" }[] = [
   { id: "ProximosAVencer", color: "var(--badge-danger-fg)", icono: iconoComo("reloj"), contador: "proximosAVencer" },
-  { id: "SinContraventor", color: "var(--badge-purple-fg)", icono: UserX, contador: "sinContraventor" },
+  { id: "SinContraventor", color: "var(--badge-purple-fg)", icono: iconoComo("persona"), contador: "sinContraventor" },
   { id: "RechazadosOt", color: "var(--badge-warning-fg)", icono: iconoComo("alerta"), contador: "rechazadosOt" },
 ];
 

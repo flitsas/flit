@@ -62,7 +62,7 @@ function ModalConductor({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () 
   };
 
   return (
-    <Modal
+    <Modal icono="persona"
       open
       onClose={onCerrar}
       busy={ocupado}

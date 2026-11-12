@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileSpreadsheet, Zap } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { errorIdentificador } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
@@ -64,11 +64,11 @@ export function CapturaExpress() {
           className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS} font-semibold uppercase tracking-widest sm:flex-1`}
         />
         <button type="submit" className={BOTON_PRIMARIO_CLS}>
-          <Zap className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="destello" className="h-4 w-4" />
           Diagnosticar
         </button>
         <Link href="/diagnosticos/nuevo?modo=masivo" className={BOTON_SECUNDARIO_CLS}>
-          <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="reporte-detallado" className="h-4 w-4" />
           Carga masiva
         </Link>
       </div>

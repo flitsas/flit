@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { ArrowUpRight, Globe, Palette } from "lucide-react";
+import { Globe } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { BrandLogo } from "@flit/brand/BrandLogo";
@@ -16,7 +16,7 @@ import { buttonClass } from "@flit/ui/Button";
 // panel de tinta (--di-ingreso-*, igual en los dos temas), ilustraciones de producto, tarjetas `.card` y botones píldora.
 // Tiene modo oscuro. Sin precios por decisión de negocio. El texto vive en lib/products.ts y lib/site.ts.
 
-const PILLAR_ICONS = { "key-round": iconoComo("rol"), plug: iconoComo("integraciones"), "shield-check": iconoComo("escudo"), palette: Palette } as const;
+const PILLAR_ICONS = { "key-round": iconoComo("rol"), plug: iconoComo("integraciones"), "shield-check": iconoComo("escudo"), palette: iconoComo("destello") } as const;
 
 const card =
   "rounded-[20px] border border-[color:var(--di-border)] bg-[color:var(--di-surface-elevated)] shadow-[var(--shadow-card)]";
@@ -339,7 +339,7 @@ function Contact() {
           </a>
           <a href={CONTACT.web} target="_blank" rel="noopener" className={BOTON_TINTA}>
             <Globe className="h-4 w-4" aria-hidden="true" /> {CONTACT.web.replace("https://", "")}
-            <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="externo" className="h-4 w-4" />
           </a>
         </div>
       </div>

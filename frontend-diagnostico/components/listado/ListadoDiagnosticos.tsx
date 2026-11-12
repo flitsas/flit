@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { SearchX } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
@@ -43,7 +42,7 @@ const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
 const TEXTO_SECUNDARIO = "max-w-md text-sm text-muted-foreground";
 
-/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (iconoComo("buscar")). */
 type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
 
 function Vacio({ titulo, Icono, children }: { titulo: string; Icono: IconoVacio; children?: ReactNode }) {
@@ -147,7 +146,7 @@ export function ListadoDiagnosticos() {
     );
   } else if (carga.lista.diagnosticos.length === 0 && hayFiltros(filtros)) {
     contenido = (
-      <Vacio titulo="No hay diagnósticos con estos filtros" Icono={SearchX}>
+      <Vacio titulo="No hay diagnósticos con estos filtros" Icono={iconoComo("buscar")}>
         <p className={TEXTO_SECUNDARIO}>Cambia las fechas, el tipo, el estado o el nombre, o quita los filtros.</p>
         <button type="button" onClick={limpiar} className={BOTON_SECUNDARIO_CLS}>
           Limpiar filtros

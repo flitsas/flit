@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -131,7 +130,7 @@ function Formulario({ rl, nits, onCerrar, onGuardado }: { rl: Representante | nu
   };
 
   return (
-    <Modal
+    <Modal icono="firma"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -235,7 +234,7 @@ export default function Representantes() {
           acciones={
             puedeGestionar && (
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEditar("nuevo")}>
-                <Plus className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="mas" className="h-3.5 w-3.5" />
                 Nuevo representante
               </button>
             )
@@ -306,7 +305,7 @@ export default function Representantes() {
           />
         )}
         {rlDocumentos && (
-          <Modal open onClose={() => setDocumentos(null)} title={`Documentos de ${rlDocumentos.nombres}`} size="md">
+          <Modal icono="documento" open onClose={() => setDocumentos(null)} title={`Documentos de ${rlDocumentos.nombres}`} size="md">
             <div className="flex flex-col gap-2">
               {DOCUMENTOS.map((d) =>
                 puedeGestionar ? (
