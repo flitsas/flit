@@ -9,7 +9,6 @@
 // (`operation_mode`): aquello describe al OT CLIENTE de FLIT, esto describe a la secretaría
 // DESTINO a la que FLIT radica y que normalmente ni siquiera es cliente.
 import { useState } from "react";
-import { Send } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { ApiValidationError } from "@/lib/api/types";
@@ -92,7 +91,7 @@ export function TransitOfficeQuipuxDialog({
       busy={busy}
       size="md"
       zClassName="z-[90]"
-      icon={Send}
+      icono="radicacion"
       title="Radicación por Quipux"
       description={office.name}
     >

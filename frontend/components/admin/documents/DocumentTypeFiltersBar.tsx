@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
 import { buttonClass } from "@flit/ui/Button";
 import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
@@ -94,14 +94,14 @@ export function DocumentTypeFiltersBar({
           type="submit"
           className={buttonClass({ variant: "primary", size: "sm" })}
         >
-          <Search className="h-3.5 w-3.5" /> Buscar
+          <Icono nombre="buscar" className="h-3.5 w-3.5" /> Buscar
         </button>
         <button
           type="button"
           onClick={onClear}
           className={buttonClass({ variant: "secondary", size: "sm" })}
         >
-          <X className="h-3.5 w-3.5" /> Limpiar
+          <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
         </button>
       </div>
     </form>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
@@ -148,7 +148,7 @@ export function SignatureVaultFormPanel({
       className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
       style={{ background: "var(--color-flit-brand)" }}
     >
-      {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+      {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
       Registrar firma
     </button>
   );
@@ -158,6 +158,7 @@ export function SignatureVaultFormPanel({
 
   return (
     <Modal
+      icono="firma"
       open={open}
       title="Registrar firma del apoderado"
       onClose={onClose}

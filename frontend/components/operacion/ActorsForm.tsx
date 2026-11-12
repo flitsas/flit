@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AlertTriangle, Info, Loader2, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
@@ -2650,7 +2650,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap"
               style={cardTone('info').title}
             >
-              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="exclamacion" className="h-3.5 w-3.5 shrink-0" />
               Empresa encontrada en RUES
               {originBadge(r.mode, 'RUES')}
             </p>
@@ -3474,7 +3474,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       aria-busy="true"
                       className="mt-1 flex items-center gap-1.5 text-xs opacity-70"
                     >
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                      <Icono nombre="girador" className="h-3.5 w-3.5 shrink-0 animate-spin" />
                       Cargando el documento del propietario…
                     </p>
                   )}
@@ -3485,7 +3485,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       className="mt-1 flex items-center gap-1.5 text-xs"
                       style={{ color: 'var(--destructive)' }}
                     >
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                       No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
                       <button
                         type="button"
@@ -3730,7 +3730,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
               {showCiudades && (
                 <ul
-                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-card shadow-lg"
+                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-card shadow-[var(--kit-sombra)]"
                   style={{ borderColor: 'var(--border)' }}
                   aria-label="Sugerencias de ciudad"
                 >
@@ -4144,7 +4144,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         aria-busy="true"
                         className="mt-1 flex items-center gap-1.5 text-xs opacity-70"
                       >
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                        <Icono nombre="girador" className="h-3.5 w-3.5 shrink-0 animate-spin" />
                         Cargando el documento del propietario…
                       </p>
                     )}
@@ -4155,7 +4155,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className="mt-1 flex items-center gap-1.5 text-xs"
                         style={{ color: 'var(--destructive)' }}
                       >
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                         No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
                         <button
                           type="button"
@@ -4334,7 +4334,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       )}
                       {showCiudadSuggestions && (
                         <ul
-                          className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-card shadow-lg"
+                          className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-card shadow-[var(--kit-sombra)]"
                           style={{ borderColor: 'var(--border)' }}
                           aria-label="Sugerencias de ciudad"
                         >
@@ -4470,7 +4470,7 @@ function EmailReenvioConfirmModal({
       open
       onClose={onCancel}
       title="Reenviar validación de identidad"
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg="var(--color-flit-alert)"
       size="sm"
     >
@@ -4527,7 +4527,7 @@ function RlSwitchConfirmModal({
       open
       onClose={onCancel}
       title="Cambiar representante legal"
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg="var(--color-flit-alert)"
       size="sm"
     >

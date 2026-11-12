@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { RefreshCw, Star } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { FamiliaTabs } from './FamiliaTabs';
 import { TRAMITES_CONTROL_CLS } from './tramites-control-styles';
@@ -63,15 +63,11 @@ export function TramitesListToolbar({
             // estrella conserva su amarillo, que ahí no es "activo" genérico sino prioritario.
             className={`${TRAMITES_CONTROL_CLS} w-9 justify-center px-0`}
           >
-            <Star
-              className="h-4 w-4"
-              style={
+            <Icono nombre="medalla" className="h-4 w-4" style={
                 soloPrioritarios
                   ? { color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }
                   : { color: 'var(--muted-foreground)', fill: 'transparent' }
-              }
-              aria-hidden="true"
-            />
+              } />
           </button>
           <button
             type="button"
@@ -81,7 +77,7 @@ export function TramitesListToolbar({
             title="Actualizar"
             className={TRAMITES_CONTROL_CLS}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <Icono nombre="reintento" className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
           </button>
         </div>

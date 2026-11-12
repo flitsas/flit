@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, RefreshCw, ZoomIn } from 'lucide-react';
+import { ImageOff } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
@@ -142,7 +143,7 @@ export function ManualImageGallery({
                     {/* eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida */}
                     <img src={estado.url} alt={alt} className="h-full w-full object-contain" />
                     <span className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground transition group-hover:text-flit-brand">
-                      <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="buscar" className="h-3.5 w-3.5" />
                     </span>
                   </button>
                 ) : estado.status === 'loading' ? (
@@ -151,7 +152,7 @@ export function ManualImageGallery({
                   </p>
                 ) : estado.status === 'error' ? (
                   <div role="alert" className="flex flex-col items-center gap-2 px-2 text-center">
-                    <AlertTriangle className="h-5 w-5 text-[var(--badge-warning-fg)]" aria-hidden />
+                    <Icono nombre="alerta" className="h-5 w-5 text-[var(--badge-warning-fg)]" />
                     <p className="text-xs font-medium">No se pudo cargar la imagen.</p>
                     <button
                       type="button"
@@ -159,7 +160,7 @@ export function ManualImageGallery({
                       aria-label={`Reintentar ${title.toLowerCase()}`}
                       className={`inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground ${MANUAL_FOCO}`}
                     >
-                      <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Reintentar
+                      <Icono nombre="reintento" className="h-3.5 w-3.5" /> Reintentar
                     </button>
                   </div>
                 ) : (
@@ -171,7 +172,7 @@ export function ManualImageGallery({
               </div>
               {noVerificada && (
                 <p className={`flex items-start gap-1.5 border-t px-3 py-2 text-xs ${MANUAL_AVISO.warning}`}>
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     <strong className="font-semibold">No verificada.</strong> {etiquetaMotivoFoto(validacionFotos?.[kind]?.motivo)}
                   </span>
@@ -239,11 +240,11 @@ function ManualImageViewer({
     MANUAL_FOCO;
 
   return (
-    <Modal open onClose={onClose} title={title} size="xl" zClassName="z-[110]">
+    <Modal open onClose={onClose} title={title} icono="biometria" size="xl" zClassName="z-[110]">
       <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-3 outline-none">
         <div className="flex items-center justify-center gap-3">
           <button type="button" onClick={() => ir(-1)} disabled={navegables.length < 2} aria-label="Imagen anterior" className={botonNav}>
-            <ChevronLeft className="h-5 w-5" aria-hidden />
+            <Icono nombre="izquierda" className="h-5 w-5" />
           </button>
           <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-secondary">
             {estado.status === 'ready' && (
@@ -252,7 +253,7 @@ function ManualImageViewer({
             )}
           </div>
           <button type="button" onClick={() => ir(1)} disabled={navegables.length < 2} aria-label="Imagen siguiente" className={botonNav}>
-            <ChevronRight className="h-5 w-5" aria-hidden />
+            <Icono nombre="derecha" className="h-5 w-5" />
           </button>
         </div>
         <p className="text-center text-xs text-muted-foreground" role="status" aria-live="polite">

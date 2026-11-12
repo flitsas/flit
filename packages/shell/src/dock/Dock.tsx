@@ -2,7 +2,7 @@
 
 import { useId, type RefObject } from "react";
 import Link from "next/link";
-import { ChevronUp } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DockEntry, DockGroup } from "../nav";
 import { DockGlyph } from "./DockGlyph";
 import { useDisclosureNav } from "./useDisclosureNav";
@@ -171,7 +171,7 @@ function DockGroupPill({
       >
         {art}
         {label}
-        {showLabels && <ChevronUp className="dock-flecha" aria-hidden="true" />}
+        {showLabels && <Icono nombre="arriba" className="dock-flecha" />}
       </button>
 
       {open && (
@@ -231,8 +231,8 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
 }
 
 /**
- * Entrada del submenú (también la usa la hoja móvil): viñeta, nombre y, si el catálogo la trae, la descripción corta.
- * La ilustración va solo en el título de la sección (HU #14479). El nombre accesible es solo el nombre; la descripción se anuncia como descripción.
+ * Entrada del submenú (también la usa la hoja móvil): ícono del kit, nombre y, si el catálogo la trae, la descripción
+ * corta (UI Kit 2026, `.dock__menu` de la propuesta-2). El nombre accesible es solo el nombre; la descripción se anuncia como descripción.
  */
 export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
   const uid = useId();
@@ -246,7 +246,8 @@ export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigat
       aria-describedby={descId}
       aria-current={item.active ? "page" : undefined}
     >
-      <span aria-hidden="true" className="dock-entrada__vineta" />
+      {/* Como la propuesta (`.dock__entrada`): el ícono del kit de la entrada en 32 px, en tinta; azul si está activa. */}
+      <DockGlyph icon={item.icon} ilustracion={item.ilustracion} className="dock-entrada__glifo" />
       <span className="dock-entrada__texto">
         <strong>{item.label}</strong>
         {item.descripcion && <small id={descId}>{item.descripcion}</small>}

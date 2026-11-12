@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Columns3 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { controlCls } from "@/components/ui/estilos";
 
 export interface OpcionColumna {
@@ -67,7 +67,7 @@ export function SelectorColumnas({
         onClick={() => setAbierto((a) => !a)}
         className={controlCls(false)}
       >
-        <Columns3 className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="rejilla" className="h-3.5 w-3.5" />
         Columnas
       </button>
       {abierto && (
@@ -78,15 +78,15 @@ export function SelectorColumnas({
           aria-label="Elegir columnas visibles"
           className="absolute left-0 top-full z-30 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-foreground shadow-[var(--shadow-modal)]"
         >
-          {/* Franja tinta del Modal de @flit/ui (homologación HU #14512), repintada en su sitio. */}
-          <div className="relative flex shrink-0 items-baseline justify-between gap-2 overflow-clip bg-[color:var(--di-accent)] px-5 py-3.5 text-[color:var(--di-on-accent)]">
+          {/* Cabecera blanca del Modal del UI Kit 2026, repintada en su sitio: título en el color de título y línea inferior. */}
+          <div className="relative flex shrink-0 items-baseline justify-between gap-2 overflow-clip border-b border-[color:var(--di-border)] bg-card px-5 py-3.5 text-[color:var(--di-heading)]">
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
+              className="hidden"
             />
             <span className="relative z-[1] text-sm font-semibold">Columnas</span>
-            {/* Pastilla tinta: el contador cae sobre el círculo turquesa de la franja y sin ella no se lee. */}
-            <span className="relative z-[1] rounded-full bg-[color:var(--di-accent)] px-2 py-0.5 text-[11px] tabular-nums">
+            {/* Contador en la pastilla del kit (disco --kit-hover, texto azul AA). */}
+            <span className="relative z-[1] rounded-full bg-[color:var(--kit-hover)] px-2 py-0.5 text-[11px] tabular-nums text-[color:var(--kit-azul-texto)]">
               {visibles.length} de {columnas.length}
             </span>
           </div>

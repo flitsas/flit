@@ -1,8 +1,8 @@
 "use client";
 
-import { FileText } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { CompanyTransitOfficeOption } from "@/lib/api/admin-mandate-signers";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * HU #13174 — formato de contrato de mandato que cada organismo de tránsito aplica a la compañía.
@@ -19,7 +19,7 @@ export function FormatosContratoModal({
     <Modal
       open
       onClose={onClose}
-      icon={FileText}
+      icono="documento"
       iconBg="var(--color-flit-brand)"
       title="Formatos de contrato"
       titleClassName="text-base font-bold text-flit-primary"
@@ -39,9 +39,9 @@ export function FormatosContratoModal({
               >
                 <span className="font-medium text-flit-primary">{o.name}</span>
                 <span
-                  className="w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                  style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "var(--flit-brand-ink)" }}
+                  {...etiquetaKit("info", { className: "w-fit" })}
                 >
+                  <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                   {o.formatName}
                 </span>
               </li>

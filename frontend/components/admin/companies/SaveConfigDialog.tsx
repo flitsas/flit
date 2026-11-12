@@ -1,13 +1,13 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { ConfigChangeGroup, ConfigChangeItem } from "./settingsForm";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
-const TONE_COLORS: Record<ConfigChangeItem["tone"], string> = {
-  on: "var(--flit-success-ink)",
-  off: "var(--destructive)",
-  neutral: "var(--color-flit-brand)",
+const TONE_KIT: Record<ConfigChangeItem["tone"], "success" | "danger" | "info"> = {
+  on: "success",
+  off: "danger",
+  neutral: "info",
 };
 
 // Ventana emergente de confirmación de "Guardar todo" (HU #10194, AC2). Detecta los cambios
@@ -52,7 +52,7 @@ export function SaveConfigDialog({
       busy={saving}
       size="sm"
       zClassName="z-[95]"
-      icon={phase === "success" ? CheckCircle2 : undefined}
+      icono={phase === "success" ? "check" : undefined}
       iconBg="var(--color-flit-tech)"
       title={phase === "success" ? "Cambios guardados" : "Confirmar guardado"}
       titleClassName="text-lg font-semibold text-flit-primary"
@@ -147,9 +147,9 @@ function ChangeList({ changes }: { changes: ConfigChangeGroup[] }) {
               <li key={item.label} className="flex items-center justify-between gap-3">
                 <span className="opacity-80">{item.label}</span>
                 <span
-                  className="shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold"
-                  style={{ color: TONE_COLORS[item.tone], background: `${TONE_COLORS[item.tone]}1a` }}
+                  {...etiquetaKit(TONE_KIT[item.tone], { className: "shrink-0" })}
                 >
+                  <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                   {item.detail}
                 </span>
               </li>

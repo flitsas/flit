@@ -1,13 +1,6 @@
 import type { ComponentType, CSSProperties } from "react";
-import {
-  FileStack,
-  ShieldCheck,
-  BarChart3,
-  Users,
-  Lock,
-  Radar,
-  FolderCog,
-} from "lucide-react";
+import { FolderCog } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { ilustracionDe, rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
@@ -86,13 +79,13 @@ export type DockIconComponent = ComponentType<{
 }>;
 
 export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
-  tramites: FileStack,
-  identidad: ShieldCheck,
-  reportes: BarChart3,
-  usuarios: Users,
+  tramites: iconoComo("archivo"),
+  identidad: iconoComo("escudo"),
+  reportes: iconoComo("reportes"),
+  usuarios: iconoComo("usuarios"),
   administracion: FolderCog,
-  administradores: Lock,
-  integraciones: Radar,
+  administradores: iconoComo("candado"),
+  integraciones: iconoComo("consulta"),
 };
 
 /** Mapeo entrada del dock → agrupador (por key estable). */

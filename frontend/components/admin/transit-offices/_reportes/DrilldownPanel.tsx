@@ -11,6 +11,7 @@ import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO
 import Link from "next/link";
 import type { OtDrilldown } from "@/lib/api/ot-metrics";
 import { Empty } from "./shared";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Estado del drawer: qué bloque se abrió y con qué se pobló. */
 export interface DrilldownState {
@@ -54,7 +55,7 @@ export function DrilldownPanel({
       }}
     >
       <div className={`flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden p-4 sm:p-6 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6">
+        <FranjaDialogo icono="reportes" className="-mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6">
           <h3 className={`text-sm font-semibold ${DIALOGO_TITULO_CLS}`}>{label}</h3>
           <button
             type="button"
@@ -88,7 +89,8 @@ export function DrilldownPanel({
                       <p className="font-semibold">
                         {item.referenceNumber}
                         {item.prioritario && (
-                          <span className="ml-2 rounded-full bg-[var(--di-warning-soft)] text-[color:var(--di-warning)] px-2 py-0.5 text-[10px] font-semibold">
+                          <span {...etiquetaKit("warning", { className: "ml-2 align-middle" })}>
+                            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                             Prioritario
                           </span>
                         )}

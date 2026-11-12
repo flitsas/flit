@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRight, Paperclip } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type {
   FieldValue,
   ProcedureAttachment,
@@ -20,6 +20,7 @@ import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCapti
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 // Misma regla de «hay transformación» que aplica el detalle del OT al revisarla (HU #11931).
 import { valorCambiado as isChanged } from '@/lib/tramites/transformaciones-vehiculo';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** DocTipo de soporte por subtrámite (whitelist AttachmentRules + RF33 factura_carroceria). */
 const DOC_TIPO_BY_KEY: Record<SubtramiteKey, string> = {
@@ -482,21 +483,20 @@ function SubtramiteDocCard({
   return (
     <div
       className={cn(
-        'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md',
+        'relative flex flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)]',
         done ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
       )}
       style={{ borderColor: 'var(--border)' }}
     >
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {done ? (
-          <span
-            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold"
-            style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
-          >
+          <span {...etiquetaKit('success')}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Validado
           </span>
         ) : (
-          <span className="whitespace-nowrap rounded-full bg-[var(--badge-danger-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--badge-danger-fg)]">
+          <span {...etiquetaKit('danger')}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             * Obligatorio
           </span>
         )}
@@ -579,7 +579,7 @@ function SubtramiteDocCard({
         {changed && (
           <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-flit-brand)' }}>
             <span className="opacity-70">{up(item.runtValue)}</span>
-            <ArrowRight aria-hidden="true" className="h-3 w-3" />
+            <Icono nombre="derecha" className="h-3 w-3" />
             <span className="font-semibold">{up(item.effectiveValue)}</span>
           </p>
         )}
@@ -630,7 +630,7 @@ function SubtramiteDocCard({
                 borderWidth: 1,
               }}
             >
-              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="archivo" className="h-3.5 w-3.5" />
               {uploading
                 ? 'Subiendo…'
                 : attachment

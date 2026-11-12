@@ -6,7 +6,7 @@
 // desactivar. Mismo modelo de tabla que Trámites: DataTable + RowActions + paginación numerada + filtros por
 // columna. El secreto vive solo en memoria mientras se muestra su modal.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, KeyRound, LockKeyhole, LockOpen, PlugZap, Power } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -145,11 +145,11 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     const estado = externalIntegrationStatus(integration);
     const name = integration.clientId;
     if (estado === "inactive") {
-      return [{ icon: Ban, label: `${name} está desactivada`, onClick: () => {}, disabled: true }];
+      return [{ icon: iconoComo("distinto"), label: `${name} está desactivada`, onClick: () => {}, disabled: true }];
     }
     const actions: RowAction[] = [
       {
-        icon: KeyRound,
+        icon: iconoComo("rol"),
         label: `Generar clave nueva para ${name}`,
         tone: "primary",
         disabled: estado === "blocked",
@@ -160,20 +160,20 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     actions.push(
       estado === "blocked"
         ? {
-            icon: LockOpen,
+            icon: iconoComo("candado-abierto"),
             label: `Desbloquear ${name}`,
             tone: "primary",
             onClick: () => setPending({ action: "unblock", integration }),
           }
         : {
-            icon: LockKeyhole,
+            icon: iconoComo("candado"),
             label: `Bloquear ${name}`,
             tone: "danger",
             onClick: () => setPending({ action: "block", integration }),
           },
     );
     actions.push({
-      icon: Power,
+      icon: iconoComo("encendido"),
       label: `Desactivar ${name}`,
       tone: "danger",
       onClick: () => setPending({ action: "deactivate", integration }),
@@ -271,7 +271,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
         </div>
         <CreateButton
           label="Crear conexión"
-          icon={PlugZap}
+          icon={iconoComo("integraciones")}
           onClick={() => setCreating(true)}
           disabled={hasActive}
         />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { FormFieldItem, ValidationErrorCode } from '@/lib/api/types/procedure-parametrization';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { digitsOnly } from '@/lib/format/currency';
@@ -317,7 +317,7 @@ export function DynamicFieldRenderer({ field, value, onChange, showErrors, serve
               style={{ background: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' }}
               title={lockReason ?? 'Campo bloqueado'}
             >
-              <Lock className="h-3 w-3" aria-hidden="true" /> Bloqueado
+              <Icono nombre="candado" className="h-3 w-3" /> Bloqueado
             </span>
           )}
         </label>

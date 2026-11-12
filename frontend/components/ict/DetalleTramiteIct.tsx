@@ -3,9 +3,12 @@
 // Detalle de un trámite de la integración (HU #11819). Cuatro capas, de la más útil a la más
 // técnica: el recorrido responde «dónde se atascó», las consultas responden «por qué», los datos
 // responden «con qué llegó» y el log queda al fondo para cuando nada de lo anterior baste.
-import { useCallback, useEffect, useState } from "react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { Ban, Check, CircleDashed, Eye, EyeOff, Hourglass, X, type LucideIcon } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchConsultasFuenteIct,
@@ -56,12 +59,12 @@ const PESTANAS: { id: Pestana; label: string }[] = [
  * Iconos de `lucide` y nunca glifos sueltos (✓ ✕ ○): el navegador los pinta como emoji y
  * desentonan con el resto de la aplicación.
  */
-const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: LucideIcon }> = {
-  ok: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: Check },
-  error: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: X },
-  espera: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: Hourglass },
-  anulado: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
-  pendiente: { fg: "var(--muted-foreground)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
+const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: ComponentType<IconoComoProps> }> = {
+  ok: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: iconoComo("check") },
+  error: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: iconoComo("cerrar") },
+  espera: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: iconoComo("espera") },
+  anulado: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: iconoComo("distinto") },
+  pendiente: { fg: "var(--muted-foreground)", bg: "var(--badge-neutral-bg)", Icon: iconoComo("espera") },
 };
 
 export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; esAdmin: boolean }) {
@@ -72,7 +75,7 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
       <div
         role="tablist"
         aria-label={`Detalle del trámite ${tramite.numero}`}
-        className="flex gap-1 overflow-x-auto border-b border-border px-3"
+        className={`${PESTANAS_LISTA_CLS} px-3`}
       >
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
@@ -84,14 +87,12 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
               aria-selected={activa}
               onClick={() => setPestana(p.id)}
               // Mismo patrón que TramitesListToolbar: color más subrayado absoluto, no pastilla.
-              className={`relative whitespace-nowrap px-3 py-2.5 text-xs font-semibold transition ${
-                activa ? "text-flit-brand" : "opacity-60 hover:opacity-100"
-              }`}
+              className={pestanaClass(activa)}
             >
               {p.label}
               {activa && (
                 <span
-                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-t bg-flit-brand"
+                  className="hidden"
                   aria-hidden="true"
                 />
               )}
@@ -238,12 +239,7 @@ function Hito({ hito, ultimo }: { hito: HitoTrazabilidad; ultimo: boolean }) {
           </span>
           {hito.segundosDesdeAnterior !== null && (
             <span
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold tabular-nums"
-              style={
-                hito.esTramoMasLento
-                  ? { background: "var(--badge-danger-bg)", color: "var(--destructive)" }
-                  : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
-              }
+              {...etiquetaKit(hito.esTramoMasLento ? "danger" : "neutral", { className: "font-mono tabular-nums" })}
               // El tramo lento no se distingue solo por color: se nombra.
               title={hito.esTramoMasLento ? "Tramo más lento del recorrido" : undefined}
             >
@@ -369,7 +365,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
                           className="justify-start"
                           actions={[
                             {
-                              icon: abierta === c.id ? EyeOff : Eye,
+                              icon: abierta === c.id ? iconoComo("ojo-tachado") : iconoComo("ojo"),
                               label: `${abierta === c.id ? "Ocultar" : "Ver"} respuesta de ${c.tipoConsultaEtiqueta}`,
                               tone: "primary",
                               onClick: () => setAbierta(abierta === c.id ? null : c.id),
@@ -516,9 +512,9 @@ function PanelDatos({ numero }: { numero: number }) {
               className="inline-flex items-center gap-1.5 rounded-lg bg-flit-brand/10 px-3 py-1.5 text-[11px] font-semibold text-flit-brand hover:bg-flit-brand/20 disabled:opacity-50"
             >
               {revelado ? (
-                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo-tachado" className="h-3.5 w-3.5" />
               ) : (
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
               )}
               {revelando
                 ? "Revelando…"
@@ -604,14 +600,7 @@ function PanelLog({ numero }: { numero: number }) {
                       )}
                     </td>
                     <td className={TD_CLS} style={TD_STYLE}>
-                      <span
-                        className="rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold"
-                        style={
-                          e.codigo >= 400
-                            ? { background: "var(--badge-danger-bg)", color: "var(--destructive)" }
-                            : { background: "var(--badge-success-bg)", color: "var(--flit-success-ink)" }
-                        }
-                      >
+                      <span {...etiquetaKit(e.codigo >= 400 ? "danger" : "success", { className: "font-mono" })}>
                         {e.codigo}
                       </span>
                     </td>

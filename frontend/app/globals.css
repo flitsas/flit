@@ -46,32 +46,16 @@
     font-family: var(--font-mono);
   }
 
+  /* UI Kit 2026: superficies planas, sin vidrio ni sombra (la sombra es solo del menú principal). */
   .glass {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06);
+    background: var(--di-surface-elevated);
+    border: 1px solid var(--di-border);
+    box-shadow: none;
   }
 
   .app-bg {
     background-color: var(--color-flit-bg);
-    background-image:
-      radial-gradient(at 20% 0%, color-mix(in srgb, var(--color-flit-brand) 8%, transparent), transparent 50%),
-      radial-gradient(at 100% 100%, color-mix(in srgb, var(--color-flit-tech) 7%, transparent), transparent 50%);
-  }
-
-  .dark .glass {
-    background: rgba(22, 39, 68, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
-  }
-
-  .dark .app-bg {
-    background-color: #0a1428;
-    background-image:
-      radial-gradient(at 20% 0%, color-mix(in srgb, var(--color-flit-brand) 18%, transparent), transparent 50%),
-      radial-gradient(at 100% 100%, color-mix(in srgb, var(--color-flit-tech) 12%, transparent), transparent 50%);
+    background-image: none;
   }
 
   @keyframes flit-orbit {
@@ -146,8 +130,8 @@
 
 /* HU #12724 — DateRangePicker (react-day-picker) con tokens FLIT */
 .flit-date-range-picker .rdp-root {
-  --rdp-accent-color: var(--color-flit-brand);
-  --rdp-accent-background-color: color-mix(in srgb, var(--color-flit-brand) 14%, transparent);
+  --rdp-accent-color: var(--kit-azul-relleno);
+  --rdp-accent-background-color: var(--kit-hover);
   --rdp-day-height: 36px;
   --rdp-day-width: 36px;
   --rdp-day_button-height: 34px;
@@ -155,7 +139,7 @@
 }
 
 .dark .flit-date-range-picker .rdp-root {
-  --rdp-accent-color: #8fa8ff;
-  --rdp-accent-background-color: rgba(143, 168, 255, 0.18);
+  --rdp-accent-color: var(--kit-azul-texto);
+  --rdp-accent-background-color: var(--kit-hover);
   color: #fff;
 }

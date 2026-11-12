@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Landmark, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
@@ -168,7 +168,7 @@ export function CreateTransitOfficeTenantDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={Landmark}
+      icono="banco"
       title="Activar Organismo de Tránsito"
       titleClassName="text-base font-bold text-flit-brand"
     >
@@ -249,7 +249,7 @@ export function CreateTransitOfficeTenantDialog({
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
               style={{ background: "var(--gradient-action)" }}
             >
-              {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
               {submitting ? "Activando…" : "Activar Organismo de Tránsito"}
             </button>
           </div>

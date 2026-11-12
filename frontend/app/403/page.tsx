@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { buttonClass } from "@flit/ui/Button";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
+import { IconoModulo } from "@flit/ui/Icono";
 import { getHubUrl } from "@flit/auth/server";
 
 // Destino de acceso denegado (HU #10194, AC6). El middleware redirige aquí a los usuarios sin rol SuperAdmin antes de
@@ -46,9 +46,8 @@ export default async function ForbiddenPage({ searchParams }: { searchParams: Pr
   return (
     <main className="app-bg flex min-h-screen flex-col items-center justify-center px-4 py-10 text-center">
       {/* Homologación (HU #14511): estado vacío de la propuesta (`.vacio`), tarjeta con ilustración y botón del kit. */}
-      <div className="flex w-full max-w-lg flex-col items-center gap-4 rounded-[20px] border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10">
-        {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
-        <img src={rutaIlustracion("seguridad")} alt="" aria-hidden="true" width={96} height={96} className="h-24 w-24" />
+      <div className="flex w-full max-w-lg flex-col items-center gap-4 rounded-2xl border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10">
+        <IconoModulo clave="seguridad" disco size={96} />
         <h1 className="text-2xl font-bold text-[color:var(--di-heading)]">
           {denied?.title ?? "Acceso restringido"}
         </h1>

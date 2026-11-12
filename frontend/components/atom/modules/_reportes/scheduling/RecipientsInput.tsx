@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { cn } from "@/lib/utils";
 import { isValidEmail, MAX_RECIPIENTS } from "./labels";
 
@@ -66,7 +66,7 @@ export function RecipientsInput({ value, onChange, error, disabled }: Recipients
                 onClick={() => onChange(value.filter((r) => r !== email))}
                 className="rounded-full hover:bg-[color:var(--di-accent-soft)]"
               >
-                <X className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="cerrar" className="h-3 w-3" />
               </button>
             )}
           </span>

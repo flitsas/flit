@@ -1,6 +1,7 @@
 'use client';
 
-import type { LucideIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
+import type { IconoComoProps } from '@flit/ui/iconoComo';
 
 /**
  * Tile de lectura rápida (icono + label + valor) usado en el detalle de
@@ -13,7 +14,7 @@ export function IdentityInfoTile({
   mono,
   className = '',
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<IconoComoProps>;
   label: string;
   value: string;
   mono?: boolean;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Columns3 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 
 // Selector de columnas reutilizable: cualquier tabla de trámites (gestor u OT) lo monta pasando
 // su propia lista de columnas + la selección actual + el callback de guardado (normalmente
@@ -118,7 +118,7 @@ export function ColumnSelector({
         disabled={disabled}
         className={buttonClassName}
       >
-        <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="rejilla" className="h-3.5 w-3.5" />
         {label}
       </button>
 
@@ -129,7 +129,7 @@ export function ColumnSelector({
           role="dialog"
           aria-label={`Elegir columnas visibles de ${label.toLowerCase()}`}
           aria-describedby={hintId}
-          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-card shadow-lg dark:bg-secondary"
+          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-card shadow-[var(--kit-sombra)] dark:bg-secondary"
         >
           {/* Cabecera y aviso quedan FIJOS; solo scrollea la lista. El scroll va en un `div`, no
               en el `<fieldset>`: fieldset no funciona como contenedor flex con overflow y la

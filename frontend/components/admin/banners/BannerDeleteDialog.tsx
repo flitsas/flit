@@ -38,6 +38,7 @@ export function BannerDeleteDialog({ banner, onClose, onDeleted }: BannerDeleteD
 
   return (
     <Modal
+      icono="papelera"
       open
       onClose={onClose}
       busy={busy}

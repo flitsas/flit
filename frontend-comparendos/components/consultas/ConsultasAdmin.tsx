@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Pause, Play, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
@@ -42,10 +43,10 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         {horas.map((h) => (
-          <span key={h} className="inline-flex items-center gap-1 rounded-full bg-[var(--badge-info-bg)] px-2 py-0.5 text-xs font-semibold text-flit-brand-ink">
+          <span key={h} {...etiquetaKit({ c: "var(--color-flit-brand)", ct: "var(--flit-brand-ink)" })}>
             {h}
             <button type="button" aria-label={`Quitar ${h}`} onClick={() => onCambio(horas.filter((x) => x !== h))}>
-              <X className="h-3 w-3" />
+              <Icono nombre="cerrar" className="h-3 w-3" />
             </button>
           </span>
         ))}
@@ -228,12 +229,12 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
         <div className="flex gap-2">
           {v.estado === "Activa" ? (
             <button type="button" className={controlCls(false)} onClick={() => setConfirmar("pausar")}>
-              <Pause className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="pausa" className="h-3.5 w-3.5" />
               Pausar
             </button>
           ) : (
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={v.productoHabilitado === false || encendidos === 0} onClick={() => setConfirmar("activar")}>
-              <Play className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="avance" className="h-3.5 w-3.5" />
               Activar
             </button>
           )}
@@ -258,7 +259,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
       </div>
 
       {confirmar && (
-        <Modal
+        <Modal icono="consulta"
           open
           onClose={() => setConfirmar(null)}
           busy={ocupado}

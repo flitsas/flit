@@ -1,7 +1,8 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { ArrowRightLeft, BadgeCheck, Ban, Paperclip, RefreshCcw, Send, UserCog } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -180,7 +181,7 @@ function CambiarEstadoModal({ open, onClose, item, tenantId, onSuccess, onError 
       onClose={onClose}
       title="Cambiar estado"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={ArrowRightLeft}
+      icono="intercambio"
       description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
       busy={busy}
@@ -274,7 +275,7 @@ function AnularModal({ open, onClose, item, tenantId, onSuccess, onError }: Moda
       onClose={onClose}
       title="Anular trámite"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={Ban}
+      icono="distinto"
       iconBg={DANGER_COLOR}
       description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
@@ -376,7 +377,7 @@ function ConsolidadoModal({
       onClose={onClose}
       title="Gestionar consolidado"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={RefreshCcw}
+      icono="reintento"
       description={`Trámite ${item.referenceNumber}`}
       size="sm"
       busy={busy}
@@ -430,7 +431,7 @@ function ConsolidadoModal({
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
               style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
             >
-              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="archivo" className="h-3.5 w-3.5" />
               {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
             </button>
             {file ? (
@@ -513,7 +514,7 @@ function ReasignarGestorModal({ open, onClose, item, tenantId, onSuccess, onErro
       onClose={onClose}
       title="Reasignar gestor"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={UserCog}
+      icono="rol"
       description={`Trámite ${item.referenceNumber}`}
       size="sm"
       busy={busy}
@@ -603,7 +604,7 @@ function ConsultarRuntModal({ open, onClose, item, onSuccess, onError }: Omit<Mo
       onClose={onClose}
       title="Consultar ahora en RUNT"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={BadgeCheck}
+      icono="check"
       description={`Trámite ${item.referenceNumber}${item.placa ? ` · ${item.placa}` : ''}`}
       size="sm"
       busy={busy}
@@ -714,7 +715,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-cambiar-estado',
       label: 'Cambiar estado',
-      icon: ArrowRightLeft,
+      icon: iconoComo("intercambio"),
       disabled: esAprobado,
       disabledReason: 'Un trámite Aprobado no admite cambio de estado administrativo.',
       onSelect: () => setEstadoOpen(true),
@@ -724,7 +725,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-anular',
       label: 'Anular',
-      icon: Ban,
+      icon: iconoComo("distinto"),
       disabled: esAprobado || esAnulado,
       disabledReason: esAnulado
         ? 'Este trámite ya está Anulado.'
@@ -738,7 +739,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-consolidado',
       label: 'Gestionar consolidado',
-      icon: RefreshCcw,
+      icon: iconoComo("reintento"),
       onSelect: () => setConsolidadoOpen(true),
     });
   }
@@ -746,7 +747,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-reenviar-validacion',
       label: 'Reenviar validación',
-      icon: Send,
+      icon: iconoComo("radicacion"),
       disabled: identidadNoAccionable,
       disabledReason:
         esAprobado || esAnulado
@@ -759,7 +760,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-reasignar-gestor',
       label: 'Reasignar gestor',
-      icon: UserCog,
+      icon: iconoComo("rol"),
       onSelect: () => setReasignarOpen(true),
     });
   }
@@ -769,7 +770,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-consultar-runt',
       label: 'Consultar ahora en RUNT',
-      icon: BadgeCheck,
+      icon: iconoComo("check"),
       disabled: !esAprobado || yaConfirmado,
       disabledReason: !esAprobado
         ? 'Solo se confirman en el RUNT los trámites aprobados.'

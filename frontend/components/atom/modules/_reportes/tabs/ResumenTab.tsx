@@ -29,7 +29,6 @@ import { CATEGORY_FAMILY, CATEGORY_META, CATEGORY_ORDER } from "../categories";
 import { compareRange, type ReportFilters } from "../filters";
 import { formatInt } from "../format";
 import { KpiCard } from "../KpiCard";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { LiveNowPanel } from "../LiveNowPanel";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
@@ -153,7 +152,7 @@ export function ResumenTab({
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label={COPY.E03}
-              ilustracion={rutaIlustracion("tramites")}
+              icono="tramites"
               value={formatInt(totals.total)}
               tooltip="Suma de trámites de todas las categorías creados en el rango de fechas."
               variation={variation("total")}

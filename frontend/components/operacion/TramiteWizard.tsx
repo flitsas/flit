@@ -10,20 +10,8 @@ import {
   type RefObject,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  AlertTriangle,
-  Calendar,
-  Car,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  Loader2,
-  PenLine,
-  RefreshCw,
-  RotateCcw,
-  Shield,
-  Wrench,
-} from 'lucide-react';
+import { Wrench } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { resolveActorRole, resolveStepBody } from './sectionRendererRegistry';
 import {
   capacidadesEfectivas,
@@ -194,6 +182,7 @@ import { estadoLabel, revocationRequestLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { InlineAlert } from '@/components/atom/InlineAlert';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -458,7 +447,7 @@ function ReadOnlyStateNotice({
       role="status"
       aria-live="polite"
     >
-      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: ink }} aria-hidden="true" />
+      <Icono nombre="ojo" className="h-4 w-4 shrink-0 mt-0.5" style={{ color: ink }} />
       <div className="min-w-0 flex-1">
         <span>
           <span className="font-semibold" style={{ color: ink }}>
@@ -1941,11 +1930,10 @@ export function TramiteWizard(props: Props) {
       id="tramite-wizard-root"
       ref={wizardRootRef}
       tabIndex={-1}
-      // Propuesta (asistente lateral): desde lg la cabecera fija (pasos + salida + franja) pasa a
-      // una columna de 280px a la izquierda y todo lo demás a la derecha. Es solo CSS de rejilla: el
-      // orden del DOM —y con él el del lector de pantalla y el del Tab— no cambia. La cabecera
-      // abarca 16 filas implícitas sin hueco entre filas, así que las vacías miden cero.
-      className="flex w-full flex-col gap-3 pb-2 focus:outline-none lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-x-6 lg:gap-y-0 lg:[&>*]:col-start-2 lg:[&>*:not(:first-child)]:mt-3"
+      // UI Kit 2026 (`.asistente` de una columna): los pasos van en horizontal arriba del formulario a
+      // cualquier ancho; ya no hay columna lateral de 280px. Solo CSS: el orden del DOM —y con él el
+      // del lector de pantalla y el del Tab— no cambia.
+      className="flex w-full flex-col gap-3 pb-2 focus:outline-none"
     >
       {/* Radicar es la espera más larga del flujo y la que más ansiedad genera: mientras dura, el
           velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
@@ -1955,7 +1943,7 @@ export function TramiteWizard(props: Props) {
           mismo título y la misma frase que antes iban en sr-only. Ocupa las dos columnas de la
           rejilla, encima de los pasos; va antes del centinela, así la cabecera de pasos se compacta
           cuando el encabezado ya salió de vista. Sin datos del vehículo hasta que haya consulta. */}
-      <div className="lg:!col-start-1 lg:col-span-2 lg:row-start-1 lg:!mt-0 lg:mb-3">
+      <div>
         <ModuleTitle
           title={displayTitle}
           subtitle={displaySubtitle}
@@ -1975,11 +1963,11 @@ export function TramiteWizard(props: Props) {
       {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
           franja de identidad estaba calculada para la cabecera completa. */}
       <div
-        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none lg:!col-start-1 lg:row-start-2 lg:row-span-[16] lg:!mt-0 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:!space-y-3 lg:!pb-3 ${
+        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none ${
           cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
         }`}
       >
-        <div className="flex items-start justify-between gap-3 lg:flex-col lg:items-stretch">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {steps.length === 0 ? (
               <p className="text-xs opacity-60">
@@ -2011,7 +1999,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             disabled={cancelandoSubsanacion}
-            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand lg:self-start lg:px-2"
+            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
             style={{ color: puedeCancelarSubsanacion ? 'var(--destructive)' : 'var(--muted-foreground)' }}
             aria-label={
               puedeCancelarSubsanacion
@@ -2042,10 +2030,10 @@ export function TramiteWizard(props: Props) {
             referencia del PO — no sustituir por tinte claro. */}
         {(refLabel || identificador) && (
           <div
-            className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5 lg:mx-0 lg:w-full lg:flex-col lg:items-start lg:gap-y-1.5 lg:rounded-[20px] lg:px-4 lg:py-3"
-            // Degradado de acción de la propuesta: el mismo de los botones, legible con blanco en
-            // claro y en oscuro (HU #14478).
-            style={{ background: 'var(--gradient-action)', color: '#fff' }}
+            // UI Kit 2026 (`.pildora-tramite`): píldora centrada de 22 px de radio (9 px en celular) en el azul de
+            // botones —lleva texto, así que #1D53FF y no #557EFF— con texto blanco, igual en claro y en oscuro.
+            className="mx-auto mt-2 flex w-fit max-w-[calc(100%-32px)] flex-wrap items-center justify-center gap-x-6 gap-y-1.5 rounded-[22px] px-5 py-2 text-white max-sm:rounded-[9px]"
+            style={{ background: 'var(--kit-azul-relleno)' }}
             data-testid="tramite-identity-strip"
           >
             {refLabel && (
@@ -2085,7 +2073,7 @@ export function TramiteWizard(props: Props) {
               <span className="font-semibold">{fechaStrip}</span>
             </p>
             {estadoTramite && (
-              <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">
+              <span className="rounded-full border border-white/70 px-3 py-0.5 text-[11px] font-bold">
                 {estadoTramite === 'borrador' ? 'En borrador' : estadoLabel(estadoTramite)}
               </span>
             )}
@@ -2096,11 +2084,12 @@ export function TramiteWizard(props: Props) {
             {activeRevocationRequest && (
               <span
                 role="status"
-                className="rounded-full border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-2.5 py-0.5 text-[11px] font-semibold"
+                {...etiquetaKit('warning')}
                 aria-label={`Sub-estado de revocatoria: ${
                   revocationRequestLabel(activeRevocationRequest.status) ?? 'en curso'
                 }`}
               >
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {revocationRequestLabel(activeRevocationRequest.status) ?? 'Revocatoria en curso'}
               </span>
             )}
@@ -2125,12 +2114,12 @@ export function TramiteWizard(props: Props) {
                   >
                     {activandoSubsanacion ? (
                       <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                         Activando subsanación…
                       </>
                     ) : (
                       <>
-                        <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
+                        <Icono nombre="lapiz" className="h-3.5 w-3.5" />
                         Subsanar trámite
                       </>
                     )}
@@ -2159,7 +2148,7 @@ export function TramiteWizard(props: Props) {
           role="status"
           aria-live="polite"
         >
-          <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
+          <Icono nombre="escudo" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} />
           <span>
             <span className="font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
               Borrador finalizado — esperando validación del cliente.
@@ -2394,7 +2383,7 @@ export function TramiteWizard(props: Props) {
               // HU #14482 (propuesta): `.btn.secondary`.
               className={buttonClass({ variant: 'secondary', className: 'gap-1 disabled:opacity-30' })}
             >
-              <ChevronLeft className="h-3 w-3" /> Anterior
+              <Icono nombre="izquierda" className="h-3 w-3" /> Anterior
             </button>
 
             {/* PDF / prototipo: sin barra central «Estado del trámite» + Anular duplicado.
@@ -2470,7 +2459,7 @@ export function TramiteWizard(props: Props) {
                             : 'Re-radica el trámite al organismo de tránsito'
                     }
                   >
-                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                    <Icono nombre="reintento" className="h-3 w-3" />
                     {reradicando ? 'Re-radicando…' : 'Re-radicar'}
                   </button>
                 </>
@@ -2490,7 +2479,7 @@ export function TramiteWizard(props: Props) {
                 className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
               >
                 Continuar
-                <ChevronRight className="h-3 w-3" />
+                <Icono nombre="derecha" className="h-3 w-3" />
               </button>
             ) : (
               <>
@@ -2505,7 +2494,7 @@ export function TramiteWizard(props: Props) {
                     className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-flit-brand disabled:opacity-40`}
                     style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
                   >
-                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                    <Icono nombre="reintento" className="h-3 w-3" />
                     Volver al resumen
                   </button>
                 )}
@@ -2963,7 +2952,7 @@ function VehicleDataCard({
             className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
             style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)' }}
           >
-            <Car className="h-4 w-4" style={{ color: 'var(--color-flit-brand)' }} />
+            <Icono nombre="carro" className="h-4 w-4" style={{ color: 'var(--color-flit-brand)' }} />
           </span>
           <div className="min-w-0 flex-1">
             <WizardCardHeader
@@ -3000,7 +2989,7 @@ function VehicleDataCard({
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {year && (
               <span className="inline-flex items-center gap-1 text-xs opacity-70">
-                <Calendar className="h-3 w-3" /> Modelo {year}
+                <Icono nombre="calendario" className="h-3 w-3" /> Modelo {year}
               </span>
             )}
             {estado && (
@@ -3016,7 +3005,7 @@ function VehicleDataCard({
           <div className="flex shrink-0 flex-wrap gap-2">
             {(soatVencimiento || soatAseguradora) && (
               <div className="flex min-w-0 items-start gap-1.5 rounded-xl border px-2.5 py-1.5">
-                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
+                <Icono nombre="escudo" className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase" style={{ color: 'var(--color-flit-brand)' }}>SOAT</p>
                   {soatVencimiento && (
@@ -3065,7 +3054,7 @@ function VehicleDataCard({
           <div className="flex flex-wrap gap-3">
             {(soatVencimiento || soatAseguradora) && (
               <div className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2">
-                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
+                <Icono nombre="escudo" className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase" style={{ color: 'var(--color-flit-brand)' }}>SOAT</p>
                   {soatVencimiento && (
@@ -5579,7 +5568,7 @@ function StepBody({
             >
               {paqueteDocsStatus === 'loading' ? (
                 <span className="inline-flex items-center gap-2">
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin" />
                   Generando documentos del expediente (FUR, certificados
                   {caps.pideValorComercial ? ', compraventa' : ''} e impronta)… No bloquea Preparar.
                 </span>
@@ -5607,7 +5596,7 @@ function StepBody({
                 guardados.
               </p>
               <p className="mt-2 flex items-start gap-1.5">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
                   <span className="font-semibold">Revisa bien antes de enviar:</span> después ya
                   no podrás modificar los datos.
@@ -5627,7 +5616,7 @@ function StepBody({
               role="status"
               aria-live="polite"
             >
-              <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
+              <Icono nombre="escudo" className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} />
               <span>
                 <span className="font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                   El FUR y la firma se generarán automáticamente

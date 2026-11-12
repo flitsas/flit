@@ -274,9 +274,10 @@ describe("UsersTable — diseño", () => {
   it("el chip de perfil Gestor usa el tono neutral tintado (no el cian de éxito) y lleva texto", () => {
     renderTable();
     const chip = screen.getByText("Gestor · Admin");
-    expect(chip.style.color).toBe("var(--badge-neutral-fg)");
-    expect(chip.style.background).toBe("var(--badge-neutral-bg)");
-    expect(chip.className).toContain("text-xs");
+    // UI Kit 2026: etiqueta con punta (`etiquetaKit`); el tono sale de las variables --c / --ct.
+    expect(chip.style.getPropertyValue("--ct")).toBe("var(--badge-neutral-fg)");
+    expect(chip.style.getPropertyValue("--c")).toBe("var(--badge-neutral-border)");
+    expect(chip.className).toContain("kit-etiqueta");
   });
 
   it("las opciones del menú llevan icono, nombre accesible y tooltip", async () => {

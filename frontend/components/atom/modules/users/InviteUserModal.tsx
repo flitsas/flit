@@ -3,7 +3,8 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useEffect, useMemo, useState } from "react";
-import { Landmark, Shield, ShieldCheck, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { createInvitation, type InvitationCreatedResult, type TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
@@ -27,10 +28,10 @@ import {
 
 const SUPER_ADMIN_ROLE_CODE = "superadmin";
 
-const PROFILE_ICON: Record<UserProfileKind, typeof Shield> = {
-  FLIT: ShieldCheck,
-  GESTOR: Shield,
-  OT: Landmark,
+const PROFILE_ICON: Record<UserProfileKind, ReturnType<typeof iconoComo>> = {
+  FLIT: iconoComo("escudo"),
+  GESTOR: iconoComo("escudo"),
+  OT: iconoComo("banco"),
 };
 
 export interface InviteUserModalProps {
@@ -223,13 +224,13 @@ export function InviteUserModal({
   return (
     <div className={`fixed inset-0 z-50 grid place-items-center overflow-y-auto px-4 py-6 ${DIALOGO_VELO_CLS}`}>
       <div className={`max-h-[90dvh] w-full max-w-md overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-6 -mt-6 mb-5">
+        <FranjaDialogo className="-mx-6 -mt-6 mb-5" icono="persona">
           <div>
             <h3 className={`text-lg font-bold ${DIALOGO_TITULO_CLS}`}>Invitar usuario</h3>
             <p className="mt-0.5 text-xs opacity-85">Asigna el acceso para colaborar dentro de FLIT.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Cerrar" className={DIALOGO_CERRAR_CLS}>
-            <X className="h-5 w-5" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </FranjaDialogo>
 
@@ -501,7 +502,7 @@ function OnboardingSteps() {
               className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-bold"
               style={{
                 background: i === 0 ? "var(--color-flit-tech)" : "var(--border)",
-                color: i === 0 ? "#fff" : "var(--color-flit-primary)",
+                color: i === 0 ? "var(--di-on-accent)" : "var(--color-flit-primary)",
               }}
             >
               {i + 1}

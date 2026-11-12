@@ -2,7 +2,6 @@
 
 import { buttonClass } from "@flit/ui/Button";
 import { useEffect, useState } from "react";
-import { FileSignature } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { fetchMandateSignerSignatureImage } from "@/lib/api/admin-mandate-signers";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
@@ -30,7 +29,7 @@ export function MandatarioFirmaPreviewDialog({
     <Modal
       open
       onClose={onClose}
-      icon={FileSignature}
+      icono="firma"
       title={`Firma de ${signer.fullName}`}
       description="Cómo se verá en el contrato de mandato"
       size="md"

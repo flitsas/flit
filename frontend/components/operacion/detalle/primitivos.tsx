@@ -1,6 +1,7 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from '@flit/ui/StatusBadge';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 import {
   DETALLE_BLUE,
@@ -43,28 +44,13 @@ const NAVY = DETALLE_NAVY;
 const AZUL = DETALLE_BLUE;
 
 /**
- * Pastilla del detalle en el lenguaje de la propuesta (HU #14482): los tres tonos semánticos del
- * detalle (hecho, pendiente, rechazado) dejan el verde, el dorado y el rojo y pasan a cielo con
- * check, cielo con punto naranja y blanco con aro y equis naranja. Cualquier otro color conserva
- * el tinte suave de antes.
+ * Pastilla del detalle (HU #14482) con la etiqueta del UI Kit 2026: los tres tonos semánticos del detalle (hecho,
+ * pendiente, rechazado) toman su tono del kit; cualquier otro color se usa como color de la etiqueta.
  */
-const BADGE_PROPUESTA: Record<string, { clase: string; style: CSSProperties }> = {
-  [DETALLE_GREEN]: {
-    clase: 'di-estado di-estado--check',
-    style: { background: 'var(--di-success-soft)', color: 'var(--di-success)' },
-  },
-  [DETALLE_GOLD]: {
-    clase: 'di-estado di-estado--punto',
-    style: { background: 'var(--di-sky)', color: 'var(--di-heading)' },
-  },
-  [DETALLE_RED]: {
-    clase: 'di-estado di-estado--equis',
-    style: {
-      background: 'var(--di-surface-elevated)',
-      color: 'var(--di-heading)',
-      boxShadow: 'inset 0 0 0 1px var(--di-alerta-punto)',
-    },
-  },
+const TONO_KIT_DETALLE: Record<string, 'success' | 'warning' | 'danger'> = {
+  [DETALLE_GREEN]: 'success',
+  [DETALLE_GOLD]: 'warning',
+  [DETALLE_RED]: 'danger',
 };
 
 export function DetalleBadgeSoft({
@@ -77,13 +63,12 @@ export function DetalleBadgeSoft({
   /** El texto ya trae su propia marca (p. ej. «✓ Adjunto»): se pinta el tono sin sumar el check. */
   sinMarca?: boolean;
 }) {
-  const propuesta = BADGE_PROPUESTA[color];
-  const clase = propuesta && !sinMarca ? propuesta.clase : '';
+  // UI Kit 2026: la etiqueta con punta del kit. Los tres tonos semánticos del detalle van a su tono del kit
+  // (hecho verde, pendiente naranja, rechazado rojo); cualquier otro color se usa tal cual como color de la etiqueta.
+  const tono = TONO_KIT_DETALLE[color];
   return (
-    <span
-      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${clase}`}
-      style={propuesta?.style ?? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}
-    >
+    <span {...etiquetaKit(tono ?? { c: color })}>
+      {sinMarca ? null : <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />}
       {text}
     </span>
   );

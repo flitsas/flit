@@ -10,14 +10,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import {
-  Activity,
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  ExternalLink,
-} from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchActiveModules,
@@ -39,10 +32,10 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
-import { estadoAcentoVar, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { estadoAcentoVar, estadoLabel } from "@/lib/tramites/estados";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { RangoFechas } from "@/components/atom/RangoFechas";
+import { GraficoDona } from "@/components/inicio/GraficoDona";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
@@ -159,9 +152,9 @@ function buildWelcomeBody(
 // activos el carrusel solo muestra el slide fijo (AC3).
 
 /** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
-// HU #14481 (propuesta): el slide fijo es el `.page-header` del prototipo, una tarjeta clara de
-// superficie a cielo con texto en tinta, en vez del degradado azul y turquesa con texto blanco.
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--di-surface-elevated) 35%,var(--di-sky) 100%)";
+// UI Kit 2026: el slide fijo es la lámina `.banner-kit__lamina--degradado` del manual, con el contraste AA ya calculado
+// con texto blanco (ui-kit-2026.css), en vez de la tarjeta clara con el círculo turquesa.
+const BRAND_GRADIENT = "linear-gradient(160deg, #007d79 0%, #1670b8 55%, #1d53ff 100%)";
 const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
 
 /**
@@ -174,10 +167,29 @@ const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
 const FILTRO_CONTROL_CLS =
   "[&>label]:text-[0.8125rem] [&>label]:font-semibold [&>label]:normal-case [&>label]:opacity-100 " +
   "[&>label]:text-[color:var(--di-text-primary)] " +
-  "[&>button]:min-h-11 [&>button]:rounded-xl [&>button]:border-[color:var(--di-border-control)] " +
+  "[&>button]:min-h-10 [&>button]:rounded-[9px] [&>button]:border-[color:var(--di-border-control)] " +
   "[&>button]:bg-[var(--di-surface-elevated)] [&>button]:text-[color:var(--di-text-primary)] " +
-  "[&_input]:h-11 [&_input]:rounded-xl [&_input]:border-[color:var(--di-border-control)] " +
+  "[&_input]:h-10 [&_input]:rounded-[9px] [&_input]:border-[color:var(--di-border-control)] " +
   "[&_input]:bg-[var(--di-surface-elevated)] [&_input]:text-[color:var(--di-text-primary)]";
+
+/**
+ * UI Kit 2026 — rejilla de los filtros de la cabecera, con el mismo hueco que las cifras de abajo. `RangoFechas` es un
+ * átomo compartido: su raíz pasa a `display: contents` para que Periodo, Desde y Hasta sean celdas de esta rejilla
+ * (Periodo junto a Compañía; Desde y Hasta en la fila siguiente, una columna cada uno) y sus campos toman el control
+ * del kit (`TRAMITES_INPUT_CLS`: 40 px, radio 9 px, contorno de control). Sus estados y manejadores no cambian.
+ */
+const FILTROS_REJILLA_CLS =
+  "grid grid-cols-2 gap-3 items-end [&>[data-testid=rango-fechas]]:contents " +
+  "[&>[data-testid=rango-fechas]>label]:min-w-0 [&>[data-testid=rango-fechas]>p]:col-span-2 " +
+  "[&>[data-testid=rango-fechas]>label]:text-[0.8125rem] [&>[data-testid=rango-fechas]>label]:font-semibold " +
+  "[&>[data-testid=rango-fechas]>label]:text-[color:var(--di-text-primary)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:h-10 [&>[data-testid=rango-fechas]_:is(select,input)]:w-full " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:min-w-0 [&>[data-testid=rango-fechas]_:is(select,input)]:rounded-[9px] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:border-[color:var(--di-border-control)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:bg-[var(--di-surface-elevated)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:px-3 [&>[data-testid=rango-fechas]_:is(select,input)]:text-sm " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:text-[color:var(--di-text-primary)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:focus:border-[color:var(--di-action)]";
 
 type WelcomeSlide = {
   type: "welcome";
@@ -529,14 +541,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
         <div
-          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)] md:min-h-0 ${
-            esBienvenida(s)
-              ? "rounded-[28px] border border-[color:var(--di-border)] text-[color:var(--di-heading)] shadow-[var(--shadow-card)]"
-              : "rounded-2xl text-white"
+          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[200px] max-sm:min-h-[180px] ${
+            esBienvenida(s) ? "rounded-[9px] text-white" : "rounded-2xl text-white"
           }`}
           data-testid="dashboard-hero-banner"
         >
-          {/* Capa de fondo: gradiente de marca fijo en el slide de bienvenida; en un banner, el
+          {/* Capa de fondo: lámina degradada del kit en el slide de bienvenida; en un banner, el
               color PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con
               el azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja
               margen (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el
@@ -570,30 +580,24 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             }}
           />
           {s.type === "welcome" && (
-            // Círculos del prototipo: el turquesa lleno arriba a la derecha y, con `outline`, el aro
-            // grande de cielo alrededor (`.page-header::before/::after`), sin marcado nuevo.
-            <div
-              className="absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90"
-              style={{
-                background: "var(--di-highlight-decor)",
-                outline: "1.5px solid color-mix(in srgb, var(--di-sky-line) 50%, transparent)",
-                outlineOffset: "95px",
-              }}
-            />
+            // Círculo de la lámina del kit (`.banner-kit__lamina::after`): blanco translúcido arriba a la derecha.
+            <div className="absolute -right-[50px] -top-[70px] h-[190px] w-[190px] rounded-full bg-white/[0.14]" />
           )}
           {s.type === "welcome" ? (
-            // `.page-header` del prototipo: la ilustración de Inicio a la izquierda del texto (el ícono sigue
-            // en el DOM, oculto: era decorativo) y el texto en flujo, con el pie reservado para los puntos del
-            // carrusel, así un aviso largo agranda el banner en vez de cortarse o montarse sobre ellos.
-            <div className="relative flex flex-1 flex-col justify-center gap-2 max-w-[85%] pl-[108px] pr-6 pt-5 pb-12 max-sm:pl-[84px]">
-              <div
-                className="absolute left-6 top-5 h-16 w-16 max-sm:left-4 max-sm:h-14 max-sm:w-14"
-                style={{ background: `url("${rutaIlustracion("inicio")}") center / contain no-repeat` }}
-              >
-                <Activity className="hidden" aria-hidden="true" />
+            // Lámina del kit (`.banner-kit__lamina`): el chip de 42 px con el ícono de Inicio junto al título y el
+            // texto en flujo, con el pie reservado para los puntos del carrusel, así un aviso largo agranda el banner
+            // en vez de cortarse o montarse sobre ellos.
+            <div className="relative flex flex-1 flex-col justify-center gap-2.5 max-w-[85%] px-6 pt-6 pb-16">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
+                >
+                  <IconoModulo clave="inicio" size={22} />
+                </span>
+                <h2 className="text-2xl md:text-[1.75rem] font-bold leading-tight line-clamp-2 min-w-0 text-white">{s.title}</h2>
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
-              <p className="text-sm md:text-base leading-snug line-clamp-3 text-[color:var(--di-text-secondary)]">{s.body}</p>
+              <p className="max-w-[58ch] text-sm md:text-base leading-snug line-clamp-3 text-white">{s.body}</p>
             </div>
           ) : s.linkUrl ? (
             // Sin título visible (solo el banner): el enlace cubre toda la imagen — al acercarse,
@@ -608,8 +612,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             >
               <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
               <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
-                  <ExternalLink className="h-5 w-5" aria-hidden="true" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary">
+                  <Icono nombre="externo" className="h-5 w-5" />
                 </span>
               </span>
             </a>
@@ -629,17 +633,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   key={i}
                   onClick={() => setSlide(i)}
                   aria-label={`Slide ${i + 1}`}
-                  className="h-1.5 rounded-full transition-all"
-                  style={{
-                    width: i === slide ? 16 : 5,
-                    background: esBienvenida(s)
-                      ? i === slide
-                        ? "var(--di-action)"
-                        : "var(--di-border-control)"
-                      : i === slide
-                        ? "#ffffff"
-                        : "rgba(255,255,255,0.5)",
-                  }}
+                  // Puntos del kit (`.banner-kit__punto`): 8 px, el actual de 22 px en blanco pleno.
+                  className={`h-2 rounded-full transition-all ${i === slide ? "bg-current" : "bg-white/50"}`}
+                  style={{ width: i === slide ? 22 : 8 }}
                 />
               ))}
             </div>
@@ -648,25 +644,19 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Anterior"
-                className={`h-6 w-6 rounded-full grid place-items-center disabled:cursor-not-allowed disabled:opacity-40 ${
-                  esBienvenida(s)
-                    ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
-                    : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
-                }`}
+                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
               >
-                <ChevronLeft className="h-3 w-3" />
+                <Icono nombre="izquierda" size={18} />
               </button>
               <button
                 onClick={() => setSlide((v) => (v + 1) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Siguiente"
-                className={`h-6 w-6 rounded-full grid place-items-center disabled:cursor-not-allowed disabled:opacity-40 ${
-                  esBienvenida(s)
-                    ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
-                    : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
-                }`}
+                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
               >
-                <ChevronRight className="h-3 w-3" />
+                <Icono nombre="derecha" size={18} />
               </button>
             </div>
           </div>
@@ -679,7 +669,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           className="flex flex-col gap-3"
           data-testid="dashboard-hero-column"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end" data-testid="dashboard-filter-row">
+          <div
+            className={`${FILTROS_REJILLA_CLS} ${
+              isSuper ? "" : "[&>[data-testid=rango-fechas]>label:first-child]:col-span-2"
+            }`}
+            data-testid="dashboard-filter-row"
+          >
             <RangoFechas
               value={range}
               onChange={setRange}
@@ -694,7 +689,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 disabled={status === "loading"}
                 defaultLabel="Todas las compañías"
                 id="dashboard-compania"
-                className={`min-w-0 ${FILTRO_CONTROL_CLS}`}
+                className={`col-start-2 row-start-1 min-w-0 ${FILTRO_CONTROL_CLS}`}
               />
             )}
           </div>
@@ -718,8 +713,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             // del banner; la columna puede quedar más baja que él.
             <div className="grid grid-cols-3 items-start gap-3" data-testid="dashboard-kpi-grid">
               {[
-                { label: "Matrículas", value: matriculas, ilustracion: "matricula" as const, family: "MATRICULAS" as const },
-                { label: "Traspasos", value: traspasos, ilustracion: "traspaso" as const, family: "TRASPASO" as const },
+                // UI Kit 2026: claves del kit con glifo (disco --kit-hover y glifo azul), no los discos sólidos
+                // @tramite-matricula/@tramite-traspaso: placa para matrícula e intercambio para traspaso.
+                { label: "Matrículas", value: matriculas, ilustracion: "preasignacion" as const, family: "MATRICULAS" as const },
+                { label: "Traspasos", value: traspasos, ilustracion: "llamadas" as const, family: "TRASPASO" as const },
                 { label: "Otros Trámites", value: otros, ilustracion: "procesos" as const, family: "OTROS" as const },
               ].filter((k) => showsInAggregates(k.family)).map((k) => {
                 const isError = status === "error";
@@ -732,8 +729,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                     // rótulo se comía el ancho y la ilustración quedaba en 0 px. Aquí la tarjeta va a
                     // una columna —el rótulo usa todo el ancho y no se parte— y la ilustración se fija
                     // abajo a la derecha, junto a la cifra, con un tamaño que no se encoge.
-                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>img]:absolute [&>img]:bottom-3 [&>img]:right-3 [&>img]:h-10 [&>img]:w-10 [&>img]:shrink-0 [&>img]:max-w-none [&>img]:rounded-full [&>img]:bg-[var(--di-accent-soft)] [&>img]:p-1.5 [&>span:nth-child(2)]:pr-12 [&>span:nth-child(2)]:text-2xl"
-                    ilustracion={rutaIlustracion(k.ilustracion)}
+                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>:nth-child(3)]:absolute [&>:nth-child(3)]:bottom-3 [&>:nth-child(3)]:right-3 [&>:nth-child(3)]:h-10 [&>:nth-child(3)]:w-10 [&>:nth-child(3)]:shrink-0 [&>:nth-child(3)]:max-w-none [&>span:nth-child(2)]:pr-12 [&>span:nth-child(2)]:text-2xl"
+                    icono={k.ilustracion}
                     etiqueta={
                       <span className="block min-w-0">
                         {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
@@ -757,7 +754,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           style={{ color: "var(--di-danger)" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
-                          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
                           <span>—</span>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
                         </span>
@@ -797,7 +794,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
                   style={{ background: "var(--badge-neutral-bg)" }}
                 >
-                  <Clock className="h-5 w-5" style={{ color: "var(--badge-neutral-fg)" }} aria-hidden="true" />
+                  <Icono nombre="reloj" className="h-5 w-5" style={{ color: "var(--badge-neutral-fg)" }} />
                 </div>
                 <div>
                   <p className="text-sm font-bold">{m.label}</p>
@@ -826,47 +823,26 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               skeletonRows={3}
             >
               {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
-              <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
-                <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+              <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+                <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                   Distribución General de Trámites
                   {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="distribucion-red" />}
                 </h2>
                 {globalFunnel.length === 0 ? (
                   <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
                 ) : (
-                  // HU #14481 (referencia de Samuel) — lista numerada sin fondos por fila, separada por una línea
-                  // fina: orden, barrita del color del estado, nombre, cantidad y el porcentaje en la pastilla
-                  // tintada del estado (--estado-<x>-bg/-fg). Sin íconos.
-                  <ul className="divide-y divide-[color:var(--di-divider)]">
-                    {globalFunnel.map((f, i) => {
-                      const chip = estadoChipStyle(f.status);
-                      const pct = totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0;
-                      return (
-                        <li key={f.status} className="flex items-center gap-3 py-2.5">
-                          <span className="w-4 shrink-0 text-sm font-bold tabular-nums text-[color:var(--di-heading)]">
-                            {i + 1}
-                          </span>
-                          <span
-                            aria-hidden="true"
-                            className="h-6 w-1 shrink-0 rounded-full"
-                            style={{ background: estadoAcentoVar(f.status) }}
-                          />
-                          <span className="min-w-0 flex-1 text-sm text-[color:var(--di-text-primary)]">
-                            {estadoLabel(f.status)}
-                          </span>
-                          <span className="text-lg font-bold tabular-nums text-[color:var(--di-heading)]">
-                            {f.count}
-                          </span>
-                          <span
-                            className="min-w-[3.25rem] shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-semibold tabular-nums"
-                            style={{ background: chip.bg, color: chip.color }}
-                          >
-                            {pct}{"\u00a0"}%
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  // UI Kit 2026 — dona de la propuesta con los MISMOS datos que pintaba la lista: cada estado con su
+                  // acento, su cifra y su porcentaje; el total al centro. La leyenda sigue siendo la lista accesible.
+                  <GraficoDona
+                    total={totalFunnel}
+                    porciones={globalFunnel.map((f) => ({
+                      clave: f.status,
+                      etiqueta: estadoLabel(f.status),
+                      valor: f.count,
+                      color: estadoAcentoVar(f.status),
+                      detalle: `${totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0}\u00a0%`,
+                    }))}
+                  />
                 )}
               </section>
             </UiStateBoundary>
@@ -881,8 +857,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
-            <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
-              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+            <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+              <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                 Validaciones Biométricas
                 {/* Sin ruta de red para biometría: sigue siendo del cliente propio y se rotula
                     para que no se lea como agregado de la red (AC1). */}
@@ -903,7 +879,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   // Referencia de Samuel: tarjetita blanca con todo centrado — punto, nombre y cifra.
                   <div
                     key={k.label}
-                    className="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-2 py-3 text-center shadow-[var(--shadow-card)]"
+                    className="flex min-w-0 flex-col items-center gap-1.5 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-2 py-3 text-center"
                   >
                     <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background: k.punto }} />
                     <p className="text-xs font-medium leading-tight text-[color:var(--di-text-secondary)]">{k.label}</p>
@@ -919,7 +895,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   // Aviso pendiente de la propuesta: cielo con texto en tinta; el naranja queda en el ícono.
                   style={{ background: "var(--di-sky)", color: "var(--di-heading)" }}
                 >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--di-alerta-punto)" }} />
+                  <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--di-alerta-punto)" }} />
                   {expiringSoonCount} validación{expiringSoonCount === 1 ? "" : "es"} próxima
                   {expiringSoonCount === 1 ? "" : "s"} a vencer
                 </div>
@@ -939,27 +915,28 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             emptyMessage="No hay datos de tendencia en los últimos 6 meses."
             skeletonRows={3}
           >
-            <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
-              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+            <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+              <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                 Seguimiento operativo
                 {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="seguimiento-red" />}
               </h2>
               <div className="h-[280px] -mx-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    {/* UI Kit 2026 (`barrasGrupo`): guías horizontales punteadas 3·4 en --kit-linea y ejes en 11 px gris. */}
                     <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="var(--border)"
+                      strokeDasharray="3 4"
+                      stroke="var(--kit-linea)"
                       vertical={false}
                     />
                     <XAxis
                       dataKey="m"
-                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      tick={{ fontSize: 11, fill: "var(--di-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      tick={{ fontSize: 11, fill: "var(--di-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
@@ -969,21 +946,22 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                         background: "rgba(22,39,68,0.95)",
                         border: "none",
                         borderRadius: 10,
-                        color: "#fff",
+                        color: "white",
                         fontSize: 11,
                       }}
                       labelStyle={{ color: "var(--color-flit-tech)", fontWeight: 600 }}
                     />
                     {SERIES.filter((s) => showsInAggregates(s.family)).map((s) => (
-                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[4, 4, 0, 0]} />
+                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[3, 3, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex items-center justify-center gap-3 mt-1 text-[9px]">
+              {/* Leyenda centrada del kit (`.leyenda`): puntos de 10 px, texto de 13 px. */}
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-[18px] gap-y-1.5 text-[0.8125rem]">
                 {SERIES.filter((s) => showsInAggregates(s.family)).map(({ color, label }) => (
-                  <span key={label} className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                  <span key={label} className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
                     {label}
                   </span>
                 ))}

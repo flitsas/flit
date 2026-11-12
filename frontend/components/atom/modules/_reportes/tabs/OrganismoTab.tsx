@@ -11,7 +11,6 @@ import { CompanyNotice } from "../CompanyNotice";
 import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatHours, formatInt, formatNumber, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -67,7 +66,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Tasa de rechazo"
-              ilustracion={rutaIlustracion("causales")}
+              icono="causales"
               value={formatPct(summary.rejectionRatePct)}
               tooltip="Rechazados / (aprobados + rechazados) × 100 en el rango."
               variation={kpiVariation("rejectionRatePct")}
@@ -76,7 +75,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             />
             <KpiCard
               label="Aprobación p50"
-              ilustracion={rutaIlustracion("calendario")}
+              icono="tiempo"
               value={formatHours(summary.p50ApprovalHours)}
               tooltip="Mediana de horas entre la última entrega y la decisión (aprobado/rechazado)."
               variation={kpiVariation("p50ApprovalHours")}
@@ -85,7 +84,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             />
             <KpiCard
               label="Aprobación p90"
-              ilustracion={rutaIlustracion("calendario")}
+              icono="tiempo"
               value={formatHours(summary.p90ApprovalHours)}
               tooltip="Percentil 90 de horas entre la última entrega y la decisión: el 90% de los trámites se decide en este tiempo o menos."
               variation={kpiVariation("p90ApprovalHours")}
@@ -94,7 +93,7 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             />
             <KpiCard
               label="Reincidencia"
-              ilustracion={rutaIlustracion("revocatorias")}
+              icono="revocatorias"
               value={formatPct(summary.reincidencePct)}
               tooltip="% de trámites rechazados que se reintentaron: reapertura a borrador, re-radicación tras subsanar, o subsanación abierta."
               variation={kpiVariation("reincidencePct")}

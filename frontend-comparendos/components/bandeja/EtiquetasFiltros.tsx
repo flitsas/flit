@@ -1,6 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import type { ClaveEtiqueta, EtiquetaFiltro } from "@/lib/filtros";
 
 /**
@@ -22,9 +23,7 @@ export function EtiquetasFiltros({
       {etiquetas.map((e) => (
         <span
           key={e.clave}
-          className={`flex items-center gap-1.5 rounded-full border border-flit-brand bg-[var(--badge-info-bg)] px-2.5 py-1 text-xs font-semibold text-flit-brand-ink ${
-            e.porDefecto ? "border-dashed" : ""
-          }`}
+          {...etiquetaKit(e.porDefecto ? "neutral" : { c: "var(--color-flit-brand)", ct: "var(--flit-brand-ink)" })}
           title={e.porDefecto ? "Filtro por defecto de la bandeja" : undefined}
         >
           {e.texto}
@@ -34,7 +33,7 @@ export function EtiquetasFiltros({
             aria-label={`Quitar filtro ${e.texto}`}
             className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <X className="h-3 w-3" aria-hidden />
+            <Icono nombre="cerrar" className="h-3 w-3" />
           </button>
         </span>
       ))}

@@ -94,7 +94,8 @@ describe('HU #12728 — DocumentSlot cabecera (D.2)', () => {
     ).toBeInTheDocument();
     const nota = screen.getByText('Sube la factura original firmada por el concesionario.')
       .parentElement;
-    const infoIcon = nota?.querySelector('svg.lucide-info');
+    // UI Kit 2026: el ícono es el «exclamacion» del kit (`svg.kit-icono`) en vez de lucide-info.
+    const infoIcon = nota?.querySelector('svg.kit-icono');
     expect(infoIcon).toBeTruthy();
     // El azul de marca va por token: en una Marca Blanca toma su color de acción.
     expect(infoIcon?.getAttribute('style')).toMatch(/var\(--color-flit-brand\)/);

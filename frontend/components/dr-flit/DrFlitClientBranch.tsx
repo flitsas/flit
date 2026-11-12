@@ -1,14 +1,15 @@
 "use client";
 
-import { ChevronRight, FileStack, ShieldCheck } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import {
   DR_FLIT_CLIENT_BRANCHES,
   type DrFlitClientBranch,
 } from "./dr-flit-intents";
 
 const ICONS = {
-  tramites: FileStack,
-  validaciones: ShieldCheck,
+  tramites: iconoComo("archivo"),
+  validaciones: iconoComo("escudo"),
 } as const;
 
 export function DrFlitClientBranchChoices({
@@ -70,11 +71,7 @@ export function DrFlitClientBranchChoices({
                   />
                 </span>
                 <span className="flex-1">{branch.label}</span>
-                <ChevronRight
-                  className="h-4 w-4 shrink-0"
-                  style={{ color: "var(--dr-flit-brand-blue)" }}
-                  aria-hidden="true"
-                />
+                <Icono nombre="derecha" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
               </button>
             </li>
           );

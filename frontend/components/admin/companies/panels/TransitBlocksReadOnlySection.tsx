@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -106,7 +106,7 @@ export function TransitBlocksReadOnlySection({
   return (
     <section aria-label="Organismos bloqueados" className="space-y-2">
       <div className="flex items-center gap-2">
-        <Ban className="h-4 w-4 opacity-70" aria-hidden />
+        <Icono nombre="distinto" className="h-4 w-4 opacity-70" />
         <h5 className="text-xs font-semibold">Organismos bloqueados</h5>
       </div>
       <p className="text-xs opacity-60" role="note">

@@ -20,9 +20,9 @@
 // HU #14482 (propuesta): `.control` del prototipo — 44 px, contorno de control visible, superficie
 // elevada y texto de 14px. El error sigue en el naranja de alerta (`aria-invalid`).
 export const WIZARD_INPUT =
-  'min-h-11 w-full rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-sm ' +
-  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--di-text-tertiary)] outline-none transition ' +
-  'focus:border-[color:var(--di-action)] focus:ring-2 focus:ring-flit-brand/20 ' +
+  'min-h-11 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-base ' +
+  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--kit-gris)] outline-none transition ' +
+  'focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] ' +
   'aria-[invalid=true]:border-flit-alert ' +
   'disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -36,9 +36,9 @@ export const WIZARD_INPUT =
 // HU #14482 — mismo `.control` que el campo de texto. El esquema de color sigue al tema (claro en
 // claro, oscuro en oscuro), así que el desplegable nativo ya no queda negro sobre negro.
 export const WIZARD_SELECT =
-  'min-h-11 w-full rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-sm ' +
-  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--di-text-tertiary)] outline-none transition ' +
-  'focus:border-[color:var(--di-action)] focus:ring-2 focus:ring-flit-brand/20 ' +
+  'min-h-11 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-base ' +
+  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--kit-gris)] outline-none transition ' +
+  'focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] ' +
   'hover:border-[color:var(--di-action)] ' +
   'aria-[invalid=true]:border-flit-alert ' +
   'disabled:cursor-not-allowed disabled:opacity-60 ' +
@@ -75,7 +75,7 @@ export const WIZARD_CARD = 'rounded-2xl border bg-card p-4';
  * `focus-visible:ring-[hex]` — todos los usos actuales del repo lo hacen.
  */
 export const WIZARD_BTN =
-  'h-11 w-auto rounded-xl px-6 text-[13px] font-semibold transition ' +
+  'h-11 w-auto rounded-full px-6 text-sm font-semibold transition hover:brightness-90 ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
 
 /**
@@ -83,7 +83,7 @@ export const WIZARD_BTN =
  * PDF anotaciones + prototipo Lovable: estos botones son `#557EFF` sólido, SIN degradado.
  * El degradado (`WIZARD_CTA_GRADIENT`) queda reservado a CTAs de avance/cierre (Continuar, Radicar).
  */
-export const WIZARD_BTN_SOLID = 'var(--color-flit-brand)';
+export const WIZARD_BTN_SOLID = 'var(--kit-azul-relleno)';
 
 /**
  * Botón de acción primario dentro de tarjetas del wizard (validación, documentos, etc.): azul
@@ -91,12 +91,12 @@ export const WIZARD_BTN_SOLID = 'var(--color-flit-brand)';
  * asistente (Continuar / Radicar / Finalizar) — HU #12729 D.3.
  */
 export const WIZARD_BTN_BRAND =
-  'rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 ' +
+  'rounded-full px-4 py-2 text-sm font-semibold text-white transition hover:brightness-90 ' +
   'disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 /** Variante outline del botón de marca para cancelar / reenviar secundario. */
 export const WIZARD_BTN_BRAND_OUTLINE =
-  'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ' +
+  'flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-semibold transition ' +
   'disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 /**

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, RotateCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useCooldown } from "@/hooks/useCooldown";
 import { ApiError } from "@/lib/api/types";
 import { EMAIL_ALREADY_ASSOCIATED_MESSAGE, emailConflictErrorCode, isEmailConflictCode } from "@/lib/users/emailConflict";
@@ -117,7 +117,7 @@ export function ReactivateInvitationButton({
         className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
         style={{ color: "var(--color-flit-brand)" }}
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
+        {busy ? <Icono nombre="girador" className="h-4 w-4 animate-spin" /> : <Icono nombre="reintento" className="h-4 w-4" />}
       </button>
       {message && (
         <p

@@ -1,35 +1,35 @@
 /**
  * Homologación #14507 (regla 3) — piezas visuales del `@flit/ui/Modal` para los diálogos propios que NO se
  * migran a él: cada uno conserva su componente, su foco, su tecla Escape y su clic afuera, y solo toma de
- * aquí el velo, el panel (radio, sombra) y la franja tinta con el círculo turquesa. Son las mismas clases
+ * aquí el velo, el panel (borde de 1 px, sin sombra) y la cabecera blanca del UI Kit 2026. Son las mismas clases
  * que pinta `packages/ui/src/Modal.tsx`; si el Modal cambia, se cambian aquí.
  */
 
-/** Velo del fondo: `--overlay` con el desenfoque del Modal. */
-export const DIALOGO_VELO = 'bg-[var(--overlay)] backdrop-blur-md';
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from '@flit/ui/Modal';
 
-/** Panel: radio de diálogo, superficie de tarjeta y sombra de modal. El ancho lo pone cada diálogo. */
+/** Velo del fondo: el mismo del Modal (`MODAL_VELO_CLS`). */
+export const DIALOGO_VELO = MODAL_VELO_CLS;
+
+/** Panel: radio de diálogo, superficie de tarjeta y borde de 1 px, sin sombra (UI Kit 2026). El ancho lo pone cada diálogo. */
 export const DIALOGO_PANEL =
-  'relative overflow-clip rounded-[var(--di-radius-modal)] bg-card text-flit-primary shadow-[var(--shadow-modal)] dark:text-foreground';
+  'relative overflow-clip rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground';
 
-/** Franja tinta (`.modal__franja`): ícono, título y X en el color sobre acento. */
-export const DIALOGO_FRANJA =
-  'relative flex shrink-0 items-center gap-3 overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)] sm:px-6 sm:py-5';
+/** Cabecera del kit (`MODAL_CABECERA_CLS`): ícono opcional de 52 px, título y bajada centrados; la X va absoluta. */
+export const DIALOGO_FRANJA = `${MODAL_CABECERA_CLS} text-[color:var(--di-heading)]`;
 
-/** Círculo turquesa decorativo de la franja (va como `<span aria-hidden>` dentro de ella). */
+/** Círculo decorativo del diseño anterior: el kit no lo trae; el `<span aria-hidden>` queda oculto. */
 export const DIALOGO_FRANJA_CIRCULO =
-  'pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]';
+  'hidden';
 
-/** Título dentro de la franja. */
-export const DIALOGO_FRANJA_TITULO =
-  'relative z-[1] min-w-0 flex-1 text-base font-semibold leading-tight text-[color:var(--di-on-accent)]';
+/** Título dentro de la franja (`MODAL_TITULO_CLS`). */
+export const DIALOGO_FRANJA_TITULO = `min-w-0 ${MODAL_TITULO_CLS}`;
 
-/** Ícono a la izquierda del título, dentro de la franja. */
-export const DIALOGO_FRANJA_ICONO = 'relative z-[1] h-6 w-6 shrink-0 text-[color:var(--di-on-accent)]';
+/** Ícono sobre el título: el disco del kit de 52 px (fondo --kit-hover, glifo azul), como el `icono` del Modal. */
+export const DIALOGO_FRANJA_ICONO =
+  'h-[52px] w-[52px] shrink-0 rounded-full bg-[var(--kit-hover)] p-3.5 text-[color:var(--kit-azul)]';
 
-/** Botón cerrar (X) de la franja. */
-export const DIALOGO_FRANJA_CERRAR =
-  'relative z-[1] grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]';
+/** Botón cerrar (X): arriba a la derecha de la cabecera (`MODAL_CERRAR_CLS`). */
+export const DIALOGO_FRANJA_CERRAR = MODAL_CERRAR_CLS;
 
 /** Pie separado por la línea del Modal. */
 export const DIALOGO_PIE = 'border-t border-[color:var(--di-divider)]';

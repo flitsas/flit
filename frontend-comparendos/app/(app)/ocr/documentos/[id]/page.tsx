@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Download, RefreshCcw, RotateCcw, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import { ZoomOut } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -112,12 +113,12 @@ function Original({ d }: { d: Documento }) {
               </button>
               <span className="w-12 text-center tabular-nums">{Math.round(zoom * 100)} %</span>
               <button type="button" className={controlCls(false)} aria-label="Acercar" disabled={zoom >= 4} onClick={() => setZoom((z) => Math.min(4, z + 0.25))}>
-                <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="buscar" className="h-3.5 w-3.5" />
               </button>
             </>
           )}
           <button type="button" className={controlCls(false)} onClick={descargar}>
-            <Download className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
             Descargar
           </button>
         </div>
@@ -304,7 +305,7 @@ function Formulario({
     <div className="flex flex-wrap justify-end gap-2">
       {acciones.reintentar && (
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Reintentar
         </button>
       )}
@@ -316,19 +317,19 @@ function Formulario({
           title={d.motivoNoReprocesable ?? (sucio ? "Guarda o deshaz los cambios antes de reprocesar" : undefined)}
           onClick={() => setModal("reprocesar")}
         >
-          <RefreshCcw className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Reprocesar
         </button>
       )}
       {acciones.descartar && (
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setModal("descartar")}>
-          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="papelera" className="h-3.5 w-3.5" />
           Descartar
         </button>
       )}
       {editable && (
         <button type="button" className={controlCls(sucio)} disabled={ocupado || !sucio} onClick={() => setModal("guardar")}>
-          <Save className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           Guardar cambios
         </button>
       )}
@@ -364,7 +365,7 @@ function Formulario({
                 title={sucio ? "Guarda o deshaz los cambios antes de confirmar" : undefined}
                 onClick={confirmarNumero}
               >
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="check" className="h-3.5 w-3.5" />
                 El número está bien
               </button>
               <span className="text-[11px] opacity-70">Si está mal, corrígelo en el campo y guarda.</span>
@@ -432,7 +433,7 @@ function Formulario({
                     {c.valorCorregido !== null && <span className="opacity-60">corregido</span>}
                     {marca && !faltante ? (
                       <span className="inline-flex items-center gap-1 font-semibold text-[var(--badge-warning-fg)]">
-                        <AlertTriangle className="h-3 w-3" aria-hidden />
+                        <Icono nombre="alerta" className="h-3 w-3" />
                         Revisar
                       </span>
                     ) : c.esNull && !faltante ? (
@@ -463,7 +464,7 @@ function Formulario({
 
       {botones && <div className="border-t border-border pt-3">{botones}</div>}
 
-      <Modal
+      <Modal icono="documento"
         open={modal !== null}
         onClose={() => setModal(null)}
         busy={ocupado}
@@ -566,7 +567,7 @@ function Revision({ id }: { id: string }) {
   return (
     <section className="flex flex-col gap-4">
       <Link href={`/ocr/paquetes/${d.paqueteId}`} className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Volver al paquete
       </Link>
       <header className="flex flex-wrap items-center gap-3">

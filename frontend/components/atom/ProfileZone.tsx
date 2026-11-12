@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Mail, Phone, Building2, KeyRound, LifeBuoy, ArrowLeft, Check, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
 
 // Homologación (HU #14511): tarjetas, controles y botones del kit; el diálogo se repinta en su sitio con la franja del Modal.
 const CARD = "rounded-[20px] border border-border bg-card p-6 shadow-[var(--shadow-card)]";
@@ -18,7 +19,7 @@ export function ProfileZone({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="space-y-6">
-      <button onClick={onBack} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Volver al Dashboard</button>
+      <button onClick={onBack} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><Icono nombre="izquierda" className="h-4 w-4" /> Volver al Dashboard</button>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Bloque 1 */}
@@ -32,9 +33,9 @@ export function ProfileZone({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <dl className="mt-5 space-y-3 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground"><Mail className="h-4 w-4 text-muted-foreground" /><span className="font-mono text-xs">auditor.senior@flit.io</span></div>
-            <div className="flex items-center gap-2 text-muted-foreground"><Phone className="h-4 w-4 text-muted-foreground" /><span className="font-mono text-xs">+57 1 555 0099</span></div>
-            <div className="flex items-center gap-2 text-muted-foreground"><Building2 className="h-4 w-4 text-muted-foreground" /><span className="text-xs">Renting Colombia S.A.</span></div>
+            <div className="flex items-center gap-2 text-muted-foreground"><Icono nombre="correo" className="h-4 w-4 text-muted-foreground" /><span className="font-mono text-xs">auditor.senior@flit.io</span></div>
+            <div className="flex items-center gap-2 text-muted-foreground"><Icono nombre="celular" className="h-4 w-4 text-muted-foreground" /><span className="font-mono text-xs">+57 1 555 0099</span></div>
+            <div className="flex items-center gap-2 text-muted-foreground"><Icono nombre="empresas" className="h-4 w-4 text-muted-foreground" /><span className="text-xs">Renting Colombia S.A.</span></div>
           </dl>
           <p className="text-xs text-muted-foreground mt-4 leading-relaxed">Responsable de auditoría transaccional sobre el ecosistema SaaS multi-tenant. Acceso al permiso <span className="font-mono">tramites.admin.maestro</span> y orquestación de la máquina de estados finita.</p>
         </div>
@@ -56,9 +57,9 @@ export function ProfileZone({ onBack }: { onBack: () => void }) {
               <label className="text-xs text-muted-foreground">Teléfono de contacto</label>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} className={`${INPUT} font-mono`} />
               {!phoneOk ? (
-                <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--badge-danger-fg)" }}><X className="h-3 w-3" /> Formato inválido</p>
+                <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--badge-danger-fg)" }}><Icono nombre="cerrar" className="h-3 w-3" /> Formato inválido</p>
               ) : (
-                <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--badge-success-fg)" }}><Check className="h-3 w-3" /> Formato válido</p>
+                <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: "var(--badge-success-fg)" }}><Icono nombre="check" className="h-3 w-3" /> Formato válido</p>
               )}
             </div>
             <button className={buttonClass({ className: "w-full mt-2" })}>Guardar cambios</button>
@@ -69,21 +70,21 @@ export function ProfileZone({ onBack }: { onBack: () => void }) {
         <div className={`${CARD} space-y-3`}>
           <p className="text-[10px] font-mono uppercase text-muted-foreground">Panel Transaccional</p>
           <button onClick={() => setShowPwdModal(true)} className={ITEM}>
-            <KeyRound className="h-5 w-5 text-[color:var(--di-action)]" />
+            <Icono nombre="rol" className="h-5 w-5 text-[color:var(--di-action)]" />
             <div>
               <p className="text-sm font-semibold text-foreground">Cambiar Contraseña</p>
               <p className="text-xs text-muted-foreground">Política: 12 chars · alfanum + símbolo</p>
             </div>
           </button>
           <button className={ITEM}>
-            <LifeBuoy className="h-5 w-5 text-[color:var(--di-info)]" />
+            <Icono nombre="ayuda" className="h-5 w-5 text-[color:var(--di-info)]" />
             <div>
               <p className="text-sm font-semibold text-foreground">Solicitud de Soporte Técnico</p>
               <p className="text-xs text-muted-foreground font-mono">→ landing externa con metadatos</p>
             </div>
           </button>
           <button onClick={onBack} className={ITEM}>
-            <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+            <Icono nombre="izquierda" className="h-5 w-5 text-muted-foreground" />
             <div>
               <p className="text-sm font-semibold text-foreground">Volver al Dashboard</p>
               <p className="text-xs text-muted-foreground">Grilla Maestra de Trámites</p>
@@ -93,12 +94,12 @@ export function ProfileZone({ onBack }: { onBack: () => void }) {
       </div>
 
       {showPwdModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-[var(--overlay)] p-4 backdrop-blur-md">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 ${MODAL_VELO_CLS}`}>
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto overflow-x-clip rounded-[var(--di-radius-modal)] bg-card shadow-[var(--shadow-modal)]">
             <div className="relative flex items-center justify-between gap-3 overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)]">
               <span aria-hidden="true" className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]" />
               <h3 className="relative z-[1] font-bold text-[color:var(--di-on-accent)]">Cambiar Contraseña</h3>
-              <button onClick={() => setShowPwdModal(false)} className="relative z-[1] grid h-10 w-10 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)]"><X className="h-5 w-5" /></button>
+              <button onClick={() => setShowPwdModal(false)} className="relative z-[1] grid h-10 w-10 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)]"><Icono nombre="cerrar" className="h-5 w-5" /></button>
             </div>
             <div className="space-y-3 p-5">
               <input type="password" placeholder="Contraseña actual" className={INPUT} />

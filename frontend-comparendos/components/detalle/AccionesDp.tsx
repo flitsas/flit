@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, MessageSquareReply, RotateCcw, Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -113,13 +113,13 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
           <div className="flex flex-wrap gap-2">
             {!v.bloqueos.some((b) => b.codigo === "SIN_PLANTILLA") && (
               <button type="button" className={controlCls(false)} onClick={verPdf}>
-                <FileText className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="documento" className="h-3.5 w-3.5" />
                 Ver documento
               </button>
             )}
             {puedeEnviar && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!v.puedeEnviar} onClick={() => setConfirmar(true)}>
-                <Send className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="radicacion" className="h-3.5 w-3.5" />
                 Generar y enviar
               </button>
             )}
@@ -127,7 +127,7 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
         </div>
       )}
 
-      <Modal
+      <Modal icono="radicacion"
         open={confirmar}
         onClose={() => setConfirmar(false)}
         busy={enviando}
@@ -179,7 +179,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
   };
 
   return (
-    <Modal
+    <Modal icono="log-mensajes"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -274,13 +274,13 @@ export function AccionesDp({ ctx }: { ctx: ContextoDetalle }) {
     <div className="flex flex-wrap gap-2 border-t border-border pt-3">
       {puedeReintentar && (
         <button type="button" className={controlCls(false)} disabled={reintentando} onClick={reintentar}>
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           {reintentando ? "Reintentando…" : "Reintentar envío"}
         </button>
       )}
       {puedeResponder && (
         <button type="button" className={controlCls(false)} onClick={() => setResponder(true)}>
-          <MessageSquareReply className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="log-mensajes" className="h-3.5 w-3.5" />
           Registrar respuesta del organismo
         </button>
       )}

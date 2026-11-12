@@ -1,7 +1,10 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
+import { BellPlus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -157,7 +160,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
             className={cn(subTabClass(subView === "history"), "flex items-center gap-1")}
             style={subView === "history" ? { background: "var(--color-flit-brand)" } : undefined}
           >
-            <History className="h-3.5 w-3.5" aria-hidden="true" /> Historial de disparos
+            <Icono nombre="reloj" className="h-3.5 w-3.5" /> Historial de disparos
           </button>
         </div>
         {subView === "rules" && !formOpen && !needsCompany && (
@@ -225,12 +228,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                         <td data-label="Último disparo" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{formatDateTime(r.lastTriggeredAt)}</td>
                         <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                           <span
-                            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                            style={
-                              r.isActive
-                                ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                                : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
-                            }
+                            {...etiquetaKit(r.isActive ? "success" : "neutral")}
                           >
                             {r.isActive ? "Activa" : "Inactiva"}
                           </span>
@@ -238,8 +236,8 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                         <td data-label="Acciones" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                           <RowActions
                             actions={[
-                              { icon: Pencil, label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
-                              { icon: Trash2, label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
+                              { icon: iconoComo("lapiz"), label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
+                              { icon: iconoComo("papelera"), label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
                             ]}
                           />
                         </td>

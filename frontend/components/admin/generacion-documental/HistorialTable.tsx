@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
 import {
@@ -146,7 +146,7 @@ export function HistorialTable({
                     <RowActions
                       actions={[
                         {
-                          icon: Download,
+                          icon: iconoComo("nube-bajar"),
                           label: `Descargar ${generacionDocumentalTypeLabel(row.documentType)} del ${formatGeneracionDocumentalDate(row.createdAt)}`,
                           tone: "primary",
                           onClick: () => onDownload(row),

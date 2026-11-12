@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { ClampedText, Hint, StateChip, type ChipTone } from "./ConfigUi";
 
 // Switch accesible reutilizado en las pestañas de configuración (HU #10194).
@@ -77,14 +78,9 @@ export function ToggleSwitch({
             />
             <span
               aria-hidden="true"
-              className="h-6 w-11 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand peer-focus-visible:ring-offset-2"
-              style={{ background: checked ? "var(--color-flit-tech)" : "var(--border)" }}
+              className={`${INTERRUPTOR_CLS} peer-checked:bg-[url('/assets/kit/interruptor-encendido.svg')] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--di-action)]`}
             />
-            <span
-              aria-hidden="true"
-              className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-all"
-              style={{ left: checked ? "calc(100% - 22px)" : "2px" }}
-            />
+            <span aria-hidden="true" className={INTERRUPTOR_PERILLA_CLS} />
           </label>
         </div>
       </div>

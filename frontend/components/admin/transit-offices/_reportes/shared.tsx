@@ -78,7 +78,7 @@ export function Tile({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-border px-3 py-2 text-left transition hover:border-flit-brand hover:shadow-sm dark:hover:border-flit-brand"
+      className="rounded-xl border border-border px-3 py-2 text-left transition hover:border-flit-brand hover:bg-[var(--kit-hover)] dark:hover:border-flit-brand"
     >
       {content}
     </button>
@@ -126,7 +126,7 @@ export function Bucket({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-3 py-2 text-center transition hover:shadow-sm ${baseCls}`}
+      className={`rounded-xl border px-3 py-2 text-center transition ${baseCls}`}
     >
       {content}
     </button>
