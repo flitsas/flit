@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiValidationError } from "@/lib/api/types";
 import type {
@@ -160,7 +160,7 @@ export function CreateDocumentTypeDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={FileText}
+      icono="documento"
       title={title}
       titleClassName="text-base font-bold text-flit-brand"
     >

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import type { TransitOffice } from "@/lib/api/types";
@@ -129,7 +130,7 @@ export function TransitGrantsPicker({
         Buscar organismo de tránsito
       </label>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" aria-hidden />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" />
         <input
           id="ot-grants-search"
           type="search"

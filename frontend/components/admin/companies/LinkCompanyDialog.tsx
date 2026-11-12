@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, Loader2, Search } from "lucide-react";
+import { Link2, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { fetchAllCompanies, linkCompanyToParent } from "@/lib/api/admin-companies";
 import { ApiValidationError, isHeadTenantType, tenantTypeLabel } from "@/lib/api/types";
@@ -144,7 +145,7 @@ export function LinkCompanyDialog({
             Buscar compañía
           </label>
           <div className="relative mb-2">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" aria-hidden />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" />
             <input
               id="link-search"
               type="search"

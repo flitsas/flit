@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { AlertTriangle, Info, ShieldAlert } from "lucide-react";
+import { Info } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   generateTransferenciaDocument,
   prefillPersonaJuridica,
@@ -423,7 +424,7 @@ export function TransferenciaFormPanel() {
         data-testid="transferencia-aviso-normativo"
         className="flex gap-2 rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-3 text-[11px] text-[var(--badge-warning-fg)]"
       >
-        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
         <div>
           <p id="transferencia-aviso-titulo" className="font-semibold">
             FLIT no garantiza la suficiencia jurídica del documento ni su aprobación por el organismo
@@ -452,7 +453,7 @@ export function TransferenciaFormPanel() {
           className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="alerta" className="h-3.5 w-3.5" />
             No se generó el documento: hay validaciones normativas sin cumplir
           </p>
           <ul className="mt-1 list-disc pl-5">

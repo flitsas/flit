@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Search } from "lucide-react";
+import { Ban } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { RowActions } from "@/components/atom/RowActions";
@@ -244,7 +245,7 @@ export function TransitBlocksPanel({
             skeletonRows={3}
           >
             <div className="flex max-w-md items-center gap-2 rounded-xl border bg-card p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand">
-              <Search className="h-4 w-4 opacity-60" aria-hidden />
+              <Icono nombre="buscar" className="h-4 w-4 opacity-60" />
               <label htmlFor="ot-blocks-search" className="sr-only">
                 Buscar organismo de tránsito
               </label>

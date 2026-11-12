@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Loader2, UploadCloud } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import {
@@ -152,7 +153,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             className="flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] font-medium"
             style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{banner}</span>
           </p>
         )}
@@ -257,7 +258,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
                     : "var(--border)",
             }}
           >
-            <UploadCloud className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+            <Icono nombre="nube-subir" className="h-4 w-4 shrink-0 opacity-60" />
             <span className="truncate font-medium">
               {form.file
                 ? form.file.name

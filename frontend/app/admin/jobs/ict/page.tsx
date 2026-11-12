@@ -1,7 +1,7 @@
 "use client";
 
 // HU #12123 — formulario de cadencia ICT. /admin/jobs/ict es SuperAdmin (middleware).
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -20,7 +20,7 @@ export default function AdminIctJobSettingsPage() {
           className="flex w-fit items-center gap-1.5 text-xs font-semibold"
           style={{ color: "var(--color-flit-brand)" }}
         >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="izquierda" className="h-3.5 w-3.5" />
           Volver al catálogo
         </button>
 

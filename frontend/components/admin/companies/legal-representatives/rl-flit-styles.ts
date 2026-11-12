@@ -1,7 +1,7 @@
 /**
  * Tokens visuales del módulo Representantes legales.
  * Fuente: flit_design_tokens.json + patrón CTA admin vivo
- * (`linear-gradient(135deg,#557EFF,#00DBD5)` en CompanyConfigTabs / Usuarios).
+ * (hoy resuelto con los tokens del Manual UI Kit 2026).
  *
  * No inventar hex fuera de este archivo dentro del módulo RL.
  */

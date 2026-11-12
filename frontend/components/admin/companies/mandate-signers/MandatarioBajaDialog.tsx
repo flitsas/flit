@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import {
   impactFromConfirmationError,
@@ -100,7 +99,7 @@ export function MandatarioBajaDialog({
       open
       onClose={onClose}
       busy={busy}
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg={conImpacto || eliminar ? "var(--destructive)" : "var(--color-flit-alert)"}
       title={titulo}
       titleClassName="text-base font-bold text-flit-primary"

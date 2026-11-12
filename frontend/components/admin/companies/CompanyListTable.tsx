@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, Pencil, Settings2 } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { isB2BTenantType, tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
@@ -155,7 +155,7 @@ export function CompanyListTable({
                   <RowActions
                     actions={[
                       {
-                        icon: editable ? Pencil : Lock,
+                        icon: editable ? iconoComo("lapiz") : iconoComo("candado"),
                         label: `Editar ${c.razonSocial}`,
                         onClick: () => editable && onEdit(c),
                         tone: "primary",
@@ -173,7 +173,7 @@ export function CompanyListTable({
                   <RowActions
                     actions={[
                       {
-                        icon: Settings2,
+                        icon: iconoComo("ajustes"),
                         label: `Configurar ${c.razonSocial}`,
                         onClick: () => onConfigure(c.id),
                         tone: "primary",

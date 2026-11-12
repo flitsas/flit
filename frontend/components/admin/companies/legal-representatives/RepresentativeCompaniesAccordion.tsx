@@ -1,14 +1,8 @@
 "use client";
 
 import { useId, useState } from "react";
-import {
-  Building2,
-  Eye,
-  FileText,
-  Loader2,
-  Pencil,
-  Star,
-} from "lucide-react";
+import { Loader2, Star } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { DeedsFormPanel, type DeedEditingRef } from "../deeds/DeedsFormPanel";
 import { saveDeed, fetchDeedDetail, type DeedFormInput } from "@/lib/api/admin-deeds";
@@ -287,11 +281,7 @@ export function RepresentativeCompaniesAccordion({
                 aria-label={`Empresa ${displayName || index + 1}`}
               >
                 <div className="mb-3 flex items-start gap-2">
-                  <Building2
-                    className="mt-0.5 h-4 w-4 shrink-0"
-                    style={{ color: RL_COLOR.brand }}
-                    aria-hidden="true"
-                  />
+                  <Icono nombre="empresas" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: RL_COLOR.brand }} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="truncate text-xs font-semibold">{displayName}</span>
@@ -558,7 +548,7 @@ function DeedBlock({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden="true" />
+                  <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0 opacity-50" />
                   <span className="truncate text-xs font-medium">{deed.description}</span>
                   <StatusBadge
                     tone={deedTone(deed.estado)}
@@ -582,7 +572,7 @@ function DeedBlock({
                   {viewing === deed.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                   ) : (
-                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="ojo" className="h-3.5 w-3.5" />
                   )}
                   Ver PDF
                 </button>
@@ -595,7 +585,7 @@ function DeedBlock({
                     className={rlOutlinedActionClass}
                     style={rlOutlinedActionStyle}
                   >
-                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="lapiz" className="h-3.5 w-3.5" />
                     Editar
                   </button>
                 )}

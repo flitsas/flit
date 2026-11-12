@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, HelpCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * La ayuda de la consola, plegada por omisión.
@@ -22,12 +22,12 @@ export function ComoSeUsa() {
         aria-expanded={abierta}
         className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold"
       >
-        <HelpCircle className="h-4 w-4 shrink-0" aria-hidden="true" style={{ color: "var(--color-flit-brand)" }} />
+        <Icono nombre="ayuda" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
         Cómo se usa
         {abierta ? (
-          <ChevronDown className="ml-auto h-4 w-4 opacity-60" aria-hidden="true" />
+          <Icono nombre="abajo" className="ml-auto h-4 w-4 opacity-60" />
         ) : (
-          <ChevronRight className="ml-auto h-4 w-4 opacity-60" aria-hidden="true" />
+          <Icono nombre="derecha" className="ml-auto h-4 w-4 opacity-60" />
         )}
       </button>
 

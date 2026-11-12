@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, Download, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload } from "@/lib/auth/jwt";
 import { describeImprontaError, generarImpronta } from "@/lib/api/admin-improntas";
@@ -220,7 +221,7 @@ export function ImprontaFormPanel() {
           style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           data-testid="impronta-error"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
@@ -233,7 +234,7 @@ export function ImprontaFormPanel() {
           style={{ borderColor: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
           data-testid="impronta-success"
         >
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} aria-hidden="true" />
+          <Icono nombre="check" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} />
           <div className="flex flex-col gap-1">
             <span>
               Impronta generada y descargada. La descarga del PDF se inició en tu navegador.
@@ -268,7 +269,7 @@ export function ImprontaFormPanel() {
         {submitting ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
-          <Download className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-4 w-4" />
         )}
         {submitting ? "Generando impronta…" : "Generar impronta"}
       </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { TransitGrantsPicker } from "@/components/admin/companies/TransitGrantsPicker";
@@ -201,7 +201,7 @@ export function EditCompanyDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={Building2}
+      icono="empresas"
       title={step === "ot" ? "Organismos de la Concesión" : "Editar compañía"}
       titleClassName="text-base font-bold text-flit-brand"
     >

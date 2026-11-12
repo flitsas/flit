@@ -1,6 +1,5 @@
 "use client";
 
-import { FileText } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { CompanyTransitOfficeOption } from "@/lib/api/admin-mandate-signers";
 
@@ -19,7 +18,7 @@ export function FormatosContratoModal({
     <Modal
       open
       onClose={onClose}
-      icon={FileText}
+      icono="documento"
       iconBg="var(--color-flit-brand)"
       title="Formatos de contrato"
       titleClassName="text-base font-bold text-flit-primary"

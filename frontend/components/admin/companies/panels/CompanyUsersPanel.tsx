@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { History, Pencil, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import {
   assignRole,
   getRoles,
@@ -155,13 +156,13 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
     if (!u || isInvitationRow(u) || managingChild) return [];
     return [
       {
-        icon: History,
+        icon: iconoComo("reloj"),
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
       },
       {
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         label: `Editar usuario ${u.fullName}`,
         tone: "primary",
         onClick: () => setEditTarget(u),

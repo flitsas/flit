@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
@@ -369,7 +369,7 @@ export function OTConfigTablePanel({
           role="note"
           aria-live="polite"
         >
-          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+          <Icono nombre="candado" className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
           <span>{legend}</span>
         </div>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider } from "@/components/admin/Toast";
 import { DocumentProcedureTabs } from "@/components/admin/documents/DocumentProcedureTabs";
@@ -33,7 +33,7 @@ function DocumentProcedureConsole() {
         onClick={() => router.push("/admin/documents/procedures")}
         className={ADMIN_BACK_LINK_CLS}
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver a los trámites
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" /> Volver a los trámites
       </button>
 
       <ModuleTitle
