@@ -2,7 +2,7 @@
 // dock lo filtra por permiso y lo dibuja. Las capacidades de la empresa (OCR, reportes) no van en el token: las trae
 // /api/v1/comparendos/sesion y se aplican aquí antes de entregarle el catálogo al dock.
 import { FileSearch, FileStack, MailWarning, MapPinned, ScanText } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavCatalog, NavItem, NavSection } from "@flit/shell/nav";
 import type { Ilustracion } from "@flit/ui/ilustraciones";
 import { rutaKit } from "@flit/ui/iconos-mapas";

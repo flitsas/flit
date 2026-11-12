@@ -1,6 +1,6 @@
 'use client';
 
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { RowActions } from '@/components/atom/RowActions';
 import { Pagination } from '@/components/atom/Pagination';

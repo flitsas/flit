@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { UserCog } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
 import {
   INVITATION_PENDING_MESSAGE,

@@ -16,7 +16,8 @@
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
 import { CalendarPlus, Lightbulb, type LucideIcon } from "lucide-react";
-import { Icono, iconoComo, type IconoComoProps, type NombreIcono } from "@flit/ui/Icono";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { useMemo, useState, type ComponentType } from "react";
 
 import { Modal } from "@/components/atom/Modal";

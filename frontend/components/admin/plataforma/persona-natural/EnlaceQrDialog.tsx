@@ -9,7 +9,7 @@ import { getPortalDominios, principalActivo } from "@/lib/api/admin-ot-portal-do
 import { direccionConDominio, origenPublicoCanal } from "@/lib/plataforma/direccion-canal";
 import { PN_FIELD_ERROR_CLS, PN_INPUT_CLS } from "./pn-ui";
 import { PnButton } from "./pn-componentes";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export function EnlaceQrDialog({
   codigo,

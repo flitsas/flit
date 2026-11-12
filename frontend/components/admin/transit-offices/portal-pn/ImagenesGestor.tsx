@@ -13,7 +13,7 @@ import {
 import { PORTAL_IMAGE_ACCEPT, validatePortalCarouselLink } from "@/lib/brand/validate-portal-image";
 import type { ClienteMarcaPortal } from "./cliente-marca";
 import { useAuthedImage } from "./useAuthedImage";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 /** Operaciones que necesita el gestor (las cumplen `carrusel` y `banners` del cliente de marca). */
 export interface ApiGestorImagenes {

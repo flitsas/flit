@@ -35,7 +35,7 @@ import { maskTargetUrl } from "./ot-utils";
 import { WebhookFormPanel } from "./WebhookFormPanel";
 
 import { formatFechaHora } from "@/lib/format/date";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 // Bug #13055 — tabla homologada con el modelo de trámites.
 const HEAD_STYLE = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
 const CELL_STYLE = { borderColor: "var(--border)" } as const;

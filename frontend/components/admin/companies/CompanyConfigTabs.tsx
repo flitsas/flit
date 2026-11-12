@@ -3,7 +3,8 @@
 import { createContext, useContext, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { Blocks, FileClock, Network, Palette, PlugZap, Save, UserCog } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";

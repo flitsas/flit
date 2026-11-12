@@ -1,7 +1,7 @@
 'use client';
 
 import type { ComponentType } from 'react';
-import type { IconoComoProps } from '@flit/ui/Icono';
+import type { IconoComoProps } from '@flit/ui/iconoComo';
 
 /**
  * Tile de lectura rápida (icono + label + valor) usado en el detalle de

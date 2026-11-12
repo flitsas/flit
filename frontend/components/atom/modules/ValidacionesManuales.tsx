@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Info, Link2 } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
 import { ActionsMenu } from '@/components/atom/ActionsMenu';
 import { CarLoaderModal } from '@/components/atom/CarLoader';

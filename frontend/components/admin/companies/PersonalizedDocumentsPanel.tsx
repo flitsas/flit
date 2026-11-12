@@ -7,7 +7,8 @@
 // visual: panel de escrituras/representantes legales (`DeedsFormPanel`, `RepresentativesAndVaultTab`).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";

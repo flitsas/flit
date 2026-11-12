@@ -4,7 +4,8 @@
 // anterior al instante), bloquear, desbloquear y desactivar. Toda acción pide confirmación con un mensaje claro; si
 // la API la rechaza (409), el motivo se muestra aquí mismo y el diálogo no se cierra.
 import { useState } from "react";
-import { iconoComo, type NombreIcono } from "@flit/ui/Icono";
+import { type NombreIcono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";

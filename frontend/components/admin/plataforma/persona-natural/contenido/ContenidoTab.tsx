@@ -22,7 +22,7 @@ import { EnlacesSection } from "./EnlacesSection";
 import { PreguntasSection } from "./PreguntasSection";
 import { VersionesModal } from "./VersionesModal";
 import { VistaPreviaModal } from "./VistaPreviaModal";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 function plural(n: number, uno: string, varios: string): string {
   return `${n} ${n === 1 ? uno : varios}`;

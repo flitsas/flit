@@ -1,7 +1,7 @@
 "use client";
 
 import { Network } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
 import { rutaKit } from "@flit/ui/iconos-mapas";
 

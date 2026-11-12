@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Scale } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
 import { NORMATIVA_RESOLUCION_SLUG } from "@/lib/manual/articles/normativa";
 import { ModuleTitle } from "./ModuleTitle";

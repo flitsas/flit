@@ -5,7 +5,7 @@
 // descarta (el padre pone `null`).
 import { useState } from "react";
 import { Copy } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { Modal } from "@/components/atom/Modal";

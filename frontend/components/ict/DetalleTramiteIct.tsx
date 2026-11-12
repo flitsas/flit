@@ -6,7 +6,8 @@
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { Ban, CircleDashed, EyeOff } from "lucide-react";
-import { Icono, iconoComo, type IconoComoProps } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {

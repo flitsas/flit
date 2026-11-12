@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentType } from "react";
-import type { IconoComoProps } from "@flit/ui/Icono";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { buttonClass } from "@flit/ui/Button";
 
 // HU #10844 — Botón de "crear / agregar" unificado. Centraliza el patrón que cada

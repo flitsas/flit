@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { Ban } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 

@@ -12,7 +12,7 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RuleFormPanel } from "./RuleFormPanel";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface RulesSectionProps {
   /** Oficina OT en scope (SuperAdmin navegando el hub). Mismo patrón que RequirementsSection. */

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { bannerEstadoTone } from "@/components/atom/statusTones";

@@ -29,7 +29,7 @@ import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
 import { OtTabBar } from "./OtTabBar";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { TAG_COLOR_OPTIONS, TagFormPanel } from "./TagFormPanel";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 /** Nombre accesible/legible del color de una etiqueta (HU #12883 AC3 — paleta cerrada). */
 function tagColorLabel(hex: string): string {

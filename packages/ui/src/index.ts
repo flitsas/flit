@@ -18,6 +18,7 @@ export * from "./SearchableSelect";
 export * from "./StatusBadge";
 export * from "./ilustraciones";
 export * from "./Icono";
+export * from "./iconoComo";
 export * from "./iconos-mapas";
 export * from "./Interruptor";
 export * from "./Miga";

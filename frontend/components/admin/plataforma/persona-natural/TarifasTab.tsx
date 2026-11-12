@@ -35,7 +35,7 @@ import { nombrePropio } from "./formato";
 import { PnSeccionHeader } from "./pn-componentes";
 import { TarifaFormModal, type TarifaFormMode } from "./TarifaFormModal";
 import { ESTADO_TARIFA_LABEL, ESTADO_TARIFA_TONE, TarifaHistorialModal } from "./TarifaHistorialModal";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "organismo", label: "Organismo", tipo: "texto" },

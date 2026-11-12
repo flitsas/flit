@@ -8,7 +8,8 @@
 // persistente, almacenamiento del navegador ni logs, y al cerrar la tarjeta se descarta.
 import { useCallback, useEffect, useState } from "react";
 import { Copy, PlugZap } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";

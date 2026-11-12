@@ -6,7 +6,8 @@
 // muestra UNA sola vez (no se puede recuperar) — se regenera con "Regenerar secreto".
 import { useCallback, useEffect, useState } from "react";
 import { Copy } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ApiError } from "@/lib/api/types";
 import {

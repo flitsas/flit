@@ -3,7 +3,8 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useEffect, useMemo, useState } from "react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { createInvitation, type InvitationCreatedResult, type TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";

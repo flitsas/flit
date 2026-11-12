@@ -3,7 +3,8 @@
 import { useSyncExternalStore } from "react";
 import type { ComponentType } from "react";
 import { UserX } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { Contadores } from "@/lib/tipos";
 import { TEXTO_JURIDICO, TEXTO_RAPIDO, type FiltroJuridico, type FiltroRapido } from "@/lib/filtros";
 

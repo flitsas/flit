@@ -8,7 +8,7 @@ import {
   updateRejectionReason,
 } from "@/lib/api/ot-metrics";
 import type { RejectionReason } from "@/lib/api/types-ot";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { buttonClass } from "@flit/ui/Button";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";

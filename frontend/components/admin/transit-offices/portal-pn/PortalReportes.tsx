@@ -29,7 +29,7 @@ import { formatFechaHora } from "@/lib/format/date";
 import { condicionesAParams, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export const REPORTE_PORTAL_CARGANDO = "Armando el reporte…";
 export const REPORTE_PORTAL_VACIO = "No hay trámites del portal en FLIT 2.0 con esos filtros.";

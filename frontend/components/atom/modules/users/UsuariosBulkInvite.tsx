@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";

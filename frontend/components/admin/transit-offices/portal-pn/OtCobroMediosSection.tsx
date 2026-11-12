@@ -7,8 +7,9 @@
 import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { useCallback, useEffect, useId, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Store } from "lucide-react";
-import type { IconoComoProps } from "@flit/ui/Icono";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";

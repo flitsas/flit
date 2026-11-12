@@ -31,7 +31,7 @@ import { pnErrorMessage } from "../pnErrors";
 import { BannerFormModal } from "./BannerFormModal";
 import { BannerImagen } from "./BannerImagen";
 import { moverId } from "./PreguntasSection";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "banner", label: "Banner", tipo: "texto" },

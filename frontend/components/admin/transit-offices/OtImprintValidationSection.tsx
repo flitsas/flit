@@ -24,7 +24,7 @@ import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 
 import { formatFechaHora } from "@/lib/format/date";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
 type HistoryPhase = "idle" | "loading" | "error" | "empty" | "ready";

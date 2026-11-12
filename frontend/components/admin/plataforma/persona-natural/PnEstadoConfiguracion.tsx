@@ -5,7 +5,8 @@
 // resume en lenguaje de negocio lo que ve hoy el ciudadano. Los números salen de las mismas listas que usan las
 // pestañas (tipos y organismos); no se inventa ningún dato.
 import { useCallback, useEffect, useState } from "react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { fetchOrganismosPn, fetchTiposPn, type OrganismoPn, type TipoPn } from "@/lib/api/admin-pn-config";
 import { PnButton } from "./pn-componentes";

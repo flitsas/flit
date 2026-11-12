@@ -1,6 +1,6 @@
 'use client';
 
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';

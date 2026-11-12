@@ -7,7 +7,7 @@ import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import { formatFechaHora } from "@/lib/format/date";
 import { resolveTipoNegocio, tipoNegocioLabel } from "@/lib/plataforma/mandato-templates";
 import { TipoMandatoAyuda } from "./TipoMandatoAyuda";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface MandatosFormatosTableProps {
   formatos: readonly MandatoFormatView[];

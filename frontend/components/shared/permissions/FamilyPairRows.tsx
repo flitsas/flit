@@ -1,7 +1,8 @@
 "use client";
 
 import { UserCog } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { ActionView } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
 import { CREATE_NEEDS_READ_HINT } from "./FamilyPairCheckboxes";

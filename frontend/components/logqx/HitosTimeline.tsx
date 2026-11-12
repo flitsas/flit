@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Cpu } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { LogQxHito, LogQxRadicacion } from "@/lib/api/admin-log-qx";
 import {
   codigoQx,

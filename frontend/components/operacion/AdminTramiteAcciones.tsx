@@ -2,7 +2,8 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Ban, Paperclip, UserCog } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from '@/components/atom/Modal';
 import { INLINE_ALERT_TONES, InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';

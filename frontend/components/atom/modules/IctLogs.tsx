@@ -5,7 +5,8 @@
 // Las Consultas personalizadas y la Programación de informes viven en su propio módulo, "Reportes
 // ICT" (HU #11619) — separar los logs técnicos de los reportes de autoservicio.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";

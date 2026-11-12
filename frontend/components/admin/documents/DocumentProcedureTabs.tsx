@@ -3,7 +3,7 @@
 import { useState, type ComponentType } from "react";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { FileStack } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { RequirementsTab } from "@/components/admin/documents/tabs/RequirementsTab";
 import { OtOverridesTab } from "@/components/admin/documents/tabs/OtOverridesTab";
 import { MatrixPreviewTab } from "@/components/admin/documents/tabs/MatrixPreviewTab";

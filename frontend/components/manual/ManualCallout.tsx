@@ -1,7 +1,7 @@
 import type { ManualCallout } from "@/lib/manual/types";
 import { Info, Lightbulb } from "lucide-react";
 import type { ComponentType } from "react";
-import { iconoComo, type IconoComoProps } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 
 const styles: Record<
   ManualCallout["variant"],

@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { ArrowUpRight, Globe, Palette } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { BrandLogo } from "@flit/brand/BrandLogo";
 import { PRODUCTS, type ProductInfo } from "@/lib/products";
 import { COMPANY, CONTACT, PILLARS, STEPS, demoMailto } from "@/lib/site";

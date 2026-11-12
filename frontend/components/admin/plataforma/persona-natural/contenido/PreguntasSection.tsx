@@ -28,7 +28,7 @@ import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { PnConfirmDialog, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { PreguntaFormModal } from "./PreguntaFormModal";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "pregunta", label: "Pregunta", tipo: "texto" },

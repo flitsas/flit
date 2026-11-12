@@ -3,7 +3,7 @@
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { Ban, CircleDashed } from "lucide-react";
-import type { IconoComoProps } from "@flit/ui/Icono";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -22,7 +22,7 @@ import {
 import { formatFechaHora } from "@/lib/format/date";
 import { proveedorLabel, QUERY_KIND_LABEL } from "./historial-columns";
 import { leerRespuestaRunt, type RuntRespuestaVista } from "./runt-respuesta";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 type Pestana = "veredicto" | "respuesta" | "json";
 

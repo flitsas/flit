@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { CalendarX, Copy, ListTree, XCircle } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
 import { SectionTabs } from '@/components/atom/SectionTabs';

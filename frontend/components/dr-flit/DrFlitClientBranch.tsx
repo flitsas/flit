@@ -1,7 +1,8 @@
 "use client";
 
 import { FileStack } from "lucide-react";
-import { Icono, iconoComo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import {
   DR_FLIT_CLIENT_BRANCHES,
   type DrFlitClientBranch,

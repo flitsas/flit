@@ -72,4 +72,5 @@ export function IconoModulo({ clave, size, className, style, disco, etiqueta }: 
   return <Icono nombre={m as NombreIcono} size={size} className={className} style={style} disco={disco} etiqueta={etiqueta} />;
 }
 
-export { iconoComo, type IconoComoProps } from "./iconoComo";
+// `iconoComo` NO se reexporta aquí: este módulo es "use client" y desde el servidor sería una referencia de cliente.
+// Se importa siempre de "@flit/ui/iconoComo".

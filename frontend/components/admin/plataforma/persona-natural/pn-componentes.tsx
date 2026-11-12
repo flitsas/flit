@@ -5,7 +5,8 @@
 // sección con ayuda breve. Todo sale de los tokens de `pn-ui.ts` (línea base de globals.css).
 import { useState, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from "react";
 import { Loader2, type LucideIcon } from "lucide-react";
-import type { IconoComoProps, NombreIcono } from "@flit/ui/Icono";
+import type { NombreIcono } from "@flit/ui/Icono";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PN_CANCEL_BTN_CLS, PN_DANGER_BTN_STYLE, PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "./pn-ui";

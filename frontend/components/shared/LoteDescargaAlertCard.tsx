@@ -2,7 +2,8 @@
 
 import { useId, type ComponentType, type Ref } from 'react';
 import { ChevronsRight, FileArchive, Loader2, Network, XCircle } from "lucide-react";
-import { Icono as IconoKit, iconoComo, type IconoComoProps } from "@flit/ui/Icono";
+import { Icono as IconoKit } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import { MENSAJE_REINTENTAR_DESCARGA } from '@/lib/api/consolidado-lotes-client';
 import {

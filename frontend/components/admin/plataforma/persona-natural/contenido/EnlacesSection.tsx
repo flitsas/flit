@@ -26,7 +26,7 @@ import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_L
 import { PnButton, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarEnlace } from "./contenidoReglas";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 /** Texto de la columna «Valor»: la URL, «Sin documento oficial» (legales) o «Sin valor» (los demás). */
 export function valorEnlace(e: EnlacePn): { texto: string; vacio: boolean } {

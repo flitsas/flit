@@ -1,7 +1,7 @@
 'use client';
 
 import { Info } from "lucide-react";
-import { iconoComo } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { avisoDigitoPlacaOt } from '@/lib/tramites/plate-digit-preference';
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
