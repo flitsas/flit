@@ -227,7 +227,27 @@ public sealed class FurNumeral3MarksTests
             "TRASPASO",
             FurPrendaMarking.Levantamiento,
             new FurTransformacionesDeclaradas(Combustible: true))
-            .Should().BeEquivalentTo([2, 12, 18]);
+            .Should().BeEquivalentTo([2, 12, 9, 18]);
+    }
+
+    [Fact]
+    public void ConversionCombustible_Marca9TransformacionY18Otros()
+    {
+        Marks("CONVERSION_COMBUSTIBLE").Should().BeEquivalentTo([9, 18]);
+    }
+
+    [Fact]
+    public void ConversionCombustible_ConTransformacionCombustibleDeclarada_NoDuplica()
+    {
+        Marks("CONVERSION_COMBUSTIBLE", t: new FurTransformacionesDeclaradas(Combustible: true))
+            .Should().BeEquivalentTo([9, 18]);
+    }
+
+    [Fact]
+    public void TransformacionComplementariaDeCombustible_EnMatricula_Suma9Y18()
+    {
+        Marks("MATRICULA_NUEVA", "MATRICULAS", t: new FurTransformacionesDeclaradas(Combustible: true))
+            .Should().BeEquivalentTo([1, 9, 18]);
     }
     // ── Feature #13110 — «Omitir prenda»: la tabla 2 no suma (ni 11 ni 12) ─────────────────────
 
