@@ -1,8 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Download, FileSpreadsheet, Upload } from 'lucide-react';
+import { FileSpreadsheet } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
+import { PESTANAS_LISTA_CLS, pestanaClass } from '@flit/ui/Pestanas';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { download } from '@/components/consultas/export';
 import { XLSX_MIME } from '@/lib/xlsx';
@@ -117,7 +119,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
         <div
           role="tablist"
           aria-label="Carga masiva"
-          className="flex gap-1 border-b border-border"
+          className={PESTANAS_LISTA_CLS}
         >
           {(
             [
@@ -132,11 +134,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
               aria-selected={pestana === clave}
               onClick={() => setPestana(clave)}
               data-testid={`carga-masiva-tab-${clave}`}
-              className={`-mb-px border-b-2 px-3 pb-2 text-xs font-semibold transition ${
-                pestana === clave
-                  ? 'border-flit-brand text-flit-brand-ink'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              className={pestanaClass(pestana === clave)}
             >
               {titulo}
             </button>
@@ -191,7 +189,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
             className={`${controlCls(false)} self-start`}
             data-testid="carga-masiva-descargar"
           >
-            <Download className={`h-3.5 w-3.5 ${descargando ? 'animate-pulse' : ''}`} aria-hidden="true" />
+            <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${descargando ? 'animate-pulse' : ''}`} />
             {descargando ? 'Descargando…' : 'Descargar plantilla'}
           </button>
 
@@ -250,7 +248,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: WIZARD_CTA_GRADIENT }}
           >
-            <Upload className={`h-3.5 w-3.5 ${subiendo ? 'animate-pulse' : ''}`} aria-hidden="true" />
+            <Icono nombre="nube-subir" className={`h-3.5 w-3.5 ${subiendo ? 'animate-pulse' : ''}`} />
             {subiendo ? 'Subiendo…' : 'Procesar archivo'}
           </button>
         </div>

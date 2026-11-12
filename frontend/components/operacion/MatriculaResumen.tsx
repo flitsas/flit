@@ -1,7 +1,8 @@
 'use client';
 
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
+import { Copy, Star } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { EditarSeccionButton, type DestinoEdicion } from './EditarSeccionButton';
 import type {
   BiometricParte,
@@ -11,7 +12,7 @@ import type {
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-import { estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { ESTADO_ICONO, type EstadoTramite, estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { COPY } from '@/lib/copy/copy-catalog';
@@ -285,7 +286,7 @@ function PrendaDocumentoVerButton({
               .finally(() => setBusy(false));
           }}
         >
-          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5 shrink-0" />
           {busy ? 'Abriendo…' : 'Ver'}
         </button>
         {error ? (
@@ -324,7 +325,7 @@ function IdentidadStatusBanner({
           style={{ background: 'var(--color-flit-brand)', color: 'white' }}
           aria-hidden
         >
-          <FileSignature className="h-5 w-5" />
+          <Icono nombre="firma" className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
@@ -353,7 +354,7 @@ function IdentidadStatusBanner({
           style={{ background: 'var(--flit-success-ink)', color: 'white' }}
           aria-hidden
         >
-          <Check className="h-5 w-5" />
+          <Icono nombre="check" className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           {/* Copy Flit 2.0 · S4. El puntaje se retira por decisión de producto: el número no le
@@ -386,7 +387,7 @@ function IdentidadStatusBanner({
         style={{ background: 'var(--muted-foreground)', color: 'var(--card)' }}
         aria-hidden
       >
-        <Clock className="h-5 w-5" />
+        <Icono nombre="reloj" className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
         {/* Copy Flit 2.0 · S4. */}
@@ -473,7 +474,7 @@ function CertificadoIdButton({
             : 'Disponible cuando la validación esté aprobada'
         }
       >
-        <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0" />
         {busy ? 'Abriendo…' : label}
       </button>
       {!aprobado && (
@@ -640,7 +641,7 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
         style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
         {copied ? 'Copiado' : 'Copiar'}
       </button>
     </div>
@@ -1020,6 +1021,7 @@ export default function MatriculaResumen({
                 <StatusBadge
                   label={estadoLabelConOrigen(status, rejectedFrom)}
                   className={estadoChipClass(status)}
+                  icono={ESTADO_ICONO[status as EstadoTramite]}
                   bg={estadoChipStyle(status).bg}
                   color={estadoChipStyle(status).color}
                   border={estadoChipStyle(status).border}

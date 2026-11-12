@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import { Copy, Send } from 'lucide-react';
+import { Copy } from "lucide-react";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import {
@@ -352,7 +352,7 @@ export function ReenviarValidacionIdentidadModal({
       onClose={cerrar}
       title="Reenviar validación de identidad"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={Send}
+      icono="radicacion"
       description={`Trámite ${referenceNumber}`}
       size="sm"
       busy={busy}

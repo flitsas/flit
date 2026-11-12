@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { WizardAccordion } from './WizardAccordion';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -157,7 +157,7 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
   return (
     <WizardAccordion
       title="Escrituras vigentes de la compañía"
-      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />}
+      icon={<Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />}
       open={open}
       onOpenChange={setOpen}
     >

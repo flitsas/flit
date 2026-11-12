@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ChevronUp } from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
+import { MAPA_ICONO } from "@flit/ui/iconos-mapas";
 import type { DockEntry, DockGroup } from "@flit/shell/nav";
 import { useShellNav } from "@flit/shell/nav-context";
 
@@ -66,17 +67,26 @@ function filas(grupo: DockGroup): { entry: DockEntry; sub?: string }[] {
   ]);
 }
 
-/** Ilustración del grupo o del módulo (la del dock, HU #14479); sin ella, el ícono de línea en un círculo cielo. */
+/** Clave del kit a partir de la ruta que declara el catálogo del dock (`/assets/kit/modulo/reportes.svg`), como el dock. */
+function claveDe(ruta: string): string | null {
+  const nombre = ruta.split("/").pop()?.replace(/\.(svg|webp|png)$/, "") ?? "";
+  return nombre in MAPA_ICONO ? nombre : null;
+}
+
+/**
+ * UI Kit 2026: el ícono del grupo o del módulo en el disco del kit (`.kico`), con la misma clave que usa el dock; si la
+ * clave no tiene ícono en el kit, el ícono de línea de siempre en ese mismo disco. Decorativo.
+ */
 function Glifo({ entry, size }: { entry: { icon: DockEntry["icon"]; ilustracion?: string }; size: "grupo" | "modulo" }) {
-  const cls = size === "grupo" ? "h-9 w-9 max-sm:h-8 max-sm:w-8" : "h-8 w-8";
-  if (entry.ilustracion) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={entry.ilustracion} alt="" aria-hidden="true" className={`${cls} shrink-0`} />;
+  const lado = size === "grupo" ? 36 : 32;
+  const clave = entry.ilustracion ? claveDe(entry.ilustracion) : null;
+  if (clave) {
+    return <IconoModulo clave={clave} disco size={lado} className="shrink-0" />;
   }
   const Icon = entry.icon;
   return (
-    <span aria-hidden="true" className={`${cls} grid shrink-0 place-items-center rounded-full bg-[var(--di-sky)] text-[color:var(--di-accent)]`}>
-      <Icon className="h-[55%] w-[55%]" aria-hidden="true" />
+    <span aria-hidden="true" className="kit-disco shrink-0" style={{ width: lado, height: lado }}>
+      <Icon className="h-[56%] w-[56%]" aria-hidden="true" />
     </span>
   );
 }
@@ -119,10 +129,7 @@ function Grupo({ grupo, abierto, onAlternar, conteos }: { grupo: DockGroup; abie
               {total.toLocaleString("es-CO")} {conCifra.length === 1 ? conCifra[0].etiqueta : "con cifra"}
             </span>
           )}
-          <ChevronUp
-            className={`h-[18px] w-[18px] shrink-0 transition-transform duration-150 motion-reduce:transition-none ${abierto ? "text-[color:var(--di-action)]" : "rotate-180 text-[color:var(--di-text-tertiary)]"}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="arriba" className={`h-[18px] w-[18px] shrink-0 transition-transform duration-150 motion-reduce:transition-none ${abierto ? "text-[color:var(--di-action)]" : "rotate-180 text-[color:var(--di-text-tertiary)]"}`} />
         </button>
       </h3>
       <div id={panelId} hidden={!abierto}>

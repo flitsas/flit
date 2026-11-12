@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
-import { Eye, Info } from 'lucide-react';
+import { Info } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   ocrResultForTipo,
   resumirVins,
@@ -28,8 +29,8 @@ import {
   DIALOGO_FRANJA_CIRCULO,
   DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
-  DIALOGO_VELO,
 } from './dialogo-propio';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -593,7 +594,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
       <button
         type="button"
         className="inline-flex h-7 w-7 items-center justify-center rounded-full"
-        style={{ background: palette.color, color: 'var(--di-on-accent)', boxShadow: 'var(--shadow-card)' }}
+        style={{ background: palette.color, color: 'var(--di-on-accent)' }}
         aria-label={`OCR ${nombre}: ${palette.label}. Ver detalle`}
         aria-describedby={tipOpen ? tipId : undefined}
         aria-expanded={detailOpen}
@@ -610,7 +611,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         <div
           id={tipId}
           role="tooltip"
-          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-card p-2.5 text-left shadow-lg"
+          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-card p-2.5 text-left shadow-[var(--kit-sombra)]"
           style={{ borderColor: palette.border }}
         >
           <p className="text-xs font-bold" style={{ color: palette.color }}>
@@ -637,7 +638,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           // B6 (guardián de diseño) — overlay único del sistema: `rgba(22,39,68,0.45)` +
           // `backdrop-blur-[6px]` (antes `bg-black/40 backdrop-blur-sm`, uno de los cuatro
           // overlays distintos del asistente).
-          className={`fixed inset-0 z-50 grid place-items-center px-4 ${DIALOGO_VELO}`}
+          className={`fixed inset-0 z-50 grid place-items-center px-4 ${MODAL_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby={`ocr-detail-title-${tipo}`}
@@ -653,7 +654,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
               <div className="relative z-[1] flex min-w-0 items-center gap-2">
                 <span
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)]"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--kit-hover)] text-[color:var(--kit-azul-relleno)]"
                   aria-hidden
                 >
                   <Info className="h-4 w-4" strokeWidth={2.5} />
@@ -671,7 +672,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <button
                 type="button"
                 onClick={() => setDetailOpen(false)}
-                className="relative z-[1] shrink-0 rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] px-3 py-1.5 text-xs font-semibold text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]"
+                className="relative z-[1] shrink-0 rounded-[9px] border border-[color:var(--di-border)] bg-transparent px-3 py-1.5 text-xs font-semibold text-[color:var(--di-action)] transition hover:bg-[var(--kit-hover)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
               >
                 Cerrar
               </button>
@@ -835,7 +836,7 @@ export function DocumentSlot({
         // «Certificado de Aduana» (sin nombre de archivo ni barra de progreso) quedaba más baja que
         // sus vecinas. Quitar la altura explícita deja actuar el `align-items: stretch` por defecto
         // del flex container, que sí iguala cada tarjeta a la más alta de su misma fila.
-        'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
+        'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
         (isAuto || (done && !ocrRejected)
           ? 'border'
           : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary')
@@ -951,7 +952,7 @@ export function DocumentSlot({
                 style={{ color: 'var(--color-flit-brand)' }}
                 aria-label={`Previsualizar ${caption}`}
                 >
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
               </button>
             )}
             {!deFlito && (

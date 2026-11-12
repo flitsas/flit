@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, type ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
-import { DIALOGO_FRANJA, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL, DIALOGO_VELO } from './dialogo-propio';
+import { DIALOGO_FRANJA, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL } from './dialogo-propio';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
 
 /**
  * Modal centrado del asistente, en la forma de la propuesta: overlay opaco de marca, tarjeta de
@@ -36,7 +37,7 @@ export function WizardModal({
   useWizardFocusTrap(cardRef, { active: true, onEscape: onClose });
 
   return (
-    <div className={`fixed inset-0 z-[1150] grid place-items-center p-6 ${DIALOGO_VELO}`}>
+    <div className={`fixed inset-0 z-[1150] grid place-items-center p-6 ${MODAL_VELO_CLS}`}>
       {/* Captura del clic fuera. No es un control accesible a propósito: duplicaría el nombre del
           botón de cierre y el teclado ya sale por Escape o por la X. */}
       <div className="absolute inset-0" aria-hidden="true" onClick={onClose} />
@@ -55,9 +56,9 @@ export function WizardModal({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-3 z-[2] grid h-10 w-10 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)] sm:right-5 sm:top-4"
+          className="absolute right-4 top-4 z-[2] grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] sm:right-5 sm:top-5"
         >
-          <X className="h-5 w-5" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-5 w-5" />
         </button>
         <div className={`${DIALOGO_FRANJA} pr-16`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />

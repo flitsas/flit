@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
 import { usePendingChanges } from './pending-changes';
@@ -1038,10 +1038,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               aria-controls={runtDetailId}
             >
               <span>Ver información de prenda / gravamen del RUNT</span>
-              <ChevronDown
-                className={`h-4 w-4 shrink-0 transition-transform ${runtOpen ? 'rotate-180' : ''}`}
-                aria-hidden
-              />
+              <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition-transform ${runtOpen ? 'rotate-180' : ''}`} />
             </button>
             {runtOpen && (
               <div

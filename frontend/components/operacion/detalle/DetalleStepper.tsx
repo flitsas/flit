@@ -1,18 +1,19 @@
 'use client';
 
-import { Check, type LucideIcon } from 'lucide-react';
+import type { ComponentType } from "react";
+import { Icono } from "@flit/ui/Icono";
 import { DETALLE_CARD } from './detalle-visual';
 
 export interface DetallePaso {
   id: string;
   label: string;
-  Icon: LucideIcon;
+  Icon: ComponentType<{ className?: string }>;
   /** Paso cumplido (círculo turquesa + check si no está seleccionado). */
   completo: boolean;
 }
 
 /**
- * Stepper del detalle — círculos 36px con icono/check (spec flit-detalle-tramite).
+ * Stepper del detalle con el avance horizontal del UI Kit 2026 (`.kit-pasos`), con ícono/check en el círculo.
  * Distinto del StepMarker del wizard (28px + halo).
  */
 export function DetalleStepper({
@@ -29,27 +30,17 @@ export function DetalleStepper({
 }) {
   return (
     <div className={integrado ? 'overflow-x-auto' : `${DETALLE_CARD} mt-3 overflow-x-auto p-4`}>
-      <div className="flex min-w-[760px] items-start" role="tablist" aria-label="Pasos del trámite">
+      {/* UI Kit 2026: avance horizontal del kit (`.kit-pasos`): círculos de 32 px unidos por la línea de 2 px que
+          dibuja `.kit-paso + .kit-paso::before`; hecho en verde, el abierto con borde azul y aro, lo que falta en gris.
+          Roles, ids y manejadores de las pestañas quedan iguales. */}
+      <div className="kit-pasos min-w-[760px] items-start" role="tablist" aria-label="Pasos del trámite">
         {pasos.map((paso, i) => {
           const isSel = paso.id === pasoActivoId;
           const done = paso.completo && !isSel;
-          // Lenguaje de la propuesta (línea de avance): hecho en turquesa, el paso abierto en azul de
-          // acción con halo, lo que falta en blanco con aro gris. Sin verde.
-          const marcador = isSel
-            ? {
-                background: 'var(--di-action)',
-                borderColor: 'var(--di-action)',
-                color: 'var(--di-on-action)',
-                boxShadow: '0 0 0 5px var(--di-accent-soft)',
-              }
-            : done
-              ? { background: 'var(--color-flit-tech)', borderColor: 'var(--color-flit-tech)', color: 'var(--flit-tinta, #162744)' }
-              : { background: 'var(--di-surface-elevated)', borderColor: 'var(--di-border-control)', color: 'var(--di-text-tertiary)' };
-          const esUltimo = i === pasos.length - 1;
-          const conectorHecho = paso.completo;
+          const estado = isSel ? 'actual' : done ? 'hecho' : 'pendiente';
 
           return (
-            <div key={paso.id} className="flex flex-1 items-center last:flex-none">
+            <div key={paso.id} className="kit-paso" data-estado={estado}>
               <button
                 type="button"
                 role="tab"
@@ -58,35 +49,19 @@ export function DetalleStepper({
                 aria-controls={`detalle-panel-${paso.id}`}
                 aria-label={`Paso ${i + 1}: ${paso.label}`}
                 onClick={() => onSelect(paso.id)}
-                className="flex shrink-0 flex-col items-center gap-2 rounded-xl px-2 py-1 transition hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+                className="kit-paso__boton rounded-[9px] py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
               >
-                <span
-                  className="grid h-8 w-8 place-items-center rounded-full border-[3px] transition"
-                  style={marcador}
-                  aria-hidden="true"
-                >
+                <span className="kit-paso__num" aria-hidden="true">
                   {done ? (
-                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                    <Icono nombre="check" className="h-4 w-4" />
                   ) : (
-                    <paso.Icon className="h-3.5 w-3.5" />
+                    <paso.Icon className="h-4 w-4" />
                   )}
                 </span>
-                <span
-                  className={`whitespace-nowrap text-[12px] ${isSel ? 'font-bold' : 'font-semibold'}`}
-                  style={{
-                    color: isSel ? 'var(--di-action)' : done ? 'var(--di-heading)' : 'var(--di-text-secondary)',
-                  }}
-                >
+                <span className="kit-paso__etiqueta whitespace-nowrap">
                   {i + 1}. {paso.label}
                 </span>
               </button>
-              {!esUltimo ? (
-                <div
-                  className="mx-1 mt-[-22px] h-[3px] flex-1 rounded-full"
-                  style={{ background: conectorHecho ? 'var(--color-flit-tech)' : 'var(--di-surface-sunken)' }}
-                  aria-hidden="true"
-                />
-              ) : null}
             </div>
           );
         })}

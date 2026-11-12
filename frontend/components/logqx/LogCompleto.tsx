@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -142,7 +142,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
           disabled={!data || data.data.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium opacity-80 hover:opacity-100 disabled:opacity-40"
         >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" /> Exportar
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5" /> Exportar
         </button>
       </div>
 
@@ -254,7 +254,7 @@ function FilaEvento({
     <>
       <tr
         className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
-          abierto ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
+          abierto ? "bg-[var(--kit-hover)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -268,10 +268,7 @@ function FilaEvento({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`} />
         </td>
         <td className={`${tdCls} whitespace-nowrap font-mono tabular-nums`}>
           {formatFecha(evento.occurredAt)}

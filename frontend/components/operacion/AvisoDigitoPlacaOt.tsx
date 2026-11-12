@@ -1,7 +1,11 @@
 'use client';
 
-import { CheckCircle2, Info } from 'lucide-react';
+import { Info } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { avisoDigitoPlacaOt } from '@/lib/tramites/plate-digit-preference';
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_CHECK = iconoComo("check");
 
 /**
  * Registro diferido 2026-11-09 (HU 3) — aviso al gestor: la placa que asignó el organismo de
@@ -31,7 +35,7 @@ export function AvisoDigitoPlacaOt({
   const aviso = avisoDigitoPlacaOt({ placa, source, digito, clase });
   if (!aviso) return null;
   const exito = aviso.tono === 'exito';
-  const Icon = exito ? CheckCircle2 : Info;
+  const Icon = exito ? ICONO_CHECK : Info;
   return (
     <p
       role="status"

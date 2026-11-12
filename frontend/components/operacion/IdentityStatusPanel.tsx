@@ -2,8 +2,9 @@
 
 import { esFamiliaTraspaso } from './wizardCapabilities';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, Clock, Info, XCircle } from 'lucide-react';
+import { type ComponentType, useCallback, useEffect, useRef, useState } from 'react';
+import { Info, XCircle } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -19,6 +20,10 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_ALERTA = iconoComo("alerta");
+const ICONO_RELOJ = iconoComo("reloj");
 /**
 
  * HU #10875 + CF-08 (Feature #11004, HU #11009).
@@ -41,12 +46,12 @@ function parteLabel(role: string | null | undefined, fallback?: string | null): 
 
 const ALERT_META: Record<
   IdentityValidationAlertKind,
-  { label: string; tone: StatusTone; icon: typeof AlertCircle }
+  { label: string; tone: StatusTone; icon: ComponentType<{ className?: string }> }
 > = {
   rechazada: { label: 'Rechazada', tone: 'danger', icon: XCircle },
-  expirada: { label: 'Expirada', tone: 'danger', icon: AlertCircle },
-  por_vencer: { label: 'Por vencer', tone: 'warning', icon: Clock },
-  atascada: { label: 'Atascada', tone: 'warning', icon: AlertTriangle },
+  expirada: { label: 'Expirada', tone: 'danger', icon: ICONO_ALERTA },
+  por_vencer: { label: 'Por vencer', tone: 'warning', icon: ICONO_RELOJ },
+  atascada: { label: 'Atascada', tone: 'warning', icon: ICONO_ALERTA },
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -271,7 +276,7 @@ export function IdentityStatusPanel({
               role="alert"
               aria-live="polite"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-1">
                 <p className="font-semibold">No se pudo cargar el historial de identidad.</p>
                 <p className="opacity-80">{error}</p>
@@ -390,7 +395,7 @@ function MotivoNoEnvioRow({ motivo }: { motivo: EnvioValidacionMotivo }) {
   const copy = presentarMotivoNoEnvio(motivo.codigo, parte);
   const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
   const { color, background, border } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
-  const Icono = bloqueo ? AlertTriangle : Info;
+  const Icono = bloqueo ? ICONO_ALERTA : Info;
 
   return (
     <div
@@ -428,7 +433,7 @@ function AlertsBanner({
       role="alert"
       aria-live="polite"
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="space-y-1">
         {alerts.length > 0 && (
           <p className="font-semibold">

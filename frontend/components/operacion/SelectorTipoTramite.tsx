@@ -65,7 +65,7 @@ function OpcionTarjeta({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex h-full w-full flex-col rounded-xl border bg-card p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-flit-brand enabled:hover:shadow-sm"
+      className="flex h-full w-full flex-col rounded-xl border bg-card p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-flit-brand"
       style={{ borderColor: 'var(--border)', ...(disabled ? { opacity: 0.55 } : {}) }}
     >
       <span className="text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>

@@ -1,11 +1,6 @@
-import {
-  AlertTriangle,
-  Ban,
-  Check,
-  Clock,
-  FileText,
-  type LucideIcon,
-} from 'lucide-react';
+import type { ComponentType } from "react";
+import { Ban } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 
@@ -14,7 +9,7 @@ export interface DetalleEstadoHeader {
   label: string;
   /** Tono del estado — mismo `accent` que fila/filtros (`estadoChipStyle`). */
   color: string;
-  Icon: LucideIcon;
+  Icon: ComponentType<{ className?: string }>;
   /** Banner contextual opcional bajo el header. */
   alert: string | null;
   pendiente: boolean;
@@ -31,7 +26,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Check,
+        Icon: iconoComo("check"),
         alert: null,
         pendiente: false,
       };
@@ -72,7 +67,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Clock,
+        Icon: iconoComo("reloj"),
         alert: 'Radicado sin placa: el Organismo de Tránsito debe asignarla.',
         pendiente: true,
       };
@@ -80,7 +75,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Check,
+        Icon: iconoComo("check"),
         alert: 'Placa asignada por el Organismo de Tránsito. Gestiona el SOAT y los impuestos y envía el trámite al OT.',
         pendiente: true,
       };
@@ -88,7 +83,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: FileText,
+        Icon: iconoComo("documento"),
         alert: 'Trámite en borrador: faltan pasos por completar.',
         pendiente: false,
       };
@@ -96,7 +91,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Check,
+        Icon: iconoComo("check"),
         alert: null,
         pendiente: false,
       };
@@ -104,7 +99,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Clock,
+        Icon: iconoComo("reloj"),
         alert: null,
         pendiente: false,
       };
@@ -112,7 +107,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: AlertTriangle,
+        Icon: iconoComo("alerta"),
         alert: 'Trámite en subsanación activa.',
         pendiente: true,
       };
@@ -120,7 +115,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: AlertTriangle,
+        Icon: iconoComo("alerta"),
         alert: 'Trámite pendiente por aprobación del Organismo de Tránsito.',
         pendiente: true,
       };
