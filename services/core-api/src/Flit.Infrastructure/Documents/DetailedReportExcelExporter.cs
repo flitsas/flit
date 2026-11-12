@@ -2,9 +2,11 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Analytics.Application.Abstractions;
+using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.Dtos;
 using Flit.Analytics.Application.Queries;
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Domain.Tramites.Enums;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -28,6 +30,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         "Referencia", "Tipo de trámite", "Categoría", "Estado", "Radicado por",
         "Persona documento", "Persona nombre", "Transformación", "Detalle transformación",
         "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado",
+        // HU #14319 — al final, para no mover las columnas que ya existían.
+        "Canal", "OT del canal",
     ];
 
     /// <summary>Cabeceras del reporte de red: «Compañía» + las de siempre, en el mismo orden.</summary>
@@ -47,19 +51,24 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(filter);
 
+        // Paso previo: el máximo de actores por rol sobre TODO el filtro fija el ancho del bloque de validación de
+        // identidad (igual para toda la hoja). Crece solo si hace falta.
+        var max = await _repo.GetMaxActoresPorRolAsync(filter, ct).ConfigureAwait(false);
+
         var wroteRows = await WriteWorkbookAsync(
             output,
-            Headers,
+            DetalleHeaders(Headers, max),
             (writeRow, token) => _repo.ExportProceduresAsync(
                 filter,
                 (row, _) =>
                 {
-                    writeRow(ToCells(row));
+                    writeRow([.. ToCells(row), .. ActoresCells(row, max)]);
                     return Task.CompletedTask;
                 },
                 token),
             requireRows: true,
-            ct).ConfigureAwait(false);
+            ct,
+            numericColumns: IntentosColumns(DetalleHeaders(Headers, max))).ConfigureAwait(false);
 
         if (!wroteRows)
             throw new InvalidOperationException("no_records");
@@ -71,9 +80,10 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         ArgumentNullException.ThrowIfNull(filter);
 
         IReadOnlyList<Guid> reached = [];
+        var max = await _networkRepo.GetNetworkMaxActoresPorRolAsync(filter, ct).ConfigureAwait(false);
         await WriteWorkbookAsync(
             output,
-            NetworkHeaders,
+            DetalleHeaders(NetworkHeaders, max),
             async (writeRow, token) =>
             {
                 // AC5 — la misma consulta y el mismo filtro resuelto que el listado; AC4 — un conjunto
@@ -82,13 +92,14 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                     filter,
                     (row, _) =>
                     {
-                        writeRow(ToNetworkCells(row));
+                        writeRow([.. ToNetworkCells(row), .. ActoresCells(row.ToRow(), max)]);
                         return Task.CompletedTask;
                     },
                     token).ConfigureAwait(false);
             },
             requireRows: false,
-            ct).ConfigureAwait(false);
+            ct,
+            numericColumns: IntentosColumns(DetalleHeaders(NetworkHeaders, max))).ConfigureAwait(false);
 
         return reached;
     }
@@ -103,7 +114,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         IReadOnlyList<string> headers,
         Func<Action<IReadOnlyList<string>>, CancellationToken, Task> writeRowsAsync,
         bool requireRows,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlySet<int>? numericColumns = null)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"flit-detailed-report-{Guid.NewGuid():N}.xlsx");
         var wroteRows = false;
@@ -118,13 +130,13 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
                 {
                     writer.WriteStartElement(new Worksheet());
                     writer.WriteStartElement(new SheetData());
-                    WriteRow(writer, headers);
+                    WriteRow(writer, headers, null);
 
                     await writeRowsAsync(
                         cells =>
                         {
                             wroteRows = true;
-                            WriteRow(writer, cells);
+                            WriteRow(writer, cells, numericColumns);
                         },
                         ct).ConfigureAwait(false);
 
@@ -158,6 +170,28 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         }
     }
 
+    /// <summary>
+    /// Cabeceras de la hoja: las de siempre + (después de Canal / OT del canal) los dos grupos de validación de
+    /// identidad, Comprador y Vendedor, cada uno agrupado por persona. Contrato v3.
+    /// </summary>
+    private static IReadOnlyList<string> DetalleHeaders(IReadOnlyList<string> baseHeaders, MaxActoresPorRolDto max) =>
+    [
+        .. baseHeaders,
+        .. ActoresExcelColumns.Headers(max, ActoresExcelColumns.Grupo.Comprador),
+        .. ActoresExcelColumns.Headers(max, ActoresExcelColumns.Grupo.Vendedor),
+    ];
+
+    private static IReadOnlyList<string> ActoresCells(DetailedProcedureRowDto row, MaxActoresPorRolDto max) =>
+    [
+        .. ActoresExcelColumns.Cells(row.Actores, max, ActoresExcelColumns.Grupo.Comprador),
+        .. ActoresExcelColumns.Cells(row.Actores, max, ActoresExcelColumns.Grupo.Vendedor),
+    ];
+
+    /// <summary>Posiciones de las columnas «Intentos …»: son las únicas que se escriben como número.</summary>
+    private static HashSet<int> IntentosColumns(IReadOnlyList<string> headers) =>
+        headers.Select((h, i) => (h, i)).Where(x => x.h.StartsWith("Intentos ", StringComparison.Ordinal))
+            .Select(x => x.i).ToHashSet();
+
     private static string[] ToCells(DetailedProcedureRowDto r) =>
     [
         r.ReferenceNumber,
@@ -174,16 +208,33 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         r.TransferType ?? string.Empty,
         FormatoFecha.Instante(r.SubmittedAt),
         FormatoFecha.Instante(r.CompletedAt),
+        // HU #14319 — nombre visible del catálogo; un código ajeno al catálogo se muestra tal cual en vez de ocultarse.
+        TramiteCanal.NombreVisible(TramiteCanal.Efectivo(r.Channel)) ?? r.Channel,
+        r.ChannelTransitOfficeName ?? string.Empty,
     ];
 
     /// <summary>«Compañía» + las mismas celdas de siempre (AC1/AC6: ningún enlace ni contenido de documentos).</summary>
     private static string[] ToNetworkCells(NetworkDetailedProcedureRowDto r) => [r.TenantName, .. ToCells(r.ToRow())];
 
-    private static void WriteRow(OpenXmlWriter writer, IReadOnlyList<string> values)
+    private static void WriteRow(OpenXmlWriter writer, IReadOnlyList<string> values, IReadOnlySet<int>? numericColumns)
     {
         writer.WriteStartElement(new Row());
-        foreach (var value in values)
+        for (var i = 0; i < values.Count; i++)
         {
+            var value = values[i];
+            // Solo las columnas marcadas (Intentos) van como número, para poder sumarlas y filtrarlas; el resto del
+            // archivo conserva su convención de texto. Un valor vacío o no numérico se queda como texto.
+            if (numericColumns is not null && numericColumns.Contains(i)
+                && double.TryParse(value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var number))
+            {
+                writer.WriteElement(new Cell
+                {
+                    CellValue = new CellValue(number.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                });
+                continue;
+            }
+
             var cell = new Cell { DataType = CellValues.InlineString };
             cell.AppendChild(new InlineString(new Text(value)));
             writer.WriteElement(cell);

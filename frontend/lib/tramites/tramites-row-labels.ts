@@ -16,6 +16,7 @@ import type {
   FirmaParteEstado,
   InstanceSummary,
   RuntConfirmedValue,
+  TramiteCanal,
   TramiteFuente,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
@@ -157,6 +158,37 @@ export const FUENTE_LABEL: Record<TramiteFuente, string> = {
   integracion: 'Integración',
   migrado: 'Migrado',
 };
+
+/**
+ * Épica #14296 (HUs #14321/#14322) — ÚNICA fuente de los nombres de canal en el frontend. Los códigos
+ * son los del contrato (`TramiteCanal` en el backend / enum del OpenAPI). Ningún otro archivo escribe
+ * estos textos.
+ */
+export const CANAL_LABEL: Record<TramiteCanal, string> = {
+  tramites: 'Trámites',
+  pn_web: 'Persona Natural Web',
+  pn_punto: 'Persona Natural OT',
+  integracion: 'Integración',
+  aplicacion: 'Aplicación',
+};
+
+/** Canales en el orden en que se ofrecen en los selectores. */
+export const CANALES_ORDENADOS: readonly TramiteCanal[] = [
+  'tramites',
+  'pn_web',
+  'pn_punto',
+  'integracion',
+  'aplicacion',
+];
+
+/** Canal que se muestra cuando el backend no lo trae (histórico o backend anterior). */
+export const CANAL_POR_DEFECTO: TramiteCanal = 'tramites';
+
+/** Nombre del canal; un código desconocido (contrato nuevo) se muestra tal cual, sin inventar. */
+export function canalLabel(canal: string | null | undefined): string {
+  if (!canal) return CANAL_LABEL[CANAL_POR_DEFECTO];
+  return CANAL_LABEL[canal as TramiteCanal] ?? canal;
+}
 
 /**
  * Feature #12276 (HU #12312) — texto de la columna «Confirmado en RUNT»: SÍ, NO o vacío (la celda

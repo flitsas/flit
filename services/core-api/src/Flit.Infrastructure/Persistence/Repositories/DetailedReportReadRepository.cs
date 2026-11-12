@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
+using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.Dtos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -31,6 +32,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
           AND (@personName::text IS NULL OR v.person_full_name ILIKE '%' || @personName::text || '%')
           AND (@hasTransformation::boolean IS NULL OR v.has_transformation = @hasTransformation::boolean)
           AND (@isLeasing::boolean IS NULL OR v.is_leasing = @isLeasing::boolean)
+          AND (@channel::text IS NULL OR v.channel = @channel::text)
+          AND (@channelOffice::uuid IS NULL OR v.channel_transit_office_id = @channelOffice::uuid)
           AND {FamilyByDetailView}
         """ + "\n";
 
@@ -51,7 +54,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
                 SELECT v.id, v.reference_number, v.procedure_type_name, v.category, v.status,
                        v.created_by_display_name, v.submitted_at, v.completed_at,
                        v.person_document, v.person_full_name, v.has_transformation,
-                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type
+                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type,
+                       v.channel, v.channel_transit_office_id, v.channel_transit_office_name, v.actors::text
                 """ + BaseFrom + """
                 ORDER BY v.created_at DESC, v.id DESC
                 LIMIT @pageSize OFFSET @offset;
@@ -62,8 +66,20 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
 
             var items = await ReadRowsAsync(pageCmd, ct).ConfigureAwait(false);
             var summary = await ReadSummaryAsync(conn, tx, filter, ct).ConfigureAwait(false);
-            return new DetailedProceduresPageDto(items, total, page, pageSize, summary);
+            var maxActores = await ReadMaxActoresAsync(conn, tx, filter, ct).ConfigureAwait(false);
+            return new DetailedProceduresPageDto(items, total, page, pageSize, summary, maxActores);
         }, ct);
+
+    public Task<MaxActoresPorRolDto> GetMaxActoresPorRolAsync(DetailedReportFilter filter, CancellationToken ct = default) =>
+        ExecuteWithTenantAsync(filter.TenantId, (conn, tx) => ReadMaxActoresAsync(conn, tx, filter, ct), ct);
+
+    private static async Task<MaxActoresPorRolDto> ReadMaxActoresAsync(
+        DbConnection conn, DbTransaction tx, DetailedReportFilter filter, CancellationToken ct)
+    {
+        await using var cmd = CreateCommand(conn, tx, DetailedReportActors.MaxSql(BaseFrom));
+        BindFilter(cmd, filter);
+        return await DetailedReportActors.ReadMaxAsync(cmd, ct).ConfigureAwait(false);
+    }
 
     public Task ExportProceduresAsync(
         DetailedReportFilter filter,
@@ -77,7 +93,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
                 SELECT v.id, v.reference_number, v.procedure_type_name, v.category, v.status,
                        v.created_by_display_name, v.submitted_at, v.completed_at,
                        v.person_document, v.person_full_name, v.has_transformation,
-                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type
+                       v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type,
+                       v.channel, v.channel_transit_office_id, v.channel_transit_office_name, v.actors::text
                 """ + BaseFrom + """
                 ORDER BY v.created_at DESC, v.id DESC;
                 """);
@@ -165,7 +182,11 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
             reader.GetString(13),
             // `transfer_type` es NULL fuera de la familia TRASPASO (DDL 90): ahí la pregunta no
             // aplica, y una celda vacía lo dice mejor que inventarle una clase de traspaso.
-            reader.IsDBNull(14) ? null : reader.GetString(14));
+            reader.IsDBNull(14) ? null : reader.GetString(14),
+            reader.GetString(15),
+            reader.IsDBNull(16) ? null : reader.GetGuid(16),
+            reader.IsDBNull(17) ? null : reader.GetString(17),
+            DetailedReportActors.Parse(reader.IsDBNull(18) ? null : reader.GetString(18)));
 
     private static void BindFilter(DbCommand cmd, DetailedReportFilter filter)
     {
@@ -181,6 +202,8 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
         AddParam(cmd, "personName", (object?)filter.PersonName ?? DBNull.Value);
         AddParam(cmd, "hasTransformation", filter.HasTransformation.HasValue ? filter.HasTransformation.Value : DBNull.Value);
         AddParam(cmd, "isLeasing", filter.IsLeasing.HasValue ? filter.IsLeasing.Value : DBNull.Value);
+        AddParam(cmd, "channel", (object?)filter.Channel ?? DBNull.Value);
+        AddParam(cmd, "channelOffice", (object?)filter.ChannelTransitOfficeId ?? DBNull.Value);
         AnalyticsFamilyFilter.AddParam(cmd, filter.AllowedFamilies);
     }
 

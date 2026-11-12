@@ -51,6 +51,7 @@ import {
   type DataColumn,
 } from "./columns";
 import { CoverageNotice, coverageLines } from "./CoverageNotice";
+import type { MaxActoresPorRol } from "@/lib/api/company-queries";
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes, queryFileName } from "./export";
 import { decodeDefinition, encodeDefinition } from "./link-state";
 import { QueryFilterBar } from "./QueryFilterBar";
@@ -411,8 +412,13 @@ export function QueryConsole<TRow>({
         const notas = coverageLines(result.cobertura, fields);
         const nombre = saved.find((q) => q.id === activeId)?.nombre ?? null;
 
+        // Solo las consultas de empresa lo traen; sin él no se exportan las columnas por actor.
+        const maxActoresPorRol = (result as { maxActoresPorRol?: MaxActoresPorRol })
+          .maxActoresPorRol;
+
         const { exportadas, archivos: totalArchivos } = await exportarPorLotes<TRow>({
           total: result.total,
+          maxActoresPorRol,
           pageSize: QUERY_MAX_PAGE_SIZE,
           traerPagina: async (page, pageSize) =>
             (await source.run(definition, { page, pageSize })).filas,
@@ -428,12 +434,19 @@ export function QueryConsole<TRow>({
 
             if (formato === "xlsx") {
               download(
-                buildWorkbook(sheetName, allColumns, lote, visibleColumns, notas),
+                buildWorkbook(
+                  sheetName,
+                  allColumns,
+                  lote,
+                  visibleColumns,
+                  notas,
+                  parte.maxActoresPorRol,
+                ),
                 fileName,
                 XLSX_MIME,
               );
             } else {
-              const csv = buildCsv(allColumns, lote, visibleColumns);
+              const csv = buildCsv(allColumns, lote, visibleColumns, parte.maxActoresPorRol);
               const conNotas =
                 notas.length > 0
                   ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
@@ -555,6 +568,7 @@ export function QueryConsole<TRow>({
                 <DateField
                   label="Desde"
                   value={definition.fechas.from ?? ""}
+                  max={definition.fechas.to ?? undefined}
                   onChange={(from) =>
                     setDefinition((prev) => ({ ...prev, fechas: { ...prev.fechas, from } }))
                   }
@@ -562,6 +576,7 @@ export function QueryConsole<TRow>({
                 <DateField
                   label="Hasta"
                   value={definition.fechas.to ?? ""}
+                  min={definition.fechas.from ?? undefined}
                   onChange={(to) =>
                     setDefinition((prev) => ({ ...prev, fechas: { ...prev.fechas, to } }))
                   }
@@ -914,10 +929,15 @@ function DateField({
   label,
   value,
   onChange,
+  min,
+  max,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** Límites cruzados: Desde no pasa de Hasta y Hasta no baja de Desde. */
+  min?: string;
+  max?: string;
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -925,6 +945,8 @@ function DateField({
       <input
         type="date"
         value={value}
+        min={min || undefined}
+        max={max || undefined}
         onChange={(e) => onChange(e.target.value)}
         className={FIELD_CLS}
       />
