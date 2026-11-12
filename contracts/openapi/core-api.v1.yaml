@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.5"
+  version: "1.0.6"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
