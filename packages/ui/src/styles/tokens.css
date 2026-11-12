@@ -603,8 +603,10 @@
   /* Avance horizontal (`ol.pasos`). */
   .kit-pasos { display: flex; margin: 0; padding: 16px 16px 4px; list-style: none; overflow-x: auto; }
   .kit-paso { position: relative; flex: 1 1 0; min-width: 96px; }
+  /* La línea va de centro a centro por DEBAJO de los círculos (z-index 0 frente a 1): si no, el paso siguiente la pinta
+   * encima del disco del anterior. */
   .kit-paso + .kit-paso::before {
-    content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 2px; background: var(--kit-linea);
+    content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 2px; background: var(--kit-linea); z-index: 0;
   }
   .kit-paso[data-estado="hecho"]::before, .kit-paso[data-estado="actual"]::before { background: var(--kit-azul-texto); }
   .kit-paso__boton {
@@ -613,6 +615,7 @@
   }
   button.kit-paso__boton { cursor: pointer; }
   .kit-paso__num {
+    position: relative; z-index: 1;
     display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9999px;
     border: 2px solid var(--kit-gris); background: var(--di-surface-elevated); color: var(--kit-gris);
     font-weight: 700; font-size: 0.875rem;
