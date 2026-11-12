@@ -1,5 +1,4 @@
 import type { ComponentType } from 'react';
-import { XCircle } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import type { ManualOrigin, ManualStatus } from '@/lib/api/types/manual-review';
@@ -18,7 +17,7 @@ export const MANUAL_STATUS_META: Record<ManualStatus, ManualStatusMeta> = {
   manual_activo: { label: 'Esperando captura', tone: 'info', icon: iconoComo("espera") },
   pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info', icon: iconoComo("reloj") },
   aprobado: { label: 'Aprobada manual', tone: 'success', icon: iconoComo("check") },
-  rechazado: { label: 'Rechazada', tone: 'danger', icon: XCircle },
+  rechazado: { label: 'Rechazada', tone: 'danger', icon: iconoComo("cerrar") },
   expirado: { label: 'Vencida', tone: 'neutral', icon: iconoComo("cronometro") },
 };
 

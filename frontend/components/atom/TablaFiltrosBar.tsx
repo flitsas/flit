@@ -77,7 +77,6 @@
  */
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { SearchX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   INPUT_CLS,
@@ -367,7 +366,7 @@ export function TablaFiltrosVacio({
 }) {
   return (
     <div role="status" className="flex flex-col items-center gap-3 px-4 py-10 text-center">
-      <SearchX className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+      <Icono nombre="buscar" className="h-8 w-8 text-muted-foreground" />
       <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{mensaje}</p>
       <button
         type="button"

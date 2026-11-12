@@ -1,6 +1,24 @@
 // Íconos del Manual UI Kit 2026 (propuesta-2, assets/kit/kit-iconos.js) más la X del sprite de index.html. GENERADO: no editar a mano.
 // Azul y tinta en currentColor; acentos naranja y verde fijos; los detalles blancos son recortes (máscara, __K__ = id único).
 export const GLIFOS = {
+ // Controles de interfaz (trazo de 24 px, como las flechas, el check y la X del kit): sin glifo en el paquete, dibujados
+ // con el mismo trazo de los controles del kit. «girador» es el `.girador` de la propuesta (aro con el arco azul).
+ "mas": {
+  "vb": "0 0 24 24",
+  "inner": "<path d=\"M12 5v14M5 12h14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/>"
+ },
+ "copiar": {
+  "vb": "0 0 24 24",
+  "inner": "<rect x=\"8\" y=\"8\" width=\"12\" height=\"12\" rx=\"2.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\"/><path d=\"M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\"/>"
+ },
+ "girador": {
+  "vb": "0 0 24 24",
+  "inner": "<circle cx=\"12\" cy=\"12\" r=\"8.5\" fill=\"none\" stroke=\"currentColor\" stroke-opacity=\".25\" stroke-width=\"2.4\"/><path d=\"M12 3.5a8.5 8.5 0 0 1 8.5 8.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\"/>"
+ },
+ "ojo-tachado": {
+  "vb": "0 0 24 24",
+  "inner": "<path d=\"M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linejoin=\"round\"/><circle cx=\"12\" cy=\"12\" r=\"2.6\" fill=\"currentColor\"/><path d=\"M4 20 20 4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/>"
+ },
  // Control de interfaz del sprite de index.html (i-cerrar): la X de diálogos, avisos y filtros activos.
  "cerrar": {
   "vb": "0 0 24 24",

@@ -22,11 +22,16 @@ export interface PaginationProps {
   noun?: string;
 }
 
-/** Mismo selector que el listado de trámites (control de 36 px, borde neutro). */
-const SELECT_CLS =
-  "inline-flex h-9 shrink-0 items-center rounded-[9px] border border-border bg-card px-3 text-xs " +
-  "font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 " +
-  "focus-visible:ring-flit-brand focus-visible:ring-offset-2";
+/**
+ * Selector de «Filas por página» con el `.control` del kit (radio 9, borde de línea, foco azul con la sombra del kit), en
+ * la densidad de 36 px del pie. Exportado para las tablas que arman su propio pie (p. ej. /tramites).
+ */
+export const PAGINACION_SELECT_CLS =
+  "inline-flex h-9 shrink-0 items-center rounded-[9px] border border-[color:var(--di-border-control)] " +
+  "bg-[var(--di-surface-elevated)] px-3 text-sm font-semibold text-[color:var(--di-text-primary)] transition " +
+  "hover:border-[color:var(--di-action)] focus:outline-none focus:border-[color:var(--di-action)] " +
+  "focus:shadow-[var(--kit-sombra)] focus-visible:ring-2 focus-visible:ring-[var(--di-action)]";
+const SELECT_CLS = PAGINACION_SELECT_CLS;
 
 /**
  * Paginación ESTÁNDAR de las tablas FLIT (Bug #13055): la misma del listado de trámites.

@@ -40,6 +40,8 @@ export const EMBUDO_CLS =
 export interface ChipFiltroProps {
   /** Conteo en negrita delante de la etiqueta. Se omite si no se pasa. */
   cifra?: ReactNode;
+  /** Ícono del estado sobre la etiqueta en el embudo (ruta del disco, p. ej. `ESTADO_ICONO[estado]`). Decorativo. */
+  icono?: string;
   etiqueta: ReactNode;
   activo: boolean;
   onClick: () => void;
@@ -52,6 +54,7 @@ export interface ChipFiltroProps {
 
 export function ChipFiltro({
   cifra,
+  icono,
   etiqueta,
   activo,
   onClick,
@@ -81,6 +84,11 @@ export function ChipFiltro({
         <>
           <strong className="text-xl font-bold tabular-nums group-aria-pressed:text-[color:var(--kit-azul-texto)]">{cifra}</strong>
           <span className="text-xs font-medium">{etiqueta}</span>
+          {/* Último en el DOM y primero a la vista (columna invertida): el nombre accesible sigue siendo «15 Todos». */}
+          {icono ? (
+            // eslint-disable-next-line @next/next/no-img-element -- disco estático del kit
+            <img src={icono} alt="" aria-hidden="true" width={32} height={32} className="mb-0.5 h-8 w-8" />
+          ) : null}
         </>
       ) : (
         <span>{etiqueta}</span>
@@ -93,6 +101,7 @@ export interface OpcionChipFiltro<V extends string> {
   valor: V;
   etiqueta: ReactNode;
   cifra?: ReactNode;
+  icono?: string;
   pendiente?: boolean;
   disabled?: boolean;
 }
@@ -124,6 +133,7 @@ export function ChipsFiltro<V extends string>({
         <ChipFiltro
           key={o.valor}
           cifra={o.cifra}
+          icono={o.icono}
           etiqueta={o.etiqueta}
           activo={o.valor === valor}
           onClick={() => onChange(o.valor)}

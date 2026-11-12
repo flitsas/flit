@@ -4,7 +4,6 @@
 // pantalla tradujera los estados por su cuenta, el XLSX que se reenvía por correo podría decir algo
 // distinto de lo que el analista tenía en la pantalla.
 import type { ComponentType } from "react";
-import { Ban, CircleDashed } from "lucide-react";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { ESTADO_CHIP_STYLES, type EstadoChipStyle } from "@/lib/tramites/estados";
 
@@ -40,7 +39,7 @@ export const ESTADO_ICT: Record<EstadoIct, { label: string; style: EstadoChipSty
   recibido: {
     label: "Recibido",
     style: ESTADO_CHIP_STYLES.borrador,
-    Icon: CircleDashed,
+    Icon: iconoComo("espera"),
   },
   en_validacion_negocio: {
     label: "Validando negocio",
@@ -70,7 +69,7 @@ export const ESTADO_ICT: Record<EstadoIct, { label: string; style: EstadoChipSty
   anulado: {
     label: "Anulado",
     style: ESTADO_CHIP_STYLES.anulado,
-    Icon: Ban,
+    Icon: iconoComo("distinto"),
   },
 };
 

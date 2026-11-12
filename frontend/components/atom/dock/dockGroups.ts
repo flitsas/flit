@@ -1,5 +1,5 @@
 import type { ComponentType, CSSProperties } from "react";
-import { FileStack, Radar, FolderCog } from "lucide-react";
+import { FolderCog } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -79,13 +79,13 @@ export type DockIconComponent = ComponentType<{
 }>;
 
 export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
-  tramites: FileStack,
+  tramites: iconoComo("archivo"),
   identidad: iconoComo("escudo"),
   reportes: iconoComo("reportes"),
   usuarios: iconoComo("usuarios"),
   administracion: FolderCog,
   administradores: iconoComo("candado"),
-  integraciones: Radar,
+  integraciones: iconoComo("consulta"),
 };
 
 /** Mapeo entrada del dock → agrupador (por key estable). */

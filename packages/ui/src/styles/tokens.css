@@ -624,3 +624,5 @@
   .kit-paso__etiqueta { font-size: 0.875rem; font-weight: 400; color: var(--di-text-primary); }
   .kit-paso[data-estado="actual"] .kit-paso__etiqueta { font-weight: 700; color: var(--kit-azul-texto); }
 }
+
+/* «girador» del kit (`.girador`): el ícono gira solo cuando la pieza lo pide con `animate-spin`, como el Loader2 de antes. */

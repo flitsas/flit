@@ -1,5 +1,7 @@
 'use client';
 
+import { Icono } from './Icono';
+
 /**
  * Paginación numerada del diseño FLIT: ‹ 1 2 … N ›, con la página activa rellena en tinta.
  *
@@ -35,7 +37,7 @@ const BOTON_FLECHA_CLS =
   'focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-default disabled:opacity-45 ' +
   'disabled:hover:bg-transparent max-sm:h-11 max-sm:min-w-11';
 /** Primera/Última llevan su nombre a la vista: un «»» suelto no se lee como «ir al final». */
-const BOTON_EXTREMO_CLS = `${BOTON_FLECHA_CLS} inline-flex gap-1`;
+const BOTON_EXTREMO_CLS = `${BOTON_FLECHA_CLS} inline-flex shrink-0 gap-1 whitespace-nowrap`;
 const NUMERO_CLS =
   'grid h-9 w-9 place-items-center rounded-full border border-transparent text-[0.8125rem] ' +
   'font-semibold tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
@@ -87,7 +89,7 @@ export function PageNav({
             aria-label="Primera página"
             title="Primera página"
           >
-            <span aria-hidden="true">«</span>
+            <Icono nombre="izquierda" size={16} />
             <span aria-hidden="true">Primera</span>
           </button>
           <button
@@ -98,7 +100,7 @@ export function PageNav({
             aria-label="Página anterior"
             title="Página anterior"
           >
-            ‹
+            <Icono nombre="izquierda" size={18} />
           </button>
           {paginas.map((p, i) =>
             p === 'gap' ? (
@@ -130,7 +132,7 @@ export function PageNav({
             aria-label="Página siguiente"
             title="Página siguiente"
           >
-            ›
+            <Icono nombre="derecha" size={18} />
           </button>
           <button
             type="button"
@@ -141,7 +143,7 @@ export function PageNav({
             title="Última página"
           >
             <span aria-hidden="true">Última</span>
-            <span aria-hidden="true">»</span>
+            <Icono nombre="derecha" size={16} />
           </button>
         </div>
       ) : null}

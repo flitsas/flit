@@ -857,8 +857,7 @@
   .suite-buscar:hover { background: var(--kit-hover); }
   .suite-buscar kbd { border-radius: 9px; background: var(--kit-hover); color: var(--di-text-primary); }
 
-  .suite-icono-btn { border: 0; background: transparent; color: var(--kit-azul); }
-  .dark .suite-icono-btn { color: #a9c9fc; }
+  .suite-icono-btn { border: 0; background: transparent; color: var(--di-text-primary); }
   .suite-icono-btn:hover,
   .suite-icono-btn[aria-pressed="true"],
   .suite-icono-btn[aria-expanded="true"] { background: var(--kit-hover); border-color: transparent; }
@@ -910,8 +909,8 @@
     gap: 2px; padding: 8px 14px; border-radius: 9999px; background: var(--di-surface-elevated); border: 0;
     box-shadow: var(--kit-sombra), 0 0 0 1px color-mix(in srgb, var(--kit-linea) 60%, transparent); backdrop-filter: none;
   }
-  .dock-glifo--icono { background: transparent; color: var(--kit-azul); }
-  .dark .dock-glifo--icono { color: #a9c9fc; }
+  /* Como la propuesta: los íconos del menú en tinta (el texto del ítem); el activo pasa a azul con su disco. */
+  .dock-glifo--icono { background: transparent; color: var(--di-text-primary); }
   .dock-pill { padding: 0 12px 0 8px; font-weight: 400; color: var(--di-text-primary); }
   .dock-pill:hover, .dock-pill[aria-expanded="true"] { background: var(--kit-hover); color: var(--di-text-primary); }
   .dock-pill__glifo, .dock-pill--compacta .dock-pill__glifo { width: 36px; height: 36px; border-radius: 9999px; }
