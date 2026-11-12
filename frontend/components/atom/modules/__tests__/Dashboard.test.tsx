@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ActiveModulesResponse, AnalyticsOverviewResponse } from "@/lib/api/types";
@@ -526,23 +526,20 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(params.createdTo).toBeUndefined();
   });
 
-  it("el selector de rango arranca vacío (HU #12724)", async () => {
+  it("el selector de rango arranca vacío: «Todo el periodo» (HU #12724)", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(
-      await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText("Periodo")).toHaveValue("todo");
+    expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
   });
 
   it("al aplicar una sola fecha, sí se acota: el filtro sigue disponible", async () => {
     const user = userEvent.setup();
     render(<Dashboard onNewTramite={noop} />);
-    await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByLabelText("Periodo")).toBeEnabled());
 
-    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
-    const dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
-    await user.click(within(dialog).getByTestId("day-2026-09-01"));
-    await user.click(within(dialog).getByTestId("date-range-apply"));
+    await user.selectOptions(screen.getByLabelText("Periodo"), "personalizado");
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-09-01" } });
 
     await waitFor(() => {
       const ultima = mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0];
@@ -552,28 +549,25 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].to).toBeFalsy();
   });
 
-  it("Limpiar en el picker devuelve a la vista sin acotar (HU #12724 / #12725)", async () => {
+  it("«Todo el periodo» devuelve a la vista sin acotar (HU #12724 / #12725)", async () => {
     const user = userEvent.setup();
     render(<Dashboard onNewTramite={noop} />);
+    // El selector se deshabilita mientras carga: se espera a que termine antes de usarlo.
+    await waitFor(() => expect(screen.getByLabelText("Periodo")).toBeEnabled());
 
-    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
-    let dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
-    await user.click(within(dialog).getByTestId("day-2026-09-01"));
-    await user.click(within(dialog).getByTestId("date-range-apply"));
+    await user.selectOptions(screen.getByLabelText("Periodo"), "personalizado");
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-09-01" } });
     await waitFor(() => {
       expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBe("2026-09-01");
     });
+    await waitFor(() => expect(screen.getByLabelText("Periodo")).toBeEnabled());
 
-    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
-    dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
-    await user.click(within(dialog).getByTestId("date-range-clear"));
+    await user.selectOptions(screen.getByLabelText("Periodo"), "todo");
 
-    expect(
-      await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
-    ).toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBeFalsy();
     });
+    expect(screen.getByLabelText("Periodo")).toHaveValue("todo");
   });
 });
 
@@ -653,7 +647,7 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(banner.style.minHeight).toBe("");
   });
 
-  it("AC2 — SuperAdmin ve DateRangePicker y CompanySelector en la misma fila de filtros", async () => {
+  it("AC2 — SuperAdmin ve RangoFechas y CompanySelector en la misma fila de filtros", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.fetchAllCompanies.mockResolvedValue([
       { id: "c1", razonSocial: "Acme SA", nit: "900" },
@@ -662,7 +656,7 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     const filterRow = await screen.findByTestId("dashboard-filter-row");
-    expect(within(filterRow).getByTestId("date-range-picker")).toBeInTheDocument();
+    expect(within(filterRow).getByTestId("rango-fechas")).toBeInTheDocument();
     expect(within(filterRow).getByRole("combobox", { name: /Compañía/i })).toBeInTheDocument();
     expect(filterRow.className).toMatch(/grid-cols-2/);
   });
@@ -705,11 +699,11 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
     expect(banner.className).not.toMatch(/min-h-\[220px\]/);
   });
 
-  it("AC3 contrato — fila de filtros siempre incluye DateRangePicker; KPI grid queda debajo", async () => {
+  it("AC3 contrato — fila de filtros siempre incluye RangoFechas; KPI grid queda debajo", async () => {
     render(<Dashboard onNewTramite={noop} />);
     const filterRow = await screen.findByTestId("dashboard-filter-row");
     const kpiGrid = screen.getByTestId("dashboard-kpi-grid");
-    expect(within(filterRow).getByTestId("date-range-picker")).toBeInTheDocument();
+    expect(within(filterRow).getByTestId("rango-fechas")).toBeInTheDocument();
     expect(filterRow.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

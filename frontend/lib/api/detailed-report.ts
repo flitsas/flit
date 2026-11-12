@@ -1,5 +1,6 @@
 // Cliente del reporte detallado de trámites (Feature #10813).
 import { apiFetch } from "./client";
+import type { ActorValidacionDto, MaxActoresPorRol } from "./company-queries";
 import { downloadFile } from "./download";
 
 export interface DetailedReportFilters {
@@ -48,6 +49,8 @@ export interface DetailedProcedureRow {
   /** Solo con `allCompanies=true` (SuperAdmin). */
   tenantId?: string;
   tenantName?: string;
+  /** Validación de identidad por actor. Ausente en un backend anterior: se lee como lista vacía. */
+  actores?: ActorValidacionDto[] | null;
 }
 
 export interface LabelCount {
@@ -68,6 +71,7 @@ export interface DetailedReportPage {
   page: number;
   pageSize: number;
   summary: DetailedReportSummary;
+  maxActoresPorRol?: MaxActoresPorRol;
 }
 
 const base = "/api/v1/detailed-report";
