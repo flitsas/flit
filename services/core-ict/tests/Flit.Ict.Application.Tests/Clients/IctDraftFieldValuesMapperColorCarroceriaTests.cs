@@ -6,12 +6,12 @@ using Xunit;
 namespace Flit.Ict.Application.Tests.Clients;
 
 /// <summary>
-/// Bug #13590 (hallazgo 2) — la <c>description</c> de la transformación ICT 7 (color) / 6 (carrocería)
+/// Bug #13590 (hallazgo 2) — la <c>description</c> de la transformación ICT 5 (color) / 17 (carrocería)
 /// es el valor nuevo que eligió el gestor y viaja tal cual (solo Trim) como <c>vehicle_color</c> /
 /// <c>vehicle_body_type</c>, junto a su bandera <c>cambio_*</c>.
 /// <para>Uso de ejemplo:
 /// <code>
-/// IctDraftFieldValuesMapper.Map(master) // código 7 "NEGRO" → cambio_color="true" + vehicle_color="NEGRO"
+/// IctDraftFieldValuesMapper.Map(master) // código 5 "NEGRO" → cambio_color="true" + vehicle_color="NEGRO"
 /// </code></para>
 /// </summary>
 public sealed class IctDraftFieldValuesMapperColorCarroceriaTests
@@ -34,9 +34,9 @@ public sealed class IctDraftFieldValuesMapperColorCarroceriaTests
     }
 
     [Fact]
-    public void Color7ConDescripcion_EmiteBanderaYVehicleColor()
+    public void Color5ConDescripcion_EmiteBanderaYVehicleColor()
     {
-        var valores = IctDraftFieldValuesMapper.Map(Master((7, "NEGRO")))
+        var valores = IctDraftFieldValuesMapper.Map(Master((5, "NEGRO")))
             .ToDictionary(f => f.FieldKey, f => f.ValueText);
 
         valores.Should().Contain("cambio_color", "true");
@@ -44,9 +44,9 @@ public sealed class IctDraftFieldValuesMapperColorCarroceriaTests
     }
 
     [Fact]
-    public void Carroceria6ConDescripcionConEspacios_EmiteVehicleBodyTypeRecortado()
+    public void Carroceria17ConDescripcionConEspacios_EmiteVehicleBodyTypeRecortado()
     {
-        var valores = IctDraftFieldValuesMapper.Map(Master((6, " VOLQUETA ")))
+        var valores = IctDraftFieldValuesMapper.Map(Master((17, " VOLQUETA ")))
             .ToDictionary(f => f.FieldKey, f => f.ValueText);
 
         valores.Should().Contain("cambio_carroceria", "true");
@@ -58,7 +58,7 @@ public sealed class IctDraftFieldValuesMapperColorCarroceriaTests
     [InlineData("   ")]
     public void DescripcionVacia_SoloEmiteLaBandera(string descripcion)
     {
-        var claves = IctDraftFieldValuesMapper.Map(Master((7, descripcion), (6, descripcion)))
+        var claves = IctDraftFieldValuesMapper.Map(Master((5, descripcion), (17, descripcion)))
             .Select(f => f.FieldKey)
             .ToList();
 
@@ -69,7 +69,7 @@ public sealed class IctDraftFieldValuesMapperColorCarroceriaTests
     [Fact]
     public void ColorCarroceriaYCombustibleJuntos_TodasLasClavesSinDuplicados()
     {
-        var master = Master((7, "NEGRO"), (6, "VOLQUETA"), (9, ""));
+        var master = Master((5, "NEGRO"), (17, "VOLQUETA"), (9, ""));
         master.NewVehicleFuelType = 3;
 
         var campos = IctDraftFieldValuesMapper.Map(master);
@@ -90,7 +90,7 @@ public sealed class IctDraftFieldValuesMapperColorCarroceriaTests
     [Fact]
     public void CodigoRepetido_UsaLaPrimeraDescripcionNoVacia()
     {
-        var campos = IctDraftFieldValuesMapper.Map(Master((7, " "), (7, "ROJO"), (7, "AZUL")));
+        var campos = IctDraftFieldValuesMapper.Map(Master((5, " "), (5, "ROJO"), (5, "AZUL")));
 
         campos.Select(f => f.FieldKey).Should().OnlyHaveUniqueItems();
         campos.Should().ContainSingle(f => f.FieldKey == "vehicle_color")

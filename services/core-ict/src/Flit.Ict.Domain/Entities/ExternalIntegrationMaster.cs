@@ -111,6 +111,13 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
 
     public short? NewVehicleFuelType { get; set; }
 
+    /// <summary>
+    /// Tipo de servicio del vehículo (opcional, solo matrícula): 1 Particular, 2 Público, 3 Diplomático,
+    /// 4 Oficial, 5 Especial, 6 Otros. Null = no declarado (se asume Particular al crear el borrador).
+    /// Público sin empresa vinculadora no es novedad: lo completa el gestor en el wizard.
+    /// </summary>
+    public short? VehicleServiceType { get; set; }
+
     // --- Estado interno del pipeline (motor de los SP) ---
     public short ProcessStatusId { get; set; } = 1;
 
@@ -131,7 +138,7 @@ public sealed class ExternalIntegrationMaster : AuditableEntity
 
     public ICollection<ExternalIntegrationActor> Actors { get; } = [];
 
-    /// <summary>Transformaciones declaradas por el gestor (more_transaction_transaction_type, catálogo Tipo Trámite 5/6/7/9).</summary>
+    /// <summary>Transformaciones declaradas por el gestor (more_transaction_transaction_type, catálogo B «Tipo de transformación ICT»: 5 color, 9 combustible, 17 carrocería).</summary>
     public ICollection<ExternalIntegrationMasterTransformation> Transformations { get; } = [];
 
     /// <summary>

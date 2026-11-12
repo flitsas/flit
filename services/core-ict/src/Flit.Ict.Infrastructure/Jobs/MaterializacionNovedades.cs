@@ -56,6 +56,31 @@ internal static class MaterializacionNovedades
         return mensaje.Length <= MaxLongitud ? mensaje : mensaje[..MaxLongitud];
     }
 
+
+    /// <summary>
+    /// Mensaje claro para los códigos de error FATALES de core-api al crear el borrador por el organismo de
+    /// tránsito (gate de creación y OT derivado del RUNT). El código original se conserva entre paréntesis
+    /// para trazabilidad (sin PII). Null si el código no es uno de estos (se usa tal cual).
+    /// </summary>
+    internal static string? MensajeError(string? errorCode)
+    {
+        var texto = errorCode?.Trim() switch
+        {
+            "ot_runt_no_habilitado" =>
+                "El organismo de tránsito del vehículo según el RUNT no está activo o no está habilitado para la compañía",
+            "ot_not_permitted" =>
+                "El organismo de tránsito no está habilitado para la compañía",
+            "OT_NOT_AUTHORIZED_FOR_TYPE" =>
+                "El organismo de tránsito no está habilitado u operativo para este tipo de trámite",
+            "tenant_inactive" =>
+                "La compañía u organismo de tránsito no está activo",
+            "network_inactive" =>
+                "La red del organismo de tránsito no está activa",
+            _ => null,
+        };
+
+        return texto is null ? null : $"{texto} ({errorCode!.Trim()})";
+    }
     /// <summary>Longitud máxima del mensaje (deja margen dentro de message_validation varchar(500)).</summary>
     internal const int MaxLongitud = 400;
 
