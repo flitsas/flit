@@ -148,6 +148,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { IdentidadParteTrackingModal, type ActorTracking } from './IdentidadParteTrackingModal';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
 const ICONO_ARCHIVO = iconoComo("archivo");
@@ -3168,25 +3169,17 @@ function TramiteRow({
                   >
                     {enSubsanacion ? (
                       <span
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                        style={{
-                          background: 'var(--badge-warning-bg)',
-                          color: 'var(--badge-warning-fg)',
-                          borderColor: 'var(--badge-warning-border)',
-                        }}
+                        {...etiquetaKit('warning')}
                       >
+                        <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                         En subsanación
                       </span>
                     ) : null}
                     {subsanacionCount > 0 ? (
                       <span
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                        style={{
-                          background: 'var(--badge-purple-bg)',
-                          color: 'var(--badge-purple-fg)',
-                          borderColor: 'var(--badge-purple-border)',
-                        }}
+                        {...etiquetaKit('purple')}
                       >
+                        <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                         Subsanado ×{subsanacionCount}
                       </span>
                     ) : null}
@@ -3201,7 +3194,7 @@ function TramiteRow({
             Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
         {muestraPausado ? (
           <span
-            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[var(--border-strong)] bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+            {...etiquetaKit('neutral', { className: 'shrink-0' })}
             title={item.pausedObservation ?? 'Trámite pausado'}
             aria-label={
               item.pausedObservation
@@ -3209,6 +3202,7 @@ function TramiteRow({
                 : 'Trámite pausado'
             }
           >
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Pausado
           </span>
         ) : null}
@@ -3311,12 +3305,9 @@ function TramiteRow({
         {item.runtConfirmed === 'yes' || item.runtConfirmed === 'no' ? (
           <span
             data-testid="tramite-confirmado-runt"
-            className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
-              item.runtConfirmed === 'yes'
-                ? 'bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]'
-                : 'bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]'
-            }`}
+            {...etiquetaKit(item.runtConfirmed === 'yes' ? 'success' : 'warning')}
           >
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {item.runtConfirmed === 'yes' ? 'SÍ' : 'NO'}
           </span>
         ) : (

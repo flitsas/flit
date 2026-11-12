@@ -23,6 +23,7 @@ import {
   resultado,
 } from "@/lib/logqx/labels";
 import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Pestaña «Log completo» (HU #11790). Todos los eventos de la radicación, filtrados y paginados EN
@@ -108,7 +109,8 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
         </label>
 
         {ocultarSinNovedad && data && data.ocultosSinNovedad > 0 && (
-          <span className="rounded-full bg-[var(--badge-danger-bg)] px-2.5 py-1 font-mono text-[11.5px] tabular-nums text-destructive">
+          <span {...etiquetaKit("neutral", { className: "font-mono tabular-nums" })}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {data.ocultosSinNovedad.toLocaleString("es-CO")} consultas sin novedad ocultas
           </span>
         )}
@@ -416,10 +418,9 @@ function Columna({
     <div className="min-w-0 overflow-hidden rounded-[9px] border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-secondary px-3 py-2 dark:bg-secondary">
         <span
-          className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-            tono === "info" ? "bg-flit-brand/15 text-flit-brand" : "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]"
-          }`}
+          {...etiquetaKit(tono === "info" ? "info" : "success", { className: "font-mono" })}
         >
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {etiqueta}
         </span>
         <h4 className="text-[12px] font-semibold opacity-75">{titulo}</h4>

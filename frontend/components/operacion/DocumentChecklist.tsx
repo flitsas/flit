@@ -35,6 +35,7 @@ import type {
   ProcedureAttachment,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 export type DocumentUploadMode = 'individual' | 'batch';
 
@@ -845,10 +846,8 @@ export function DocumentSlot({
       {/* Badges + OCR en cabecera (HU #12728 D.2): Opcional en brand-ink; chip obligatorio por token danger. */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {showValidado ? (
-          <span
-            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold"
-            style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
-          >
+          <span {...etiquetaKit('success')}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Cargado
           </span>
         ) : ocrRejected ? (

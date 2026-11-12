@@ -17,6 +17,7 @@ import {
   filtrarOrganismosOtConfig,
 } from "@/lib/companies/ot-config-filtros";
 import { useTablaFiltros, type TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Estado operativo de un OT en FLIT (HU #10518) para bloquear habilitación. */
 export interface OtOperationalInfo {
@@ -269,9 +270,9 @@ export function OTConfigTable({
             {reason && (
               <span
                 id={reasonId}
-                className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                style={{ color: "var(--badge-warning-fg)", borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)" }}
+                {...etiquetaKit("warning")}
               >
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {reason} en FLIT
               </span>
             )}

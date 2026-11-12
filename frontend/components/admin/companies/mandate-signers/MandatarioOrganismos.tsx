@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 export interface MandatarioOrganismosProps {
   /** Nombre del mandatario: titula el modal y da nombre accesible al botón. */
@@ -54,19 +55,17 @@ export function MandatarioOrganismos({
         aria-label={`Ver organismos de ${signerName}: ${etiqueta}`}
         aria-haspopup="dialog"
         data-aviso={conAviso ? "true" : undefined}
-        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-        style={{
-          background: `var(--badge-${tone}-bg)`,
-          color: `var(--badge-${tone}-fg)`,
-          borderColor: `var(--badge-${tone}-border)`,
-        }}
+        className="inline-flex rounded-full transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
       >
-        {conAviso ? (
-          <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <Icono nombre="empresas" className="h-3.5 w-3.5 shrink-0" />
-        )}
-        {etiqueta}
+        {/* La etiqueta del kit va por dentro: su punta (clip-path) recortaría el contorno de foco del botón. */}
+        <span {...etiquetaKit(tone)}>
+          {conAviso ? (
+            <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <Icono nombre="empresas" className="h-3.5 w-3.5 shrink-0" />
+          )}
+          {etiqueta}
+        </span>
       </button>
 
       {open && (
@@ -93,12 +92,7 @@ export function MandatarioOrganismos({
                 >
                   <span className="font-medium text-flit-primary">{o.nombre}</span>
                   <span
-                    className="inline-flex w-fit shrink-0 items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
-                    style={{
-                      background: `var(--badge-${o.bloqueado ? "warning" : "success"}-bg)`,
-                      color: `var(--badge-${o.bloqueado ? "warning" : "success"}-fg)`,
-                      borderColor: `var(--badge-${o.bloqueado ? "warning" : "success"}-border)`,
-                    }}
+                    {...etiquetaKit(o.bloqueado ? "warning" : "success", { className: "w-fit shrink-0" })}
                   >
                     {o.bloqueado ? (
                       <Icono nombre="alerta" className="h-3 w-3" />

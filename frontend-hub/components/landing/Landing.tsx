@@ -10,6 +10,7 @@ import { ProductArt } from "@/components/ui/ProductIcon";
 import { FLIT_PRIVACY_POLICY_URL } from "@flit/brand/types";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { buttonClass } from "@flit/ui/Button";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 // Landing de FLIT en la raíz del hub, sin sesión (B-11): qué es FLIT, sus productos, cómo empezar y contacto. Con el
 // lenguaje del ingreso de la propuesta «Diseño Inteligente» (HU #14487, `@flit/ui/Ingreso`): portada y contacto en el
@@ -232,7 +233,7 @@ function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInf
             <p className="text-xs font-bold uppercase tracking-[0.08em] text-[color:var(--di-text-tertiary)]">Pensado para</p>
             <ul className="mt-3 flex flex-wrap gap-2">
               {p.audiences.map((a) => (
-                <li key={a} className="rounded-full bg-[color:var(--di-surface-sunken)] px-3 py-1 text-xs font-medium text-[color:var(--di-text-primary)]">
+                <li key={a} {...etiquetaKit("neutral")}>
                   {a}
                 </li>
               ))}

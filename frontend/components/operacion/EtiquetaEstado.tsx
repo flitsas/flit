@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { ETIQUETA_ICONO_CLS, ETIQUETA_PUNTO_CLS, etiquetaKit } from '@flit/ui/StatusBadge';
 import { ESTADO_ICONO, type EstadoTramite, estadoChipClass, estadoChipStyle } from '@/lib/tramites/estados';
 
 /**
@@ -11,17 +12,14 @@ import { ESTADO_ICONO, type EstadoTramite, estadoChipClass, estadoChipStyle } fr
 export function EtiquetaEstado({ estado, children, className = '' }: { estado: string; children: ReactNode; className?: string }) {
   const chip = estadoChipStyle(estado);
   const icono = ESTADO_ICONO[estado as EstadoTramite];
-  const style = { '--c': chip.border, '--ct': chip.color } as CSSProperties;
+  const kit = etiquetaKit({ c: chip.border, ct: chip.color }, { icono: Boolean(icono), className: `${estadoChipClass(estado)} ${className}` });
   return (
-    <span
-      className={`${estadoChipClass(estado)} kit-etiqueta${icono ? ' kit-etiqueta--icono' : ''} whitespace-nowrap ${className}`}
-      style={style}
-    >
+    <span {...kit}>
       {icono ? (
         // eslint-disable-next-line @next/next/no-img-element -- disco estático del kit
-        <img src={icono} alt="" aria-hidden="true" width={20} height={20} className="kit-etiqueta__icono" />
+        <img src={icono} alt="" aria-hidden="true" width={20} height={20} className={ETIQUETA_ICONO_CLS} />
       ) : (
-        <span aria-hidden="true" className="kit-etiqueta__punto" />
+        <span aria-hidden="true" className={ETIQUETA_PUNTO_CLS} />
       )}
       {children}
     </span>

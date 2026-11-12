@@ -25,6 +25,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
 
 /**
  * La tabla del lote: una casilla por trámite y el resultado de cada uno en cuanto llega.
@@ -214,24 +215,26 @@ function motivoDelFallo(fila: FilaLote): string | null {
   return fila.respuesta?.instancias.find((i) => i.conProblemas)?.motivo ?? null;
 }
 
-const TONO: Record<EstadoFila, string> = {
-  pendiente: "bg-secondary opacity-70",
-  en_curso: "bg-[var(--badge-info-bg)] text-flit-brand-ink",
+const TONO: Record<EstadoFila, StatusTone> = {
+  pendiente: "neutral",
+  en_curso: "info",
   // Deliberadamente NO verde: una simulación no migró nada, y el verde es la señal universal de
   // «hecho». Se parece más a un pendiente informado que a un logro.
-  simulado: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]",
-  migrado: "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]",
-  con_avisos: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]",
-  fallido: "bg-[var(--badge-danger-bg)] text-destructive",
-  ya_estaba: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
+  simulado: "info",
+  migrado: "success",
+  con_avisos: "warning",
+  fallido: "danger",
+  ya_estaba: "neutral",
 };
 
 function Estado({ estado }: { estado: EstadoFila }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold ${TONO[estado]}`}
-    >
-      {estado === "en_curso" && <Icono nombre="girador" className="h-3 w-3 animate-spin" />}
+    <span {...etiquetaKit(TONO[estado], { className: estado === "pendiente" ? "opacity-70" : undefined })}>
+      {estado === "en_curso" ? (
+        <Icono nombre="girador" className="h-3 w-3 animate-spin" />
+      ) : (
+        <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
+      )}
       {ETIQUETA_ESTADO[estado]}
     </span>
   );

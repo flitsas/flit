@@ -31,7 +31,8 @@ import {
   DetalleBadgeSoft,
   type SeccionDetalleProps,
 } from './primitivos';
-import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD, DETALLE_GREY } from './detalle-visual';
+import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD } from './detalle-visual';
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Sección «Documentos» del modal de detalle (Frente C, `Paso3` de la propuesta).
@@ -199,10 +200,9 @@ function ConsultaRow({
 function RotuloSoloConsulta() {
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `color-mix(in srgb, ${DETALLE_GREY} 13%, transparent)`, color: 'var(--muted-foreground)' }}
+      {...etiquetaKit('neutral', { className: 'shrink-0' })}
     >
-      <Icono nombre="ojo" className="h-3 w-3" />
+      <Icono nombre="ojo" className="h-3.5 w-3.5" />
       {ETIQUETA_SOLO_CONSULTA}
     </span>
   );

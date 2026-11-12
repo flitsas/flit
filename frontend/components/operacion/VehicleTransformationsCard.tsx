@@ -20,6 +20,7 @@ import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCapti
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 // Misma regla de «hay transformación» que aplica el detalle del OT al revisarla (HU #11931).
 import { valorCambiado as isChanged } from '@/lib/tramites/transformaciones-vehiculo';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** DocTipo de soporte por subtrámite (whitelist AttachmentRules + RF33 factura_carroceria). */
 const DOC_TIPO_BY_KEY: Record<SubtramiteKey, string> = {
@@ -489,14 +490,13 @@ function SubtramiteDocCard({
     >
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {done ? (
-          <span
-            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold"
-            style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
-          >
+          <span {...etiquetaKit('success')}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Validado
           </span>
         ) : (
-          <span className="whitespace-nowrap rounded-full bg-[var(--badge-danger-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--badge-danger-fg)]">
+          <span {...etiquetaKit('danger')}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             * Obligatorio
           </span>
         )}
