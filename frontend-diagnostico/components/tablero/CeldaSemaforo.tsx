@@ -5,6 +5,7 @@ import { Check, Clock, LoaderCircle, MinusCircle, X } from "lucide-react";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
+import { rotular } from "@/lib/rotulos";
 import { BotonReprocesar, type BotonReprocesarProps } from "./BotonReprocesar";
 
 type Tono = "neutral" | "success" | "danger" | "warning" | "na";
@@ -87,7 +88,7 @@ const NOTAS_ERROR: Record<string, string> = {
 };
 
 function detalle(celda: CeldaGrilla): string | null {
-  if (celda.estado === "NA") return celda.motivo_na ? MOTIVOS_NA[celda.motivo_na] : null;
+  if (celda.estado === "NA") return celda.motivo_na || celda.motivo_na_etiqueta ? motivoNaDeCelda(celda) : null;
   if (celda.estado === "ERROR") return (celda.tipo_error && NOTAS_ERROR[celda.tipo_error]) || "No se pudo consultar";
   if (celda.estado === "COMPLETADO" && celda.reutilizada && celda.dato_obtenido_en) return `Dato del ${fechaDelDato(celda.dato_obtenido_en)}`;
   return null;
@@ -97,16 +98,21 @@ function detalle(celda: CeldaGrilla): string | null {
 export const esReprocesable = (celda: CeldaGrilla) => celda.estado === "ERROR" && celda.tipo_error !== BLOQUEADA_POR_RUNT;
 
 /** Texto visible del estado de una celda («Ejecutado (OK)», «Novedad», «Sin solicitar»…). */
-export const textoEstadoCelda = (estado: EstadoVisible) => ESTADOS[estado].texto;
+export const textoEstadoCelda = (estado: EstadoVisible) => vistaDe(estado, false).texto;
 
-/** Motivo corto de una N/A («Servicio público»…), el que va bajo el chip «Novedad». */
-export const motivoNaCorto = (motivo: MotivoNa | null) => (motivo ? MOTIVOS_NA[motivo] : null);
+/** Motivo corto de una N/A («Servicio público»…), el que va bajo el chip «Novedad». Desconocido: «Novedad sin clasificar». */
+export const motivoNaCorto = (motivo: MotivoNa | null, etiqueta?: string | null) =>
+  motivo || etiqueta ? rotular({ contexto: "motivo de N/A", codigo: motivo, etiqueta, respaldo: MOTIVOS_NA }) : null;
+
+/** Nota de la N/A de una celda: `motivo_na_etiqueta` de la API primero y el motivo corto local de respaldo. */
+const motivoNaDeCelda = (celda: CeldaGrilla) => motivoNaCorto(celda.motivo_na, celda.motivo_na_etiqueta);
 
 /** Impuesto completado con deuda: ámbar «Con deuda», no verde. El resto de estados no cambia. */
-function vistaDe(estado: EstadoVisible, conDeuda: boolean) {
+function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto: string; Icono: Icono; animado?: boolean } {
   if (conDeuda && estado === "COMPLETADO")
     return { tono: "warning" as const, texto: "Con deuda", Icono: Punto, animado: false };
-  return ESTADOS[estado];
+  // Punto 5: un estado que el frontend no conoce no rompe el chip ni pinta el código.
+  return ESTADOS[estado] ?? { tono: "neutral", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: Clock };
 }
 
 /**

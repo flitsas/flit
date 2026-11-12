@@ -72,6 +72,8 @@ public static class Program
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
         // HU #13743: tablero del lote (grilla incremental, cierre del panel e historial de estados).
         Modulos.Tablero.EndpointsTablero.AddTablero(builder.Services);
+        // Punto 4 (ADR-0084): «Crear trámite» individual, apagado por defecto (Diagnostico:Derivacion:Habilitada).
+        Modulos.Derivacion.DerivacionEndpoints.AddDerivacion(builder.Services, builder.Configuration);
         // HU #13746: reproceso de una celda en ERROR (POST /consultas/{cid}/reprocesar).
         Modulos.Consultas.EndpointsReproceso.AddReproceso(builder.Services);
         // HU #13800: llenado manual de una celda en ERROR desde el backoffice (PUT /backoffice/consultas/{cid}/manual).
@@ -109,6 +111,10 @@ public static class Program
         });
 
         var app = builder.Build();
+        // Punto 5 (2026-11-11): un código sin rótulo de negocio deja aviso en el log técnico (sin datos de personas).
+        // Se suelta al detenerse: el estático no debe sobrevivir a la fábrica de logs de este host.
+        var soltarRotulos = RotulosDiagnostico.Conectar(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.Diagnostico.Rotulos"));
+        app.Lifetime.ApplicationStopping.Register(soltarRotulos);
         app.UseExceptionHandler();
         app.UseFlitCorrelationId();
         app.UseAuthentication();

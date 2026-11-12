@@ -110,7 +110,7 @@ public sealed class ExcelLoteTests
         vehiculos.Skip(1).Select(f => f[1]).Should().Equal(placas, "en el orden de la carga");
         var fila = libro.Fila("Vehículos", "TST401");
         libro.Valor("Vehículos", fila, "Orden").Should().Be("1");
-        libro.Valor("Vehículos", fila, "Tipo de identificador").Should().Be("PLACA_CARRO");
+        libro.Valor("Vehículos", fila, "Tipo de identificador").Should().Be("Placa de carro");
         libro.Valor("Vehículos", fila, "Estado del vehículo").Should().Be("Terminado");
         libro.Valor("Vehículos", fila, "RUNT — Estado").Should().Be("Completado");
         libro.Valor("Vehículos", fila, "RUNT — Servicio").Should().Be("PARTICULAR");
@@ -384,7 +384,7 @@ public sealed class ExcelLoteTests
         var ajena = await api.Cliente(creador).GetAsync(ExcelDePrueba.Ruta(deB.Id), ct);
         var cuerpo = await ajena.Content.ReadAsStringAsync(ct);
         ajena.StatusCode.Should().Be(HttpStatusCode.NotFound, cuerpo);
-        JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+        JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
         cuerpo.Should().NotContainAny(["Lote secreto de B", "TST481", deB.Vehiculos.Single().Id.ToString(), empresas.B.Id.ToString()]);
 
         await ConfiguracionPropiosAsync(empresas.A, ct);

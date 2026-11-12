@@ -241,9 +241,9 @@ public sealed class EjecutorCeldaRuntPersonaTests
         var deOriginal = await RespuestaFuenteTests.CifradaAsync(api, original.Id, ct);
         deOriginal.Should().NotBeNull();
         (await RespuestaFuenteTests.CifradaAsync(api, copia.Id, ct)).Should().Equal(deOriginal!, "se copia el cifrado tal cual");
-        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, deOriginal!)).RootElement;
+        var mapa = JsonElement.Parse(RespuestaFuenteTests.Descifrar(api, deOriginal!));
         var conCrudo = mapa.EnumerateObject()
-            .Select(p => JsonDocument.Parse(p.Value.GetString()!).RootElement.GetProperty("resultado").TryGetProperty("respuesta_cruda", out var c) && c.ValueKind == JsonValueKind.Object)
+            .Select(p => JsonElement.Parse(p.Value.GetString()!).GetProperty("resultado").TryGetProperty("respuesta_cruda", out var c) && c.ValueKind == JsonValueKind.Object)
             .ToList();
         conCrudo.Should().NotBeEmpty().And.OnlyContain(c => c, "lo copiado lleva la respuesta cruda de cada persona");
     }

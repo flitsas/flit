@@ -7,7 +7,7 @@ using Flit.Diagnostico.Domain.Dictamen;
 namespace Flit.Diagnostico.Api.Persistence.Siembra;
 
 /// <summary>
-/// Siembra de <c>diagnostico.reglas_dictamen</c> (ADR-0077). Lee <see cref="CatalogoReglasDictamen.Filas"/> y produce el
+/// Siembra de <c>diagnostico.reglas_dictamen</c> (ADR-0077). Lee <see cref="CatalogoReglasDictamen.Historico"/> (v1 y v2) y produce el
 /// identificador UUID v5, la condición y el resto de la fila. No copia efectos ni plantillas a mano. Dos llamadas con la
 /// misma clave devuelven el mismo <see cref="Guid"/>.
 /// </summary>
@@ -16,9 +16,12 @@ internal static class ProyectorReglasDictamen
     /// <summary>Espacio de nombres DNS de la RFC 4122. Cambiarlo cambia todos los id de la siembra.</summary>
     private static readonly Guid EspacioDns = new("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 
-    /// <summary>42 filas v1, todas vigentes. Cada llamada vuelve a proyectar: el id sale del nombre, no de un caché.</summary>
+    /// <summary>
+    /// 42 filas v1 y 54 v2. La v1 no se toca (ni texto ni <c>vigente</c>): la usan los dictámenes ya emitidos. Cada
+    /// llamada vuelve a proyectar: el id sale del nombre, no de un caché.
+    /// </summary>
     public static IReadOnlyList<ReglaDictamen> Proyectar() =>
-        CatalogoReglasDictamen.Filas.Select(ProyectarFila).ToArray();
+        CatalogoReglasDictamen.Historico.Select(ProyectarFila).ToArray();
 
     private static ReglaDictamen ProyectarFila(FilaReglaDictamen fila) => new()
     {

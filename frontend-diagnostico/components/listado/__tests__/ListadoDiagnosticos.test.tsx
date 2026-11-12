@@ -266,3 +266,45 @@ describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs 
     expect(screen.queryByRole("button", { name: "Limpiar filtros" })).toBeNull();
   });
 });
+
+describe("ListadoDiagnosticos — Punto 5 AC6: errores en lenguaje de negocio, sin códigos", () => {
+  it("un error cuyo mensaje es el código muestra el title/detail de la API, nunca el código", async () => {
+    simularApi({
+      "GET /diagnosticos": () =>
+        Response.json({ code: "FILTRO_INVALIDO", error: "FILTRO_INVALIDO", title: "El filtro pedido no es válido." }, { status: 400 }),
+    });
+    render(<ListadoDiagnosticos />);
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent("El filtro pedido no es válido.");
+    expect(aviso).not.toHaveTextContent("FILTRO_INVALIDO");
+  });
+
+  it("un error con solo el código muestra un mensaje genérico de negocio", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json({ code: "ALGO_INTERNO", error: "ALGO_INTERNO" }, { status: 409 }) });
+    render(<ListadoDiagnosticos />);
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).not.toHaveTextContent("ALGO_INTERNO");
+    expect(aviso).toHaveTextContent("No se pudo completar la acción.");
+  });
+
+  it("el estado del diagnóstico usa estado_etiqueta y un estado desconocido nunca sale como código", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    simularApi({
+      "GET /diagnosticos": () =>
+        Response.json(
+          lista([
+            diagnostico(1, { estado: "COMPLETADO", estado_etiqueta: "Terminado" } as never),
+            diagnostico(2, { estado: "ESTADO_FUTURO" } as never),
+            diagnostico(3, { tipo_tramite: { codigo: "TIPO_SIN_PUBLICAR", nombre: "TIPO_SIN_PUBLICAR" } }),
+          ]),
+        ),
+    });
+    render(<ListadoDiagnosticos />);
+    const t = await tabla();
+    expect(within(t).getByText("Terminado")).toBeInTheDocument();
+    expect(t).not.toHaveTextContent("ESTADO_FUTURO");
+    expect(t).not.toHaveTextContent("TIPO_SIN_PUBLICAR");
+    expect(within(t).getAllByText("Novedad sin clasificar").length).toBeGreaterThanOrEqual(2);
+    aviso.mockRestore();
+  });
+});

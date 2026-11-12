@@ -11,6 +11,7 @@
  * Uso de ejemplo:
  *   validarIdentificador(" mc029554 ")        // → { normalizado: "MC029554", tipo: "PLACA_MAQUINARIA" }
  *   validarIdentificador("ABC-123")           // → { normalizado: "ABC123", tipo: "PLACA_CARRO" }
+ *   validarIdentificador("123-abc")           // → { normalizado: "123ABC", tipo: "PLACA_MOTOCARRO" }
  *   validarLongitudIdentificador("AB1234567") // → { codigo: "EXCEDE_LONGITUD", clase: "PLACA", longitud: 9, maximo: 8, ... }
  */
 
@@ -19,6 +20,13 @@ export const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
 
 /** Placa colombiana: carro `AAA123`, moto `AAA12A`/`AAA12`, remolque `R12345`/`S123456`, maquinaria `AA123456`. */
 export const PLATE_PATTERN = /^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9]{5,6}|[A-Z]{2}[0-9]{6})$/;
+
+/**
+ * Placa de motocarro `123ABC` (3 números y 3 letras; punto 7.1, 2026-11-11). Va APARTE de `PLATE_PATTERN`, igual que en
+ * Trámites (`PLATE_MOTOCARRO_PATTERN`): `PLATE_PATTERN` es el contrato de cuatro ramas que valida el test de la tabla
+ * compartida de Trámites. El test compara este literal con el de Trámites.
+ */
+export const PLATE_MOTOCARRO_PATTERN = /^[0-9]{3}[A-Z]{3}$/;
 
 export const LONGITUD_MAXIMA_VIN = 17;
 export const LONGITUD_MAXIMA_PLACA = 8;
@@ -40,7 +48,13 @@ export const sanitizeVin = (v: string): string => limpiarVin(v).slice(0, LONGITU
 /** Igual que Trámites: deja solo alfanumérico en mayúsculas, tope de 8 (maquinaria `AA123456`). */
 export const sanitizePlate = (v: string): string => limpiarPlaca(v).slice(0, LONGITUD_MAXIMA_PLACA);
 
-export type TipoIdentificador = "PLACA_CARRO" | "PLACA_MOTO" | "PLACA_REMOLQUE" | "PLACA_MAQUINARIA" | "VIN";
+export type TipoIdentificador =
+  | "PLACA_CARRO"
+  | "PLACA_MOTO"
+  | "PLACA_REMOLQUE"
+  | "PLACA_MAQUINARIA"
+  | "PLACA_MOTOCARRO"
+  | "VIN";
 
 export interface ResultadoIdentificador {
   normalizado: string;
@@ -58,7 +72,7 @@ const RAMAS_DE_PLACA: ReadonlyArray<readonly [TipoIdentificador, RegExp]> = [
 
 /**
  * Normaliza y clasifica igual que Trámites: primero VIN (`sanitizeVin` + `VIN_PATTERN`); si no, placa
- * (`sanitizePlate` + ramas de `PLATE_PATTERN`). Si nada casa es INVALIDO y el normalizado es el valor en
+ * (`sanitizePlate` + ramas de `PLATE_PATTERN` y, aparte, `PLATE_MOTOCARRO_PATTERN`). Si nada casa es INVALIDO y el normalizado es el valor en
  * mayúsculas con solo A-Z y 0-9, sin cortar. Ojo: el corte a 17/8 puede volver válida una entrada demasiado
  * larga; en carga masiva y express usa además `validarLongitudIdentificador`.
  */
@@ -71,6 +85,7 @@ export function validarIdentificador(identificador: string | null | undefined): 
   const placa = sanitizePlate(entrada);
   const rama = RAMAS_DE_PLACA.find(([, patron]) => patron.test(placa));
   if (rama && PLATE_PATTERN.test(placa)) return { normalizado: placa, tipo: rama[0] };
+  if (PLATE_MOTOCARRO_PATTERN.test(placa)) return { normalizado: placa, tipo: "PLACA_MOTOCARRO" };
 
   return { normalizado: limpiarPlaca(entrada), tipo: null };
 }

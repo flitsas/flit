@@ -7,12 +7,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 
-/// <summary>Un alertamiento del dictamen, en el orden guardado. Sin documentos ni nombres.</summary>
+/// <summary>
+/// Un alertamiento del dictamen, en el orden guardado. Sin documentos ni nombres. <c>etiqueta</c> y <c>fuente_etiqueta</c>
+/// (punto 5, 2026-11-11) son los rótulos de <see cref="RotulosDiagnostico"/>: no se guardan, se calculan al responder.
+/// </summary>
 internal sealed record AlertaDictamenDto(
     [property: JsonPropertyName("codigo")] string Codigo,
     [property: JsonPropertyName("texto")] string Texto,
     [property: JsonPropertyName("efecto")] string Efecto,
-    [property: JsonPropertyName("fuente")] string Fuente);
+    [property: JsonPropertyName("fuente")] string Fuente)
+{
+    /// <summary>Rótulo de la regla («SOAT no vigente»); sin rótulo, «Novedad sin clasificar».</summary>
+    [JsonPropertyName("etiqueta")]
+    public string Etiqueta => RotulosDiagnostico.DeAlerta(Codigo, Fuente);
+
+    /// <summary>Nombre de la fuente («RUNT propietarios»); sin rótulo, «Novedad sin clasificar».</summary>
+    [JsonPropertyName("fuente_etiqueta")]
+    public string FuenteEtiqueta => RotulosDiagnostico.DeFuente(Fuente);
+}
 
 /// <summary>
 /// Dictamen vigente que ve la compañía. No trae override, lease, intentos ni la empresa.

@@ -198,7 +198,7 @@ public sealed class ContratoBackofficeTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        Codigos(JsonDocument.Parse(texto).RootElement.GetProperty("fuentes_disponibles")).Should().Equal([.. SinImpuesto, "IMPUESTO_DEPARTAMENTAL"]);
+        Codigos(JsonElement.Parse(texto).GetProperty("fuentes_disponibles")).Should().Equal([.. SinImpuesto, "IMPUESTO_DEPARTAMENTAL"]);
         (await LeerAsync(api, empresas.B.Id, ct)).FuentesHabilitadas.Should().Equal(Fuente.Runt, Fuente.ImpuestoDepartamental);
         var cambio = (await CambiosAsync(api, empresas.B.Id, ct)).Should().ContainSingle().Subject;
         cambio.Campo.Should().Be(ServicioConfiguracion.CampoFuentesHabilitadas);
@@ -230,7 +230,7 @@ public sealed class ContratoBackofficeTests
         {
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             Codigos(json.GetProperty("fuentes_disponibles")).Should().Equal(SinImpuesto, texto);
             Codigos(json.GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "AVALUO");
         }

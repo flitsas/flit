@@ -71,6 +71,8 @@ describe("sin formulario propio", () => {
         join("components", "listado"),
         // Pantalla única de creación (HU #14085): placa o VIN, documento del locatario y archivo de vehículos.
         join("components", "nuevo"),
+        // Punto 4 (crear trámite masivo): casillas de selección de placas del tablero, no de credenciales.
+        join("components", "tablero", "BarraSeleccionDerivacion.tsx"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);

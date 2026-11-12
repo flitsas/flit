@@ -286,8 +286,10 @@ public sealed class LectorHechosDictamenTests
     }
 
     [Fact]
-    public void Las_cuatro_fuentes_en_error_avisan_y_siguen_viables()
+    public void Las_cuatro_fuentes_en_error_avisan_y_el_simit_faltante_bloquea()
     {
+        // Catálogo v2 (punto 2, 2026-11-11): en v1 eran cuatro FUENTE_PENDIENTE y VIABLE. Ahora el SIMIT que falta es un
+        // solo SIMIT_SIN_VERIFICAR que bloquea; RUNT y RUNT del propietario siguen como FUENTE_PENDIENTE.
         var resultado = EvaluadorDictamen.Evaluar(LectorHechosDictamen.Leer(Base() with
         {
             RuntDetalle = Celda(EstadoCelda.Error, Detalle()),
@@ -296,8 +298,11 @@ public sealed class LectorHechosDictamenTests
             SimitPropietario = Celda<IReadOnlyList<ResultadoSimitDetalle>>(EstadoCelda.Error, [Simit()]),
         }));
 
-        resultado.Veredicto.Should().Be("VIABLE");
-        resultado.Reglas.Select(r => r.Fuente).Should().Equal("RUNT", "SIMIT_VEHICULO", "RUNT_PROPIETARIO", "SIMIT_PROPIETARIO");
+        resultado.Veredicto.Should().Be("BLOQUEADO");
+        resultado.Reglas.Select(r => (r.Codigo, r.Fuente)).Should().Equal(
+            ("SIMIT_SIN_VERIFICAR", "SIMIT_VEHICULO"),
+            ("FUENTE_PENDIENTE", "RUNT"),
+            ("FUENTE_PENDIENTE", "RUNT_PROPIETARIO"));
     }
 
     [Fact]

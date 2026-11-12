@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package flit.tramites.v1;
+
+option csharp_namespace = "Flit.Tramites.Grpc.V1";
+
+import "google/protobuf/timestamp.proto";
+
+// Creación de borradores de trámite desde Diagnóstico Vehicular (ADR-0084). Servidor a servidor, sin wizard.
+// Autenticación: token de servicio del cliente `svc-diagnostico` con `aud=tramites` y scope
+// `platform.tramites.derivacion`. Otro cliente recibe PERMISSION_DENIED. La empresa va en la metadata
+// `x-flit-tenant-id` (contrato v1.3 §3). Habeas Data: nada del request se escribe en logs.
+// El servicio solo se mapea con `Tramites:Derivacion:Habilitada=true` (apagado por defecto): apagado responde UNIMPLEMENTED.
+service DerivacionTramitesService {
+  // Idempotente por (empresa, external_ref): si ya existe un trámite con esa referencia y origin = diagnostico,
+  // devuelve el MISMO con ya_existia = true (y completa los datos faltantes si sigue en borrador). Nunca crea dos.
+  // Errores técnicos como status gRPC (UNAVAILABLE, RESOURCE_EXHAUSTED si el limitador está lleno,
+  // DEADLINE_EXCEEDED, INTERNAL); los de negocio como `rechazo` con código estable.
+  rpc CrearBorradorDesdeDiagnostico(CrearBorradorDesdeDiagnosticoRequest) returns (CrearBorradorDesdeDiagnosticoResponse);
+
+  // Trámites por referencia externa (reconciliación y vehículos derivados antes de una caída). Máximo 500 referencias:
+  // más responde INVALID_ARGUMENT. Solo devuelve los de origin = diagnostico de la empresa de la metadata.
+  rpc ObtenerTramitesPorReferencia(ObtenerTramitesPorReferenciaRequest) returns (ObtenerTramitesPorReferenciaResponse);
+}
+
+message CrearBorradorDesdeDiagnosticoRequest {
+  string external_ref = 1;                         // vehiculo_id (uuid). Obligatorio.
+  string usuario_id = 2;                           // `sub` del usuario que lanzó la acción (autor del borrador, 4.6)
+  string tipo_tramite_codigo = 3;                  // código de tramites.procedure_types
+  string placa = 4;                                // uno de placa o vin
+  string vin = 5;
+  string organismo_nombre_runt = 6;                // transit_office_name tal como lo dio el RUNT
+  string organismo_codigo = 7;                     // código de la réplica de Diagnóstico si el nombre casó con uno solo; vacío si no
+  DocumentoPersona propietario = 8;                // propietario actual según RUNT (solo tipo y número)
+  DocumentoPersona locatario = 9;                  // opcional (leasing)
+  VehiculoBorrador vehiculo = 10;                  // precarga; la hidratación RUNT de Trámites prevalece
+  string diagnostico_id = 11;                      // trazabilidad
+  google.protobuf.Timestamp runt_consultado_en = 12;
+  string intento_id = 13;                          // id del ítem de Diagnóstico; solo correlación en logs
+}
+
+message DocumentoPersona {
+  string tipo_documento = 1;                       // CC, CE, NIT, PAS, PPT…
+  string numero_documento = 2;
+}
+
+message VehiculoBorrador {
+  string clase = 1;                                // vehicle_class
+  string servicio = 2;                             // vehicle_service
+  string marca = 3;                                // vehicle_brand
+  string linea = 4;                                // vehicle_line
+  string modelo = 5;                               // año modelo → vehicle_year
+  string combustible = 6;                          // vehicle_fuel (+ vehicle_fuel_runt)
+  string cilindraje = 7;                           // vehicle_engine_displacement
+  string color = 8;                                // vehicle_color (+ vehicle_color_runt)
+}
+
+message CrearBorradorDesdeDiagnosticoResponse {
+  oneof resultado {
+    BorradorCreado creado = 1;
+    RechazoBorrador rechazo = 2;
+  }
+}
+
+message BorradorCreado {
+  string procedure_instance_id = 1;
+  string numero = 2;                               // reference_number
+  string estado = 3;                               // borrador | … (estado real si ya existía)
+  bool ya_existia = 4;
+  repeated string advertencias = 5;                // p. ej. seed_warning:<codigo>; sin datos personales
+}
+
+// Códigos estables de `codigo`: TIPO_NO_DISPONIBLE, FAMILIA_BLOQUEADA, USUARIO_SIN_PERMISO, OT_NO_HABILITADO,
+// REGLA_COMPANIA, TRAMITE_ACTIVO_DUPLICADO, EMPRESA_INACTIVA, REFERENCIA_DE_OTRO_ORIGEN, DATOS_INVALIDOS.
+// Ninguno es reintentable.
+message RechazoBorrador {
+  string codigo = 1;
+  string motivo = 2;                               // lenguaje claro, sin datos personales
+}
+
+message ObtenerTramitesPorReferenciaRequest { repeated string external_refs = 1; }
+message ObtenerTramitesPorReferenciaResponse { repeated TramitePorReferencia tramites = 1; }
+message TramitePorReferencia {
+  string external_ref = 1;
+  string procedure_instance_id = 2;
+  string numero = 3;
+  string estado = 4;
+}

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.0.0"
+  version: "1.1.0"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -54,6 +54,10 @@ tags:
       Tablero del lote (MOD04, HU #13743): grilla incremental por versión (polling cada 3 s), estado global, cierre
       del panel e historial de estados. Todo con diagnostico.diagnosticos.ver y la visibilidad de la compañía
       (visibilidad_usuario=PROPIOS limita al creador; el admin de la compañía ve todos). Campos en snake_case.
+  - name: Derivacion
+    description: >
+      Crear trámite desde el diagnóstico (Punto 4, ADR-0084): borrador en Trámites servidor a servidor, sin wizard.
+      Incremento 2: individual síncrono. Apagado por defecto (Diagnostico:Derivacion:Habilitada).
   - name: Express
     description: >
       Diagnóstico Express de un solo vehículo (MOD02, HU #13753): cabecera y vehículo en una transacción, con las mismas
@@ -66,8 +70,11 @@ tags:
       documentos completos (R-20).
   - name: Backoffice
     description: >
-      Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
-      tenant_type=FLIT a la vez, empresa explícita y auditoría de cada lectura.
+      Lectura entre compañías del backoffice (D-16, ADR-0073; ajustes 2026-11-11, punto 1). Dos políticas: la de
+      configuración (diagnostico.backoffice: SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver y
+      tenant_type=FLIT a la vez) para resumen, contrato, diagnósticos, intentos, fuentes obligatorias y empresas; y la de
+      operación FLIT (diagnostico.backoffice.operacion: compañía FLIT con el permiso o SuperAdmin de FLIT) para el
+      override del dictamen y el llenado manual. Empresa explícita y auditoría de cada lectura.
 
 paths:
   /api/v1/diagnostico/sesion:
@@ -80,7 +87,9 @@ paths:
         Usuario del producto (política diagnostico.usuario): al menos un permiso diagnostico.* o SuperAdmin;
         un token de servicio o un rol de otro producto sin permisos de Diagnóstico recibe 403 (HU #13726). No acepta parámetros: si llega un parámetro o la cabecera X-Flit-Tenant-Id con otra
         compañía, se ignora. `permisos` solo trae slugs diagnostico.* (el token también lleva los de
-        plataforma). Las capacidades del backoffice FLIT exigen además tenant_type=FLIT (D-16).
+        plataforma). `capacidades.backoffice` sigue la política de configuración del backoffice (SuperAdmin de
+        cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y `capacidades.backofficeOperacion`, la de
+        operación FLIT (override del dictamen y llenado manual; ajustes 2026-11-11, punto 1).
       responses:
         "200":
           description: Sesión de la compañía del token.
@@ -1497,9 +1506,13 @@ paths:
       description: >
         HU #13850 (F07-H5, F07-C9/C11). Permiso diagnostico.reportes.descargar y la visibilidad de la grilla. Un PDF por vehículo
         incluido (diagnostico-{8 primeros del id}-{placa o VIN}.pdf, el mismo PDF del vehículo: si su huella coincide se reutiliza el
-        PDF vigente) e indice.txt (UTF-8, separado por tabuladores) con todos los vehículos del lote en el orden de la carga: orden,
-        identificador (placa o VIN), estado (Terminado, En proceso o Con error) y si su PDF va en el ZIP (Incluido / No incluido) con
-        el nombre del archivo. Sin documentos completos, nombres de personas, origen, usuario manual, proveedor ni transacción
+        PDF vigente) e indice.xlsx (ajustes 2026-11-11, punto 8; reemplaza a indice.txt), una sola hoja: arriba el nombre del
+        diagnóstico, la fecha y hora de generación (Colombia) y «N de M vehículos con PDF»; debajo una tabla con encabezado y
+        autofiltro con todos los vehículos del lote en el orden de la carga: Orden, Placa/VIN (texto), Estado (Terminado, En proceso
+        o Con error), En el ZIP (Sí / No), Archivo (nombre del PDF con vínculo relativo dentro del ZIP; vacío si no va), Dictamen
+        (Viable, Bloqueado o Pendiente si no hay dictamen emitido), Motivos de bloqueo (rótulos de las reglas que bloquean,
+        separados por «; », solo con Bloqueado) y Trámite (número del borrador creado desde el diagnóstico; vacío si no hay).
+        Sin documentos completos, nombres de personas, origen, usuario manual, proveedor ni transacción
         (R-20). Un ZIP LISTA que ya no es el vigente se sigue pudiendo descargar por su id.
       responses:
         "200":
@@ -1593,6 +1606,453 @@ paths:
             No es reprocesable y nada cambia: `code` = CELDA_NO_EN_ERROR (la celda no está en ERROR),
             CELDA_BLOQUEADA_POR_RUNT (tipo_error=BLOQUEADA_POR_RUNT y la RUNT del vehículo no está COMPLETADO: se
             reprocesa la RUNT) o CELDA_MODIFICADA (la celda cambió mientras se pedía: volver a leer la grilla).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/reintentar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Tablero]
+      operationId: reintentarPlaca
+      summary: Reencola las consultas pegadas de una placa
+      description: >
+        Ajuste 2026-11-11 (Punto 3, decisiones 3.2-3.4). Permiso diagnostico.consultas.reprocesar. Sin cuerpo. Reencola solo
+        las celdas pegadas de la placa: en ERROR, o en PENDIENTE/EN_CURSO sin cambio hace más de
+        Diagnostico:Consultas:UmbralPegada (10 min por defecto). Si la RUNT del vehículo no está COMPLETADO solo se reencola
+        la RUNT (las demás esperan su cierre). Las COMPLETADO, NA y las recientes no se tocan. Cada celda sale por el camino
+        del reproceso: PENDIENTE, intentos_auto=0 (vuelve a tener sus reintentos automáticos), disponible_desde=ahora, intento
+        con disparador=REPROCESO y el usuario, y un trabajo con trabajo_id NUEVO; la respuesta tardía del trabajo anterior se
+        descarta. Un lote COMPLETADO o INCOMPLETO vuelve a EN_PROCESO (historial REPROCESO). Idempotente: pulsar dos veces
+        seguidas responde reencoladas=0 la segunda (una celda recién reencolada no cuenta como pegada). El dictamen de la placa
+        se recalcula al completarse sus consultas.
+      responses:
+        "200":
+          description: Celdas reencoladas (0 si no había ninguna pegada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintentoPegadas"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.consultas.reprocesar; sin compañía (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario, o el vehículo no es del lote."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = CELDA_MODIFICADA: una celda cambió mientras se pedía el reintento; volver a leer la grilla."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/tramite:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Derivacion]
+      operationId: crearTramiteDesdeVehiculo
+      summary: Crea el borrador del trámite de una placa (individual, síncrono)
+      description: >
+        Punto 4, incremento 2 (ADR-0084, diseño §5.1). Permiso diagnostico.derivacion.crear (el rol de backoffice no lo tiene).
+        Solo existe con Diagnostico:Derivacion:Habilitada=true (apagada por defecto: 404). Desde el contexto de backoffice
+        (petición con la empresa explícita ?empresa=) responde 403 DERIVACION_DESDE_BACKOFFICE aunque se tenga el permiso.
+        Revalida en el servidor la misma regla de la grilla (fila derivacion): vehículo terminado, dictamen vigente VIABLE
+        (solo en lotes CON_ANALISIS; los SIMPLE no tienen dictamen), sin trámite y sin otro intento en curso. Tipo de trámite:
+        en CON_ANALISIS el del lote (se ignora el del cuerpo); en SIMPLE el tipo_tramite_codigo del cuerpo, validado contra
+        GET /tipos-tramite. Llama al rpc CrearBorradorDesdeDiagnostico de core-api con la empresa del lote, el usuario que
+        lanza como autor, external_ref = id del vehículo y el OT de matrícula del RUNT (nombre y código de la réplica). Es
+        idempotente en Trámites: si el borrador ya existía responde 201 con ya_existia=true. Un rechazo de Trámites deja el
+        intento OMITIDO (la placa se puede volver a intentar); Trámites caído lo deja FALLIDO. Al crearse, el vehículo guarda
+        el trámite (id y número) una sola vez.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrearTramiteEntrada"
+      responses:
+        "201":
+          description: Borrador creado (o ya existente en Trámites).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TramiteCreado"
+        "400":
+          description: >
+            code = TIPO_TRAMITE_REQUERIDO (lote SIMPLE sin tipo_tramite_codigo, campo = tipo_tramite_codigo),
+            TIPO_TRAMITE_INVALIDO (no está en el catálogo de la etapa) o CUERPO_INVALIDO (JSON inválido).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.derivacion.crear; desde el backoffice (code = DERIVACION_DESDE_BACKOFFICE); sin compañía
+            (code = SIN_EMPRESA); compañía sin Diagnóstico activo (code = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            code = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario, o el vehículo no es
+            del lote. También si la derivación está apagada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "code = YA_TIENE_TRAMITE: el vehículo ya tiene su trámite; no se llama a Trámites."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictoTramite"
+        "422":
+          description: >
+            code = NO_ELEGIBLE. motivo_codigo: NO_TERMINADO, NO_VIABLE, EN_CURSO (otro intento del vehículo en vuelo, p. ej.
+            doble clic) o un rechazo de Trámites (TIPO_NO_DISPONIBLE, FAMILIA_BLOQUEADA, USUARIO_SIN_PERMISO, OT_NO_HABILITADO,
+            REGLA_COMPANIA, TRAMITE_ACTIVO_DUPLICADO, EMPRESA_INACTIVA, REFERENCIA_DE_OTRO_ORIGEN, DATOS_INVALIDOS,
+            RECHAZO_TRAMITES). motivo en lenguaje claro, sin datos personales.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoElegibleDerivacion"
+        "503":
+          description: >
+            code = TRAMITES_NO_DISPONIBLE (o CATALOGO_NO_DISPONIBLE si en un lote SIMPLE el catálogo no responde). Con
+            Retry-After solo si es transitorio (UNAVAILABLE, RESOURCE_EXHAUSTED, DEADLINE_EXCEEDED, INTERNAL); sin él si es de
+            configuración (cliente de servicio rechazado o derivación apagada en core-api). El intento queda FALLIDO y se puede
+            volver a pedir. Incremento 3: con el freno hacia Trámites abierto (varios transitorios seguidos) responde 503 sin
+            llamar ni crear el intento, con Retry-After = lo que falta de la pausa.
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar (solo transitorio).
+              schema:
+                type: integer
+                example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Derivacion]
+      operationId: crearTramitesDesdeDiagnostico
+      summary: Crea los borradores de trámite de una selección del lote (masivo, encolado)
+      description: >
+        Punto 4, incremento 3 (ADR-0084, diseño §5.1 y §5.3). Permiso diagnostico.derivacion.crear; 403
+        DERIVACION_DESDE_BACKOFFICE desde el contexto de backoffice. Solo existe con Diagnostico:Derivacion:Habilitada=true.
+        vehiculo_ids son los vehículos elegidos, en el orden de la selección (los repetidos cuentan una vez), entre 1 y
+        Diagnostico:Derivacion:MaxItemsPorOperacion (5000). Todos deben ser del lote (si no, 400 VEHICULO_FUERA_DEL_LOTE y no
+        se crea nada). Tipo de trámite: el del lote en CON_ANALISIS (se ignora el del cuerpo); en SIMPLE el del cuerpo,
+        validado contra GET /tipos-tramite. En una transacción crea la operación MASIVA con un ítem por vehículo: los
+        elegibles PENDIENTE y los no elegibles OMITIDO de inmediato con su motivo (no_elegibles); luego libera como mucho
+        Diagnostico:Derivacion:CreditoPorCompania ítems de la compañía (2 por defecto) publicando por la outbox el evento
+        diagnostico.derivacion.solicitada (solo ids). Cada ítem que cierra libera el siguiente de la compañía. No llama a
+        Trámites en la petición. Idempotente ante el doble clic: un vehículo con un ítem vivo (de este envío o de otro) queda
+        en no_elegibles con EN_CURSO; nunca hay dos ítems vivos del mismo vehículo. El progreso se lee en Location.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrearTramitesEntrada"
+      responses:
+        "202":
+          description: Operación creada y encolada.
+          headers:
+            Location:
+              description: /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones/{operacion_id}
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperacionEncolada"
+        "400":
+          description: >
+            code = VEHICULOS_REQUERIDOS (lista vacía o ausente, campo = vehiculo_ids), DEMASIADOS_VEHICULOS (más de
+            MaxItemsPorOperacion), VEHICULO_FUERA_DEL_LOTE (algún vehículo no es del lote), TIPO_TRAMITE_REQUERIDO,
+            TIPO_TRAMITE_INVALIDO o CUERPO_INVALIDO. Las dos primeras y CUERPO_INVALIDO se deciden sin tocar la base.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.derivacion.crear o desde el backoffice (code = DERIVACION_DESDE_BACKOFFICE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no existe o no es visible para el usuario. También con la derivación apagada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: "code = CATALOGO_NO_DISPONIBLE: lote SIMPLE y el catálogo de tipos no responde (con Retry-After)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: ultima
+        in: query
+        required: false
+        description: Con true, las operaciones EN_CURSO del lote y la más reciente (para retomar al volver a la pantalla).
+        schema:
+          type: boolean
+    get:
+      tags: [Derivacion]
+      operationId: listarOperacionesDerivacion
+      summary: Operaciones «Crear trámite» del lote
+      description: >
+        Punto 4, incremento 3. Permiso diagnostico.diagnosticos.ver. De la más reciente a la más antigua (20). Lee solo los
+        contadores propios de Diagnóstico; nunca llama a core-api.
+      responses:
+        "200":
+          description: Operaciones del lote.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProgresoOperacion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no existe o no es visible. También con la derivación apagada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones/{opId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: opId
+        in: path
+        required: true
+        description: Id de la operación.
+        schema:
+          type: string
+          format: uuid
+      - name: estado
+        in: query
+        required: false
+        description: Filtra los ítems por estado.
+        schema:
+          type: string
+          enum: [PENDIENTE, ENVIADO, CREADO, OMITIDO, FALLIDO]
+      - name: pagina
+        in: query
+        required: false
+        description: Página de ítems (50 por página), desde 1.
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+    get:
+      tags: [Derivacion]
+      operationId: leerOperacionDerivacion
+      summary: Progreso de una operación «Crear trámite»
+      description: >
+        Punto 4, incremento 3. Permiso diagnostico.diagnosticos.ver. Contadores (pendientes = total − creadas − omitidas −
+        fallidas, incluye los en vuelo), motivos agrupados de OMITIDO y FALLIDO y una página de ítems por orden de la
+        selección. El front lo sondea cada 3 s mientras está EN_CURSO. Lee solo tablas de Diagnóstico; nunca llama a core-api.
+      responses:
+        "200":
+          description: Progreso.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetalleOperacionDerivacion"
+        "400":
+          description: "code = ESTADO_INVALIDO: el filtro estado no es uno de los cinco."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no es visible o la operación no es de ese lote."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/tramites/operaciones/{opId}/reintentar-fallidas:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+      - name: opId
+        in: path
+        required: true
+        description: Id de la operación.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Derivacion]
+      operationId: reintentarFallidasDerivacion
+      summary: Vuelve a encolar los ítems FALLIDO de una operación
+      description: >
+        Punto 4, incremento 3. Permiso diagnostico.derivacion.crear; 403 DERIVACION_DESDE_BACKOFFICE desde el backoffice.
+        Solo con la operación sin ítems PENDIENTE ni ENVIADO (si no, 409 OPERACION_EN_CURSO). Cada FALLIDO se revalida:
+        si sigue elegible se reabre el MISMO ítem a PENDIENTE (sin motivo ni intentos) y la operación vuelve a EN_CURSO; si ya
+        no lo es, queda OMITIDO con su motivo. Luego se libera el crédito de la compañía. Sin fallidos responde 202 con 0.
+      responses:
+        "202":
+          description: Fallidos reencolados.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintentoFallidas"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.derivacion.crear o desde el backoffice (code = DERIVACION_DESDE_BACKOFFICE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "code = NO_ENCONTRADO: el lote no es visible o la operación no es de ese lote."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "code = OPERACION_EN_CURSO: quedan ítems en vuelo, otro reintento corre a la vez o algún vehículo ya tiene otro ítem vivo."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/reintentar-pegadas:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Tablero]
+      operationId: reintentarPegadasLote
+      summary: Reencola las consultas pegadas de todo el lote
+      description: >
+        Ajuste 2026-11-11 (Punto 3). Igual que reintentarPlaca, para todas las placas del lote en una sola transacción. Permiso
+        diagnostico.consultas.reprocesar. Idempotente. El tablero lo ofrece como «Reintentar pegadas (N)» con N = total_pegadas
+        de la grilla.
+      responses:
+        "200":
+          description: Celdas reencoladas (0 si no había ninguna pegada).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReintentoPegadas"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.consultas.reprocesar; sin compañía (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: "`code` = CELDA_MODIFICADA: una celda cambió mientras se pedía el reintento; volver a leer la grilla."
           content:
             application/json:
               schema:
@@ -1710,7 +2170,7 @@ paths:
       operationId: listarFuentesObligatoriasBackoffice
       summary: Catálogo global de fuentes obligatorias por trámite (backoffice FLIT)
       description: >
-        ADR-0078. Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT). No pide
+        ADR-0078. Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT). No pide
         ?empresa=: el dato es de FLIT, no de una compañía. Mandar ?empresa= no cambia la respuesta y no responde
         EMPRESA_REQUERIDA. No se registra en lecturas_backoffice. Lista las cabeceras guardadas con sus líneas;
         una cabecera con fuentes vacías va en el arreglo y una definición que no existe no va (en el alta, eso es
@@ -1794,8 +2254,8 @@ paths:
       operationId: listarEmpresasBackoffice
       summary: Empresas con Diagnóstico para el selector del editor de contrato (backoffice FLIT)
       description: >
-        HU #13741 (escenarios 15 y 16). Mismos permisos que el contrato: política diagnostico.backoffice
-        (diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.configuracion.contrato.editar.
+        HU #13741 (escenarios 15 y 16). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT). Desde los ajustes 2026-11-11 (punto 6) ya no exige
+        diagnostico.configuracion.contrato.editar: también la usa el selector del listado de diagnósticos.
         Devuelve las empresas activas con Diagnóstico encendido tal como las tiene Identidad
         (EmpresasService.ListarEmpresasConProducto, producto diagnostico), ordenadas por nombre (sin distinguir
         mayúsculas ni tildes). Solo lectura de la plataforma: no lleva empresa explícita ni se registra en
@@ -1814,8 +2274,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo);
-            SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+            No cumple la política de configuración del backoffice (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o
+            PRODUCTO_NO_HABILITADO.
           content:
             application/json:
               schema:
@@ -1851,7 +2311,7 @@ paths:
       operationId: obtenerContratoEmpresaBackoffice
       summary: Contrato de una compañía para el backoffice FLIT
       description: >
-        Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además
+        Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y además
         diagnostico.configuracion.contrato.editar (HU #13741). La lectura queda en diagnostico.lecturas_backoffice
         antes de leer. Sin fila guardada devuelve los valores por defecto.
       responses:
@@ -1871,7 +2331,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); token sin
+            No cumple la política de configuración del backoffice o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); token sin
             compañía (SIN_EMPRESA) o sin usuario (SIN_USUARIO); PRODUCTO_NO_HABILITADO.
           content:
             application/json:
@@ -1918,7 +2378,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); campo que no
+            No cumple la política de configuración del backoffice o le falta diagnostico.configuracion.contrato.editar (sin cuerpo); campo que no
             es del contrato (CAMPO_NO_EDITABLE); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
           content:
             application/json:
@@ -1940,7 +2400,7 @@ paths:
         HU #13737 (F03-H6, F03-C11, plan §6.1 fila 03). Cada ejecución de una celda deja un intento de solo
         inserción en diagnostico.intentos_consulta (disparador AUTO y usuario_id nulo cuando lo hace el
         procesador; los reintentos de errores transitorios con backoff también dejan su intento). Política
-        diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.auditoria.ver:
+        diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.auditoria.ver:
         un usuario de la compañía recibe 403. Empresa explícita en ?empresa=; la lectura queda en
         diagnostico.lecturas_backoffice. Los intentos nunca llevan documentos: solo la placa o el VIN consultado.
         Orden: inicio ascendente.
@@ -1976,7 +2436,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT o le falta diagnostico.auditoria.ver (sin cuerpo); token sin compañía
+            No cumple la política de configuración del backoffice o le falta diagnostico.auditoria.ver (sin cuerpo); token sin compañía
             (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
             (`code` = PRODUCTO_NO_HABILITADO).
           content:
@@ -2011,8 +2471,8 @@ paths:
       operationId: obtenerFormularioLlenadoManualBackoffice
       summary: Formulario del llenado manual de una celda (backoffice FLIT)
       description: >
-        HU #13800 (F06-H3). Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además
-        diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
+        HU #13800 (F06-H3). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT), además
+        la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
         Devuelve la versión de la celda que se manda en el PUT, si admite el llenado (`admite_manual`) y, si no, el `motivo`
         (FUENTE_NO_ADMITE_MANUAL, CELDA_NO_EN_ERROR, CELDA_BLOQUEADA_POR_RUNT o SIN_PERSONAS_EN_ERROR). En las fuentes de persona
         (RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO) trae SOLO las personas en ERROR con su
@@ -2046,7 +2506,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada."
           content:
@@ -2153,7 +2613,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada (nada cambia)."
           content:
@@ -2203,7 +2663,7 @@ paths:
       operationId: obtenerDictamenVehiculoBackoffice
       summary: Dictamen vigente de un vehículo (backoffice FLIT)
       description: >
-        Corte 7. Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y empresa explícita en
+        Corte 7. Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y empresa explícita en
         ?empresa= (la lectura queda en diagnostico.lecturas_backoffice antes de tocar la fila). El mismo cuerpo que la
         compañía más analisis_override, usuario_override_id (uuid, sin nombre) y override_en. Sin lease, intentos ni texto
         de cola. Un usuario de la compañía recibe 403.
@@ -2223,7 +2683,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de configuración del backoffice (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
           content:
             application/json:
               schema:
@@ -2241,7 +2701,8 @@ paths:
       operationId: corregirDictamenVehiculoBackoffice
       summary: Reemplazar el veredicto del dictamen vigente (backoffice FLIT)
       description: >
-        Corte 7. La misma política del GET y además diagnostico.dictamen.override. El admin de la compañía recibe 403.
+        Corte 7. La misma política del GET, además la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y
+        diagnostico.dictamen.override. El admin de la compañía recibe 403.
         No vuelve a evaluar ni redacta. El veredicto nuevo es el del cuerpo. Los alertamientos conservan codigo, efecto
         y fuente, en el mismo orden; el texto vuelve a la plantilla del catálogo del tipo de trámite (si esa fila no está,
         se conserva el texto guardado). Nace otra versión (la anterior queda vigente=false), con analisis_override, el sub
@@ -2270,7 +2731,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.dictamen.override. No se escribe.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.dictamen.override. No se escribe.
         "404":
           description: "`code` = NO_ENCONTRADO o SIN_DICTAMEN. No se escribe."
           content:
@@ -2300,7 +2761,7 @@ paths:
       operationId: listarDiagnosticosBackoffice
       summary: Lotes de una compañía para el backoffice FLIT
       description: >
-        HU #13799 (F06-H2, F06-C6). Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT):
+        HU #13799 (F06-H2, F06-C6). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT):
         el rol backoffice_diagnostico en una compañía que no es FLIT, o el admin de la compañía, reciben 403 sin cuerpo.
         Empresa explícita en ?empresa= (nunca la del token); la lectura queda en diagnostico.lecturas_backoffice con el
         usuario, la empresa consultada, la ruta y la fecha, antes de leer. Solo lotes de esa compañía, del más reciente
@@ -2359,7 +2820,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT (sin cuerpo); token sin compañía (`code` = SIN_EMPRESA) o sin usuario
+            No cumple la política de configuración del backoffice (sin cuerpo); token sin compañía (`code` = SIN_EMPRESA) o sin usuario
             (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
 
   /api/v1/diagnostico/backoffice/diagnosticos/{id}/grilla:
@@ -2434,7 +2895,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de configuración del backoffice (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: el lote no existe en la compañía indicada."
           content:
@@ -2488,7 +2949,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No es backoffice FLIT o le falta diagnostico.auditoria.ver (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de configuración del backoffice o le falta diagnostico.auditoria.ver (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: el lote no existe en la compañía indicada."
           content:
@@ -2503,9 +2964,10 @@ paths:
       summary: Resumen de una compañía cliente para el backoffice FLIT
       description: >
         Ruta mínima de D0 (HU #13728): si la compañía indicada tiene configuración y cuántos diagnósticos y
-        vehículos tiene. Política diagnostico.backoffice: exige a la vez el permiso diagnostico.backoffice.ver
-        (o SuperAdmin) y el claim tenant_type=FLIT del token; con el rol backoffice_diagnostico en una compañía
-        que no es FLIT, o en la compañía FLIT sin el permiso, responde 403, igual que cualquier otra ruta
+        vehículos tiene. Política diagnostico.backoffice de configuración: pasa un SuperAdmin de cualquier compañía
+        (ajustes 2026-11-11, punto 1) o un usuario con el permiso diagnostico.backoffice.ver y el claim
+        tenant_type=FLIT del token; con el rol backoffice_diagnostico en una compañía que no es FLIT (sin SuperAdmin),
+        o en la compañía FLIT sin el permiso, responde 403, igual que cualquier otra ruta
         /backoffice/* (también una que no existe). La compañía nunca sale del token: se indica en ?empresa=
         (o en el segmento {empresa} de las rutas que lo lleven; si llegan los dos deben coincidir). Cada
         lectura queda en diagnostico.lecturas_backoffice con el usuario, la empresa consultada, la ruta y la
@@ -2535,7 +2997,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           description: >
-            No es backoffice FLIT (falta el permiso o tenant_type no es FLIT; sin cuerpo); token sin compañía
+            No cumple la política de configuración del backoffice (sin SuperAdmin: falta el permiso o tenant_type no es FLIT; sin cuerpo); token sin compañía
             (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
             (`code` = PRODUCTO_NO_HABILITADO).
           content:
@@ -2603,8 +3065,11 @@ components:
     Capacidades:
       type: object
       description: >
-        Ayuda para armar el menú; cada endpoint vuelve a exigir su permiso. Las seis últimas son del
-        backoffice FLIT y exigen además tenant_type=FLIT.
+        Ayuda para armar el menú; cada endpoint vuelve a exigir su permiso. Backoffice (ajustes 2026-11-11, punto 1):
+        backoffice, editarContrato y verAuditoria siguen la política de configuración (SuperAdmin de cualquier
+        compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) junto con su permiso; backofficeOperacion,
+        llenarConsultas y corregirDictamen, la de operación FLIT (compañía FLIT con el permiso o SuperAdmin de FLIT);
+        verVolumetria exige tenant_type=FLIT.
       required:
         - crearDiagnosticos
         - verDiagnosticos
@@ -2619,6 +3084,7 @@ components:
         - corregirDictamen
         - verAuditoria
         - verVolumetria
+        - backofficeOperacion
       properties:
         crearDiagnosticos:
           type: boolean
@@ -2646,6 +3112,11 @@ components:
           type: boolean
         verVolumetria:
           type: boolean
+        backofficeOperacion:
+          type: boolean
+          description: >
+            Override del dictamen y llenado manual del backoffice (política de operación FLIT). Un SuperAdmin de una
+            compañía que no es FLIT tiene backoffice=true y backofficeOperacion=false.
 
     ResumenEmpresaBackoffice:
       type: object
@@ -2746,10 +3217,12 @@ components:
 
     DefinicionFuentesObligatorias:
       type: object
-      required: [familia, tipo_tramite_codigo, fuentes]
+      required: [familia, tipo_tramite_codigo, fuentes, tipo_tramite_etiqueta, familia_etiqueta]
       description: >
         Una definición del catálogo global. familia y tipo_tramite_codigo son excluyentes; la que no aplica es null.
-        fuentes vacío con la definición presente es la lista vacía explícita.
+        fuentes vacío con la definición presente es la lista vacía explícita. tipo_tramite_etiqueta y familia_etiqueta
+        (punto 5, 2026-11-11) son los nombres que se muestran: el del tipo es el que publica Trámites y, si no responde o el
+        tipo no está publicado, el respaldo del servicio; null cuando su código es null.
       properties:
         familia:
           type: string
@@ -2763,10 +3236,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FuenteConfigurable"
+        tipo_tramite_etiqueta:
+          type: string
+          nullable: true
+          example: Traspaso
+        familia_etiqueta:
+          type: string
+          nullable: true
+          example: Traspaso
       example:
         familia: null
         tipo_tramite_codigo: TRASPASO_STANDARD
         fuentes: [SIMIT_PROPIETARIO]
+        tipo_tramite_etiqueta: Traspaso
+        familia_etiqueta: null
 
     ListaDefinicionesFuentesObligatorias:
       type: object
@@ -3160,7 +3643,7 @@ components:
         tipo_identificador:
           type: string
           nullable: true
-          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, VIN, null]
+          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO, VIN, null]
         tipo_documento_locatario:
           type: string
           nullable: true
@@ -3323,7 +3806,7 @@ components:
           type: string
         tipo_identificador:
           type: string
-          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, VIN]
+          enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO, VIN]
         tipo_documento_locatario:
           type: string
           nullable: true
@@ -3413,7 +3896,7 @@ components:
 
     Grilla:
       type: object
-      required: [id, nombre, estado, version, desde, columnas, avance, vehiculos]
+      required: [id, nombre, estado, estado_etiqueta, version, desde, columnas, avance, vehiculos]
       properties:
         id:
           type: string
@@ -3422,6 +3905,10 @@ components:
           type: string
         estado:
           $ref: "#/components/schemas/EstadoDiagnostico"
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo de negocio del estado del lote (Sin lanzar, En proceso, Completado, Incompleto); el código sigue en estado.
+          example: En proceso
         version:
           type: integer
           format: int64
@@ -3444,6 +3931,20 @@ components:
           description: Solo con estimado_consultas=AL_FINALIZAR y el lote COMPLETADO o INCOMPLETO; si no, la clave no viene.
           items:
             $ref: "#/components/schemas/EstimadoVsConsumido"
+        total_pegadas:
+          type: integer
+          minimum: 0
+          description: >
+            Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): placas del lote con alguna consulta pegada
+            (ERROR, o PENDIENTE/EN_CURSO sin cambio hace más de 10 min; con la RUNT sin completar cuenta solo la RUNT). Viene
+            siempre, también en el sondeo incremental (una placa se pega sin que cambie ninguna celda). Es la N de
+            «Reintentar pegadas (N)».
+        vehiculos_pegados:
+          type: array
+          description: Punto 3. Ids de las placas pegadas (las de total_pegadas), en el orden del lote; siempre presente.
+          items:
+            type: string
+            format: uuid
 
     AvanceLote:
       type: object
@@ -3458,7 +3959,7 @@ components:
 
     FilaVehiculo:
       type: object
-      required: [id, orden, identificador, tipo_identificador, placa, vin, terminado, celdas, documento_declarado, propietarios]
+      required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, documento_declarado, propietarios]
       properties:
         id:
           type: string
@@ -3471,6 +3972,10 @@ components:
         tipo_identificador:
           type: string
           example: PLACA_CARRO
+        tipo_identificador_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo del tipo de identificador (Placa de carro, Placa de moto, Placa de remolque, Placa de maquinaria, Placa de motocarro, VIN).
+          example: Placa de carro
         placa:
           type: string
           nullable: true
@@ -3499,6 +4004,280 @@ components:
             los registre. Solo tipo y número enmascarado.
           items:
             $ref: "#/components/schemas/PropietarioGrilla"
+        pegada:
+          type: boolean
+          description: >
+            Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): la placa tiene alguna consulta que
+            «Reintentar placa» reencolaría. Solo viaja en las filas de la respuesta; para las que no viajan, usar
+            vehiculos_pegados del lote.
+        derivacion:
+          allOf:
+            - $ref: "#/components/schemas/DerivacionFila"
+          nullable: true
+          description: >
+            Punto 4 (ADR-0084). Crear trámite de la fila; null con Diagnostico:Derivacion:Habilitada=false. Solo viaja en las
+            filas de la respuesta (en el sondeo incremental, las que cambiaron celdas): tras crear el trámite, el cliente
+            actualiza la fila con la respuesta del POST.
+
+    DerivacionFila:
+      type: object
+      required: [elegible, motivo_no_elegible, estado, tramite]
+      properties:
+        elegible:
+          type: boolean
+          description: Se puede crear el trámite ahora (misma regla que revalida el POST).
+        motivo_no_elegible:
+          type: string
+          nullable: true
+          enum: [NO_TERMINADO, NO_VIABLE, YA_TIENE_TRAMITE, EN_CURSO, null]
+          description: Null si es elegible. En orden de prioridad YA_TIENE_TRAMITE, EN_CURSO, NO_TERMINADO, NO_VIABLE.
+        estado:
+          type: string
+          nullable: true
+          enum: [PENDIENTE, ENVIADO, CREADO, OMITIDO, FALLIDO, null]
+          description: Estado del último intento del vehículo; null si nunca se intentó. OMITIDO y FALLIDO no impiden volver a intentar.
+        tramite:
+          allOf:
+            - $ref: "#/components/schemas/TramiteFila"
+          nullable: true
+          description: El borrador creado (Ver trámite #N); null si no hay.
+
+    TramiteFila:
+      type: object
+      required: [id, numero, url]
+      properties:
+        id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+          description: reference_number del trámite en Trámites.
+          example: TR-000123
+        url:
+          type: string
+          description: >
+            Enlace al borrador en Trámites ({Diagnostico:Derivacion:UrlTramites}/tramites/{id}?t={empresa}); relativo
+            (/tramites/{id}?t={empresa}) si no hay base configurada.
+
+    CrearTramiteEntrada:
+      type: object
+      properties:
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          description: Obligatorio en lotes SIMPLE (código de GET /tipos-tramite); ignorado en CON_ANALISIS.
+          example: TRASPASO_STANDARD
+
+    CrearTramitesEntrada:
+      type: object
+      required: [vehiculo_ids]
+      properties:
+        vehiculo_ids:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          description: Vehículos elegidos del lote, en el orden de la selección (Diagnostico:Derivacion:MaxItemsPorOperacion).
+          items:
+            type: string
+            format: uuid
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          description: Obligatorio en lotes SIMPLE (código de GET /tipos-tramite); ignorado en CON_ANALISIS.
+          example: TRASPASO_STANDARD
+
+    OperacionEncolada:
+      type: object
+      required: [operacion_id, total, encolados, no_elegibles]
+      properties:
+        operacion_id:
+          type: string
+          format: uuid
+        total:
+          type: integer
+          description: Vehículos de la operación (sin repetidos).
+        encolados:
+          type: integer
+          description: Ítems PENDIENTE (los primeros, hasta el crédito de la compañía, ya salieron hacia Trámites).
+        no_elegibles:
+          type: array
+          description: Vehículos que quedaron OMITIDO de inmediato.
+          items:
+            type: object
+            required: [vehiculo_id, motivo_codigo]
+            properties:
+              vehiculo_id:
+                type: string
+                format: uuid
+              motivo_codigo:
+                type: string
+                enum: [NO_TERMINADO, NO_VIABLE, YA_TIENE_TRAMITE, EN_CURSO]
+      example:
+        operacion_id: 0199f3a1-0000-7000-8000-0000000000a1
+        total: 3
+        encolados: 2
+        no_elegibles:
+          - { vehiculo_id: 0199f3a1-0000-7000-8000-0000000000b3, motivo_codigo: NO_VIABLE }
+
+    ProgresoOperacion:
+      type: object
+      required: [operacion_id, tipo, estado, tipo_tramite_codigo, total, creadas, omitidas, fallidas, pendientes, creada_en, terminada_en]
+      properties:
+        operacion_id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [INDIVIDUAL, MASIVA]
+        estado:
+          type: string
+          enum: [EN_CURSO, TERMINADA]
+        tipo_tramite_codigo:
+          type: string
+        total:
+          type: integer
+        creadas:
+          type: integer
+        omitidas:
+          type: integer
+        fallidas:
+          type: integer
+        pendientes:
+          type: integer
+          description: total − creadas − omitidas − fallidas (PENDIENTE y ENVIADO).
+        creada_en:
+          type: string
+          format: date-time
+        terminada_en:
+          type: string
+          format: date-time
+          nullable: true
+
+    DetalleOperacionDerivacion:
+      allOf:
+        - $ref: "#/components/schemas/ProgresoOperacion"
+        - type: object
+          required: [motivos, pagina, tamano_pagina, total_items, items]
+          properties:
+            motivos:
+              type: array
+              description: Ítems OMITIDO y FALLIDO por motivo (resumen «omitidas por motivo»), de más a menos.
+              items:
+                type: object
+                required: [estado, motivo_codigo, motivo, cantidad]
+                properties:
+                  estado:
+                    type: string
+                    enum: [OMITIDO, FALLIDO]
+                  motivo_codigo:
+                    type: string
+                  motivo:
+                    type: string
+                    description: Texto claro, sin datos personales.
+                  cantidad:
+                    type: integer
+            pagina:
+              type: integer
+            tamano_pagina:
+              type: integer
+              example: 50
+            total_items:
+              type: integer
+              description: Ítems que cumplen el filtro estado.
+            items:
+              type: array
+              items:
+                type: object
+                required: [vehiculo_id, orden, placa, estado, motivo_codigo, motivo, tramite_id, tramite_numero, tramite_url]
+                properties:
+                  vehiculo_id:
+                    type: string
+                    format: uuid
+                  orden:
+                    type: integer
+                  placa:
+                    type: string
+                    description: Placa (o VIN, o el identificador cargado).
+                  estado:
+                    type: string
+                    enum: [PENDIENTE, ENVIADO, CREADO, OMITIDO, FALLIDO]
+                  motivo_codigo:
+                    type: string
+                    nullable: true
+                  motivo:
+                    type: string
+                    nullable: true
+                  tramite_id:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  tramite_numero:
+                    type: string
+                    nullable: true
+                  tramite_url:
+                    type: string
+                    nullable: true
+                    description: Igual que TramiteFila.url.
+
+    ReintentoFallidas:
+      type: object
+      required: [reencolados, omitidas]
+      properties:
+        reencolados:
+          type: integer
+          description: FALLIDO que volvieron a PENDIENTE (el mismo ítem).
+        omitidas:
+          type: integer
+          description: FALLIDO que ya no eran elegibles y quedaron OMITIDO.
+
+    TramiteCreado:
+      type: object
+      required: [tramite_id, numero, url, ya_existia]
+      properties:
+        tramite_id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+          example: TR-000123
+        url:
+          type: string
+          description: Igual que TramiteFila.url.
+        ya_existia:
+          type: boolean
+          description: Trámites ya tenía el borrador de este vehículo (idempotencia por empresa y external_ref).
+
+    ConflictoTramite:
+      type: object
+      required: [code, error, tramite_id, numero]
+      properties:
+        code:
+          type: string
+          example: YA_TIENE_TRAMITE
+        error:
+          type: string
+        tramite_id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+
+    NoElegibleDerivacion:
+      type: object
+      required: [code, error, motivo_codigo, motivo]
+      properties:
+        code:
+          type: string
+          example: NO_ELEGIBLE
+        error:
+          type: string
+          description: Igual a motivo.
+        motivo_codigo:
+          type: string
+          example: OT_NO_HABILITADO
+        motivo:
+          type: string
+          example: OT no habilitado para la compañía
 
     DocumentoDeclaradoGrilla:
       type: object
@@ -3532,7 +4311,7 @@ components:
     CeldaGrilla:
       type: object
       description: Sin origen, usuario manual, payload ni documentos (R-20).
-      required: [id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, version]
+      required: [id, fuente, estado, estado_etiqueta, motivo_na, motivo_na_etiqueta, tipo_error, dato_obtenido_en, reutilizada, version]
       properties:
         id:
           type: string
@@ -3542,10 +4321,19 @@ components:
         estado:
           type: string
           enum: [PENDIENTE, EN_CURSO, COMPLETADO, ERROR, NA]
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo del estado de la celda (Pendiente, En curso, Completado, Error, No aplica).
+          example: No aplica
         motivo_na:
           type: string
           nullable: true
           description: "Solo con estado NA: SERVICIO_PUBLICO, DEPARTAMENTO_NO_SOPORTADO o SIN_DOCUMENTO_LOCATARIO."
+        motivo_na_etiqueta:
+          type: string
+          nullable: true
+          description: Punto 5 (2026-11-11). Texto de negocio del motivo de N/A; null cuando motivo_na es null.
+          example: "El vehículo es de servicio público: esta consulta no aplica."
         tipo_error:
           type: string
           nullable: true
@@ -3632,6 +4420,15 @@ components:
           format: int64
           description: version_tablero del lote tras el reproceso (la celda la lleva para el sondeo ?desde=).
 
+    ReintentoPegadas:
+      type: object
+      required: [reencoladas]
+      properties:
+        reencoladas:
+          type: integer
+          minimum: 0
+          description: Celdas que se reencolaron con un trabajo_id nuevo (0 si no había ninguna pegada).
+
     HistorialLote:
       type: object
       required: [diagnostico_id, estado, transiciones]
@@ -3709,7 +4506,7 @@ components:
 
     DiagnosticoListado:
       type: object
-      required: [id, nombre, creado_en, modo, tipo_tramite, estado, usuario_creador, es_express]
+      required: [id, nombre, creado_en, modo, tipo_tramite, estado, estado_etiqueta, usuario_creador, es_express]
       properties:
         id:
           type: string
@@ -3733,6 +4530,10 @@ components:
               type: string
         estado:
           $ref: "#/components/schemas/EstadoDiagnostico"
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo de negocio del estado del lote (Sin lanzar, En proceso, Completado, Incompleto); el código sigue en estado.
+          example: En proceso
         usuario_creador:
           type: object
           required: [id, nombre]
@@ -3773,11 +4574,11 @@ components:
         tamano: 10
         total: 1
         diagnosticos:
-          - { id: 0199f3a1-1111-7000-8000-000000000001, nombre: Lote octubre, estado: EN_PROCESO, creado_en: "2026-10-22T14:00:00+00:00", vehiculos: 2, celdas_en_error: 2 }
+          - { id: 0199f3a1-1111-7000-8000-000000000001, nombre: Lote octubre, estado: EN_PROCESO, estado_etiqueta: En proceso, creado_en: "2026-10-22T14:00:00+00:00", vehiculos: 2, celdas_en_error: 2 }
 
     DiagnosticoBackoffice:
       type: object
-      required: [id, nombre, estado, creado_en, vehiculos, celdas_en_error]
+      required: [id, nombre, estado, estado_etiqueta, creado_en, vehiculos, celdas_en_error]
       properties:
         id:
           type: string
@@ -3786,6 +4587,10 @@ components:
           type: string
         estado:
           $ref: "#/components/schemas/EstadoDiagnostico"
+        estado_etiqueta:
+          type: string
+          description: Punto 5 (2026-11-11). Rótulo de negocio del estado del lote (Sin lanzar, En proceso, Completado, Incompleto); el código sigue en estado.
+          example: En proceso
         creado_en:
           type: string
           format: date-time
@@ -3882,12 +4687,23 @@ components:
     AlertaDictamen:
       type: object
       additionalProperties: false
-      required: [codigo, texto, efecto, fuente]
+      required: [codigo, texto, efecto, fuente, etiqueta, fuente_etiqueta]
       properties:
         codigo: { type: string }
         texto: { type: string }
         efecto: { type: string }
         fuente: { type: string }
+        etiqueta:
+          type: string
+          description: >
+            Punto 5 (2026-11-11). Rótulo de negocio de la regla (p. ej. «SOAT no vigente», «Multas del propietario»;
+            FUENTE_PENDIENTE da «Consulta pendiente: nombre de la fuente»). Calculado al responder; un código sin rótulo
+            da «Novedad sin clasificar», nunca el código.
+          example: SOAT no vigente
+        fuente_etiqueta:
+          type: string
+          description: Punto 5. Nombre de la fuente (RUNT, RUNT propietarios, SIMIT vehículo…); sin rótulo, «Novedad sin clasificar».
+          example: RUNT
 
     DictamenVehiculo:
       type: object

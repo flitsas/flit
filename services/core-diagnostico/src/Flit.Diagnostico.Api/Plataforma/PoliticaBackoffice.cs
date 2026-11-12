@@ -5,29 +5,60 @@ using Microsoft.AspNetCore.Authorization;
 namespace Flit.Diagnostico.Api.Plataforma;
 
 /// <summary>
-/// Política de las rutas <c>/backoffice/*</c> (HU #13728, D-16, ADR-0073). Exige a la vez el permiso
-/// <see cref="Permisos.BackofficeVer"/> y el claim <c>tenant_type=FLIT</c> del access token. Un usuario con el rol
-/// <c>backoffice_diagnostico</c> en una compañía que no es FLIT, o de la compañía FLIT sin el permiso, recibe 403. El
-/// SuperAdmin cuenta como si tuviera el permiso (igual que en <see cref="Capacidades"/>), pero también necesita ser de la
-/// compañía FLIT. Un token de servicio nunca pasa: los servicios entran por gRPC.
+/// Políticas de las rutas <c>/backoffice/*</c> (HU #13728, D-16, ADR-0073; ajustes 2026-11-11, punto 1). Son dos:
+/// <list type="bullet">
+/// <item><see cref="Nombre"/> (configuración): resumen, contrato, diagnósticos (listado, grilla, historial y detalle del
+/// dictamen), intentos, fuentes obligatorias y la lista de empresas. Pasa un SuperAdmin de <b>cualquier</b> compañía, o un
+/// usuario de la compañía FLIT (<c>tenant_type=FLIT</c>) con <see cref="Permisos.BackofficeVer"/>. Un usuario de otra
+/// compañía con el permiso pero sin SuperAdmin recibe 403.</item>
+/// <item><see cref="NombreOperacion"/> (operación FLIT): override del dictamen y llenado manual. Sin cambio de regla: solo la
+/// compañía FLIT, con el permiso o SuperAdmin. Un SuperAdmin de otra compañía recibe 403.</item>
+/// </list>
+/// Un token de servicio nunca pasa ninguna: los servicios entran por gRPC. Cada endpoint puede exigir además su permiso.
 /// </summary>
 public static class PoliticaBackoffice
 {
+    /// <summary>Política de configuración del backoffice (todo el grupo <c>/backoffice</c>).</summary>
     public const string Nombre = "diagnostico.backoffice";
 
-    /// <summary>El usuario puede usar el backoffice: no es un servicio, es de la compañía FLIT y tiene el permiso.</summary>
-    public static bool Cumple(ClaimsPrincipal user)
-    {
-        ArgumentNullException.ThrowIfNull(user);
-        if (user.Identity?.IsAuthenticated != true || PlatformPrincipal.IsService(user))
-            return false;
+    /// <summary>Política de operación FLIT (override del dictamen y llenado manual), encima de <see cref="Nombre"/>.</summary>
+    public const string NombreOperacion = "diagnostico.backoffice.operacion";
 
-        var esFlit = string.Equals(user.FindFirstValue("tenant_type"), UsuarioActual.TipoEmpresaFlit, StringComparison.OrdinalIgnoreCase);
-        var tienePermiso = PlatformPrincipal.IsSuperAdmin(user)
-            || user.FindAll("permissions").Any(c => string.Equals(c.Value, Permisos.BackofficeVer, StringComparison.OrdinalIgnoreCase));
-        return esFlit && tienePermiso;
+    /// <summary>Configuración: no es un servicio y es SuperAdmin (de cualquier compañía) o es de FLIT con el permiso.</summary>
+    public static bool CumpleConfiguracion(ClaimsPrincipal user)
+    {
+        if (!EsUsuario(user))
+            return false;
+        return PlatformPrincipal.IsSuperAdmin(user) || (EsFlit(user) && TienePermisoVer(user));
     }
 
+    /// <summary>Operación FLIT: no es un servicio, es de la compañía FLIT y tiene el permiso (o es SuperAdmin).</summary>
+    public static bool CumpleOperacion(ClaimsPrincipal user)
+    {
+        if (!EsUsuario(user))
+            return false;
+        return EsFlit(user) && (PlatformPrincipal.IsSuperAdmin(user) || TienePermisoVer(user));
+    }
+
+    /// <summary>La exigen el override del dictamen y el llenado manual, además de su permiso.</summary>
+    public static TBuilder RequiereOperacionFlit<TBuilder>(this TBuilder builder)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.RequireAuthorization(NombreOperacion);
+
     internal static AuthorizationBuilder AddPoliticaBackoffice(this AuthorizationBuilder builder) =>
-        builder.AddPolicy(Nombre, p => p.RequireAuthenticatedUser().RequireAssertion(c => Cumple(c.User)));
+        builder
+            .AddPolicy(Nombre, p => p.RequireAuthenticatedUser().RequireAssertion(c => CumpleConfiguracion(c.User)))
+            .AddPolicy(NombreOperacion, p => p.RequireAuthenticatedUser().RequireAssertion(c => CumpleOperacion(c.User)));
+
+    private static bool EsUsuario(ClaimsPrincipal user)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return user.Identity?.IsAuthenticated == true && !PlatformPrincipal.IsService(user);
+    }
+
+    private static bool EsFlit(ClaimsPrincipal user) =>
+        string.Equals(user.FindFirstValue("tenant_type"), UsuarioActual.TipoEmpresaFlit, StringComparison.OrdinalIgnoreCase);
+
+    private static bool TienePermisoVer(ClaimsPrincipal user) =>
+        user.FindAll("permissions").Any(c => string.Equals(c.Value, Permisos.BackofficeVer, StringComparison.OrdinalIgnoreCase));
 }

@@ -10,9 +10,10 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Rutas <c>/backoffice/*</c> del backoffice FLIT (HU #13728, D-16, ADR-0073). Todo el grupo exige
-/// <see cref="PoliticaBackoffice"/> (permiso <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>) y la empresa
-/// explícita (<see cref="EmpresaExplicita"/>, que además audita cada lectura). Una ruta inexistente bajo
-/// <c>/backoffice/</c> también pasa por la política: 403 a quien no es backoffice FLIT, 404 a quien sí. Existen
+/// la política de configuración de <see cref="PoliticaBackoffice"/> (SuperAdmin de cualquier compañía, o FLIT con
+/// <c>diagnostico.backoffice.ver</c>; ajustes 2026-11-11, punto 1; el override y el llenado manual exigen además la de
+/// operación FLIT) y la empresa explícita (<see cref="EmpresaExplicita"/>, que además audita cada lectura). Una ruta inexistente bajo
+/// <c>/backoffice/</c> también pasa por la política: 403 a quien no la cumple, 404 a quien sí. Existen
 /// <c>GET /backoffice/resumen?empresa=</c> (D0) y <c>GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato</c>
 /// (<see cref="ContratoBackofficeEndpoints"/>, HU #13741) y <c>GET /backoffice/consultas/{consulta}/intentos</c>
 /// (<see cref="IntentosBackofficeEndpoints"/>, HU #13737) y los lotes, la grilla y el historial de una compañía

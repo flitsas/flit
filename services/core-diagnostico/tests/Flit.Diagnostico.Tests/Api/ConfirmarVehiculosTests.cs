@@ -50,7 +50,7 @@ public sealed class ConfirmarVehiculosTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("confirmados").GetInt32().Should().Be(3);
         json.GetProperty("invalidos").GetInt32().Should().Be(2, "MAL y el documento con letras");
         json.GetProperty("duplicados").GetInt32().Should().Be(1, "ABC123 repite a abc-123: gana la primera");
@@ -110,7 +110,7 @@ public sealed class ConfirmarVehiculosTests
         {
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be("SIN_VALIDOS");
             json.GetProperty("campo").GetString().Should().Be("vehiculos");
             json.GetProperty("error").GetString().Should().NotBeNullOrWhiteSpace();
@@ -136,7 +136,7 @@ public sealed class ConfirmarVehiculosTests
 
         var texto = await exceso.Content.ReadAsStringAsync(ct);
         exceso.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("code").GetString().Should().Be("LIMITE_SUPERADO");
         json.GetProperty("campo").GetString().Should().Be("vehiculos");
         json.GetProperty("error").GetString().Should().Contain("501").And.Contain("500");
@@ -211,9 +211,9 @@ public sealed class ConfirmarVehiculosTests
             o => o.WithStrictOrdering());
         var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, id, ct);
         cabecera.Estado.Should().Be(EstadoDiagnostico.Creado);
-        var estimado = JsonDocument.Parse(cabecera.EstimadoConsultas!).RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
+        var estimado = JsonElement.Parse(cabecera.EstimadoConsultas!).EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
         estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 2, ["RUNT_LOCATARIO"] = 1 });
-        JsonDocument.Parse(texto).RootElement.GetProperty("estimado_consultas").EnumerateArray()
+        JsonElement.Parse(texto).GetProperty("estimado_consultas").EnumerateArray()
             .ToDictionary(e => e.GetProperty("fuente").GetString()!, e => e.GetProperty("consultas").GetInt32())
             .Should().Equal(estimado, "con ANTES_DE_LANZAR la respuesta trae el estimado");
     }

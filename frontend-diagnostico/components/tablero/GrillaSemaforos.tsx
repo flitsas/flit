@@ -8,6 +8,7 @@ import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
+import { nombreRol } from "@/lib/rotulos";
 
 /** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px. */
 const CABECERA_CLS = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider";
@@ -20,7 +21,6 @@ const TD_CLS = "px-3 py-2.5 align-top";
 
 const RESUELTAS: ReadonlySet<CeldaGrilla["estado"]> = new Set(["COMPLETADO", "NA", "ERROR"]);
 
-const ROLES: Record<string, string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
 
 /** Pilares con más de una fuente: su cabecera agrupa (colgroup) y sus fuentes van en el segundo nivel. */
 const PILARES_AGRUPADOS = PILARES.filter((p) => p.fuentes.length > 1);
@@ -43,8 +43,15 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
    * `descargarReportes`). Sin ella la columna no existe (backoffice y compañía sin la capacidad).
    */
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
+  /** Título de la columna de `accionVehiculo`; por defecto «Reporte» (Punto 3: «Acciones» cuando también hay reintentos). */
+  tituloAccionVehiculo?: string;
   /** Acción bajo la placa (corte 7: «Dictamen»). No entra en el sondeo de la grilla: quien la pinta pide el dictamen al abrirla. */
   accionEncabezado?: (vehiculo: FilaVehiculo) => ReactNode;
+  /**
+   * Casilla de selección al inicio de cada fila (Punto 4, masivo: solo con la capacidad `derivar` y la derivación encendida).
+   * Sin ella la columna no existe.
+   */
+  casillaVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
 }
 
 /** «—» con nombre accesible cuando el dato no existe. */
@@ -86,7 +93,7 @@ function CeldaDocumentoDeclarado({ vehiculo }: { vehiculo: FilaVehiculo }) {
       {d ? (
         <span className="flex flex-col gap-0.5">
           <span className={DOCUMENTO_CLS}>{`${d.tipo_documento} ${enmascararDocumento(d.documento_enmascarado)}`}</span>
-          <span className={TEXTO_SECUNDARIO_CLS}>{ROLES[d.rol] ?? d.rol}</span>
+          <span className={TEXTO_SECUNDARIO_CLS}>{nombreRol(d.rol)}</span>
         </span>
       ) : (
         <SinDato etiqueta="Sin documento declarado" />
@@ -133,7 +140,9 @@ export function GrillaSemaforos({
   accionCelda,
   marcaCelda,
   accionVehiculo,
+  tituloAccionVehiculo = "Reporte",
   accionEncabezado,
+  casillaVehiculo,
 }: GrillaSemaforosProps) {
   const pedidas = fuentesPedidas(grilla.columnas);
 
@@ -142,7 +151,12 @@ export function GrillaSemaforos({
       <table aria-label="Semáforo de consultas del lote" className="w-full min-w-[1280px] border-collapse text-sm">
         <thead>
           <tr>
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} align-bottom`} style={CABECERA_ESTILO}>
+            {casillaVehiculo && (
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} w-10 align-bottom`} style={CABECERA_ESTILO}>
+                <span className="sr-only">Seleccionar</span>
+              </th>
+            )}
+            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`} style={CABECERA_ESTILO}>
               Placa o VIN
             </th>
             <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
@@ -165,7 +179,7 @@ export function GrillaSemaforos({
             )}
             {accionVehiculo && (
               <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-                Reporte
+                {tituloAccionVehiculo}
               </th>
             )}
           </tr>
@@ -182,6 +196,11 @@ export function GrillaSemaforos({
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
               <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-card">
+                {casillaVehiculo && (
+                  <td data-columna="seleccion" className={TD_CLS}>
+                    {casillaVehiculo(v)}
+                  </td>
+                )}
                 <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} accion={accionEncabezado?.(v)} />
                 <CeldaDocumentoDeclarado vehiculo={v} />
                 <CeldaDocumentosPropietario vehiculo={v} />
