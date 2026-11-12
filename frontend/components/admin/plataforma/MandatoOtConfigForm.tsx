@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Eye, FileText, Pencil, RotateCcw, Search, Trash2, Upload } from "lucide-react";
+import { Copy } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -630,7 +631,7 @@ export function MandatoOtConfigForm({
                   subject={row.companyName}
                   actions={[
                     {
-                      icon: Pencil,
+                      icon: iconoComo("lapiz"),
                       label: `Editar tipo de mandato de ${row.companyName}`,
                       onClick: () => {
                         setRuleError(null);
@@ -642,7 +643,7 @@ export function MandatoOtConfigForm({
                     ...(row.hasExplicitRule
                       ? [
                           {
-                            icon: RotateCcw,
+                            icon: iconoComo("reintento"),
                             label: `Volver al default de ${row.companyName}`,
                             onClick: () => {
                               setRuleError(null);
@@ -688,7 +689,7 @@ export function MandatoOtConfigForm({
                 onClick={() => void handlePreview()}
                 className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground disabled:opacity-50"
               >
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
                 {previewing ? "Abriendo…" : "Vista previa"}
               </button>
               <button
@@ -844,7 +845,7 @@ export function MandatoOtConfigForm({
 
             {templateCode === "auto" ? (
               <div
-                className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-secondary via-card to-[color-mix(in_srgb,var(--color-flit-tech)_8%,transparent)] px-4 py-3 dark:to-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)]"
+                className="relative overflow-hidden rounded-2xl border border-border bg-secondary px-4 py-3"
                 data-testid="mandato-system-template-badge"
                 role="status"
               >
@@ -876,7 +877,7 @@ export function MandatoOtConfigForm({
                     Propia
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden="true" />
+                    <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0 text-flit-brand" />
                     {view.customTemplateKind === "pdf"
                       ? (view.customTemplateFileName ?? "plantilla.pdf")
                       : "Editor rellenable"}
@@ -892,7 +893,7 @@ export function MandatoOtConfigForm({
                   onClick={() => void handleRemoveCustom()}
                   className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-destructive disabled:opacity-50"
                 >
-                  <Trash2 className="h-3 w-3" aria-hidden="true" />
+                  <Icono nombre="papelera" className="h-3 w-3" />
                   Quitar y volver a {effectiveTemplateName}
                 </button>
               </div>
@@ -923,7 +924,7 @@ export function MandatoOtConfigForm({
                   onClick={() => pdfRef.current?.click()}
                   className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
                 >
-                  <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
                   {uploading ? "Subiendo…" : hasCustom ? "Reemplazar PDF" : "Subir PDF"}
                 </button>
                 <button
@@ -933,7 +934,7 @@ export function MandatoOtConfigForm({
                   className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
                   data-testid="mandato-open-editor"
                 >
-                  <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="documento" className="h-3.5 w-3.5" />
                   {showEditor ? "Ocultar editor" : "Abrir editor"}
                 </button>
               </div>
@@ -1125,10 +1126,7 @@ export function MandatoOtConfigForm({
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="relative min-w-[10rem] flex-1">
                     <span className="sr-only">Buscar compañía</span>
-                    <Search
-                      className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                      aria-hidden="true"
-                    />
+                    <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <input
                       value={companySearch}
                       onChange={(e) => {

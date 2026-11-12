@@ -1,7 +1,8 @@
 "use client";
 
 import { buttonClass } from "@flit/ui/Button";
-import { Pencil, ShieldCheck, UserCheck, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
 import { etiquetaTipoFirma, tipoDeFirmaMandatario } from "@/lib/plataforma/mandatario-firma";
@@ -58,7 +59,7 @@ export function MandatarioGeneralCard({
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-[color:var(--di-on-action)]"
             style={{ background: hay ? "var(--gradient-action)" : "var(--border-strong)" }}
           >
-            {hay ? <UserCheck className="h-6 w-6" /> : <UserPlus className="h-6 w-6" />}
+            {hay ? <Icono nombre="persona" className="h-6 w-6" /> : <UserPlus className="h-6 w-6" />}
           </span>
           <div className="min-w-0">
             <p
@@ -96,7 +97,7 @@ export function MandatarioGeneralCard({
                       ) : null}
                       {natural ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-flit-primary">
-                          <ShieldCheck className="h-3.5 w-3.5 text-flit-brand" aria-hidden="true" />
+                          <Icono nombre="escudo" className="h-3.5 w-3.5 text-flit-brand" />
                           {etiquetaTipoFirma(tipoDeFirmaMandatario(signer))}
                         </span>
                       ) : null}
@@ -131,7 +132,7 @@ export function MandatarioGeneralCard({
             aria-label="Editar mandatario general del organismo"
             className={buttonClass({ size: "sm", className: "shrink-0" })}
           >
-            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="lapiz" className="h-3.5 w-3.5" />
             {hay ? "Cambiar mandatario" : "Elegir mandatario"}
           </button>
         ) : null}

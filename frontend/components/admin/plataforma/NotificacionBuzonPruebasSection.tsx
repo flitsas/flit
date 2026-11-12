@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Inbox, Pencil, RefreshCw, TriangleAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ApiError } from "@/lib/api/types";
 import {
   updateTestMailbox,
@@ -86,7 +86,7 @@ export function NotificacionBuzonPruebasSection({
         id="notificaciones-buzon-heading"
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground"
       >
-        <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="radicacion" className="h-3.5 w-3.5" />
         Buzón de pruebas
       </h2>
 
@@ -113,7 +113,7 @@ export function NotificacionBuzonPruebasSection({
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white"
             style={{ background: "var(--color-flit-brand)" }}
           >
-            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3 w-3" />
             Reintentar
           </button>
         </div>
@@ -158,7 +158,7 @@ export function NotificacionBuzonPruebasSection({
             </div>
             {formError ? (
               <p role="alert" className="inline-flex items-center gap-1.5 text-xs text-destructive">
-                <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                 {formError}
               </p>
             ) : null}
@@ -179,7 +179,7 @@ export function NotificacionBuzonPruebasSection({
                 className="inline-flex items-center gap-1.5 text-xs text-destructive"
                 data-testid="notificaciones-buzon-sin-configurar"
               >
-                <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                 No hay un buzón de pruebas configurado. Configúralo para poder enviar correos de
                 prueba.
               </p>
@@ -189,7 +189,7 @@ export function NotificacionBuzonPruebasSection({
               onClick={startEditing}
               className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground"
             >
-              <Pencil className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="lapiz" className="h-3 w-3" />
               {mailbox?.isConfigured ? "Modificar" : "Configurar"}
             </button>
           </div>

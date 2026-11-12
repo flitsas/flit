@@ -2,7 +2,6 @@
 
 // HU #14076 AC3 — Historial de versiones publicadas: cuándo se publicó cada una, quién y cuánto contenía. Solo lectura.
 import { useCallback, useEffect, useState } from "react";
-import { History } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -43,7 +42,7 @@ export function VersionesModal({ onClose }: { onClose: () => void }) {
   }, [load]);
 
   return (
-    <Modal open onClose={onClose} title="Publicaciones anteriores" description="Cada vez que publicas queda aquí, de la más reciente a la más antigua." icon={History} size="lg">
+    <Modal open onClose={onClose} title="Publicaciones anteriores" description="Cada vez que publicas queda aquí, de la más reciente a la más antigua." icono="reloj" size="lg">
       {status === "loading" ? (
         <CarLoaderModal label="Cargando publicaciones…" />
       ) : (

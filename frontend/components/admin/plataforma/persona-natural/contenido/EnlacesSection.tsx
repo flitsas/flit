@@ -4,7 +4,7 @@
 // legal sin documento oficial se muestra como «Sin documento oficial»: el portal conserva su aviso actual y no se
 // inventa texto legal. Cada guardado queda en el borrador. Tabla estándar con RowActions y los cuatro estados.
 import { useCallback, useEffect, useState } from "react";
-import { Link2, Pencil, Save } from "lucide-react";
+import { Link2, Save } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -26,6 +26,7 @@ import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_L
 import { PnButton, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarEnlace } from "./contenidoReglas";
+import { iconoComo } from "@flit/ui/Icono";
 
 /** Texto de la columna «Valor»: la URL, «Sin documento oficial» (legales) o «Sin valor» (los demás). */
 export function valorEnlace(e: EnlacePn): { texto: string; vacio: boolean } {
@@ -157,7 +158,7 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
       header: "Acciones",
       align: "right",
       render: (e) => (
-        <RowActions actions={[{ icon: Pencil, label: `Editar ${ENLACE_LABEL[e.codigo]}`, tone: "primary", onClick: () => setEditando(e) }]} />
+        <RowActions actions={[{ icon: iconoComo("lapiz"), label: `Editar ${ENLACE_LABEL[e.codigo]}`, tone: "primary", onClick: () => setEditando(e) }]} />
       ),
     },
   ];

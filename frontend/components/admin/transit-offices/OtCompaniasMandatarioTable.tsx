@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -109,7 +109,7 @@ export function OtCompaniasMandatarioTable({
                 ariaLabel="Sin mandatario"
                 label={
                   <span className="inline-flex items-center gap-1" data-testid="ot-mandatos-sin-mandatario">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden={true} />
+                    <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                     Sin mandatario
                   </span>
                 }
@@ -133,7 +133,7 @@ export function OtCompaniasMandatarioTable({
             subject={row.name}
             actions={[
               {
-                icon: Pencil,
+                icon: iconoComo("lapiz"),
                 label: `Editar mandatario de ${row.name}`,
                 tone: "primary",
                 onClick: () => onEdit(row),

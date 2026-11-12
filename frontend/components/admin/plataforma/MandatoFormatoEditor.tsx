@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { AlertTriangle, Eye, FileSignature, History } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -220,7 +220,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
         <RowActions
           actions={[
             {
-              icon: Eye,
+              icon: iconoComo("ojo"),
               label: `Ver el texto de la versión ${v.versionNumber}`,
               onClick: () => void openVersion(v.versionNumber),
               tone: "primary",
@@ -240,7 +240,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
         open
         onClose={onClose}
         busy={busy}
-        icon={FileSignature}
+        icono="firma"
         iconBg="var(--color-flit-brand)"
         title={title}
         titleClassName="text-base font-bold text-flit-primary"
@@ -408,7 +408,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   className="inline-flex items-center gap-1.5 font-semibold text-flit-brand disabled:opacity-50"
                   data-testid="mandato-formato-historial-toggle"
                 >
-                  <History className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="reloj" className="h-3.5 w-3.5" />
                   Historial de versiones ({detail?.versions.length ?? 0})
                 </button>
                 {showHistory ? (
@@ -482,7 +482,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
         <Modal
           open
           onClose={() => setConfirming(false)}
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg="var(--color-flit-alert)"
           title="Confirmar publicación de la plantilla"
           titleClassName="text-base font-bold text-flit-primary"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertTriangle, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   fetchOtClientProcedure,
@@ -34,7 +34,7 @@ import {
   OT_WARN_TEXT,
 } from "./detalle/ot-detalle-visual";
 import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
-import { estadoChipClass } from "@/lib/tramites/estados";
+import { ESTADO_ICONO, estadoChipClass, type EstadoTramite } from "@/lib/tramites/estados";
 
 import { formatFechaHora } from "@/lib/format/date";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -292,7 +292,7 @@ export function ClientProcedureDetailModal({
             title="Ver línea de tiempo del trámite"
             className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <StatusBadge className={estadoChipClass(row.status)} label={estadoLabel} {...procedureStatusChip(row.status)} />
+            <StatusBadge className={estadoChipClass(row.status)} label={estadoLabel} icono={ESTADO_ICONO[row.status as EstadoTramite]} {...procedureStatusChip(row.status)} />
           </button>
         </div>
         <p className="mt-1 text-[12px] text-muted-foreground">
@@ -309,7 +309,7 @@ export function ClientProcedureDetailModal({
           className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={
             timelineActive
-              ? { background: OT_BLUE, borderColor: OT_BLUE, color: "#fff" }
+              ? { background: OT_BLUE, borderColor: OT_BLUE, color: "var(--di-on-action)" }
               : { borderColor: OT_BORDER, color: OT_NAVY, background: "transparent" }
           }
         >
@@ -322,7 +322,7 @@ export function ClientProcedureDetailModal({
           className="rounded-xl border bg-card p-2 dark:border-border"
           style={{ borderColor: OT_BORDER, color: OT_NAVY }}
         >
-          <X className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-4 w-4" />
         </button>
       </div>
 
@@ -336,11 +336,7 @@ export function ClientProcedureDetailModal({
           role="status"
           id={avisosId}
         >
-          <AlertTriangle
-            className="mt-0.5 h-4 w-4 shrink-0"
-            style={{ color: OT_WARN }}
-            aria-hidden="true"
-          />
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: OT_WARN }} />
           <div className="text-[11.5px] font-medium" style={{ color: OT_WARN_TEXT }}>
             <strong>Pendientes antes de decidir:</strong>
             <ul className="mt-1 list-disc space-y-0.5 pl-4">
@@ -368,13 +364,9 @@ export function ClientProcedureDetailModal({
           }
           role="status"
         >
-          <AlertTriangle
-            className="mt-0.5 h-4 w-4 shrink-0"
-            style={{
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{
               color: row.revocationDecisionStatus === "aprobada" ? "var(--badge-danger-fg)" : OT_WARN,
-            }}
-            aria-hidden="true"
-          />
+            }} />
           <div
             className="text-[11.5px] font-medium"
             style={{

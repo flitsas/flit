@@ -3,7 +3,7 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Tag, Trash2 } from "lucide-react";
+import { Tag } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { getToken } from "@/lib/api/client";
@@ -29,6 +29,7 @@ import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
 import { OtTabBar } from "./OtTabBar";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { TAG_COLOR_OPTIONS, TagFormPanel } from "./TagFormPanel";
+import { iconoComo } from "@flit/ui/Icono";
 
 /** Nombre accesible/legible del color de una etiqueta (HU #12883 AC3 — paleta cerrada). */
 function tagColorLabel(hex: string): string {
@@ -211,7 +212,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         <RowActions
           actions={[
             {
-              icon: Trash2,
+              icon: iconoComo("papelera"),
               label: `Eliminar etiqueta ${tag.name}`,
               tone: "danger",
               onClick: () => setDeleteTarget(tag),

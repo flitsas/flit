@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { OT_BLUE } from "./ot-detalle-visual";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import {
@@ -80,11 +80,7 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
                 </span>
                 <Valor texto={t.valorRunt} ausente="Sin dato del RUNT" />
               </span>
-              <ArrowRight
-                className="h-3.5 w-3.5 shrink-0"
-                style={{ color: OT_BLUE }}
-                aria-label="cambia a"
-              />
+              <Icono nombre="derecha" className="h-3.5 w-3.5 shrink-0" style={{ color: OT_BLUE }} etiqueta="cambia a" />
               <span className="flex flex-col">
                 <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-muted-foreground">
                   Nuevo en el trámite

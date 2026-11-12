@@ -5,7 +5,6 @@
 // textos y el orden, no el código del portal. Un enlace legal sin documento oficial se indica como tal y el portal
 // conserva su aviso actual.
 import { useCallback, useEffect, useState } from "react";
-import { Eye } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Modal } from "@/components/atom/Modal";
@@ -113,7 +112,7 @@ export function VistaPreviaModal({ onClose }: { onClose: () => void }) {
             : "Es igual a lo que ya está publicado."
           : undefined
       }
-      icon={Eye}
+      icono="ojo"
       size="xl"
     >
       {status === "loading" ? (

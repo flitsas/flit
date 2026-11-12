@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
@@ -82,7 +82,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
           onClick={reintentar}
           className="inline-flex items-center gap-1.5 rounded-md text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Actualizar
         </button>
       </div>
@@ -152,7 +152,7 @@ export function AiAlertsSection({ onAcked }: { onAcked?: () => void }) {
                   disabled={ackId === a.id}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-60"
                 >
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="check" className="h-3.5 w-3.5" />
                   {ackId === a.id ? "Marcando…" : "Marcar leída"}
                 </button>
               ) : null}

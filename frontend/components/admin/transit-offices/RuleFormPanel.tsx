@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { CreateOtRuleRequest, OtRule, OtRuleCondition } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
@@ -217,7 +218,7 @@ export function RuleFormPanel({
                   style={{ color: "var(--destructive)" }}
                   onClick={() => setConditions((prev) => prev.filter((_, i) => i !== index))}
                 >
-                  <Trash2 className="h-3 w-3" /> Quitar
+                  <Icono nombre="papelera" className="h-3 w-3" /> Quitar
                 </button>
               )}
             </div>

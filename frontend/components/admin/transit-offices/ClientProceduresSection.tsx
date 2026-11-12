@@ -64,7 +64,7 @@ import {
   mensajeEntregaOtFallida,
   resolverFuenteMaestroOt,
 } from "@/lib/tramites/consolidado-entrega-ot";
-import { Download, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
   ClientProcedureDetailModal,
@@ -1710,10 +1710,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   className={controlCls(false)}
                   data-testid="ot-bandeja-export-xlsx"
                 >
-                  <Download
-                    className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
-                    aria-hidden="true"
-                  />
+                  <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`} />
                   {exporting ? "Exportando…" : COPY.A13}
                 </button>
               }
@@ -1729,10 +1726,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               title="Actualizar"
               className={controlCls(false)}
             >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
+              <Icono nombre="reintento" className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`} />
               Actualizar
             </button>
           </div>

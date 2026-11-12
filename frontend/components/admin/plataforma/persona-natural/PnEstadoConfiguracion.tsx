@@ -5,7 +5,7 @@
 // resume en lenguaje de negocio lo que ve hoy el ciudadano. Los números salen de las mismas listas que usan las
 // pestañas (tipos y organismos); no se inventa ningún dato.
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Check, Eye } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { fetchOrganismosPn, fetchTiposPn, type OrganismoPn, type TipoPn } from "@/lib/api/admin-pn-config";
 import { PnButton } from "./pn-componentes";
@@ -146,7 +146,7 @@ export function PnEstadoConfiguracion({
         </h2>
         <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary">
           <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--flit-success-ink)] text-white">
-            <Check className="h-4 w-4" />
+            <Icono nombre="check" className="h-4 w-4" />
           </span>
           <span>Configuración completa. {frasePortal(resumen, pasos)}</span>
         </p>
@@ -212,7 +212,7 @@ export function PnEstadoConfiguracion({
                       p.hecho ? "bg-[var(--flit-success-ink)] text-white" : "border-2 border-border text-muted-foreground"
                     }`}
                   >
-                    {p.hecho ? <Check className="h-4 w-4" /> : i + 1}
+                    {p.hecho ? <Icono nombre="check" className="h-4 w-4" /> : i + 1}
                   </span>
                   <span className="text-sm font-bold text-flit-primary">
                     <span className="sr-only">Paso {i + 1}: </span>
@@ -224,7 +224,7 @@ export function PnEstadoConfiguracion({
                 </div>
                 <p className="text-sm text-muted-foreground">{p.detalle}</p>
                 <div className="mt-auto">
-                  <PnButton variant={p.hecho ? "secondary" : "primary"} icon={ArrowRight} onClick={() => onIr(p.id)}>
+                  <PnButton variant={p.hecho ? "secondary" : "primary"} icon={iconoComo("derecha")} onClick={() => onIr(p.id)}>
                     {p.boton}
                   </PnButton>
                 </div>
@@ -234,7 +234,7 @@ export function PnEstadoConfiguracion({
 
           <div className="flex flex-col gap-2 rounded-xl bg-secondary p-3">
             <p className="flex items-start gap-2 text-sm font-semibold text-flit-primary">
-              <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="ojo" className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{frasePortal(resumen, pasos)}</span>
             </p>
             {resumen.organismosSinTarifa > 0 && (

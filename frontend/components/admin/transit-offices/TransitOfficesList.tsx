@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Power, PowerOff, Landmark, Search, Send, SlidersHorizontal } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import type { UiStatus } from "@/components/admin/UiStateBoundary";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -154,7 +154,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
   const rowActions = useCallback(
     (office: TransitOfficeOperationalStatus): RowAction[] => {
       const quipuxAction: RowAction = {
-        icon: Send,
+        icon: iconoComo("radicacion"),
         label: `Parametrizar radicación Quipux de ${office.name}`,
         onClick: () => setQuipuxTarget(office),
         tone: "default",
@@ -163,7 +163,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       if (!office.hasTenant) {
         return [
           {
-            icon: Landmark,
+            icon: iconoComo("banco"),
             label: `Activar ${office.name}`,
             onClick: () => onCreateTenant?.(office),
             tone: "primary",
@@ -175,14 +175,14 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       const activo = office.estadoActivo === true;
       return [
         {
-          icon: SlidersHorizontal,
+          icon: iconoComo("filtro"),
           label: `Administrar ${office.name}`,
           onClick: () => router.push(otHubModulePath(office.id, "client-procedures")),
           tone: "primary",
         },
         quipuxAction,
         {
-          icon: activo ? PowerOff : Power,
+          icon: activo ? iconoComo("asistente-apagado") : iconoComo("encendido"),
           label: `${activo ? "Desactivar" : "Activar"} ${office.name}`,
           onClick: () => setStatusTarget(office),
           tone: activo ? "danger" : "default",
@@ -237,10 +237,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       <div className="flex flex-col gap-3">
         <label className="relative block w-full max-w-md">
           <span className="sr-only">Buscar organismo de tránsito</span>
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50"
-            aria-hidden="true"
-          />
+          <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
           <input
             type="search"
             value={search}

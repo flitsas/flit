@@ -47,7 +47,7 @@ export function TipoMandatoAyuda({ label = "Tipo de mandato" }: { label?: string
         <span
           id={panelId}
           role="note"
-          className="absolute left-0 top-full z-30 mt-2 block w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 text-left text-[11px] font-normal normal-case leading-relaxed tracking-normal text-foreground shadow-lg"
+          className="absolute left-0 top-full z-30 mt-2 block w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 text-left text-[11px] font-normal normal-case leading-relaxed tracking-normal text-foreground shadow-[var(--kit-sombra)]"
         >
           <span className="mb-1.5 block text-muted-foreground">
             Dice quién ocupa el bloque del mandatario en el contrato.

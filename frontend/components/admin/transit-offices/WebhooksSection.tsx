@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { RowActions } from "@/components/atom/RowActions";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -36,6 +35,7 @@ import { maskTargetUrl } from "./ot-utils";
 import { WebhookFormPanel } from "./WebhookFormPanel";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { iconoComo } from "@flit/ui/Icono";
 // Bug #13055 — tabla homologada con el modelo de trámites.
 const HEAD_STYLE = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
 const CELL_STYLE = { borderColor: "var(--border)" } as const;
@@ -223,7 +223,7 @@ export function WebhooksSection() {
                       <RowActions
                         actions={[
                           {
-                            icon: Pencil,
+                            icon: iconoComo("lapiz"),
                             label: `Editar webhook ${w.eventType}`,
                             onClick: () => {
                               setEditing(w);
