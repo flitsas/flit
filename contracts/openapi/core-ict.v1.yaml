@@ -3093,7 +3093,7 @@ components:
           - Especial
           - Otros
           description: "Tipo de servicio del vehiculo. Opcional y solo aplica en Matricula (tipos 1 y 2): si no se envia,
-            el tramite se crea como Particular (1). Un valor fuera de 1-6 deja la transaccion con novedades. En Traspaso
+            el tramite se crea como Particular (1). Un valor fuera de 1-6 rechaza la fila en la respuesta del registro. En Traspaso
             se ignora (lo toma el RUNT). Si es Publico, la empresa vinculadora la completa el gestor en FLIT."
           examples:
           - 1
