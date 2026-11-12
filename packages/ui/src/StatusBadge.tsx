@@ -101,3 +101,27 @@ export function StatusBadge({
     </span>
   );
 }
+
+/**
+ * Forma de la etiqueta del kit para un elemento PROPIO que ya existe (un `<span>` de estado, un chip de una tabla o una
+ * tarjeta) sin cambiar su DOM ni su accesibilidad: StatusBadge agrega role="status" y aria-label; esto no. Devuelve la
+ * clase y las variables de color; el contenido (punto, ícono o texto) lo pone quien lo usa.
+ *
+ *   <span {...etiquetaKit("success")}><span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />Activo</span>
+ *   <span {...etiquetaKit({ c: estilo.border, ct: estilo.color })}>…</span>
+ */
+export function etiquetaKit(
+  tono: StatusBadgeTone | { c: string; ct?: string },
+  opciones: { icono?: boolean; className?: string } = {},
+): { className: string; style: CSSProperties } {
+  const t = typeof tono === "string" ? TONO[tono] : { c: tono.c, ct: tono.ct ?? tono.c };
+  return {
+    className: `kit-etiqueta${opciones.icono ? " kit-etiqueta--icono" : ""} whitespace-nowrap${opciones.className ? ` ${opciones.className}` : ""}`,
+    style: { "--c": t.c, "--ct": t.ct } as CSSProperties,
+  };
+}
+
+/** Punto de 8 px del color del tono, para usar dentro de `etiquetaKit` cuando no hay ícono de estado. */
+export const ETIQUETA_PUNTO_CLS = "kit-etiqueta__punto";
+/** Ícono de 20 px dentro de `etiquetaKit({…}, { icono: true })` (p. ej. `<img src={ESTADO_ICONO[e]} className={…}>`). */
+export const ETIQUETA_ICONO_CLS = "kit-etiqueta__icono";
