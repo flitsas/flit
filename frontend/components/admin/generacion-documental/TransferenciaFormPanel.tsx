@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Info } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   generateTransferenciaDocument,
@@ -475,7 +474,7 @@ export function TransferenciaFormPanel() {
           {resultado.advisories.length > 0 ? (
             <div className="mt-2" data-testid="transferencia-advisories">
               <p className="flex items-center gap-1.5 font-semibold">
-                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
                 Prevalidaciones pendientes de verificación por el organismo de tránsito (avisos, no
                 errores)
               </p>

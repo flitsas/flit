@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, MailCheck, Vault, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -323,11 +322,11 @@ export function LegalRepresentativesTab({
           </p>
           <div className="flex shrink-0 gap-2">
             <a href={IDENTITY_MODULE_HREF} className={rlPrimaryCtaClass} style={rlPrimaryCtaStyle}>
-              <MailCheck className="h-3.5 w-3.5" />
+              <Icono nombre="correo" className="h-3.5 w-3.5" />
               Ir al módulo Identidad
             </a>
             <SignatureAction
-              icon={Vault}
+              icon={iconoComo("candado")}
               label="Asociar firma"
               onClick={() => openEdit(pendingItem)}
             />
@@ -598,7 +597,7 @@ export function LegalRepresentativesTab({
               className={`flex-1 ${rlDangerCtaClass}`}
               style={rlDangerCtaStyle}
             >
-              {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {deleting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
               Eliminar
             </button>
           </div>
@@ -614,7 +613,7 @@ function SignatureAction({
   busy = false,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   busy?: boolean;
   onClick: () => void;
@@ -627,7 +626,7 @@ function SignatureAction({
       className={rlPrimaryCtaClass}
       style={rlPrimaryCtaStyle}
     >
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+      {busy ? <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
       {label}
     </button>
   );

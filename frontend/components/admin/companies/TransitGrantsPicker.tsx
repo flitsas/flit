@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
@@ -91,7 +90,7 @@ export function TransitGrantsPicker({
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 text-xs opacity-70" role="status">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        <Icono nombre="girador" className="h-4 w-4 animate-spin" />
         Cargando organismos de tránsito…
       </div>
     );

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
-import { Blocks, FileClock, Network, Palette, PlugZap, Save, UserCog } from "lucide-react";
+import { Blocks, FileClock } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -71,14 +71,14 @@ const TABS: TabDef[] = [
   // compañías: el mandatario es de la empresa, no del organismo.
   { id: "mandatarios", label: "Mandatarios", icon: iconoComo("persona"), isConfig: false },
   // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
-  { id: "usuarios", label: "Usuarios", icon: UserCog, isConfig: false },
+  { id: "usuarios", label: "Usuarios", icon: iconoComo("rol"), isConfig: false },
   // HU #14068 (Épica #14021) — integraciones externas de la compañía (Persona Natural); solo SuperAdmin: la ficha
   // inyecta el slot solo para él, y sin slot la pestaña no aparece.
-  { id: "integraciones", label: "Integraciones externas", icon: PlugZap, isConfig: false },
+  { id: "integraciones", label: "Integraciones externas", icon: iconoComo("integraciones"), isConfig: false },
   // Cabeza Marca Blanca: la tabla de clientes y la identidad de marca (con su dominio) eran cajas
   // apiladas bajo las pestañas, visibles en cualquiera; ahora son pestañas propias (solo con slot).
-  { id: "hijos", label: "Clientes hijos", icon: Network, isConfig: false },
-  { id: "marca", label: "Identidad de marca", icon: Palette, isConfig: false },
+  { id: "hijos", label: "Clientes hijos", icon: iconoComo("integraciones"), isConfig: false },
+  { id: "marca", label: "Identidad de marca", icon: iconoComo("destello"), isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -299,7 +299,7 @@ export function CompanyConfigTabs({
                 }`}
                 style={{ background: "var(--gradient-action)" }}
               >
-                <Save className="h-4 w-4" aria-hidden /> Guardar todo
+                <Icono nombre="nube-subir" className="h-4 w-4" /> Guardar todo
               </button>
               {pendingChangeCount === 0 && (
                 <span id={`${baseId}-sin-cambios`} className="sr-only">

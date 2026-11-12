@@ -297,6 +297,7 @@ function AuditDetailModal({ entry, onClose }: { entry: AuditLogEntry | null; onC
   const newParsed = parseAuditValue(entry.newValue, entry.fieldName);
   return (
     <Modal
+      icono="portapapeles"
       open
       onClose={onClose}
       size="lg"

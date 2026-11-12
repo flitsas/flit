@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ImageUp, Loader2 } from "lucide-react";
+import { ImageUp } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { brandingErrorMessage } from "@/lib/brand/error-messages";
 import { logoDimensionsHint, validateLogoFile } from "@/lib/brand/validate-logo";
 import { brandingErrorCode, uploadBrandLogo, type BrandLogoResponse, type BrandingSource } from "@/lib/api/branding";
@@ -149,7 +150,7 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
           >
             {uploading ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Cargando…
+                <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" /> Cargando…
               </>
             ) : (
               buttonLabel

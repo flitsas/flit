@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowUpRight, Info, XCircle } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   enlaceTramite,
@@ -95,7 +94,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
           style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
           Abrir el trámite en V2
-          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="externo" className="h-3.5 w-3.5" />
         </a>
       )}
 
@@ -114,7 +113,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
   if (conProblemas) {
     return (
       <Titular
-        icono={<XCircle className="h-5 w-5 text-destructive" aria-hidden="true" />}
+        icono={<Icono nombre="cerrar" className="h-5 w-5 text-destructive" />}
         texto="La migración reportó problemas"
         detalle="Revisa abajo qué instancia falló y por qué. Reintentar es seguro."
       />
@@ -124,7 +123,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
   if (origen.dryRun) {
     return (
       <Titular
-        icono={<Info className="h-5 w-5" aria-hidden="true" style={{ color: "var(--color-flit-brand)" }} />}
+        icono={<Icono nombre="exclamacion" className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} />}
         texto="Simulación completada"
         // Se nombra el control tal y como está rotulado en pantalla: la versión anterior decía
         // «vuelve a lanzarla sin simulación» y ese botón no existe con ese nombre en ningún sitio.

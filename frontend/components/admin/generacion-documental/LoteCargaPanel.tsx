@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { FileSpreadsheet } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import {
@@ -158,11 +157,7 @@ export function LoteCargaPanel() {
   return (
     <section aria-labelledby="gd-lotes-title" className="flex flex-1 flex-col gap-4">
       <header className="flex items-start gap-2">
-        <FileSpreadsheet
-          className="mt-0.5 h-4 w-4 shrink-0"
-          style={{ color: "var(--color-flit-brand)" }}
-          aria-hidden="true"
-        />
+        <Icono nombre="reporte-detallado" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
         <div>
           <h2 id="gd-lotes-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Carga masiva

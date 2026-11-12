@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { fetchAllCompanies, linkCompanyToParent } from "@/lib/api/admin-companies";
@@ -116,7 +115,7 @@ export function LinkCompanyDialog({
       open
       onClose={onClose}
       busy={submitting}
-      icon={Link2}
+      icono="externo"
       title="Vincular cliente existente"
       titleClassName="text-base font-bold text-flit-brand"
     >
@@ -127,7 +126,7 @@ export function LinkCompanyDialog({
 
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-xs opacity-70" role="status">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          <Icono nombre="girador" className="h-4 w-4 animate-spin" />
           Cargando compañías…
         </div>
       ) : loadError ? (
@@ -207,7 +206,7 @@ export function LinkCompanyDialog({
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
           style={{ background: "var(--gradient-action)" }}
         >
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+          {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
           Vincular
         </button>
       </div>

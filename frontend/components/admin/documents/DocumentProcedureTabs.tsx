@@ -2,7 +2,6 @@
 
 import { useState, type ComponentType } from "react";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
-import { FileStack } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { RequirementsTab } from "@/components/admin/documents/tabs/RequirementsTab";
 import { OtOverridesTab } from "@/components/admin/documents/tabs/OtOverridesTab";
@@ -17,7 +16,7 @@ const TABS: { id: TabId; label: string; icon: ComponentType<{ className?: string
   {
     id: "documentos",
     label: "Documentos",
-    icon: FileStack,
+    icon: iconoComo("archivo"),
     description:
       "Define qué documentos exige este trámite y cuáles son obligatorios. El orden lo define exclusivamente la pestaña «Overrides OT».",
   },

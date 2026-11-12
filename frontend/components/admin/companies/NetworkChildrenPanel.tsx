@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
@@ -160,7 +159,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
         </div>
         <CreateButton
           label="Agregar cliente a la red"
-          icon={UserPlus}
+          icon={iconoComo("persona")}
           onClick={() => setCreateOpen(true)}
         />
       </div>
@@ -320,7 +319,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                                 onClick: () => setInviteTarget(child),
                               },
                               {
-                                icon: UserPlus,
+                                icon: iconoComo("persona"),
                                 label: child.estadoActivo
                                   ? `Desactivar ${child.razonSocial}`
                                   : `Activar ${child.razonSocial}`,

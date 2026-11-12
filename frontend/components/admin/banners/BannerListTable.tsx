@@ -210,6 +210,7 @@ export function BannerListTable({
       <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} className="mt-auto" />
 
       <Modal
+        icono="ojo"
         open={preview !== null}
         onClose={() => setPreview(null)}
         title={preview?.name ?? "Banner"}

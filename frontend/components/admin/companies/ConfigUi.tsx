@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Info } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { ICONO_TONO, rutaKit } from "@flit/ui/iconos-mapas";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
@@ -43,7 +42,7 @@ export function StateChip({ text, tone }: { text: string; tone: ChipTone }) {
 export function Hint({ children }: { children: ReactNode }) {
   return (
     <p className={`flex items-start gap-1.5 ${HELP_TEXT}`}>
-      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+      <Icono nombre="exclamacion" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span>{children}</span>
     </p>
   );

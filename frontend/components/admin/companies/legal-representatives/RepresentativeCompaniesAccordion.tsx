@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Loader2, Star } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { DeedsFormPanel, type DeedEditingRef } from "../deeds/DeedsFormPanel";
@@ -286,12 +285,9 @@ export function RepresentativeCompaniesAccordion({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="truncate text-xs font-semibold">{displayName}</span>
                       {isPrimary && (
-                        <Star
-                          className="h-3 w-3 shrink-0 fill-current"
-                          style={{ color: RL_COLOR.warning }}
-                          aria-label="Compañía principal"
-                          data-testid="icon-principal"
-                        />
+                        <span className="inline-flex shrink-0" data-testid="icon-principal">
+                          <Icono nombre="medalla" className="h-3 w-3" style={{ color: RL_COLOR.warning }} etiqueta="Compañía principal" />
+                        </span>
                       )}
                       {vigentesCount > 0 && (
                         <span
@@ -523,7 +519,7 @@ function DeedBlock({
             aria-label="Asociar escritura a esta compañía"
           >
             {asociando ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
             ) : null}
             {asociando ? "Guardando empresa…" : "Asociar escritura"}
           </button>
@@ -570,7 +566,7 @@ function DeedBlock({
                   style={rlOutlinedActionStyle}
                 >
                   {viewing === deed.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <Icono nombre="ojo" className="h-3.5 w-3.5" />
                   )}

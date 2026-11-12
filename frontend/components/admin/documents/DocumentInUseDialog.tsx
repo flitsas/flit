@@ -3,7 +3,6 @@
 // Modal emergente (persistente) que se muestra al intentar desactivar un documento que
 // está en uso (409). A diferencia del toast, no se autodescarta: el usuario debe cerrarlo
 // con «Entendido» o la X. Lista los tipos de trámite donde el documento está en uso.
-import { Ban } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 
 export interface DocumentInUseProcedureType {
@@ -27,7 +26,7 @@ export function DocumentInUseDialog({
       open
       onClose={onClose}
       size="sm"
-      icon={Ban}
+      icono="distinto"
       iconBg="var(--destructive)"
       title="No se puede desactivar"
       titleClassName="text-base font-bold text-destructive"
