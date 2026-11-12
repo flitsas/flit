@@ -5,7 +5,7 @@
 // estado de cada versión (vigente, futura o cerrada), filtros por columna estándar, historial por fila y creación o
 // versionado en un modal. Las cotizaciones ya emitidas no cambian al registrar una tarifa nueva. Sin datos bancarios.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { History, PencilLine, ReceiptText } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -35,6 +35,7 @@ import { nombrePropio } from "./formato";
 import { PnSeccionHeader } from "./pn-componentes";
 import { TarifaFormModal, type TarifaFormMode } from "./TarifaFormModal";
 import { ESTADO_TARIFA_LABEL, ESTADO_TARIFA_TONE, TarifaHistorialModal } from "./TarifaHistorialModal";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "organismo", label: "Organismo", tipo: "texto" },
@@ -192,11 +193,11 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
   function actionsFor(g: GrupoTarifa): RowAction[] {
     const nombre = `${g.tipoTramiteNombre ?? "todos los trámites"} en ${g.organismoNombre ?? "todos los organismos"}`;
     const actions: RowAction[] = [
-      { icon: History, label: `Ver historial de ${nombre}`, onClick: () => setHistorial(g) },
+      { icon: iconoComo("reloj"), label: `Ver historial de ${nombre}`, onClick: () => setHistorial(g) },
     ];
     if (g.estado !== "cerrada" && !esSoloLectura(g)) {
       actions.push({
-        icon: PencilLine,
+        icon: iconoComo("lapiz"),
         label: `Cambiar valores de ${nombre}`,
         tone: "primary",
         onClick: () => abrirFormulario({ kind: "version", grupo: g }),

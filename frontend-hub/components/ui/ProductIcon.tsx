@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { appIcon } from "@flit/shell/apps";
-import { ilustracionDe } from "@flit/ui/ilustraciones";
+import { IconoModulo } from "@flit/ui/Icono";
+import { MAPA_ICONO } from "@flit/ui/iconos-mapas";
 
 /** Degradado de marca de la propuesta (`--di-gradient-brand`, azul → cian). */
 export const BRAND_GRADIENT = "var(--di-gradient-brand)";
@@ -21,11 +22,12 @@ export function ProductIcon({ icon, size = "md", muted = false }: { icon: string
   );
 }
 
-const ARTE = { sm: "h-9 w-9", md: "h-16 w-16", lg: "h-20 w-20" } as const;
+/** Lado del disco del ícono del producto, en px (mismo hueco que la ilustración anterior: 36, 64 y 80). */
+const ARTE = { sm: 36, md: 64, lg: 80 } as const;
 
 /**
- * Ilustración del producto de la propuesta «Diseño Inteligente» (HU #14487): la misma WebP que usan la cabecera y el
- * dock de cada producto (`tramites`, `comparendos`, `diagnostico`). Es decorativa: el nombre va al lado, en texto. Si
+ * Ícono del producto del Manual UI Kit 2026 en su disco (`IconoModulo`): el mismo que usan la cabecera y el dock de cada
+ * producto (`tramites`, `comparendos`, `diagnostico`). Es decorativa: el nombre va al lado, en texto. Si
  * el producto no tiene ilustración se queda con su ícono de siempre. «Próximamente» (`muted`) la apaga, como el menú
  * de productos de la barra.
  */
@@ -40,10 +42,6 @@ export function ProductArt({
   size?: keyof typeof ARTE;
   muted?: boolean;
 }) {
-  const src = ilustracionDe(code);
-  if (!src) return <ProductIcon icon={icon} size={size === "lg" ? "lg" : "md"} muted={muted} />;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática
-    <img src={src} alt="" aria-hidden="true" className={`${ARTE[size]} shrink-0 object-contain ${muted ? "opacity-45 grayscale-[0.4]" : ""}`} />
-  );
+  if (!(code in MAPA_ICONO)) return <ProductIcon icon={icon} size={size === "lg" ? "lg" : "md"} muted={muted} />;
+  return <IconoModulo clave={code} disco size={ARTE[size]} className={`shrink-0 ${muted ? "opacity-45 grayscale-[0.4]" : ""}`} />;
 }

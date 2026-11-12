@@ -1,6 +1,6 @@
 'use client';
 
-import { Network } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { NetworkChildOption } from '@/hooks/useNetworkScope';
 import {
@@ -39,7 +39,7 @@ export function NetworkScopeBadge({
         ariaLabel={`${ETIQUETA_DISTINTIVO_RED}: datos de ${detalle}`}
         label={
           <span className="inline-flex items-center gap-1">
-            <Network className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="integraciones" className="h-3 w-3" />
             {ETIQUETA_DISTINTIVO_RED}
           </span>
         }

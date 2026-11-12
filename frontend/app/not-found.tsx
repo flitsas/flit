@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { buttonClass } from "@flit/ui/Button";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
+import { IconoModulo } from "@flit/ui/Icono";
 
 /**
  * 404 global FLIT — patrón AlertCard / Acceso restringido (`/403`).
@@ -10,12 +10,11 @@ export default function NotFoundPage() {
   return (
     <main className="app-bg flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
       <div
-        className="flex w-full max-w-lg flex-col items-center gap-3 rounded-[20px] border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10"
+        className="flex w-full max-w-lg flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10"
         role="status"
         aria-live="polite"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
-        <img src={rutaIlustracion("consulta-placa")} alt="" aria-hidden="true" width={96} height={96} className="h-24 w-24" />
+        <IconoModulo clave="consulta-placa" disco size={96} />
         <p
           className="text-3xl font-bold tracking-tight text-muted-foreground"
           aria-hidden="true"

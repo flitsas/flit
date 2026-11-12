@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { CornerDownLeft, Hash, Search } from "lucide-react";
+import { CornerDownLeft, Hash } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DockGroup } from "./nav";
 import { buildSearchResults, SEARCH_GROUP_LABEL, type PlateSearch, type SearchAction, type SearchResult } from "./search";
 
@@ -128,7 +129,7 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
         aria-label="Buscar (Ctrl K)"
         className="suite-buscar"
       >
-        <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <Icono nombre="buscar" size={20} className="shrink-0 text-[color:var(--kit-azul-texto)]" />
         <span>Buscar placa, trámite o módulo</span>
         <kbd aria-hidden="true">Ctrl K</kbd>
       </button>
@@ -136,27 +137,21 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
       {/* Portal al <body>: la barra tiene backdrop-filter, que vuelve «fixed» relativo a ella; sin portal el velo
           solo cubría la franja de la barra (la «sombra negra» de arriba) en vez de toda la pantalla. */}
       {open && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--overlay)] px-4 pt-[12vh] backdrop-blur-[4px]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--overlay)] px-4 pt-[12vh] backdrop-blur-[5px]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Buscador"
             className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--popover)] text-[var(--foreground)] shadow-[var(--shadow-modal)]"
           >
-            {/* Franja tinta del `dialog.modal#buscador` de la propuesta (mismo aspecto que el Modal de @flit/ui). Sin X:
-                el diálogo conserva su teclado (el foco no sale del campo y Esc cierra); el nombre accesible sigue siendo
-                «Buscador» por el aria-label. */}
-            <div className="relative flex shrink-0 items-center gap-3 overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)]">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
-              />
-              {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa de la propuesta */}
-              <img src="/assets/ilustraciones/consulta-placa.webp" alt="" aria-hidden="true" className="relative z-[1] h-9 w-9 shrink-0" />
-              <p className="relative z-[1] m-0 flex-1 text-lg font-semibold text-[color:var(--di-on-accent)]">Buscar en la plataforma</p>
+            {/* Cabecera del `dialog.modal#buscador` del Manual UI Kit 2026: blanca, con el ícono del buscador en su disco y el
+                título en azul. Sin X: el diálogo conserva su teclado (el foco no sale del campo y Esc cierra). */}
+            <div className="flex shrink-0 flex-col items-center gap-2 px-6 pb-2 pt-6 text-center">
+              <Icono nombre="buscar" disco size={52} />
+              <p className="m-0 text-[1.375rem] font-bold leading-tight text-[color:var(--di-heading)]">Buscar en la plataforma</p>
             </div>
             <div className="flex items-center gap-3 border-b border-[var(--border)] px-4">
-              <Search className="h-5 w-5 shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
+              <Icono nombre="buscar" size={20} className="shrink-0 text-[color:var(--kit-azul-texto)]" />
               <input
                 ref={inputRef}
                 type="text"

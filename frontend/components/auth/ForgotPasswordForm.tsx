@@ -4,7 +4,7 @@
 // (anti-enumeración), igual que el backend responde 202 genérico.
 import { useState } from "react";
 import { forgotPassword } from "@/lib/api/auth";
-import { Mail } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
 import {
   AUTH_ERROR_CLASS,
@@ -53,7 +53,7 @@ export function ForgotPasswordForm() {
           Correo electrónico
         </label>
         <div className="relative">
-          <Mail className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="correo" className={INGRESO_ICONO_CLS} />
           <input
             id="fp-email"
             type="email"

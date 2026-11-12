@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 // Piezas comunes de las vistas del detalle de celda (HU #13801), también para la grilla de backoffice (F06-H5). Todo valor
 // visual sale de los tokens de @flit/ui (tokens.css): cabecera de tabla gris de marca, borde de fila y tintas AA.
@@ -37,10 +38,7 @@ export function Etiqueta({ tono, children }: { tono: TonoEtiqueta; children: Rea
   // El rojo usa la tinta --badge-pending-fg (AA sobre el fondo tintado), como el semáforo de la grilla.
   const color = tono === "danger" ? "var(--badge-pending-fg)" : `var(--badge-${tono}-fg)`;
   return (
-    <span
-      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold"
-      style={{ background: `var(--badge-${tono}-bg)`, color, borderColor: `var(--badge-${tono}-border)` }}
-    >
+    <span {...etiquetaKit({ c: `var(--badge-${tono}-border)`, ct: color })}>
       {children}
     </span>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { CreateOtWebhookRequest, OtWebhook, UpdateOtWebhookRequest } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
@@ -74,7 +74,7 @@ export function WebhookFormPanel({
           style={{ background: "var(--color-flit-brand)" }}
           onClick={() => void submit()}
         >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
           Guardar
         </button>
       }

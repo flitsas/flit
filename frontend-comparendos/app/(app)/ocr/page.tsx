@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Contador, Progreso, useSondeo } from "@/components/ocr/comunes";
@@ -114,7 +114,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
   };
 
   return (
-    <Modal
+    <Modal icono="archivo-subir"
       open
       onClose={onCerrar}
       busy={enviando}
@@ -157,7 +157,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             arrastrando ? "border-flit-brand bg-secondary dark:bg-flit-brand/10" : "border-border"
           }`}
         >
-          <Upload className="h-5 w-5 text-flit-brand" aria-hidden />
+          <Icono nombre="nube-subir" className="h-5 w-5 text-flit-brand" />
           <span className="font-semibold">Arrastra los archivos aquí o haz clic para elegirlos</span>
           <span className="opacity-60">JPG, PNG, TIFF o PDF · máximo 20 MB cada uno</span>
           <input
@@ -193,7 +193,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
                     {a.error && <span className="ml-2 font-semibold">· {a.error}</span>}
                   </span>
                   <button type="button" aria-label={`Quitar ${a.archivo.name}`} onClick={() => setElegidos((l) => l.filter((_, j) => j !== i))}>
-                    <Trash2 className="h-3.5 w-3.5 opacity-60 hover:opacity-100" aria-hidden />
+                    <Icono nombre="papelera" className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
                   </button>
                 </li>
               ))}
@@ -292,12 +292,12 @@ function Paquetes() {
         acciones={
           <>
             <button type="button" className={controlCls(false)} onClick={lista.recargar}>
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="reintento" className="h-3.5 w-3.5" />
               Actualizar
             </button>
             {puedeCrear && (
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setCreando(true)}>
-                <Plus className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="mas" className="h-3.5 w-3.5" />
                 Nuevo paquete
               </button>
             )}

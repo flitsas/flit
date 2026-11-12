@@ -77,7 +77,7 @@
  */
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Search, SearchX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   INPUT_CLS,
   PeriodoPopover,
@@ -205,7 +205,7 @@ function FiltroPopover({
         className={controlCls(visibles.length > 0)}
       >
         {visibles.length > 0 ? `+ Filtro (${visibles.length})` : "+ Filtro"}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -334,10 +334,7 @@ export function TablaFiltrosBar({
     <div className="flex flex-wrap items-center gap-2">
       {buscador ? (
         <div className="relative w-64 shrink-0">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
-            aria-hidden="true"
-          />
+          <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
           <input
             type="search"
             aria-label={buscador.ariaLabel ?? buscador.placeholder}
@@ -369,7 +366,7 @@ export function TablaFiltrosVacio({
 }) {
   return (
     <div role="status" className="flex flex-col items-center gap-3 px-4 py-10 text-center">
-      <SearchX className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
+      <Icono nombre="buscar" className="h-8 w-8 text-muted-foreground" />
       <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{mensaje}</p>
       <button
         type="button"

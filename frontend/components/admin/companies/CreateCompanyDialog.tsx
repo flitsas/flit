@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { TransitGrantsPicker } from "@/components/admin/companies/TransitGrantsPicker";
@@ -249,7 +249,7 @@ export function CreateCompanyDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={Building2}
+      icono="empresas"
       title={
         pendingCreated
           ? "Compañía creada"
@@ -428,7 +428,7 @@ export function CreateCompanyDialog({
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
               style={{ background: "var(--gradient-action)" }}
             >
-              {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+              {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
               {submitting ? "Creando…" : step === "form" && needsOtStep ? "Siguiente" : "Crear compañía"}
             </button>
           </div>

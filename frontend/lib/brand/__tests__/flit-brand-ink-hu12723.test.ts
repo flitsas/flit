@@ -26,17 +26,18 @@ function extractBrandInkTokens(css: string): { light: string; dark: string } {
 describe("HU #12723 — --flit-brand-ink (AC1)", () => {
   it("happy path: tinta clara ≥ 4,5:1 sobre blanco y comentario documenta ratio", () => {
     const { light } = extractBrandInkTokens(GLOBALS);
-    // Propuesta «Diseño Inteligente»: el azul legible #3d5fd9 (antes #476bd9, 4,80:1).
-    expect(light.toLowerCase()).toBe("#3d5fd9");
+    // UI Kit 2026 (propuesta-2): el azul de texto y botones #1d53ff (antes #3d5fd9 de «Diseño Inteligente»).
+    expect(light.toLowerCase()).toBe("#1d53ff");
     expect(contrastRatio(light, LIGHT_BG)).toBeGreaterThanOrEqual(MIN_CONTRAST_RATIO);
-    expect(GLOBALS).toMatch(/5,47:1|5\.47:1/);
+    expect(GLOBALS).toMatch(/5,62:1|5\.62:1/);
   });
 
   it("edge: tinta dark ≥ 4,5:1 sobre fondo dock oscuro", () => {
     const { dark } = extractBrandInkTokens(GLOBALS);
-    expect(dark.toLowerCase()).toBe("#6fa5ff");
+    // UI Kit 2026: en oscuro el azul de texto es #8fb0ff.
+    expect(dark.toLowerCase()).toBe("#8fb0ff");
     expect(contrastRatio(dark, DARK_DOCK_BG)).toBeGreaterThanOrEqual(MIN_CONTRAST_RATIO);
-    expect(GLOBALS).toMatch(/6,04:1|6\.04:1/);
+    expect(GLOBALS).toMatch(/6,98:1|6\.98:1/);
   });
 
   it("contrato: --color-flit-brand fallback #557eff no cambia; ink ≠ fill", () => {
@@ -50,7 +51,8 @@ describe("HU #12723 — --flit-brand-ink (AC1)", () => {
 describe("Dock — ítem seleccionado con el degradado del isotipo central", () => {
   it("píldora, ancestro y subítem activos usan --nav-activo e icono blanco", () => {
     expect(GLOBALS).toMatch(
-      /--nav-activo:\s*linear-gradient\(90deg,\s*var\(--brand-ink,\s*#3d5fd9\)\s+0%,\s*var\(--brand-accent,\s*#0f6fa8\)\s+100%\)/i,
+      // UI Kit 2026 (propuesta-2): el activo del dock es azul plano (sin degradado), con la tinta de la marca si la hay.
+      /--nav-activo:\s*var\(--brand-ink,\s*#1d53ff\)/i,
     );
     // UI kit (HU #14474): en FLIT el degradado del ítem activo es #557EFF → #0F6FA8 (cierre legible con texto
     // blanco); en una Marca Blanca cierra en su `--brand-accent`. El turquesa sigue como acento decorativo.

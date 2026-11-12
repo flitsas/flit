@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { fetchDocumentTypes } from '@/lib/api/admin-document-types';
 import type { DocumentType } from '@/lib/api/types-documents';
@@ -142,7 +142,7 @@ export function TipoTramiteDocumentos({
                   className="rounded-lg border p-1.5 border-border transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                   style={{ color: 'var(--color-flit-brand)' }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="papelera" className="h-3.5 w-3.5" />
                 </button>
               </span>
             </li>
@@ -185,7 +185,7 @@ export function TipoTramiteDocumentos({
         >
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-3 w-3 animate-spin" />
               Guardando…
             </span>
           ) : (

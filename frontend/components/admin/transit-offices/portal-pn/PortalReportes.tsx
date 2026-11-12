@@ -5,7 +5,6 @@
 // cliente inyectado (`api`) y si se ofrece el filtro de organismo (solo el SuperAdmin en Plataforma). El servidor decide el
 // alcance; aquí solo se pintan los datos tal cual llegan: lo que no viene (sin pago aún) queda vacío, sin inventar.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -30,6 +29,7 @@ import { formatFechaHora } from "@/lib/format/date";
 import { condicionesAParams, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export const REPORTE_PORTAL_CARGANDO = "Armando el reporte…";
 export const REPORTE_PORTAL_VACIO = "No hay trámites del portal en FLIT 2.0 con esos filtros.";
@@ -248,7 +248,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false, tarjeta = 
         acciones={
           <PnButton
             variant="secondary"
-            icon={Download}
+            icon={iconoComo("nube-bajar")}
             loading={exportando}
             onClick={() => void exportar()}
           >

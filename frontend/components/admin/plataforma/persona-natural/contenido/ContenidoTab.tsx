@@ -6,7 +6,6 @@
 // vista previa y las publicaciones anteriores, y «Publicar cambios» pide confirmación explicando qué cambia para el
 // ciudadano. Una publicación reemplaza las preguntas y los banners que el portal muestra por defecto y no se edita.
 import { useCallback, useEffect, useState } from "react";
-import { Eye, History, Send } from "lucide-react";
 import { useToast } from "@/components/admin/Toast";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -23,6 +22,7 @@ import { EnlacesSection } from "./EnlacesSection";
 import { PreguntasSection } from "./PreguntasSection";
 import { VersionesModal } from "./VersionesModal";
 import { VistaPreviaModal } from "./VistaPreviaModal";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 function plural(n: number, uno: string, varios: string): string {
   return `${n} ${n === 1 ? uno : varios}`;
@@ -42,9 +42,9 @@ function PublicarDialog({
   return (
     <PnConfirmDialog
       title="Publicar los cambios"
-      icon={Send}
+      icono="radicacion"
       confirmLabel="Sí, publicar"
-      confirmIcon={Send}
+      confirmIcon={iconoComo("radicacion")}
       onClose={onClose}
       onConfirm={onPublicar}
     >
@@ -148,15 +148,15 @@ export function ContenidoTab() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <PnButton variant="secondary" icon={Eye} onClick={() => setVista("previa")}>
+            <PnButton variant="secondary" icon={iconoComo("ojo")} onClick={() => setVista("previa")}>
               Ver cómo quedaría
             </PnButton>
-            <PnButton variant="secondary" icon={History} onClick={() => setVista("versiones")}>
+            <PnButton variant="secondary" icon={iconoComo("reloj")} onClick={() => setVista("versiones")}>
               Publicaciones anteriores
             </PnButton>
             <PnButton
               variant="primary"
-              icon={Send}
+              icon={iconoComo("radicacion")}
               onClick={() => setVista("publicar")}
               disabled={!sinPublicar}
               title={sinPublicar ? undefined : "No hay cambios por publicar"}

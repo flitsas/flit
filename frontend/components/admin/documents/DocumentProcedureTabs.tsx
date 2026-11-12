@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { FileStack, Building2, Table2 } from "lucide-react";
+import { useState, type ComponentType } from "react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { RequirementsTab } from "@/components/admin/documents/tabs/RequirementsTab";
 import { OtOverridesTab } from "@/components/admin/documents/tabs/OtOverridesTab";
 import { MatrixPreviewTab } from "@/components/admin/documents/tabs/MatrixPreviewTab";
@@ -11,25 +12,25 @@ import { MatrixPreviewTab } from "@/components/admin/documents/tabs/MatrixPrevie
 // pestaña gestiona su propia carga y sus 4 estados UI (AC7).
 type TabId = "documentos" | "ot" | "matriz";
 
-const TABS: { id: TabId; label: string; icon: typeof FileStack; description: string }[] = [
+const TABS: { id: TabId; label: string; icon: ComponentType<{ className?: string }>; description: string }[] = [
   {
     id: "documentos",
     label: "Documentos",
-    icon: FileStack,
+    icon: iconoComo("archivo"),
     description:
       "Define qué documentos exige este trámite y cuáles son obligatorios. El orden lo define exclusivamente la pestaña «Overrides OT».",
   },
   {
     id: "ot",
     label: "Overrides OT",
-    icon: Building2,
+    icon: iconoComo("empresas"),
     description:
       "Selecciona el organismo de tránsito y define el orden de los documentos: es el único nivel que ordena (RF22).",
   },
   {
     id: "matriz",
     label: "Matriz resuelta",
-    icon: Table2,
+    icon: iconoComo("reporte-detallado"),
     description:
       "Previsualiza el orden final que verá un trámite combinando la precedencia OT › Default.",
   },
@@ -41,7 +42,7 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
+      <div className={PESTANAS_LISTA_CLS} role="tablist">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -53,14 +54,10 @@ export function DocumentProcedureTabs({ procedureTypeId }: { procedureTypeId: st
               aria-selected={active}
               aria-controls={`tabpanel-${t.id}`}
               onClick={() => setTab(t.id)}
-              className="relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition"
-              style={{ color: active ? "var(--color-flit-brand)" : undefined, opacity: active ? 1 : 0.65 }}
+              className={pestanaClass(active, "relative shrink-0 gap-2")}
             >
               <Icon className="h-3.5 w-3.5" />
               {t.label}
-              {active && (
-                <span className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full" style={{ background: "var(--color-flit-brand)" }} />
-              )}
             </button>
           );
         })}

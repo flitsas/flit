@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -354,7 +355,7 @@ export function CompanyMandatariosPanel({
               style={rlOutlinedActionStyle}
               onClick={() => setFormatosOpen(true)}
             >
-              <FileText className="h-4 w-4" aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4" />
               Formatos de contrato
             </button>
           ) : (
@@ -569,7 +570,7 @@ export function CompanyMandatariosPanel({
                                   ? []
                                   : [
                                       {
-                                        icon: Pencil,
+                                        icon: iconoComo("lapiz"),
                                         label: `Editar mandatario ${signer.fullName}`,
                                         onClick: () => {
                                           setEditing(signer);
@@ -580,7 +581,7 @@ export function CompanyMandatariosPanel({
                                       ...(puedeReenviarValidacion(signer)
                                         ? [
                                             {
-                                              icon: Send,
+                                              icon: iconoComo("radicacion"),
                                               label: `Reenviar validación a ${signer.fullName}`,
                                               onClick: () => void handleReenviarFila(signer),
                                               disabled: busyId === signer.id,
@@ -589,7 +590,7 @@ export function CompanyMandatariosPanel({
                                         : []),
                                       signer.isActive
                                         ? {
-                                            icon: UserX,
+                                            icon: iconoComo("persona"),
                                             label: `Desactivar mandatario ${signer.fullName}`,
                                             onClick: () =>
                                               setBaja({ signer, accion: "desactivar" }),
@@ -597,7 +598,7 @@ export function CompanyMandatariosPanel({
                                             disabled: busyId === signer.id,
                                           }
                                         : {
-                                            icon: RotateCcw,
+                                            icon: iconoComo("reintento"),
                                             label: `Reactivar mandatario ${signer.fullName}`,
                                             onClick: () => void handleReactivar(signer),
                                             disabled: busyId === signer.id,
@@ -605,7 +606,7 @@ export function CompanyMandatariosPanel({
                                       ...(puedeEliminarMandatario(signer)
                                         ? [
                                             {
-                                              icon: Trash2,
+                                              icon: iconoComo("papelera"),
                                               label: `Eliminar mandatario ${signer.fullName}`,
                                               onClick: () =>
                                                 setBaja({ signer, accion: "eliminar" }),

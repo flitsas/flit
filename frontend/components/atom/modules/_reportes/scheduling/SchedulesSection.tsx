@@ -1,7 +1,9 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -280,12 +282,7 @@ export function SchedulesSection({
                     <td data-label="Último envío" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{formatDateTime(s.lastSentAt)}</td>
                     <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                       <span
-                        className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                        style={
-                          s.isActive
-                            ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                            : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
-                        }
+                        {...etiquetaKit(s.isActive ? "success" : "neutral")}
                       >
                         {s.isActive ? "Activo" : "Inactivo"}
                       </span>
@@ -293,8 +290,8 @@ export function SchedulesSection({
                     <td data-label="Acciones" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                       <RowActions
                         actions={[
-                          { icon: Pencil, label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
-                          { icon: Trash2, label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
+                          { icon: iconoComo("lapiz"), label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
+                          { icon: iconoComo("papelera"), label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
                         ]}
                       />
                     </td>

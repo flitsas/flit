@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Car, FileText, Users } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { type ComponentType, useEffect, useMemo, useState } from 'react';
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from '@/components/atom/Modal';
 import { SeccionCargando, SeccionError } from '@/components/operacion/detalle/primitivos';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipClass, estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { EtiquetaEstado } from './EtiquetaEstado';
 import { tramiteLabel, vehiculo } from '@/lib/tramites/tramites-row-labels';
 import type {
   InstanceSummary,
@@ -94,7 +94,6 @@ export function TramiteTrackingModal({
 
   if (!item) return null;
 
-  const chip = estadoChipStyle(item.estado);
 
   return (
     <Modal
@@ -107,12 +106,7 @@ export function TramiteTrackingModal({
         // panel desde una tabla larga necesita reconocer la fila de un vistazo, y el estado es
         // justo el dato por el que hizo clic.
         <span className="flex flex-wrap items-center gap-2">
-          <span
-            className={`${estadoChipClass(item.estado)} inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold`}
-            style={{ background: chip.bg, color: chip.color, borderColor: chip.border }}
-          >
-            {estadoLabelConOrigen(item.estado, item.rejectedFrom)}
-          </span>
+          <EtiquetaEstado estado={item.estado}>{estadoLabelConOrigen(item.estado, item.rejectedFrom)}</EtiquetaEstado>
           <span className="text-xs text-muted-foreground">
             {[item.placa?.trim(), tramiteLabel(item)].filter(Boolean).join(' · ')}
           </span>
@@ -186,7 +180,7 @@ function Bloque({
   children,
 }: {
   titulo: string;
-  icono: LucideIcon;
+  icono: ComponentType<{ className?: string }>;
   children: React.ReactNode;
 }) {
   return (
@@ -216,13 +210,13 @@ function FichaTramite({ item }: { item: InstanceSummary }) {
       aria-label="Resumen del trámite"
       className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3"
     >
-      <Bloque titulo="Vehículo" icono={Car}>
+      <Bloque titulo="Vehículo" icono={iconoComo("carro")}>
         <Dato etiqueta="Placa" valor={item.placa} mono />
         <Dato etiqueta="VIN" valor={item.vin} mono />
         <Dato etiqueta="Marca y línea" valor={vehiculo(item)} />
       </Bloque>
 
-      <Bloque titulo="Partes" icono={Users}>
+      <Bloque titulo="Partes" icono={iconoComo("usuarios")}>
         {esMatricula ? (
           <Dato
             etiqueta="Propietario"
@@ -236,7 +230,7 @@ function FichaTramite({ item }: { item: InstanceSummary }) {
         )}
       </Bloque>
 
-      <Bloque titulo="Trámite" icono={FileText}>
+      <Bloque titulo="Trámite" icono={iconoComo("documento")}>
         <Dato etiqueta="Tipo" valor={tramiteLabel(item)} />
         <Dato etiqueta="Organismo" valor={item.organismoTransito} />
         <Dato etiqueta="Gestiona" valor={item.companiaNombre} />

@@ -1,9 +1,10 @@
 'use client';
 
+import { PESTANAS_LISTA_CLS, pestanaClass } from '@flit/ui/Pestanas';
 import { buttonClass } from '@flit/ui/Button';
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Archive, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
@@ -84,7 +85,7 @@ export function TiposTramitePanel() {
   if (cargando) {
     return (
       <p className="flex items-center gap-2 p-6 text-xs opacity-70">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
         Cargando el catálogo de tipos…
       </p>
     );
@@ -102,7 +103,7 @@ export function TiposTramitePanel() {
           className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold border-border"
           style={{ color: 'var(--color-flit-brand)' }}
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Reintentar
         </button>
       </div>
@@ -159,11 +160,7 @@ export function TiposTramitePanel() {
                       <span className="block text-xs opacity-55">{familiaLabel(t.family)}</span>
                     </span>
                     {t.wizardEnabled ? (
-                      <CheckCircle2
-                        className="h-3.5 w-3.5 shrink-0"
-                        style={{ color: 'var(--flit-success-ink)' }}
-                        aria-label="Operable"
-                      />
+                      <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--flit-success-ink)' }} etiqueta="Operable" />
                     ) : (
                       <span
                         className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
@@ -208,7 +205,7 @@ export function TiposTramitePanel() {
                       className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold border-border transition hover:border-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                       style={{ color: 'var(--destructive)' }}
                     >
-                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Icono nombre="archivo" className="h-3.5 w-3.5" />
                       Retirar del catálogo
                     </button>
                     {errorRetiro && (
@@ -225,19 +222,14 @@ export function TiposTramitePanel() {
                 )}
               </header>
 
-              <nav className="flex flex-wrap gap-1" aria-label="Configuración del tipo">
+              <nav className={PESTANAS_LISTA_CLS} aria-label="Configuración del tipo">
                 {PESTANAS.map((p) => (
                   <button
                     key={p.id}
                     type="button"
                     onClick={() => setPestana(p.id)}
                     aria-current={pestana === p.id ? 'page' : undefined}
-                    className="rounded-lg px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-                    style={
-                      pestana === p.id
-                        ? { background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }
-                        : { color: 'var(--color-flit-primary)' }
-                    }
+                    className={pestanaClass(pestana === p.id)}
                   >
                     {p.label}
                   </button>
@@ -246,7 +238,7 @@ export function TiposTramitePanel() {
 
               {cargandoDetalle ? (
                 <p className="flex items-center gap-2 py-6 text-xs opacity-70">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                   Cargando la configuración…
                 </p>
               ) : errorDetalle ? (
@@ -334,7 +326,7 @@ function ConfirmarRetiro({
       aria-label="Retirar tipo de trámite"
     >
       <div className={`w-full max-w-md overflow-hidden p-5 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-5 -mt-5 mb-4">
+        <FranjaDialogo icono="archivo" className="-mx-5 -mt-5 mb-4">
           <h2 className={`text-base font-semibold ${DIALOGO_TITULO_CLS}`}>
             Retirar «{nombre}» del catálogo
           </h2>
@@ -381,7 +373,7 @@ function Validacion({ detalle }: { detalle: { validacion: { isValid: boolean; er
       role="status"
     >
       <p className="mb-1.5 flex items-center gap-1.5 font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
-        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="alerta" className="h-3.5 w-3.5" />
         La parametrización tiene {v.errors.length} {v.errors.length === 1 ? 'problema' : 'problemas'}
       </p>
       <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-muted-foreground">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { nombreFuente, type Fuente } from "@/lib/configuracion";
 import { FUENTE_SIEMPRE, GRUPOS, fuentesOfrecidas, type GrupoAlcance } from "@/lib/diagnosticos/api";
@@ -145,7 +145,7 @@ function CasillaFuente({
             Dependiente
           </span>
         )}
-        {motivoBloqueo && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
+        {motivoBloqueo && <Icono nombre="candado" className="h-3.5 w-3.5 text-muted-foreground" />}
       </label>
       {motivoBloqueo && (
         <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>

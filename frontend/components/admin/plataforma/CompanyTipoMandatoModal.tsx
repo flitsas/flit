@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState } from "react";
-import { AlertTriangle, FileSignature } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { CompanyOtMandateRuleView } from "@/lib/api/admin-plataforma-mandatos";
 import {
@@ -91,7 +90,7 @@ export function CompanyTipoMandatoModal({
         open
         onClose={() => setConfirming(false)}
         busy={busy}
-        icon={AlertTriangle}
+        icono="alerta"
         iconBg="var(--color-flit-alert)"
         title="Confirmar mandato Abierto (sin mandatario)"
         titleClassName="text-base font-bold text-flit-primary"
@@ -140,7 +139,7 @@ export function CompanyTipoMandatoModal({
       open
       onClose={onCancel}
       busy={busy}
-      icon={FileSignature}
+      icono="firma"
       iconBg="var(--color-flit-brand)"
       title="Tipo de mandato"
       titleClassName="text-base font-bold text-flit-primary"
@@ -291,7 +290,7 @@ export function CompanyVolverDefaultModal({
       open
       onClose={onCancel}
       busy={busy}
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg="var(--color-flit-alert)"
       title="Volver al default"
       titleClassName="text-base font-bold text-flit-primary"

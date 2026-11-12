@@ -37,7 +37,7 @@ describe('detalleEstadoHeader — ruta de placa (ADR-0059)', () => {
   it('HU #12726 (C.1) — entregado usa el accent del catálogo (teal), no morado ni dorado', () => {
     const hdr = detalleEstadoHeader('entregado');
     expect(hdr.color).toBe(estadoChipStyle('entregado').accent);
-    expect(hdr.color).toBe('#00A99D');
+    expect(hdr.color).toBe('#14C4A6');
   });
 
   // Uso de ejemplo: detalleEstadoHeader(estado).color === estadoChipStyle(estado).accent (AC1 contrato).

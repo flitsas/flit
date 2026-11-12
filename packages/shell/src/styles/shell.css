@@ -836,3 +836,133 @@
     }
   }
 }
+
+/* ======================= Manual UI Kit 2026 (propuesta-2, ui-kit-2026.css) =======================
+ * Va al final de la capa para ganarle al aspecto anterior sin reescribir cada regla. Sin backdrop-filter en la barra
+ * ni en el dock: así ningún velo `fixed` queda atrapado (Ctrl K) y la única sombra es la del kit (3 3 3 #557EFF 30 %),
+ * solo en el menú principal y sus menús. */
+@layer components {
+  .suite-barra {
+    gap: 16px; padding: 8px var(--kit-margen); background: var(--di-surface); backdrop-filter: none;
+    border-bottom: 1px solid var(--di-border);
+  }
+  .suite-barra__logo { height: 30px; }
+  .suite-barra__producto {
+    padding-left: 12px; border-left: 2px solid var(--kit-gris); color: var(--kit-gris); font-weight: 600; font-size: 1rem;
+  }
+  .suite-buscar {
+    border-radius: 9px; border: 1px solid var(--di-border); background: var(--di-surface-elevated);
+    color: var(--kit-gris); min-width: 240px;
+  }
+  .suite-buscar:hover { background: var(--kit-hover); }
+  .suite-buscar kbd { border-radius: 9px; background: var(--kit-hover); color: var(--di-text-primary); }
+
+  .suite-icono-btn { border: 0; background: transparent; color: var(--di-text-primary); }
+  .suite-icono-btn:hover,
+  .suite-icono-btn[aria-pressed="true"],
+  .suite-icono-btn[aria-expanded="true"] { background: var(--kit-hover); border-color: transparent; }
+
+  /* Interruptor de tema del paquete (sol / luna). */
+  .suite-tema {
+    flex: none; width: 60px; height: 32px; border: 0; border-radius: 9999px; cursor: pointer;
+    background: url("/assets/kit/interruptor-tema-claro.svg") center / contain no-repeat;
+  }
+  .suite-tema[aria-pressed="true"] { background-image: url("/assets/kit/interruptor-tema-oscuro.svg"); }
+  .suite-tema:disabled { cursor: not-allowed; opacity: 0.6; }
+  .suite-tema:focus-visible { outline: 2px solid var(--di-action); outline-offset: 2px; }
+
+  /* Usuario: avatar a la derecha con aro turquesa, nombre en negrita y rol en azul. */
+  .suite-usuario { flex-direction: row-reverse; gap: 10px; padding: 2px 2px 2px 10px; border-radius: 9px; text-align: right; }
+  .suite-usuario:hover, .suite-usuario[aria-expanded="true"] { background: var(--kit-hover); }
+  .suite-usuario__avatar {
+    width: 40px; height: 40px; background: var(--di-surface-elevated); color: var(--kit-tinta);
+    border: 2px solid var(--kit-turquesa);
+  }
+  .dark .suite-usuario__avatar { color: #e6f0ff; }
+  .suite-usuario__texto strong { font-weight: 700; }
+  .suite-usuario__texto small,
+  .suite-usuario:hover .suite-usuario__texto small,
+  .suite-usuario[aria-expanded="true"] .suite-usuario__texto small { color: var(--di-action); }
+
+  /* Menús flotantes (usuario y productos): radio 9 px, borde y sombra del kit; cabecera azul con texto blanco. */
+  .suite-menu-usuario, .suite-menu-productos { border-radius: 9px; box-shadow: var(--kit-sombra); }
+  .suite-menu-usuario__cabeza { background: var(--kit-azul-relleno); color: #fff; }
+  .suite-menu-usuario__cabeza::after, .dock-menu__cabeza::after { content: none; }
+  .suite-menu-usuario__avatar { background: #fff; color: var(--kit-tinta); }
+  .suite-menu-usuario ul { padding: 4px 16px; gap: 0; }
+  .suite-menu-usuario__entrada { border-radius: 0; padding: 8px 0; }
+  .suite-menu-usuario li + li .suite-menu-usuario__entrada { border-top: 1px solid var(--di-border); }
+  .suite-menu-usuario__entrada:hover { background: transparent; color: var(--di-action); }
+  .suite-menu-usuario__salir { border: 0; background: var(--kit-naranja-boton); color: #fff; }
+  .suite-menu-usuario__salir:hover { background: var(--kit-naranja-boton); filter: brightness(0.9); }
+  .suite-menu-productos__entrada { border-radius: 9px; }
+  .suite-menu-productos__entrada:hover, .suite-menu-productos__entrada[aria-current="page"] { background: var(--kit-hover); }
+  .suite-menu-productos__ilus { width: 36px; height: 36px; }
+  .suite-menu-productos__pie { border-radius: 9px; }
+
+  @media (max-width: 640px) {
+    .suite-barra__logo { height: 26px; }
+  }
+
+  /* Dock: píldora blanca, ítems de 44 px con ícono de 24 px; el activo en azul con su disco --kit-hover y un punto. */
+  .dock-capsula {
+    gap: 2px; padding: 8px 14px; border-radius: 9999px; background: var(--di-surface-elevated); border: 0;
+    box-shadow: var(--kit-sombra), 0 0 0 1px color-mix(in srgb, var(--kit-linea) 60%, transparent); backdrop-filter: none;
+  }
+  /* Como la propuesta: los íconos del menú en tinta (el texto del ítem); el activo pasa a azul con su disco. */
+  .dock-glifo--icono { background: transparent; color: var(--di-text-primary); }
+  .dock-pill { padding: 0 12px 0 8px; font-weight: 400; color: var(--di-text-primary); }
+  .dock-pill:hover, .dock-pill[aria-expanded="true"] { background: var(--kit-hover); color: var(--di-text-primary); }
+  .dock-pill__glifo, .dock-pill--compacta .dock-pill__glifo { width: 36px; height: 36px; border-radius: 9999px; }
+  .dock-pill[aria-current="page"],
+  .dock-pill[data-ancestor-active="true"],
+  .dock-pill[aria-current="page"]:hover,
+  .dock-pill[data-ancestor-active="true"]:hover { background: transparent; color: var(--kit-azul-texto); }
+  .dock-pill[aria-current="page"] > svg,
+  .dock-pill[data-ancestor-active="true"] > svg { color: var(--kit-azul-texto); }
+  .dock-pill[aria-current="page"] .dock-pill__glifo,
+  .dock-pill[data-ancestor-active="true"] .dock-pill__glifo { background: var(--kit-hover); padding: 0; color: var(--kit-azul-texto); }
+  .dock-pill[aria-current="page"]::after,
+  .dock-pill[data-ancestor-active="true"]::after {
+    content: ""; position: absolute; bottom: -5px; left: 26px; width: 6px; height: 6px; border-radius: 9999px;
+    background: var(--kit-azul-texto);
+  }
+  .dock-pill--compacta[aria-current="page"]::after,
+  .dock-pill--compacta[data-ancestor-active="true"]::after { left: 50%; translate: -50% 0; }
+
+  .dock-fab {
+    width: 54px; height: 54px; margin: -10px 6px; border: 0; background: var(--di-surface-elevated); box-shadow: none;
+    position: relative; overflow: visible;
+  }
+  .dock-fab[aria-current="page"] { outline: 0; }
+  .dock-fab[aria-current="page"]::after {
+    content: ""; position: absolute; bottom: -7px; left: 50%; translate: -50% 0; width: 6px; height: 6px;
+    border-radius: 9999px; background: var(--kit-azul-texto);
+  }
+  .dock-fab--lanzador { width: 54px; height: 54px; }
+
+  .dock-menu { border-radius: 9px; border: 1px solid var(--di-border); box-shadow: var(--kit-sombra); padding: 0 0 8px; }
+  .dock-menu__cabeza { background: var(--kit-azul-relleno); color: #fff; padding: 12px 16px; }
+  .dock-menu__cabeza .dock-glifo--icono { background: #ffffff3d; color: #fff; }
+  .dock-menu__cerrar { background: #ffffff3d; color: #fff; }
+  .dock-menu__lista { gap: 0; padding: 0 16px; }
+  .dock-menu__secciones { gap: 8px 24px; padding: 0 16px; }
+  .dock-menu__seccion-titulo { padding: 0; color: var(--kit-gris); letter-spacing: 0.04em; }
+  .dock-menu__seccion-glifo { width: 22px; height: 22px; }
+  .dock-entrada { border-radius: 0; padding: 8px 0; font-weight: 400; }
+  .dock-menu__entradas > li + li .dock-entrada,
+  .dock-menu__lista > li + li .dock-entrada { border-top: 1px solid var(--di-border); }
+  .dock-entrada:hover { background: transparent; color: var(--kit-azul-texto); }
+  .dock-entrada[aria-current="page"] { background: transparent; color: var(--kit-azul-texto); font-weight: 600; }
+  .dock-entrada__vineta { background: var(--kit-linea); }
+  .dock-entrada:hover .dock-entrada__vineta, .dock-entrada[aria-current="page"] .dock-entrada__vineta { background: var(--kit-azul-texto); }
+  .dock-pill:focus-visible, .dock-fab:focus-visible, .dock-entrada:focus-visible, .suite-buscar:focus-visible,
+  .suite-icono-btn:focus-visible, .suite-usuario:focus-visible, .dock-menu__cerrar:focus-visible {
+    outline: 2px solid var(--kit-azul-texto); outline-offset: 2px;
+  }
+
+  /* Entradas del submenú con su ícono de 32 px (propuesta-2), centrado con el nombre. */
+  .dock-entrada { align-items: center; gap: 12px; }
+  .dock-entrada__glifo { width: 32px; height: 32px; }
+  .dock-entrada:hover .dock-entrada__glifo, .dock-entrada[aria-current="page"] .dock-entrada__glifo { color: var(--kit-azul-texto); }
+}

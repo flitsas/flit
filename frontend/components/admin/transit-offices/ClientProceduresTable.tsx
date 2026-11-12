@@ -1,22 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Check,
-  Eye,
-  FileStack,
-  FolderOpen,
-  Paperclip,
-  Pencil,
-  Scale,
-  Star,
-  Tag,
-  Undo2,
-  X,
-} from "lucide-react";
+import { ArrowUpDown, Tag } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { Placa } from "@flit/ui/Placa";
 import {
@@ -34,8 +21,10 @@ import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
+  ESTADO_ICONO,
   estadoChipClass,
   esRevocationRequestStatus,
+  type EstadoTramite,
   revocationRequestListColor,
   revocationRequestListLabel,
 } from "@/lib/tramites/estados";
@@ -45,6 +34,11 @@ import {
   type OtProceduresSortOption,
   otColumnToSortBy,
 } from "@/lib/admin/ot-procedures-columns";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+
+/** Íconos del kit como componente, fuera del render (estables). */
+const IconoArriba = iconoComo("arriba");
+const IconoAbajo = iconoComo("abajo");
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -159,7 +153,7 @@ function SortMenu({
   }, [open]);
 
   const activa = opciones.find((o) => o.sort === sortBy);
-  const Icon = !activa ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  const Icon = !activa ? ArrowUpDown : sortDir === "asc" ? IconoArriba : IconoAbajo;
 
   return (
     <div className="relative inline-block">
@@ -189,7 +183,7 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-xl"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-[var(--kit-sombra)]"
         >
           <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
@@ -204,7 +198,7 @@ function SortMenu({
                 <span className="flex items-center gap-1.5">
                   {(["asc", "desc"] as const).map((dir) => {
                     const seleccionada = sortBy === opcion.sort && sortDir === dir;
-                    const Flecha = dir === "asc" ? ArrowUp : ArrowDown;
+                    const Flecha = dir === "asc" ? IconoArriba : IconoAbajo;
                     return (
                       <button
                         key={dir}
@@ -258,7 +252,7 @@ function SortableTh({
   const apiKey = otColumnToSortBy(columnKey);
   const active = sortBy === apiKey || (columnKey === "fechaRadicacion" && sortBy === "createdAt");
   const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
-  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? IconoArriba : IconoAbajo;
 
   const cls = `${TABLA_HEADER_CELL_CLS} ${className}`.trim();
   const style = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG };
@@ -328,11 +322,7 @@ function renderCelda(
       return (
         <span className="flex items-center gap-1.5">
           {row.prioritario && (
-            <Star
-              className="h-3.5 w-3.5 shrink-0"
-              style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }}
-              aria-label="Trámite prioritario"
-            />
+            <Icono nombre="medalla" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }} etiqueta="Trámite prioritario" />
           )}
           {/* Ajuste 2026-11-10 (D3=b) — el radicado es el ÚNICO control que abre el detalle: la fila
               ya no lo hace, para poder seleccionar y copiar datos sin abrir nada. Mismo aspecto que
@@ -385,6 +375,7 @@ function renderCelda(
         <StatusBadge
           className={estadoChipClass(row.status)}
           label={estadoLabel}
+          icono={ESTADO_ICONO[row.status as EstadoTramite]}
           {...procedureStatusChip(row.status)}
         />
       );
@@ -420,7 +411,7 @@ function renderCelda(
               style={{ color: revocationRequestListColor(row.revocationRequestStatus) }}
               title={`Sub-estado de revocatoria: ${revocationRequestListLabel(row.revocationRequestStatus)}`}
             >
-              <Undo2 className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="devolucion" className="h-3 w-3" />
               {revocationRequestListLabel(row.revocationRequestStatus)}
             </span>
           ) : null}
@@ -487,7 +478,7 @@ export function ClientProceduresTable({
       items.push({
         key: "aprobar",
         label: COPY.E01Aprobar,
-        icon: Check,
+        icon: iconoComo("check"),
         onSelect: () => onApprove(row),
       });
     }
@@ -505,13 +496,13 @@ export function ClientProceduresTable({
       items.push({
         key: "rechazar",
         label: COPY.E01Rechazar,
-        icon: X,
+        icon: iconoComo("cerrar"),
         onSelect: () => onReject(row),
       });
     }
 
     if (row.status === "asignado" && showApprovalActions && onRevoke) {
-      items.push({ key: "liberar-placa", label: "Liberar placa", icon: Undo2, onSelect: () => onRevoke(row) });
+      items.push({ key: "liberar-placa", label: "Liberar placa", icon: iconoComo("devolucion"), onSelect: () => onRevoke(row) });
     }
 
     // HU #12577 (Feature #12565) AC1 — decidir la solicitud de revocatoria del gestor. Solo es
@@ -526,7 +517,7 @@ export function ClientProceduresTable({
       items.push({
         key: "decidir-revocatoria",
         label: "Decidir revocatoria",
-        icon: Scale,
+        icon: iconoComo("mazo"),
         disabled: !conSolicitudActiva,
         disabledReason: "El gestor no ha solicitado la revocatoria de este trámite.",
         onSelect: () => onDecideRevocation(row),
@@ -543,7 +534,7 @@ export function ClientProceduresTable({
       items.push({
         key: "actualizar-placa",
         label: ventana.disabled ? "Actualizar placa" : `Actualizar placa (${ventana.minutosRestantes} min)`,
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         disabled: ventana.disabled,
         disabledReason: ventana.disabledReason,
         onSelect: () => onUpdatePlate(row),
@@ -551,14 +542,14 @@ export function ClientProceduresTable({
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {
-      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
+      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: iconoComo("archivo"), onSelect: () => onAdjuntarLt(row) });
     }
 
     if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
       items.push({
         key: "consolidado",
         label: COPY.A12,
-        icon: FileStack,
+        icon: iconoComo("archivo"),
         // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
         // clic dispararía una segunda generación del mismo expediente.
         disabled: consolidadoActingId === row.id,
@@ -571,7 +562,7 @@ export function ClientProceduresTable({
       items.push({
         key: "documentos",
         label: "Ver documentos",
-        icon: FolderOpen,
+        icon: iconoComo("carpeta"),
         onSelect: () => onVerDocumentos(row),
       });
     }
@@ -580,7 +571,7 @@ export function ClientProceduresTable({
       items.push({
         key: "detalle",
         label: "Detalle del trámite",
-        icon: Eye,
+        icon: iconoComo("ojo"),
         onSelect: () => onVerDetalle(row),
       });
     }
@@ -673,12 +664,14 @@ export function ClientProceduresTable({
                   {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
-                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-success-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-success)]">
+                        <span {...etiquetaKit("success", { className: "di-estado di-estado--check" })}>
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           SOAT
                         </span>
                       )}
                       {row.impuestoDepartamentalPagado && (
-                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-action)]">
+                        <span {...etiquetaKit("info", { className: "di-estado di-estado--check" })}>
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           Impuesto
                         </span>
                       )}

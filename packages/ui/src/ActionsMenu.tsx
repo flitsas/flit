@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ComponentType } from "react";
 
 // Menú de acciones accesible "⋯ Acciones" (HU #10194 — consolidación de config OT en
@@ -255,10 +255,7 @@ export function ActionsMenu({
         }`}
       >
         {triggerLabel}
-        <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 transition ${open ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
+        <Icono nombre="abajo" className={`h-3.5 w-3.5 shrink-0 transition ${open ? "rotate-180" : ""}`} />
         {attention ? (
           <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5" aria-hidden="true">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-flit-alert opacity-60" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { searchManualArticles } from "@/lib/manual/catalog";
@@ -50,7 +50,7 @@ export function ManualSearch() {
           background: "var(--manual-card-bg)",
         }}
       >
-        <Search className="h-4 w-4 shrink-0" style={{ color: "var(--manual-text-soft)" }} aria-hidden />
+        <Icono nombre="buscar" className="h-4 w-4 shrink-0" style={{ color: "var(--manual-text-soft)" }} />
         <input
           ref={inputRef}
           id="manual-search"

@@ -1,18 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Coins,
-  Download,
-  Eye,
-  FileCheck2,
-  FileText,
-  FolderCheck,
-  Loader2,
-  PenLine,
-  Users,
-  X,
-} from 'lucide-react';
+import { type ComponentType, type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { Coins, FolderCheck } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { AttachmentPreview, AvisoDescargaFallida, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
@@ -52,6 +43,8 @@ import {
   describirErrorDeSeccion,
 } from '@/lib/tramites/network-scope';
 import {
+  ESTADO_ICONO,
+  type EstadoTramite,
   estadoChipClass,
   estadoChipStyle,
   revocationRequestLabel,
@@ -67,6 +60,10 @@ import type {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 import { formatFechaHora } from '@/lib/format/date';
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_DOCUMENTO = iconoComo("documento");
+const ICONO_USUARIOS = iconoComo("usuarios");
 /**
 
  * Modal «Ver» — detalle del trámite radicado. Shell alineado al mockup (`DetalleTramiteModal`):
@@ -89,26 +86,26 @@ export type TramiteDetalleInitialPanel = Exclude<PanelTracking, null>;
 
 const PASOS_POR_MODALIDAD: Record<
   ProcedureFamily,
-  { id: SeccionId; label: string; Icon: typeof FileText }[]
+  { id: SeccionId; label: string; Icon: ComponentType<{ className?: string; style?: CSSProperties }> }[]
 > = {
   TRASPASO: [
-    { id: 'vehiculo', label: 'Trámite y vehículo', Icon: FileText },
-    { id: 'actores', label: 'Actores y validación', Icon: Users },
+    { id: 'vehiculo', label: 'Trámite y vehículo', Icon: ICONO_DOCUMENTO },
+    { id: 'actores', label: 'Actores y validación', Icon: ICONO_USUARIOS },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
     { id: 'comercial', label: 'Datos comerciales', Icon: Coins },
-    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+    { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
   MATRICULAS: [
-    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
-    { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
+    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: ICONO_DOCUMENTO },
+    { id: 'actores', label: 'Comprador y rep. legal', Icon: ICONO_USUARIOS },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
-    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+    { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
   OTROS: [
-    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
-    { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
+    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: ICONO_DOCUMENTO },
+    { id: 'actores', label: 'Comprador y rep. legal', Icon: ICONO_USUARIOS },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
-    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+    { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
 };
 
@@ -144,12 +141,12 @@ function BotonSubsanacion({
     >
       {loading ? (
         <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
           Abriendo el asistente…
         </>
       ) : (
         <>
-          <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="lapiz" className="h-3.5 w-3.5" />
           {label}
         </>
       )}
@@ -427,7 +424,7 @@ export function TramiteDetalleModal({
     pasos.findIndex((p) => p.id === seccion),
   );
   const pasoActivo = pasos[pasoActivoIndex];
-  const StepIcon = pasoActivo?.Icon ?? FileText;
+  const StepIcon = pasoActivo?.Icon ?? ICONO_DOCUMENTO;
   const estadoVigente = detail?.status ?? item?.estado;
   const rejectedFromVigente = detail?.rejectedFrom ?? item?.rejectedFrom;
   const estadoHdr =
@@ -525,16 +522,21 @@ export function TramiteDetalleModal({
                   aria-pressed={panelTracking === 'timeline'}
                   aria-label={`Estado: ${estadoHdr.label}. Ver línea de tiempo del trámite`}
                   title="Ver línea de tiempo del trámite"
-                  className={`${estadoChipClass(estadoVigente)} rounded-full border px-3 py-1 text-[12px] font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2`}
+                  className={`${estadoChipClass(estadoVigente)} inline-flex items-center gap-1.5 rounded-full border py-1 ${ESTADO_ICONO[estadoVigente as EstadoTramite] ? 'pl-1 pr-3' : 'px-3'} text-[12px] font-bold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2`}
                   style={{
                     background: estadoChipStyle(estadoVigente).bg,
                     color: estadoChipStyle(estadoVigente).color,
                     borderColor: estadoChipStyle(estadoVigente).border,
                   }}
                 >
-                  {/* HU #14482: el chip va solo con texto y el color del estado; el icono sigue en
-                      el DOM pero oculto. */}
+                  {/* HU #14482: el icono de línea sigue en el DOM pero oculto. UI Kit 2026: delante del texto va el
+                      disco del estado del kit (decorativo). Es un botón, así que conserva la píldora y no toma la
+                      punta de `.kit-etiqueta`: su recorte se comería el anillo de foco. */}
                   <estadoHdr.Icon className="hidden" aria-hidden="true" />
+                  {ESTADO_ICONO[estadoVigente as EstadoTramite] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- disco estático del kit
+                    <img src={ESTADO_ICONO[estadoVigente as EstadoTramite]} alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0" />
+                  ) : null}
                   {estadoHdr.label}
                 </button>
               ) : null}
@@ -559,7 +561,7 @@ export function TramiteDetalleModal({
                   ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
                   label={
                     <span className="inline-flex items-center gap-1">
-                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Icono nombre="ojo" className="h-3.5 w-3.5" />
                       {ETIQUETA_SOLO_CONSULTA}
                     </span>
                   }
@@ -603,7 +605,7 @@ export function TramiteDetalleModal({
               aria-label="Cerrar"
               className="rounded-xl border border-border bg-card p-2"
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="cerrar" className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -989,7 +991,7 @@ export function TramiteDetalleModal({
                                         className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand border-border"
                                         style={{ color: BLUE }}
                                       >
-                                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                                        <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                                       </button>
                                     </li>
                                   ))}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { Pagination } from '@/components/atom/Pagination';
@@ -140,7 +140,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
           className={controlCls(false)}
           data-testid="carga-masiva-actualizar"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Actualizar
         </button>
       </div>

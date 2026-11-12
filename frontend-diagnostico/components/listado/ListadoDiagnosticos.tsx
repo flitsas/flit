@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, SearchX } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
@@ -43,7 +43,10 @@ const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
 const TEXTO_SECUNDARIO = "max-w-md text-sm text-muted-foreground";
 
-function Vacio({ titulo, Icono, children }: { titulo: string; Icono: typeof ClipboardList; children?: ReactNode }) {
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (iconoComo("buscar")). */
+type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
+
+function Vacio({ titulo, Icono, children }: { titulo: string; Icono: IconoVacio; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-3 py-10 text-center">
       <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
@@ -144,7 +147,7 @@ export function ListadoDiagnosticos() {
     );
   } else if (carga.lista.diagnosticos.length === 0 && hayFiltros(filtros)) {
     contenido = (
-      <Vacio titulo="No hay diagnósticos con estos filtros" Icono={SearchX}>
+      <Vacio titulo="No hay diagnósticos con estos filtros" Icono={iconoComo("buscar")}>
         <p className={TEXTO_SECUNDARIO}>Cambia las fechas, el tipo, el estado o el nombre, o quita los filtros.</p>
         <button type="button" onClick={limpiar} className={BOTON_SECUNDARIO_CLS}>
           Limpiar filtros
@@ -153,7 +156,7 @@ export function ListadoDiagnosticos() {
     );
   } else if (carga.lista.diagnosticos.length === 0) {
     contenido = (
-      <Vacio titulo="Todavía no hay diagnósticos" Icono={ClipboardList}>
+      <Vacio titulo="Todavía no hay diagnósticos" Icono={iconoComo("portapapeles")}>
         <p className={TEXTO_SECUNDARIO}>Aquí verás los diagnósticos vehiculares de tu compañía cuando empiecen a registrarse.</p>
       </Vacio>
     );

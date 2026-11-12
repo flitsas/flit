@@ -30,7 +30,7 @@ const nav: NavCatalog = {
   (`suiteRoleLabel`, «Super Admin», «Admin de Compañía»…). Esas pantallas viven hoy en Trámites: cualquier otra app pasa
   `accountUrl` con la URL de Trámites (hasta B-12). `accountLinks` es solo para opciones propias del producto, que van
   después de las de la suite; `headerActions`, para controles propios (Trámites pone ahí el tema claro/oscuro).
-- **Puntero:** `@import "@flit/ui/cursor.css"` (flecha de marca y mano en lo clicable), igual que en las demás apps.
+- **Puntero:** `@import "@flit/ui/cursor.css"` (mano en lo clicable; el puntero es el del sistema), igual que en las demás apps.
 - **Cerrar sesión («Salir de la plataforma»):** `/auth/logout` de la app (`@flit/auth`), o `onLogout` si la app cierra
   sesión por su cuenta.
 - **Estilos:** `@import "@flit/ui/tokens.css"` y luego `@import "@flit/shell/shell.css"` en el CSS global, más

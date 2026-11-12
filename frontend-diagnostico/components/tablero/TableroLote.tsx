@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState , type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardCheck, ClipboardList, SearchX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { INLINE_ALERT_TONES, InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -45,7 +46,6 @@ import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
 import { GrillaSemaforos } from "./GrillaSemaforos";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert con su propio nombre accesible
@@ -78,7 +78,11 @@ const placaDe = (v: FilaVehiculo) => v.placa || v.vin || v.identificador;
 const puedeCerrarPanel = (g: Grilla) =>
   g.estado === "EN_PROCESO" && !hayPendientes(g) && g.vehiculos.some((v) => v.celdas.some((c) => c.estado === "ERROR"));
 
-function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; children?: React.ReactNode; Icono?: typeof ClipboardList }) {
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (iconoComo("buscar")). */
+type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
+const ICONO_VACIO = iconoComo("portapapeles");
+
+function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; children?: React.ReactNode; Icono?: IconoVacio }) {
   return (
     <section aria-labelledby="tablero-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
       <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
@@ -283,7 +287,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     contenido = <VehicleLoader label="Cargando el tablero…" />;
   } else if (error instanceof ApiError && error.status === 404) {
     contenido = (
-      <Vacio titulo="No encontramos este diagnóstico" Icono={SearchX}>
+      <Vacio titulo="No encontramos este diagnóstico" Icono={iconoComo("buscar")}>
         <p className="max-w-md text-sm text-muted-foreground">Puede que no exista o que no tengas acceso a él.</p>
         <Link href="/" className={BOTON_SECUNDARIO_CLS}>
           Volver al inicio
@@ -417,16 +421,16 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
         titulo={grilla?.nombre ?? "Tablero del diagnóstico"}
         descripcion={sesion?.empresa.nombre}
         encima={<Migas migas={[{ texto: "Diagnósticos", href: volver }, { texto: grilla?.nombre ?? "Tablero del diagnóstico" }]} />}
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
         acciones={
           <>
             <Link href={volver} className={BOTON_SECUNDARIO_CLS}>
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="izquierda" className="h-4 w-4" />
               Volver a diagnósticos
             </Link>
             {grilla && puedeCerrarPanel(grilla) && (
               <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
-                <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="portapapeles" className="h-4 w-4" />
                 Cerrar panel
               </button>
             )}

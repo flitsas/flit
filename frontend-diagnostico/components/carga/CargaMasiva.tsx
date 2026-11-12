@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileSpreadsheet, RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { ApiError } from "@/lib/api";
@@ -20,7 +20,6 @@ import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface Analisis {
   /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
@@ -142,7 +141,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
   if (!puedeCrear) {
     contenido = (
       <section aria-labelledby="carga-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
-        <FileSpreadsheet className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+        <Icono nombre="reporte-detallado" className="h-10 w-10 text-flit-brand" />
         <h2 id="carga-vacio" className="text-lg font-semibold">
           No tienes permiso para cargar vehículos
         </h2>
@@ -184,7 +183,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         />
         <div className="flex justify-start">
           <button type="button" onClick={() => setAnalisis(null)} className={BOTON_SECUNDARIO_CLS}>
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-4 w-4" />
             Subir otro archivo
           </button>
         </div>
@@ -200,7 +199,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         tituloId="carga-titulo"
         titulo="Cargar vehículos"
         descripcion={sesion?.empresa.nombre}
-        ilustracion={rutaIlustracion("documentos")}
+        icono="documentos"
       />
       {contenido}
     </>

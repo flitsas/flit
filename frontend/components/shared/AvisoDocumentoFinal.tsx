@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgeCheck } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   COPY_DOCUMENTO_FINAL_DETALLE,
   COPY_DOCUMENTO_FINAL_TITULO,
@@ -22,11 +22,7 @@ export function AvisoDocumentoFinal({ className }: { className?: string }) {
       role="status"
       data-testid="aviso-documento-final"
     >
-      <BadgeCheck
-        className="mt-0.5 h-4 w-4 shrink-0"
-        style={{ color: 'var(--flit-success-ink)' }}
-        aria-hidden="true"
-      />
+      <Icono nombre="check" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--flit-success-ink)' }} />
       <p className="text-xs">
         <span className="font-bold" style={{ color: 'var(--flit-success-ink)' }}>
           {COPY_DOCUMENTO_FINAL_TITULO}.

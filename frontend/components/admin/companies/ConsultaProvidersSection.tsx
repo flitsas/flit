@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { Accordion, ClampedText, FIELD_CLASS, FIELD_LABEL, HELP_TEXT } from "./ConfigUi";
 import {
@@ -84,7 +84,7 @@ export function ConsultaProvidersSection({
             ariaLabel={`Failover ${form.runtFailoverTimeoutMs} milisegundos`}
             label={
               <span className="inline-flex items-center gap-1">
-                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="filtro" className="h-3.5 w-3.5" />
                 Failover {form.runtFailoverTimeoutMs} ms
               </span>
             }

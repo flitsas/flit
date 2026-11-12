@@ -2,10 +2,12 @@
 
 import type { CSSProperties, ElementType, MouseEventHandler, ReactNode } from "react";
 import { cn } from "./cn";
+import { IconoModulo } from "./Icono";
 
 /**
- * Tarjeta de cifra del prototipo «Diseño Inteligente» (`.metrica` de `propuesta.css`, HU #14476): etiqueta
- * arriba, cifra grande debajo, ilustración a la derecha y un pie opcional con la acción («Ver el detalle»).
+ * Tarjeta de cifra del Manual UI Kit 2026 (propuesta-2, `.metrica`): etiqueta arriba, cifra de 24 px en azul, ícono de
+ * 40 px en disco a la derecha y un pie opcional con la acción subrayada. Borde de 1 px, radio de 9 px, sin sombra; al
+ * pasar el puntero el borde se pone azul. `pendiente` pinta el borde, la cifra y el disco en naranja.
  *
  * Es genérica: no sabe de trámites ni de reportes. Con `href` se pinta como enlace y con `onClick` como botón
  * (la tarjeta entera es la zona de pulsación, como en el prototipo); sin ninguno de los dos es una tarjeta
@@ -14,7 +16,9 @@ import { cn } from "./cn";
 export interface TarjetaMetricaProps {
   etiqueta: ReactNode;
   cifra: ReactNode;
-  /** Ruta de la ilustración (p. ej. `ilustracionDe("reportes")`). Es decorativa: va con `alt=""`. */
+  /** Clave del ícono en MAPA_ICONO (p. ej. "finalizados", "tiempo"). Decorativo. */
+  icono?: string;
+  /** @deprecated Usa `icono`. Ilustración WebP del diseño anterior. */
   ilustracion?: string;
   /** Pie de la tarjeta: la acción («Ver el detalle») o una línea secundaria (variación, aclaración). */
   pie?: ReactNode;
@@ -22,7 +26,7 @@ export interface TarjetaMetricaProps {
   /** Componente de enlace para `href` (p. ej. `Link` de next, para navegar sin recargar). Por defecto `<a>`. */
   enlace?: ElementType;
   onClick?: MouseEventHandler<HTMLElement>;
-  /** Resalta la tarjeta con el borde turquesa del prototipo (`.metrica--pendiente`): algo espera atención. */
+  /** Resalta la tarjeta en naranja (`.metrica--pendiente` del kit): algo espera atención. */
   pendiente?: boolean;
   /** Color de la cifra; por defecto el texto principal. */
   colorCifra?: string;
@@ -33,22 +37,21 @@ export interface TarjetaMetricaProps {
   "data-testid"?: string;
 }
 
-/** Rejilla de tarjetas de cifra (`.metricas` del prototipo): columnas de 220 px como mínimo. */
-export const METRICAS_GRID_CLS = "grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4";
+/** Rejilla de tarjetas de cifra (`.metricas` del kit): columnas de 190 px como mínimo. */
+export const METRICAS_GRID_CLS = "grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-4";
 
 const BASE_CLS =
-  "grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 rounded-[20px] border p-5 text-left " +
-  "text-inherit no-underline border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] " +
-  "shadow-[var(--shadow-card)]";
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-[9px] border p-4 text-left " +
+  "text-inherit no-underline border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-none";
 
 const ACCIONABLE_CLS =
-  "cursor-pointer transition-[box-shadow,transform] duration-150 hover:-translate-y-0.5 " +
-  "hover:shadow-[var(--shadow-card-hover)] focus:outline-none focus-visible:ring-2 " +
-  "focus-visible:ring-flit-brand focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:hover:translate-y-0";
+  "cursor-pointer transition-colors duration-150 hover:border-[color:var(--kit-azul-texto)] " +
+  "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--kit-azul-texto)]";
 
 export function TarjetaMetrica({
   etiqueta,
   cifra,
+  icono,
   ilustracion,
   pie,
   href,
@@ -66,20 +69,28 @@ export function TarjetaMetrica({
   const cls = cn(
     BASE_CLS,
     accionable && ACCIONABLE_CLS,
-    pendiente && "border-[color:var(--di-highlight-decor)]",
+    pendiente && "border-[color:var(--kit-naranja)] hover:border-[color:var(--kit-naranja)]",
     className,
   );
 
   const contenido = (
     <>
-      <span className="text-[0.8125rem] font-medium text-[color:var(--di-text-secondary)]">{etiqueta}</span>
+      <span className="text-sm font-medium text-[color:var(--di-text-primary)]">{etiqueta}</span>
       <span
-        className="row-start-2 text-[length:var(--di-text-cifra)] font-bold leading-[1.1] tabular-nums text-[color:var(--di-text-primary)]"
-        style={colorCifra ? { color: colorCifra } : undefined}
+        className="row-start-2 text-[length:var(--di-text-cifra)] font-bold leading-[1.1] tabular-nums"
+        style={{ color: colorCifra ?? (pendiente ? "var(--badge-warning-fg)" : "var(--kit-azul-texto)") }}
       >
         {cifra}
       </span>
-      {ilustracion ? (
+      {icono ? (
+        <IconoModulo
+          clave={icono}
+          disco
+          size={40}
+          className="col-start-2 row-span-3 row-start-1"
+          style={pendiente ? { background: "#ff4e001a", color: "var(--kit-naranja)" } : undefined}
+        />
+      ) : ilustracion ? (
         <img
           src={ilustracion}
           alt=""
@@ -93,7 +104,7 @@ export function TarjetaMetrica({
         <span
           className={cn(
             "row-start-3 text-xs",
-            accionable ? "font-semibold text-[color:var(--di-action)]" : "text-[color:var(--di-text-tertiary)]",
+            accionable ? "text-[color:var(--di-action)] underline underline-offset-2" : "text-[color:var(--di-text-tertiary)]",
           )}
         >
           {pie}

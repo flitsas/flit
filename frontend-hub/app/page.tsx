@@ -60,7 +60,7 @@ export default async function HubRoot({ searchParams }: { searchParams: Promise<
       <p className="max-w-md text-lg text-[color:var(--brand-on-primary,#ffffff)]">{`Los servicios de ${brand.platformName} con una sola cuenta.`}</p>
       <a
         href={config.loginUrl}
-        className="rounded-full bg-flit-brand px-8 py-3 font-semibold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        className="rounded-full bg-flit-brand px-8 py-3 font-semibold text-white transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
       >
         Iniciar sesión
       </a>

@@ -6,7 +6,8 @@
 // cambió la configuración (409) se avisa con la opción de recargar y NO se pierde lo escrito hasta que se decida.
 // Sin datos bancarios ni de pago (decisión del PO: otra épica).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCcw, RotateCcw, Save } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { ReactNode } from "react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -284,7 +285,7 @@ export function ParametrosTab() {
               tone="warning"
               title="Alguien más cambió estos ajustes"
               action={
-                <PnButton variant="secondary" icon={RefreshCcw} onClick={recargarActual}>
+                <PnButton variant="secondary" icon={iconoComo("reintento")} onClick={recargarActual}>
                   Cargar valores actuales
                 </PnButton>
               }
@@ -418,13 +419,13 @@ export function ParametrosTab() {
             <div className="flex flex-wrap items-center gap-2">
               {hayCambios && (
                 <button type="button" onClick={descartar} disabled={busy} className={ADMIN_BRAND_OUTLINE_BTN_CLS}>
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  <Icono nombre="reintento" className="h-4 w-4" />
                   Descartar cambios
                 </button>
               )}
               <CreateButton
                 type="submit"
-                icon={Save}
+                icon={iconoComo("nube-subir")}
                 label={busy ? "Guardando…" : "Guardar ajustes"}
                 disabled={busy || !hayCambios}
               />

@@ -1,7 +1,8 @@
 "use client";
 
-import type { ComponentType, CSSProperties, ReactNode, SVGProps } from "react";
-import { Check, Clock, LoaderCircle, MinusCircle, X } from "lucide-react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
+import { iconoComo } from "@flit/ui/iconoComo";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
@@ -42,20 +43,21 @@ export type EstadoVisible = EstadoCelda | typeof SIN_SOLICITAR;
  * El estado nunca depende solo del color: cada chip lleva icono y texto.
  */
 const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono; animado?: boolean }> = {
-  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: Clock },
-  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: LoaderCircle, animado: true },
-  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: Check },
-  ERROR: { tono: "danger", texto: "Error", Icono: X },
+  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("reloj") },
+  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("girador"), animado: true },
+  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: iconoComo("check") },
+  ERROR: { tono: "danger", texto: "Error", Icono: iconoComo("cerrar") },
   NA: { tono: "warning", texto: "Novedad", Icono: Punto },
-  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: MinusCircle },
+  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: iconoComo("menos") },
 };
 
-const ESTILOS: Record<Tono, CSSProperties> = {
-  neutral: { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)", borderColor: "var(--badge-neutral-border)" },
-  success: { background: "var(--badge-success-bg)", color: "var(--badge-success-fg)", borderColor: "var(--badge-success-border)" },
-  danger: { background: "var(--badge-danger-bg)", color: "var(--badge-pending-fg)", borderColor: "var(--badge-danger-border)" },
-  warning: { background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)", borderColor: "var(--badge-warning-border)" },
-  na: { background: "var(--surface-sunken)", color: "var(--muted-foreground)", borderColor: "var(--border)", borderStyle: "dashed" },
+/** Color pleno (`--c`) y de texto (`--ct`) de la etiqueta del kit por tono; el rojo usa la tinta AA --badge-pending-fg. */
+const ESTILOS: Record<Tono, { c: string; ct: string }> = {
+  neutral: { c: "var(--badge-neutral-border)", ct: "var(--badge-neutral-fg)" },
+  success: { c: "var(--badge-success-border)", ct: "var(--badge-success-fg)" },
+  danger: { c: "var(--badge-danger-border)", ct: "var(--badge-pending-fg)" },
+  warning: { c: "var(--badge-warning-border)", ct: "var(--badge-warning-fg)" },
+  na: { c: "var(--border)", ct: "var(--muted-foreground)" },
 };
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
@@ -112,7 +114,7 @@ function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto:
   if (conDeuda && estado === "COMPLETADO")
     return { tono: "warning" as const, texto: "Con deuda", Icono: Punto, animado: false };
   // Punto 5: un estado que el frontend no conoce no rompe el chip ni pinta el código.
-  return ESTADOS[estado] ?? { tono: "neutral", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: Clock };
+  return ESTADOS[estado] ?? { tono: "neutral", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: iconoComo("reloj") };
 }
 
 /**
@@ -122,11 +124,7 @@ function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto:
 export function ChipEstadoCelda({ estado, conDeuda = false }: { estado: EstadoVisible; conDeuda?: boolean }) {
   const { tono, texto, Icono, animado } = vistaDe(estado, conDeuda);
   return (
-    <span
-      data-tono={tono}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold`}
-      style={ESTILOS[tono]}
-    >
+    <span data-tono={tono} {...etiquetaKit(ESTILOS[tono])}>
       <Icono
         className={`shrink-0 ${ICONO_CLS[tono] ?? "h-3.5 w-3.5"} ${animado ? "motion-safe:animate-spin" : ""}`}
         aria-hidden="true"

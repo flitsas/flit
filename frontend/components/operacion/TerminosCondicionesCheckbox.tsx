@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 
 const BLUE = 'var(--color-flit-brand)';
@@ -84,7 +84,7 @@ export function TerminosCondicionesCheckbox({ checked, onChange, disabled }: Pro
           style={{ color: BLUE }}
         >
           Ver Términos y Condiciones
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="externo" className="h-3.5 w-3.5" />
           <span className="sr-only">(se abre en una pestaña nueva)</span>
         </a>
       </span>

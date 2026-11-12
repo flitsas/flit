@@ -13,6 +13,7 @@ import {
   parseCancelacionCausal,
 } from '@/lib/catalogs/cancelacion';
 import { WIZARD_INPUT, WIZARD_LABEL } from './wizard-field-styles';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Causal del trámite `CANCELACION_MATRICULA` (familia OTROS): por qué se cancela la matrícula.
@@ -110,18 +111,13 @@ export function CancelacionCausalCard({
 
       <div
         className={cn(
-          'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md sm:max-w-sm',
+          'relative flex flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)] sm:max-w-sm',
           causal ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
         )}
         style={{ borderColor: 'var(--border)' }}
       >
-        <span
-          className={cn(
-            'absolute right-3 top-3 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs',
-            causal ? 'font-semibold' : 'bg-[var(--badge-danger-bg)] font-medium text-[var(--badge-danger-fg)]',
-          )}
-          style={causal ? { background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' } : undefined}
-        >
+        <span {...etiquetaKit(causal ? 'success' : 'danger', { className: 'absolute right-3 top-3' })}>
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {causal ? 'Validado' : '* Obligatorio'}
         </span>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorOrganismo } from "@/components/SelectorOrganismo";
@@ -70,7 +70,7 @@ export default function Municipios() {
             <SelectorOrganismo valor={ot} onCambio={(id) => setOt(id)} />
           </div>
           <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !codigo.trim() || !nombre.trim()} onClick={crear}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="mas" className="h-3.5 w-3.5" />
             Agregar
           </button>
         </div>
@@ -100,7 +100,7 @@ export default function Municipios() {
           ]}
         />
         {confirmar && (
-          <Modal
+          <Modal icono="alerta"
             open
             onClose={() => setConfirmar(null)}
             busy={cambiando}

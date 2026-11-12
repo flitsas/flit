@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mail } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -43,7 +43,7 @@ function ModalAviso({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => v
   };
 
   return (
-    <Modal
+    <Modal icono="campana"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -101,7 +101,7 @@ export function AccionesAviso({ ctx }: { ctx: ContextoDetalle }) {
   return (
     <>
       <button type="button" className={controlCls(false)} disabled={!!motivo} title={motivo ?? undefined} onClick={() => setAbierto(true)}>
-        <Mail className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="correo" className="h-3.5 w-3.5" />
         Enviar aviso
       </button>
       {abierto && <ModalAviso ctx={ctx} onCerrar={() => setAbierto(false)} />}

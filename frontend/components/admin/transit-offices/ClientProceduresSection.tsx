@@ -64,7 +64,7 @@ import {
   mensajeEntregaOtFallida,
   resolverFuenteMaestroOt,
 } from "@/lib/tramites/consolidado-entrega-ot";
-import { Download, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
   ClientProcedureDetailModal,
@@ -116,6 +116,7 @@ import { XLSX_MIME } from "@/lib/xlsx";
 import { estadoPlacaOt, grupoPlacaPideDigito, resolverGrupoPlaca } from "@/lib/tramites/plate-format";
 import { PlacaOtField } from "./PlacaOtField";
 import { usePaginacion } from "@/components/atom/usePaginacion";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 // Bug #13055 — tamaño inicial; el usuario lo cambia con «Filas por página».
 
@@ -1609,10 +1610,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     <div className="space-y-4">
       {isReadOnly && (
         <div className="flex items-center gap-2">
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
-          >
+          <span {...etiquetaKit("danger")}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Solo lectura
           </span>
           <span className="text-[11px] opacity-60">
@@ -1710,10 +1709,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   className={controlCls(false)}
                   data-testid="ot-bandeja-export-xlsx"
                 >
-                  <Download
-                    className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
-                    aria-hidden="true"
-                  />
+                  <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`} />
                   {exporting ? "Exportando…" : COPY.A13}
                 </button>
               }
@@ -1729,10 +1725,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               title="Actualizar"
               className={controlCls(false)}
             >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
+              <Icono nombre="reintento" className={`h-3.5 w-3.5 ${status === "loading" ? "animate-spin" : ""}`} />
               Actualizar
             </button>
           </div>
@@ -1877,7 +1870,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Confirmar aprobación"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="check" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>¿Aprobar este trámite?</h2>
             </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">{approveTarget.referenceNumber}</p>
@@ -1936,7 +1929,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Elegir mandatario del mandato"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="firma" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Elige el mandatario que firma</h2>
             </FranjaDialogo>
             {mandatarioOptions.length > 0 && (
@@ -2013,7 +2006,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Asignar placa"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="placa" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Asignar placa al trámite</h2>
             </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
@@ -2076,7 +2069,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Liberar placa"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="devolucion" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Liberar placa</h2>
             </FranjaDialogo>
             <p className="mt-1 text-xs opacity-70">
@@ -2109,7 +2102,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Decidir revocatoria"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="mazo" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Decidir revocatoria</h2>
             </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
@@ -2263,7 +2256,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Actualizar placa"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="lapiz" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Corregir placa</h2>
             </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">
@@ -2307,7 +2300,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Rechazar trámite"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="alerta" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Motivo del rechazo</h2>
             </FranjaDialogo>
 
@@ -2385,7 +2378,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Adjuntar Licencia de Tránsito"
         >
           <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="archivo-subir" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Adjuntar Licencia de Tránsito (LT)</h2>
             </FranjaDialogo>
             <p className="mt-2 text-sm opacity-80">{ltTarget.referenceNumber}</p>

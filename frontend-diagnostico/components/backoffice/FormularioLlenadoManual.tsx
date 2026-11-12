@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Modal } from "@flit/ui/Modal";
@@ -190,7 +190,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-flit-primary">{titulo}</span>
         <button type="button" onClick={onQuitar} className={BOTON_FILA_CLS}>
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="papelera" className="h-3.5 w-3.5" />
           {`Quitar ${titulo.toLowerCase()}`}
         </button>
       </div>
@@ -202,7 +202,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
 function Agregar({ texto, onClick, deshabilitado }: { texto: string; onClick: () => void; deshabilitado?: boolean }) {
   return (
     <button type="button" onClick={onClick} disabled={deshabilitado} className={BOTON_FILA_CLS}>
-      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="mas" className="h-3.5 w-3.5" />
       {texto}
     </button>
   );
@@ -524,7 +524,7 @@ export function FormularioLlenadoManual({ consultaId, empresa, nombreFuente, ide
   }
 
   return (
-    <Modal
+    <Modal icono="lapiz"
       open
       onClose={onClose}
       busy={enviando}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
 import {
@@ -116,7 +116,7 @@ export function ProcedureDetailPanel({ category, status, range, tenantId, onClos
             aria-label="Cerrar detalle"
             className="h-8 w-8 grid place-items-center rounded-lg border hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)]"
           >
-            <X className="h-4 w-4" />
+            <Icono nombre="cerrar" className="h-4 w-4" />
           </button>
         </div>
       )}

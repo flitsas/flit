@@ -66,7 +66,8 @@ describe("HU #10498 — AC2: wizard con scroll en main y tracker de seguimiento"
     expect(wizard).toMatch(/sticky top-0/);
     expect(tracker).toMatch(/aria-label="Asistente de seguimiento"/);
     expect(tracker).not.toMatch(/sticky top/);
-    expect(tracker).toMatch(/ol className="flex w-full min-w-0 items-start/);
+    // UI Kit 2026: el avance horizontal del kit (`.kit-pasos`) en vez de la lista flex propia.
+    expect(tracker).toMatch(/ol className=\{`kit-pasos w-full min-w-0 items-start/);
     // Etiquetas siempre visibles (sin colapso hover).
     expect(tracker).not.toMatch(/grid-rows-\[0fr\]/);
     expect(tracker).not.toMatch(/group\/tracker/);

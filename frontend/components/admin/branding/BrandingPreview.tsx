@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import { Eye, ImageIcon, Mail } from "lucide-react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { ImageIcon } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { BrandColors, BrandingSource } from "@/lib/api/branding";
@@ -75,8 +77,8 @@ export function BrandingPreview({
   }, [open]);
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" icon={Eye} title="Previsualización de la marca">
-      <div className="flex gap-2 border-b pb-2" style={{ borderColor: "var(--border)" }} role="tablist" aria-label="Superficies de previsualización">
+    <Modal open={open} onClose={onClose} size="lg" icono="ojo" title="Previsualización de la marca">
+      <div className={PESTANAS_LISTA_CLS} role="tablist" aria-label="Superficies de previsualización">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -84,12 +86,7 @@ export function BrandingPreview({
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-            style={
-              tab === t.id
-                ? { background: "var(--di-accent)", color: "var(--di-on-accent)" }
-                : { background: "transparent", color: "var(--di-text-secondary)" }
-            }
+            className={pestanaClass(tab === t.id)}
           >
             {t.label}
           </button>
@@ -265,7 +262,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
             </p>
             {theme && (
               <p className="flex items-center gap-1.5 text-[11px] opacity-70" data-testid="branding-preview-email-theme">
-                <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="correo" className="h-3.5 w-3.5 shrink-0" />
                 {theme.platformName}
                 {theme.version !== undefined ? ` · v${theme.version}` : ""}
                 {theme.senderName ? ` · ${theme.senderName}` : ""}

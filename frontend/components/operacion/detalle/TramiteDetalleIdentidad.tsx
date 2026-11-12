@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -195,7 +195,7 @@ function FilaValidacion({
               className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-40 border-border"
               style={{ color: AZUL }}
             >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
             </button>
           ) : null}
         </span>

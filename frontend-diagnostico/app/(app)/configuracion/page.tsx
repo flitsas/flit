@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Settings } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -11,7 +11,6 @@ import { PestanaOperacion } from "@/components/configuracion/PestanaOperacion";
 import { BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -53,7 +52,7 @@ export default function ConfiguracionPagina() {
   if (!verConfiguracion && !editarContrato) {
     contenido = (
       <section aria-labelledby="configuracion-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
-        <Settings className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+        <Icono nombre="ajustes" className="h-10 w-10 text-flit-brand" />
         <h2 id="configuracion-vacio" className="text-lg font-semibold">
           No tienes acceso a la configuración
         </h2>
@@ -104,7 +103,7 @@ export default function ConfiguracionPagina() {
         tituloId="configuracion-titulo"
         titulo="Configuración"
         descripcion={sesion?.empresa.nombre}
-        ilustracion={rutaIlustracion("configuracion")}
+        icono="configuracion"
       />
       {contenido}
     </>

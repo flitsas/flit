@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import type { ConformationProfile, GateProfile } from '@/lib/api/types/procedure-parametrization';
 
@@ -218,7 +218,7 @@ export function TipoTramiteCapacidades({
         >
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-3 w-3 animate-spin" />
               Guardando…
             </span>
           ) : (

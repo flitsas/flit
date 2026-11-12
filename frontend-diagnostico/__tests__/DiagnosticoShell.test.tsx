@@ -68,7 +68,8 @@ describe("DiagnosticoShell", () => {
     montar();
 
     const loader = screen.getByRole("status", { name: "Abriendo Diagnóstico…" });
-    expect(loader).toHaveClass("flit-loader");
+    // UI Kit 2026 (propuesta-2): el cargador del kit (pista, línea y vehículo) en lugar del aro con el ícono.
+    expect(loader).toHaveClass("flit-cargador");
     expect(screen.queryByText("pantalla base")).toBeNull();
   });
 

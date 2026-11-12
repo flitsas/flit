@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo } from "react";
-import { AlertTriangle, Check, Wand2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { brandContrastPairs, formatContrastRatio, isValidHexColor } from "@/lib/brand/contrast";
 import { brandColorsReadable, fixContrast, pickOnPrimary } from "@/lib/brand/derive-tokens";
 import type { BrandColors } from "@/lib/api/branding";
@@ -87,7 +87,7 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
                   <span className="-ml-1 h-3.5 w-3.5 rounded-full border border-white" style={{ background: preset.primary }} />
                 </span>
                 {preset.name}
-                {selected && <Check className="h-3 w-3" aria-hidden />}
+                {selected && <Icono nombre="check" className="h-3 w-3" />}
               </button>
             );
           })}
@@ -153,9 +153,9 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
         >
           <div className="flex items-start gap-2">
             {readable ? (
-              <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} aria-hidden />
+              <Icono nombre="check" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} />
             ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--badge-warning-fg)" }} aria-hidden />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--badge-warning-fg)" }} />
             )}
             <span className="text-flit-primary">
               {readable
@@ -170,7 +170,7 @@ export function BrandingColorPicker({ colors, onChange, disabled = false, fieldC
               className="inline-flex w-fit items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
               style={{ background: "var(--badge-warning-fg)", color: "var(--destructive-foreground)" }}
             >
-              <Wand2 className="h-3.5 w-3.5" aria-hidden /> Ajustar automáticamente
+              <Icono nombre="varita" className="h-3.5 w-3.5" /> Ajustar automáticamente
             </button>
           )}
           <details className="text-[11px] opacity-70">

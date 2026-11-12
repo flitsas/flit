@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Info } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { MANDATO_TIPOS } from "@/lib/plataforma/mandato-templates";
 
 /**
@@ -41,13 +41,13 @@ export function TipoMandatoAyuda({ label = "Tipo de mandato" }: { label?: string
         onClick={() => setOpen((v) => !v)}
         className="inline-flex h-5 w-5 items-center justify-center rounded-full text-inherit hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
       >
-        <Info className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <span
           id={panelId}
           role="note"
-          className="absolute left-0 top-full z-30 mt-2 block w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 text-left text-[11px] font-normal normal-case leading-relaxed tracking-normal text-foreground shadow-lg"
+          className="absolute left-0 top-full z-30 mt-2 block w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-3 text-left text-[11px] font-normal normal-case leading-relaxed tracking-normal text-foreground shadow-[var(--kit-sombra)]"
         >
           <span className="mb-1.5 block text-muted-foreground">
             Dice quién ocupa el bloque del mandatario en el contrato.

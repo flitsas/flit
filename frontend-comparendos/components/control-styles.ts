@@ -14,18 +14,17 @@
 
 /** Control en reposo: 36px de alto, texto de 12px semibold, borde y fondo neutros. */
 export const TRAMITES_CONTROL_CLS =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border ' +
-  'border-border bg-card px-3 text-xs font-semibold text-foreground transition ' +
-  'hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
-  'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ' +
-  '';
+  'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-0 ' +
+  'bg-[color:var(--kit-tinta)] px-4 text-sm font-semibold text-white transition ' +
+  'hover:brightness-90 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 ' +
+  'focus-visible:outline-[var(--kit-azul-relleno)] disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * Marcado de "tiene algo aplicado": borde de marca y texto en el azul OSCURECIDO (`#3B4FD6`), no en
  * el `#557EFF` puro — sobre blanco el puro se queda en 3.7:1 y este es texto pequeño.
  * Se concatena al de reposo, que ya aporta la geometría.
  */
-export const TRAMITES_CONTROL_ACTIVO_CLS = 'border-flit-brand text-flit-brand-ink';
+export const TRAMITES_CONTROL_ACTIVO_CLS = 'bg-[color:var(--kit-azul-relleno)]! text-white!';
 
 /** Clase del control según tenga o no algo aplicado. */
 export function controlCls(activo: boolean): string {

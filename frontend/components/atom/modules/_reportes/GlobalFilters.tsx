@@ -4,7 +4,7 @@
 // se conservan al cambiar de pestaña. Rango de fechas + compañía (SuperAdmin) +
 // comparación de periodos + filtros adicionales ocultables (OT y operador por ID).
 import { useEffect, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   TipoTramiteSelect,
   agruparTiposTramite,
@@ -102,7 +102,7 @@ export function GlobalFilters({
           aria-expanded={showAdvanced}
           className={buttonClass({ variant: "secondary", size: "sm" })}
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="filtro" className="h-3.5 w-3.5" />
           {showAdvanced ? "Ocultar filtros" : "Más filtros"}
         </button>
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { FormEvent, type RefObject, useState } from "react";
 
 export function DrFlitComposer({
@@ -64,7 +64,7 @@ export function DrFlitComposer({
           boxShadow: "var(--dr-flit-shadow-fab)",
         }}
       >
-        <Send className="h-4 w-4" aria-hidden="true" />
+        <Icono nombre="radicacion" className="h-4 w-4" />
       </button>
     </form>
   );

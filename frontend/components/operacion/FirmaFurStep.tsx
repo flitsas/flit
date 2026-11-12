@@ -1,13 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  Check,
-  Copy,
-  RefreshCw,
-  Search,
-  X,
-} from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { improntaObligatoriaEnChecklist } from './DocumentChecklist';
 import MatriculaResumen, { ResumenCard, type ResolverEdicion } from './MatriculaResumen';
@@ -21,7 +15,8 @@ import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
-import { DIALOGO_FRANJA, DIALOGO_FRANJA_CERRAR, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL, DIALOGO_VELO } from './dialogo-propio';
+import { DIALOGO_FRANJA, DIALOGO_FRANJA_CERRAR, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL } from './dialogo-propio';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
 import type {
   Actor,
   BiometricParte,
@@ -98,9 +93,9 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
         title="Consulta RNMC — Medidas correctivas"
         action={
           loading ? (
-            <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-70" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin opacity-70" />
           ) : (
-            <Search className="h-4 w-4 opacity-70" aria-hidden="true" />
+            <Icono nombre="buscar" className="h-4 w-4 opacity-70" />
           )
         }
       />
@@ -274,7 +269,7 @@ export function CopyLink({
         style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
         {copied ? 'Copiado' : 'Copiar'}
       </button>
     </div>
@@ -1191,7 +1186,7 @@ function OrganismoModal({
   return (
     <div
       // Homologación #14507 — velo, panel y franja del Modal, en su sitio (mismo foco y Escape).
-      className={`fixed inset-0 z-50 grid place-items-center px-4 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-50 grid place-items-center px-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-label="Seleccionar organismo de tránsito"
@@ -1208,7 +1203,7 @@ function OrganismoModal({
             <p className="mt-1 text-xs leading-snug opacity-85">Elige dónde se radicará el trámite.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Cerrar" className={DIALOGO_FRANJA_CERRAR}>
-            <X className="h-5 w-5" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </div>
 
@@ -1231,7 +1226,7 @@ function OrganismoModal({
         )}
 
         <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-50" aria-hidden="true" />
+          <Icono nombre="buscar" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-50" />
           <input
             ref={searchInputRef}
             type="text"

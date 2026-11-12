@@ -5,7 +5,8 @@
 // cualquier compañía (selector); un admin no-super, solo la suya. El SECRETO lo genera el sistema y se
 // muestra UNA sola vez (no se puede recuperar) — se regenera con "Regenerar secreto".
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, KeyRound, Power, PowerOff, RotateCcw, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ApiError } from "@/lib/api/types";
 import {
@@ -204,7 +205,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <p className="text-xs font-semibold text-flit-primary">
-                <KeyRound className="mr-1 inline h-3.5 w-3.5" />
+                <Icono nombre="rol" className="mr-1 inline h-3.5 w-3.5" />
                 Secreto de «{revealed.username}» — cópielo ahora, no se volverá a mostrar.
               </p>
               <code className="rounded bg-card px-2 py-1 font-mono text-sm text-flit-primary">
@@ -217,7 +218,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                 onClick={copySecret}
                 className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-flit-brand hover:bg-flit-brand/10"
               >
-                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Icono nombre="check" className="h-3.5 w-3.5" /> : <Icono nombre="copiar" className="h-3.5 w-3.5" />}
                 {copied ? "Copiado" : "Copiar"}
               </button>
               <button
@@ -226,7 +227,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                 onClick={() => setRevealed(null)}
                 className="rounded-lg border border-border p-1 text-muted-foreground hover:bg-secondary"
               >
-                <X className="h-3.5 w-3.5" />
+                <Icono nombre="cerrar" className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
@@ -339,14 +340,14 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                       <RowActions
                         actions={[
                           {
-                            icon: c.isActive ? PowerOff : Power,
+                            icon: c.isActive ? iconoComo("asistente-apagado") : iconoComo("encendido"),
                             label: `${c.isActive ? "Desactivar" : "Activar"} cliente ${c.username}`,
                             tone: c.isActive ? "danger" : "primary",
                             disabled: busyId === c.id,
                             onClick: () => void toggleActive(c),
                           },
                           {
-                            icon: RotateCcw,
+                            icon: iconoComo("reintento"),
                             label: `Regenerar secreto de ${c.username}`,
                             tone: "primary",
                             disabled: busyId === c.id,

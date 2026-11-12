@@ -23,7 +23,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@flit/brand": "workspace:*"
+    "@flit/brand": "workspace:*",
+    "@flit/ui": "workspace:*"
   },
   "peerDependencies": {
     "lucide-react": "^1.20.0",

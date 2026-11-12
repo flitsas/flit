@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FilePlus2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -19,7 +19,6 @@ import { CreacionMasiva } from "./CreacionMasiva";
 import { DosZonas } from "./DosZonas";
 import { SelectorModo } from "./SelectorModo";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -89,7 +88,7 @@ export function NuevoDiagnostico() {
   if (!puedeCrear) {
     contenido = (
       <section aria-labelledby="nuevo-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
-        <FilePlus2 className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+        <Icono nombre="archivo-subir" className="h-10 w-10 text-flit-brand" />
         <h2 id="nuevo-vacio" className="text-lg font-semibold">
           No tienes permiso para crear diagnósticos
         </h2>
@@ -142,7 +141,7 @@ export function NuevoDiagnostico() {
         tituloId="nuevo-titulo"
         titulo="Nuevo diagnóstico"
         descripcion={sesion?.empresa.nombre}
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
         acciones={
           puedeCrear && (
             <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />

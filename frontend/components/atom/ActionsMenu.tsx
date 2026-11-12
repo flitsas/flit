@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ComponentType } from "react";
 
 // Menú de acciones accesible "⋯ Acciones" (HU #10194 — consolidación de config OT en
@@ -181,7 +181,7 @@ export function ActionsMenu({
         aria-label={ariaLabel}
         onKeyDown={onMenuKeyDown}
         style={{ top: coords.top, left: coords.left, minWidth: coords.minWidth }}
-        className="fixed z-[200] rounded-xl border bg-card p-1 shadow-lg dark:bg-card"
+        className="fixed z-[200] rounded-[9px] border bg-card px-4 py-1 shadow-[var(--kit-sombra)] dark:bg-card"
       >
         {items.map((item, i) => {
           const Icon = item.icon;
@@ -204,7 +204,8 @@ export function ActionsMenu({
                 close();
                 item.onSelect();
               }}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-flit-brand/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+              // `.menu-acciones` del kit: ítems de 40 px separados por una línea; al pasar el puntero, el texto en azul.
+              className={`flex min-h-10 w-full items-center gap-2 border-t border-[color:var(--di-border)] px-0 py-2 text-left text-sm font-medium transition first:border-t-0 hover:text-[color:var(--kit-azul-texto)] disabled:cursor-not-allowed disabled:opacity-40 ${
                 item.attention
                   ? "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95 dark:bg-[var(--badge-warning-bg)] dark:text-[var(--badge-warning-fg)]"
                   : item.tone === "danger"
@@ -229,7 +230,9 @@ export function ActionsMenu({
     );
 
   return (
-    <div className={`relative inline-block text-left ${className}`}>
+    // El contenedor no lleva fondo propio (aunque el llamador pase uno): en una fila con fondo al pasar el puntero, un
+    // fondo aquí dibujaba un recuadro detrás de la píldora.
+    <div className={`relative inline-block text-left ${className.replace(/(^|\s)(dark:)?bg-[^\s]+/g, "")}`}>
       <button
         ref={buttonRef}
         type="button"
@@ -248,17 +251,15 @@ export function ActionsMenu({
         // borde neutro y texto de marca. El kebab de tres puntos que había antes se lee como "más
         // opciones" —algo accesorio— cuando aquí vive la acción principal de la fila: aprobar,
         // rechazar, asignar placa. El chevron dice lo que de verdad pasa: se despliega una lista.
-        className={`relative flex w-full items-center justify-between gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-semibold transition hover:bg-flit-brand/10 ${
+        // UI Kit 2026 (`.acciones-btn`): píldora de 32 px con borde de línea, texto de acción y chevron de 16 px.
+        className={`relative flex min-h-8 w-full items-center justify-between gap-1 rounded-full border py-0 pl-4 pr-2 text-sm font-semibold transition hover:bg-[var(--kit-hover)] ${
           attention
             ? "border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95 dark:bg-[var(--badge-warning-bg)] dark:text-[var(--badge-warning-fg)] dark:hover:brightness-110"
-            : "border-border bg-card text-flit-brand dark:border-border dark:bg-card"
+            : "border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] text-[color:var(--di-action)]"
         }`}
       >
         {triggerLabel}
-        <ChevronDown
-          className={`h-3.5 w-3.5 shrink-0 transition ${open ? "rotate-180" : ""}`}
-          aria-hidden="true"
-        />
+        <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
         {attention ? (
           <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5" aria-hidden="true">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-flit-alert opacity-60" />

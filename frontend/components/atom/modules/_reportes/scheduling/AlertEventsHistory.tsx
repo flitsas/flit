@@ -1,7 +1,9 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
 import {
@@ -142,17 +144,16 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
                   <td data-label="Acción" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>
                     {e.acknowledgedAt ? (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                        style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }}
+                        {...etiquetaKit("success")}
                       >
-                        <Check className="h-3 w-3" aria-hidden="true" /> Reconocida
+                        <Icono nombre="check" className="h-3 w-3" /> Reconocida
                       </span>
                     ) : (
                       <RowActions
                         className="justify-start"
                         actions={[
                           {
-                            icon: Check,
+                            icon: iconoComo("check"),
                             label: `Reconocer disparo de ${e.ruleName}`,
                             tone: "primary",
                             onClick: () => void handleAck(e.id),

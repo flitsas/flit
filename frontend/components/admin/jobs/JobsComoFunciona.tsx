@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { HelpCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Modal } from "@/components/atom/Modal";
 
@@ -19,7 +19,7 @@ export function JobsComoFunciona() {
         onClick={() => setOpen(true)}
         className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-semibold text-flit-brand transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
       >
-        <HelpCircle className="h-4 w-4" aria-hidden="true" />
+        <Icono nombre="ayuda" className="h-4 w-4" />
         Cómo funciona
       </button>
 
@@ -27,7 +27,7 @@ export function JobsComoFunciona() {
         open={open}
         onClose={() => setOpen(false)}
         title="Cómo funciona"
-        icon={HelpCircle}
+        icono="ayuda"
         size="xl"
         description="Qué hace esta pantalla, qué pasa al guardar y qué no conviene confundir."
         footer={

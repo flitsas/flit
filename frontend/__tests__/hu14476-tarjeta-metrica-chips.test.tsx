@@ -16,7 +16,8 @@ describe("TarjetaMetrica", () => {
     expect(screen.getByText("1.204")).toBeInTheDocument();
     expect(screen.getByText("Ver el detalle")).toBeInTheDocument();
     const img = container.querySelector("img");
-    expect(img).toHaveAttribute("src", "/assets/ilustraciones/tramites.webp");
+    // UI Kit 2026 (propuesta-2): la ruta de la ilustración apunta al ícono del kit en su disco.
+    expect(img).toHaveAttribute("src", "/assets/kit/modulo/tramites.svg");
     expect(img).toHaveAttribute("alt", "");
   });
 

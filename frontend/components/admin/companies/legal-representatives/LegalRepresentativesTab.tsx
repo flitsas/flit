@@ -1,17 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Building2,
-  CheckCircle2,
-  Loader2,
-  MailCheck,
-  Pencil,
-  Trash2,
-  Vault,
-  type LucideIcon,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -331,11 +322,11 @@ export function LegalRepresentativesTab({
           </p>
           <div className="flex shrink-0 gap-2">
             <a href={IDENTITY_MODULE_HREF} className={rlPrimaryCtaClass} style={rlPrimaryCtaStyle}>
-              <MailCheck className="h-3.5 w-3.5" />
+              <Icono nombre="correo" className="h-3.5 w-3.5" />
               Ir al módulo Identidad
             </a>
             <SignatureAction
-              icon={Vault}
+              icon={iconoComo("candado")}
               label="Asociar firma"
               onClick={() => openEdit(pendingItem)}
             />
@@ -500,9 +491,9 @@ export function LegalRepresentativesTab({
                                 label={
                                   <span className="inline-flex items-center gap-1">
                                     {item.hasSignatureOrIdentity ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" />
                                     ) : (
-                                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                                     )}
                                     {st.label}
                                   </span>
@@ -517,18 +508,18 @@ export function LegalRepresentativesTab({
                               <RowActions
                                 actions={[
                                   {
-                                    icon: Pencil,
+                                    icon: iconoComo("lapiz"),
                                     label: `Editar persona y firma de ${fullName(item)}`,
                                     onClick: () => openEdit(item),
                                     tone: "primary",
                                   },
                                   {
-                                    icon: Building2,
+                                    icon: iconoComo("empresas"),
                                     label: `Asociar empresas de ${fullName(item)}`,
                                     onClick: () => openCompanies(item),
                                   },
                                   {
-                                    icon: Trash2,
+                                    icon: iconoComo("papelera"),
                                     label: `Eliminar ${fullName(item)}`,
                                     onClick: () => setToDelete(item),
                                     tone: "danger",
@@ -580,7 +571,7 @@ export function LegalRepresentativesTab({
           onClose={() => setToDelete(null)}
           busy={deleting}
           size="sm"
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg={RL_COLOR.danger}
           title="Eliminar representante"
         >
@@ -606,7 +597,7 @@ export function LegalRepresentativesTab({
               className={`flex-1 ${rlDangerCtaClass}`}
               style={rlDangerCtaStyle}
             >
-              {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {deleting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
               Eliminar
             </button>
           </div>
@@ -622,7 +613,7 @@ function SignatureAction({
   busy = false,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   busy?: boolean;
   onClick: () => void;
@@ -635,7 +626,7 @@ function SignatureAction({
       className={rlPrimaryCtaClass}
       style={rlPrimaryCtaStyle}
     >
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+      {busy ? <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
       {label}
     </button>
   );

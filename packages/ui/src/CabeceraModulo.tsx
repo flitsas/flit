@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { IconoModulo } from "./Icono";
+import { Miga, type MigaItem } from "./Miga";
 
 /**
- * Cabecera de módulo de la propuesta «Diseño Inteligente» (`.page-header` de propuesta.css), HU #14476: tarjeta con
- * degradado blanco → cielo, la ilustración del módulo a la izquierda, antetítulo opcional, título con su línea de
- * acento, bajada, los dos círculos decorativos (turquesa lleno y aro) a la derecha y las acciones dentro, a la derecha.
- *
- * Es la misma pieza en las 4 apps. No sabe qué ilustración le toca a cada pantalla: la ruta la pasa quien la usa (cada
- * app tiene su tabla de título → ilustración, p. ej. `ModuleTitle` de Trámites).
+ * Cabecera de página del Manual UI Kit 2026 (propuesta-2, `.page-header`): tarjeta blanca con borde de 1 px y radio de
+ * 9 px, sin degradado ni adornos; el ícono del módulo (disco de 56 px) a la izquierda, la miga de pan, el antetítulo, el
+ * título (32 px, azul) y la bajada; las acciones a la derecha. En celular el ícono se oculta y las acciones ocupan el
+ * ancho. Es la misma pieza en las 4 apps: la clave del ícono (`icono`, ver MAPA_ICONO) la pasa quien la usa.
  */
 export interface CabeceraModuloProps {
   titulo: ReactNode;
@@ -15,8 +15,12 @@ export interface CabeceraModuloProps {
   descripcion?: ReactNode;
   /** Antetítulo en versalitas sobre el título (p. ej. «Gestión integral»). */
   antetitulo?: ReactNode;
-  /** Ruta de la ilustración (`rutaIlustracion(...)` o `ilustracionDe(...)`). Es decorativa: va con `alt=""`. */
+  /** Clave del ícono del módulo en MAPA_ICONO (p. ej. "tramites", "reportes"). Es decorativo. */
+  icono?: string;
+  /** @deprecated Usa `icono`. Ilustración WebP del diseño anterior; se pinta a 56 px mientras se migra. */
   ilustracion?: string;
+  /** Miga de pan con los niveles que la pantalla ya tiene (su «Volver a…» y su título). */
+  miga?: MigaItem[];
   /** Lo que va a la derecha, dentro de la cabecera: indicadores y acciones, en ese orden. */
   acciones?: ReactNode;
   /** Contenido sobre el título y el antetítulo, dentro de la columna del texto (p. ej. migas de pan). */
@@ -37,7 +41,9 @@ export function CabeceraModulo({
   titulo,
   descripcion,
   antetitulo,
+  icono,
   ilustracion,
+  miga,
   acciones,
   encima,
   debajo,
@@ -47,60 +53,49 @@ export function CabeceraModulo({
   tituloClassName,
   className,
 }: CabeceraModuloProps) {
+  const conIcono = Boolean(icono || ilustracion);
   return (
     <Raiz
       aria-labelledby={ariaLabelledby}
       className={cn(
-        "relative flex shrink-0 flex-wrap items-center gap-6 overflow-clip rounded-[var(--di-radius-header)] border border-[var(--di-border)] py-8 pl-[132px] pr-8 shadow-[var(--shadow-card)] max-md:gap-3.5 max-md:rounded-[20px] max-md:py-5 max-md:pl-[84px] max-md:pr-4",
+        "kit-cabecera relative flex shrink-0 flex-wrap items-center gap-4 rounded-[9px] border border-[var(--di-border)] bg-[var(--di-surface-elevated)] py-4 pr-6 shadow-none max-[640px]:p-4",
+        conIcono ? "pl-[92px]" : "pl-6",
         className,
       )}
-      style={{ background: "linear-gradient(120deg, var(--di-surface-elevated) 35%, var(--di-sky) 100%)" }}
     >
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90 max-md:-right-12 max-md:-top-[60px] max-md:h-[120px] max-md:w-[120px]"
-        style={{ background: "var(--di-highlight-decor)" }}
-      />
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-[150px] -top-[60px] h-[420px] w-[420px] rounded-full border-[1.5px] opacity-50 max-md:hidden"
-        style={{ borderColor: "var(--di-sky-line)" }}
-      />
-      {ilustracion ? (
+      {icono ? (
+        <IconoModulo clave={icono} disco size={56} className="absolute left-5 top-1/2 -translate-y-1/2 max-[640px]:hidden" />
+      ) : ilustracion ? (
         <img
           src={ilustracion}
           alt=""
           aria-hidden="true"
-          className="absolute left-6 top-1/2 h-[92px] w-[92px] -translate-y-1/2 object-contain max-md:left-3.5 max-md:top-5 max-md:h-[58px] max-md:w-[58px] max-md:translate-y-0"
+          className="absolute left-5 top-1/2 h-14 w-14 -translate-y-1/2 object-contain max-[640px]:hidden"
         />
       ) : null}
-      <div className="relative z-[1] min-w-0 flex-[1_1_320px]">
-        {encima && <div className="mb-2">{encima}</div>}
+      <div className="min-w-0 flex-[1_1_280px]">
+        {miga && miga.length > 0 && <Miga items={miga} />}
+        {encima && <div className="mb-1">{encima}</div>}
         {antetitulo && (
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.06em]" style={{ color: "var(--di-highlight)" }}>
+          <p className="mb-0.5 text-xs font-medium uppercase tracking-[0.04em]" style={{ color: "var(--di-text-tertiary)" }}>
             {antetitulo}
           </p>
         )}
         <h1
           id={tituloId}
-          className={cn("text-[2rem] font-bold leading-tight max-md:text-2xl", tituloClassName)}
+          className={cn("text-[2rem] font-bold leading-[1.2] max-[640px]:text-[1.625rem]", tituloClassName)}
           style={{ color: "var(--di-heading)" }}
         >
           {titulo}
         </h1>
-        <span
-          aria-hidden="true"
-          className="mt-2.5 block h-[5px] w-16 rounded-full"
-          style={{ background: "linear-gradient(90deg, var(--di-sky-line), var(--di-sky))" }}
-        />
         {descripcion && (
-          <div className="mt-2.5 max-w-[60ch] text-sm max-md:text-[13px]" style={{ color: "var(--di-text-secondary)" }}>
+          <div className="mt-1 max-w-[70ch] text-sm" style={{ color: "var(--di-text-primary)" }}>
             {descripcion}
           </div>
         )}
         {debajo}
       </div>
-      {acciones && <div className="relative z-[1] flex flex-wrap items-center gap-3">{acciones}</div>}
+      {acciones && <div className="flex flex-wrap items-center gap-3 max-[640px]:w-full max-[640px]:[&>*]:flex-[1_1_140px]">{acciones}</div>}
     </Raiz>
   );
 }

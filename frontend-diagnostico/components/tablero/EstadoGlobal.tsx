@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, type CSSProperties } from "react";
-import type { StatusTone } from "@flit/ui/StatusBadge";
+import { useId } from "react";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
 import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
 import { rotular } from "@/lib/rotulos";
@@ -23,12 +23,6 @@ export function vistaEstadoLote(estado: EstadoDiagnostico, etiqueta?: string | n
   return { texto, tono: local?.tono ?? "neutral" };
 }
 
-const chip = (tono: StatusTone): CSSProperties => ({
-  background: `var(--badge-${tono}-bg)`,
-  color: `var(--badge-${tono}-fg)`,
-  borderColor: `var(--badge-${tono}-border)`,
-});
-
 /**
  * Estado global y avance del lote (HU #13748, F04-C4/C5): chip del estado, barra de vehículos terminados y, si el lote sigue
  * con consultas abiertas, el aviso de que la grilla se actualiza sola.
@@ -44,9 +38,9 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
         <span
           role="status"
           aria-label={`Estado del lote: ${texto}`}
-          className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap"
-          style={chip(tono)}
+          {...etiquetaKit(tono)}
         >
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {texto}
         </span>
         <span className="text-sm font-medium text-flit-primary">{`${terminados} de ${vehiculos} vehículos terminados`}</span>

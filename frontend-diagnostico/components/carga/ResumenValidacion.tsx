@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, PencilLine } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ResumenValidacion as Resumen } from "@/lib/carga/api";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ERROR_CLS } from "@/components/parametrizacion/estilos";
@@ -71,7 +71,7 @@ export function ResumenValidacion({ resumen, onCorregir, onContinuar, confirmand
         )}
         {onCorregir && resumen.erroneos > 0 && (
           <button type="button" onClick={onCorregir} className={BOTON_SECUNDARIO_CLS}>
-            <PencilLine className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="lapiz" className="h-4 w-4" />
             Corregir ahora
           </button>
         )}
@@ -83,7 +83,7 @@ export function ResumenValidacion({ resumen, onCorregir, onContinuar, confirmand
           className={BOTON_PRIMARIO_CLS}
         >
           {confirmando ? "Confirmando…" : "Continuar solo con los válidos"}
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="derecha" className="h-4 w-4" />
         </button>
       </div>
     </section>

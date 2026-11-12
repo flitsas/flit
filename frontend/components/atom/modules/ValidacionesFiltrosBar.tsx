@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   Field,
   INPUT_CLS,
@@ -81,7 +81,7 @@ function IdentityFiltroPopover({
         className={controlCls(aplicadasCount > 0)}
       >
         {aplicadasCount > 0 ? `Filtros (${aplicadasCount})` : '+ Filtro'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -362,10 +362,7 @@ export function ValidacionesFiltrosBar({
     <div className="flex flex-wrap items-center gap-2" role="search" aria-label="Filtros de validaciones">
       {scopeSelector}
       <div className="relative w-64 shrink-0">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
         <input
           type="search"
           aria-label="Buscar validaciones por nombre, documento o radicado"

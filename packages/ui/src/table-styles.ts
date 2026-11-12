@@ -11,17 +11,16 @@
  */
 
 /**
- * Fondo de la barra de cabecera y color de su texto. Salen de los tokens (`--table-header-*`): desde la HU #14477 la
- * cabecera es la tinta del UI kit (`.table th`: #162744 con texto blanco), por decisión de producto sobre la cabecera
- * clara del prototipo; en oscuro se adapta sola. Toda `<th>` lleva LOS DOS (fondo y texto): con solo el fondo, el
- * texto heredado queda oscuro sobre tinta.
+ * Fondo de la barra de cabecera y color de su texto (`--table-header-*`). UI Kit 2026 (propuesta-2, decisión de
+ * Samuel del 2026-11-12): cabecera #A9C9FC con texto tinta; en oscuro #3A5688 con texto claro. Toda `<th>` lleva LOS
+ * DOS (fondo y texto).
  */
 export const TABLA_HEADER_BG = 'var(--table-header-bg)';
 export const TABLA_HEADER_FG = 'var(--table-header-fg)';
 
 /**
- * Celda de cabecera (HU #14477): tinta del UI kit con texto blanco de 13px en peso 600, sin versalitas (producto
- * pidió solo el color del kit, no sus mayúsculas), y extremos de 8px. La barra queda FIJA al hacer scroll.
+ * Celda de cabecera del UI Kit 2026: texto de 13 px en negrita, en mayúsculas con 0,03 em de espaciado y relleno de
+ * 10 × 14 px, sin redondeo propio (lo recorta el contenedor de 9 px). La barra queda FIJA al hacer scroll.
  *
  * El `sticky` no es un adorno: en una lista larga —el OT pagina de 20 en 20— al bajar se pierde de
  * vista qué columna se está mirando, y en una tabla de diez columnas eso obliga a subir a releer.
@@ -30,38 +29,34 @@ export const TABLA_HEADER_FG = 'var(--table-header-fg)';
  * pantalla haya escrito su propio `rounded-l-xl` (las variantes ganan sobre la clase suelta).
  */
 export const TABLA_HEADER_CELL_CLS =
-  'sticky top-0 z-10 px-3.5 py-2.5 text-left text-[0.8125rem] font-semibold normal-case tracking-normal ' +
-  'first:rounded-l-lg last:rounded-r-lg';
+  'sticky top-0 z-10 px-3.5 py-2.5 text-left text-[0.8125rem] font-bold uppercase tracking-[0.03em] ' +
+  'first:rounded-none last:rounded-none';
 
 /**
- * Tarjeta detrás de la tabla, como la `.card` del prototipo (HU #14477): superficie elevada, borde, radio de 20px y
- * sombra suave. Va en el envoltorio de la tabla (el de scroll o el que la junta con su paginador), nunca dentro de otra
- * tarjeta. Anula la regla anterior de «tabla sin tarjeta ni fondo detrás», por decisión de producto.
+ * Contenedor de la tabla del UI Kit 2026 (`.tabla-wrap`): borde de 1 px #A9C9FC, radio de 9 px y superficie elevada,
+ * sin sombra ni relleno. La clase `kit-tabla` (tokens.css) convierte cualquier tabla de dentro —también las escritas a
+ * mano con `border-separate` y filas-tarjeta— en filas separadas por una línea, con la cabecera pegada al borde y la
+ * fila en --kit-hover al pasar el puntero. Va en el envoltorio de la tabla (el de scroll o el que la junta con su
+ * paginador), nunca dentro de otra tarjeta.
  *
- * Por debajo de 900px desaparece: allí cada fila ya es una tarjeta, y una tarjeta grande alrededor de tarjetas
- * pequeñas sería ruido y le restaría ancho a la rejilla. El relleno vertical es menor que el lateral porque la
- * separación de 6px entre filas (`border-spacing-y-1.5`) ya deja aire arriba y abajo.
+ * Por debajo de 900px el contenedor desaparece: allí cada fila ya es una tarjeta.
  */
 export const TABLA_TARJETA_SUPERFICIE_CLS =
-  'rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-4 py-2.5 ' +
-  'shadow-[var(--shadow-card)]';
+  'kit-tabla overflow-clip rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] ' +
+  'shadow-none';
 export const TABLA_TARJETA_CLS =
   `${TABLA_TARJETA_SUPERFICIE_CLS} ` +
-  'max-[900px]:rounded-none max-[900px]:border-0 max-[900px]:bg-transparent max-[900px]:p-0 max-[900px]:shadow-none';
+  'max-[900px]:overflow-visible max-[900px]:rounded-none max-[900px]:border-0 max-[900px]:bg-transparent max-[900px]:p-0';
 /**
  * Variante para el listado de /tramites, cuyas filas pasan a tarjeta a 640px (`tramites-propuesta.css`) y no a 900px:
  * la tarjeta grande se mantiene hasta ese mismo corte, para no dejar un tramo sin ninguna de las dos.
  */
 export const TABLA_TARJETA_640_CLS =
-  `${TABLA_TARJETA_SUPERFICIE_CLS} ` +
-  'max-[640px]:rounded-none max-[640px]:border-0 max-[640px]:bg-transparent max-[640px]:p-0 max-[640px]:shadow-none';
+  `${TABLA_TARJETA_SUPERFICIE_CLS} kit-tabla--640 ` +
+  'max-[640px]:overflow-visible max-[640px]:rounded-none max-[640px]:border-0 max-[640px]:bg-transparent max-[640px]:p-0';
 
-/**
- * Fila de listado: al pasar el puntero cambia el BORDE de sus celdas (`--di-border-control`), no el fondo,
- * como en el prototipo: así las pastillas de estado conservan su contraste. Sin sombra ni elevación.
- */
-export const TABLA_ROW_HOVER_CLS =
-  'transition-colors [&:hover>td]:border-[color:var(--di-border-control)]!';
+/** Fila de listado: el fondo pasa a --table-row-hover al pasar el puntero (lo pinta `.kit-tabla`). */
+export const TABLA_ROW_HOVER_CLS = 'transition-colors';
 
 /** Línea secundaria dentro de una celda (fechas bajo el radicado, gestor bajo la empresa…). */
 export const TABLA_CELDA_SECUNDARIA_CLS = 'text-[10px] opacity-55';
