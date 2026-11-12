@@ -1,6 +1,7 @@
 "use client";
 
-import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
+import type { IconoComoProps } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 
 // HU #10844 — Botón de "crear / agregar" unificado. Centraliza el patrón que cada
@@ -33,7 +34,8 @@ export interface CreateButtonProps {
   /** Acción de creación. */
   onClick?: () => void;
   /** Icono semántico de la acción (Lucide). Va `aria-hidden`; opcional. */
-  icon?: LucideIcon;
+  /** Ícono del kit (`iconoComo("…")`) o, si el kit no tiene el glifo, uno de lucide. */
+  icon?: ComponentType<IconoComoProps>;
   /** Densidad del botón. `md` por defecto. */
   size?: CreateButtonSize;
   type?: "button" | "submit";
