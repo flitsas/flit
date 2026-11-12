@@ -12,7 +12,7 @@ import {
   emailConflictErrorCode,
   isEmailConflictCode,
 } from "@/lib/users/emailConflict";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
 import {
   AUTH_ERROR_CLASS,
@@ -102,7 +102,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
           Nueva contraseña
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="ac-password"
             type="password"
@@ -119,7 +119,7 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
           Confirmar contraseña
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="ac-confirm"
             type="password"

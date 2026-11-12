@@ -2,7 +2,7 @@
 
 import { useId, type RefObject } from "react";
 import Link from "next/link";
-import { ChevronUp } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DockEntry, DockGroup } from "../nav";
 import { DockGlyph } from "./DockGlyph";
 import { useDisclosureNav } from "./useDisclosureNav";
@@ -171,7 +171,7 @@ function DockGroupPill({
       >
         {art}
         {label}
-        {showLabels && <ChevronUp className="dock-flecha" aria-hidden="true" />}
+        {showLabels && <Icono nombre="arriba" className="dock-flecha" />}
       </button>
 
       {open && (

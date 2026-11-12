@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Selector con buscador interno (combobox). Nace para los pickers de compañía: con decenas de
@@ -191,10 +191,7 @@ export function SearchableSelect({
       </label>
 
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40" />
         <input
           id={baseId}
           ref={inputRef}
@@ -235,7 +232,7 @@ export function SearchableSelect({
               aria-label="Quitar selección"
               className="rounded p-1 opacity-50 transition hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="cerrar" className="h-3.5 w-3.5" />
             </button>
           )}
           <button
@@ -253,10 +250,7 @@ export function SearchableSelect({
             aria-hidden="true"
             className="rounded p-1 opacity-50 transition hover:opacity-100 disabled:opacity-30"
           >
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
+            <Icono nombre="abajo" className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
         </div>
 
@@ -291,7 +285,7 @@ export function SearchableSelect({
                     {o.hint && <span className="block truncate text-[10px] opacity-60">{o.hint}</span>}
                   </span>
                   {elegida && (
-                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+                    <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
                   )}
                 </li>
               );

@@ -471,6 +471,9 @@ importers:
       '@flit/brand':
         specifier: workspace:*
         version: link:../brand
+      '@flit/ui':
+        specifier: workspace:*
+        version: link:../ui
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.9.1

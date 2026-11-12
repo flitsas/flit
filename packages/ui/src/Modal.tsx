@@ -2,8 +2,9 @@
 
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
-import { X, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "./cn";
+import { Icono, type NombreIcono } from "./Icono";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
 // contraste legible en dark). Encapsula el overlay (`fixed inset-0` + backdrop
@@ -12,8 +13,9 @@ import { cn } from "./cn";
 // cerrar). Reemplaza el boilerplate que cada diálogo repetía con z-index, blur y
 // anchos divergentes. El cuerpo (formulario, campos, botones) se pasa como
 // `children`; el título lo renderiza el propio Modal para garantizar el contraste.
-// HU #14476 — aspecto del `.modal` de la propuesta: radio de 24 px, franja tinta arriba con el ícono, el título y la X
-// en el color sobre acento, círculo turquesa decorativo y pie separado por una línea. Mismas props.
+// UI Kit 2026 (propuesta-2, `.modal`): contenedor blanco de radio 9 px con borde de 1 px y sin sombra; ícono de 52 px
+// centrado sobre el título (1,375 rem, azul), subtítulo gris, X discreta arriba a la derecha y velo azul al 50 % con
+// desenfoque de 5 px. Mismas props y mismo comportamiento (Escape, clic fuera, ocupado, portal).
 
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
@@ -38,11 +40,13 @@ export interface ModalProps {
   onClose: () => void;
   /** Título accesible; el Modal lo asocia vía `aria-labelledby`. */
   title: string;
-  /** Icono opcional a la izquierda del título (Lucide). */
+  /** Ícono del kit centrado sobre el título (preferido). */
+  icono?: NombreIcono;
+  /** @deprecated Usa `icono`. Ícono Lucide; se pinta en el mismo disco centrado mientras se migra. */
   icon?: LucideIcon;
-  /** Fondo del recuadro del icono (por defecto azul de marca). */
+  /** @deprecated Sin efecto: el disco es el del kit. */
   iconBg?: string;
-  /** Clase del título (tamaño y peso). El color lo fija la franja (`--di-on-accent`) para que siempre se lea. */
+  /** Clase del título (tamaño y peso). El color es el de los títulos del kit (`--di-heading`). */
   titleClassName?: string;
   /** Subtítulo opcional bajo el título. */
   description?: React.ReactNode;
@@ -69,9 +73,10 @@ export function Modal({
   open,
   onClose,
   title,
+  icono,
   icon: Icon,
-  iconBg = "var(--color-flit-brand)",
-  titleClassName = "text-base font-semibold",
+  iconBg,
+  titleClassName = "text-[1.375rem] font-bold leading-tight",
   description,
   size = "md",
   zClassName = "z-[100]",
@@ -84,6 +89,7 @@ export function Modal({
   children,
 }: ModalProps) {
   const titleId = useId();
+  void iconBg;
 
   // Escape cierra el modal (salvo que esté ocupado).
   useEffect(() => {
@@ -116,7 +122,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-[var(--overlay)] px-4 py-6 backdrop-blur-md`}
+      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-[var(--overlay)] px-3 py-6 backdrop-blur-[5px]`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -130,48 +136,39 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-flit-primary shadow-[var(--shadow-modal)] dark:text-foreground ${panelClassName}`}
+        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
           <div className="mx-4 mt-4 shrink-0 sm:mx-6 sm:mt-6">{resolvedHeader}</div>
         ) : (
-          // Franja tinta del `.modal__franja` del prototipo: ícono y título en el color sobre acento, y un círculo
-          // turquesa decorativo arriba a la derecha sobre el que queda la X.
-          <div className="relative flex shrink-0 items-center gap-3 overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)] sm:px-6 sm:py-5">
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
-            />
-            {Icon && (
-              <span
-                className="relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: iconBg }}
-              >
-                <Icon className="h-4.5 w-4.5 text-white" />
+          // `.modal__franja` del kit: ícono centrado, título y subtítulo; la X flota arriba a la derecha.
+          <div className="relative flex shrink-0 flex-col items-center gap-2 px-14 pb-1 pt-6 text-center">
+            {icono ? (
+              <Icono nombre={icono} disco size={52} />
+            ) : Icon ? (
+              <span aria-hidden="true" className="kit-disco h-[52px] w-[52px]">
+                <Icon className="h-7 w-7" strokeWidth={1.75} />
               </span>
-            )}
-            <div className="relative z-[1] min-w-0 flex-1 leading-tight">
-              <h2
-                id={titleId}
-                className={cn(titleClassName, "text-[color:var(--di-on-accent)] dark:text-[color:var(--di-on-accent)]")}
-              >
+            ) : null}
+            <div className="min-w-0 leading-tight">
+              <h2 id={titleId} className={cn(titleClassName, "text-[color:var(--di-heading)]")}>
                 {title}
               </h2>
-              {description && <p className="mt-0.5 text-xs opacity-85">{description}</p>}
+              {description && <p className="mt-1 text-sm text-[color:var(--di-text-tertiary)]">{description}</p>}
             </div>
             <button
               type="button"
               aria-label="Cerrar"
               onClick={requestClose}
-              className="relative z-[1] grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]"
+              className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
             >
-              <X className="h-5 w-5" />
+              <Icono nombre="cerrar" size={20} />
             </button>
           </div>
         )}
         {/* Márgenes y no padding: el cuerpo conserva su barra de scroll y el `px-*` que algunos llamadores le pasan. */}
         <div
-          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 sm:mt-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
+          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
         >
           {children}
         </div>

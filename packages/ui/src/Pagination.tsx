@@ -24,7 +24,7 @@ export interface PaginationProps {
 
 /** Mismo selector que el listado de trámites (control de 36 px, borde neutro). */
 const SELECT_CLS =
-  "inline-flex h-9 shrink-0 items-center rounded-xl border border-border bg-card px-3 text-xs " +
+  "inline-flex h-9 shrink-0 items-center rounded-[9px] border border-border bg-card px-3 text-xs " +
   "font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 " +
   "focus-visible:ring-flit-brand focus-visible:ring-offset-2";
 
@@ -56,7 +56,7 @@ export function Pagination({
   const opciones = estandar.includes(pageSize) ? estandar : [...estandar, pageSize].sort((a, b) => a - b);
 
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
+    <div className={`kit-paginacion flex flex-wrap items-center justify-between gap-4 ${className}`}>
       {onPageSizeChange ? (
         <label className="flex items-center gap-2 pt-4 text-[0.8125rem] text-[color:var(--di-text-tertiary)]">
           Filas por página

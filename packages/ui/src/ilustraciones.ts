@@ -69,9 +69,15 @@ const POR_CLAVE: Record<string, Ilustracion> = {
   diagnostico: "diagnostico",
 };
 
-/** Ruta pública de una ilustración (`/assets/ilustraciones/<nombre>.webp`). */
+/**
+ * Ruta pública de una ilustración. UI Kit 2026 (propuesta-2): las ilustraciones WebP del diseño anterior se
+ * reemplazan por el ícono del kit de cada clave (MAPA_ICONO) en su disco (`/assets/kit/modulo/<nombre>.svg`, generado
+ * desde `iconos-kit.ts`). Así toda pantalla que todavía pide `ilustracionDe(...)` ya muestra el ícono del kit; las
+ * pantallas se pasan a `<IconoModulo>` (que además sigue el tema) en su ronda. Solo la placa sigue en WebP.
+ */
 export function rutaIlustracion(nombre: Ilustracion): string {
-  return `/assets/ilustraciones/${nombre}.webp`;
+  if (nombre === "placa-colombia" || nombre === "heroe-ingreso") return `/assets/ilustraciones/${nombre}.webp`;
+  return `/assets/kit/modulo/${nombre}.svg`;
 }
 
 /** Ilustración que le toca a una clave del dock o a un módulo; `undefined` si no tiene. */

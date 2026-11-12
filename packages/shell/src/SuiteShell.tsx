@@ -159,14 +159,8 @@ export function SuiteShell({
       <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white">
         {header}
         <main className="relative min-h-0 flex-1 overflow-hidden">
-          {/* Propuesta «Diseño Inteligente» (propuesta.css `.fondo`): círculo cielo abajo a la izquierda y arco fino a la
-              derecha, fijos detrás del contenido. Sin `isolate` ni z-index negativo: el main no debe crear un contexto de
-              apilamiento, o los paneles fijos de las páginas (Dr. FLIT, z-50) quedan debajo de la barra (z-40). El orden
-              del DOM ya pone el contenido encima de los círculos. */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-clip">
-            <span className="absolute -bottom-[220px] -left-[180px] h-[520px] w-[520px] rounded-full bg-[var(--di-sky)]" />
-            <span className="absolute -right-[380px] top-[18%] h-[640px] w-[640px] rounded-full border-[1.5px] border-[var(--di-sky-line)] opacity-35" />
-          </div>
+          {/* UI Kit 2026: fondo plano --di-surface, sin los círculos decorativos del diseño anterior. Sin `isolate` ni
+              z-index negativo en el main: los paneles fijos de las páginas (Dr. FLIT, z-50) deben quedar sobre la barra. */}
           {/* Colchón inferior para que el dock no tape el final del contenido (guía §4.3). El fondo propio de las
               páginas (`.app-bg`) se apaga aquí para que se vea el de la propuesta. */}
           <div

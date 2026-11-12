@@ -40,7 +40,8 @@ describe("HU #10496 — Modal (AC1 ancho + blur, AC2 contraste dark)", () => {
       </Modal>,
     );
     const dialog = screen.getByRole("dialog");
-    expect(dialog.className).toContain("backdrop-blur-md");
+    // UI Kit 2026 (propuesta-2): velo azul al 50 % con desenfoque de 5 px.
+    expect(dialog.className).toContain("backdrop-blur-[5px]");
     expect(dialog.className).toMatch(/fixed inset-0/);
     const panel = dialog.firstElementChild as HTMLElement;
     // md por defecto → max-w-lg (estándar, no el max-w-md angosto anterior).

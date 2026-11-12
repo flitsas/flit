@@ -1,7 +1,8 @@
 "use client";
 
 import { createElement, useEffect, useRef, useState } from "react";
-import { ArrowRight, House } from "lucide-react";
+import { House } from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { appIcon, appTagline, fetchMyApps, type SuiteApp } from "./apps";
 
 // Menú de productos (▦, B-10/B-11): la única forma de cambiar de producto. Cada producto abre en su host; la sesión
@@ -59,9 +60,7 @@ export function ProductMenu({
         aria-controls="flit-suite-products"
         className="suite-icono-btn"
       >
-        {/* Ilustración de productos del prototipo «Diseño Inteligente» (HU #14479); cada app la sirve desde su public/. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img className="suite-icono-btn__ilus" src="/assets/ilustraciones/productos.webp" alt="" aria-hidden="true" />
+        <Icono nombre="rejilla" size={26} />
       </button>
       {open && (
         // `.menu-flotante--productos` de la propuesta (HU #14479): mismo panel que el menú de usuario y el submenú del
@@ -102,10 +101,7 @@ export function ProductMenu({
                         {tagline && <small>{tagline}</small>}
                       </span>
                       {!current && (
-                        <ArrowRight
-                          className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100"
-                          aria-hidden="true"
-                        />
+                        <Icono nombre="derecha" className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
                       )}
                     </a>
                   </li>
@@ -131,14 +127,13 @@ export function ProductMenu({
   );
 }
 
-/** Productos con ilustración propia en `public/assets/ilustraciones` de cada app (las de `@flit/ui/ilustraciones`). */
+/** Productos con ícono propio en el kit (MAPA_ICONO de `@flit/ui/iconos-mapas`). */
 const ILUSTRADOS = new Set(["tramites", "comparendos", "diagnostico"]);
 
-/** Ilustración del producto; un código nuevo sin ilustración cae en su ícono de línea dentro de un círculo cielo. */
+/** Ícono del producto (disco del kit); un código nuevo sin ícono cae en su ícono de línea dentro del disco. */
 function ProductGlyph({ app }: { app: SuiteApp }) {
   if (ILUSTRADOS.has(app.code)) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img className="suite-menu-productos__ilus" src={`/assets/ilustraciones/${app.code}.webp`} alt="" aria-hidden="true" />;
+    return <IconoModulo clave={app.code} disco size={36} className="suite-menu-productos__ilus" />;
   }
   return (
     <span className="suite-menu-productos__ilus suite-menu-productos__ilus--icono" aria-hidden="true">

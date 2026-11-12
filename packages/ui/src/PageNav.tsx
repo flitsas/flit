@@ -25,24 +25,24 @@ export interface PageNavProps {
 }
 
 /**
- * HU #14476 — aspecto del `.paginador` del prototipo «Diseño Inteligente»: los números son píldoras de 36px
- * (44px en celular, para el dedo) en texto secundario, con la página actual rellena en tinta; las flechas y los
- * extremos son botones fantasma en azul de acción. Se conservan «Primera»/«Última» (HU #13916).
+ * UI Kit 2026 (propuesta-2, paginación): números en círculos de 36 px (44 px en celular), la página actual en azul con
+ * texto blanco y el resto con fondo --kit-hover al pasar el puntero; flechas y extremos en gris. Se conservan
+ * «Primera»/«Última» (HU #13916).
  */
 const BOTON_FLECHA_CLS =
   'inline-grid h-9 min-w-9 place-items-center rounded-full px-3 text-[0.8125rem] font-semibold ' +
-  'text-[color:var(--di-action)] transition-colors hover:bg-[var(--di-accent-soft)] focus:outline-none ' +
+  'text-[color:var(--di-text-tertiary)] transition-colors hover:bg-[var(--kit-hover)] hover:text-[color:var(--di-action)] focus:outline-none ' +
   'focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-default disabled:opacity-45 ' +
   'disabled:hover:bg-transparent max-sm:h-11 max-sm:min-w-11';
 /** Primera/Última llevan su nombre a la vista: un «»» suelto no se lee como «ir al final». */
 const BOTON_EXTREMO_CLS = `${BOTON_FLECHA_CLS} inline-flex gap-1`;
 const NUMERO_CLS =
-  'grid h-9 min-w-9 place-items-center rounded-full border border-transparent px-2 text-[0.8125rem] ' +
+  'grid h-9 w-9 place-items-center rounded-full border border-transparent text-[0.8125rem] ' +
   'font-semibold tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
   'max-sm:h-11 max-sm:min-w-11';
 const NUMERO_INACTIVO_CLS =
-  'text-[color:var(--di-text-secondary)] hover:bg-[var(--di-sky)] hover:text-[color:var(--di-action)]';
-const NUMERO_ACTUAL_CLS = 'bg-[var(--di-accent)] text-[color:var(--di-on-accent)]';
+  'text-[color:var(--di-text-primary)] hover:bg-[var(--kit-hover)] hover:text-[color:var(--di-action)]';
+const NUMERO_ACTUAL_CLS = 'bg-[var(--kit-azul-relleno)] text-white';
 
 export function PageNav({
   page,
