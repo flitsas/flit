@@ -156,12 +156,12 @@ describe("GrillaSemaforos — HU #14087 AC4: placa, documento declarado y docume
 
 describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
   it.each([
-    ["celda-3-runt", "PENDIENTE", "neutral", "Sin ejecutar", "var(--badge-neutral-bg)"],
-    ["celda-2-runt_locatario", "EN_CURSO", "neutral", "Sin ejecutar", "var(--badge-neutral-bg)"],
-    ["celda-2-runt", "COMPLETADO", "success", "Ejecutado (OK)", "var(--badge-success-bg)"],
-    ["celda-2-simit_propietario", "ERROR", "danger", "Error", "var(--badge-danger-bg)"],
-    ["celda-1-impuesto_departamental", "NA", "warning", "Novedad", "var(--badge-warning-bg)"],
-  ])("%s en %s se pinta con el tono %s, su texto «%s», un icono y el token de fondo", (id, estado, tono, texto, fondo) => {
+    ["celda-3-runt", "PENDIENTE", "neutral", "Sin ejecutar", "var(--badge-neutral-border)"],
+    ["celda-2-runt_locatario", "EN_CURSO", "neutral", "Sin ejecutar", "var(--badge-neutral-border)"],
+    ["celda-2-runt", "COMPLETADO", "success", "Ejecutado (OK)", "var(--badge-success-border)"],
+    ["celda-2-simit_propietario", "ERROR", "danger", "Error", "var(--badge-danger-border)"],
+    ["celda-1-impuesto_departamental", "NA", "warning", "Novedad", "var(--badge-warning-border)"],
+  ])("%s en %s se pinta con el tono %s, su texto «%s», un icono y el token de color de la etiqueta del kit", (id, estado, tono, texto, fondo) => {
     const { container } = pintar();
     const td = celdaDe(container, id);
     expect(td).toHaveAttribute("data-estado", estado);
@@ -169,7 +169,8 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
     expect(chip).toHaveAttribute("data-tono", tono);
     expect(chip).toHaveTextContent(new RegExp(`^${texto.replace(/[()]/g, "\\$&")}$`));
     expect(chip.querySelector("svg")).not.toBeNull();
-    expect(chip.style.background).toBe(fondo);
+    expect(chip).toHaveClass("kit-etiqueta");
+    expect(chip.style.getPropertyValue("--c")).toBe(fondo);
   });
 
   it("EN_CURSO conserva el icono animado; PENDIENTE no", () => {
@@ -178,18 +179,18 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
     expect(chipDe(celdaDe(container, "celda-3-runt")).querySelector("svg")!.getAttribute("class")).not.toMatch(/animate-spin/);
   });
 
-  it("«Sin solicitar» usa el tono na punteado, con icono", () => {
+  it("«Sin solicitar» usa el tono na (gris del borde), con icono", () => {
     const { container } = pintar();
     const chip = chipDe(fuenteDe(filaDe(container, "vehiculo-1"), "AVALUO"));
     expect(chip).toHaveAttribute("data-tono", "na");
-    expect(chip.style.borderStyle).toBe("dashed");
+    expect(chip.style.getPropertyValue("--c")).toBe("var(--border)");
     expect(chip.querySelector("svg")).not.toBeNull();
     expect(chip).toHaveTextContent("Sin solicitar");
   });
 
   it("el texto del error usa la tinta AA del rojo (no el --badge-danger-fg de 4,46:1)", () => {
     const { container } = pintar();
-    expect(chipDe(celdaDe(container, "celda-2-simit_propietario")).style.color).toBe("var(--badge-pending-fg)");
+    expect(chipDe(celdaDe(container, "celda-2-simit_propietario")).style.getPropertyValue("--ct")).toBe("var(--badge-pending-fg)");
   });
 
   it.each([

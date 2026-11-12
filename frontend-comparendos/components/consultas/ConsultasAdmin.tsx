@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
@@ -42,7 +43,7 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         {horas.map((h) => (
-          <span key={h} className="inline-flex items-center gap-1 rounded-full bg-[var(--badge-info-bg)] px-2 py-0.5 text-xs font-semibold text-flit-brand-ink">
+          <span key={h} {...etiquetaKit({ c: "var(--color-flit-brand)", ct: "var(--flit-brand-ink)" })}>
             {h}
             <button type="button" aria-label={`Quitar ${h}`} onClick={() => onCambio(horas.filter((x) => x !== h))}>
               <Icono nombre="cerrar" className="h-3 w-3" />

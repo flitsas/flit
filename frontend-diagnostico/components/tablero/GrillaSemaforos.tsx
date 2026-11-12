@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { nombreFuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
@@ -65,10 +66,7 @@ function EncabezadoVehiculo({ vehiculo, pedidas, accion }: { vehiculo: FilaVehic
       </span>
       <span className={`mt-1 block ${TEXTO_SECUNDARIO_CLS}`}>{`${resueltas} de ${pedidas.size} consultas`}</span>
       {vehiculo.terminado && (
-        <span
-          className="mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
-          style={{ background: "var(--badge-success-bg)", color: "var(--badge-success-fg)", borderColor: "var(--badge-success-border)" }}
-        >
+        <span {...etiquetaKit("success", { className: "mt-1" })}>
           <Icono nombre="check" className="h-3.5 w-3.5" />
           Terminado
         </span>
