@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Settings } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -104,14 +104,14 @@ export function JobsCatalog() {
           {filter !== "Quipux" ? (
             <CreateButton
               label="Configurar cadencia ICT"
-              icon={Settings}
+              icon={iconoComo("ajustes")}
               onClick={() => router.push("/admin/jobs/ict")}
             />
           ) : null}
           {filter !== "ICT" ? (
             <CreateButton
               label="Configurar Quipux"
-              icon={Settings}
+              icon={iconoComo("ajustes")}
               onClick={() => router.push("/admin/quipux")}
             />
           ) : null}

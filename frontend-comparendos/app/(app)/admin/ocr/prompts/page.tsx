@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FlaskConical, ListChecks, Pencil, Plus, Scale, Send, Undo2 } from "lucide-react";
+import { FlaskConical, Plus, Scale } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -292,7 +293,7 @@ function Prompts() {
           <div className="flex flex-wrap gap-2">
             {anterior && (
               <button type="button" className={controlCls(false)} onClick={() => setPublicar(anterior)}>
-                <Undo2 className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="devolucion" className="h-3.5 w-3.5" />
                 Volver a la versión {anterior.numeroVersion}
               </button>
             )}
@@ -362,14 +363,14 @@ function Prompts() {
                 </button>
                 {v.evaluacion && v.evaluacion.estado !== "EnCurso" && !v.publicada && !v.retiradaEn && (
                   <button type="button" className={controlCls(false)} onClick={() => setResultado(v.evaluacion!.id)}>
-                    <ListChecks className="h-3.5 w-3.5" aria-hidden />
+                    <Icono nombre="lista" className="h-3.5 w-3.5" />
                     Resultado
                   </button>
                 )}
                 {!v.publicada && !v.retiradaEn && (
                   <>
                     <button type="button" className={controlCls(false)} onClick={() => setEdicion({ id: v.id, texto: v.texto, modelo: v.modelo })}>
-                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="lapiz" className="h-3.5 w-3.5" />
                       Editar
                     </button>
                     <button type="button" className={controlCls(false)} disabled={v.evaluacion?.estado === "EnCurso"} onClick={() => evaluar(v)}>
@@ -386,7 +387,7 @@ function Prompts() {
                     title={v.puedePublicar ? undefined : "Necesita una evaluación aprobada contra la versión publicada."}
                     onClick={() => setPublicar(v)}
                   >
-                    {v.retiradaEn ? <Undo2 className="h-3.5 w-3.5" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
+                    {v.retiradaEn ? <Icono nombre="devolucion" className="h-3.5 w-3.5" /> : <Icono nombre="radicacion" className="h-3.5 w-3.5" />}
                     {v.retiradaEn ? "Volver a publicar" : "Publicar"}
                   </button>
                 )}

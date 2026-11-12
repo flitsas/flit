@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useEffect, useRef, useState } from "react";
 import { controlCls } from "@/components/ui/estilos";
 
@@ -62,10 +62,10 @@ export function MultiSeleccion({
     >
       <button ref={boton} type="button" className={`${controlCls(valores.length > 0)} w-full justify-between`} onClick={() => setAbierto((a) => !a)} aria-expanded={abierto}>
         <span className="truncate">{valores.length > 0 ? `${etiqueta} (${valores.length})` : etiqueta}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <Icono nombre="abajo" className="h-3.5 w-3.5 shrink-0" />
       </button>
       {abierto && (
-        <div className="absolute z-30 mt-1 max-h-72 w-72 overflow-auto rounded-xl border border-border bg-card p-2 shadow-lg">
+        <div className="absolute z-30 mt-1 max-h-72 w-72 overflow-auto rounded-xl border border-border bg-card p-2 shadow-[var(--kit-sombra)]">
           {onBuscar && (
             <input
               value={busqueda}

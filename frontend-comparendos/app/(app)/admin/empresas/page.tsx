@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { History, Plug, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -27,6 +28,7 @@ import type {
 } from "@/lib/tipos";
 import { type PruebaContratos, resumenPrueba } from "@/lib/conductor";
 import { useCarga } from "@/lib/useCarga";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 function NuevaEmpresa({
   onCerrar,
@@ -193,7 +195,7 @@ function ProbarConexion() {
     <div className="flex flex-col gap-2">
       <div>
         <button type="button" className={controlCls(false)} disabled={probando} onClick={probar}>
-          <Plug className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="integraciones" className="h-3.5 w-3.5" />
           {probando ? "Probando…" : "Probar conexión"}
         </button>
       </div>
@@ -344,7 +346,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       <div className="flex flex-wrap items-start justify-between gap-2">
         <DatosEmpresa nombre={config.datos.empresaNombre} nit={config.datos.empresaNit} />
         <button type="button" className={controlCls(false)} onClick={() => setHistorial(true)}>
-          <History className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reloj" className="h-3.5 w-3.5" />
           Historial de cambios
         </button>
       </div>
@@ -547,7 +549,7 @@ function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: ()
       <div
         role="tablist"
         aria-label="Configuración de la empresa"
-        className="flex gap-1 border-b border-border"
+        className={PESTANAS_LISTA_CLS}
       >
         {(
           [
@@ -561,7 +563,7 @@ function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: ()
             role="tab"
             aria-selected={pestana === valor}
             onClick={() => setPestana(valor)}
-            className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${pestana === valor ? "border-flit-brand-ink text-flit-brand-ink" : "border-transparent opacity-70 hover:opacity-100"}`}
+            className={pestanaClass(pestana === valor)}
           >
             {etiqueta}
           </button>

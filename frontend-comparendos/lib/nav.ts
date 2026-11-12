@@ -1,34 +1,11 @@
 // Catálogo de navegación de Comparendos para @flit/shell (especificación GDC §7.0). Dice QUÉ existe y QUIÉN lo ve; el
 // dock lo filtra por permiso y lo dibuja. Las capacidades de la empresa (OCR, reportes) no van en el token: las trae
 // /api/v1/comparendos/sesion y se aplican aquí antes de entregarle el catálogo al dock.
-import {
-  Bell,
-  BookOpen,
-  CalendarDays,
-  ClipboardList,
-  Cog,
-  FileSearch,
-  FileStack,
-  FileText,
-  Gauge,
-  Inbox,
-  KeyRound,
-  Landmark,
-  ListChecks,
-  MailWarning,
-  MapPinned,
-  Plug,
-  Receipt,
-  ScanText,
-  Send,
-  Settings,
-  ShieldCheck,
-  Timer,
-  Users,
-  Wallet,
-} from "lucide-react";
+import { FileSearch, FileStack, MailWarning, MapPinned, ScanText } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import type { NavCatalog, NavItem, NavSection } from "@flit/shell/nav";
-import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
+import type { Ilustracion } from "@flit/ui/ilustraciones";
+import { rutaKit } from "@flit/ui/iconos-mapas";
 import type { Capacidades } from "@/lib/sesion";
 
 export const P = {
@@ -98,54 +75,54 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   "adm-calendario": "calendario",
 };
 
-function ilustracionDe(key: string): string | undefined {
+function iconoDockDe(key: string): string | undefined {
   const nombre = ILUSTRACION[key];
-  return nombre ? rutaIlustracion(nombre) : undefined;
+  return nombre ? rutaKit(`modulo/${nombre}`) : undefined;
 }
 
 function conIlustracion(item: NavItem): NavItem {
-  return { ...item, ilustracion: ilustracionDe(item.key), children: item.children?.map(conIlustracion) };
+  return { ...item, ilustracion: iconoDockDe(item.key), children: item.children?.map(conIlustracion) };
 }
 
 export function comparendosNav(caps: Capacidades): NavCatalog {
   const items: NavItem[] = [
-    { key: "bandeja", label: "Bandeja", href: "/", section: "operacion", icon: Inbox, permission: P.bandejaVer },
+    { key: "bandeja", label: "Bandeja", href: "/", section: "operacion", icon: iconoComo("radicacion"), permission: P.bandejaVer },
     ...(caps.ocr ? [{ key: "ocr", label: "Paquetes OCR", href: "/ocr", section: "operacion", icon: ScanText, permission: P.ocrVer }] : []),
     ...(caps.derechosPeticion
-      ? [{ key: "dp-lotes", label: "Envíos masivos de DP", href: "/dp/lotes", section: "operacion", icon: Send, permission: P.dpEnviarMasivo }]
+      ? [{ key: "dp-lotes", label: "Envíos masivos de DP", href: "/dp/lotes", section: "operacion", icon: iconoComo("radicacion"), permission: P.dpEnviarMasivo }]
       : []),
-    { key: "pagos", label: "Carga de pagos", href: "/pagos", section: "operacion", icon: Wallet, permission: P.pagosCargarMasivo },
+    { key: "pagos", label: "Carga de pagos", href: "/pagos", section: "operacion", icon: iconoComo("pago"), permission: P.pagosCargarMasivo },
     { key: "mensajes", label: "Centro de mensajes", href: "/mensajes", section: "operacion", icon: MailWarning, permission: P.mensajesVer },
     ...(caps.reportes
       ? [
-          { key: "dashboard", label: "Dashboard", href: "/reportes", section: "reportes", icon: Gauge, permission: P.reportesVer },
-          { key: "productividad", label: "Productividad", href: "/reportes/productividad", section: "reportes", icon: Users, permission: P.productividadVer },
+          { key: "dashboard", label: "Dashboard", href: "/reportes", section: "reportes", icon: iconoComo("medidor"), permission: P.reportesVer },
+          { key: "productividad", label: "Productividad", href: "/reportes/productividad", section: "reportes", icon: iconoComo("usuarios"), permission: P.productividadVer },
         ]
       : []),
     { key: "monitoreo", label: "NITs y placas", href: "/configuracion/monitoreo", section: "configuracion", icon: FileSearch, permission: P.monitoreoVer },
-    { key: "representantes", label: "Representantes legales", href: "/configuracion/representantes", section: "configuracion", icon: ShieldCheck, permission: P.representantesVer },
-    { key: "ots", label: "Organismos de tránsito", href: "/configuracion/organismos", section: "configuracion", icon: Landmark, permission: P.otsGestionar },
-    { key: "correo", label: "Empresa y correo", href: "/configuracion/empresa", section: "configuracion", icon: Settings, permission: P.configuracionVer },
-    { key: "plantillas", label: "Plantillas", href: "/configuracion/plantillas", section: "configuracion", icon: FileText, permission: P.plantillasVer },
+    { key: "representantes", label: "Representantes legales", href: "/configuracion/representantes", section: "configuracion", icon: iconoComo("escudo"), permission: P.representantesVer },
+    { key: "ots", label: "Organismos de tránsito", href: "/configuracion/organismos", section: "configuracion", icon: iconoComo("banco"), permission: P.otsGestionar },
+    { key: "correo", label: "Empresa y correo", href: "/configuracion/empresa", section: "configuracion", icon: iconoComo("ajustes"), permission: P.configuracionVer },
+    { key: "plantillas", label: "Plantillas", href: "/configuracion/plantillas", section: "configuracion", icon: iconoComo("documento"), permission: P.plantillasVer },
     {
       key: "flit",
       label: "Administración FLIT",
       href: "",
       section: "administracion",
-      icon: Cog,
+      icon: iconoComo("ajustes"),
       superAdminOnly: true,
       children: [
-        { key: "adm-empresas", label: "Parametrizador por empresa", href: "/admin/empresas", section: "administracion", icon: KeyRound, superAdminOnly: true },
-        { key: "adm-tipologias", label: "Tipologías de DP", href: "/admin/tipologias", section: "administracion", icon: BookOpen, superAdminOnly: true },
+        { key: "adm-empresas", label: "Parametrizador por empresa", href: "/admin/empresas", section: "administracion", icon: iconoComo("rol"), superAdminOnly: true },
+        { key: "adm-tipologias", label: "Tipologías de DP", href: "/admin/tipologias", section: "administracion", icon: iconoComo("ayuda"), superAdminOnly: true },
         { key: "adm-plantillas", label: "Editor de plantillas", href: "/admin/plantillas", section: "administracion", icon: FileStack, superAdminOnly: true },
-        { key: "adm-ingesta", label: "Trabajos e ingesta", href: "/admin/ingesta", section: "administracion", icon: Plug, superAdminOnly: true },
-        { key: "adm-log", label: "Log de migración", href: "/admin/log-migracion", section: "administracion", icon: ListChecks, superAdminOnly: true },
+        { key: "adm-ingesta", label: "Trabajos e ingesta", href: "/admin/ingesta", section: "administracion", icon: iconoComo("integraciones"), superAdminOnly: true },
+        { key: "adm-log", label: "Log de migración", href: "/admin/log-migracion", section: "administracion", icon: iconoComo("lista"), superAdminOnly: true },
         { key: "adm-organismos", label: "Catálogo de organismos", href: "/admin/organismos", section: "administracion", icon: MapPinned, superAdminOnly: true },
-        { key: "adm-municipios", label: "Fuentes municipales", href: "/admin/municipios", section: "administracion", icon: ClipboardList, superAdminOnly: true },
-        { key: "adm-alertas", label: "Alertas de integración", href: "/admin/alertas", section: "administracion", icon: Bell, superAdminOnly: true },
-        { key: "adm-scheduler", label: "Horario de avisos", href: "/admin/scheduler", section: "administracion", icon: Timer, superAdminOnly: true },
-        { key: "adm-ocr", label: "Prompt OCR", href: "/admin/ocr/prompts", section: "administracion", icon: Receipt, superAdminOnly: true },
-        { key: "adm-calendario", label: "Calendario", href: "/admin/calendario", section: "administracion", icon: CalendarDays, superAdminOnly: true },
+        { key: "adm-municipios", label: "Fuentes municipales", href: "/admin/municipios", section: "administracion", icon: iconoComo("portapapeles"), superAdminOnly: true },
+        { key: "adm-alertas", label: "Alertas de integración", href: "/admin/alertas", section: "administracion", icon: iconoComo("campana"), superAdminOnly: true },
+        { key: "adm-scheduler", label: "Horario de avisos", href: "/admin/scheduler", section: "administracion", icon: iconoComo("cronometro"), superAdminOnly: true },
+        { key: "adm-ocr", label: "Prompt OCR", href: "/admin/ocr/prompts", section: "administracion", icon: iconoComo("pago"), superAdminOnly: true },
+        { key: "adm-calendario", label: "Calendario", href: "/admin/calendario", section: "administracion", icon: iconoComo("calendario"), superAdminOnly: true },
       ],
     },
   ];
@@ -153,12 +130,12 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
   return {
     sections: (
       [
-        { id: "operacion", label: "Operación", icon: Inbox, side: "left" },
-        { id: "reportes", label: "Reportes", icon: Gauge, side: "left" },
-        { id: "configuracion", label: "Configuración", icon: Settings, side: "right" },
-        { id: "administracion", label: "Administración FLIT", icon: Cog, side: "right" },
+        { id: "operacion", label: "Operación", icon: iconoComo("radicacion"), side: "left" },
+        { id: "reportes", label: "Reportes", icon: iconoComo("medidor"), side: "left" },
+        { id: "configuracion", label: "Configuración", icon: iconoComo("ajustes"), side: "right" },
+        { id: "administracion", label: "Administración FLIT", icon: iconoComo("ajustes"), side: "right" },
       ] satisfies NavSection[]
-    ).map((sec) => ({ ...sec, ilustracion: ilustracionDe(sec.id) })),
+    ).map((sec) => ({ ...sec, ilustracion: iconoDockDe(sec.id) })),
     items: items.map(conIlustracion),
   };
 }

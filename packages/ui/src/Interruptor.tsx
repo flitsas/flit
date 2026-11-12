@@ -15,6 +15,8 @@ export const INTERRUPTOR_CLS =
   "kit-interruptor relative inline-block h-9 w-[68px] shrink-0 cursor-pointer rounded-full border-0 p-0 " +
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)] " +
   "disabled:cursor-not-allowed disabled:opacity-50";
+/** Variante de alerta: encendido en naranja, para cuando encender es una emergencia (suspender, bloquear). */
+export const INTERRUPTOR_ALERTA_CLS = "kit-interruptor--alerta";
 /** Para la perilla de una versión propia: el dibujo del kit ya la trae. */
 export const INTERRUPTOR_PERILLA_CLS = "hidden";
 

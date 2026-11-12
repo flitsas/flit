@@ -1,6 +1,5 @@
 "use client";
 
-import { FileSignature } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { SignatureVaultItem } from "@/lib/api/admin-signature-vault";
 import { ESTADO_LABELS, formatDate } from "./signatureVaultDisplay";
@@ -22,7 +21,7 @@ export function SignatureVaultDetailModal({ item, onClose }: SignatureVaultDetai
     <Modal
       open
       onClose={onClose}
-      icon={FileSignature}
+      icono="firma"
       title="Detalle de la firma"
       description={item.fullName}
       size="md"

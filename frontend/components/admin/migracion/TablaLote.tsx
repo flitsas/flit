@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ArrowUpRight, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   ETIQUETA_ESTADO,
   estaTerminada,
@@ -158,9 +159,9 @@ export function TablaLote({
                           className="flex items-center gap-1 text-xs font-semibold opacity-80 hover:opacity-100"
                         >
                           {desplegada ? (
-                            <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                            <Icono nombre="abajo" className="h-3 w-3" />
                           ) : (
-                            <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                            <Icono nombre="derecha" className="h-3 w-3" />
                           )}
                           {desplegada ? "Ocultar" : "Ver reporte"}
                         </button>

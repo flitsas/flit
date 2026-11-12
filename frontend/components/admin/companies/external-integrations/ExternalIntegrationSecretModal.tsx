@@ -4,7 +4,7 @@
 // memoria mientras el modal está abierto: no se guarda en almacenamiento del navegador ni en logs, y al cerrar se
 // descarta (el padre pone `null`).
 import { useState } from "react";
-import { Check, Copy, KeyRound } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { Modal } from "@/components/atom/Modal";
@@ -28,7 +28,7 @@ export function ExternalIntegrationSecretModal({ clientId, secret, onClose }: Ex
       open
       onClose={onClose}
       title={`Credenciales de «${clientId}»`}
-      icon={KeyRound}
+      icono="rol"
       size="md"
       closeOnBackdrop={false}
       footer={

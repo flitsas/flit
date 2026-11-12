@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { FOCO_CLS } from "./estilos";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 export interface Pestana {
   id: string;
@@ -37,7 +38,7 @@ export function ConfiguracionTabs({ etiqueta, pestanas }: { etiqueta: string; pe
 
   return (
     <div className="flex flex-col gap-4">
-      <div role="tablist" aria-label={etiqueta} className="flex w-fit gap-1 rounded-full border border-input bg-card p-1">
+      <div role="tablist" aria-label={etiqueta} className={PESTANAS_LISTA_CLS}>
         {pestanas.map((p, i) => {
           const activo = i === seleccionada;
           return (
@@ -54,9 +55,7 @@ export function ConfiguracionTabs({ etiqueta, pestanas }: { etiqueta: string; pe
               tabIndex={activo ? 0 : -1}
               onClick={() => setActiva(i)}
               onKeyDown={(e) => alPulsar(e, i)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${FOCO_CLS} ${
-                activo ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-              }`}
+              className={pestanaClass(activo, FOCO_CLS)}
             >
               {p.etiqueta}
             </button>

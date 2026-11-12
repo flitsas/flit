@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search, Settings2 } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -262,7 +262,7 @@ export function OTConfigTable({
                 className="flex items-center gap-1 text-xs font-semibold"
                 style={{ color: "var(--flit-success-ink)" }}
               >
-                <Check className="h-3 w-3" /> Guardado
+                <Icono nombre="check" className="h-3 w-3" /> Guardado
               </span>
             ) : null}
             {reason && (
@@ -294,7 +294,7 @@ export function OTConfigTable({
                     {
                       key: "config",
                       label: "Configurar",
-                      icon: Settings2,
+                      icon: iconoComo("ajustes"),
                       onSelect: () => onOpenConfig(office),
                       disabled: !enabledForConfig,
                       disabledReason:
@@ -320,7 +320,7 @@ export function OTConfigTable({
       </div>
 
       <div className="flex max-w-md items-center gap-2 rounded-xl border bg-card p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand">
-        <Search className="h-4 w-4 opacity-60" />
+        <Icono nombre="buscar" className="h-4 w-4 opacity-60" />
         <label htmlFor="ot-config-search" className="sr-only">
           Buscar organismo de tránsito
         </label>

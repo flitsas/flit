@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Pencil, X } from "lucide-react";
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ReactNode } from "react";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -445,7 +447,7 @@ export function LegalRepresentativesFormPanel({
           style={rlPrimaryCtaStyle}
           aria-label="Pasar a modo edición"
         >
-          <Pencil className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="lapiz" className="h-4 w-4" />
           Editar persona / firma
         </button>
         <button
@@ -1009,7 +1011,7 @@ function FullScreenShell({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--overlay)] backdrop-blur-sm">
+    <div className={`fixed inset-0 z-50 flex flex-col ${MODAL_VELO_CLS}`}>
       <button
         type="button"
         className="absolute inset-0"
@@ -1017,7 +1019,7 @@ function FullScreenShell({
         onClick={onClose}
       />
       <div
-        className="relative m-0 flex h-full w-full flex-col shadow-2xl sm:m-4 sm:h-[calc(100%-2rem)] sm:w-[calc(100%-2rem)] sm:rounded-2xl sm:border"
+        className="relative m-0 flex h-full w-full flex-col sm:m-4 sm:h-[calc(100%-2rem)] sm:w-[calc(100%-2rem)] sm:rounded-2xl sm:border"
         style={{
           background: RL_COLOR.modal,
           borderColor: RL_COLOR.border,
@@ -1035,7 +1037,7 @@ function FullScreenShell({
             {title}
           </h2>
           <button type="button" aria-label="Cerrar" onClick={onClose}>
-            <X className="h-4 w-4" style={{ color: RL_COLOR.navy }} />
+            <Icono nombre="cerrar" className="h-4 w-4" style={{ color: RL_COLOR.navy }} />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>

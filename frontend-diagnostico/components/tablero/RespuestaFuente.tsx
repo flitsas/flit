@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, memo, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import {
   CABECERA_TABLA_CLS,
@@ -226,7 +226,7 @@ function Subseccion({ nombre, valor, nivel, profundidad }: { nombre: string; val
     <section aria-labelledby={id}>
       <details open={profundidad === 0} onToggle={alCambiar} className="group flex flex-col">
         <summary className={SUMMARY_CLS}>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90" aria-hidden="true" />
+          <Icono nombre="derecha" className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90" />
           <Titulo nivel={nivel} id={id}>
             {titulo}
           </Titulo>

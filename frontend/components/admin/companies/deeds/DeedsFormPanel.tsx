@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, FileText, Loader2, UploadCloud } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
@@ -214,7 +215,7 @@ export function DeedsFormPanel({
             className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs"
             style={{ borderColor: "var(--border)" }}
           >
-            <Building2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
+            <Icono nombre="empresas" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             <span className="min-w-0">
               <span className="block truncate font-semibold">{company?.name ?? "—"}</span>
               {company?.nit && <span className="block font-mono opacity-60">{company.nit}</span>}
@@ -264,9 +265,9 @@ export function DeedsFormPanel({
             }
           >
             {form.file ? (
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
+              <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             ) : (
-              <UploadCloud className="h-4 w-4 shrink-0 opacity-60" />
+              <Icono nombre="nube-subir" className="h-4 w-4 shrink-0 opacity-60" />
             )}
             <span className="truncate font-medium">
               {form.file

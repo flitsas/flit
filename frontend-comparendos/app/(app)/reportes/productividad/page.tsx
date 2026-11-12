@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, Modal, usePaginacion } from "@flit/ui";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { Encabezado } from "@/components/Pantalla";
@@ -81,7 +81,7 @@ function Contenido() {
         descripcion="Acciones hechas por cada usuario en el periodo. Lo automático (consultas, envíos programados y favorables automáticos) no se atribuye a nadie. Haz clic en una cifra para ver sus comparendos."
         acciones={
           <button type="button" className={controlCls(false)} onClick={exportar} disabled={filas.length === 0}>
-            <Download className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
             Exportar a Excel
           </button>
         }

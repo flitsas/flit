@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Copy, FilePlus2, Send } from "lucide-react";
+import { Copy, FilePlus2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { EditorHtml } from "@/components/plantillas/EditorHtml";
@@ -157,7 +158,7 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
                       Guardar borrador
                     </button>
                     <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !nota.trim()} onClick={publicar}>
-                      <Send className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="radicacion" className="h-3.5 w-3.5" />
                       Publicar
                     </button>
                   </div>

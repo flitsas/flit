@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Upload, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { controlCls } from "@/components/ui/estilos";
 
 /**
@@ -36,14 +36,14 @@ export function SelectorArchivo({
         }}
       />
       <button type="button" className={controlCls(false)} disabled={disabled} onClick={() => input.current?.click()}>
-        <Upload className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
         {archivo ? "Cambiar archivo" : texto}
       </button>
       {archivo ? (
         <span className="inline-flex items-center gap-1 text-xs">
           {archivo.name}
           <button type="button" aria-label={`Quitar ${archivo.name}`} className="opacity-60 hover:opacity-100" disabled={disabled} onClick={() => onCambio(null)}>
-            <X className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" />
           </button>
         </span>
       ) : (

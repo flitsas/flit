@@ -16,6 +16,7 @@ import { formatoFecha } from "@/lib/format/date";
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit, PlacaMonitoreada } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 const TIPOS_DOCUMENTO = ["NIT", "CC", "CE", "TI", "PA", "CD", "RC", "CV"];
 
@@ -424,11 +425,11 @@ export default function Monitoreo() {
         {esSuperAdmin && <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />}
         {(!esSuperAdmin || empresa) && (
           <>
-            <div className="flex gap-2" role="tablist">
-              <button type="button" role="tab" aria-selected={pestana === "nits"} className={controlCls(pestana === "nits")} onClick={() => setPestana("nits")}>
+            <div className={PESTANAS_LISTA_CLS} role="tablist">
+              <button type="button" role="tab" aria-selected={pestana === "nits"} className={pestanaClass(pestana === "nits")} onClick={() => setPestana("nits")}>
                 NITs y documentos
               </button>
-              <button type="button" role="tab" aria-selected={pestana === "placas"} className={controlCls(pestana === "placas")} onClick={() => setPestana("placas")}>
+              <button type="button" role="tab" aria-selected={pestana === "placas"} className={pestanaClass(pestana === "placas")} onClick={() => setPestana("placas")}>
                 Placas
               </button>
             </div>

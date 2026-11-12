@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { TransitGrantsPicker } from "@/components/admin/companies/TransitGrantsPicker";
@@ -249,7 +249,7 @@ export function CreateCompanyDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={Building2}
+      icono="empresas"
       title={
         pendingCreated
           ? "Compañía creada"

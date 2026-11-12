@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, Eye, Loader2, Pencil } from "lucide-react";
+import { Ban, Loader2 } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -200,7 +201,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                       <RowActions
                         actions={[
                           {
-                            icon: Eye,
+                            icon: iconoComo("ojo"),
                             label: `Ver detalle de la firma de ${item.fullName}`,
                             onClick: () => setDetail(item),
                             tone: "primary",
@@ -208,7 +209,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                           ...(!revoked
                             ? [
                                 {
-                                  icon: Pencil,
+                                  icon: iconoComo("lapiz"),
                                   label: `Corregir la firma de ${item.fullName}`,
                                   onClick: () => setToEdit(item),
                                   tone: "primary" as const,
@@ -274,7 +275,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           onClose={() => setToRevoke(null)}
           busy={revoking}
           size="sm"
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg="var(--destructive)"
           title="Anular firma"
         >

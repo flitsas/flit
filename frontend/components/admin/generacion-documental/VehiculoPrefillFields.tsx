@@ -15,7 +15,7 @@
  * <p>Si la fuente se cae, este bloque muestra su error con opción de reintentar y <b>todos los
  * campos siguen editables</b>: la generación del documento no depende de que el RUNT responda.</p>
  */
-import { RefreshCw, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
 import type {
   TransferValidationIssue,
@@ -153,7 +153,7 @@ export function VehiculoPrefillFields({
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
           style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="buscar" className="h-3.5 w-3.5" />
           {consultando ? "Consultando el RUNT…" : "Consultar la placa en el RUNT"}
         </button>
 
@@ -199,7 +199,7 @@ export function VehiculoPrefillFields({
             onClick={() => void prefill.ejecutar()}
             className="flex items-center gap-1 rounded-lg border border-[var(--badge-danger-border)] px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
-            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3 w-3" />
             Reintentar la consulta del vehículo
           </button>
         </div>

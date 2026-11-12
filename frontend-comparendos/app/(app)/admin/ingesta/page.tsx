@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, X } from "lucide-react";
+import { Play } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, enabledTone, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -164,7 +165,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                       />
                       {prog.horas.length > 1 && (
                         <button type="button" className="text-xs opacity-60 hover:opacity-100" aria-label={`Quitar la hora ${i + 1}`} onClick={() => cambiar({ horas: prog.horas.filter((_, j) => j !== i) })}>
-                          <X className="h-3.5 w-3.5" aria-hidden />
+                          <Icono nombre="cerrar" className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </span>

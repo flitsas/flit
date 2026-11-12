@@ -1,7 +1,9 @@
 "use client";
 
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Check, ChevronDown, Info, Lock, MinusCircle } from "lucide-react";
+import { Info } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { ICONO_TONO, rutaKit } from "@flit/ui/iconos-mapas";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 
 // Piezas visuales compartidas por las pestañas de configuración de la compañía (Trámites, Configuración
@@ -29,20 +31,12 @@ export const FIELD_LABEL = "mb-1.5 block text-xs font-semibold text-flit-primary
 export type ChipTone = StatusTone;
 
 /** Chip de estado tintado con icono + texto (nunca solo color). */
+/** Disco de estado del kit según el tono (ICONO_TONO), para los chips que no tienen estado propio. */
+const TONO_KIT: Record<StatusTone, string> = { success: "ok", warning: "warn", danger: "danger", info: "info", neutral: "" };
+export const iconoDeTono = (tone: StatusTone) => rutaKit(ICONO_TONO[TONO_KIT[tone]]);
+
 export function StateChip({ text, tone }: { text: string; tone: ChipTone }) {
-  const Icon = tone === "success" ? CheckCircle2 : tone === "warning" || tone === "danger" ? AlertCircle : MinusCircle;
-  return (
-    <StatusBadge
-      tone={tone}
-      ariaLabel={`Estado: ${text}`}
-      label={
-        <span className="inline-flex items-center gap-1">
-          <Icon className="h-3.5 w-3.5" aria-hidden />
-          {text}
-        </span>
-      }
-    />
-  );
+  return <StatusBadge tone={tone} icono={iconoDeTono(tone)} ariaLabel={`Estado: ${text}`} label={text} />;
 }
 
 /** Pista corta con icono info (consecuencia o valor por defecto de una opción). */
@@ -217,11 +211,7 @@ export function Accordion({
           onClick={onToggle}
           className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 px-5 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
         >
-          <ChevronDown
-            className="h-4 w-4 shrink-0 text-flit-primary transition-transform"
-            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
-            aria-hidden
-          />
+          <Icono nombre="abajo" className="h-4 w-4 shrink-0 text-flit-primary transition-transform" style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }} />
           <span className="min-w-0">
             <span className={`block font-semibold text-flit-primary ${flat ? "text-sm" : "text-base"}`}>{title}</span>
             {subtitle && <span className={`mt-0.5 block ${HELP_TEXT}`}>{subtitle}</span>}
@@ -296,7 +286,7 @@ export function OptionCard({
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center border-2 ${mark}`}
         style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--flit-success-ink)", color: "var(--di-on-accent)" } : { borderColor: "var(--muted-foreground)", background: "var(--card)" }}
       >
-        {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+        {checked && <Icono nombre="check" className="h-3 w-3" />}
       </span>
       <span className="min-w-0 flex-1">
         <span
@@ -309,7 +299,7 @@ export function OptionCard({
       </span>
       {locked && (
         <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-flit-primary">
-          <Lock className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="candado" className="h-3.5 w-3.5" />
           Obligatorio
         </span>
       )}

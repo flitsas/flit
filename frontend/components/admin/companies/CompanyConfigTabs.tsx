@@ -1,7 +1,9 @@
 "use client";
 
-import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Blocks, Building2, FileClock, Network, Palette, PlugZap, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { createContext, useContext, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { Blocks, FileClock, Network, Palette, PlugZap, Save, UserCog } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
@@ -50,23 +52,23 @@ export function useCompanyTabsNav(): CompanyTabsNav {
 interface TabDef {
   id: TabId;
   label: string;
-  icon: typeof Stamp;
+  icon: ComponentType<{ className?: string }>;
   isConfig: boolean;
 }
 
 const TABS: TabDef[] = [
   // HU #12967 — productos de la suite encendidos para la compañía (estado real, al instante, sin «Guardar todo»).
   { id: "productos", label: "Productos", icon: Blocks, isConfig: false },
-  { id: "tramites", label: "Trámites", icon: Stamp, isConfig: true },
-  { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
+  { id: "tramites", label: "Trámites", icon: iconoComo("impronta"), isConfig: true },
+  { id: "config", label: "Configuración Empresa", icon: iconoComo("empresas"), isConfig: true },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
   // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
   // suelto ni sección hermana de escrituras en esta pestaña).
-  { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
+  { id: "representantes", label: "Representantes legales", icon: iconoComo("usuarios"), isConfig: false },
   // HU #11202 (Feature #11190) — los mandatarios los registra la COMPAÑÍA y elige en cuáles de sus
   // organismos aplican. Antes vivían en el perfil de cada organismo de tránsito, que era quien elegía
   // compañías: el mandatario es de la empresa, no del organismo.
-  { id: "mandatarios", label: "Mandatarios", icon: UserCheck, isConfig: false },
+  { id: "mandatarios", label: "Mandatarios", icon: iconoComo("persona"), isConfig: false },
   // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
   { id: "usuarios", label: "Usuarios", icon: UserCog, isConfig: false },
   // HU #14068 (Épica #14021) — integraciones externas de la compañía (Persona Natural); solo SuperAdmin: la ficha
@@ -274,7 +276,7 @@ export function CompanyConfigTabs({
                     ariaLabel={`Cambios sin guardar: ${pendingChangeCount}`}
                     label={
                       <span className="inline-flex items-center gap-1">
-                        <AlertCircle className="h-3.5 w-3.5" aria-hidden />
+                        <Icono nombre="alerta" className="h-3.5 w-3.5" />
                         Cambios sin guardar
                       </span>
                     }
@@ -309,7 +311,7 @@ export function CompanyConfigTabs({
       )}
 
       <div
-        className="flex items-center gap-1 overflow-x-auto border-b"
+        className={PESTANAS_LISTA_CLS}
         role="tablist"
         aria-label="Secciones de la compañía"
       >
@@ -330,15 +332,10 @@ export function CompanyConfigTabs({
               tabIndex={active ? 0 : -1}
               onClick={() => setTab(t.id)}
               onKeyDown={(e) => onTabKeyDown(e, i)}
-              className={`relative flex shrink-0 items-center gap-2 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand ${
-                active ? "text-flit-brand" : "text-flit-primary opacity-70 dark:text-white/[0.78] dark:opacity-100"
-              }`}
+              className={pestanaClass(active, "relative shrink-0 gap-2")}
             >
               <Icon className="h-3.5 w-3.5" aria-hidden />
               {t.label}
-              {active && (
-                <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-flit-brand" aria-hidden />
-              )}
             </button>
           );
         })}

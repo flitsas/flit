@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useState, type ReactNode } from "react";
 
 /**
@@ -31,7 +31,7 @@ export function Acordeon({
     <section id={id} className="scroll-mt-4 rounded-2xl border border-border">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <button type="button" className="flex flex-1 items-center gap-2 text-left text-sm font-semibold" onClick={alternar} aria-expanded={abierto}>
-          <ChevronDown className={`h-4 w-4 transition ${abierto ? "rotate-180" : ""}`} aria-hidden />
+          <Icono nombre="abajo" className={`h-4 w-4 transition ${abierto ? "rotate-180" : ""}`} />
           {titulo}
         </button>
         {extra}

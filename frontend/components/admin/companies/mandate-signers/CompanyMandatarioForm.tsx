@@ -2,7 +2,8 @@
 
 import { buttonClass } from "@flit/ui/Button";
 import { useState, type ReactNode } from "react";
-import { Building2, FileText, ShieldCheck, User, Vault } from "lucide-react";
+import { Vault } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import {
   MultiSelectBuscable,
@@ -48,13 +49,13 @@ const DOC_TYPES = ["CC", "CE", "PAS", "NIT"];
 const ORGANISMOS_COMO_CHIPS = 8;
 
 const MODELOS: ReadonlyArray<{ value: SignerModel; label: string; ayuda: string; icono: ReactNode }> = [
-  { value: "natural", label: "Persona natural", ayuda: "Firma con su identidad", icono: <User className="h-5 w-5" aria-hidden="true" /> },
-  { value: "juridica", label: "Persona jurídica", ayuda: "La entidad, con su NIT", icono: <Building2 className="h-5 w-5" aria-hidden="true" /> },
-  { value: "formato_blanco", label: "Formato en blanco", ayuda: "El PDF sin firma", icono: <FileText className="h-5 w-5" aria-hidden="true" /> },
+  { value: "natural", label: "Persona natural", ayuda: "Firma con su identidad", icono: <Icono nombre="persona" className="h-5 w-5" /> },
+  { value: "juridica", label: "Persona jurídica", ayuda: "La entidad, con su NIT", icono: <Icono nombre="empresas" className="h-5 w-5" /> },
+  { value: "formato_blanco", label: "Formato en blanco", ayuda: "El PDF sin firma", icono: <Icono nombre="documento" className="h-5 w-5" /> },
 ];
 
 const FORMAS: ReadonlyArray<{ value: SignatureMethod; label: string; ayuda: string; icono: ReactNode }> = [
-  { value: "biometria", label: "Validación de identidad", ayuda: "La persona valida con un enlace", icono: <ShieldCheck className="h-5 w-5" aria-hidden="true" /> },
+  { value: "biometria", label: "Validación de identidad", ayuda: "La persona valida con un enlace", icono: <Icono nombre="escudo" className="h-5 w-5" /> },
   { value: "baul", label: "Baúl de firmas", ayuda: "Usa una firma ya guardada", icono: <Vault className="h-5 w-5" aria-hidden="true" /> },
 ];
 

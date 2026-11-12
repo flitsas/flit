@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import Link from "next/link";
-import { FileCheck2, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   generateRuesDocument,
   previewRuesCompany,
@@ -162,7 +162,7 @@ export function RuesGeneracionForm() {
           className="flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-60"
           style={{ color: "var(--color-flit-brand)", borderColor: "var(--color-flit-brand)" }}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="buscar" className="h-3.5 w-3.5" />
           {revisando ? "Consultando…" : "Revisar antes de generar"}
         </button>
 
@@ -230,7 +230,7 @@ export function RuesGeneracionForm() {
 
       {resultado && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
-          <FileCheck2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+          <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
           <p className="text-xs">
             Certificado generado. La descarga se hace desde el historial: la generación devuelve
             siempre JSON, nunca el PDF.

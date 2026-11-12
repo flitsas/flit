@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, ClipboardList } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
@@ -31,7 +31,6 @@ import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { SelectorEmpresa } from "./SelectorEmpresa";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface ListaLotesBackofficeProps {
   /** Valores iniciales tomados de la URL (?empresa=&estado=&con_errores=&pagina=). */
@@ -63,7 +62,11 @@ function consultaUrl(f: Filtros): string {
   return q.toString();
 }
 
-function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; children?: React.ReactNode; Icono?: typeof ClipboardList }) {
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
+type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
+const ICONO_VACIO = iconoComo("portapapeles");
+
+function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; children?: React.ReactNode; Icono?: IconoVacio }) {
   return (
     <div className="flex flex-col items-center gap-3 py-10 text-center">
       <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
@@ -122,7 +125,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   let contenido: React.ReactNode;
   if (!hayEmpresa) {
     contenido = (
-      <Vacio titulo="Elige una compañía" Icono={Building2}>
+      <Vacio titulo="Elige una compañía" Icono={iconoComo("empresas")}>
         <p className="max-w-md text-sm text-muted-foreground">Indica la compañía cuyos lotes de diagnóstico quieres revisar.</p>
       </Vacio>
     );
@@ -218,7 +221,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         tituloId="lotes-bo-titulo"
         titulo="Backoffice de diagnósticos"
         descripcion="Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error."
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
       />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
         <SelectorEmpresa valor={filtros.empresa} onElegir={(empresa) => aplicar({ empresa, pagina: 1 })} />

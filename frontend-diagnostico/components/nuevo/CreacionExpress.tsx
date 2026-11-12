@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Rocket } from "lucide-react";
+import { Rocket } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
@@ -184,7 +185,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                 <ListaEstimado estimado={fase.estimado} />
                 <div className="flex flex-wrap justify-end gap-2">
                   <button type="button" onClick={() => setFase({ tipo: "editando" })} className={BOTON_ANTERIOR_CLS}>
-                    <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                    <Icono nombre="izquierda" className="h-4 w-4" />
                     Anterior
                   </button>
                   <button type="button" onClick={() => lanzar(fase.entrada)} className={BOTON_PRIMARIO_CLS}>
@@ -197,7 +198,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
               <div className="flex justify-end">
                 <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
                   Continuar
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  <Icono nombre="derecha" className="h-4 w-4" />
                 </button>
               </div>
             )}

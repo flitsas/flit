@@ -1,6 +1,5 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { ConfigChangeGroup, ConfigChangeItem } from "./settingsForm";
 
@@ -52,7 +51,7 @@ export function SaveConfigDialog({
       busy={saving}
       size="sm"
       zClassName="z-[95]"
-      icon={phase === "success" ? CheckCircle2 : undefined}
+      icono={phase === "success" ? "check" : undefined}
       iconBg="var(--color-flit-tech)"
       title={phase === "success" ? "Cambios guardados" : "Confirmar guardado"}
       titleClassName="text-lg font-semibold text-flit-primary"

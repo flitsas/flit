@@ -6,16 +6,8 @@
 // SIEMPRE de la configuración que devuelve la API (nunca de una lista fija en el bundle). Precedente
 // visual: panel de escrituras/representantes legales (`DeedsFormPanel`, `RepresentativesAndVaultTab`).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Eye,
-  FileText,
-  History,
-  Loader2,
-  RotateCcw,
-  Undo2,
-  UploadCloud,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -117,7 +109,7 @@ function PersonalizedDocumentsPanelContent({ tenantId }: { tenantId: string }) {
     <section aria-label="Documentos personalizados de la compañía" className="space-y-4">
       <header>
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <FileText className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
+          <Icono nombre="documento" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
           Documentos personalizados
         </h2>
         <p className="mt-0.5 max-w-2xl text-xs opacity-60">
@@ -344,7 +336,7 @@ function PersonalizedDocumentSection({
         <RowActions
           actions={[
             {
-              icon: Eye,
+              icon: iconoComo("ojo"),
               label: `Ver versión ${v.version}`,
               onClick: () => void openPreview(v),
               tone: "primary",
@@ -352,7 +344,7 @@ function PersonalizedDocumentSection({
             ...(!v.isActive
               ? [
                   {
-                    icon: RotateCcw,
+                    icon: iconoComo("reintento"),
                     label: `Reactivar versión ${v.version}`,
                     onClick: () => setDialog({ kind: "reactivate", versionId: v.id, version: v.version }),
                     tone: "primary" as const,
@@ -381,7 +373,7 @@ function PersonalizedDocumentSection({
             className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
             style={{ borderColor: "var(--border)" }}
           >
-            <Undo2 className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="devolucion" className="h-3.5 w-3.5" />
             Volver al documento del sistema
           </button>
         )}
@@ -395,7 +387,7 @@ function PersonalizedDocumentSection({
             style={{ borderColor: "var(--color-flit-tech)", background: "color-mix(in srgb, var(--color-flit-tech) 6%, transparent)" }}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} />
               <span className="min-w-0">
                 <span className="block truncate text-xs font-semibold">
                   {active.filename} <span className="opacity-60">· v{active.version}</span>
@@ -411,7 +403,7 @@ function PersonalizedDocumentSection({
               className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
               style={{ background: "var(--color-flit-brand)" }}
             >
-              <Eye className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="ojo" className="h-3.5 w-3.5" />
               Vista previa
             </button>
           </div>
@@ -440,9 +432,9 @@ function PersonalizedDocumentSection({
             style={file ? { borderColor: "var(--color-flit-brand)" } : { borderColor: "var(--border)" }}
           >
             {file ? (
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             ) : (
-              <UploadCloud className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+              <Icono nombre="nube-subir" className="h-4 w-4 shrink-0 opacity-60" />
             )}
             <span className="min-w-0 truncate font-medium">
               {file ? file.name : "Selecciona el PDF del documento personalizado"}
@@ -479,7 +471,7 @@ function PersonalizedDocumentSection({
       {hasAnything && (
         <div className="mt-4">
           <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold opacity-70">
-            <History className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="reloj" className="h-3.5 w-3.5" />
             Historial
           </h4>
           {/* HU #13918 — historial con DataTable y paginación estándar en cliente. */}
@@ -517,7 +509,7 @@ function PersonalizedDocumentSection({
           onClose={closePreview}
           title={`Vista previa · ${preview.label}`}
           size="lg"
-          icon={Eye}
+          icono="ojo"
         >
           {preview.loading && (
             <p className="flex items-center gap-2 text-sm opacity-70">
@@ -581,7 +573,7 @@ function DocumentActionDialog({
       onClose={onCancel}
       busy={busy}
       size="sm"
-      icon={isActivation ? AlertTriangle : Undo2}
+      icono={isActivation ? "alerta" : "devolucion"}
       iconBg={isActivation ? "var(--color-flit-alert)" : "var(--color-flit-brand)"}
       title={title}
     >

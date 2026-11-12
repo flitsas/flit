@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileArchive, FileSpreadsheet, Download } from "lucide-react";
+import { FileArchive, FileSpreadsheet } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
@@ -116,7 +117,7 @@ export function DescargasLote({ diagnosticoId, estadoLote, puedeDescargar }: Des
             aria-busy={archivoZip.descargando || undefined}
             className={BOTON_PRIMARIO_CLS}
           >
-            <Download className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="nube-bajar" className="h-4 w-4" />
             Descargar el ZIP
           </a>
         )}
