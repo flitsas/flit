@@ -53,7 +53,8 @@ export function DetalleStepper({
               >
                 <span className="kit-paso__num" aria-hidden="true">
                   {done ? (
-                    <Icono nombre="check" className="h-4 w-4" />
+                    // Check del kit de 18 px, como `PasosHorizontal`: trazo en currentColor, blanco sobre el disco verde.
+                    <Icono nombre="check" className="h-[18px] w-[18px]" />
                   ) : (
                     <paso.Icon className="h-4 w-4" />
                   )}
