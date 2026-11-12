@@ -24,6 +24,15 @@ import { Icono, type NombreIcono } from "./Icono";
  */
 export const MODAL_VELO_CLS = "bg-[var(--overlay)] backdrop-blur-[5px]";
 export const MODAL_PANEL_CLS = "rounded-[9px] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground";
+/** Cabecera del kit para diálogos propios: ícono de 52 px (`<Icono … disco size={52} />`), título y bajada centrados. */
+export const MODAL_CABECERA_CLS = "relative flex shrink-0 flex-col items-center gap-2 px-14 pb-1 pt-6 text-center";
+/** Título del diálogo: 1,375 rem en negrita, color de títulos del kit. */
+export const MODAL_TITULO_CLS = "text-[1.375rem] font-bold leading-tight text-[color:var(--di-heading)]";
+export const MODAL_DESCRIPCION_CLS = "mt-1 text-sm text-[color:var(--di-text-tertiary)]";
+/** La X discreta arriba a la derecha (el contenedor de la cabecera es `relative`). */
+export const MODAL_CERRAR_CLS =
+  "absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] " +
+  "transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]";
 
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
@@ -150,7 +159,7 @@ export function Modal({
           <div className="mx-4 mt-4 shrink-0 sm:mx-6 sm:mt-6">{resolvedHeader}</div>
         ) : (
           // `.modal__franja` del kit: ícono centrado, título y subtítulo; la X flota arriba a la derecha.
-          <div className="relative flex shrink-0 flex-col items-center gap-2 px-14 pb-1 pt-6 text-center">
+          <div className={MODAL_CABECERA_CLS}>
             {icono ? (
               <Icono nombre={icono} disco size={52} />
             ) : Icon ? (
@@ -162,13 +171,13 @@ export function Modal({
               <h2 id={titleId} className={cn(titleClassName, "text-[color:var(--di-heading)]")}>
                 {title}
               </h2>
-              {description && <p className="mt-1 text-sm text-[color:var(--di-text-tertiary)]">{description}</p>}
+              {description && <p className={MODAL_DESCRIPCION_CLS}>{description}</p>}
             </div>
             <button
               type="button"
               aria-label="Cerrar"
               onClick={requestClose}
-              className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
+              className={MODAL_CERRAR_CLS}
             >
               <Icono nombre="cerrar" size={20} />
             </button>
