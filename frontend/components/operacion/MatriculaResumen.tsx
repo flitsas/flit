@@ -1,7 +1,6 @@
 'use client';
 
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Copy, Star } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { EditarSeccionButton, type DestinoEdicion } from './EditarSeccionButton';
 import type {
@@ -641,7 +640,7 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
         style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
-        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
         {copied ? 'Copiado' : 'Copiar'}
       </button>
     </div>
@@ -994,7 +993,7 @@ export default function MatriculaResumen({
                         : { borderColor: BORDER, color: 'var(--muted-foreground)' }
                     }
                   >
-                    <Star className="h-3.5 w-3.5" fill={prioritario ? 'currentColor' : 'none'} aria-hidden="true" />
+                    <Icono nombre="medalla" className="h-3.5 w-3.5" />
                     Trámite Prioritario
                   </button>
                 ) : null}

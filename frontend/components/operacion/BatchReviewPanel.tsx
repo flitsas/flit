@@ -1,6 +1,5 @@
 'use client';
 
-import { FileWarning } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { OcrStatusPanel, tipoLabel } from './DocumentChecklist';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -236,7 +235,7 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
         <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
           {!nada && (
             <p className="flex items-center gap-1.5 text-xs font-semibold">
-              <FileWarning className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+              <Icono nombre="documento" className="h-3.5 w-3.5 opacity-70" />
               Páginas que no corresponden a ningún requisito
             </p>
           )}

@@ -2,7 +2,6 @@
 
 import { useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
-import { Info } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   ocrResultForTipo,
@@ -604,7 +603,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         onBlur={() => setTipOpen(false)}
         onClick={() => setDetailOpen(true)}
       >
-        <Info className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+        <Icono nombre="exclamacion" className="h-4 w-4" />
       </button>
 
       {tipOpen && !detailOpen && (
@@ -650,14 +649,14 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
             className={`${DIALOGO_PANEL} flex max-h-[80vh] w-full max-w-lg flex-col outline-none focus:ring-0`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className={`${DIALOGO_FRANJA} justify-between`}>
+            <div className={DIALOGO_FRANJA}>
               <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-              <div className="relative z-[1] flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-col items-center gap-2">
                 <span
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--kit-hover)] text-[color:var(--kit-azul-relleno)]"
                   aria-hidden
                 >
-                  <Info className="h-4 w-4" strokeWidth={2.5} />
+                  <Icono nombre="exclamacion" className="h-4 w-4" />
                 </span>
                 <h3
                   id={`ocr-detail-title-${tipo}`}
@@ -672,7 +671,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <button
                 type="button"
                 onClick={() => setDetailOpen(false)}
-                className="relative z-[1] shrink-0 rounded-[9px] border border-[color:var(--di-border)] bg-transparent px-3 py-1.5 text-xs font-semibold text-[color:var(--di-action)] transition hover:bg-[var(--kit-hover)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
+                className="absolute right-3 top-3 shrink-0 rounded-[9px] border border-[color:var(--di-border)] bg-transparent px-3 py-1.5 text-xs font-semibold text-[color:var(--di-action)] transition hover:bg-[var(--kit-hover)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
               >
                 Cerrar
               </button>
@@ -881,13 +880,13 @@ export function DocumentSlot({
               de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
               vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+          <Icono nombre="exclamacion" className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
           <span className="opacity-70">{instruccion}</span>
         </p>
       )}
       {improntaSoloManual && !readOnly && !attachment && !isAuto && (
         <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+          <Icono nombre="exclamacion" className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
           <span className="opacity-70">
             {IMPRONTA_MANUAL_TEXTO}
             {item.obligatorio ? ' Debe cargarla para radicar.' : ''}

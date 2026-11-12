@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Icono, IconoModulo } from "@flit/ui/Icono";
@@ -42,13 +42,13 @@ export function ModulosAcordeon({ conteos = {} }: { conteos?: ConteosModulo }) {
     // de su columna, como antes.
     <section
       aria-labelledby="inicio-modulos-titulo"
-      className="flex flex-col gap-4 rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-5 shadow-[var(--shadow-card)] md:p-6"
+      className="flex flex-col gap-4 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-6 pb-6 pt-4 max-sm:p-4"
     >
       <div>
-        <h2 id="inicio-modulos-titulo" className="text-base font-semibold text-[color:var(--di-heading)]">
+        <h2 id="inicio-modulos-titulo" className="text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)]">
           Módulos
         </h2>
-        <p className="mt-0.5 text-xs text-[color:var(--di-text-tertiary)]">Todo lo que puedes hacer en la plataforma, agrupado como en el menú.</p>
+        <p className="mt-0.5 text-[0.8125rem] text-[color:var(--di-text-tertiary)]">Todo lo que puedes hacer en la plataforma, agrupado como en el menú.</p>
       </div>
       <div className="gap-x-4 sm:columns-2 lg:columns-3 [&>*]:mb-3 [&>*]:break-inside-avoid">
         {groups.map((g) => (
@@ -100,31 +100,32 @@ function Grupo({ grupo, abierto, onAlternar, conteos }: { grupo: DockGroup; abie
   // Tarjeta del grupo (referencia de Samuel): ilustración, nombre en negrita con cuántos módulos tiene debajo, a la
   // derecha lo pendiente y la flecha.
   return (
-    <div className="overflow-clip rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-card)]">
+    <div className="overflow-clip rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)]">
       <h3 className="m-0">
         <button
           type="button"
           aria-expanded={abierto}
           aria-controls={panelId}
           onClick={onAlternar}
-          className={`group/fila flex min-h-16 w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-[var(--di-sky)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--di-action)] motion-reduce:transition-none max-sm:gap-2.5 max-sm:px-3 max-sm:py-2 ${
-            abierto ? "border-b border-[color:var(--di-divider)] bg-[var(--di-sky)]" : ""
+          // `.acordeon__fila` del kit: 56 px, hover y abierto en --kit-hover.
+          className={`group/fila flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-150 hover:bg-[var(--kit-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--di-action)] motion-reduce:transition-none max-sm:gap-2.5 max-sm:px-3 max-sm:py-2 ${
+            abierto ? "border-b border-[color:var(--di-divider)] bg-[var(--kit-hover)]" : ""
           }`}
         >
           <Glifo entry={grupo} size="grupo" />
           <span className="grid min-w-0 flex-1 leading-[1.3]">
-            <span className="truncate font-bold text-[color:var(--di-heading)]">{grupo.label}</span>
-            <span className="truncate text-xs text-[color:var(--di-text-tertiary)]">
-              {lista.length} {lista.length === 1 ? "módulo" : "módulos"}
-            </span>
+            <span className="truncate font-bold text-[color:var(--di-text-primary)]">{grupo.label}</span>
+          </span>
+          {/* `.acordeon__cuenta` del kit: la cifra en la píldora; la palabra sigue para el lector, en el mismo orden. */}
+          <span className="inline-grid h-8 min-w-8 shrink-0 place-items-center rounded-[9px] bg-[var(--kit-hover)] px-2 text-[0.8125rem] font-bold tabular-nums text-[color:var(--kit-azul-texto)] max-sm:hidden">
+            {lista.length}
+            <span className="sr-only"> {lista.length === 1 ? "módulo" : "módulos"}</span>
           </span>
           {conCifra.length > 0 && (
             <span
-              // Sobre el cielo de la fila abierta o con el puntero encima, la insignia pasa a blanco (como `.badge.warn`).
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold tabular-nums ${
-                abierto ? "bg-[var(--di-surface-elevated)]" : "bg-[var(--badge-pending-bg)] group-hover/fila:bg-[var(--di-surface-elevated)]"
-              }`}
-              style={{ color: "var(--badge-pending-fg)", borderColor: "var(--badge-pending-border)" }}
+              // `.badge.warn` del kit: la etiqueta con punta en el tono pendiente.
+              className="kit-etiqueta shrink-0 tabular-nums"
+              style={{ "--c": "var(--badge-pending-border)", "--ct": "var(--badge-pending-fg)" } as CSSProperties}
             >
               {total.toLocaleString("es-CO")} {conCifra.length === 1 ? conCifra[0].etiqueta : "con cifra"}
             </span>
@@ -142,15 +143,16 @@ function Grupo({ grupo, abierto, onAlternar, conteos }: { grupo: DockGroup; abie
                 {/* `.modulo` del prototipo: ilustración de 32 px, nombre, para qué sirve y, si hay, su cifra. */}
                 <Link
                   href={entry.href}
-                  className="group flex min-h-13 items-center gap-3 py-2 pl-5 pr-4 no-underline transition-colors duration-150 hover:bg-[var(--di-surface-sunken)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--di-action)] motion-reduce:transition-none max-sm:pl-3"
+                  className="group flex min-h-13 items-center gap-3 py-2 pl-5 pr-4 no-underline transition-colors duration-150 hover:bg-[var(--kit-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--di-action)] motion-reduce:transition-none max-sm:pl-3"
                 >
                   <Glifo entry={entry} size="modulo" />
                   <span className="grid min-w-0 flex-1 leading-[1.3]">
-                    <span className="truncate text-[0.8125rem] font-semibold text-[color:var(--di-heading)] group-hover:text-[color:var(--di-action)]">{entry.label}</span>
+                    <span className="truncate text-[0.8125rem] font-semibold text-[color:var(--di-text-primary)] group-hover:text-[color:var(--di-action)]">{entry.label}</span>
                     {detalle && <span className="truncate text-xs text-[color:var(--di-text-tertiary)]">{detalle}</span>}
                   </span>
                   {cifra && (
-                    <span className="inline-grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-[var(--di-sky)] px-2 text-xs font-bold tabular-nums text-[color:var(--di-heading)] shadow-[inset_0_0_0_1.5px_var(--di-alerta-punto)]">
+                    // `.modulo__cuenta` del kit: píldora naranja con la cifra en blanco.
+                    <span className="inline-grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-[var(--kit-naranja-boton)] px-2 text-xs font-bold tabular-nums text-white">
                       {cifra.total.toLocaleString("es-CO")} {cifra.etiqueta}
                     </span>
                   )}

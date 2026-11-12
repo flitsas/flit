@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Info } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { WizardModal } from './WizardModal';
 import { ALLOWED_MIME } from './DocumentChecklist';
@@ -234,7 +233,7 @@ export function ProcedureDocsPreviewInformativo({
                 style={{ borderColor: 'var(--border)' }}
               >
                 <p className="flex min-w-0 items-center gap-1.5 text-xs opacity-70">
-                  <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <Icono nombre="exclamacion" className="h-3.5 w-3.5 shrink-0" />
                   Los documentos deben estar legibles y en formato {FORMATOS_ADMITIDOS}.
                 </p>
                 {/* «Entendido», no «Cerrar»: la X del modal ya lleva ese nombre, y el pie no repite la

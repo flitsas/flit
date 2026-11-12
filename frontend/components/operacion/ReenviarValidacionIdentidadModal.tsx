@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import { Copy } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import {
@@ -176,7 +176,7 @@ function CopiarEnlace({
       </a>
       <div className="flex items-center gap-3">
       <button type="button" onClick={() => onCopiar(url)} className={LINK_BTN_CLS}>
-        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="copiar" className="h-3.5 w-3.5" />
         Copiar enlace
       </button>
       <span role="status" aria-live="polite" className="text-xs font-medium">

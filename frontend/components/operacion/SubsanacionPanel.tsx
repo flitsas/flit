@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import {
@@ -94,7 +93,7 @@ export function SubsanacionPanel({
         aria-live="polite"
         aria-busy="true"
       >
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
+        <Icono nombre="girador" className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--badge-warning-fg)' }} />
         <span>Cargando el detalle de la subsanación…</span>
       </div>
     );

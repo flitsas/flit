@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { FileArchive } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -236,7 +235,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
       onClose={onClose}
       busy={creando}
       title="Descargar consolidados en ZIP"
-      icon={FileArchive}
+      icono="archivo"
       iconBg="var(--color-flit-brand)"
       size="sm"
       footer={

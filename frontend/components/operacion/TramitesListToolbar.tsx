@@ -1,7 +1,6 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Star } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { FamiliaTabs } from './FamiliaTabs';
@@ -64,15 +63,11 @@ export function TramitesListToolbar({
             // estrella conserva su amarillo, que ahí no es "activo" genérico sino prioritario.
             className={`${TRAMITES_CONTROL_CLS} w-9 justify-center px-0`}
           >
-            <Star
-              className="h-4 w-4"
-              style={
+            <Icono nombre="medalla" className="h-4 w-4" style={
                 soloPrioritarios
                   ? { color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }
                   : { color: 'var(--muted-foreground)', fill: 'transparent' }
-              }
-              aria-hidden="true"
-            />
+              } />
           </button>
           <button
             type="button"

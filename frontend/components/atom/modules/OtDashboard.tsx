@@ -354,8 +354,7 @@ function Bienvenida({
         fijo
           ? "rounded-[9px] text-white"
           : "rounded-2xl text-white"
-      } ${className}`}
-      style={{ minHeight: "220px" }}
+      } min-h-[200px] max-sm:min-h-[180px] ${className}`}
     >
       {/* Capa de fondo: lámina degradada del kit en el slide de la cola; en un banner, el color
           PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con el
@@ -965,10 +964,10 @@ function PanelOperativoResto({
 
 function Tarjeta({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
-    // `.card` de la propuesta: borde --di-border y radio de 20 px; el título como `.card__cabeza h2`, sin versalitas.
-    <section className="rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-5 shadow-[var(--shadow-card)]">
+    // `.card` del UI Kit 2026: borde --di-border, radio de 9 px y sin sombra; el título como `.card__cabeza h2` (24 px, azul).
+    <section className="rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-6 pb-6 pt-4 max-sm:p-4">
       {titulo && (
-        <h2 className="mb-4 text-[0.9375rem] font-semibold leading-tight text-[color:var(--di-heading)]">
+        <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)]">
           {titulo}
         </h2>
       )}

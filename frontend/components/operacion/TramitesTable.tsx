@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFechaHora } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import { ArrowUpDown, FileStack, Play, Star } from "lucide-react";
+import { ArrowUpDown } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
+import { PAGINACION_SELECT_CLS } from "@flit/ui/Pagination";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
@@ -149,6 +150,8 @@ import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization'
 import { IdentidadParteTrackingModal, type ActorTracking } from './IdentidadParteTrackingModal';
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_ARCHIVO = iconoComo("archivo");
+const ICONO_AVANCE = iconoComo("avance");
 const ICONO_ABAJO = iconoComo("abajo");
 const ICONO_ARRIBA = iconoComo("arriba");
 const ICONO_CHECK = iconoComo("check");
@@ -1649,7 +1652,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 onClick={() => void handleBulkPause(false)}
                 className="inline-flex items-center gap-1 rounded-lg border border-flit-brand/40 px-2.5 py-1 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
               >
-                <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+                <Icono nombre="avance" className="h-3.5 w-3.5" /> Reanudar
               </button>
             ) : null}
             {muestraPausa && particionPausa.excluidosRed > 0 ? (
@@ -2344,7 +2347,7 @@ function TableBody({
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className={controlCls(false)}
+            className={PAGINACION_SELECT_CLS}
             aria-label="Filas por página"
           >
             {TAMANOS_DE_PAGINA.map((n) => (
@@ -2674,7 +2677,7 @@ function TramiteRow({
       : abreAsistente
         ? 'Continuar'
         : 'Ver';
-  const actionIcon = consultaMode ? ICONO_OJO : async?.ready ? ICONO_DOCUMENTO : abreAsistente ? Play : ICONO_OJO;
+  const actionIcon = consultaMode ? ICONO_OJO : async?.ready ? ICONO_DOCUMENTO : abreAsistente ? ICONO_AVANCE : ICONO_OJO;
   /**
    * "Pausado" y el sub-estado de revocatoria podían apilarse bajo el chip de Estado sin
    * jerarquía entre ellos — se muestra UNO SOLO, el de mayor prioridad. Revocatoria primero
@@ -2711,7 +2714,7 @@ function TramiteRow({
           {
             key: 'pausa',
             label: item.isPaused ? 'Reanudar' : 'Pausar',
-            icon: item.isPaused ? Play : ICONO_PAUSA,
+            icon: item.isPaused ? ICONO_AVANCE : ICONO_PAUSA,
             onSelect: () => onTogglePause(item.id, !item.isPaused, item.tenantId),
           },
         ]
@@ -2767,7 +2770,7 @@ function TramiteRow({
           {
             key: 'consolidado',
             label: COPY.A12,
-            icon: FileStack,
+            icon: ICONO_ARCHIVO,
             onSelect: () => onVerConsolidado(item),
           },
         ]
@@ -2856,11 +2859,11 @@ function TramiteRow({
               HU #12362 — en modo consulta la estrella es solo informativa: no hay botón. */}
           {consultaMode ? (
             item.prioritario ? (
-              <Star
+              <Icono
+                nombre="medalla"
                 className="h-4 w-4 shrink-0"
-                style={{ color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }}
-                role="img"
-                aria-label="Trámite prioritario"
+                style={{ color: 'var(--badge-warning-fg)' }}
+                etiqueta="Trámite prioritario"
               />
             ) : null
           ) : (
@@ -2879,15 +2882,11 @@ function TramiteRow({
             title={item.prioritario ? 'Prioritario — clic para quitar' : 'Marcar como prioritario'}
             className="shrink-0 rounded-md p-0.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
-            <Star
-              className="h-4 w-4"
-              style={
+            <Icono nombre="medalla" className="h-4 w-4" style={
                 item.prioritario
                   ? { color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }
                   : { color: 'var(--color-flit-primary)', opacity: 0.3 }
-              }
-              aria-hidden="true"
-            />
+              } />
           </button>
           )}
           {/* Acceso por teclado/lector de pantalla a la fila: el `<tr>` ya no es focuseable (una
@@ -3448,7 +3447,6 @@ function TramiteRow({
         <ActionsMenu
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
-          className="bg-card"
           attention={puedeEnviarAlOt}
           attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />

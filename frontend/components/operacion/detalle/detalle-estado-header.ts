@@ -1,5 +1,4 @@
 import type { ComponentType } from "react";
-import { Ban } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
@@ -34,7 +33,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Ban,
+        Icon: iconoComo("distinto"),
         alert: 'Trámite anulado. Requiere radicación nueva si aplica.',
         pendiente: false,
       };
@@ -43,7 +42,7 @@ export function detalleEstadoHeader(
         // ADR-0059 — «Rechazado preasignación» cuando el OT rechazó desde la cola de placa.
         label: estadoLabelConOrigen(estado, rejectedFrom),
         color,
-        Icon: Ban,
+        Icon: iconoComo("distinto"),
         alert:
           rejectedFrom === 'preasignacion'
             ? 'Trámite rechazado por el Organismo de Tránsito antes de asignar placa. Al subsanarlo y radicarlo de nuevo vuelve a la cola de placa.'
@@ -58,7 +57,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Ban,
+        Icon: iconoComo("distinto"),
         alert: 'Aprobación revocada por el Organismo de Tránsito. La placa quedó liberada.',
         pendiente: false,
       };

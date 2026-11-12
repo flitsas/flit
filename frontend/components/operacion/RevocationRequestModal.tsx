@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Paperclip } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { tramitesClient, TramitesApiError } from '@/lib/api/tramites-client';
 import type { RequestRevocationResult } from '@/lib/api/types/procedure-runtime';
@@ -226,7 +225,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
                 className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
               >
-                <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="archivo" className="h-3.5 w-3.5" />
                 {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
               </button>
               {file ? (

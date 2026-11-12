@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Copy } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient, getIdentitySendConflict } from '@/lib/api/tramites-client';
@@ -1090,7 +1089,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
         style={{ borderColor: WIZARD_BTN_SOLID, color: WIZARD_BTN_SOLID }}
         aria-label="Copiar enlace de captura"
       >
-        <Copy className="h-3 w-3" aria-hidden />
+        <Icono nombre="copiar" className="h-3 w-3" />
         {copied ? 'Copiado' : 'Copiar enlace'}
       </button>
       <a

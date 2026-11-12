@@ -60,7 +60,7 @@ export function WizardModal({
         >
           <Icono nombre="cerrar" className="h-5 w-5" />
         </button>
-        <div className={`${DIALOGO_FRANJA} pr-16`}>
+        <div className={DIALOGO_FRANJA}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
           <h3 className={DIALOGO_FRANJA_TITULO}>{title}</h3>
         </div>

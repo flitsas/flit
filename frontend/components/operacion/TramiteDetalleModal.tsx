@@ -1,7 +1,7 @@
 'use client';
 
 import { type ComponentType, type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
-import { Coins, FolderCheck, Loader2 } from "lucide-react";
+import { Coins, FolderCheck } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -141,7 +141,7 @@ function BotonSubsanacion({
     >
       {loading ? (
         <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
           Abriendo el asistente…
         </>
       ) : (

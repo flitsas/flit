@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Paperclip } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -310,7 +310,7 @@ export function BlindajeDeclaracionCard({
                   borderWidth: certificado ? 1 : 2,
                 }}
               >
-                <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="archivo" className="h-3.5 w-3.5" />
                 {uploading ? 'Subiendo…' : certificado ? 'Reemplazar archivo' : 'Adjuntar archivo'}
               </button>
               {certificado && (

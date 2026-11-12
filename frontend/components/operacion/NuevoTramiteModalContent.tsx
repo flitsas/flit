@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Info, Loader2 } from "lucide-react";
 import { Icono, IconoModulo } from "@flit/ui/Icono";
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
@@ -428,7 +427,7 @@ export function NuevoTramiteModalContent({
           role="status"
           aria-live="polite"
         >
-          <Info className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+          <Icono nombre="exclamacion" className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} />
           <p className="text-[13.5px] leading-snug text-muted-foreground">{infoText}</p>
         </div>
       ) : null}
@@ -469,7 +468,7 @@ export function NuevoTramiteModalContent({
           disabled={!puedeIniciar}
           className={buttonClass({ className: 'min-w-[160px]' })}
         >
-          {registrandoTerminos ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {registrandoTerminos ? <Icono nombre="girador" className="h-4 w-4 animate-spin" /> : null}
           {registrandoTerminos ? 'Registrando…' : 'Iniciar trámite'}
         </button>
       </div>

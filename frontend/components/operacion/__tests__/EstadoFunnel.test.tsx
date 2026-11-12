@@ -91,11 +91,11 @@ describe('EstadoFunnel', () => {
       'Anulado: 0 trámites',
     ]);
     expect(screen.queryByLabelText(/^Preparado:/)).not.toBeInTheDocument();
-    // HU #14482: la franja es una fila de baldosas que pasa a varias filas, sin rejilla por columnas.
-    expect(screen.getByRole('group')).toHaveClass('flex', 'flex-wrap');
+    // UI Kit 2026: la franja es el embudo del kit (rejilla de columnas que se desliza en celular).
+    expect(screen.getByRole('group')).toHaveClass('grid', 'rounded-[26px]');
   });
 
-  it('HU #14482 — cada tarjeta es una baldosa con aria-pressed y la barra del color de su estado', () => {
+  it('UI Kit 2026 — cada tarjeta es un chip del embudo con aria-pressed y el disco de su estado', () => {
     render(
       <EstadoFunnel
         counts={counts}
@@ -105,11 +105,10 @@ describe('EstadoFunnel', () => {
     );
     const botones = screen.getAllByRole('button');
     expect(botones).toHaveLength(8);
-    for (const b of botones) expect(b.className).toMatch(/rounded-xl/);
-    const barra = (re: RegExp) =>
-      screen.getByLabelText(re).querySelector('span.rounded-full') as HTMLElement;
-    expect(barra(/^Aprobado:/).style.background).toBe('var(--estado-aprobado-acento)');
-    expect(barra(/^Anulado:/).style.background).toBe('var(--estado-anulado-acento)');
+    for (const b of botones) expect(b.className).toMatch(/rounded-\[9px\]/);
+    const disco = (re: RegExp) => screen.getByLabelText(re).querySelector('img') as HTMLImageElement;
+    expect(disco(/^Aprobado:/).getAttribute('src')).toBe('/assets/estados/aprobado.svg');
+    expect(disco(/^Anulado:/).getAttribute('src')).toBe('/assets/estados/anulado.svg');
     expect(screen.getByLabelText(/^Aprobado:/)).toHaveAttribute('aria-pressed', 'true');
   });
 

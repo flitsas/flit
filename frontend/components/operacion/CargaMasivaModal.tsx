@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { FileSpreadsheet } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { PESTANAS_LISTA_CLS, pestanaClass } from '@flit/ui/Pestanas';
@@ -171,7 +170,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
                   }`}
                 >
                   <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                    <FileSpreadsheet className="h-3.5 w-3.5 text-flit-brand" aria-hidden="true" />
+                    <Icono nombre="reporte-detallado" className="h-3.5 w-3.5 text-flit-brand" />
                     {opcion.titulo}
                   </span>
                   <span className="text-[11px] leading-snug text-muted-foreground">

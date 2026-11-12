@@ -3,7 +3,6 @@
 import { esFamiliaTraspaso } from './wizardCapabilities';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { type ComponentType, useCallback, useEffect, useRef, useState } from 'react';
-import { Info, XCircle } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -23,6 +22,8 @@ import type {
 import { formatFechaHora } from '@/lib/format/date';
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_CERRAR = iconoComo("cerrar");
+const ICONO_EXCLAMACION = iconoComo("exclamacion");
 const ICONO_ALERTA = iconoComo("alerta");
 const ICONO_RELOJ = iconoComo("reloj");
 /**
@@ -49,7 +50,7 @@ const ALERT_META: Record<
   IdentityValidationAlertKind,
   { label: string; tone: StatusTone; icon: ComponentType<{ className?: string }> }
 > = {
-  rechazada: { label: 'Rechazada', tone: 'danger', icon: XCircle },
+  rechazada: { label: 'Rechazada', tone: 'danger', icon: ICONO_CERRAR },
   expirada: { label: 'Expirada', tone: 'danger', icon: ICONO_ALERTA },
   por_vencer: { label: 'Por vencer', tone: 'warning', icon: ICONO_RELOJ },
   atascada: { label: 'Atascada', tone: 'warning', icon: ICONO_ALERTA },
@@ -396,7 +397,7 @@ function MotivoNoEnvioRow({ motivo }: { motivo: EnvioValidacionMotivo }) {
   const copy = presentarMotivoNoEnvio(motivo.codigo, parte);
   const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
   const { color, background, border } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
-  const Icono = bloqueo ? ICONO_ALERTA : Info;
+  const Icono = bloqueo ? ICONO_ALERTA : ICONO_EXCLAMACION;
 
   return (
     <div

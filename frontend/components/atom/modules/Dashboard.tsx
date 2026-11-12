@@ -32,9 +32,10 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
-import { estadoAcentoVar, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { estadoAcentoVar, estadoLabel } from "@/lib/tramites/estados";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { RangoFechas } from "@/components/atom/RangoFechas";
+import { GraficoDona } from "@/components/inicio/GraficoDona";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
@@ -166,10 +167,29 @@ const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
 const FILTRO_CONTROL_CLS =
   "[&>label]:text-[0.8125rem] [&>label]:font-semibold [&>label]:normal-case [&>label]:opacity-100 " +
   "[&>label]:text-[color:var(--di-text-primary)] " +
-  "[&>button]:min-h-11 [&>button]:rounded-xl [&>button]:border-[color:var(--di-border-control)] " +
+  "[&>button]:min-h-10 [&>button]:rounded-[9px] [&>button]:border-[color:var(--di-border-control)] " +
   "[&>button]:bg-[var(--di-surface-elevated)] [&>button]:text-[color:var(--di-text-primary)] " +
-  "[&_input]:h-11 [&_input]:rounded-xl [&_input]:border-[color:var(--di-border-control)] " +
+  "[&_input]:h-10 [&_input]:rounded-[9px] [&_input]:border-[color:var(--di-border-control)] " +
   "[&_input]:bg-[var(--di-surface-elevated)] [&_input]:text-[color:var(--di-text-primary)]";
+
+/**
+ * UI Kit 2026 — rejilla de los filtros de la cabecera, con el mismo hueco que las cifras de abajo. `RangoFechas` es un
+ * átomo compartido: su raíz pasa a `display: contents` para que Periodo, Desde y Hasta sean celdas de esta rejilla
+ * (Periodo junto a Compañía; Desde y Hasta en la fila siguiente, una columna cada uno) y sus campos toman el control
+ * del kit (`TRAMITES_INPUT_CLS`: 40 px, radio 9 px, contorno de control). Sus estados y manejadores no cambian.
+ */
+const FILTROS_REJILLA_CLS =
+  "grid grid-cols-2 gap-3 items-end [&>[data-testid=rango-fechas]]:contents " +
+  "[&>[data-testid=rango-fechas]>label]:min-w-0 [&>[data-testid=rango-fechas]>p]:col-span-2 " +
+  "[&>[data-testid=rango-fechas]>label]:text-[0.8125rem] [&>[data-testid=rango-fechas]>label]:font-semibold " +
+  "[&>[data-testid=rango-fechas]>label]:text-[color:var(--di-text-primary)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:h-10 [&>[data-testid=rango-fechas]_:is(select,input)]:w-full " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:min-w-0 [&>[data-testid=rango-fechas]_:is(select,input)]:rounded-[9px] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:border-[color:var(--di-border-control)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:bg-[var(--di-surface-elevated)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:px-3 [&>[data-testid=rango-fechas]_:is(select,input)]:text-sm " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:text-[color:var(--di-text-primary)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:focus:border-[color:var(--di-action)]";
 
 type WelcomeSlide = {
   type: "welcome";
@@ -521,7 +541,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
         <div
-          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)] md:min-h-0 ${
+          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[200px] max-sm:min-h-[180px] ${
             esBienvenida(s) ? "rounded-[9px] text-white" : "rounded-2xl text-white"
           }`}
           data-testid="dashboard-hero-banner"
@@ -649,7 +669,12 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           className="flex flex-col gap-3"
           data-testid="dashboard-hero-column"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end" data-testid="dashboard-filter-row">
+          <div
+            className={`${FILTROS_REJILLA_CLS} ${
+              isSuper ? "" : "[&>[data-testid=rango-fechas]>label:first-child]:col-span-2"
+            }`}
+            data-testid="dashboard-filter-row"
+          >
             <RangoFechas
               value={range}
               onChange={setRange}
@@ -664,7 +689,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 disabled={status === "loading"}
                 defaultLabel="Todas las compañías"
                 id="dashboard-compania"
-                className={`min-w-0 ${FILTRO_CONTROL_CLS}`}
+                className={`col-start-2 row-start-1 min-w-0 ${FILTRO_CONTROL_CLS}`}
               />
             )}
           </div>
@@ -688,8 +713,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             // del banner; la columna puede quedar más baja que él.
             <div className="grid grid-cols-3 items-start gap-3" data-testid="dashboard-kpi-grid">
               {[
-                { label: "Matrículas", value: matriculas, ilustracion: "matricula" as const, family: "MATRICULAS" as const },
-                { label: "Traspasos", value: traspasos, ilustracion: "traspaso" as const, family: "TRASPASO" as const },
+                // UI Kit 2026: claves del kit con glifo (disco --kit-hover y glifo azul), no los discos sólidos
+                // @tramite-matricula/@tramite-traspaso: placa para matrícula e intercambio para traspaso.
+                { label: "Matrículas", value: matriculas, ilustracion: "preasignacion" as const, family: "MATRICULAS" as const },
+                { label: "Traspasos", value: traspasos, ilustracion: "llamadas" as const, family: "TRASPASO" as const },
                 { label: "Otros Trámites", value: otros, ilustracion: "procesos" as const, family: "OTROS" as const },
               ].filter((k) => showsInAggregates(k.family)).map((k) => {
                 const isError = status === "error";
@@ -796,47 +823,26 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               skeletonRows={3}
             >
               {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
-              <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
-                <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+              <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+                <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                   Distribución General de Trámites
                   {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="distribucion-red" />}
                 </h2>
                 {globalFunnel.length === 0 ? (
                   <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
                 ) : (
-                  // HU #14481 (referencia de Samuel) — lista numerada sin fondos por fila, separada por una línea
-                  // fina: orden, barrita del color del estado, nombre, cantidad y el porcentaje en la pastilla
-                  // tintada del estado (--estado-<x>-bg/-fg). Sin íconos.
-                  <ul className="divide-y divide-[color:var(--di-divider)]">
-                    {globalFunnel.map((f, i) => {
-                      const chip = estadoChipStyle(f.status);
-                      const pct = totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0;
-                      return (
-                        <li key={f.status} className="flex items-center gap-3 py-2.5">
-                          <span className="w-4 shrink-0 text-sm font-bold tabular-nums text-[color:var(--di-heading)]">
-                            {i + 1}
-                          </span>
-                          <span
-                            aria-hidden="true"
-                            className="h-6 w-1 shrink-0 rounded-full"
-                            style={{ background: estadoAcentoVar(f.status) }}
-                          />
-                          <span className="min-w-0 flex-1 text-sm text-[color:var(--di-text-primary)]">
-                            {estadoLabel(f.status)}
-                          </span>
-                          <span className="text-lg font-bold tabular-nums text-[color:var(--di-heading)]">
-                            {f.count}
-                          </span>
-                          <span
-                            className="min-w-[3.25rem] shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-semibold tabular-nums"
-                            style={{ background: chip.bg, color: chip.color }}
-                          >
-                            {pct}{"\u00a0"}%
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  // UI Kit 2026 — dona de la propuesta con los MISMOS datos que pintaba la lista: cada estado con su
+                  // acento, su cifra y su porcentaje; el total al centro. La leyenda sigue siendo la lista accesible.
+                  <GraficoDona
+                    total={totalFunnel}
+                    porciones={globalFunnel.map((f) => ({
+                      clave: f.status,
+                      etiqueta: estadoLabel(f.status),
+                      valor: f.count,
+                      color: estadoAcentoVar(f.status),
+                      detalle: `${totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0}\u00a0%`,
+                    }))}
+                  />
                 )}
               </section>
             </UiStateBoundary>
@@ -851,8 +857,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
-            <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
-              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+            <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+              <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                 Validaciones Biométricas
                 {/* Sin ruta de red para biometría: sigue siendo del cliente propio y se rotula
                     para que no se lea como agregado de la red (AC1). */}
@@ -873,7 +879,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   // Referencia de Samuel: tarjetita blanca con todo centrado — punto, nombre y cifra.
                   <div
                     key={k.label}
-                    className="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-2 py-3 text-center shadow-[var(--shadow-card)]"
+                    className="flex min-w-0 flex-col items-center gap-1.5 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-2 py-3 text-center"
                   >
                     <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background: k.punto }} />
                     <p className="text-xs font-medium leading-tight text-[color:var(--di-text-secondary)]">{k.label}</p>
@@ -909,27 +915,28 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             emptyMessage="No hay datos de tendencia en los últimos 6 meses."
             skeletonRows={3}
           >
-            <section className="rounded-2xl p-4 bg-card border border-border flex flex-col">
-              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+            <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+              <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                 Seguimiento operativo
                 {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="seguimiento-red" />}
               </h2>
               <div className="h-[280px] -mx-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    {/* UI Kit 2026 (`barrasGrupo`): guías horizontales punteadas 3·4 en --kit-linea y ejes en 11 px gris. */}
                     <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="var(--border)"
+                      strokeDasharray="3 4"
+                      stroke="var(--kit-linea)"
                       vertical={false}
                     />
                     <XAxis
                       dataKey="m"
-                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      tick={{ fontSize: 11, fill: "var(--di-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      tick={{ fontSize: 11, fill: "var(--di-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
@@ -945,15 +952,16 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                       labelStyle={{ color: "var(--color-flit-tech)", fontWeight: 600 }}
                     />
                     {SERIES.filter((s) => showsInAggregates(s.family)).map((s) => (
-                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[4, 4, 0, 0]} />
+                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[3, 3, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex items-center justify-center gap-3 mt-1 text-[9px]">
+              {/* Leyenda centrada del kit (`.leyenda`): puntos de 10 px, texto de 13 px. */}
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-[18px] gap-y-1.5 text-[0.8125rem]">
                 {SERIES.filter((s) => showsInAggregates(s.family)).map(({ color, label }) => (
-                  <span key={label} className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                  <span key={label} className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
                     {label}
                   </span>
                 ))}

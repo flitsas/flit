@@ -5,7 +5,7 @@
  * que pinta `packages/ui/src/Modal.tsx`; si el Modal cambia, se cambian aquí.
  */
 
-import { MODAL_VELO_CLS } from '@flit/ui/Modal';
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from '@flit/ui/Modal';
 
 /** Velo del fondo: el mismo del Modal (`MODAL_VELO_CLS`). */
 export const DIALOGO_VELO = MODAL_VELO_CLS;
@@ -14,24 +14,22 @@ export const DIALOGO_VELO = MODAL_VELO_CLS;
 export const DIALOGO_PANEL =
   'relative overflow-clip rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground';
 
-/** Cabecera blanca del kit (`.modal__franja`): ícono, título en --di-heading y X discreta. */
-export const DIALOGO_FRANJA =
-  'relative flex shrink-0 items-center gap-3 overflow-clip bg-transparent px-5 pb-1 pt-5 text-[color:var(--di-heading)] sm:px-6 sm:pt-6';
+/** Cabecera del kit (`MODAL_CABECERA_CLS`): ícono opcional de 52 px, título y bajada centrados; la X va absoluta. */
+export const DIALOGO_FRANJA = `${MODAL_CABECERA_CLS} text-[color:var(--di-heading)]`;
 
 /** Círculo decorativo del diseño anterior: el kit no lo trae; el `<span aria-hidden>` queda oculto. */
 export const DIALOGO_FRANJA_CIRCULO =
   'hidden';
 
-/** Título dentro de la franja. */
-export const DIALOGO_FRANJA_TITULO =
-  'relative z-[1] min-w-0 flex-1 text-[1.375rem] font-bold leading-tight text-[color:var(--di-heading)]';
+/** Título dentro de la franja (`MODAL_TITULO_CLS`). */
+export const DIALOGO_FRANJA_TITULO = `min-w-0 ${MODAL_TITULO_CLS}`;
 
-/** Ícono a la izquierda del título, dentro de la franja. */
-export const DIALOGO_FRANJA_ICONO = 'relative z-[1] h-6 w-6 shrink-0 text-[color:var(--kit-azul-relleno)]';
+/** Ícono sobre el título: el disco del kit de 52 px (fondo --kit-hover, glifo azul), como el `icono` del Modal. */
+export const DIALOGO_FRANJA_ICONO =
+  'h-[52px] w-[52px] shrink-0 rounded-full bg-[var(--kit-hover)] p-3.5 text-[color:var(--kit-azul)]';
 
-/** Botón cerrar (X) de la franja. */
-export const DIALOGO_FRANJA_CERRAR =
-  'relative z-[1] grid h-9 w-9 shrink-0 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]';
+/** Botón cerrar (X): arriba a la derecha de la cabecera (`MODAL_CERRAR_CLS`). */
+export const DIALOGO_FRANJA_CERRAR = MODAL_CERRAR_CLS;
 
 /** Pie separado por la línea del Modal. */
 export const DIALOGO_PIE = 'border-t border-[color:var(--di-divider)]';

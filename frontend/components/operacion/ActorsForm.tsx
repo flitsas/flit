@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Info, Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -2651,7 +2650,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap"
               style={cardTone('info').title}
             >
-              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="exclamacion" className="h-3.5 w-3.5 shrink-0" />
               Empresa encontrada en RUES
               {originBadge(r.mode, 'RUES')}
             </p>
@@ -3475,7 +3474,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       aria-busy="true"
                       className="mt-1 flex items-center gap-1.5 text-xs opacity-70"
                     >
-                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                      <Icono nombre="girador" className="h-3.5 w-3.5 shrink-0 animate-spin" />
                       Cargando el documento del propietario…
                     </p>
                   )}
@@ -4145,7 +4144,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         aria-busy="true"
                         className="mt-1 flex items-center gap-1.5 text-xs opacity-70"
                       >
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                        <Icono nombre="girador" className="h-3.5 w-3.5 shrink-0 animate-spin" />
                         Cargando el documento del propietario…
                       </p>
                     )}

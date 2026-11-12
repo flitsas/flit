@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Wrench } from "lucide-react";
+import { Wrench } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { resolveActorRole, resolveStepBody } from './sectionRendererRegistry';
 import {
@@ -2112,7 +2112,7 @@ export function TramiteWizard(props: Props) {
                   >
                     {activandoSubsanacion ? (
                       <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                         Activando subsanación…
                       </>
                     ) : (

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Paperclip } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import type {
   FieldValue,
@@ -631,7 +630,7 @@ function SubtramiteDocCard({
                 borderWidth: 1,
               }}
             >
-              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="archivo" className="h-3.5 w-3.5" />
               {uploading
                 ? 'Subiendo…'
                 : attachment

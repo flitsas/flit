@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
@@ -571,7 +570,7 @@ function ReconstruccionPanel({
         className="mb-3 flex items-start gap-2 rounded-xl border p-3 text-xs"
         style={{ borderColor: BLUE, background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: INK_BLUE }}
       >
-        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold">Reconstrucción en curso</p>
           <p className="mt-0.5">{COPY_RECONSTRUCCION_EN_CURSO}</p>
@@ -601,7 +600,7 @@ function ReconstruccionPanel({
           color: 'var(--badge-warning-fg)',
         }}
       >
-        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold">La actualización sigue en proceso</p>
           <p className="mt-0.5">
