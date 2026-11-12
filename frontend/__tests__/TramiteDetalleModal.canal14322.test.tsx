@@ -82,8 +82,6 @@ beforeEach(() => {
     total: 0,
     page: 1,
     pageSize: 20,
-    modificaciones: [],
-    modificacionesTotal: 0,
   });
   vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
     validations: [],
