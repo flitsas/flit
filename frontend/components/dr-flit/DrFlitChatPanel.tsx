@@ -142,25 +142,30 @@ export function DrFlitChatPanel({
       }}
     >
         <header
-          className="flex shrink-0 items-center gap-2 px-4 py-3.5"
+          className="relative flex shrink-0 items-center gap-2 overflow-clip px-4 py-3.5"
           style={{ background: "var(--dr-flit-gradient-header)" }}
         >
+          {/* Círculo turquesa decorativo de la franja del Modal, detrás de la X. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-[30px] -top-[60px] h-[120px] w-[120px] rounded-full bg-[color:var(--di-highlight-decor)]"
+          />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={DR_FLIT_ASSETS.header}
             alt=""
             aria-hidden="true"
-            className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/40"
+            className="relative z-[1] h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-[color-mix(in_srgb,var(--di-on-accent)_40%,transparent)]"
             draggable={false}
           />
-          <div className="min-w-0 flex-1">
+          <div className="relative z-[1] min-w-0 flex-1">
             <h2
               id={`${panelId}-title`}
-              className="text-base font-bold text-white leading-tight"
+              className="text-base font-bold text-[color:var(--di-on-accent)] leading-tight"
             >
               DR. FLIT
             </h2>
-            <p className="text-xs text-white/85 leading-snug">
+            <p className="text-xs text-[color:var(--di-on-accent)] opacity-85 leading-snug">
               Tu asistente inteligente de FLIT
             </p>
           </div>
@@ -170,7 +175,7 @@ export function DrFlitChatPanel({
             onClick={onClose}
             aria-label="Cerrar DR. FLIT"
             title="Ocultar panel (conserva la conversación)"
-            className="rounded-md p-1.5 text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="relative z-[1] grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>

@@ -34,7 +34,7 @@ export default function AdminTiposTramitePage() {
           subtitle="Catálogo de trámites y su parametrización: qué recorrido sigue cada uno, qué exige y qué documentos pide. Solo SuperAdmin."
         />
 
-        <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
           <TiposTramitePanel />
         </div>
       </div>

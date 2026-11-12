@@ -35,6 +35,13 @@ internal static class IdentityApprovalResolver
     {
         var vault = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // HU #13824 - la salida de borrador solo se consulta si hace falta (una fila propia vencida a mano) o, mas
+        // abajo, al caer al fallback de identidad vencida a mano de otro tramite.
+        var salidaCargada = TieneVencidaManualLocal(instance);
+        DateTimeOffset? salidaDeBorrador = salidaCargada
+            ? await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false)
+            : null;
         foreach (var parte in Partes)
         {
             // Bug #13194 (P4, D4) — fail-closed: una parte SIN actor no queda aprobada. Antes se evaluaba
@@ -68,7 +75,7 @@ internal static class IdentityApprovalResolver
                     continue; // este actor queda cubierto por el baúl.
 
                 // 1) Fila PROPIA del trámite (aprobada+vigente+documento del actor): validó EN este trámite.
-                if (HasLocalVigente(instance, parte, tipoDoc, documento, now))
+                if (HasLocalVigente(instance, parte, tipoDoc, documento, now, salidaDeBorrador))
                     continue; // este actor queda cubierto por su fila propia.
 
                 // 2) Sin fila propia → se REFERENCIA la identidad vigente de la PERSONA (documento) en otro
@@ -84,8 +91,17 @@ internal static class IdentityApprovalResolver
                 // HU #13824 — un trámite que ya NO está en borrador conserva su firma aunque un Super Admin haya vencido
                 // a mano la identidad de la persona (hasta el fin de vigencia que tenía). Un borrador no la conserva.
                 if (vigente is null && !EsBorrador(instance))
+                {
+                    if (!salidaCargada)
+                    {
+                        salidaDeBorrador = await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct)
+                            .ConfigureAwait(false);
+                        salidaCargada = true;
+                    }
+
                     vigente = await repo.FindProtegidaPorVencimientoManualAsync(
-                        instance.TenantId, tipoDoc.Trim(), documento.Trim(), now, ct);
+                        instance.TenantId, tipoDoc.Trim(), documento.Trim(), now, salidaDeBorrador, ct);
+                }
                 if (vigente is null)
                 {
                     todosCubiertos = false;
@@ -135,7 +151,8 @@ internal static class IdentityApprovalResolver
         IReadOnlySet<string> approvedKeys,
         DateTimeOffset now,
         IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona = null,
-        IReadOnlySet<string>? protegidasKeys = null)
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>? protegidasKeys = null,
+        DateTimeOffset? salidaDeBorradorAt = null)
     {
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
@@ -146,44 +163,81 @@ internal static class IdentityApprovalResolver
             if (actores.Count == 0)
                 continue;
 
-            var todosCubiertos = true;
-            foreach (var actor in actores)
-            {
-                var (tipoDoc, documento) = ActorDoc(actor);
-
-                // 0) BAÚL — mismo orden y mismo predicado que ResolveApprovedPartiesAsync.
-                if (firmaBaulVigentePorPersona is not null
-                    && FirmaBaulCobertura.Aplica(actor)
-                    && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
-                    && firmaBaulVigentePorPersona.TryGetValue(
-                        BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento), out var baulVigente)
-                    && baulVigente)
-                    continue;
-
-                if (HasLocalVigente(instance, parte, tipoDoc, documento, now))
-                    continue;
-
-                if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(documento))
-                {
-                    todosCubiertos = false;
-                    break;
-                }
-
-                var key = BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento);
-                if (!approvedKeys.Contains(key)
-                    // HU #13824 — ver ResolveApprovedPartiesAsync: fuera de borrador se conserva la firma.
-                    && !(protegidasKeys is not null && !EsBorrador(instance) && protegidasKeys.Contains(key)))
-                {
-                    todosCubiertos = false;
-                    break;
-                }
-            }
+            var todosCubiertos = actores.TrueForAll(actor => ActorCubiertoPorClaves(
+                instance, parte, actor, approvedKeys, now, firmaBaulVigentePorPersona, protegidasKeys, salidaDeBorradorAt));
 
             if (todosCubiertos)
                 approved.Add(parte);
         }
 
         return approved;
+    }
+
+    /// <summary>
+    /// ADR-0053 — actores (de cualquier lado) con identidad acreditada, uno por uno, con EXACTAMENTE la
+    /// comprobación de <see cref="ApprovedPartiesFromKeys"/>. Lo usa el desplegable de copropietarios
+    /// del listado para pintar la firma de cada persona; el set por parte sigue siendo «todos firman».
+    /// Comparación por referencia: los actores son los mismos objetos del grafo cargado.
+    /// </summary>
+    public static IReadOnlySet<ProcedureInstanceActor> ApprovedActorsFromKeys(
+        ProcedureInstance instance,
+        IReadOnlySet<string> approvedKeys,
+        DateTimeOffset now,
+        IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona = null,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>? protegidasKeys = null,
+        DateTimeOffset? salidaDeBorradorAt = null)
+    {
+        var cubiertos = new HashSet<ProcedureInstanceActor>(ReferenceEqualityComparer.Instance);
+        foreach (var parte in Partes)
+        {
+            foreach (var actor in ActoresDe(instance, parte))
+            {
+                if (ActorCubiertoPorClaves(
+                        instance, parte, actor, approvedKeys, now, firmaBaulVigentePorPersona, protegidasKeys, salidaDeBorradorAt))
+                    cubiertos.Add(actor);
+            }
+        }
+
+        return cubiertos;
+    }
+
+    /// <summary>
+    /// ¿Este actor tiene identidad acreditada, según las claves precomputadas del listado? Orden: baúl →
+    /// fila propia vigente → identidad referenciada (o protegida tras vencimiento manual, HU #13824).
+    /// </summary>
+    private static bool ActorCubiertoPorClaves(
+        ProcedureInstance instance,
+        string parte,
+        ProcedureInstanceActor actor,
+        IReadOnlySet<string> approvedKeys,
+        DateTimeOffset now,
+        IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>? protegidasKeys,
+        DateTimeOffset? salidaDeBorradorAt)
+    {
+        var (tipoDoc, documento) = ActorDoc(actor);
+
+        // 0) BAÚL — mismo orden y mismo predicado que ResolveApprovedPartiesAsync.
+        if (firmaBaulVigentePorPersona is not null
+            && FirmaBaulCobertura.Aplica(actor)
+            && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
+            && firmaBaulVigentePorPersona.TryGetValue(
+                BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento), out var baulVigente)
+            && baulVigente)
+            return true;
+
+        if (HasLocalVigente(instance, parte, tipoDoc, documento, now, salidaDeBorradorAt))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(documento))
+            return false;
+
+        var key = BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento);
+        return approvedKeys.Contains(key)
+            // HU #13824 — ver ResolveApprovedPartiesAsync: fuera de borrador se conserva la firma.
+            || (protegidasKeys is not null
+                && protegidasKeys.TryGetValue(key, out var vencidas)
+                && BiometricRules.ConservaFirmaTrasVencimientoManual(instance.Status, salidaDeBorradorAt, vencidas));
     }
 
     /// <summary>
@@ -215,9 +269,27 @@ internal static class IdentityApprovalResolver
 
     /// <summary>¿El trámite tiene una validación PROPIA de la parte aprobada+vigente y del documento del actor?</summary>
     private static bool HasLocalVigente(
-        ProcedureInstance instance, string parte, string? tipoDoc, string? documento, DateTimeOffset now) =>
+        ProcedureInstance instance, string parte, string? tipoDoc, string? documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt) =>
         instance.BiometricValidations.Any(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now)
+            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now, salidaDeBorradorAt)
             && BiometricRules.DocumentoCoincide(v, tipoDoc, documento));
+
+    /// <summary>Tiene el tramite (fuera de borrador) alguna fila propia aprobada y vencida a mano? Solo entonces su salida de borrador cambia el veredicto.</summary>
+    internal static bool TieneVencidaManualLocal(ProcedureInstance instance) =>
+        !EsBorrador(instance)
+        && instance.BiometricValidations.Any(v =>
+            v.Status == BiometricEstados.Aprobado && v.ExpiredManuallyAt != null);
+
+    /// <summary>
+    /// Salida de borrador del tramite para decidir si conserva una identidad vencida a mano
+    /// (<see cref="BiometricRules.ConservaFirmaTrasVencimientoManual"/>). Nula en borrador (no hace falta) y cuando no hay
+    /// fila en el historial (legado/migrados: comportamiento previo).
+    /// </summary>
+    internal static async Task<DateTimeOffset?> SalidaDeBorradorAsync(
+        IProcedureInstanceRepository repo, ProcedureInstance instance, CancellationToken ct) =>
+        EsBorrador(instance)
+            ? null
+            : await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 }

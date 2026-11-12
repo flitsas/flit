@@ -133,6 +133,13 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14318 — nombre de cada organismo de tránsito indicado (<c>catalogs.transit_offices</c>), para
+    /// mostrar el OT del canal en el detalle. Mapa id→nombre en una consulta; ids sin organismo se omiten.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetTransitOfficeNamesAsync(
+        IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
     /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
     /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
@@ -424,14 +431,40 @@ public interface IProcedureInstanceRepository
     /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) cuyo fin de vigencia previo aún no llega. Para el
     /// FUR, el certificado y el gate de un trámite que NO está en borrador. Solo lectura.
     /// </summary>
+    /// <param name="salidaDeBorradorAt">
+    /// Salida de borrador del trámite (<see cref="GetSalidaDeBorradorAtAsync"/>); solo cuentan las identidades vencidas a
+    /// mano que estaban aprobadas al salir y aún no vencidas (<see cref="Entities.BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?)"/>).
+    /// Nulo = sin historial (legado): comportamiento previo.
+    /// </param>
     Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
-        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt, CancellationToken ct = default);
+
+    /// <summary>
+    /// Momento en que el trámite salió de borrador por primera vez (primera fila de
+    /// <c>procedure_instance_status_history</c> con <c>from_status = 'borrador'</c>), o <c>null</c> si no hay fila
+    /// (legado o migrados). Un trámite no vuelve a borrador, así que es único.
+    /// </summary>
+    Task<DateTimeOffset?> GetSalidaDeBorradorAtAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="GetSalidaDeBorradorAtAsync"/> en lote (UNA consulta, sin N+1) para el listado. Filtra por
+    /// <paramref name="tenantIds"/> (la vista de red es multi-tenant) además de por id. Las instancias sin fila de salida no
+    /// aparecen en el diccionario.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ListSalidasDeBorradorAsync(
+        IReadOnlyCollection<Guid> tenantIds, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
 
     /// <summary>
     /// HU #13824 — claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de las identidades vencidas a mano que los
     /// trámites ya fuera de borrador siguen honrando, en UNA consulta (listado de trámites, sin N+1). Set vacío si no hay.
     /// </summary>
-    Task<IReadOnlySet<string>> ListProtegidasPorVencimientoManualKeysAsync(
+    /// <remarks>
+    /// El valor son TODAS las identidades vencidas a mano de esa llave (aprobación y vencimiento): un trámite conserva la
+    /// firma si CUALQUIERA estaba aprobada y sin vencer cuando salió de borrador
+    /// (<see cref="Entities.BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, IReadOnlyList{Entities.IdentidadVencidaManual}?)"/>).
+    /// </remarks>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<Entities.IdentidadVencidaManual>>> ListProtegidasPorVencimientoManualKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
@@ -539,6 +572,12 @@ public interface IProcedureInstanceRepository
 
     /// <summary>Encola un evento de bitácora (append-only) para persistir en el próximo SaveChanges.</summary>
     Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14494 — <c>CreatedAt</c> del último evento <c>cambio_estado</c> del trámite, o <c>null</c> si no hay historial.
+    /// </summary>
+    Task<DateTimeOffset?> GetUltimoCambioEstadoCreatedAtAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
     /// Documentos que se consultaron REALMENTE en el RUNT dentro de este trámite, en la forma

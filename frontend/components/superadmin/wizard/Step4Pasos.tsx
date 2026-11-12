@@ -32,7 +32,7 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
         {steps.map((step, index) => (
           <div
             key={index}
-            className="flex items-center gap-3 rounded-xl p-3 border bg-[color-mix(in_srgb,var(--color-flit-brand)_3%,transparent)] dark:bg-white/5"
+            className="flex items-center gap-3 rounded-xl p-3 border bg-[color-mix(in_srgb,var(--color-flit-brand)_3%,transparent)] dark:bg-secondary"
           >
             <GripVertical className="h-4 w-4 opacity-30 shrink-0" aria-hidden="true" />
             <span
@@ -65,7 +65,7 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
                 className="p-1 rounded opacity-40 hover:opacity-100"
                 aria-label={`Eliminar paso ${step.title}`}
               >
-                <Trash2 className="h-3.5 w-3.5" style={{ color: '#FF4E00' }} />
+                <Trash2 className="h-3.5 w-3.5" style={{ color: 'var(--destructive)' }} />
               </button>
             </div>
           </div>
@@ -83,7 +83,7 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
           value={newStepName}
           onChange={(e) => setNewStepName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand"
+          className="flex-1 px-3 py-2 rounded-xl border bg-background text-xs outline-none focus:border-flit-brand"
         />
         <button
           onClick={handleAdd}

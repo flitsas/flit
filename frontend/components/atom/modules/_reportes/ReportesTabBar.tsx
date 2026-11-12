@@ -35,7 +35,7 @@ export function ReportesTabBar({ tabs, activeId, onChange, ariaLabel }: Reportes
             onClick={() => onChange(tab.id)}
             className={cn(
               "relative shrink-0 px-4 py-2.5 text-xs font-semibold transition",
-              active ? "text-flit-brand opacity-100" : "text-flit-primary dark:text-white opacity-65",
+              active ? "text-flit-brand opacity-100" : "text-flit-primary opacity-65",
             )}
           >
             {tab.label}

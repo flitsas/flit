@@ -155,7 +155,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
       cellClassName: "max-w-[320px]",
       render: (f) => f.pregunta,
     },
-    { key: "respuesta", header: "Respuesta", cellClassName: "max-w-[360px] text-xs text-[#59677D] dark:text-white/78", render: (f) => resumen(f.respuesta, 140) },
+    { key: "respuesta", header: "Respuesta", cellClassName: "max-w-[360px] text-xs text-muted-foreground", render: (f) => resumen(f.respuesta, 140) },
     {
       key: "estado",
       header: (

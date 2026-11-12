@@ -355,8 +355,8 @@ export function VehicleTransformationsCard({
   return (
     <section
       aria-labelledby={headingId}
-      className={hideHeader ? 'space-y-4' : 'space-y-4 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}
-      style={hideHeader ? undefined : { borderColor: '#E2E8F0' }}
+      className={hideHeader ? 'space-y-4' : 'space-y-4 rounded-2xl border bg-card p-4'}
+      style={hideHeader ? undefined : { borderColor: 'var(--border)' }}
     >
       {!hideHeader && (
         <WizardCardHeader
@@ -394,7 +394,7 @@ export function VehicleTransformationsCard({
       )}
 
       {uploadError && (
-        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {uploadError}
         </p>
       )}
@@ -482,21 +482,21 @@ function SubtramiteDocCard({
   return (
     <div
       className={cn(
-        'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744]',
-        done ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]',
+        'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md',
+        done ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
       )}
-      style={{ borderColor: '#E2E8F0' }}
+      style={{ borderColor: 'var(--border)' }}
     >
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {done ? (
           <span
-            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-            style={{ background: '#8CC63F' }}
+            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold"
+            style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
           >
             Validado
           </span>
         ) : (
-          <span className="whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
+          <span className="whitespace-nowrap rounded-full bg-[var(--badge-danger-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--badge-danger-fg)]">
             * Obligatorio
           </span>
         )}
@@ -519,14 +519,14 @@ function SubtramiteDocCard({
       {(done || uploading) && (
         <div
           className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: '#F1F5F9' }}
+          style={{ background: 'var(--surface-sunken)' }}
           aria-hidden="true"
         >
           <div
             className={`h-full rounded-full ${uploading ? 'animate-pulse' : ''}`}
             style={{
               width: uploading ? '60%' : '100%',
-              background: uploading ? 'var(--color-flit-brand)' : '#8CC63F',
+              background: uploading ? 'var(--color-flit-brand)' : 'var(--flit-success-ink)',
             }}
           />
         </div>
@@ -572,7 +572,7 @@ function SubtramiteDocCard({
           />
         )}
         {valueMissing && (
-          <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }}>
+          <p className="text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
             Escoge un valor distinto al del RUNT.
           </p>
         )}
@@ -592,7 +592,7 @@ function SubtramiteDocCard({
           gestor. */}
       <div
         className="mt-3 rounded-lg px-2.5 py-2 text-[11px] leading-snug"
-        style={{ background: '#F8FAFC' }}
+        style={{ background: 'var(--surface-sunken)' }}
       >
         <p className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
           <span className="font-normal opacity-70">Debes adjuntar: </span>
@@ -623,7 +623,7 @@ function SubtramiteDocCard({
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy || disabled}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-card px-4 text-[12px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
               style={{
                 borderColor: 'var(--color-flit-brand)',
                 color: 'var(--color-flit-brand)',
@@ -643,7 +643,7 @@ function SubtramiteDocCard({
                 onClick={() => onRemoveAttachment(attachment.id)}
                 disabled={busy || disabled}
                 className="text-xs font-semibold disabled:opacity-50"
-                style={{ color: '#FF4E00' }}
+                style={{ color: 'var(--destructive)' }}
                 aria-label={`Borrar ${soporte.title}`}
               >
                 {deleting ? 'Borrando…' : 'Borrar'}

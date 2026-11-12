@@ -25,6 +25,11 @@ import {
 } from './primitivos';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import {
+  estadoCertificado,
+  TEXTO_CERTIFICADO_EN_PREPARACION,
+  type EstadoCertificado,
+} from '@/lib/identity/certificado-validacion';
 
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C).
@@ -75,7 +80,7 @@ interface FilaIdentidad {
   statusText: string;
   timestamp: string | null;
   validationId: string | null;
-  certificado: boolean;
+  certificado: EstadoCertificado;
 }
 
 /**
@@ -115,7 +120,7 @@ function construirFilas(
         statusText: ESTADO_LABEL[ultima.status] ?? ultima.status,
         timestamp: ultima.validatedAt ?? ultima.createdAt ?? null,
         validationId: ultima.id,
-        certificado: ultima.status === 'aprobado',
+        certificado: estadoCertificado(ultima),
       };
     }
     if (enBaul) {
@@ -126,7 +131,7 @@ function construirFilas(
         statusText: 'Acreditado por firma del baúl',
         timestamp: null,
         validationId: null,
-        certificado: false,
+        certificado: 'ninguno' as EstadoCertificado,
       };
     }
     return {
@@ -136,7 +141,7 @@ function construirFilas(
       statusText: 'Sin iniciar',
       timestamp: null,
       validationId: null,
-      certificado: false,
+      certificado: 'ninguno' as EstadoCertificado,
     };
   });
 }
@@ -159,26 +164,35 @@ function FilaValidacion({
   return (
     <li className="space-y-2">
       <div
-        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-medium text-flit-primary dark:text-white">{fila.label}</span>
+          <span className="block text-xs font-medium text-foreground">{fila.label}</span>
           {fila.timestamp ? (
-            <span className="block text-xs text-flit-primary/70 dark:text-white/70">
+            <span className="block text-xs text-muted-foreground">
               {formatFechaHora(fila.timestamp)}
             </span>
           ) : null}
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <StatusBadge tone={fila.tone} label={fila.statusText} />
-          {fila.certificado && fila.validationId && !sinDescarga ? (
+          {fila.certificado === 'en_preparacion' && !sinDescarga ? (
+            <span
+              className="text-xs text-muted-foreground"
+              role="status"
+              aria-live="polite"
+            >
+              {TEXTO_CERTIFICADO_EN_PREPARACION}
+            </span>
+          ) : null}
+          {fila.certificado === 'descargable' && fila.validationId && !sinDescarga ? (
             <button
               type="button"
               onClick={() => onDescargar(fila.validationId as string, fila.label)}
               disabled={descargando}
               aria-label={`Descargar certificado de ${fila.label}`}
               title="Descargar certificado"
-              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-40 border-[#DFE5ED] dark:border-white/10"
+              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-40 border-border"
               style={{ color: AZUL }}
             >
               <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -317,7 +331,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
         ))}
       </ul>
       {descargaError ? (
-        <p className="mt-2 text-xs" style={{ color: '#C2410C' }} role="alert">
+        <p className="mt-2 text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {descargaError}
         </p>
       ) : null}

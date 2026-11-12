@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 
@@ -17,7 +18,9 @@ public sealed record CertificadoIdentidadResult(byte[] Content, string ContentTy
 public sealed class DescargarCertificadoIdentidadHandler(
     IProcedureInstanceRepository repo,
     IKyverumCertificateClient certClient,
-    IIdentitySignatureCapture? signatureCapture = null)
+    IIdentitySignatureCapture? signatureCapture = null,
+    IIdentityLetterService? letters = null,
+    IAttachmentStorage? storage = null)
 {
     public async Task<(CertificadoIdentidadResult? Result, string? Error)> HandleAsync(
         Guid instanceId, Guid tenantId, Guid validationId, CancellationToken ct = default)
@@ -37,6 +40,12 @@ public sealed class DescargarCertificadoIdentidadHandler(
         {
             return (null, "not_found");
         }
+
+        // HU #14302 (AC4) — validación MANUAL: el documento es la carta de FLIT (no hay proveedor que consultar). Mismas reglas de
+        // pertenencia y tenant que arriba. Si la carta falta se genera aquí (la outbox pudo rendirse); si no se puede, error claro
+        // para reintentar — nunca `proveedor_error`.
+        if (string.Equals(bio.Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            return await DescargarCartaAsync(bio, ct).ConfigureAwait(false);
 
         if (!string.Equals(bio.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrWhiteSpace(bio.KyverumVerificationId))
@@ -64,6 +73,47 @@ public sealed class DescargarCertificadoIdentidadHandler(
     }
 
     /// <summary>
+    /// HU #14302 — descarga la carta de una validación MANUAL aprobada sin pasar por un trámite (prevalidación standalone o
+    /// cualquier validación por id). <paramref name="tenantId"/> <c>null</c> = Super Admin (cualquier compañía; el tenant sale de la
+    /// fila); con valor, solo se sirve la validación de ese tenant. Otro tenant, inexistente, no manual o no aprobada: <c>not_found</c>
+    /// (no revela que existe). Si la carta no se puede obtener: <c>carta_no_disponible</c>.
+    /// </summary>
+    public async Task<(CertificadoIdentidadResult? Result, string? Error)> HandleCartaPorValidacionAsync(
+        Guid validationId, Guid? tenantId, CancellationToken ct = default)
+    {
+        var bio = await repo.GetBiometricByIdAsync(validationId, ct).ConfigureAwait(false);
+        if (bio is null || (tenantId is { } t && bio.TenantId != t) || !bio.CorrespondeCartaIdentidad)
+            return (null, "not_found");
+
+        return await DescargarCartaAsync(bio, ct).ConfigureAwait(false);
+    }
+
+    private async Task<(CertificadoIdentidadResult? Result, string? Error)> DescargarCartaAsync(
+        ProcedureInstanceBiometricValidation bio, CancellationToken ct)
+    {
+        // Rechazada/en curso/aprobada sin origen manual: no hay carta que dar.
+        if (!bio.CorrespondeCartaIdentidad)
+            return (null, "sin_certificado");
+
+        try
+        {
+            var conCarta = await IdentityLetterAccess.EnsureAsync(letters, repo, bio, ct).ConfigureAwait(false);
+            if (conCarta is null || storage is null)
+                return (null, "carta_no_disponible");
+
+            var pdf = await IdentityLetterAccess.ReadPdfAsync(storage, conCarta, ct).ConfigureAwait(false);
+            return pdf is null
+                ? (null, "carta_no_disponible")
+                : (new CertificadoIdentidadResult(pdf, "application/pdf", IdentityLetterAccess.FileName(conCarta)), null);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Storage caído, etc.: el usuario puede reintentar; no es un fallo del proveedor ni un 500.
+            return (null, "carta_no_disponible");
+        }
+    }
+
+    /// <summary>
     /// ¿La validación es la identidad EFECTIVA de alguna parte del trámite (HU #11014)? Debe estar
     /// aprobada y vigente y coincidir con el documento del sujeto de identidad de un actor. Mismo criterio
     /// que <c>ListBiometriaHandler</c> al exponer la identidad referenciada: si la UI la muestra, su
@@ -77,7 +127,10 @@ public sealed class DescargarCertificadoIdentidadHandler(
             return false;
 
         // HU #13824 — un trámite fuera de borrador conserva su certificado aunque la identidad se haya vencido a mano.
-        if (!BiometricRules.EsAprobadaVigenteParaTramite(bio, instance.Status, DateTimeOffset.UtcNow))
+        var salidaDeBorrador = bio.ExpiredManuallyAt is null
+            ? null
+            : await IdentityApprovalResolver.SalidaDeBorradorAsync(repo, instance, ct);
+        if (!BiometricRules.EsAprobadaVigenteParaTramite(bio, instance.Status, DateTimeOffset.UtcNow, salidaDeBorrador))
             return false;
 
         return instance.Actors.Any(a =>

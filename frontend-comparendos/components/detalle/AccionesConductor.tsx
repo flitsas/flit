@@ -218,6 +218,8 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   const puedeAsignar = tienePermiso(ctx.sesion, P.contraventorAsignar);
   const puedeConsultar = tienePermiso(ctx.sesion, P.contraventorConsultar) && capacidades(ctx.sesion).consultaContraventor;
   const puedeDocumentos = tienePermiso(ctx.sesion, P.contraventorDocumentos);
+  // GDC punto 20: tras 3 intentos fallidos la consulta queda agotada y el servidor la rechaza: solo se asigna a mano.
+  const agotada = d.estadoConsultaContraventor === "Agotada";
   if (!d.activo) return null;
 
   const consultar = async (confirmarReemplazo = false) => {
@@ -233,8 +235,14 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       }
       setConfirmar(null);
       toast.show(
-        r.resultado === "Encontrado" ? "Se encontró el conductor." : r.resultado === "NoEncontrado" ? "No se encontró el conductor: asígnalo a mano." : "No se pudo consultar el conductor: inténtalo más tarde o asígnalo a mano.",
-        r.resultado === "Error" ? "error" : r.resultado === "NoEncontrado" ? "warning" : "success",
+        r.resultado === "Encontrado"
+          ? "Se encontró el conductor."
+          : r.resultado === "NoEncontrado"
+            ? "No se encontró el conductor: asígnalo a mano."
+            : r.resultado === "SinHora"
+              ? "El comparendo no trae hora y ese día cambió el conductor: revisa quién conducía y asígnalo a mano."
+              : "No se pudo consultar el conductor: inténtalo más tarde o asígnalo a mano.",
+        r.resultado === "Error" ? "error" : r.resultado === "Encontrado" ? "success" : "warning",
       );
       ctx.recargar();
     } catch (e) {
@@ -254,7 +262,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
       <div className="flex flex-wrap items-center gap-2">
         {puedeAsignar && (
           <button type="button" className={controlCls(false)} onClick={() => setModal(true)}>
@@ -263,7 +271,13 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
           </button>
         )}
         {puedeConsultar && (
-          <button type="button" className={controlCls(false)} disabled={consultando} onClick={() => consultar()}>
+          <button
+            type="button"
+            className={controlCls(false)}
+            disabled={consultando || agotada}
+            title={agotada ? "Ya se intentó 3 veces sin respuesta: asigna el conductor a mano." : undefined}
+            onClick={() => consultar()}
+          >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
             {consultando ? "Consultando…" : "Consultar conductor"}
           </button>

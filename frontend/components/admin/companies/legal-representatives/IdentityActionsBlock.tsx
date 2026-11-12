@@ -21,6 +21,7 @@ import {
   IDENTITY_MODULE_HREF,
 } from "@/lib/admin/identity-vigencia";
 import { RL_COLOR } from "./rl-flit-styles";
+import { StatusBadge } from "@flit/ui/StatusBadge";
 
 export interface IdentityActionsBlockProps {
   /** null en modo create: aún no hay representante persistido contra el que consultar identidad. */
@@ -84,12 +85,9 @@ export function IdentityActionsBlock({
 
       {/* Los dos rótulos SIEMPRE, sin fusionarse en una sola cadena (HU #11756, CF-04) */}
       <div className="flex flex-wrap items-center gap-2">
-        <span
-          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold"
-          style={idUi.style}
-          data-testid="rl-identity-status-badge"
-        >
-          {identidadRotulo(identityStatus)}
+        {/* Homologación #14507: chip de la propuesta por tono (texto tinta + check / punto / equis naranja). */}
+        <span className="inline-flex" data-testid="rl-identity-status-badge">
+          <StatusBadge label={identidadRotulo(identityStatus)} tone={idUi.tone} />
         </span>
         <span
           className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold"

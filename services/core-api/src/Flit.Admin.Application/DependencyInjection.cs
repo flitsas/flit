@@ -338,6 +338,11 @@ public static class DependencyInjection
         services.AddScoped<UpdateRejectionReasonHandler>();
         services.AddScoped<SetRejectionReasonActiveHandler>();
 
+        // Feature #14374 (Épica #14297): marca del portal Persona Natural de cada organismo.
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaAdminHandler>();
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaImagenHandler>();
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaPuntoHandler>();
+
         // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
         // la empresa gestora, y el organismo operaba sin ningún instrumento propio.
         services.AddScoped<OtMetrics.GetOtOperationalPanelHandler>();
@@ -375,10 +380,6 @@ public static class DependencyInjection
 
         // Preview informativo de documentos (paso 1 wizard, sin instancia).
         services.AddScoped<PreviewDocumentosInformativosHandler>();
-
-        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
-        services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();
-        services.AddScoped<CompanyDocumentParams.UpsertCompanyDocumentParamHandler>();
 
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();
@@ -489,6 +490,18 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.TarifaVigentePnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasPnHandler>();
+        // HU #14388 (Feature #14387, Épica #14297) — los mismos precios vistos desde el dashboard del organismo.
+        services.AddScoped<Plataforma.PersonaNatural.ListarTarifasOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TiposTarifaOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasOtHandler>();
+        // HU #14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal.
+        services.AddScoped<Plataforma.PersonaNatural.LeerCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarMedioCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarSwitchCobroPnHandler>();
+        // HU #14397 / #14398 (Feature #14396, Épica #14297) — reporte de los trámites del portal y su Excel.
+        services.AddScoped<Plataforma.PersonaNatural.ListarReportePortalHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.ExportarReportePortalHandler>();
         // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
         services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();

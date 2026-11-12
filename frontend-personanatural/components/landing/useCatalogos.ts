@@ -6,12 +6,14 @@ import { comoLista, tiposDisponibles } from "@/lib/landing/catalogos";
 
 const CINCO_MINUTOS = 5 * 60 * 1000;
 
-/** Organismos de tránsito integrados (GET /organismos). */
+/**
+ * Organismos de tránsito integrados (GET /organismos). Sin `staleTime`: un precio nuevo o cerrado se refleja en la
+ * siguiente consulta (HU #14391), no a los cinco minutos.
+ */
 export function useOrganismos(cliente: ClientePortal = portal) {
   return useQuery({
     queryKey: ["pn", "organismos"],
     queryFn: async ({ signal }) => comoLista<Organismo>(await cliente.catalogos.organismos({ signal })),
-    staleTime: CINCO_MINUTOS,
   });
 }
 
@@ -33,7 +35,6 @@ export function useTiposTramite(cliente: ClientePortal = portal) {
   return useQuery({
     queryKey: ["pn", "tipos-tramite"],
     queryFn: async ({ signal }) => tiposDisponibles(comoLista<TipoTramite>(await cliente.catalogos.tiposTramite({ signal }))),
-    staleTime: CINCO_MINUTOS,
   });
 }
 
@@ -45,6 +46,5 @@ export function useTiposTramitePunto(cliente: ClientePortal = portal, organismoI
   return useQuery({
     queryKey: ["pn", "punto", "tipos-tramite", organismoId],
     queryFn: async ({ signal }) => tiposDisponibles(comoLista<TipoTramite>(await cliente.punto.tiposTramite({ signal }))),
-    staleTime: CINCO_MINUTOS,
   });
 }

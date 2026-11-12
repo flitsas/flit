@@ -104,7 +104,7 @@ export function BatchProgressPanel({ batchId }: BatchProgressPanelProps) {
 
             <div
               className="mt-3 h-2 w-full overflow-hidden rounded-full"
-              style={{ background: "#DFE5ED" }}
+              style={{ background: "var(--border)" }}
               role="progressbar"
               aria-valuenow={porcentaje}
               aria-valuemin={0}
@@ -153,7 +153,7 @@ export function BatchProgressPanel({ batchId }: BatchProgressPanelProps) {
               <p
                 role="alert"
                 className="mt-3 rounded-xl border px-4 py-2 text-xs"
-                style={{ borderColor: "#FF4E00" }}
+                style={{ borderColor: "var(--destructive)" }}
               >
                 {errorDescarga}
               </p>

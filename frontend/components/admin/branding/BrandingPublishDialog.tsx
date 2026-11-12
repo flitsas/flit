@@ -8,18 +8,27 @@ export interface BrandingPublishDialogProps {
   busy: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  // Feature #14374 (portal del OT): otro alcance y otro texto. Sin ellos, el de marca blanca.
+  title?: string;
+  description?: string;
+  note?: string;
 }
 
 /** HU #12414 AC5 — confirmación de publicación con el alcance explícito. */
-export function BrandingPublishDialog({ open, busy, onClose, onConfirm }: BrandingPublishDialogProps) {
+export function BrandingPublishDialog({
+  open,
+  busy,
+  onClose,
+  onConfirm,
+  title = "Publicar identidad de marca",
+  description = "Al publicar, estos cambios se aplican de inmediato a las sesiones nuevas y a los correos nuevos que se envíen desde esta red.",
+  note = "Las comunicaciones ya enviadas no cambian.",
+}: BrandingPublishDialogProps) {
   return (
-    <Modal open={open} onClose={onClose} busy={busy} size="sm" icon={Rocket} title="Publicar identidad de marca">
-      <p className="text-sm opacity-80">
-        Al publicar, estos cambios se aplican de inmediato a las sesiones nuevas y a los correos
-        nuevos que se envíen desde esta red.
-      </p>
-      <p className="mt-2 text-sm font-medium" style={{ color: "#8a6000" }} role="note">
-        Las comunicaciones ya enviadas no cambian.
+    <Modal open={open} onClose={onClose} busy={busy} size="sm" icon={Rocket} title={title}>
+      <p className="text-sm opacity-80">{description}</p>
+      <p className="mt-2 text-sm font-medium" style={{ color: "var(--badge-warning-fg)" }} role="note">
+        {note}
       </p>
 
       <div className="mt-5 flex gap-3">
@@ -36,7 +45,7 @@ export function BrandingPublishDialog({ open, busy, onClose, onConfirm }: Brandi
           onClick={onConfirm}
           disabled={busy}
           className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
           {busy ? "Publicando…" : "Publicar"}
         </button>

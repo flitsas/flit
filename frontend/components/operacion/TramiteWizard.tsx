@@ -1,5 +1,6 @@
 'use client';
 
+import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import {
   useCallback,
   useEffect,
@@ -10,6 +11,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AlertTriangle,
   Calendar,
   Car,
   ChevronLeft,
@@ -37,6 +39,33 @@ import {
   type CapacidadesEfectivas,
 } from './wizardCapabilities';
 
+/**
+ * HU #14482 — ilustración del encabezado del asistente. Manda lo mismo que decide la frase del
+ * encabezado (las capacidades del tipo: pide vendedor = traspaso, entra por VIN = matrícula); si no
+ * lo dicen, el código del tipo (`TRASPASO_STANDARD`…) y por último la familia. Antes solo miraba la
+ * familia, que en /tramites/nuevo/TRASPASO_STANDARD no llegaba como TRASPASO y caía en la genérica.
+ */
+export function ilustracionDelAsistente({
+  pideVendedor,
+  entraPorVin,
+  tipoCodigo,
+  familia,
+}: {
+  pideVendedor: boolean;
+  entraPorVin: boolean;
+  tipoCodigo: string;
+  familia: string;
+}): string {
+  if (pideVendedor) return 'traspaso';
+  if (entraPorVin) return 'matricula';
+  for (const v of [tipoCodigo, familia]) {
+    const f = v.toUpperCase();
+    if (f.startsWith('TRASP')) return 'traspaso';
+    if (f.startsWith('MATR')) return 'matricula';
+  }
+  return 'tramites';
+}
+
 /** Rótulo del acordeón cuando el cambio ES el trámite (familia OTROS). */
 const TITULO_CAMBIO_BASE = {
   color: 'Cambio de color',
@@ -63,7 +92,13 @@ import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
-import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
+import type { ResolverEdicion, SeccionResumen } from './MatriculaResumen';
+import {
+  blockerCopy,
+  FIRMA_EXENTA_AVISO,
+  identidadAutomaticaCopy,
+  stepLabelCopy,
+} from './wizard-copy';
 import {
   MANDATARIO_ALERTA_ID,
   MandatarioFirmaIndicator,
@@ -82,6 +117,7 @@ import {
   esCancelacionDeMatricula,
 } from '@/lib/catalogs/cancelacion';
 import { WizardStepTracker } from './WizardStepTracker';
+import { buttonClass } from '@flit/ui/Button';
 import { Modal } from '@/components/atom/Modal';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
@@ -90,6 +126,7 @@ import {
 } from './wizard-actores-coalesce';
 import { useToast } from '@/components/admin/Toast';
 import { formatDateOnly } from '@/lib/format/date-only';
+import { formatFechaHora } from '@/lib/format/date';
 import {
   tramitesClient,
   getDuplicateActiveProcedureId,
@@ -115,6 +152,7 @@ import {
   toPlateDigitFieldValues,
   toPlateDigitUiValue,
 } from '@/lib/tramites/plate-digit-preference';
+import { grupoPlacaPideDigito, resolverGrupoPlaca } from '@/lib/tramites/plate-format';
 import {
   sanitizeVin,
   validateVin,
@@ -144,7 +182,6 @@ import type {
 import {
   WIZARD_BTN,
   WIZARD_CTA_GRADIENT,
-  WIZARD_CTA_GRADIENT_DONE,
   WIZARD_INPUT,
   WIZARD_SELECT,
   WIZARD_LABEL,
@@ -281,6 +318,30 @@ const STEP_SUBTITLE: Record<string, string> = {
   identidad: 'Verificación de autenticidad de las partes involucradas.',
 };
 
+/**
+ * Paso del asistente donde se captura cada sección del Resumen (botón «Editar» de sus tarjetas).
+ * Se resuelve por el CUERPO del paso, no por su clave, porque los tipos parametrizados nombran sus
+ * pasos con el código de sección: vehículo y transformaciones viven en la consulta inicial, la
+ * prenda dentro de Requisitos y cada parte en el paso de actores de su rol. -1 si no existe.
+ */
+function indicePasoDeSeccion(steps: WizardStep[], seccion: SeccionResumen): number {
+  switch (seccion) {
+    case 'vehiculo':
+      return steps.findIndex((s) => resolveStepBody(s) === 'consulta');
+    // Transformaciones, prenda y documentos se capturan en Requisitos (el resumen lee de ahí las
+    // transformaciones declaradas, ver `FirmaFurStep`).
+    case 'transformaciones':
+    case 'prenda':
+    case 'documentos':
+      return steps.findIndex((s) => {
+        const body = resolveStepBody(s);
+        return body === 'documentos' || body === 'prenda';
+      });
+    default:
+      return steps.findIndex((s) => resolveStepBody(s) === 'actores' && resolveActorRole(s) === seccion);
+  }
+}
+
 
 /**
  * ¿La validación de identidad está aprobada? (HU #10350) Se deriva del estado server-driven de los
@@ -341,30 +402,30 @@ const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
       'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla, pero ya no se regenera.',
     // El borde/fondo conservan el verde de marca crudo (relleno tintado); el texto/icono usan la
     // tinta legible unificada (`--flit-success-ink`, consolidación de verdes de texto).
-    border: '#5B8A1F',
-    bg: 'rgba(140,198,63,0.10)',
+    border: 'var(--badge-success-border)',
+    bg: 'var(--badge-success-bg)',
     ink: 'var(--flit-success-ink)',
   },
   rechazado: {
     titulo: 'Trámite rechazado — solo visualización.',
     detalle:
       'El organismo de tránsito lo rechazó. Revisa el motivo para saber qué corregir; mientras no se active la subsanación no puede editarse.',
-    border: '#c2410c',
-    bg: 'rgba(255,78,0,0.06)',
+    border: 'var(--badge-danger-fg)',
+    bg: 'var(--badge-danger-bg)',
   },
   anulado: {
     titulo: 'Trámite anulado — solo visualización.',
     detalle:
       'Este trámite quedó sin efecto. Puedes consultar y descargar su documentación, pero no editarlo ni regenerarlo.',
-    border: '#b91c1c',
-    bg: 'rgba(185,28,28,0.06)',
+    border: 'var(--badge-danger-fg)',
+    bg: 'var(--badge-danger-bg)',
   },
   preparado: {
     titulo: 'Borrador preparado — solo visualización.',
     detalle:
       'Los datos quedaron en firme. Desde el paso de decisión puedes radicar el trámite a tránsito.',
-    border: '#B45309',
-    bg: 'rgba(249,172,0,0.08)',
+    border: 'var(--badge-warning-fg)',
+    bg: 'var(--badge-warning-bg)',
   },
 };
 
@@ -515,6 +576,11 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // Sección del Resumen por la que el gestor salió con «Editar». Mientras exista, el pie ofrece
+  // «Volver al resumen» y, al llegar al paso, la pantalla baja hasta esa sección. Se limpia al
+  // volver al Resumen.
+  // `'pasos'`: salió del Resumen por la barra de pasos o «Anterior» (sin sección a la que bajar).
+  const [regresoAResumen, setRegresoAResumen] = useState<SeccionResumen | 'pasos' | null>(null);
   // HU #13403 — la compañía puede tener la generación automática de improntas deshabilitada. El flag
   // viene en el detalle del trámite; ausente/undefined ⇒ true (comportamiento histórico).
   const [improntaGenInstancia, setImprontaGeneracionHabilitada] = useState(true);
@@ -536,6 +602,13 @@ export function TramiteWizard(props: Props) {
   const [referenceNumber, setReferenceNumber] = useState<string | null>(
     () => state.detail?.referenceNumber ?? null,
   );
+  // Datos de la franja azul (placa, VIN, organismo, dígito y fecha de radicación) del mismo
+  // `getInstance`. El detalle del reducer (`state.detail`) solo existe tras guardar algo en esta
+  // sesión: al reabrir un trámite estaba vacío y la franja no tenía de dónde leer.
+  const [franjaDetalle, setFranjaDetalle] = useState<{
+    fieldValues: { fieldKey: string; valueText?: string | null }[];
+    submittedAt: string | null;
+  } | null>(null);
   useEffect(() => {
     const fromDetail = state.detail?.referenceNumber;
     if (!fromDetail) return;
@@ -555,6 +628,7 @@ export function TramiteWizard(props: Props) {
         setImprontaGeneracionHabilitada(d.improntaGeneracionHabilitada !== false);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
+        setFranjaDetalle({ fieldValues: d.fieldValues ?? [], submittedAt: d.submittedAt ?? null });
         setActiveRevocationRequest(d.activeRevocationRequest ?? null);
         setInstanceDetailError(null);
       })
@@ -985,8 +1059,12 @@ export function TramiteWizard(props: Props) {
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
   // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
   // mientras que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit.
+  // Excepción: matrícula inicial por preasignación sin placa (`firmaExentaPorPreasignacion`, la decide
+  // el backend): se envía sin la firma y esta se pide cuando el organismo asigna la placa.
   const identityApproved = isIdentityApproved(steps);
-  const canRadicar = canSubmit && identityApproved;
+  const firmaExenta = wizard?.firmaExentaPorPreasignacion === true;
+  const canRadicar = canSubmit && (identityApproved || firmaExenta);
+  const avisoFirmaExenta = firmaExenta && !identityApproved;
 
   // ADR-0050 — capacidades del tipo. Sustituyen a `modalidad === 'traspaso'` como discriminante:
   // con dos modalidades las dos ramas agotaban el catálogo, con veintiún tipos ya no. Un blindaje
@@ -1016,15 +1094,40 @@ export function TramiteWizard(props: Props) {
   const refLabel = referenceNumber ?? state.detail?.referenceNumber ?? null;
   // Identificador del expediente: el dato por el que el tipo consulta el vehículo. Un trámite que
   // entra por VIN es uno cuyo vehículo aún no tiene placa; el resto entra por placa.
+  // Primero lo guardado en esta sesión (más reciente); si no hay, lo que trajo `getInstance` al abrir.
   const fvOf = (key: string) =>
-    state.detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText?.trim() || null;
+    (state.detail?.fieldValues ?? franjaDetalle?.fieldValues)
+      ?.find((f) => f.fieldKey === key)
+      ?.valueText?.trim() || null;
   // Organismo real del trámite, para el texto del modal "Confirmar radicación" (propuesta:
   // MatriculaInicial.tsx:1114) — nunca un literal de maqueta.
   const organismoNombre = fvOf('transit_office_name');
   const identificador = caps.entraPorVin
     ? (fvOf('vin') ?? fvOf('plate'))
     : (fvOf('plate') ?? fvOf('vin'));
-  const identificadorLabel = caps.entraPorVin ? 'VIN' : 'PLACA';
+
+  // Datos del expediente en la franja azul (placa, VIN, organismo, fecha y, en matrícula, la
+  // preasignación). Placa y VIN van por separado: el antiguo «Identificador» repetía uno de los dos.
+  // `familia` puede llegar aún con el valor heredado de la modalidad (`matricula_inicial`).
+  const esMatricula = familia === 'MATRICULAS' || familia === 'matricula_inicial';
+  const placaStrip = fvOf('plate');
+  const vinStrip = fvOf('vin');
+  // Preasignación (solo matrícula): el trámite va por ella cuando no tiene placa (la asigna el
+  // organismo) o cuando el gestor dejó el dígito de preferencia (HU #10805). Con placa y dígito se
+  // muestran las dos; con placa y sin dígito, solo la placa; sin placa, solo la preasignación.
+  const digitoPreferencia = fvOf('plate_preferred_last_digit');
+  const preasignacionStrip =
+    esMatricula && (!placaStrip || digitoPreferencia)
+      ? digitoPreferencia
+        ? `Dígito ${digitoPreferencia}`
+        : 'Sin dígito de preferencia'
+      : null;
+  // La placa se ve si existe; sin placa y sin preasignación (otros tipos) queda el guion.
+  const mostrarPlaca = !!placaStrip || !preasignacionStrip;
+  // Fecha de radicación; mientras no se ha radicado, la de hoy (la que llevaría si se radica ya).
+  const fechaStrip = formatFechaHora(
+    state.detail?.submittedAt ?? franjaDetalle?.submittedAt ?? new Date(),
+  );
 
   // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
   // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
@@ -1121,6 +1224,14 @@ export function TramiteWizard(props: Props) {
     // AC1 (HU #10883) — solo se persiste al avanzar (index > activeIndex), no al retroceder ni al
     // reabrir un paso ya visitado: retroceder a revisar un paso no debe mover el punto de retoma.
     if (index > activeIndex && steps[index]) persistCurrentStep(steps[index].key);
+    // De vuelta en el Resumen (por «Volver al resumen» o por la barra de pasos) ya no hay regreso
+    // pendiente que ofrecer en el pie.
+    if (steps[index]?.key === 'fur') setRegresoAResumen(null);
+    // Sale del Resumen de un borrador editable por la barra de pasos o «Anterior»: el aviso del
+    // Resumen promete «Volver al resumen» por cualquier camino, no solo por «Editar» (que ya dejó
+    // su sección anotada antes de navegar).
+    else if (steps[activeIndex]?.key === 'fur' && estadoTramite === 'borrador' && !editLocked)
+      setRegresoAResumen((prev) => prev ?? 'pasos');
     setActiveIndex(index);
   };
 
@@ -1186,6 +1297,74 @@ export function TramiteWizard(props: Props) {
       index >= 0 ? index : steps.findIndex((s) => s.key === 'comprador' || s.key === 'vendedor');
     if (destino >= 0) goToStep(destino);
   };
+
+  /**
+   * Botón «Editar» de las tarjetas del Resumen: lleva al paso donde se captura esa sección, con la
+   * misma navegación del asistente (guarda lo pendiente antes de salir). Solo en un borrador que aún
+   * se puede editar; en cualquier otro estado los datos están bloqueados y el botón no se pinta.
+   */
+  const resolverEdicionResumen: ResolverEdicion | undefined =
+    estadoTramite === 'borrador' && !editLocked
+      ? (seccion) => {
+          const index = indicePasoDeSeccion(steps, seccion);
+          if (index < 0 || index === activeIndex || !canNavigateToStep(steps, index, navViewOnly)) {
+            return null;
+          }
+          const paso = steps[index];
+          return {
+            pasoLabel: esPasoDeActoresUnificado(steps, index)
+              ? stepLabelCopy('actores', 'Actores')
+              : stepLabelCopy(paso.key, paso.label),
+            ir: () => {
+              setRegresoAResumen(seccion);
+              void navigateToStep(index).then((ok) => {
+                if (!ok) setRegresoAResumen(null);
+              });
+            },
+          };
+        }
+      : undefined;
+
+  /** Índice del Resumen (paso de decisión): destino de «Volver al resumen». */
+  const resumenIndex = steps.findIndex((s) => s.key === 'fur');
+  // Mismo criterio que `isDecisionStep`, que se declara más abajo.
+  const enResumen = activeStep?.key === 'fur';
+  const puedeVolverAResumen =
+    regresoAResumen !== null &&
+    !enResumen &&
+    resumenIndex >= 0 &&
+    canNavigateToStep(steps, resumenIndex, navViewOnly);
+
+  // Al llegar por «Editar», baja hasta la sección que se quiere corregir. Solo las que viven a mitad
+  // de Requisitos lo necesitan; vehículo y actores ya quedan arriba del paso. El contenido del paso
+  // carga en diferido, así que se reintenta un rato corto en vez de rendirse al primer intento.
+  useEffect(() => {
+    const titulo =
+      regresoAResumen === 'documentos'
+        ? 'Gestión de documentos'
+        : regresoAResumen === 'prenda'
+          ? 'Asignación de Prenda / Limitación a la Propiedad'
+          : regresoAResumen === 'transformaciones'
+            ? 'Trámites Simultáneos — Transformaciones del Vehículo'
+            : null;
+    if (!titulo || enResumen) return;
+    let intentos = 0;
+    const timer = window.setInterval(() => {
+      intentos += 1;
+      const encabezado = Array.from(document.querySelectorAll('h2, h3, h4')).find(
+        (el) => el.textContent?.trim() === titulo,
+      );
+      if (encabezado || intentos >= 20) {
+        window.clearInterval(timer);
+        if (encabezado instanceof HTMLElement) {
+          // La barra de pasos queda fija arriba: sin este margen el título quedaba tapado por ella.
+          encabezado.style.scrollMarginTop = '180px';
+          encabezado.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }, 150);
+    return () => window.clearInterval(timer);
+  }, [regresoAResumen, activeIndex, enResumen]);
 
   /**
    * Salida de emergencia del paso cuyo guardado falla (observación de code review, Bug #11614).
@@ -1762,12 +1941,32 @@ export function TramiteWizard(props: Props) {
       id="tramite-wizard-root"
       ref={wizardRootRef}
       tabIndex={-1}
-      className="flex w-full flex-col gap-3 pb-2 focus:outline-none"
+      // Propuesta (asistente lateral): desde lg la cabecera fija (pasos + salida + franja) pasa a
+      // una columna de 280px a la izquierda y todo lo demás a la derecha. Es solo CSS de rejilla: el
+      // orden del DOM —y con él el del lector de pantalla y el del Tab— no cambia. La cabecera
+      // abarca 16 filas implícitas sin hueco entre filas, así que las vacías miden cero.
+      className="flex w-full flex-col gap-3 pb-2 focus:outline-none lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start lg:gap-x-6 lg:gap-y-0 lg:[&>*]:col-start-2 lg:[&>*:not(:first-child)]:mt-3"
     >
       {/* Radicar es la espera más larga del flujo y la que más ansiedad genera: mientras dura, el
           velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
           demora se lea como lo que es —un tercero respondiendo— y no como un cuelgue. */}
       {submitting && <CarLoaderModal mode="radicacion" />}
+      {/* HU #14482 — encabezado de la propuesta (page-header de #traspaso) con el tipo de trámite: el
+          mismo título y la misma frase que antes iban en sr-only. Ocupa las dos columnas de la
+          rejilla, encima de los pasos; va antes del centinela, así la cabecera de pasos se compacta
+          cuando el encabezado ya salió de vista. Sin datos del vehículo hasta que haya consulta. */}
+      <div className="lg:!col-start-1 lg:col-span-2 lg:row-start-1 lg:!mt-0 lg:mb-3">
+        <ModuleTitle
+          title={displayTitle}
+          subtitle={displaySubtitle}
+          ilustracion={ilustracionDelAsistente({
+            pideVendedor: caps.pideVendedor,
+            entraPorVin: caps.entraPorVin,
+            tipoCodigo,
+            familia,
+          })}
+        />
+      </div>
       {/* Centinela del colapso: mientras se ve, la cabecera va completa; al salir de cuadro el
           asistente ya está en marcha y el título deja sitio a los pasos. Va FUERA del bloque
           sticky —si estuviera dentro nunca saldría de vista— y mide un píxel: no ocupa hueco. */}
@@ -1776,15 +1975,11 @@ export function TramiteWizard(props: Props) {
       {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
           franja de identidad estaba calculada para la cabecera completa. */}
       <div
-        className={`sticky top-0 z-30 -mx-1 bg-[#eef5ff] px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none dark:bg-[#0a1428] ${
+        className={`sticky top-0 z-30 -mx-1 bg-flit-bg px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none lg:!col-start-1 lg:row-start-2 lg:row-span-[16] lg:!mt-0 lg:mx-0 lg:self-start lg:bg-transparent lg:px-0 lg:!space-y-3 lg:!pb-3 ${
           cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
         }`}
       >
-        {/* PDF: sin tarjeta de título arriba. h1 sr-only para a11y; Cancelar junto al stepper. */}
-        <h1 className="sr-only">{displayTitle}</h1>
-        <p className="sr-only">{displaySubtitle}</p>
-
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-3 lg:flex-col lg:items-stretch">
           <div className="min-w-0 flex-1">
             {steps.length === 0 ? (
               <p className="text-xs opacity-60">
@@ -1816,8 +2011,8 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             disabled={cancelandoSubsanacion}
-            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
-            style={{ color: puedeCancelarSubsanacion ? '#C2410C' : '#59677D' }}
+            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand lg:self-start lg:px-2"
+            style={{ color: puedeCancelarSubsanacion ? 'var(--destructive)' : 'var(--muted-foreground)' }}
             aria-label={
               puedeCancelarSubsanacion
                 ? 'Cancelar la subsanación y volver al listado'
@@ -1847,8 +2042,10 @@ export function TramiteWizard(props: Props) {
             referencia del PO — no sustituir por tinte claro. */}
         {(refLabel || identificador) && (
           <div
-            className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5"
-            style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
+            className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5 lg:mx-0 lg:w-full lg:flex-col lg:items-start lg:gap-y-1.5 lg:rounded-[20px] lg:px-4 lg:py-3"
+            // Degradado de acción de la propuesta: el mismo de los botones, legible con blanco en
+            // claro y en oscuro (HU #14478).
+            style={{ background: 'var(--gradient-action)', color: '#fff' }}
             data-testid="tramite-identity-strip"
           >
             {refLabel && (
@@ -1861,14 +2058,32 @@ export function TramiteWizard(props: Props) {
               <span className="font-medium uppercase text-white/80">Tipo: </span>
               <span className="font-semibold">{modalidadLabel}</span>
             </p>
-            {identificador && (
-              <p className="text-[12px]">
-                <span className="font-medium uppercase text-white/80">Identificador: </span>
-                <span className="font-semibold">
-                  {identificadorLabel}: {identificador}
-                </span>
+            {preasignacionStrip && (
+              <p className="text-[12px]" data-testid="tramite-preasignacion">
+                <span className="font-medium uppercase text-white/80">Preasignación: </span>
+                <span className="font-semibold">{preasignacionStrip}</span>
               </p>
             )}
+            {/* Placa y preasignación: sin placa solo la preasignación, con placa y sin dígito solo la
+                placa, y con las dos (placa y dígito) ambas. */}
+            {mostrarPlaca && (
+              <p className="text-[12px]" data-testid="tramite-placa">
+                <span className="font-medium uppercase text-white/80">Placa: </span>
+                <span className="font-semibold">{placaStrip ?? '—'}</span>
+              </p>
+            )}
+            <p className="min-w-0 max-w-full break-words text-[12px]" data-testid="tramite-organismo">
+              <span className="font-medium uppercase text-white/80">Organismo de tránsito: </span>
+              <span className="font-semibold">{organismoNombre ?? 'Sin definir'}</span>
+            </p>
+            <p className="min-w-0 max-w-full break-all text-[12px]" data-testid="tramite-vin">
+              <span className="font-medium uppercase text-white/80">VIN: </span>
+              <span className="font-semibold">{vinStrip ?? '—'}</span>
+            </p>
+            <p className="text-[12px]" data-testid="tramite-fecha">
+              <span className="font-medium uppercase text-white/80">Fecha: </span>
+              <span className="font-semibold">{fechaStrip}</span>
+            </p>
             {estadoTramite && (
               <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">
                 {estadoTramite === 'borrador' ? 'En borrador' : estadoLabel(estadoTramite)}
@@ -1881,7 +2096,7 @@ export function TramiteWizard(props: Props) {
             {activeRevocationRequest && (
               <span
                 role="status"
-                className="rounded-full border border-amber-200/50 bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold"
+                className="rounded-full border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-2.5 py-0.5 text-[11px] font-semibold"
                 aria-label={`Sub-estado de revocatoria: ${
                   revocationRequestLabel(activeRevocationRequest.status) ?? 'en curso'
                 }`}
@@ -1921,7 +2136,7 @@ export function TramiteWizard(props: Props) {
                     )}
                   </button>
                   {subsanarError ? (
-                    <p role="alert" className="mt-2 text-xs" style={{ color: '#C2410C' }}>
+                    <p role="alert" className="mt-2 text-xs" style={{ color: 'var(--destructive)' }}>
                       {subsanarError}
                     </p>
                   ) : null}
@@ -1940,13 +2155,13 @@ export function TramiteWizard(props: Props) {
       {draftFinalized && (
         <div
           className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: 'var(--color-flit-primary)' }}
+          style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)', color: 'var(--color-flit-primary)' }}
           role="status"
           aria-live="polite"
         >
           <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
           <span>
-            <span className="font-semibold" style={{ color: '#B45309' }}>
+            <span className="font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
               Borrador finalizado — esperando validación del cliente.
             </span>{' '}
             Los datos quedaron en solo lectura. Puedes iniciar o compartir la validación de identidad;
@@ -1982,7 +2197,7 @@ export function TramiteWizard(props: Props) {
             <button
               type="button"
               onClick={descartarCambiosYSalir}
-              className="mt-2 h-9 rounded-xl border px-4 text-[12px] font-semibold transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#FF4E00]"
+              className="mt-2 h-9 rounded-xl border px-4 text-[12px] font-semibold transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-destructive"
               style={{ borderColor: 'var(--badge-danger-border)', color: 'var(--badge-danger-fg)' }}
               title="Sales del paso sin guardar: lo capturado en este formulario se pierde"
             >
@@ -2037,8 +2252,10 @@ export function TramiteWizard(props: Props) {
                 onCamposRequeridosGateChange={setActoresCamposGateOk}
                 rotulosActores={rotulosDeActores(steps)}
                 onIrAActores={irAPasoActor}
+                resolverEdicionResumen={resolverEdicionResumen}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                firmaExenta={firmaExenta}
                 vaultCoveredPartes={vaultCoveredPartes}
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
                 esMigrado={wizard?.esMigrado ?? false}
@@ -2074,7 +2291,7 @@ export function TramiteWizard(props: Props) {
             <InlineAlert tone="info" className="mt-6">
               <p>
                 Completa los campos obligatorios (marcados con{' '}
-                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                <span style={{ color: 'var(--color-flit-alert)' }} aria-hidden="true">
                   *
                 </span>
                 <span className="sr-only">asterisco</span>) para continuar.
@@ -2125,6 +2342,12 @@ export function TramiteWizard(props: Props) {
             </InlineAlert>
           )}
 
+          {isDecisionStep && !fullReadOnly && !inSubsanacion && avisoFirmaExenta && (
+            <InlineAlert tone="info" className="mt-6" id="aviso-firma-exenta">
+              <p>{FIRMA_EXENTA_AVISO}</p>
+            </InlineAlert>
+          )}
+
           {/* Acción terminal del asistente (propuesta: MatriculaInicial.tsx:1100-1109) — vive en el
               CUERPO del paso de decisión, no en el pie. "Anterior" y "Anular trámite" quedan en el
               pie; la barra central de EstadoAcciones se retiró (estado en franja de identidad).
@@ -2144,8 +2367,8 @@ export function TramiteWizard(props: Props) {
                     (!fullReadOnly && !canRadicar && draftFinalized)
                   }
                   aria-describedby={mandatarioBloquea ? MANDATARIO_ALERTA_ID : undefined}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+                  // HU #14482 — la propuesta no tiene verde: las acciones terminales también son `.btn`.
+                  className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                   title={
                     mandatarioBloquea
                       ? 'Sin mandatario válido no se puede radicar: pide que lo configuren'
@@ -2168,8 +2391,8 @@ export function TramiteWizard(props: Props) {
               disabled={activeIndex === 0}
               // Misma altura que las acciones de la derecha: en la propuesta el pie es una sola
               // línea de botones, y un "Anterior" más bajo la partía en dos.
-              className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-[#162744] disabled:opacity-30`}
-              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
+              // HU #14482 (propuesta): `.btn.secondary`.
+              className={buttonClass({ variant: 'secondary', className: 'gap-1 disabled:opacity-30' })}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
@@ -2223,24 +2446,20 @@ export function TramiteWizard(props: Props) {
                       })();
                     }}
                     disabled={continuing || reradicando}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                     title="Guarda los cambios de este paso y habilita Re-radicar"
                   >
                     {continuing ? 'Guardando…' : 'Guardar y continuar'}
                   </button>
-                  {/* Cierre de la subsanación: degradado cian→verde (`gradient.success`), el mismo
-                      que "Finalizar y enviar trámite". Re-radicar TAMBIÉN cierra el trámite
-                      (rechazado→entregado), así que comparte el tono de las acciones terminales y no
-                      el azul del avance, que queda para "Guardar y continuar". */}
+                  {/* Cierre de la subsanación (rechazado→entregado). Hasta HU #14482 iba con el
+                      degradado cian→verde de las acciones terminales; la propuesta no tiene verde, así
+                      que es el `.btn` principal como "Finalizar y enviar trámite" y el avance. */}
                   <button
                     type="button"
                     onClick={() => void reradicar()}
                     disabled={!reradicarHabilitado}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-tech disabled:opacity-50`}
-                    style={{
-                      background: reradicarHabilitado ? WIZARD_CTA_GRADIENT_DONE : '#94A3B8',
-                    }}
+                    // HU #14482 — `.btn` principal, sin el degradado turquesa a verde.
+                    className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                     title={
                       hasUnsavedChanges
                         ? 'Hay cambios sin guardar: usa Guardar y continuar antes de re-radicar'
@@ -2259,8 +2478,7 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT }}
+                  className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                 >
                   {submitting ? 'Finalizando…' : 'Finalizar'}
                 </button>
@@ -2269,14 +2487,28 @@ export function TramiteWizard(props: Props) {
               <button
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
-                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
-                style={{ background: WIZARD_CTA_GRADIENT }}
+                className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
               >
                 Continuar
                 <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
               <>
+                {/* Regreso directo al Resumen tras pulsar «Editar» en una de sus tarjetas: sin él, el
+                    único avance del pie lleva al paso SIGUIENTE, no de vuelta a donde se estaba
+                    revisando. Guarda lo pendiente igual que la barra de pasos. */}
+                {puedeVolverAResumen && (
+                  <button
+                    type="button"
+                    onClick={() => goToStep(resumenIndex)}
+                    disabled={continuing}
+                    className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-flit-brand disabled:opacity-40`}
+                    style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
+                  >
+                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                    Volver al resumen
+                  </button>
+                )}
                 {/* Anular trámite (propuesta): acción destructiva en naranja de alerta, junto al
                     avance y no escondida en la cabecera, con confirmación porque se pierde lo no
                     guardado. Solo mientras el trámite se está capturando: ya radicado no hay nada
@@ -2285,8 +2517,13 @@ export function TramiteWizard(props: Props) {
                   <button
                     type="button"
                     onClick={() => setConfirmCancel(true)}
-                    className={`${WIZARD_BTN} text-white focus-visible:ring-[#FF4E00]`}
-                    style={{ background: '#FF4E00' }}
+                    // HU #14482 — patrón de peligro de la propuesta (como BOTON_PELIGRO_CLS de
+                    // comparendos): secundario con aro de alerta y texto de error, sin naranja sólido.
+                    className={buttonClass({
+                      variant: 'secondary',
+                      className:
+                        'border-[color:var(--di-alerta-punto)] text-[color:var(--di-danger)] hover:bg-[color:var(--di-danger-soft)]',
+                    })}
                   >
                     Anular trámite
                   </button>
@@ -2294,10 +2531,9 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleContinue()}
                   disabled={continueDisabled}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-40`}
                   // Deshabilitado en gris pleno, no el degradado atenuado: media opacidad sobre un
                   // degradado deja un azul lavado que sigue leyéndose como acción disponible.
-                  style={{ background: continueDisabled ? '#94A3B8' : WIZARD_CTA_GRADIENT }}
+                  className={buttonClass({ variant: 'primary', className: 'gap-1 disabled:[background:var(--di-surface-sunken)] disabled:text-[color:var(--di-text-tertiary)] disabled:shadow-none disabled:opacity-100' })}
                 >
                   {continuing ? 'Guardando…' : 'Continuar y guardar'}
                 </button>
@@ -2338,7 +2574,7 @@ export function TramiteWizard(props: Props) {
                 disabled={anulando}
                 aria-describedby={errorAnulacion ? 'wizard-motivo-anulacion-err' : undefined}
                 placeholder="Por qué se anula este trámite"
-                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
+                className="mt-1.5 w-full rounded-xl border border-border bg-card px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
               />
               <p className="mt-1 text-[11px] opacity-60">
                 Queda en la trazabilidad del trámite.
@@ -2358,7 +2594,7 @@ export function TramiteWizard(props: Props) {
               id="wizard-motivo-anulacion-err"
               role="alert"
               className="mt-3 text-xs font-medium"
-              style={{ color: '#C2410C' }}
+              style={{ color: 'var(--destructive)' }}
             >
               {errorAnulacion}
             </p>
@@ -2380,8 +2616,8 @@ export function TramiteWizard(props: Props) {
               type="button"
               onClick={() => void handleAnular()}
               disabled={anulando}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2 disabled:opacity-50"
-              style={{ background: '#FF4E00' }}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-alert focus-visible:ring-offset-2 disabled:opacity-50"
+              style={{ background: 'var(--color-flit-alert)' }}
             >
               {anulando ? 'Anulando…' : instanceId ? 'Sí, anular' : 'Sí, salir'}
             </button>
@@ -2413,8 +2649,7 @@ export function TramiteWizard(props: Props) {
                 setConfirmRadicar(false);
                 void handleRadicarTramite();
               }}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+              className={buttonClass({ variant: 'primary', size: 'sm' })}
             >
               Sí, radicar trámite
             </button>
@@ -2472,7 +2707,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+            style={{ background: 'var(--gradient-action)' }}
           >
             Ir al listado de trámites
           </button>
@@ -2483,7 +2718,7 @@ export function TramiteWizard(props: Props) {
   );
 }
 
-const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
+const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS', 'PPT'];
 
 /**
  * Trámites principales del selector del paso 1, en el orden y con el copy de la propuesta.
@@ -2619,7 +2854,7 @@ function VehicleDataCard({
       <div className="space-y-4">
         <div
           className="flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3"
-          style={{ background: '#EFF6FF', borderColor: '#BFDBFE' }}
+          style={{ background: 'var(--badge-info-bg)', borderColor: 'var(--badge-info-border)' }}
         >
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             {plate && (
@@ -2718,7 +2953,7 @@ function VehicleDataCard({
   return (
     <div
       className={
-        bare ? '' : 'overflow-hidden rounded-2xl border bg-white dark:bg-[#162744]'
+        bare ? '' : 'overflow-hidden rounded-2xl border bg-card'
       }
     >
       {/* Header — embebido lo pinta el acordeón, que ya dice de dónde vienen los datos. */}
@@ -2968,7 +3203,7 @@ function TramiteObservacionesField({
         if (!observaciones.trim() && !excedido) return null;
         return (
           <p
-            className={`text-xs ${excedido ? 'font-bold text-[#C0392B] dark:text-[#FF8A7A]' : 'opacity-55'}`}
+            className={`text-xs ${excedido ? 'font-bold text-destructive' : 'opacity-55'}`}
             role={excedido ? 'alert' : 'status'}
             aria-live="polite"
           >
@@ -2984,7 +3219,7 @@ function TramiteObservacionesField({
         </p>
       )}
       {(preview.manual || preview.auto.length > 0) && (
-        <div className="min-w-0 rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
+        <div className="min-w-0 rounded-xl bg-secondary px-3 py-2">
           <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
           <div className="mt-1 space-y-0.5 text-xs leading-relaxed">
             {preview.manual && (
@@ -3004,7 +3239,7 @@ function TramiteObservacionesField({
 
   if (hideCardWrapper) return content;
   return (
-    <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744]">{content}</div>
+    <div className="rounded-2xl border bg-card p-4">{content}</div>
   );
 }
 
@@ -3217,8 +3452,7 @@ function ConsultaStep({
   // diferida ya no hay instancia donde persistirlo: simplemente prellena el input del paso 1.
   const [vin, setVin] = useState(seedVin ?? '');
   const [plate, setPlate] = useState(seedPlaca ?? '');
-  // Sin valor inicial: el tipo lo elige el gestor. Asumir 'CC' mandaba un NIT como cédula a las consultas.
-  const [ownerDocType, setOwnerDocType] = useState<ActorDocumentType | ''>('');
+  const [ownerDocType, setOwnerDocType] = useState<ActorDocumentType>('CC');
   const [ownerDocNumber, setOwnerDocNumber] = useState('');
   const [persisting, setPersisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3239,9 +3473,13 @@ function ConsultaStep({
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
   // CF-02 — snapshot de la consulta desacoplada (sin instancia que lo persista todavía).
   const [previewSnapshot, setPreviewSnapshot] = useState<PreflightSnapshot | null>(null);
-  // El tipo de documento del propietario se pide siempre, sea cual sea el proveedor: otras consultas del
-  // aplicativo lo necesitan aunque Kyverum no lo exija. Este flag solo muestra el aviso de verificarlo
-  // cuando la consulta devuelve "vehículo no encontrado".
+  // HU #10478 — proveedor de consulta por placa resuelto para el tenant.
+  // null = aún sin resolver. El selector de tipo SIEMPRE se muestra (hotfix UI); lo que cambia es
+  // el payload de consulta con Kyverum (ver `resolveOwnerDocTypesForConsulta`).
+  const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
+  // HU #10478 (novedad maquinaria/remolques) — maquinaria/remolques NO están en el RUNT de Kyverum:
+  // el backend cae a Verifik, que SÍ exige el tipo real del dueño. Si la consulta falla con
+  // "vehículo no encontrado", este flag sale del modo legacy (consulta con CC) y usa el tipo de UI.
   const [ownerDocTypeSuggested, setOwnerDocTypeSuggested] = useState(false);
 
   // HU #11199 — la secretaría se elige aquí SOLO en los trámites que matriculan el vehículo y SOLO
@@ -3359,6 +3597,8 @@ function ConsultaStep({
    * `plate_route_active` que la acompañaba.
    */
   const [digitoPlaca, setDigitoPlaca] = useState('');
+  /** HU9 — `grupoPlaca` de la última consulta del paso 1 (null sin consulta o si no vino). */
+  const [grupoPlacaPreview, setGrupoPlacaPreview] = useState<string | null>(null);
 
   /**
    * Epic #12550 — ruta de la matrícula que decidió el RUNT en la consulta del paso 1, con el
@@ -3381,6 +3621,23 @@ function ConsultaStep({
     (f) => f.fieldKey === 'plate' && f.source === 'consultation',
   )?.valueText?.trim() ?? '';
   const vehiculoConPlacaRunt = placaRunt !== '';
+
+  /**
+   * HU5 (registro diferido 2026-11-09) — grupo de placa de la clase consultada, por listas exactas
+   * (MOTO, REMOLQUE). Remolque no lleva dígito (decisión D2): sin selector y sin el gate de la HU
+   * #11628. Maquinaria la define el catálogo del backend y aquí todavía no hay trámite creado para
+   * pedirla (`/fur/template-format` lee el expediente), así que en el paso 1 se comporta como hoy y
+   * el paso del FUR la corrige. Antes de consultar no hay clase → comportamiento actual.
+   */
+  // HU9 — el preview trae `grupoPlaca` (catálogo del backend, cubre maquinaria); si viene y es
+  // válido manda, si no (versión anterior, borrador rehidratado) quedan las listas exactas de HU5.
+  const grupoPlacaPaso1 = resolverGrupoPlaca(
+    grupoPlacaPreview,
+    fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText,
+  );
+  const muestraSelectorDigito = muestraDigitoPlaca && grupoPlacaPideDigito(grupoPlacaPaso1);
+  // HU10 — moto y motocarro: el dígito es el primer número de la placa.
+  const digitoPrimerNumeroPaso1 = grupoPlacaPaso1 === 'MOTO' || grupoPlacaPaso1 === 'MOTOCARRO';
 
   /**
    * Epic #12550 (ADR-0059 §Ruta Corta) — Ruta Corta: el vehículo ya tiene placa según el RUNT y el
@@ -3420,7 +3677,7 @@ function ConsultaStep({
    * bloquearlo ahí dejaría trámites imposibles de continuar (AC4).
    */
   const digitoPlacaSinDecidir = isPlateDigitUndecided({
-    muestraDigitoPlaca,
+    muestraDigitoPlaca: muestraSelectorDigito,
     vehiculoConPlacaRunt,
     transitOfficeId,
     // Epic #12550 — la preasignación está siempre disponible en la Ruta Larga (decisión B).
@@ -3503,6 +3760,7 @@ function ConsultaStep({
       .getConsultationConfig()
       .then((cfg) => {
         if (!active) return;
+        setPlatePrimaryProvider(cfg.vehiclePlate);
         const byFamily = cfg.onlyOwnVehiclesByFamily;
         const block = cfg.blockProcedureFamily;
         if (isVin) {
@@ -3532,11 +3790,11 @@ function ConsultaStep({
     setOwnerDocNumber(tenantNitDigits);
   }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
 
-  // HU #10478 (novedad maquinaria/remolques) — avisa que se verifique el tipo de documento del propietario
-  // cuando una consulta por placa devuelve "vehículo no encontrado" (check 'vehiculo' en fail).
-  // Sticky: una vez mostrado, permanece visible.
+  // HU #10478 (novedad maquinaria/remolques) — sale del payload legacy (CC) cuando una consulta por
+  // placa (Kyverum primario) devuelve "vehículo no encontrado". Verifik necesita el tipo real (p. ej. NIT).
+  // Sticky: una vez activado, permanece.
   useEffect(() => {
-    if (isVin || ownerDocTypeSuggested) return;
+    if (isVin || platePrimaryProvider !== 'kyverum_runt' || ownerDocTypeSuggested) return;
     const pf = deferred ? previewSnapshot : preflight;
     const noEncontrado = (pf?.checks ?? []).some(
       (c) => c.key === 'vehiculo' && c.status === 'fail',
@@ -3545,9 +3803,33 @@ function ConsultaStep({
     // async — checks del preflight/preview —, no del render). Sticky por el guard de arriba.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (noEncontrado) setOwnerDocTypeSuggested(true);
-  }, [isVin, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
+  }, [isVin, platePrimaryProvider, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
 
-  const buildItems = (): FieldValueInput[] | null => {
+  /**
+   * Hotfix tipo-documento-visible: el selector siempre muestra `tipoUi` (default CC).
+   * Con Kyverum placa (sin sugerencia de maquinaria) el campo estaba oculto y el consult
+   * mandaba CC (default). Ese payload se conserva cuando el gestor elige otro tipo en UI —
+   * el tipo de UI viaja a creación/Actores/RUES vía pendingPreview o patch post-consulta.
+   * Excepción: política "solo vehículos propios" ya fijaba NIT en estado aunque el campo
+   * estuviera oculto; ahí `tipoConsulta` sigue siendo NIT (fallback Verifik).
+   */
+  const resolveOwnerDocTypesForConsulta = (): {
+    tipoUi: ActorDocumentType;
+    tipoConsulta: ActorDocumentType;
+  } => {
+    const tipoUi = ownerDocType;
+    const kyverumPlateLegacy =
+      !isVin &&
+      platePrimaryProvider === 'kyverum_runt' &&
+      !ownerDocTypeSuggested &&
+      !ownerDocLocked;
+    return {
+      tipoUi,
+      tipoConsulta: kyverumPlateLegacy ? 'CC' : tipoUi,
+    };
+  };
+
+  const buildItems = (tipoConsulta: ActorDocumentType = ownerDocType): FieldValueInput[] | null => {
     if (isVin) {
       const value = vin.trim();
       if (!value) return null;
@@ -3555,15 +3837,15 @@ function ConsultaStep({
     }
     const plateValue = plate.trim();
     const docNumber = ownerDocNumber.trim();
-    if (!plateValue || !docNumber || !ownerDocType) return null;
-    // owner_document_type SIEMPRE viaja en el payload: el proveedor, sus respaldos y las demás consultas
-    // del trámite lo usan. Tras una consulta exitosa, el preflight lo hidrata al tipo que reporta el RUNT.
+    if (!plateValue || !docNumber) return null;
+    // owner_document_type SIEMPRE viaja en el payload de consulta (HU #10478 / fallback Verifik).
+    // Con Kyverum placa legacy `tipoConsulta` es CC; el tipo real de UI se persiste aparte tras la consulta.
     return [
       { formFieldId: null, fieldKey: 'plate', valueText: plateValue, valueJson: null },
       {
         formFieldId: null,
         fieldKey: 'owner_document_type',
-        valueText: ownerDocType,
+        valueText: tipoConsulta,
         valueJson: null,
       },
       {
@@ -3577,13 +3859,14 @@ function ConsultaStep({
 
   const handleRun = async () => {
     if (!instanceId && !deferred) return;
-    const items = buildItems();
+    const { tipoUi, tipoConsulta } = resolveOwnerDocTypesForConsulta();
+    const items = buildItems(tipoConsulta);
     if (!items) {
       setErrorTone('warning');
       setError(
         isVin
           ? 'Ingresa el VIN antes de consultar.'
-          : 'Ingresa la placa, el tipo y el número de documento del propietario antes de consultar.',
+          : 'Ingresa la placa y el documento del propietario antes de consultar.',
       );
       return;
     }
@@ -3600,7 +3883,7 @@ function ConsultaStep({
     // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
     // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
     if (!isVin && onlyOwnVehicles &&
-        !isTenantOwnDocument(ownerDocType, ownerDocNumber.trim(), tenantNitDigits)) {
+        !isTenantOwnDocument(tipoUi, ownerDocNumber.trim(), tenantNitDigits)) {
       setErrorTone('error');
       setError(OWNER_NOT_TENANT_MESSAGE);
       return;
@@ -3609,7 +3892,7 @@ function ConsultaStep({
     // bloqueo de negocio — se avisa en warning (ámbar), el gestor lo corrige y reintenta.
     const formatError = isVin
       ? validateVin(vin.trim())
-      : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), ownerDocType));
+      : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), tipoUi));
     if (formatError) {
       setErrorTone('warning');
       setError(formatError);
@@ -3630,7 +3913,8 @@ function ConsultaStep({
           procedureTypeCode: tipoCodigo || null,
           vin: isVin ? vin.trim() : null,
           plate: isVin ? null : plate.trim(),
-          ownerDocumentType: isVin ? null : ownerDocType,
+          // Consulta: payload legacy con Kyverum (CC). Persistencia/Actores: tipoUi en pending.
+          ownerDocumentType: isVin ? null : tipoConsulta,
           ownerDocumentNumber: isVin ? null : ownerDocNumber.trim(),
           // `|| null`, no a secas: el organismo se elige DESPUÉS de consultar, así que aquí el
           // estado suele ser cadena vacía. Mandarla tal cual rompía la consulta antes de llegar al
@@ -3647,16 +3931,22 @@ function ConsultaStep({
         // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
         // para la creación): en Ruta Corta no hay dígito que guiar.
         if (result.route === 'corta' && digitoPlaca) handleDigitoPlaca('');
+        // HU5/HU9 — remolque y maquinaria no llevan dígito: si se había elegido para otro vehículo, se borra.
+        setGrupoPlacaPreview(result.grupoPlaca ?? null);
+        const claseConsultada = result.vehicleFields.find((f) => f.fieldKey === 'vehicle_class')?.valueText;
+        if (digitoPlaca && !grupoPlacaPideDigito(resolverGrupoPlaca(result.grupoPlaca, claseConsultada)))
+          handleDigitoPlaca('');
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
         // Se guarda la consulta y se emite en un efecto: el organismo se elige DESPUÉS de consultar,
         // y "Continuar y guardar" —que es lo que crea el trámite— no puede habilitarse sin él.
+        // tipoUi (no tipoConsulta): CreateFromConsulta sincroniza vendedor/RUES con el tipo elegido.
         setPendingPreview({
           previewToken: result.previewToken,
           vin: isVin ? vin.trim() : undefined,
           plate: isVin ? undefined : plate.trim(),
-          ownerDocumentType: isVin ? undefined : ownerDocType,
+          ownerDocumentType: isVin ? undefined : tipoUi,
           ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
           hardBlocked:
             previewChecks.some((c) => c.status === 'error') ||
@@ -3675,6 +3965,18 @@ function ConsultaStep({
       await tramitesClient.patchFieldValues(instanceId, items);
       await onRunPreflight();
       await loadInstance();
+      // Tras consultar con payload legacy (CC), persiste el tipo de UI para Actores/RUES.
+      if (!isVin && tipoUi !== tipoConsulta) {
+        await tramitesClient.patchFieldValues(instanceId, [
+          {
+            formFieldId: null,
+            fieldKey: 'owner_document_type',
+            valueText: tipoUi,
+            valueJson: null,
+          },
+        ]);
+        await loadInstance();
+      }
     } catch (err) {
       // CF-02 — una consulta fallida (o bloqueada) invalida la anterior: sin consulta válida no se
       // puede crear el trámite, así que "Continuar" vuelve a deshabilitarse.
@@ -3742,6 +4044,7 @@ function ConsultaStep({
     setPreviewSnapshot(null);
     setPendingPreview(null);
     setFieldValues([]);
+    setGrupoPlacaPreview(null);
     onPreviewDone?.(null);
   };
 
@@ -3964,10 +4267,10 @@ function ConsultaStep({
   const [pendingTipo, setPendingTipo] = useState<string | null>(null);
 
   // El identificador del vehículo está completo: el VIN en matrícula; la placa Y el documento del
-  // propietario (tipo y número) en traspaso, porque el RUNT los cruza y con uno solo la consulta no resuelve.
+  // propietario en traspaso, porque el RUNT los cruza y con uno solo la consulta no resuelve.
   const identificadorCompleto = isVin
     ? vin.trim().length > 0
-    : plate.trim().length > 0 && ownerDocType !== '' && ownerDocNumber.trim().length > 0;
+    : plate.trim().length > 0 && ownerDocNumber.trim().length > 0;
 
   // Botón "Consultar RUNT" — azul pleno de marca SIN degradado (PDF anotaciones / Lovable).
   const consultButton = (
@@ -4109,7 +4412,7 @@ function ConsultaStep({
           {/* Tres columnas en matrícula (secretaría · dígito · prioridad); una sola donde el trámite
               solo escoge organismo, para no dejar dos huecos con el campo estirado a un tercio. */}
           <div
-            className={`mt-4 grid grid-cols-1 gap-4 ${muestraDigitoPlaca ? 'lg:grid-cols-2' : ''}`}
+            className={`mt-4 grid grid-cols-1 gap-4 ${muestraSelectorDigito ? 'lg:grid-cols-2' : ''}`}
           >
           <div className="min-w-0">
             <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
@@ -4135,14 +4438,14 @@ function ConsultaStep({
             {/* Aviso ámbar mientras falta: sin secretaría la consulta no se habilita, y el botón
                 deshabilitado por sí solo no dice por qué. */}
             {!transitOfficeId && secretarias.length > 0 && (
-              <p className="mt-1.5 text-xs font-medium leading-tight" style={{ color: '#B45309' }}>
+              <p className="mt-1.5 text-xs font-medium leading-tight" style={{ color: 'var(--badge-warning-fg)' }}>
                 Aún no has seleccionado la secretaría de tránsito.
               </p>
             )}
             {secretariasLoaded && secretarias.length === 0 && !secretariasError && (
               <p
                 className="mt-1.5 text-xs font-medium leading-tight"
-                style={{ color: '#B45309' }}
+                style={{ color: 'var(--badge-warning-fg)' }}
                 role="alert"
               >
                 {SECRETARIA_LISTA_VACIA}
@@ -4154,7 +4457,7 @@ function ConsultaStep({
                 : SECRETARIA_LISTA_AVISO}
             </p>
             {secretariasError && (
-              <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
+              <p className="mt-1 text-xs leading-tight" style={{ color: 'var(--destructive)' }}>
                 {secretariasError}
               </p>
             )}
@@ -4166,10 +4469,10 @@ function ConsultaStep({
               elegido tiene la ruta de preasignación activa para la compañía (HU #10806): con ella
               apagada el OT no asigna placa desde un rango y el dígito no tendría a quién guiar.
               Y solo en los tipos que PIDEN placa: en un radicado de cuenta el vehículo ya la tiene. */}
-          {muestraDigitoPlaca && (
+          {muestraSelectorDigito && (
           <div className="min-w-0">
             <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
-              Dígito de preasignación de placa
+              {digitoPrimerNumeroPaso1 ? 'Dígito numérico de preferencia' : 'Dígito de preferencia'}
             </label>
             {/* AC2 (HU #10799) — con placa del RUNT no hay nada que preasignar: se dice, con la
                 placa delante, en vez de dejar un selector apagado que parece un fallo. Es la misma
@@ -4196,7 +4499,7 @@ function ConsultaStep({
                   onChange={(e) => handleDigitoPlaca(e.target.value)}
                   disabled={readOnly || !transitOfficeId}
                   required={isPlateDigitDecisionRequired({
-                    muestraDigitoPlaca,
+                    muestraDigitoPlaca: muestraSelectorDigito,
                     vehiculoConPlacaRunt,
                     transitOfficeId,
                     preasignacionActiva: true,
@@ -4210,7 +4513,10 @@ function ConsultaStep({
                   </option>
                   <option value="none">Sin preferencia</option>
                   {Array.from({ length: 10 }, (_, i) => (
-                    <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
+                    <option key={i} value={String(i)}>
+                      {/* D4 — en motos el dígito es el primer número de la placa. */}
+                      {digitoPrimerNumeroPaso1 ? `Primer número ${i}` : `Termina en ${i}`}
+                    </option>
                   ))}
                 </select>
                 {/* Tres estados, porque un selector apagado (o sin decidir) sin explicación se lee
@@ -4221,13 +4527,17 @@ function ConsultaStep({
                   id="consulta-digito-placa-nota"
                   role={digitoPlacaSinDecidir ? 'alert' : undefined}
                   className="mt-1 text-xs font-medium leading-tight"
-                  style={{ color: digitoPlacaSinDecidir ? '#B45309' : undefined, opacity: digitoPlacaSinDecidir ? 1 : 0.7 }}
+                  style={{ color: digitoPlacaSinDecidir ? 'var(--badge-warning-fg)' : undefined, opacity: digitoPlacaSinDecidir ? 1 : 0.7 }}
                 >
                   {!transitOfficeId
                     ? 'Elige primero la secretaría: es el organismo que asignará la placa.'
                     : digitoPlacaSinDecidir
                       ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
-                      : 'Indica el número en el que prefieres que termine la placa. El organismo lo toma como guía al asignarla en Preasignación; podrás cambiarlo en el paso final.'}
+                      : grupoPlacaPaso1 === 'MOTOCARRO'
+                        ? 'Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.'
+                        : grupoPlacaPaso1 === 'MOTO'
+                        ? 'Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.'
+                        : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
                 </p>
               </>
             )}
@@ -4276,7 +4586,7 @@ function ConsultaStep({
             className="min-w-0 flex-1 rounded-xl border p-3.5"
             style={{
               borderColor: 'var(--color-flit-brand)',
-              background: '#EFF6FF',
+              background: 'var(--badge-info-bg)',
               boxShadow: '0 0 0 3px color-mix(in srgb, var(--color-flit-brand) 15%, transparent)',
             }}
             aria-current="step"
@@ -4367,8 +4677,9 @@ function ConsultaStep({
           {!readOnly && consultButton}
         </div>
         ) : (
-          /* Entrada por placa: Placa | Tipo de documento | Nº documento | Consultar RUNT.
-             Rejilla de doce columnas para que todo quepa en UNA fila: 3 + 2 + 4 + 3 = 12. */
+          /* Traspaso — Placa | Tipo doc | Nº documento | Consultar RUNT.
+             Hotfix: el tipo de documento del propietario SIEMPRE es visible (también con Kyverum).
+             Rejilla de 12: 3 + 2 + 4 + 3 = 12. */
           <div className="mt-4 grid grid-cols-1 items-end gap-4 lg:grid-cols-12">
             <div className="min-w-0 lg:col-span-3">
               <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
@@ -4387,7 +4698,6 @@ function ConsultaStep({
                 placeholder="Ej. XYR010"
               />
             </div>
-            {/* Dos de doce: lo justo para «CC»/«NIT» y su flecha. */}
             <div className="min-w-0 lg:col-span-2">
               <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
                 Tipo documento propietario
@@ -4404,9 +4714,6 @@ function ConsultaStep({
                 disabled={readOnly || ownerDocLocked}
                 className={`mt-1 ${WIZARD_SELECT} disabled:opacity-60`}
               >
-                <option value="" disabled>
-                  Selecciona
-                </option>
                 {DOC_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -4430,7 +4737,7 @@ function ConsultaStep({
                 readOnly={ownerDocLocked}
                 aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
                 className={`mt-1 ${inputClass} disabled:opacity-60 ${
-                  ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
+                  ownerDocLocked ? 'cursor-not-allowed bg-secondary' : ''
                 }`}
                 placeholder="Ingresa el número de documento propietario"
               />
@@ -4441,11 +4748,7 @@ function ConsultaStep({
           </div>
         )}
 
-        {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna,
-            donde descuadraban la altura de su campo. */}
-        {/* La tercera condición era `deferred && modalidad === 'traspaso'`, que no habilitaba
-            ninguna nota: dentro solo hay dos y ambas tienen su propia condición. Abría un contenedor
-            vacío con margen. */}
+        {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna. */}
         {(ownerDocLocked || ownerDocTypeSuggested) && (
           <div className="mt-3 space-y-1.5">
             {ownerDocLocked && (
@@ -4512,7 +4815,7 @@ function ConsultaStep({
             <span className={`mb-1.5 block ${WIZARD_LABEL}`}>Secretaría de tránsito (RUNT)</span>
             <div
               className="flex h-[42px] items-center rounded-xl border px-3"
-              style={{ borderColor: '#DFE5ED', background: 'rgba(223,229,237,0.35)' }}
+              style={{ borderColor: 'var(--border)', background: 'var(--surface-sunken)' }}
               role="status"
               aria-label={`Secretaría de tránsito: ${transitOfficeNombreTraspaso}`}
             >
@@ -4545,7 +4848,7 @@ function ConsultaStep({
               type="button"
               onClick={handleRetomarDuplicado}
               className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+              style={{ background: 'var(--gradient-action)' }}
               aria-label="Retomar el trámite existente"
             >
               Retomar
@@ -4578,8 +4881,8 @@ function ConsultaStep({
 
       {mostrarPazSalvo && (
         <label
-          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#162744]"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
+          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-card"
+          style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
         >
           <input
             type="checkbox"
@@ -4681,8 +4984,10 @@ function StepBody({
   onCamposRequeridosGateChange,
   rotulosActores,
   onIrAActores,
+  resolverEdicionResumen,
   identityOperable = false,
   identityApproved = false,
+  firmaExenta = false,
   vaultCoveredPartes = [],
   rnmcEnabled = false,
   esMigrado = false,
@@ -4754,6 +5059,8 @@ function StepBody({
   rotulosActores?: Partial<Record<ActorRol, string>>;
   /** HU #11666 — navega al paso de actores de una parte (acción correctiva de los motivos de no envío). */
   onIrAActores?: (parte: BiometricParte) => void;
+  /** Botón «Editar» de las tarjetas del Resumen (solo en borrador editable). */
+  resolverEdicionResumen?: ResolverEdicion;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
   rnmcEnabled?: boolean;
   /** Migración V1→V2 — el trámite viene de V1; el paso de consulta lo explica en el pre-vuelo. */
@@ -4780,6 +5087,8 @@ function StepBody({
   /** Identidad aprobada (deriva del estado server-driven). Con identidad pendiente, el paso FUR
    * informa que el FUR/firma se generarán automáticamente, en vez de empujar la generación manual. */
   identityApproved?: boolean;
+  /** Matrícula por preasignación sin placa: el trámite se envía sin firma (lo decide el backend). */
+  firmaExenta?: boolean;
   /** HU #10646 — partes (NIT) cubiertas por la firma electrónica del baúl (señal capturada del outcome
    * `firma_baul` de ensureIdentity). BiometricStep pinta el estado "cubierto por el baúl" para ellas. */
   vaultCoveredPartes?: BiometricParte[];
@@ -5261,8 +5570,8 @@ function StepBody({
               className="rounded-xl border p-3 text-xs"
               style={
                 paqueteDocsStatus === 'error'
-                  ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
-                  : { borderColor: '#DFE5ED', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }
+                  ? { borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' }
+                  : { borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }
               }
               role="status"
               aria-live="polite"
@@ -5285,7 +5594,33 @@ function StepBody({
           {/* HU #10350 — con la identidad pendiente, el FUR/firma se generan AUTOMÁTICAMENTE al
               aprobarse la validación del cliente (consumidor de outbox #10349). Se avisa aquí para que
               el gestor no intente generarlos a mano y entienda que solo debe "Finalizar". */}
-          {!identityApproved && (
+          {/* Borrador editable: UN solo aviso que reúne cómo corregir datos y, si la identidad está
+              pendiente, lo del FUR automático. Dos recuadros azules seguidos se leían repetidos. */}
+          {resolverEdicionResumen ? (
+            <InlineAlert tone="info" title="¿Algún dato no está bien?">
+              <p>
+                Pulsa <span className="font-semibold">Editar</span> en la sección que quieras
+                corregir, o entra al paso que necesites desde la{' '}
+                <span className="font-semibold">barra de pasos de arriba</span> (Consulta, Actores,
+                Requisitos…). Cuando termines, pulsa{' '}
+                <span className="font-semibold">Volver al resumen</span>: tus cambios quedan
+                guardados.
+              </p>
+              <p className="mt-2 flex items-start gap-1.5">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  <span className="font-semibold">Revisa bien antes de enviar:</span> después ya
+                  no podrás modificar los datos.
+                </span>
+              </p>
+              {!identityApproved && (
+                <p className="mt-2">
+                  No necesitas generar el FUR ni la firma: se crean solos cuando el cliente valide
+                  su identidad.
+                </p>
+              )}
+            </InlineAlert>
+          ) : !identityApproved && (
             <div
               className="rounded-xl p-3 text-xs border flex items-start gap-2"
               style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--color-flit-primary)' }}
@@ -5297,9 +5632,18 @@ function StepBody({
                 <span className="font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                   El FUR y la firma se generarán automáticamente
                 </span>{' '}
-                cuando el cliente valide su identidad. No necesitas generarlos a mano: completa los datos
-                y pulsa <span className="font-semibold">Finalizar</span> para dejar el trámite a la espera
-                de la validación.
+                cuando el cliente valide su identidad. No necesitas generarlos a mano
+                {firmaExenta ? (
+                  <>
+                    : envía el trámite con{' '}
+                    <span className="font-semibold">Finalizar y enviar trámite</span>.
+                  </>
+                ) : (
+                  <>
+                    : completa los datos y pulsa <span className="font-semibold">Finalizar</span> para
+                    dejar el trámite a la espera de la validación.
+                  </>
+                )}
               </span>
             </div>
           )}
@@ -5320,6 +5664,7 @@ function StepBody({
             onPaqueteStatusChange={onPaqueteStatusChange}
             vaultCoveredPartes={vaultCoveredPartes}
             biometricForceEditable={identityOperable}
+            resolverEdicion={resolverEdicionResumen}
           />
         </div>
       );

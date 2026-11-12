@@ -180,7 +180,7 @@ export function SignatureVaultSelector({
   const bloqueCaptura = (
     <div
       className="mt-2 space-y-2 rounded-xl border px-3 py-3"
-      style={{ borderColor: "var(--flit-border, #DDE5F0)" }}
+      style={{ borderColor: "var(--border)" }}
       data-testid="sig-capture-block"
     >
       <p className="text-xs opacity-70">
@@ -305,7 +305,7 @@ export function SignatureVaultSelector({
   if (fetched && items.length === 0) {
     return (
       <div data-testid="sig-selector-empty" aria-live="polite">
-        <p className="rounded-xl border border-[#DDE5F0] px-3 py-2 text-xs opacity-80">
+        <p className="rounded-xl border border-border px-3 py-2 text-xs opacity-80">
           Esta persona no tiene firmas vigentes en el baúl.
         </p>
         {!readOnly && fullName && !capturing && (

@@ -249,7 +249,7 @@ export function OtConfiguracionSection({ transitOfficeId }: OtConfiguracionSecti
             id={`${tabsId}-revocation-window-error`}
             role="alert"
             className="mt-2 text-[11px]"
-            style={{ color: "#FF4E00" }}
+            style={{ color: "var(--destructive)" }}
           >
             {revocationWindowError}
           </p>

@@ -21,13 +21,11 @@ import {
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
   fetchOtPrendaDocumentPolicies,
-  fetchTransitAgreements,
   fetchTransitBlocks,
   fetchTransitGrants,
   fetchTransitOffices,
   removeTransitBlock,
   removeTransitGrant,
-  setTransitAgreement,
   setOtBlockingPolicy,
   setOtConsultationRestriction,
   setOtPrendaDocumentPolicy,
@@ -37,7 +35,7 @@ import {
   type TransitOfficeOperationalStatus,
 } from "@/lib/api/admin-transit-office-tenants";
 import {
-  columnasFiltroOtConfig,
+  COLUMNAS_FILTRO_OT_CONFIG,
   filtrarOrganismosOtConfig,
 } from "@/lib/companies/ot-config-filtros";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
@@ -93,7 +91,6 @@ export function OTConfigTablePanel({
   const [offices, setOffices] = useState<TransitOffice[]>([]);
   const [grantedIds, setGrantedIds] = useState<string[]>([]);
   const [blockedIds, setBlockedIds] = useState<string[]>([]);
-  const [agreementIds, setAgreementIds] = useState<string[]>([]);
   const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
@@ -103,9 +100,11 @@ export function OTConfigTablePanel({
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
   const pg = usePaginacion("panels.OTConfigTablePanel");
-  // HU #14003 — filtros por columna (Organismo, Código, Estado y Convenio cuando la tabla lo pinta).
-  const columnasFiltro = useMemo(() => columnasFiltroOtConfig(!readOnly), [readOnly]);
-  const filtros = useTablaFiltros({ columnas: columnasFiltro, onCambio: () => pg.setPage(1) });
+  // HU #14003 — filtros por columna (Organismo, Código y Estado).
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS_FILTRO_OT_CONFIG,
+    onCambio: () => pg.setPage(1),
+  });
   // Buscador de arriba (nombre o código): se combina con los embudos del encabezado.
   const [search, setSearch] = useState("");
   const [pendingGrant, setPendingGrant] = useState<PendingGrantAction | null>(null);
@@ -127,7 +126,6 @@ export function OTConfigTablePanel({
         const [
           catalog,
           grants,
-          agreements,
           opStatus,
           blockingRows,
           restrictionRows,
@@ -138,9 +136,6 @@ export function OTConfigTablePanel({
           needsGrants
             ? fetchTransitGrants(effectiveGrantsTenantId, signal)
             : Promise.resolve({ transitOfficeIds: [] as string[] }),
-          needsPolicies
-            ? fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] }))
-            : Promise.resolve({ transitOfficeIds: [] }),
           fetchTransitOfficesOperationalStatus(signal).catch(
             () => [] as TransitOfficeOperationalStatus[],
           ),
@@ -163,7 +158,6 @@ export function OTConfigTablePanel({
         setOffices(catalog);
         setGrantedIds(grants.transitOfficeIds);
         setBlockedIds(blocks.transitOfficeIds);
-        setAgreementIds(agreements.transitOfficeIds);
         setOperationalById(
           Object.fromEntries(
             opStatus.map((s) => [s.id, { hasTenant: s.hasTenant, estadoActivo: s.estadoActivo }]),
@@ -193,15 +187,6 @@ export function OTConfigTablePanel({
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
-
-  const handleToggleAgreement = async (officeId: string, active: boolean) => {
-    await setTransitAgreement(tenantId, officeId, active);
-    setAgreementIds((current) =>
-      active
-        ? Array.from(new Set([...current, officeId]))
-        : current.filter((id) => id !== officeId),
-    );
-  };
 
   const persistGrantToggle = async (officeId: string, enabled: boolean) => {
     if (marcaBlancaEditable) {
@@ -322,9 +307,8 @@ export function OTConfigTablePanel({
         filtros.condicionesTotales,
         "",
         new Set(displayGrantedIds),
-        new Set(readOnly ? [] : agreementIds),
       ),
-    [visibleOffices, search, filtros.condicionesTotales, displayGrantedIds, readOnly, agreementIds],
+    [visibleOffices, search, filtros.condicionesTotales, displayGrantedIds],
   );
 
   const lastPage = Math.max(1, Math.ceil(searchedOffices.length / pg.pageSize));
@@ -379,7 +363,7 @@ export function OTConfigTablePanel({
         <div
           className="mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
           style={{
-            borderColor: "#DFE5ED",
+            borderColor: "var(--border)",
             background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)",
           }}
           role="note"
@@ -403,8 +387,6 @@ export function OTConfigTablePanel({
           <OTConfigTable
             offices={pageOffices}
             grantedIds={displayGrantedIds}
-            agreementIds={readOnly ? [] : agreementIds}
-            onToggleAgreement={readOnly ? undefined : handleToggleAgreement}
             operationalById={operationalById}
             onToggleGrant={readOnly ? async () => {} : requestGrantToggle}
             onOpenConfig={readOnly ? () => {} : (office) => setConfigOffice(office)}

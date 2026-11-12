@@ -198,12 +198,14 @@ public static class IdentityInfrastructureExtensions
 
         // HU #12416 (Feature #12368, ADR-0060 D1/D2) — dominio dedicado de la red MARCA_BLANCA.
         services.AddScoped<Flit.Admin.Domain.Companies.Domains.ITenantDomainRepository, TenantDomainRepository>();
+        // HU #14381 (Feature #14380, Épica #14297) — dominio del portal por organismo (DDL 183), sin tablas de marca blanca.
+        services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.PortalDominio.IPortalDominioRepository, PortalDominioRepository>();
         // Resolutor por host con caché de 60 s (ADR-0060 D2): IMemoryCache es Singleton, la clase es
         // Scoped (una FlitDbContext por resolución vía ITenantDomainRepository), el caché se comparte.
         services.AddMemoryCache();
         services.AddScoped<Flit.Admin.Application.Companies.Domains.ITenantDomainResolver,
             Flit.Infrastructure.Domains.CachedTenantDomainResolver>();
-        // Reservados y CNAME del borde (Domains:Reserved, Domains:EdgeTarget). Igual que
+        // Reservados e IP del borde (Domains:Reserved, Domains:EdgeIp). Igual que
         // ImprontaValidationPolicyOptions: Application consume el POCO YA resuelto, sin IOptions.
         if (configuration is not null)
         {

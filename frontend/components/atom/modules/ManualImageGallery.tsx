@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, RefreshCw, ZoomIn } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { MANUAL_BTN_SECUNDARIO, MANUAL_FOCO } from './manual-field-styles';
-import { MANUAL_IMAGE_KINDS, type ManualImageKind } from '@/lib/api/types/manual-review';
+import { MANUAL_IMAGE_KINDS, type ManualImageKind, type ManualPhotoChecks } from '@/lib/api/types/manual-review';
+import { etiquetaMotivoFoto } from '@/lib/identidad/manual-review-meta';
+import { MANUAL_AVISO } from './manual-field-styles';
 
 /**
  * Las 4 capturas de una validación manual (HU-C6): rostro, anverso, reverso y firma, con visor
@@ -99,10 +101,13 @@ export function ManualImageGallery({
   id,
   images,
   onViewerChange,
+  validacionFotos,
 }: {
   client: ManualReviewClient;
   id: string;
   images: { kind: ManualImageKind; available: boolean }[];
+  /** Resultado de la validación en el dispositivo (HU #14311). `null` o ausente: captura anterior, sin aviso. */
+  validacionFotos?: ManualPhotoChecks | null;
   /** Avisa si el visor está abierto, para que el modal padre no se cierre con el mismo Escape. */
   onViewerChange?: (open: boolean) => void;
 }) {
@@ -119,44 +124,59 @@ export function ManualImageGallery({
         {MANUAL_IMAGE_KINDS.map((kind) => {
           const estado = estados[kind];
           const { title, alt } = MANUAL_IMAGE_TEXT[kind];
+          const noVerificada = kind !== 'firma' && validacionFotos?.[kind]?.estado === 'no_verificada';
           return (
-            <li key={kind} className="flex flex-col gap-1.5">
-              <p className="text-xs font-semibold text-flit-primary dark:text-white">{title}</p>
-              <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] dark:border-white/10 dark:bg-[#162744]">
+            <li
+              key={kind}
+              className={`flex flex-col overflow-hidden rounded-2xl border ${noVerificada ? 'border-[var(--badge-warning-border)]' : 'border-border'}`}
+            >
+              <p className="px-3 py-2 text-xs font-semibold text-foreground">{title}</p>
+              <div className="flex aspect-[4/3] flex-1 items-center justify-center overflow-hidden bg-secondary">
                 {estado.status === 'ready' ? (
                   <button
                     type="button"
                     onClick={() => setAmpliada(kind)}
                     aria-label={`Ampliar ${title.toLowerCase()}`}
-                    className="h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand dark:focus-visible:outline-[#7C9BFF]"
+                    className="group relative h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida */}
                     <img src={estado.url} alt={alt} className="h-full w-full object-contain" />
+                    <span className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground transition group-hover:text-flit-brand">
+                      <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+                    </span>
                   </button>
                 ) : estado.status === 'loading' ? (
-                  <p role="status" className="text-xs text-[#59677D] dark:text-white/70">
+                  <p role="status" className="text-xs text-muted-foreground">
                     Cargando {title.toLowerCase()}…
                   </p>
                 ) : estado.status === 'error' ? (
                   <div role="alert" className="flex flex-col items-center gap-2 px-2 text-center">
-                    <AlertTriangle className="h-5 w-5 text-[#FF4E00]" aria-hidden />
+                    <AlertTriangle className="h-5 w-5 text-[var(--badge-warning-fg)]" aria-hidden />
                     <p className="text-xs font-medium">No se pudo cargar la imagen.</p>
                     <button
                       type="button"
                       onClick={() => reintentar(kind)}
                       aria-label={`Reintentar ${title.toLowerCase()}`}
-                      className={`inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] bg-white px-3 py-1 text-xs font-semibold text-flit-primary dark:border-white/15 dark:bg-white/[0.08] dark:text-white ${MANUAL_FOCO}`}
+                      className={`inline-flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground ${MANUAL_FOCO}`}
                     >
                       <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Reintentar
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-1 text-[#59677D] dark:text-white/70">
+                  <div className="flex flex-col items-center gap-1 text-muted-foreground">
                     <ImageOff className="h-5 w-5" aria-hidden />
                     <p className="text-xs">Sin captura</p>
                   </div>
                 )}
               </div>
+              {noVerificada && (
+                <p className={`flex items-start gap-1.5 border-t px-3 py-2 text-xs ${MANUAL_AVISO.warning}`}>
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    <strong className="font-semibold">No verificada.</strong> {etiquetaMotivoFoto(validacionFotos?.[kind]?.motivo)}
+                  </span>
+                </p>
+              )}
             </li>
           );
         })}
@@ -215,7 +235,7 @@ function ManualImageViewer({
   }, [ir]);
 
   const botonNav =
-    'inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#DFE5ED] bg-white text-flit-primary transition hover:bg-[#F4F8FF] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/15 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/10 ' +
+    'inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-70 ' +
     MANUAL_FOCO;
 
   return (
@@ -225,7 +245,7 @@ function ManualImageViewer({
           <button type="button" onClick={() => ir(-1)} disabled={navegables.length < 2} aria-label="Imagen anterior" className={botonNav}>
             <ChevronLeft className="h-5 w-5" aria-hidden />
           </button>
-          <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] dark:border-white/10 dark:bg-[#162744]">
+          <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-secondary">
             {estado.status === 'ready' && (
               // eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida
               <img src={estado.url} alt={alt} className="max-h-[60vh] w-full object-contain" />
@@ -235,7 +255,7 @@ function ManualImageViewer({
             <ChevronRight className="h-5 w-5" aria-hidden />
           </button>
         </div>
-        <p className="text-center text-xs text-[#59677D] dark:text-white/70" role="status" aria-live="polite">
+        <p className="text-center text-xs text-muted-foreground" role="status" aria-live="polite">
           {title} · {index + 1} de {navegables.length}. Usa las flechas del teclado para cambiar de imagen.
         </p>
         <div className="flex justify-end">

@@ -72,10 +72,10 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
       onDragOver={(e) => e.preventDefault()}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
-      className="rounded-xl border-2 border-dashed bg-white p-10 text-center shadow-sm transition-all duration-200 hover:shadow-md dark:bg-[#162744]"
+      className="rounded-xl border-2 border-dashed bg-card p-10 text-center shadow-sm transition-all duration-200 hover:shadow-md"
       style={{
-        borderColor: dragging ? 'var(--color-flit-brand)' : '#E2E8F0',
-        background: dragging ? '#F0F5FF' : undefined,
+        borderColor: dragging ? 'var(--color-flit-brand)' : 'var(--border)',
+        background: dragging ? 'var(--badge-info-bg)' : undefined,
         opacity: disabled ? 0.6 : 1,
       }}
       aria-label="Carga masiva de documentos"
@@ -97,7 +97,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
       )}
 
       {descartados > 0 && !busy && (
-        <p className="mt-2 text-xs font-medium" style={{ color: '#C23B22' }} role="alert">
+        <p className="mt-2 text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {descartados === 1
             ? 'Ese archivo no es de un tipo que podamos leer. Admitimos PDF, JPG, PNG o .zip.'
             : `Ninguno de los ${descartados} archivos es de un tipo que podamos leer. Admitimos PDF, JPG, PNG o .zip.`}
@@ -138,7 +138,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           type="button"
           onClick={() => folderRef.current?.click()}
           disabled={inactivo}
-          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-white px-6 text-[13px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
+          className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-card px-6 text-[13px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
           style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         >
           <FolderOpen className="h-4 w-4" aria-hidden="true" />

@@ -90,7 +90,7 @@ export function SignatureVaultEditPanel({
   return (
     <Modal open onClose={onClose} title="Corregir firma" size="md">
       <div className="space-y-3 text-xs">
-        <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs opacity-80">
+        <p className="rounded-xl border border-border px-3 py-2 text-xs opacity-80">
           Se corrigen los datos de captura. El documento ({item.documentType} {item.documentNumber}) y
           la imagen de la firma no se editan: para cambiarlos, registra una firma nueva de la persona,
           que sustituye a esta y la conserva como histórico.
@@ -108,7 +108,7 @@ export function SignatureVaultEditPanel({
             disabled={saving}
           />
           {fieldErrors.fullName && (
-            <p className="mt-1 text-xs" style={{ color: "#FF4E00" }}>
+            <p className="mt-1 text-xs" style={{ color: "var(--destructive)" }}>
               {fieldErrors.fullName}
             </p>
           )}
@@ -132,7 +132,7 @@ export function SignatureVaultEditPanel({
             la solicitud de trámite virtual. Sin código, esa línea no aparece.
           </p>
           {fieldErrors.codigoHash && (
-            <p className="mt-1 text-xs" style={{ color: "#FF4E00" }}>
+            <p className="mt-1 text-xs" style={{ color: "var(--destructive)" }}>
               {fieldErrors.codigoHash}
             </p>
           )}
@@ -165,7 +165,7 @@ export function SignatureVaultEditPanel({
               disabled={saving}
             />
             {fieldErrors.vigenciaHasta && (
-              <p className="mt-1 text-xs" style={{ color: "#FF4E00" }}>
+              <p className="mt-1 text-xs" style={{ color: "var(--destructive)" }}>
                 {fieldErrors.vigenciaHasta}
               </p>
             )}
@@ -173,7 +173,7 @@ export function SignatureVaultEditPanel({
         </div>
 
         {error && (
-          <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
             {error}
           </p>
         )}

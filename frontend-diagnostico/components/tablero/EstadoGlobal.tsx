@@ -41,7 +41,7 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
         >
           {texto}
         </span>
-        <span className="text-sm font-medium text-flit-primary dark:text-white">{`${terminados} de ${vehiculos} vehículos terminados`}</span>
+        <span className="text-sm font-medium text-flit-primary">{`${terminados} de ${vehiculos} vehículos terminados`}</span>
         {sondeando && <span className={AYUDA_CLS}>Se actualiza sola cada 3 segundos.</span>}
       </div>
       <div
@@ -50,9 +50,9 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
         aria-valuemin={0}
         aria-valuemax={vehiculos}
         aria-valuenow={terminados}
-        className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-flit-gray)] dark:bg-white/10"
+        className="h-2 w-full overflow-hidden rounded-full bg-secondary"
       >
-        <div className="h-full rounded-full transition-[width]" style={{ width: `${porcentaje}%`, background: "var(--nav-activo)" }} />
+        <div className="h-full rounded-full transition-[width]" style={{ width: `${porcentaje}%`, background: "var(--di-gradient-action)" }} />
       </div>
     </div>
   );
@@ -71,7 +71,7 @@ export function EstimadoVsConsumido({ estimado }: { estimado?: Estimado[] }) {
   const celda = "border-t border-[var(--table-row-border)] px-3 py-2 text-right tabular-nums";
   return (
     <section aria-labelledby="estimado-consumido" className="flex flex-col gap-2">
-      <h2 id="estimado-consumido" className="text-sm font-semibold text-flit-primary dark:text-white">
+      <h2 id="estimado-consumido" className="text-sm font-semibold text-flit-primary">
         Estimado frente a consumido
       </h2>
       <p className={AYUDA_CLS}>Consultas previstas al lanzar el lote y las que se consumieron por fuente (las reutilizadas no cuentan).</p>

@@ -76,7 +76,6 @@ tres rutas se abren por permiso (`generacion-documental.read`, `runt_confirmatio
 | ↳ Proveedores de consulta RUNT (`ConsultaProvidersSection.tsx`) y de avalúo (`AvaluoProvidersSection.tsx`) | **P** | Capacidad compartida del frente C (ADR-0065) |
 | Whitelist (`panels/WhitelistPanel.tsx`) | **P** | Whitelist de correos (`POST/GET /admin/companies/{t}/whitelist`) |
 | OT (`panels/OTConfigTablePanel.tsx`, `TransitBlocksPanel.tsx`) | **T** | Organismos concedidos y bloqueados |
-| Documentos (`CompanyDocumentParamsPanel`) | **T** | Parámetros documentales |
 | Representantes legales, escrituras, baúl de firmas | **T (propuesta)** | Datos maestros de la empresa que hoy solo usan Trámites y Mandatos. Ver decisión abierta D3 |
 | Mandatarios | **T** | Mandatos |
 | Usuarios (`panels/CompanyUsersPanel.tsx`) | **P** | |
@@ -196,8 +195,8 @@ Inventario completo agrupado por archivo en el anexo A. A nivel de grupo:
 | `/api/v1/superadmin/{procedure-types,procedure-entities}` | **T** |
 | `/api/v1/admin/companies` (CRUD, estado, parent, whitelist, audit-log), branding, domain, children, children/invitations, `/api/v1/company/{branding,domain}`, `/api/v1/internal/domains` | **P** |
 | `/api/v1/admin/companies/{t}/settings` y `children/{c}/settings` | **P/T**: el mismo JSON mezcla habilitación de productos y flags de trámites. Se parte en B-07 |
-| `/api/v1/admin/companies/{t}/{transit-grants,transit-blocks,transit-agreements,ot-consultation-restrictions,ot-blocking-policies,ot-prenda-document-policies}` | **T** |
-| `/api/v1/admin/companies/{t}/{mandate-signers,personalized-documents,document-params}` | **T** |
+| `/api/v1/admin/companies/{t}/{transit-grants,transit-blocks,ot-consultation-restrictions,ot-blocking-policies,ot-prenda-document-policies}` | **T** |
+| `/api/v1/admin/companies/{t}/{mandate-signers,personalized-documents}` | **T** |
 | `/api/v1/admin/companies/{t}/{legal-representatives,deeds,signature-vault,identity-validations}` | **T (propuesta, D3)** |
 | `/api/v1/admin/companies/{t}/notification-delivery-logs`, `/admin/plataforma/notificaciones` (canales, buzón) | **P** |
 | `/api/v1/admin/plataforma/notificaciones/plantillas` | **T** |
@@ -317,12 +316,12 @@ un endpoint sin `RequireAuthorization` es anónimo.
 | SuperAdmin/Security{Modules,Permissions,Roles,Users,Audit}Endpoints.cs | /api/v1/superadmin | CRUD de módulos, permisos, roles; restaurar usuario; auditoría | SuperAdmin | P |
 | SuperAdmin/CatalogEndpoints.cs | /api/v1/superadmin | procedure-entities (T); external-data-sources, consultation-templates (P) | SuperAdmin | P/T |
 | SuperAdmin/ProcedureTypeEndpoints.cs | /api/v1/superadmin/procedure-types | CRUD, publish, archive, wizard, reglas, perfil, pasos, validate | SuperAdmin | T |
-| AdminCompaniesEndpoints.cs | /api/v1/admin/companies | index, detalle, crear, editar, status, parent, settings, whitelist, audit-log (P); transit-grants/blocks/agreements, ot-* policies (T) | AdminCompany / SuperAdmin | P/T |
+| AdminCompaniesEndpoints.cs | /api/v1/admin/companies | index, detalle, crear, editar, status, parent, settings, whitelist, audit-log (P); transit-grants/blocks, ot-* policies (T) | AdminCompany / SuperAdmin | P/T |
 | AdminCompaniesBrandingEndpoints.cs, AdminCompaniesDomainEndpoints.cs | /api/v1/admin/companies/{t}/{branding,domain} | marca y dominio | SuperAdmin | P |
 | CompanyBrandingEndpoints.cs, CompanyDomainEndpoints.cs | /api/v1/company/{branding,domain} | autogestión | MarcaBlancaHeadCompany | P |
 | Internal/InternalDomainsEndpoints.cs | /api/v1/internal/domains | active, pending-certificate, certificate | anónimo (interno) | P |
 | AdminCompanyChildren{,Invitations,Config}Endpoints.cs | /api/v1/admin/companies/{h}/children | hijas, invitaciones, usuarios, settings, whitelist, audit-log | GroupHeadCompany | P |
-| AdminCompanyChildrenSubmoduleEndpoints.cs | …/children/{c}/{mandate-signers,legal-representatives,signature-vault,personalized-documents,deeds,document-params} | submódulos de la hija | GroupHeadCompany / SuperAdmin | T |
+| AdminCompanyChildrenSubmoduleEndpoints.cs | …/children/{c}/{mandate-signers,legal-representatives,signature-vault,personalized-documents,deeds} | submódulos de la hija | GroupHeadCompany / SuperAdmin | T |
 | AdminHierarchySwitchesEndpoints.cs | /api/v1/admin/platform/hierarchy-switches | GET, PUT | SuperAdmin | P |
 | Tramites/NetworkAccessAuditEndpoints.cs | /api/v1/admin/platform/network-access-audit; /api/v1/tramites/network-access-audit/mine | auditoría | SuperAdmin / autenticado | P |
 | AdminBannersEndpoints.cs | /api/v1/admin/banners | CRUD | banners.manage | P |
@@ -340,7 +339,7 @@ un endpoint sin `RequireAuthorization` es anónimo.
 | AdminRuntConfirmationEndpoints.cs | /api/v1/admin/runt-confirmation | settings, attempts, runs, consult-now | runt_confirmation.* | T |
 | AdminMandateSigner{s,Identity}Endpoints.cs, AdminCompanyMandateSignersEndpoints.cs | …/mandate-signers | mandatarios (identidad: 410 Gone) | OtModule / AdminCompany | T |
 | AdminSignatureVaultEndpoints.cs, AdminLegalRepresentative{s,Identity}Endpoints.cs, AdminDeedsEndpoints.cs | /api/v1/admin/companies/{t}/{signature-vault,legal-representatives,deeds} | datos maestros | AdminCompany | T (D3) |
-| AdminPersonalizedDocumentsEndpoints.cs, AdminCompanyDocumentParamsEndpoints.cs, AdminDocumentTypesEndpoints.cs, AdminProcedureDocumentRequirementsEndpoints.cs, AdminDocument{Order,Requirement}OverridesEndpoints.cs, AdminOtPrendaDocumentPolicyEndpoints.cs, AdminResolvedDocumentMatrixEndpoints.cs | documental | CRUD documental | SuperAdmin / AdminCompany / OtModule | T |
+| AdminPersonalizedDocumentsEndpoints.cs, AdminDocumentTypesEndpoints.cs, AdminProcedureDocumentRequirementsEndpoints.cs, AdminDocument{Order,Requirement}OverridesEndpoints.cs, AdminOtPrendaDocumentPolicyEndpoints.cs, AdminResolvedDocumentMatrixEndpoints.cs | documental | CRUD documental | SuperAdmin / AdminCompany / OtModule | T |
 | AdminRejectionReasonsEndpoints.cs, AdminImprontasEndpoints.cs, AdminGeneracionDocumentalEndpoints.cs | /api/v1/admin/{rejection-reasons,improntas,generacion-documental} | catálogos y generación | SuperAdmin / permisos | T |
 | Tramites/Admin{Anular,Consolidado,Estado,ReasignarGestor,ReenviarValidacion}Endpoints.cs | /api/v1/admin/tramites | acciones avanzadas | AdminTramite* | T |
 | UserUiPreferencesEndpoints, Public{Banners,Branding}, MeBranding | /api/v1/{me,public} | preferencias, banners y marca | autenticado / anónimo | P |

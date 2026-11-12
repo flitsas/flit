@@ -64,7 +64,7 @@ public static class ConsultaPorApi
 
     /// <summary>
     /// Tras cambiar un interruptor: los comparendos activos sin conductor a los que ahora aplica quedan pendientes de
-    /// consulta, y los que estaban pendientes o en error y ya no aplica pasan a asignación manual. Lo ya encontrado o no
+    /// consulta, y los que estaban pendientes, en error, sin hora o agotados y ya no aplica pasan a asignación manual. Lo ya encontrado o no
     /// encontrado no se toca.
     /// </summary>
     public static async Task RecalcularAsync(ComparendosDb db, Guid tenantId, CancellationToken ct)
@@ -74,18 +74,26 @@ public static class ConsultaPorApi
         var marcados = config is not null && EmpresaLaUsa(config) ? await MarcadosAsync(db, tenantId, ct).ConfigureAwait(false) : [];
         var candidatos = await db.Comparendos.AsNoTracking()
             .Where(c => c.TenantId == tenantId && c.Activo && c.Contraventor == null && (c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica
-                || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error))
+                || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error
+                || c.EstadoConsultaContraventor == EstadoConsultaContraventor.SinHora || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada))
             .Select(c => new Comparendo
             {
                 Id = c.Id, TenantId = c.TenantId, IdentificacionMonitoreadaId = c.IdentificacionMonitoreadaId,
                 NumeroDocumentoInfractor = c.NumeroDocumentoInfractor, EstadoConsultaContraventor = c.EstadoConsultaContraventor,
+                IntentosConsultaContraventor = c.IntentosConsultaContraventor,
             })
             .ToListAsync(ct).ConfigureAwait(false);
-        var aPendiente = candidatos.Where(c => c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica && DeNitMarcado(c, marcados)).Select(c => c.Id).ToList();
+        // GDC punto 20: si ya gastó los 3 intentos, al volver a aplicar queda agotada; como pendiente nadie lo consultaría.
+        var vuelven = candidatos.Where(c => c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica && DeNitMarcado(c, marcados)).ToList();
+        var aPendiente = vuelven.Where(c => c.IntentosConsultaContraventor < ServicioContraventor.MaxIntentos).Select(c => c.Id).ToList();
+        var aAgotada = vuelven.Where(c => c.IntentosConsultaContraventor >= ServicioContraventor.MaxIntentos).Select(c => c.Id).ToList();
         var aManual = candidatos.Where(c => c.EstadoConsultaContraventor != EstadoConsultaContraventor.NoAplica && !DeNitMarcado(c, marcados)).Select(c => c.Id).ToList();
         if (aPendiente.Count > 0)
             await db.Comparendos.Where(c => aPendiente.Contains(c.Id))
                 .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.Pendiente), ct).ConfigureAwait(false);
+        if (aAgotada.Count > 0)
+            await db.Comparendos.Where(c => aAgotada.Contains(c.Id))
+                .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.Agotada), ct).ConfigureAwait(false);
         if (aManual.Count > 0)
             await db.Comparendos.Where(c => aManual.Contains(c.Id))
                 .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.NoAplica), ct).ConfigureAwait(false);

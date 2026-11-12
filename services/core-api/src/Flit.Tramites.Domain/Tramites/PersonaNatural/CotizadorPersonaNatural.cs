@@ -63,7 +63,8 @@ public static class CotizadorPersonaNatural
         Guid organismoId,
         bool permiteTransformaciones,
         IEnumerable<string> adicionalesSolicitados,
-        IReadOnlyCollection<TarifaVigente> tarifas)
+        IReadOnlyCollection<TarifaVigente> tarifas,
+        Func<string, bool>? conceptoCobrado = null)
     {
         ArgumentNullException.ThrowIfNull(adicionalesSolicitados);
         ArgumentNullException.ThrowIfNull(tarifas);
@@ -73,12 +74,22 @@ public static class CotizadorPersonaNatural
         if (derechos is null || servicio is null)
             return new ResultadoCotizacion(null, TarifaNoVigente);
 
-        var lineas = new List<LineaCotizacion>
+        var lineas = new List<LineaCotizacion>();
+        var usadas = new List<TarifaVigente>();
+        // HU #14395: con un medio de pago, solo se cobran los conceptos cuyo switch está encendido; sin él, todos (como siempre).
+        bool Cobrado(string concepto) => conceptoCobrado is null || conceptoCobrado(concepto);
+        if (Cobrado(ConceptosTarifa.DerechosTransito))
         {
-            new(ConceptosTarifa.DerechosTransito, ConceptosTarifa.Nombre(ConceptosTarifa.DerechosTransito), string.Empty, derechos.ValorCop),
-            new(ConceptosTarifa.ServicioFlit, ConceptosTarifa.Nombre(ConceptosTarifa.ServicioFlit), SubtituloServicioFlit, servicio.ValorCop),
-        };
-        var usadas = new List<TarifaVigente> { derechos, servicio };
+            lineas.Add(new LineaCotizacion(ConceptosTarifa.DerechosTransito, ConceptosTarifa.Nombre(ConceptosTarifa.DerechosTransito), string.Empty, derechos.ValorCop));
+            usadas.Add(derechos);
+        }
+
+        if (Cobrado(ConceptosTarifa.ServicioFlit))
+        {
+            lineas.Add(new LineaCotizacion(ConceptosTarifa.ServicioFlit, ConceptosTarifa.Nombre(ConceptosTarifa.ServicioFlit), SubtituloServicioFlit, servicio.ValorCop));
+            usadas.Add(servicio);
+        }
+
         var noAplicados = new List<string>();
 
         foreach (var concepto in adicionalesSolicitados.Select(a => a?.Trim().ToUpperInvariant() ?? string.Empty).Distinct())
@@ -86,7 +97,7 @@ public static class CotizadorPersonaNatural
             var permitido = ConceptosTarifa.Adicionales.Contains(concepto)
                 && (permiteTransformaciones || !ConceptosTarifa.Transformaciones.Contains(concepto));
             var tarifa = permitido ? Resolver(concepto, tipoId, organismoId, tarifas) : null;
-            if (tarifa is null)
+            if (tarifa is null || !Cobrado(concepto))
             {
                 noAplicados.Add(concepto);
                 continue;
@@ -98,6 +109,23 @@ public static class CotizadorPersonaNatural
 
         var version = string.Join(',', usadas.Select(t => t.VersionId.ToString("N")).Order(StringComparer.Ordinal));
         return new ResultadoCotizacion(new Cotizacion(lineas, lineas.Sum(l => l.ValorCop), version, noAplicados), null);
+    }
+
+    /// <summary>
+    /// Monto de referencia del administrador de cobro. Con organismo, el mismo de la cotización. En la web, que no tiene un
+    /// organismo fijo, el valor general; si no lo hay, el mayor por organismo, porque la cotización sí cobrará ese valor a quien
+    /// elija ese organismo y la pantalla no debe decir que no se cobra. <c>null</c> si nadie tiene valor.
+    /// </summary>
+    public static long? MontoDeReferencia(string concepto, Guid tipoId, Guid? ambitoOrganismoId, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        var resuelta = Resolver(concepto, tipoId, ambitoOrganismoId ?? Guid.Empty, tarifas)?.ValorCop;
+        if (ambitoOrganismoId is not null || resuelta > 0)
+            return resuelta;
+
+        return tarifas
+            .Where(t => t.Concepto == concepto && t.OrganismoId is not null && (t.TipoId is null || t.TipoId == tipoId))
+            .Select(t => (long?)t.ValorCop)
+            .Max() ?? resuelta;
     }
 
     /// <summary>

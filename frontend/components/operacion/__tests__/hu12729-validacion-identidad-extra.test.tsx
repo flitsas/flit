@@ -77,7 +77,8 @@ describe('HU #12729 — AC4 botones azules corporativos (sin degradado en tarjet
   it('edge: CTA del wizard (FirmaFurStep) conserva el degradado', () => {
     const firma = read('operacion/FirmaFurStep.tsx');
     expect(firma).toMatch(/WIZARD_CTA_GRADIENT/);
-    expect(WIZARD_CTA_GRADIENT).toMatch(/linear-gradient/);
+    // Rediseño UI kit (HU #14482): el degradado es el token `--gradient-action` del kit.
+    expect(WIZARD_CTA_GRADIENT).toBe('var(--gradient-action)');
   });
 });
 

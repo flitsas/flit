@@ -19,7 +19,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Contrato congelado consumido por el frontend (Slice 2).
-/// <c>rol</c>: comprador|vendedor; <c>tipoDocumento</c>: CC|CE|NIT|PAS|TI.
+/// <c>rol</c>: comprador|vendedor; <c>tipoDocumento</c>: CC|CE|NIT|PAS|TI|PPT.
 /// <c>ciudad</c>/<c>direccion</c> son opcionales y se persisten en <c>actor.metadata</c> (JSON).
 /// <c>representanteLegal</c>: solo aplica a persona jurídica (NIT); es una persona natural
 /// capturada/consultada en el RUNT y se persiste embebida en <c>actor.metadata</c> (sin DDL).
@@ -140,12 +140,12 @@ public sealed class PutActorsHandler(
     // firma) ⇒ los tests que no lo inyectan conservan su comportamiento.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
-    // Documentos válidos del contrato congelado (front consume el mismo set).
+    // Documentos válidos del contrato congelado (front consume el mismo set). HU #14498: PPT.
     private static readonly HashSet<string> ValidDocumentTypes =
-        new(StringComparer.OrdinalIgnoreCase) { "CC", "CE", "NIT", "PAS", "TI" };
+        new(StringComparer.OrdinalIgnoreCase) { "CC", "CE", "NIT", "PAS", "TI", "PPT" };
 
-    // Charset del número de documento (espejo de fieldRules.ts): pasaporte admite letras y
-    // números; el resto (CC/CE/TI/NIT) solo dígitos.
+    // Charset del número de documento (espejo de fieldRules.ts): PAS y PPT admiten letras y
+    // números; el resto (CC/CE/TI/NIT) solo dígitos. ADR-0082.
     private static readonly Regex DocNumeric = new("^[0-9]+$", RegexOptions.Compiled);
     private static readonly Regex DocAlphanumeric = new("^[A-Za-z0-9]+$", RegexOptions.Compiled);
 
@@ -207,8 +207,11 @@ public sealed class PutActorsHandler(
             if (string.IsNullOrWhiteSpace(a.NumeroDocumento))
                 return (null, "missing_document_number");
             var docNumber = a.NumeroDocumento.Trim();
-            var isPassport = string.Equals(a.TipoDocumento.Trim(), "PAS", StringComparison.OrdinalIgnoreCase);
-            var docValid = isPassport ? DocAlphanumeric.IsMatch(docNumber) : DocNumeric.IsMatch(docNumber);
+            var tipoDoc = a.TipoDocumento.Trim();
+            var allowsAlphanumeric = AllowsAlphanumericDocumentNumber(tipoDoc);
+            var docValid = allowsAlphanumeric
+                ? DocAlphanumeric.IsMatch(docNumber)
+                : DocNumeric.IsMatch(docNumber);
             if (!docValid)
                 return (null, "invalid_document_number");
             if (string.IsNullOrWhiteSpace(a.NombreCompleto))
@@ -905,6 +908,11 @@ public sealed class PutActorsHandler(
             .Select(kv => kv.Key)
             .ToHashSet();
     }
+
+    /// <summary>HU #14498 — PAS y PPT admiten número alfanumérico; el resto solo dígitos.</summary>
+    private static bool AllowsAlphanumericDocumentNumber(string tipoDocumento) =>
+        string.Equals(tipoDocumento, "PAS", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(tipoDocumento, "PPT", StringComparison.OrdinalIgnoreCase);
 
     private static ParteRol? ParseRol(string? rol) => rol?.Trim().ToLowerInvariant() switch
     {

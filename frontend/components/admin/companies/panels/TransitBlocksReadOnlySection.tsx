@@ -124,6 +124,7 @@ export function TransitBlocksReadOnlySection({
         >
           {(
             <DataTable
+              tarjeta={false}
               emptyContent={
                 filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={filtros.limpiar} /> : undefined
               }

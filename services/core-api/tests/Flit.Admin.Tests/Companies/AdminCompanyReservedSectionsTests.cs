@@ -43,8 +43,6 @@ public sealed class AdminCompanyReservedSectionsTests
         { "GET", "/transit-grants" },
         { "POST", "/transit-grants" },
         { "DELETE", $"/transit-grants/{Oficina}" },
-        { "GET", "/transit-agreements" },
-        { "PUT", $"/transit-agreements/{Oficina}" },
         { "GET", "/audit-log" },
         { "GET", "/ot-consultation-restrictions" },
         { "PUT", $"/ot-consultation-restrictions/{Oficina}/rnmc" },
@@ -52,8 +50,6 @@ public sealed class AdminCompanyReservedSectionsTests
         { "PUT", $"/ot-blocking-policies/{Oficina}/soat" },
         { "GET", "/ot-prenda-document-policies" },
         { "PUT", $"/ot-prenda-document-policies/{Oficina}" },
-        { "GET", "/document-params" },
-        { "PUT", "/document-params" },
         { "GET", "/personalized-documents" },
         { "POST", "/personalized-documents" },
         { "GET", "/notification-delivery-logs" },
@@ -70,7 +66,6 @@ public sealed class AdminCompanyReservedSectionsTests
         { "GET", "/whitelist" },
         { "POST", "/whitelist" },
         { "GET", "/audit-log" },
-        { "GET", "/document-params" },
         { "GET", "/personalized-documents" },
     };
 

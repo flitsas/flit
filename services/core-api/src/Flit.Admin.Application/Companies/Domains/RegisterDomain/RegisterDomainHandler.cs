@@ -29,7 +29,7 @@ public sealed class RegisterDomainHandler(ITenantDomainRepository repository, Do
             return RegisterDomainResult.Invalid(DomainErrors.HostReserved);
         }
 
-        var current = await _repository.GetByTenantIdAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        var current = await _repository.GetByTenantIdAsync(command.TenantId, command.Purpose, cancellationToken).ConfigureAwait(false);
         if (current is not null && command.RowVersion is { } expected && expected != current.RowVersion)
         {
             return RegisterDomainResult.Conflict();
@@ -39,7 +39,7 @@ public sealed class RegisterDomainHandler(ITenantDomainRepository repository, Do
         try
         {
             updated = await _repository
-                .RegisterOrReplaceAsync(command.TenantId, normalizedHost, GenerateVerificationToken(), command.ChangedBy, cancellationToken)
+                .RegisterOrReplaceAsync(command.TenantId, normalizedHost, GenerateVerificationToken(), command.ChangedBy, command.Purpose, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (DomainTenantNotMarcaBlancaException)

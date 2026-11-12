@@ -29,10 +29,10 @@ interface AlertRuleFormProps {
 }
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 " +
-  "px-3 py-2 text-sm text-flit-primary dark:text-slate-100 outline-none focus:ring-2 focus:ring-flit-brand/40";
+  "w-full rounded-xl border border-border bg-card " +
+  "px-3 py-2 text-sm text-flit-primary outline-none focus:ring-2 focus:ring-flit-brand/40";
 
-const labelClass = "block text-xs font-semibold text-flit-primary dark:text-slate-200 mb-1";
+const labelClass = "block text-xs font-semibold text-flit-primary mb-1";
 
 /**
  * Formulario de creación/edición de una regla de alerta (Reportes 2.0, HU-D): métrica con
@@ -104,9 +104,9 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
     <form
       onSubmit={handleSubmit}
       data-testid="alert-rule-form"
-      className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3"
+      className="rounded-2xl border border-border p-4 space-y-3"
     >
-      <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">
+      <h4 className="text-sm font-bold text-flit-primary">
         {initial ? "Editar alerta" : "Nueva alerta"}
       </h4>
 
@@ -138,7 +138,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
               <option key={value} value={value}>{label}</option>
             ))}
         </select>
-        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400" data-testid="metric-description">
+        <p className="mt-1 text-[11px] text-muted-foreground" data-testid="metric-description">
           {METRIC_DESCRIPTIONS[metric]}
         </p>
       </div>
@@ -211,7 +211,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
         <RecipientsInput value={recipients} onChange={setRecipients} />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-flit-primary dark:text-slate-200">
+      <label className="flex items-center gap-2 text-sm text-flit-primary">
         <input
           type="checkbox"
           checked={isActive}
@@ -222,7 +222,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
       </label>
 
       {error && (
-        <p role="alert" data-testid="alert-form-error" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" data-testid="alert-form-error" className="text-xs font-medium text-destructive">
           {error}
         </p>
       )}
@@ -241,7 +241,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
+          className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-flit-primary"
         >
           Cancelar
         </button>

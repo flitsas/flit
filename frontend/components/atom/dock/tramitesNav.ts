@@ -49,8 +49,10 @@ import {
   DOCK_GROUP_LABEL,
   DOCK_GROUP_ORDER,
   DOCK_GROUP_SIDE,
+  DOCK_ITEM_DESCRIPCION,
   DOCK_ITEM_GROUP,
   SPA_DOCK_ITEM_LABEL,
+  dockIlustracion,
 } from "./dockGroups";
 
 /** Lo que el token no dice por sí solo y cambia qué entradas existen. */
@@ -68,9 +70,19 @@ export interface TramitesNavContext {
 
 type Entry = Omit<NavItem, "section" | "children"> & { children?: Entry[] };
 
-/** Los hijos van en la sección del padre; solo el padre necesita grupo en DOCK_ITEM_GROUP. */
+/**
+ * Los hijos van en la sección del padre; solo el padre necesita grupo en DOCK_ITEM_GROUP. Cada entrada lleva además su
+ * ilustración y su descripción corta (HU #14479), solo presentación: ni la ruta ni quién la ve cambian.
+ */
 function withSection(entry: Entry, section: string): NavItem {
-  return { ...entry, section, children: entry.children?.map((c) => withSection(c, section)) };
+  const descripcion = DOCK_ITEM_DESCRIPCION[entry.key];
+  return {
+    ...entry,
+    section,
+    ilustracion: entry.ilustracion ?? dockIlustracion(entry.key),
+    ...(descripcion ? { descripcion } : {}),
+    children: entry.children?.map((c) => withSection(c, section)),
+  };
 }
 
 function inSection(entry: Entry): NavItem {
@@ -105,25 +117,41 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
 
   const superAdmin = (key: string, label: string, href: string, icon: NavIcon): Entry => ({ key, label, href, icon, superAdminOnly: true });
   entries.push(
-    superAdmin("admin-companies", "Compañías", "/admin/companies", Building2),
+    // HU #14479 (UI kit «Diseño Inteligente»): Administradores se ordena en cuatro secciones con nombre en vez de una
+    // lista plana. Cada entrada conserva su ruta y su regla de visibilidad; una sección sin entradas visibles para el
+    // rol no aparece (buildDock descarta contenedores vacíos).
     {
-      // Tránsito es contenedor: el catálogo de causales alimenta el modal de rechazo del organismo.
+      // El catálogo de causales alimenta el modal de rechazo del organismo.
       key: "admin-transit",
-      label: "Tránsito",
+      label: "Compañías y tránsito",
       href: "",
       icon: Landmark,
       superAdminOnly: true,
       children: [
+        superAdmin("admin-companies", "Compañías", "/admin/companies", Building2),
         superAdmin("admin-transit-offices", "Organismos", otHubListPath(), Landmark),
         superAdmin("admin-rejection-reasons", "Causales de rechazo", "/admin/causales-rechazo", ClipboardList),
       ],
     },
-    superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
-    superAdmin("admin-improntas", "Improntas", "/admin/improntas", Fingerprint),
-    superAdmin("admin-quipux", "Quipux", "/admin/quipux", Send),
-    superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", Timer),
-    { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: Lock, ...navGatingFor("rbac") },
-    { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+    {
+      key: "admin-documentos",
+      label: "Documentos",
+      href: "",
+      icon: FolderCog,
+      children: [
+        superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
+        superAdmin("admin-improntas", "Improntas", "/admin/improntas", Fingerprint),
+        // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
+        {
+          key: "admin-generacion-documental",
+          label: "Generación documental",
+          href: GENERACION_DOCUMENTAL_BASE_PATH,
+          icon: FileText,
+          ...navGatingFor("admin-generacion-documental"),
+        },
+        superAdmin("admin-quipux", "Quipux", "/admin/quipux", Send),
+      ],
+    },
     {
       // Plataforma es contenedor: lo núcleo es del SuperAdmin; Confirmación RUNT (HU #12313, justo después de Tipos de
       // trámites) va por permiso, así que un rol con solo ese permiso ve Plataforma con esa entrada. Banners es solo SuperAdmin.
@@ -159,13 +187,16 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         },
       ],
     },
-    // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
     {
-      key: "admin-generacion-documental",
-      label: "Generación documental",
-      href: GENERACION_DOCUMENTAL_BASE_PATH,
-      icon: FileText,
-      ...navGatingFor("admin-generacion-documental"),
+      key: "admin-seguridad",
+      label: "Seguridad y operación",
+      href: "",
+      icon: Lock,
+      children: [
+        { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: Lock, ...navGatingFor("rbac") },
+        { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+        superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", Timer),
+      ],
     },
   );
 
@@ -191,6 +222,15 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),
       ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", Webhook),
     );
+    // Épica #14297 / HU #14377 — Portal Persona Natural del organismo: solo el ot_admin (por rol, sin permiso delegable).
+    if (ctx.isOtAdmin) {
+      entries.push({
+        key: OT_ADM_DOCK.portalPersonaNatural,
+        label: "Portal Persona Natural",
+        href: otHubModulePath(officeId, "portal-persona-natural"),
+        icon: UserRound,
+      });
+    }
   }
 
   // (La tabla de acceso declara el requisito de rol de «mi-empresa» / «admin-network» —AdminCompany—; aquí se decide con
@@ -222,7 +262,13 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   );
 
   return {
-    sections: DOCK_GROUP_ORDER.map((id) => ({ id, label: DOCK_GROUP_LABEL[id], icon: DOCK_GROUP_ICON[id], side: DOCK_GROUP_SIDE[id] })),
+    sections: DOCK_GROUP_ORDER.map((id) => ({
+      id,
+      label: DOCK_GROUP_LABEL[id],
+      icon: DOCK_GROUP_ICON[id],
+      side: DOCK_GROUP_SIDE[id],
+      ilustracion: dockIlustracion(id),
+    })),
     items: entries.map(inSection),
   };
 }

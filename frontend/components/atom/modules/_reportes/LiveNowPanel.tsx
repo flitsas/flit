@@ -33,7 +33,7 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
   const live = useLiveOverview({ tenantId, stuckDays }, { skip });
 
   return (
-    <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border flex flex-col gap-3" aria-labelledby="live-now-title">
+    <section className="rounded-2xl p-5 bg-card border flex flex-col gap-3" aria-labelledby="live-now-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="live-now-title" className="text-sm font-bold flex items-center gap-2">
           <Radio className="h-4 w-4 animate-pulse" style={{ color: "var(--color-flit-tech)" }} aria-hidden="true" />
@@ -51,7 +51,7 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
             </label>
             <select
               id="live-interval"
-              className="h-7 rounded-lg border bg-white px-1.5 text-[10px] font-medium dark:bg-[#0B0F14]"
+              className="h-7 rounded-lg border bg-background px-1.5 text-[10px] font-medium"
               value={live.intervalSec}
               onChange={(e) => live.setIntervalSec(Number(e.target.value))}
               title="Cada cuántos segundos se actualiza el panel (30–60 s)"
@@ -90,10 +90,10 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
                 <LiveStat label="Creados hoy" value={live.data.today.creados} color="var(--color-flit-brand)" tooltip="Instancias de trámite creadas hoy (hora de Bogotá)." />
                 <LiveStat label="Entregados hoy" value={live.data.today.entregados} color="var(--color-flit-brand)" tooltip="Transiciones a 'entregado' registradas hoy." />
-                <LiveStat label="Aprobados hoy" value={live.data.today.aprobados} color="#8CC63F" tooltip="Transiciones a 'aprobado' registradas hoy." />
-                <LiveStat label="Rechazados hoy" value={live.data.today.rechazados} color="#FF4E00" tooltip="Transiciones a 'rechazado' registradas hoy." />
-                <LiveStat label="Atascados" value={live.data.stuckCount} color="#F9AC00" tooltip="Trámites activos sin cambio de estado hace más días que el umbral configurado (7 por defecto)." />
-                <LiveStat label="Identidad pendiente" value={live.data.pendingIdentityValidations} color="#9B8AFB" tooltip="Validaciones biométricas de identidad pendientes o en proceso." />
+                <LiveStat label="Aprobados hoy" value={live.data.today.aprobados} color="var(--flit-success-ink)" tooltip="Transiciones a 'aprobado' registradas hoy." />
+                <LiveStat label="Rechazados hoy" value={live.data.today.rechazados} color="var(--destructive)" tooltip="Transiciones a 'rechazado' registradas hoy." />
+                <LiveStat label="Atascados" value={live.data.stuckCount} color="var(--badge-warning-fg)" tooltip="Trámites activos sin cambio de estado hace más días que el umbral configurado (7 por defecto)." />
+                <LiveStat label="Identidad pendiente" value={live.data.pendingIdentityValidations} color="var(--badge-purple-fg)" tooltip="Validaciones biométricas de identidad pendientes o en proceso." />
               </div>
 
               {live.data.today.byStatus.length > 0 && (

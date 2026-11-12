@@ -139,7 +139,7 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
               {editable ? (
                 <EditorHtml key={actual.versionId} inicial={actual.cuerpoHtml} variables={catalogo.datos ?? []} onCambio={(cuerpoHtml) => editar({ cuerpoHtml })} />
               ) : (
-                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border border-[#DFE5ED] p-3 font-mono text-[11px] dark:border-white/15">{actual.cuerpoHtml}</pre>
+                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border border-border p-3 font-mono text-[11px]">{actual.cuerpoHtml}</pre>
               )}
               {desconocidas.length > 0 && (
                 <InlineAlert tone="warning" compact>

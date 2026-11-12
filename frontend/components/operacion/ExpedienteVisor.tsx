@@ -31,6 +31,7 @@ import {
 } from '@/lib/tramites/useAperturaConsolidado';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
+import { EditarSeccionButton, type DestinoEdicion } from './EditarSeccionButton';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
   ChecklistItemView,
@@ -71,10 +72,15 @@ interface Props {
    * «reconstrucción en curso» sin bloquear la UI.
    */
   consolidadoWizard?: ConsolidadoVigencia | null;
+  /**
+   * Botón «Editar» de «Documentos cargados»: lleva al paso donde se cargan (Requisitos). Solo llega
+   * en un borrador editable; sin él la tarjeta queda en solo lectura, como siempre.
+   */
+  editarDocumentos?: DestinoEdicion | null;
 }
 
 const BLUE = 'var(--color-flit-brand)';
-const BORDER = '#DFE5ED';
+const BORDER = 'var(--border)';
 // `#557EFF` como TEXTO/relleno sólido con blanco no llega a 4.5:1 (≈3.61:1, ver auditoría de
 // diseño). `--badge-info-fg` es el mismo azul oscurecido para texto que ya usan los badges de
 // tono `info` (≈6.46:1 sobre blanco, theme-aware) — token `--badge-*`, autorizado por norma.
@@ -186,6 +192,7 @@ export default function ExpedienteVisor({
   onBeforeGenerateConsolidado,
   onAttachmentsChange,
   consolidadoWizard,
+  editarDocumentos = null,
 }: Props) {
   const subtitle =
     modalidad === 'traspaso'
@@ -194,7 +201,12 @@ export default function ExpedienteVisor({
 
   return (
     <section aria-label="Expediente digital" className="space-y-3">
-      <DocumentosCargadosCard instanceId={instanceId} attachments={attachments} checklist={checklist} />
+      <DocumentosCargadosCard
+        instanceId={instanceId}
+        attachments={attachments}
+        checklist={checklist}
+        editar={editarDocumentos}
+      />
       <WizardAccordion
         title="Expediente consolidado"
         subtitle={subtitle}
@@ -255,23 +267,28 @@ function DocumentosCargadosCard({
   instanceId,
   attachments,
   checklist,
+  editar,
 }: {
   instanceId: string | null;
   attachments: ProcedureAttachment[];
   checklist: ChecklistItemView[];
+  editar: DestinoEdicion | null;
 }) {
   const items = [...checklist, ...certificadosDelActor(attachments, checklist)];
   return (
     <VisorCard
       title="Documentos cargados"
       action={
-        // Distintivo del bloque (propuesta, WizardTramite.tsx:701). `aria-hidden`: cada documento ya
-        // anuncia su propio "SHA-256 <hash>" como texto accesible; sin ocultarlo, el nombre accesible
-        // de la tarjeta pasaría de "Documentos cargados" a "Documentos cargados SHA-256" para cada
-        // lector de pantalla que la recorra, un dato redundante con lo que ya lee en cada ficha.
-        <span className="text-xs font-semibold" style={{ color: BLUE }} aria-hidden="true">
-          SHA-256
-        </span>
+        <div className="flex items-center gap-3">
+          {/* Distintivo del bloque (propuesta, WizardTramite.tsx:701). `aria-hidden`: cada documento
+              ya anuncia su propio "SHA-256 <hash>" como texto accesible; sin ocultarlo, el nombre
+              accesible de la tarjeta pasaría de "Documentos cargados" a "Documentos cargados
+              SHA-256" para cada lector de pantalla que la recorra. */}
+          <span className="text-xs font-semibold" style={{ color: BLUE }} aria-hidden="true">
+            SHA-256
+          </span>
+          {editar ? <EditarSeccionButton title="Documentos cargados" destino={editar} /> : null}
+        </div>
       }
     >
       {items.length > 0 ? (
@@ -492,7 +509,7 @@ function ExpedienteConsolidadoBody({
       {errorVisible && (
         <div
           className="mb-3 rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
           role="alert"
           aria-live="polite"
         >
@@ -578,8 +595,8 @@ function ReconstruccionPanel({
         data-testid="consolidado-timeout"
         className="mb-3 flex items-start gap-2 rounded-xl border p-3 text-xs"
         style={{
-          borderColor: 'rgba(249,172,0,0.55)',
-          background: 'rgba(249,172,0,0.12)',
+          borderColor: 'var(--badge-warning-border)',
+          background: 'var(--badge-warning-bg)',
           color: 'var(--badge-warning-fg)',
         }}
       >
@@ -662,7 +679,7 @@ function DocRow({
       // es el hundido en el fondo de app que el guardián de diseño ya había marcado y que la
       // captura no tiene. `dark:bg-[#162744]` es la misma superficie oscura de tarjeta anidada que
       // usa `WIZARD_CARD` en toda la app, no el fondo de app.
-      className="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm dark:bg-[#162744]"
+      className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm"
       style={{ borderColor: BORDER }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -684,15 +701,15 @@ function DocRow({
       ) : null}
       {/* La barra tiene que decir lo MISMO que el badge. Cambiar solo la palabra y dejarla en ámbar
           seguiría comunicando urgencia: el color pesa más que el rótulo. */}
-      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#DFE5ED' }} aria-hidden="true">
+      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--border)' }} aria-hidden="true">
         <div
           className="h-full w-full rounded-full"
           style={{
             background: validado
-              ? '#8CC63F'
+              ? 'var(--flit-success-ink)'
               : faltaObligatorio
                 ? 'var(--badge-warning-fg)'
-                : '#94A3B8',
+                : 'var(--input)',
           }}
         />
       </div>
@@ -702,7 +719,7 @@ function DocRow({
         <button
           type="button"
           disabled={!instanceId || busy}
-          className="inline-flex items-center justify-center gap-1.5 rounded-full border bg-white px-4 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
+          className="inline-flex items-center justify-center gap-1.5 rounded-full border bg-card px-4 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
           style={{ borderColor: BLUE, color: INK_BLUE }}
           aria-label={`Ver PDF de ${label}`}
           onClick={() => void handleVer()}

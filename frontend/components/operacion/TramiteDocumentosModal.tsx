@@ -32,7 +32,7 @@ import { findConsolidadoAttachment } from './ExpedienteVisor';
  * cuando el formato no se puede previsualizar).
  */
 
-const BORDER = '#DFE5ED';
+const BORDER = 'var(--border)';
 const BLUE = 'var(--color-flit-brand)';
 
 /**
@@ -328,7 +328,7 @@ export function AvisoDescargaFallida({
   if (preview.doc !== null || !preview.error) return null;
   return (
     <div className={`flex flex-col items-start gap-2 ${className ?? ''}`} role="alert">
-      <p className="text-xs" style={{ color: '#C2410C' }}>
+      <p className="text-xs" style={{ color: 'var(--destructive)' }}>
         {preview.error}
       </p>
       {preview.reintentar ? (
@@ -446,13 +446,13 @@ export function TramiteDocumentosModal({
             aria-label="Cargando documentos del trámite"
           >
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-14 animate-pulse rounded-xl bg-[#F4F7FC] dark:bg-white/5" />
+              <div key={i} className="h-14 animate-pulse rounded-xl bg-secondary" />
             ))}
           </div>
         )}
 
         {!loading && error && (
-          <p className="py-4 text-sm" style={{ color: '#FF4E00' }} role="alert">
+          <p className="py-4 text-sm" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -474,7 +474,7 @@ export function TramiteDocumentosModal({
                 >
                   <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-flit-primary dark:text-white">
+                    <p className="truncate text-xs font-semibold text-foreground">
                       {documentLabel(d.tipo)}
                     </p>
                     <p className="truncate text-xs opacity-60">
@@ -518,8 +518,8 @@ export function TramiteDocumentosModal({
                   type="button"
                   className="mt-4 inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
                   style={{
-                    background: 'linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)',
-                    boxShadow: '0 10px 24px -6px color-mix(in srgb, var(--color-flit-brand) 45%, transparent)',
+                    background: 'var(--di-gradient-action)',
+                    boxShadow: 'var(--shadow-button)',
                   }}
                   onClick={() => void preview.downloadConsolidado()}
                   aria-label="Descargar todo · Expediente consolidado (PDF)"
@@ -537,7 +537,7 @@ export function TramiteDocumentosModal({
 
         {/* Fallo de una descarga directa: el visor no está abierto, así que el aviso va aquí. */}
         {preview.doc === null && preview.error && (
-          <p className="mt-3 text-xs" style={{ color: '#FF4E00' }} role="alert">
+          <p className="mt-3 text-xs" style={{ color: 'var(--destructive)' }} role="alert">
             {preview.error}
           </p>
         )}

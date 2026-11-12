@@ -183,7 +183,7 @@ export function OwnershipTabsBar({
           // (`border-r-0`/`border-l-0`) para que se vea como una sola forma continua.
           const pillStyle = isActive
             ? { borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }
-            : { borderColor: '#DFE5ED', color: '#59677D', background: '#fff' };
+            : { borderColor: 'var(--border)', color: 'var(--muted-foreground)', background: 'var(--card)' };
           return (
             <div key={item.index} className="flex items-center">
               <button
@@ -307,8 +307,8 @@ export function OwnershipPercentagePanel({
       id={panelId}
       role="tabpanel"
       aria-labelledby={`${idPrefix}-tab-${active.index}`}
-      className="mt-4 rounded-xl border bg-white p-4 dark:bg-[#162744]"
-      style={{ borderColor: '#DFE5ED' }}
+      className="mt-4 rounded-xl border bg-card p-4"
+      style={{ borderColor: 'var(--border)' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className={`${WIZARD_LABEL} text-[13px] font-bold`} style={{ color: 'var(--color-flit-primary)' }}>
@@ -328,16 +328,16 @@ export function OwnershipPercentagePanel({
             disabled={readOnly}
             value={active.percentage}
             onChange={(e) => onPercentageChange(active.index, Number(e.target.value))}
-            className="w-20 rounded-xl border bg-white px-3 py-2 text-right text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-            style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-primary)' }}
+            className="w-20 rounded-xl border bg-card px-3 py-2 text-right text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
+            style={{ borderColor: 'var(--border)', color: 'var(--color-flit-primary)' }}
           />
-          <span className="text-xs font-semibold" style={{ color: '#334155' }} aria-hidden="true">
+          <span className="text-xs font-semibold" style={{ color: 'var(--foreground)' }} aria-hidden="true">
             %
           </span>
         </div>
       </div>
 
-      <p className="mt-1 text-[11px]" style={{ color: '#59677D' }}>
+      <p className="mt-1 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
         Máximo para {active.label}: {formatPercent(maxAllowed)}% (no se puede superar el 100% total).
       </p>
 
@@ -355,9 +355,9 @@ export function OwnershipPercentagePanel({
           disabled={readOnly || sliderMax <= 0}
           aria-valuetext={`${formatPercent(active.percentage)}%`}
           onChange={(e) => onPercentageChange(active.index, Number(e.target.value))}
-          className="h-1.5 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[#59677D] [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#59677D] [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md"
+          className="h-1.5 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[color:var(--muted-foreground)] [&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[color:var(--muted-foreground)] [&::-moz-range-thumb]:bg-card [&::-moz-range-thumb]:shadow-md"
           style={{
-            background: `linear-gradient(to right, ${activeColor} ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%, rgba(223,229,237,0.6) ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%)`,
+            background: `linear-gradient(to right, ${activeColor} ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%, var(--border) ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%)`,
             accentColor: activeColor,
           }}
         />
@@ -390,7 +390,7 @@ export function OwnershipPercentagePanel({
       </p>
 
       {showErrors && (sumError || zeroError || rangeError) && (
-        <div role="alert" className="mt-2 space-y-1 text-xs" style={{ color: '#FF4E00' }}>
+        <div role="alert" className="mt-2 space-y-1 text-xs" style={{ color: 'var(--destructive)' }}>
           {sumError && <p>{OWNERSHIP_SUM_MESSAGE}</p>}
           {zeroError && <p>{OWNERSHIP_ZERO_MESSAGE}</p>}
           {rangeError && <p>{OWNERSHIP_RANGE_MESSAGE}</p>}

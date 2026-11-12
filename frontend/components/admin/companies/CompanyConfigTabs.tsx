@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Blocks, Building2, FileClock, FileText, Network, Palette, PlugZap, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { AlertCircle, Blocks, Building2, FileClock, Network, Palette, PlugZap, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
@@ -22,7 +22,6 @@ type TabId =
   | "productos"
   | "tramites"
   | "config"
-  | "documentos"
   | "representantes"
   | "mandatarios"
   | "usuarios"
@@ -60,8 +59,6 @@ const TABS: TabDef[] = [
   { id: "productos", label: "Productos", icon: Blocks, isConfig: false },
   { id: "tramites", label: "Trámites", icon: Stamp, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
-  // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
-  { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
   // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
   // suelto ni sección hermana de escrituras en esta pestaña).
@@ -92,7 +89,6 @@ export interface CompanyConfigTabsProps {
    *  atómico de settings). */
   otSlot?: ReactNode;
   auditSlot?: ReactNode;
-  documentosSlot?: ReactNode;
   /**
    * HU #10904 — pestaña de representantes legales (directorio). Firma e identidad
    * viven en la ficha de cada persona; las escrituras bajo cada NIT del acordeón.
@@ -137,7 +133,6 @@ export function CompanyConfigTabs({
   whitelistSlot,
   otSlot,
   auditSlot,
-  documentosSlot,
   legalRepresentativesSlot,
   mandatariosSlot,
   usuariosSlot,
@@ -249,7 +244,7 @@ export function CompanyConfigTabs({
       {/* Identidad de compañía + «Guardar todo» a la derecha (PUT atómico de settings). */}
       {(company || currentTab?.isConfig) && (
         <header
-          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] border border-[#DFE5ED] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14] ${
+          className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[14px] border border-border bg-card px-4 py-3 shadow-[var(--shadow-card)] ${
             currentTab?.isConfig ? "sticky top-0 z-20" : ""
           }`}
           aria-label="Compañía en configuración"
@@ -260,7 +255,7 @@ export function CompanyConfigTabs({
                 <span className="text-xs font-semibold uppercase tracking-wider opacity-70">
                   Configurando
                 </span>
-                <span className="text-sm font-bold text-flit-primary dark:text-white">
+                <span className="text-sm font-bold text-flit-primary">
                   {company.razonSocial}
                 </span>
                 <span className="text-xs opacity-70">NIT {company.nit}</span>
@@ -299,7 +294,7 @@ export function CompanyConfigTabs({
                 className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-60 ${
                   pendingChangeCount === 0 ? "opacity-60" : ""
                 }`}
-                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 <Save className="h-4 w-4" aria-hidden /> Guardar todo
               </button>
@@ -354,7 +349,7 @@ export function CompanyConfigTabs({
           role="alert"
           aria-live="polite"
           className="rounded-xl border px-4 py-3 text-xs font-medium"
-          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+          style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
         >
           {errorBanner}
         </div>
@@ -384,7 +379,6 @@ export function CompanyConfigTabs({
             fieldErrors={fieldErrors}
           />
         )}
-        {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "mandatarios" && mandatariosSlot}
         {activeTabId === "usuarios" && usuariosSlot}

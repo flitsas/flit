@@ -11,6 +11,17 @@ export interface BrandingColorPickerProps {
   colors: BrandColors;
   onChange: (colors: BrandColors) => void;
   disabled?: boolean;
+  /** Feature #14374 (portal del OT): textos propios de cada color. Sin ellos, los de marca blanca. */
+  fieldCopy?: Partial<Record<"primary" | "secondary", { label: string; hint: string }>>;
+  /** Feature #14374 (portal del OT): principal antes que secundario. Sin él, el orden de marca blanca. */
+  primaryFirst?: boolean;
+  /** Feature #14374 (portal del OT): reglas de lectura propias. Sin ellas, las de marca blanca. */
+  rules?: {
+    readable: (colors: BrandColors) => boolean;
+    fix: (colors: BrandColors) => BrandColors;
+    message: string;
+    extraPairs?: (colors: BrandColors) => Array<{ label: string; ratio: number | null; ok: boolean; minimo: string }>;
+  };
 }
 
 /**
@@ -29,11 +40,15 @@ const FIELDS: Array<{ key: "secondary" | "primary"; label: string; hint: string 
  * lee bien, se ofrece corregirla automáticamente. El detalle de contraste (WCAG 4.5:1, el mismo
  * que valida el backend) queda plegado para quien lo quiera ver.
  */
-export function BrandingColorPicker({ colors, onChange, disabled = false }: BrandingColorPickerProps) {
+export function BrandingColorPicker({ colors, onChange, disabled = false, fieldCopy, primaryFirst = false, rules }: BrandingColorPickerProps) {
   const baseId = useId();
-  const pairs = useMemo(() => brandContrastPairs(colors), [colors]);
+  const pairs = useMemo(
+    () => [...brandContrastPairs(colors).map((p) => ({ ...p, minimo: "4.5:1" })), ...(rules?.extraPairs?.(colors) ?? [])],
+    [colors, rules],
+  );
   const valid = [colors.primary, colors.secondary, colors.onPrimary].every(isValidHexColor);
-  const readable = brandColorsReadable(colors);
+  const readable = rules ? rules.readable(colors) : brandColorsReadable(colors);
+  const fields = primaryFirst ? [...FIELDS].reverse() : FIELDS;
 
   function setColors(next: { primary: string; secondary: string }) {
     // El texto acompaña a los colores: así nadie tiene que elegirlo ni pensar en su contraste.
@@ -64,8 +79,8 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
                 onClick={() => setColors({ primary: preset.primary, secondary: preset.secondary })}
                 aria-pressed={selected}
                 aria-label={`Combinación ${preset.name}`}
-                className="flex items-center gap-1.5 rounded-full border bg-white px-2.5 py-1 text-[11px] font-medium transition hover:shadow-sm"
-                style={{ borderColor: selected ? preset.secondary : "#DFE5ED", boxShadow: selected ? `0 0 0 1px ${preset.secondary}` : undefined }}
+                className="flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-[11px] font-medium transition hover:shadow-sm"
+                style={{ borderColor: selected ? preset.secondary : "var(--border)", boxShadow: selected ? `0 0 0 1px ${preset.secondary}` : undefined }}
               >
                 <span className="flex" aria-hidden>
                   <span className="h-3.5 w-3.5 rounded-full border border-white" style={{ background: preset.secondary }} />
@@ -80,16 +95,17 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {FIELDS.map((field) => {
+        {fields.map((base) => {
+          const field = { ...base, ...fieldCopy?.[base.key] };
           const inputId = `${baseId}-${field.key}`;
           const value = colors[field.key] ?? "#000000";
           const fieldValid = isValidHexColor(value);
           return (
-            <div key={field.key} className="flex flex-col gap-1.5 rounded-xl border bg-white p-3" style={{ borderColor: "#DFE5ED" }}>
+            <div key={field.key} className="flex flex-col gap-1.5 rounded-xl border bg-card p-3" style={{ borderColor: "var(--border)" }}>
               <span className="text-xs font-semibold text-flit-primary">{field.label}</span>
               <p className="text-[11px] opacity-60">{field.hint}</p>
               <div className="flex items-center gap-2">
-                <label className="relative block h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-xl border" style={{ borderColor: "#DFE5ED", background: fieldValid ? value : "#FFFFFF" }}>
+                <label className="relative block h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)", background: fieldValid ? value : "#FFFFFF" }}>
                   <span className="sr-only">Elegir {field.label.toLowerCase()}</span>
                   <input
                     type="color"
@@ -112,12 +128,12 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
                     aria-invalid={!fieldValid}
                     aria-label={`Código de ${field.label.toLowerCase()}`}
                     className="w-28 rounded-lg border px-2 py-1 font-mono text-xs"
-                    style={{ borderColor: fieldValid ? "#DFE5ED" : "#FF4E00" }}
+                    style={{ borderColor: fieldValid ? "var(--border)" : "var(--destructive)" }}
                   />
                 </div>
               </div>
               {!fieldValid && (
-                <span role="alert" className="text-[11px]" style={{ color: "#FF4E00" }}>
+                <span role="alert" className="text-[11px]" style={{ color: "var(--destructive)" }}>
                   Escribe el código con el formato #RRGGBB, por ejemplo #2563EB.
                 </span>
               )}
@@ -130,29 +146,29 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
         <div
           className="flex flex-col gap-2 rounded-xl border px-3 py-2.5 text-xs"
           style={{
-            borderColor: readable ? "#8CC63F" : "#F9AC00",
-            background: readable ? "rgba(140,198,63,0.08)" : "rgba(249,172,0,0.08)",
+            borderColor: readable ? "var(--badge-success-border)" : "var(--badge-warning-border)",
+            background: readable ? "var(--badge-success-bg)" : "var(--badge-warning-bg)",
           }}
           role="status"
         >
           <div className="flex items-start gap-2">
             {readable ? (
-              <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#4F7A12" }} aria-hidden />
+              <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} aria-hidden />
             ) : (
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#8A6000" }} aria-hidden />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--badge-warning-fg)" }} aria-hidden />
             )}
             <span className="text-flit-primary">
               {readable
                 ? `Se lee bien: el texto sobre tus colores irá en ${colors.onPrimary.toUpperCase() === "#FFFFFF" ? "blanco" : "oscuro"}.`
-                : "Con estos colores el texto de los botones no se leería bien. Puedes corregirlo con un clic: ajustamos el tono sin cambiar el color."}
+                : (rules?.message ?? "Con estos colores el texto de los botones no se leería bien. Puedes corregirlo con un clic: ajustamos el tono sin cambiar el color.")}
             </span>
           </div>
           {!readable && (
             <button
               type="button"
-              onClick={() => onChange(fixContrast(colors))}
+              onClick={() => onChange(rules ? rules.fix(colors) : fixContrast(colors))}
               className="inline-flex w-fit items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "#8A6000" }}
+              style={{ background: "var(--badge-warning-fg)", color: "var(--destructive-foreground)" }}
             >
               <Wand2 className="h-3.5 w-3.5" aria-hidden /> Ajustar automáticamente
             </button>
@@ -163,7 +179,7 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
               {pairs.map((p) => (
                 <li key={p.label}>
                   Contraste {p.label}: {p.ratio === null ? "—" : `${formatContrastRatio(p.ratio)}:1`}{" "}
-                  {p.ok ? "(cumple el mínimo 4.5:1)" : "(no cumple el mínimo 4.5:1)"}
+                  {p.ok ? `(cumple el mínimo ${p.minimo})` : `(no cumple el mínimo ${p.minimo})`}
                 </li>
               ))}
             </ul>

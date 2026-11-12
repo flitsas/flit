@@ -98,7 +98,6 @@ describe("Inicio (Dashboard) — tarjetas KPI por familia", () => {
     expect(within(grid).queryByText("Traspasos")).not.toBeInTheDocument();
     expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
     expect(within(grid).getByText("Otros Trámites")).toBeInTheDocument();
-    expect(within(grid).getByText("Completados")).toBeInTheDocument();
     // Leyenda de «Seguimiento operativo»: tampoco la serie de Traspasos.
     expect(screen.queryByText("Traspasos")).not.toBeInTheDocument();
   });

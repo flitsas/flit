@@ -85,7 +85,7 @@ export function ResetPasswordDialog({ user, onClose, onDone }: ResetPasswordDial
               generará una temporal, se enviará por correo y deberá cambiarla al iniciar sesión.
             </p>
             {error && (
-              <p className="text-sm" style={{ color: "#FF4E00" }} role="alert">
+              <p className="text-sm" style={{ color: "var(--destructive)" }} role="alert">
                 {error}
               </p>
             )}

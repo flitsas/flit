@@ -215,6 +215,8 @@ const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
   { value: 'CE', label: 'Cédula de extranjería (CE)' },
   { value: 'NIT', label: 'NIT' },
   { value: 'PAS', label: 'Pasaporte (PAS)' },
+  // HU #14499 / ADR-0082 — Permiso por Protección Temporal.
+  { value: 'PPT', label: 'Permiso por Protección Temporal (PPT)' },
 ];
 
 const ROL_LABEL: Record<ActorRol, string> = {
@@ -423,7 +425,7 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
 
 const INPUT_BASE = WIZARD_INPUT;
 
-const GRADIENT = 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))';
+const GRADIENT = 'var(--gradient-action)';
 
 /**
  * Marco de las tarjetas de resultado de consulta (precarga del directorio, RUES, RUNT, comparendos).
@@ -2430,7 +2432,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const errorBanner = state.error && (
     <div
       className="rounded-xl p-3 text-xs border mb-3 flex items-center justify-between gap-3"
-      style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+      style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
       role="alert"
       aria-live="polite"
     >
@@ -2793,13 +2795,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       const conductorActivo = (r.licenseStatus ?? '').toUpperCase() === 'ACTIVO';
       // Paleta PDF 20-ago + prototipo Lovable (traspaso-ui): sin hex fuera de esa escala.
       const PROTO = {
-        canvas: '#F8FAFC',
-        border: '#DFE5ED',
-        navy: '#162744',
-        green: '#8CC63F',
-        white: '#FFFFFF',
-        ok: { color: '#4F7A12', background: '#F3FBE8', borderColor: '#CDEB9C' },
-        err: { color: '#B91C1C', background: '#FEF2F2', borderColor: '#FECACA' },
+        canvas: 'var(--surface-sunken)',
+        border: 'var(--border)',
+        navy: 'var(--foreground)',
+        green: 'var(--flit-success-ink)',
+        white: 'var(--card)',
+        ok: { color: 'var(--badge-success-fg)', background: 'var(--badge-success-bg)', borderColor: 'var(--badge-success-border)' },
+        err: { color: 'var(--badge-danger-fg)', background: 'var(--badge-danger-bg)', borderColor: 'var(--badge-danger-border)' },
       } as const;
       const roStyle = {
         background: PROTO.white,
@@ -2930,7 +2932,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       return (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
           role="alert"
           aria-live="polite"
         >
@@ -2943,7 +2945,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       return (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
           role="alert"
           aria-live="polite"
         >
@@ -3135,7 +3137,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               // (no atenuar el texto al 60%: ya hubo una corrección de contraste por eso en este
               // mismo archivo — ver comentario histórico más abajo).
               className="h-[42px] shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-50"
-              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
+              style={{ borderColor: 'var(--color-flit-primary)', color: 'var(--color-flit-primary)' }}
             >
               Actualizar RUNT
             </button>
@@ -3156,7 +3158,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </p>
               )}
               {rlState.status === 'error' && (
-                <p className="text-xs" style={{ color: '#FF4E00' }}>
+                <p className="text-xs" style={{ color: 'var(--destructive)' }}>
                   No se pudo consultar RUNT. Puedes registrarlo manualmente.
                 </p>
               )}
@@ -3178,7 +3180,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {/* Email — obligatorio en persona jurídica (HU #10688): el RL valida la identidad. */}
           <div>
             <label htmlFor={`${index}-rl-email`} className={WIZARD_LABEL}>
-              Correo electrónico <span style={{ color: '#FF4E00' }}>*</span>
+              Correo electrónico <span style={{ color: 'var(--destructive)' }}>*</span>
             </label>
             <input
               id={`${index}-rl-email`}
@@ -3457,7 +3459,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     aria-busy={seedingOwnerDoc && ownerSeedStatus === 'loading'}
                     placeholder={`Número de documento del ${actor.rol}…`}
                     className={`${INPUT_BASE} font-mono${docLocked ? ' opacity-80' : ''}`}
-                    style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    style={docLocked ? { background: 'var(--surface-sunken)' } : undefined}
                   />
                   {errors.numeroDocumento && (
                     <InlineAlert id="comprador-numeroDoc-err" tone="warning" compact className="mt-1">
@@ -3481,7 +3483,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       id="comprador-numeroDoc-seed-status"
                       role="alert"
                       className="mt-1 flex items-center gap-1.5 text-xs"
-                      style={{ color: '#FF4E00' }}
+                      style={{ color: 'var(--destructive)' }}
                     >
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
@@ -3542,7 +3544,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     aria-describedby={errors.numeroDocumento ? 'comprador-numeroDoc-err' : undefined}
                     placeholder={`Número de documento del ${actor.rol}…`}
                     className={`${INPUT_BASE} font-mono${docLocked ? ' opacity-80' : ''}`}
-                    style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    style={docLocked ? { background: 'var(--surface-sunken)' } : undefined}
                   />
                   {errors.numeroDocumento && (
                     <InlineAlert id="comprador-numeroDoc-err" tone="warning" compact className="mt-1">
@@ -3591,7 +3593,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-nombre" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 {isJuridical(actor) ? 'Razón social' : 'Nombres y apellidos'}
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-nombre"
@@ -3613,7 +3615,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       : undefined
                 }
                 className={`${INPUT_BASE}${nombreBloqueado ? ' opacity-80' : ''}`}
-                style={nombreBloqueado ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                style={nombreBloqueado ? { background: 'var(--surface-sunken)' } : undefined}
               />
               {errors.nombreCompleto && (
                 <InlineAlert id="comprador-nombre-err" tone="warning" compact className="mt-1">
@@ -3637,13 +3639,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 value={actor.numeroDocumento}
                 readOnly
                 className="w-full px-3 py-2 rounded-xl border text-xs font-mono opacity-80"
-                style={{ background: 'rgba(223,229,237,0.35)' }}
+                style={{ background: 'var(--surface-sunken)' }}
               />
             </div>
             <div>
               <label htmlFor="comprador-email" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Correo electrónico
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-email"
@@ -3668,7 +3670,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-telefono" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Teléfono
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-telefono"
@@ -3698,7 +3700,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div className={`relative ${showCiudades ? 'z-40' : ''}`}>
               <label htmlFor="comprador-ciudad" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Ciudad
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-ciudad"
@@ -3728,8 +3730,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
               {showCiudades && (
                 <ul
-                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
-                  style={{ borderColor: '#DFE5ED' }}
+                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-card shadow-lg"
+                  style={{ borderColor: 'var(--border)' }}
                   aria-label="Sugerencias de ciudad"
                 >
                   {ciudades.map((c) => (
@@ -3754,7 +3756,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-direccion" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Dirección
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-direccion"
@@ -4008,7 +4010,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                           disabled
                           aria-label={isJuridical(actor) ? 'NIT del propietario' : 'Número de documento del propietario'}
                           className={`${INPUT_BASE} font-mono opacity-80`}
-                          style={{ background: 'rgba(223,229,237,0.35)' }}
+                          style={{ background: 'var(--surface-sunken)' }}
                         />
                       </div>
                       <div>
@@ -4027,7 +4029,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                           disabled
                           aria-label={isJuridical(actor) ? 'Razón social del propietario' : 'Nombre del propietario'}
                           className={`${INPUT_BASE} opacity-80`}
-                          style={{ background: 'rgba(223,229,237,0.35)' }}
+                          style={{ background: 'var(--surface-sunken)' }}
                         />
                       </div>
                     </div>
@@ -4066,7 +4068,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-numeroDoc`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Número de documento
-                        <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                       </label>
                       <input
                         id={`${prefix}-numeroDoc`}
@@ -4109,7 +4111,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <div className="sm:max-w-md">
                     <label htmlFor={`${prefix}-numeroDoc`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                       {isJuridical(actor) ? 'NIT' : 'Número de documento'}
-                      <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                      <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                     </label>
                     <input
                       id={`${prefix}-numeroDoc`}
@@ -4127,7 +4129,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       }
                       aria-busy={seedingOwnerDoc && ownerSeedStatus === 'loading'}
                       className={`${INPUT_BASE}${docLocked ? ' opacity-80' : ''}`}
-                      style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                      style={docLocked ? { background: 'var(--surface-sunken)' } : undefined}
                     />
                     {errors.numeroDocumento && (
                       <InlineAlert id={`${prefix}-numeroDoc-err`} tone="warning" compact className="mt-1">
@@ -4151,7 +4153,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         id={`${prefix}-numeroDoc-seed-status`}
                         role="alert"
                         className="mt-1 flex items-center gap-1.5 text-xs"
-                        style={{ color: '#FF4E00' }}
+                        style={{ color: 'var(--destructive)' }}
                       >
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
@@ -4195,7 +4197,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 <div>
                   <label htmlFor={`${prefix}-nombre`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     {isJuridical(actor) ? 'Razón social' : 'Nombres y apellidos'}
-                    <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                    <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                   </label>
                   <input
                     id={`${prefix}-nombre`}
@@ -4217,7 +4219,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                           : undefined
                     }
                     className={`${INPUT_BASE}${razonLocked || isNameLockedByRunt(index, actor) ? ' opacity-80' : ''}`}
-                    style={razonLocked || isNameLockedByRunt(index, actor) ? { background: 'rgba(223,229,237,0.35)' } : undefined}
+                    style={razonLocked || isNameLockedByRunt(index, actor) ? { background: 'var(--surface-sunken)' } : undefined}
                   />
                   {errors.nombreCompleto && (
                     <InlineAlert id={`${prefix}-nombre-err`} tone="warning" compact className="mt-1">
@@ -4239,14 +4241,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     incluso cuando la identidad viene bloqueada por RUNT (`esPropietarioDelRegistro`
                     con `autoConsultRunt`). En persona jurídica, además, falta el representante
                     legal — capturado aparte en `rlSection` más abajo. */}
-                <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: '#DFE5ED' }}>
+                <div className="rounded-xl border p-4 space-y-4" style={{ borderColor: 'var(--border)' }}>
                   <p className="text-[13px] font-semibold" style={{ color: 'var(--color-flit-primary)' }}>Datos de contacto</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Email */}
                     <div>
                       <label htmlFor={`${prefix}-email`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Correo electrónico
-                        <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                       </label>
                       <input
                         id={`${prefix}-email`}
@@ -4270,7 +4272,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-telefono`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Teléfono
-                        <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                       </label>
                       <input
                         id={`${prefix}-telefono`}
@@ -4300,7 +4302,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div className={`relative ${showCiudadSuggestions ? 'z-40' : ''}`}>
                       <label htmlFor={`${prefix}-ciudad`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Ciudad
-                        <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                       </label>
                       <input
                         id={`${prefix}-ciudad`}
@@ -4332,8 +4334,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       )}
                       {showCiudadSuggestions && (
                         <ul
-                          className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
-                          style={{ borderColor: '#DFE5ED' }}
+                          className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-card shadow-lg"
+                          style={{ borderColor: 'var(--border)' }}
                           aria-label="Sugerencias de ciudad"
                         >
                           {ciudadesSuggestions.map((c) => (
@@ -4359,7 +4361,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-direccion`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Dirección
-                        <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
                       </label>
                       <input
                         id={`${prefix}-direccion`}
@@ -4469,7 +4471,7 @@ function EmailReenvioConfirmModal({
       onClose={onCancel}
       title="Reenviar validación de identidad"
       icon={AlertTriangle}
-      iconBg="#B26A00"
+      iconBg="var(--color-flit-alert)"
       size="sm"
     >
       <div ref={containerRef} className="space-y-4">
@@ -4488,7 +4490,7 @@ function EmailReenvioConfirmModal({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 rounded-xl text-xs font-semibold border border-[#DFE5ED] dark:border-white/10"
+            className="px-4 py-2 rounded-xl text-xs font-semibold border border-border"
           >
             Cancelar
           </button>
@@ -4526,7 +4528,7 @@ function RlSwitchConfirmModal({
       onClose={onCancel}
       title="Cambiar representante legal"
       icon={AlertTriangle}
-      iconBg="#B26A00"
+      iconBg="var(--color-flit-alert)"
       size="sm"
     >
       <div ref={containerRef} className="space-y-4">
@@ -4556,7 +4558,7 @@ function RlSwitchConfirmModal({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 rounded-xl text-xs font-semibold border border-[#DFE5ED] dark:border-white/10"
+            className="px-4 py-2 rounded-xl text-xs font-semibold border border-border"
           >
             Cancelar
           </button>

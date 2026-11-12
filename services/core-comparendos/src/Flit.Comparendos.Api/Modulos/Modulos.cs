@@ -29,6 +29,7 @@ public static class Modulos
         services.AddScoped<Comun.Auditoria>();
         services.AddScoped<Comun.RegistroArchivos>();
         services.AddScoped<Catalogos.MapeadorOt>();
+        services.AddScoped<Catalogos.RemapeoOrganismos>();
         services.AddScoped<Comparendos.Timeline>();
         services.AddScoped<Comparendos.AccesoComparendo>();
         services.AddScoped<Bandeja.ConsultaBandeja>();

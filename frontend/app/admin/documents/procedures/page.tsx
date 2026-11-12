@@ -69,7 +69,7 @@ export default function DocumentProceduresPage() {
                   key={p.id}
                   type="button"
                   onClick={() => go(p.id)}
-                  className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-left transition hover:border-flit-brand dark:bg-[#0B0F14]"
+                  className="flex items-center justify-between rounded-xl border bg-card px-4 py-3 text-left transition hover:border-flit-brand"
                 >
                   <span>
                     <span className="block text-xs font-semibold">{p.name}</span>

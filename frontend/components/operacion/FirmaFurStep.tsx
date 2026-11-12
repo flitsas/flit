@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { improntaObligatoriaEnChecklist } from './DocumentChecklist';
-import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
+import MatriculaResumen, { ResumenCard, type ResolverEdicion } from './MatriculaResumen';
 import { ExpedienteCronologicoAccordion } from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
@@ -21,6 +21,7 @@ import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
+import { DIALOGO_FRANJA, DIALOGO_FRANJA_CERRAR, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL, DIALOGO_VELO } from './dialogo-propio';
 import type {
   Actor,
   BiometricParte,
@@ -42,6 +43,9 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/ownership-share';
+import { esPlacaAsignadaPorOt } from '@/lib/tramites/plate-digit-preference';
+import { grupoPlacaDesdeFormatoFur, grupoPlacaPideDigito, type GrupoPlaca } from '@/lib/tramites/plate-format';
+import { AvisoDigitoPlacaOt } from './AvisoDigitoPlacaOt';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -69,15 +73,17 @@ interface Props {
   rotulosPorRol?: Partial<Record<'comprador' | 'vendedor' | 'locatario', string>>;
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
+  /** Botón «Editar» de cada tarjeta del resumen (solo en borrador editable). */
+  resolverEdicion?: ResolverEdicion;
 }
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
 const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
-  ok: { dot: '#8CC63F', text: 'var(--flit-success-ink)' },
-  warn: { dot: '#F9AC00', text: 'var(--badge-warning-fg)' },
-  fail: { dot: '#FF4E00', text: '#FF4E00' },
-  unknown: { dot: '#59677D', text: '#59677D' },
-  error: { dot: '#FF4E00', text: '#FF4E00' },
+  ok: { dot: 'var(--flit-success-ink)', text: 'var(--flit-success-ink)' },
+  warn: { dot: 'var(--badge-warning-fg)', text: 'var(--badge-warning-fg)' },
+  fail: { dot: 'var(--destructive)', text: 'var(--destructive)' },
+  unknown: { dot: 'var(--muted-foreground)', text: 'var(--muted-foreground)' },
+  error: { dot: 'var(--destructive)', text: 'var(--destructive)' },
 };
 
 /**
@@ -293,6 +299,7 @@ export function FirmaFurStep({
   partesBiometricas,
   rotulosPorRol,
   biometricForceEditable = false,
+  resolverEdicion,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
@@ -539,6 +546,29 @@ export function FirmaFurStep({
     [fv],
   );
   const organismoSelected = organismo.code.trim() !== '' || organismo.name.trim() !== '';
+
+  // HU5 (registro diferido 2026-11-09) — grupo de placa para el dígito de preferencia. MAQUINARIA y
+  // REMOLQUES los decide el catálogo del backend (`GET /fur/template-format`, el mismo que elige la
+  // plantilla del FUR); el resto, las listas exactas por clase. Si el formato no llega (error o aún
+  // cargando), quedan solo las listas: el selector se comporta como hoy salvo moto/remolque.
+  const vehicleClass = fv('vehicle_class');
+  const [furTemplateFormat, setFurTemplateFormat] = useState<string | null>(null);
+  useEffect(() => {
+    if (!instanceId || modalidad !== 'matricula_inicial') return;
+    let active = true;
+    void Promise.resolve()
+      .then(() => tramitesClient.getFurTemplateFormat(instanceId))
+      .then((r) => {
+        if (active) setFurTemplateFormat(r?.format ?? null);
+      })
+      .catch(() => {
+        if (active) setFurTemplateFormat(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [instanceId, modalidad, vehicleClass]);
+  const grupoPlaca = grupoPlacaDesdeFormatoFur(furTemplateFormat, vehicleClass);
   // HU #11199 (AC4) — marca escrita al crear el trámite con la secretaría del primer paso. Su ausencia
   // (borradores anteriores al cambio) deja el comportamiento de siempre.
   const organismoElegidoEnPasoUno = fv('transit_office_origen') === 'paso_1' && organismoSelected;
@@ -706,6 +736,8 @@ export function FirmaFurStep({
             plateValue={fv('plate')}
             plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
             preferredDigitValue={fv('plate_preferred_last_digit')}
+            grupoPlaca={grupoPlaca}
+            vehicleClass={vehicleClass}
             readOnly={readOnly}
             onRefresh={() => {
               void loadDetail();
@@ -719,6 +751,7 @@ export function FirmaFurStep({
   return (
     <div className="space-y-8">
       <MatriculaResumen
+        resolverEdicion={resolverEdicion}
         modalidad={modalidad}
         partesBiometricas={partesBiometricas}
         rotulosPorRol={rotulosPorRol}
@@ -825,6 +858,7 @@ export function FirmaFurStep({
       />
 
       <ExpedienteVisor
+        editarDocumentos={resolverEdicion?.('documentos') ?? null}
         instanceId={instanceId}
         attachments={attachments}
         checklist={checklist}
@@ -886,6 +920,8 @@ export function PlacaPreasignadaSection({
   plateValue,
   plateSource,
   preferredDigitValue = '',
+  grupoPlaca = null,
+  vehicleClass = '',
   readOnly,
   onRefresh,
 }: {
@@ -894,6 +930,10 @@ export function PlacaPreasignadaSection({
   plateSource: string;
   /** HU #10805 — dígito de preferencia persistido (field_value `plate_preferred_last_digit`). */
   preferredDigitValue?: string;
+  /** HU5 — grupo de placa de la clase: MOTO cambia el texto; REMOLQUE/MAQUINARIA quitan el dígito. */
+  grupoPlaca?: GrupoPlaca | null;
+  /** HU7 — `vehicle_class`, para que el aviso compare el primer número en motos. */
+  vehicleClass?: string;
   readOnly: boolean;
   onRefresh?: () => void;
 }) {
@@ -908,6 +948,13 @@ export function PlacaPreasignadaSection({
   const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
   // Borrador anterior a la Epic #12550 con una placa elegida por el gestor desde el inventario.
   const placaElegida = placa !== '' && plateSource === 'user';
+  // Registro diferido 2026-11-09 (HU 3) — placa que asignó el organismo en Preasignación
+  // (`source: 'ot'`, o placa con source vacío de las asignadas antes de marcar el origen). Se ve en
+  // el asistente en solo lectura (enlace directo a /tramites/{id}); desde el listado, un trámite ya
+  // asignado abre el detalle, donde `DetalleResumen` pinta el mismo aviso.
+  const placaAsignadaPorOt = esPlacaAsignadaPorOt(placa, plateSource);
+  // HU10 — moto y motocarro: el dígito es el primer número de la placa.
+  const digitoPrimerNumero = grupoPlaca === 'MOTO' || grupoPlaca === 'MOTOCARRO';
 
   // Quitar una placa elegida por el gestor (borradores antiguos): limpia `plate` (='') y regenera el
   // FUR. Sin placa, el trámite vuelve a la Ruta Larga y el organismo la asigna en Preasignación.
@@ -980,7 +1027,7 @@ export function PlacaPreasignadaSection({
           Desde ahora la placa la asigna el organismo de tránsito en Preasignación.
         </p>
         {error && (
-          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -998,38 +1045,60 @@ export function PlacaPreasignadaSection({
     );
   }
 
+  if (placaAsignadaPorOt) {
+    return shell(
+      <div className="mt-2 flex flex-col gap-2" data-testid="fur-placa-asignada-ot">
+        <p className="text-xs opacity-80">
+          El organismo de tránsito asignó la placa{' '}
+          <span className="font-mono font-semibold uppercase tracking-wider">{placa}</span>.
+        </p>
+        <AvisoDigitoPlacaOt placa={placa} source={plateSource} digito={preferredDigitValue} clase={vehicleClass} />
+      </div>,
+    );
+  }
+
   return shell(
     <div className="mt-2 flex flex-col gap-3" data-testid="fur-placa-ruta-larga">
       <p className="text-xs opacity-70">
         El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.
       </p>
       {error && (
-        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}
-      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
-      <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
-        Dígito de preferencia (opcional)
-        <span className="text-xs font-normal opacity-70">
-          Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede
-          asignar una placa que termine en ese dígito u otra.
-        </span>
-        <select
-          value={preferredDigit}
-          disabled={readOnly || savingDigit}
-          onChange={(e) => void saveDigit(e.target.value)}
-          aria-label="Dígito de preferencia de placa"
-          className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
-        >
-          <option value="">Sin preferencia</option>
-          {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-            <option key={d} value={d}>
-              Termina en {d}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional).
+          HU5 (2026-11-09) — remolque y maquinaria no llevan dígito (D2); en motos es el primer
+          número de la serie numérica. */}
+      {grupoPlacaPideDigito(grupoPlaca) && (
+        <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
+          <span>
+            {digitoPrimerNumero ? 'Dígito numérico de preferencia (opcional):' : 'Dígito de preferencia (opcional):'}{' '}
+            <span className="font-normal opacity-70">
+              {grupoPlaca === 'MOTOCARRO'
+                ? 'Indica el número con el que prefieres que empiece la placa del motocarro (ej. X23ABC). El OT lo tomará como guía al preasignar.'
+                : grupoPlaca === 'MOTO'
+                ? 'Indica el número con el que prefieres que empiece la serie numérica de la moto (ej. ABCX2D o ABCX2). El OT lo tomará como guía al preasignar.'
+                : 'Indica el número en el que prefieres que termine la placa. El OT lo toma como guía: puede asignar una placa que termine en ese dígito u otra.'}
+            </span>
+          </span>
+          <select
+            value={preferredDigit}
+            disabled={readOnly || savingDigit}
+            onChange={(e) => void saveDigit(e.target.value)}
+            aria-label="Dígito de preferencia de placa"
+            className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
+          >
+            <option value="">Sin preferencia</option>
+            {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+              <option key={d} value={d}>
+                {/* D4 — en motos el dígito es el primer número de la placa. */}
+                {digitoPrimerNumero ? `Primer número ${d}` : `Termina en ${d}`}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </div>,
   );
 }
@@ -1121,8 +1190,8 @@ function OrganismoModal({
 
   return (
     <div
-      // B6 (guardián de diseño) — overlay único del sistema (antes `bg-black/40 backdrop-blur-sm`).
-      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] backdrop-blur-[6px] px-4"
+      // Homologación #14507 — velo, panel y franja del Modal, en su sitio (mismo foco y Escape).
+      className={`fixed inset-0 z-50 grid place-items-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-label="Seleccionar organismo de tránsito"
@@ -1130,17 +1199,18 @@ function OrganismoModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
+        className={`${DIALOGO_PANEL} p-6 w-full max-w-lg flex flex-col max-h-[85vh] outline-none focus:ring-0`}
       >
-        <WizardCardHeader
-          title="Organismo de tránsito"
-          subtitle="Elige dónde se radicará el trámite."
-          action={
-            <button type="button" onClick={onClose} aria-label="Cerrar">
-              <X className="h-5 w-5" />
-            </button>
-          }
-        />
+        <div className={`${DIALOGO_FRANJA} -mx-6 -mt-6 mb-4 justify-between`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <div className="relative z-[1] min-w-0">
+            <h3 className={DIALOGO_FRANJA_TITULO}>Organismo de tránsito</h3>
+            <p className="mt-1 text-xs leading-snug opacity-85">Elige dónde se radicará el trámite.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className={DIALOGO_FRANJA_CERRAR}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
         {runtSuggestion && (
           <button
@@ -1174,7 +1244,7 @@ function OrganismoModal({
         </div>
 
         {error && (
-          <p className="text-xs font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium mb-2" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -1301,7 +1371,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
       {error && (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
           role="alert"
           aria-live="polite"
         >
@@ -1372,7 +1442,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
         </div>
 
         {formError && (
-          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
             {formError}
           </p>
         )}
@@ -1489,7 +1559,7 @@ function ParticipantRow({
         )}
       </div>
       {error && (
-        <p className="text-xs font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium mt-1.5" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}

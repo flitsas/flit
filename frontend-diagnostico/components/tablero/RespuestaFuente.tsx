@@ -46,12 +46,12 @@ const CHEQUEOS = "chequeos";
 /** Avisa al contenedor de que un plegable cambió, para que el botón «Expandir/Contraer todo» diga lo correcto. */
 const AlCambiarPlegable = createContext<() => void>(() => {});
 
-const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-[var(--nav-texto)] dark:text-slate-300";
+const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-muted-foreground";
 const VALOR_CLS = `${CELDA_TABLA_CLS} whitespace-pre-wrap break-words`;
-const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10";
-const TITULO_CLS = "text-xs font-semibold text-flit-primary dark:text-white";
+const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-border";
+const TITULO_CLS = "text-xs font-semibold text-flit-primary";
 /** Botón secundario compacto (mismos tokens que BOTON_SECUNDARIO_CLS, a la escala de 12px del detalle). */
-const BOTON_PLEGAR_CLS = `inline-flex items-center justify-center self-end rounded-full border border-[var(--color-flit-gray)] bg-white px-3 py-1 text-xs font-semibold text-flit-primary transition dark:border-white/15 dark:bg-transparent dark:text-white ${FOCO_CLS}`;
+const BOTON_PLEGAR_CLS = `inline-flex items-center justify-center self-end rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-flit-primary transition ${FOCO_CLS}`;
 const SUMMARY_CLS = `flex cursor-pointer list-none items-center gap-1 rounded-lg py-0.5 [&::-webkit-details-marker]:hidden ${FOCO_CLS}`;
 
 /** Cómo se leen los datos: filtrado (respuesta de la fuente, HU #14087) o íntegro (respuesta del proveedor, HU #14154). */
@@ -226,7 +226,7 @@ function Subseccion({ nombre, valor, nivel, profundidad }: { nombre: string; val
     <section aria-labelledby={id}>
       <details open={profundidad === 0} onToggle={alCambiar} className="group flex flex-col">
         <summary className={SUMMARY_CLS}>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90 dark:text-white" aria-hidden="true" />
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90" aria-hidden="true" />
           <Titulo nivel={nivel} id={id}>
             {titulo}
           </Titulo>
@@ -257,7 +257,7 @@ function Bloque({ etiqueta, datos, nivel, profundidad }: { etiqueta: string; dat
 function Raiz({ datos, etiqueta, nivel }: { datos: unknown; etiqueta: string; nivel: number }) {
   if (esObjeto(datos)) return <Bloque etiqueta={etiqueta} datos={datos} nivel={nivel} profundidad={0} />;
   return (
-    <div className="flex flex-col gap-3 text-xs text-flit-primary dark:text-white">
+    <div className="flex flex-col gap-3 text-xs text-flit-primary">
       <Valor nombre={etiqueta} valor={datos} />
     </div>
   );

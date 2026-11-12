@@ -27,4 +27,6 @@ internal sealed class HttpDomainContextAccessor(IHttpContextAccessor httpContext
     public Guid? HeadTenantId => Current.HeadTenantId;
 
     public string ProductCode => Current.ProductCode;
+
+    public Guid? TransitOfficeId => Current.TransitOfficeId;
 }

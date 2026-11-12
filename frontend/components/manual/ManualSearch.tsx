@@ -39,15 +39,15 @@ export function ManualSearch() {
   }, []);
 
   return (
-    <div ref={rootRef} className="relative mx-auto w-full max-w-lg">
+    <div ref={rootRef} className="relative w-full">
       <label className="sr-only" htmlFor="manual-search">
         Buscar en el manual
       </label>
       <div
-        className="flex items-center gap-2.5 rounded-xl border px-4 py-3 shadow-sm"
+        className="flex min-h-11 items-center gap-2.5 rounded-xl border px-3.5 py-2.5 transition focus-within:border-[color:var(--di-action)] focus-within:ring-2 focus-within:ring-[color:var(--di-accent-soft)]"
         style={{
-          borderColor: "var(--manual-border)",
-          background: "#ffffff",
+          borderColor: "var(--di-border-control)",
+          background: "var(--manual-card-bg)",
         }}
       >
         <Search className="h-4 w-4 shrink-0" style={{ color: "var(--manual-text-soft)" }} aria-hidden />
@@ -61,7 +61,7 @@ export function ManualSearch() {
           }}
           onFocus={() => setOpen(true)}
           placeholder="Buscar en el manual..."
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9aa6b4]"
+          className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-[color:var(--di-text-tertiary)] sm:text-sm"
           style={{ color: "var(--manual-text)" }}
           autoComplete="off"
         />
@@ -79,10 +79,10 @@ export function ManualSearch() {
 
       {open && query.trim().length >= 2 && (
         <ul
-          className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-2 shadow-xl list-none m-0"
+          className="absolute left-0 right-0 z-20 mt-2 max-h-80 overflow-y-auto rounded-[var(--manual-radius-card)] border p-2 shadow-[var(--shadow-modal)] list-none m-0"
           style={{
             borderColor: "var(--manual-border)",
-            background: "#ffffff",
+            background: "var(--manual-card-bg)",
           }}
           role="listbox"
         >
@@ -95,7 +95,7 @@ export function ManualSearch() {
               <li key={hit.slug}>
                 <button
                   type="button"
-                  className="flex w-full flex-col rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--manual-active-bg)]"
+                  className="flex w-full flex-col rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[var(--manual-active-bg)]"
                   onClick={() => {
                     setOpen(false);
                     setQuery("");

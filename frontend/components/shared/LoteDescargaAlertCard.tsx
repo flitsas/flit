@@ -217,7 +217,7 @@ export function LoteDescargaAlertCard({
       // sobre el contenido y el tinte de `--badge-*-bg` es translúcido. Sombra = token `shadow.card`
       // de flit_design_tokens.json. Al minimizar se desliza a la derecha en ~200 ms solo si el
       // sistema permite movimiento (prefers-reduced-motion).
-      className={`rounded-xl border bg-card px-3 py-2 text-xs shadow-[0_8px_24px_rgba(22,39,68,0.08)] motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none ${
+      className={`rounded-xl border bg-card px-3 py-2 text-xs shadow-[var(--shadow-card)] motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none ${
         minimizado ? 'pointer-events-none translate-x-[calc(100%+1.5rem)] opacity-0' : 'translate-x-0 opacity-100'
       } ${className ?? ''}`}
       style={{
@@ -282,7 +282,7 @@ export function LoteDescargaAlertCard({
                 aria-valuemin={0}
                 aria-valuemax={lote.total}
                 aria-valuenow={lote.procesados}
-                className="h-1 w-full overflow-hidden rounded-full bg-flit-gray dark:bg-white/10"
+                className="h-1 w-full overflow-hidden rounded-full bg-flit-gray dark:bg-secondary"
               >
                 <div
                   className="h-full rounded-full transition-[width]"
@@ -329,7 +329,7 @@ export function LoteDescargaAlertCard({
         {conPartes ? (
           <ul
             aria-label="Partes de la descarga"
-            className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-white/10"
+            className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-border"
           >
             {partesConPdf.map((parte) => {
               const descargando = descargandoParte === parte.numero;

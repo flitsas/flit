@@ -3,6 +3,7 @@
 import { FileText, Upload } from "lucide-react";
 import { useId } from "react";
 import { boton } from "@/components/landing/estilos";
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { ACCEPT_ARCHIVOS } from "@/lib/tramite/requisitos";
 
 export type EstadoArchivo = "vacio" | "cargando" | "ok" | "error";
@@ -40,11 +41,7 @@ export function Drop({ title, hint, optional, estado, nombre, error, onFile, onQ
         {conArchivo ? <FileText aria-hidden className="h-7 w-7 text-success" /> : <Upload aria-hidden className="h-7 w-7 text-primary" />}
         <span className="font-medium">{title}</span>
         <span className="line-clamp-2 text-xs font-light text-muted-foreground">{conArchivo ? `${nombre} · Da clic para reemplazar el archivo` : hint}</span>
-        {cargando && (
-          <span role="status" className="text-xs text-primary">
-            Subiendo {nombre ?? "el archivo"}...
-          </span>
-        )}
+        {cargando && <MobilityEstado mensaje={`Subiendo ${nombre ?? "el archivo"}...`} className="text-xs text-primary" />}
         {error && !cargando && (
           <span id={idError} role="alert" className="text-xs text-destructive">
             {error}

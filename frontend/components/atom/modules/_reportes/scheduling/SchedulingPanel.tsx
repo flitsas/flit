@@ -1,5 +1,6 @@
 "use client";
 
+import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useEffect, useState } from "react";
 import { BellRing, CalendarClock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -59,13 +60,13 @@ export function SchedulingPanel({
     cn(
       "flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold transition-colors",
       active
-        ? "text-white"
-        : "text-flit-primary dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800",
+        ? "text-[color:var(--di-on-accent)]"
+        : "text-flit-primary hover:bg-secondary",
     );
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
+      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8 ${DIALOGO_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -75,14 +76,15 @@ export function SchedulingPanel({
         aria-modal="true"
         aria-label="Programación y alertas"
         data-testid="scheduling-panel"
-        className="w-full max-w-4xl rounded-3xl bg-white dark:bg-slate-900 shadow-xl border border-slate-200 dark:border-slate-700"
+        className={`w-full max-w-4xl overflow-hidden ${DIALOGO_PANEL_CLS}`}
       >
-        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-5 py-4">
+        <header>
+          <FranjaDialogo>
           <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--color-flit-brand)" }}>
+            <h2 className={`text-lg font-bold ${DIALOGO_TITULO_CLS}`}>
               Programación y alertas
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs opacity-85">
               {otTransitOfficeId
                 ? "Informes periódicos por correo y alertas por umbral sobre el panel de tu organismo."
                 : "Informes periódicos por correo y alertas por umbral sobre las métricas de tu compañía."}
@@ -92,10 +94,11 @@ export function SchedulingPanel({
             type="button"
             aria-label="Cerrar"
             onClick={onClose}
-            className="rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-flit-primary dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className={DIALOGO_CERRAR_CLS}
           >
-            <X className="h-4 w-4" aria-hidden="true" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
+          </FranjaDialogo>
         </header>
 
         <nav className="flex items-center gap-2 px-5 pt-4" aria-label="Secciones de programación">
@@ -103,7 +106,7 @@ export function SchedulingPanel({
             type="button"
             onClick={() => setTab("schedules")}
             className={tabClass(tab === "schedules")}
-            style={tab === "schedules" ? { background: "var(--color-flit-brand)" } : undefined}
+            style={tab === "schedules" ? { background: "var(--di-accent)" } : undefined}
             aria-current={tab === "schedules" ? "page" : undefined}
           >
             <CalendarClock className="h-4 w-4" aria-hidden="true" /> Informes programados
@@ -112,7 +115,7 @@ export function SchedulingPanel({
             type="button"
             onClick={() => setTab("alerts")}
             className={tabClass(tab === "alerts")}
-            style={tab === "alerts" ? { background: "var(--color-flit-brand)" } : undefined}
+            style={tab === "alerts" ? { background: "var(--di-accent)" } : undefined}
             aria-current={tab === "alerts" ? "page" : undefined}
           >
             <BellRing className="h-4 w-4" aria-hidden="true" /> Alertas

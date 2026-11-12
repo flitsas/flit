@@ -6,26 +6,31 @@ import { useMemo, useState } from "react";
 import { ChevronDown, FileText, FolderOpen, Menu, X } from "lucide-react";
 import { getNavTree, type ManualArticle } from "@/lib/manual/catalog";
 import { MANUAL_VERSION, MANUAL_VERSION_DATE } from "@/lib/manual/articles/meta";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { ManualSearch } from "./ManualSearch";
 import { ManualToc } from "./ManualToc";
 
+// Homologación (HU #14511): deja el logo «FLIT Docs» y usa el acceso de la vista «Ayuda» de la propuesta (`vAyuda`).
 function ManualLogo() {
   return (
-    <Link href="/manual" className="flex items-center gap-2.5 px-5 py-5">
+    <Link
+      href="/manual"
+      className="m-3 flex min-h-[72px] items-center gap-3.5 rounded-xl px-3 py-3 transition-colors hover:bg-[var(--manual-active-bg)]"
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/assets/favicon.svg"
+        src={rutaIlustracion("ayuda")}
         alt=""
         aria-hidden
-        className="h-10 w-10 shrink-0 rounded-xl shadow-sm"
+        className="h-10 w-10 shrink-0 object-contain"
         draggable={false}
       />
       <span className="leading-tight">
-        <span className="block text-base font-bold tracking-tight" style={{ color: "var(--manual-text)" }}>
-          FLIT
+        <span className="block text-base font-bold" style={{ color: "var(--manual-heading)" }}>
+          Ayuda
         </span>
-        <span className="block text-[11px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--manual-brand)" }}>
-          Docs
+        <span className="block text-xs" style={{ color: "var(--manual-text-soft)" }}>
+          Manual de usuario
         </span>
       </span>
     </Link>
@@ -53,7 +58,7 @@ function SidebarNav({
           <div key={section.id} className="mb-1">
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.14em] transition-colors hover:bg-[var(--manual-border-soft)]"
+              className="flex w-full items-center gap-2 rounded-xl px-2 py-2.5 text-left text-[11px] font-bold uppercase tracking-[0.14em] transition-colors hover:bg-[var(--manual-active-bg)]"
               style={{ color: "var(--manual-text-muted)" }}
               onClick={() => setOpenSections((s) => ({ ...s, [section.id]: !open }))}
               aria-expanded={open}
@@ -75,7 +80,7 @@ function SidebarNav({
                       <Link
                         href={href}
                         onClick={onNavigate}
-                        className="flex items-start gap-2 rounded-lg px-2.5 py-2 text-[13px] leading-snug transition-colors"
+                        className="flex items-start gap-2 rounded-xl px-2.5 py-2 text-[13px] leading-snug transition-colors hover:bg-[var(--manual-active-bg)]"
                         style={
                           active
                             ? {
@@ -121,20 +126,20 @@ export function ManualShell({
 
   return (
     <div className="manual-root min-h-screen" style={{ background: "var(--manual-bg)" }}>
-      {/* Mobile overlay */}
+      {/* Mobile overlay: velo del Modal */}
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-[var(--overlay)] backdrop-blur-md lg:hidden"
           aria-label="Cerrar menú"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
-      <div className="flex min-h-screen items-start">
-        {/* Sidebar — altura fija al viewport; no estirar con el contenido del artículo */}
+      <div className="mx-auto flex min-h-screen max-w-[1440px] items-start gap-6 lg:px-8 lg:py-6">
+        {/* Lista de guías: tarjeta fija al viewport en escritorio; cajón con radio y sombra del Modal en celular. */}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh w-[280px] shrink-0 flex-col border-r transition-transform lg:sticky lg:top-0 lg:z-auto lg:max-h-dvh lg:translate-x-0 ${
+          className={`fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh w-[300px] max-w-[calc(100vw-2rem)] shrink-0 flex-col overflow-clip rounded-r-[var(--di-radius-modal)] border-r shadow-[var(--shadow-modal)] transition-transform lg:sticky lg:top-6 lg:z-auto lg:h-[calc(100dvh-3rem)] lg:max-h-[calc(100dvh-3rem)] lg:translate-x-0 lg:rounded-[var(--manual-radius-card)] lg:border lg:shadow-[var(--manual-shadow)] ${
             mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           }`}
           style={{
@@ -146,7 +151,7 @@ export function ManualShell({
             <ManualLogo />
             <button
               type="button"
-              className="m-4 rounded-lg p-2 lg:hidden"
+              className="m-4 grid h-10 w-10 place-items-center rounded-full transition-colors hover:bg-[var(--manual-active-bg)] lg:hidden"
               onClick={() => setMobileOpen(false)}
               aria-label="Cerrar menú lateral"
             >
@@ -163,7 +168,7 @@ export function ManualShell({
 
           <div
             className="mt-auto shrink-0 border-t px-5 py-4 text-[11px] leading-relaxed"
-            style={{ borderColor: "var(--manual-border)", color: "var(--manual-text-soft)" }}
+            style={{ borderColor: "var(--manual-border-soft)", color: "var(--manual-text-soft)" }}
           >
             <p className="font-medium">Versión {MANUAL_VERSION}</p>
             <p>{MANUAL_VERSION_DATE}</p>
@@ -171,18 +176,20 @@ export function ManualShell({
         </aside>
 
         {/* Main column */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col gap-5 px-4 py-4 lg:px-0 lg:py-0">
+          {/* Buscador en tarjeta (`section.card` de la vista «Ayuda»). */}
           <header
-            className="sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-4 backdrop-blur-md lg:px-8"
+            className="sticky top-4 z-30 flex items-center gap-3 rounded-[var(--manual-radius-card)] border p-3 sm:p-4"
             style={{
-              background: "rgba(238, 245, 255, 0.92)",
+              background: "var(--manual-card-bg)",
               borderColor: "var(--manual-border)",
+              boxShadow: "var(--manual-shadow)",
             }}
           >
             <button
               type="button"
-              className="rounded-lg border p-2 lg:hidden"
-              style={{ borderColor: "var(--manual-border)", background: "white" }}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border lg:hidden"
+              style={{ borderColor: "var(--di-border-control)", background: "var(--manual-card-bg)" }}
               onClick={() => setMobileOpen(true)}
               aria-label="Abrir menú"
             >
@@ -193,7 +200,7 @@ export function ManualShell({
             </div>
           </header>
 
-          <div className="flex min-w-0 flex-1 justify-center gap-6 px-4 py-8 lg:px-8">
+          <div className="flex min-w-0 flex-1 justify-center gap-6">
             <main className="min-w-0 w-full max-w-3xl">{children}</main>
             {article && article.blocks.length > 0 && (
               <ManualToc blocks={article.blocks} />

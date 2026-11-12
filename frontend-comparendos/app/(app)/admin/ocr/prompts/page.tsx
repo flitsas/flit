@@ -159,6 +159,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         )}
         {resultado?.exitoso && (
           <DataTable
+            tarjeta={false}
             ariaLabel="Campos extraídos"
             rows={campos}
             getRowKey={([k]) => k}
@@ -173,7 +174,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         {resultado?.crudo && (
           <details className="text-xs">
             <summary className="cursor-pointer font-semibold">JSON devuelto por {resultado.modelo}</summary>
-            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">{formatear(resultado.crudo)}</pre>
+            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-secondary p-3 text-[11px]">{formatear(resultado.crudo)}</pre>
           </details>
         )}
       </div>
@@ -182,7 +183,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 }
 
 function Valor({ v, ok }: { v: string | null; ok: boolean }) {
-  return <span className={ok ? "" : "font-semibold text-[#C10000] dark:text-red-400"}>{v ?? <span className="opacity-50">vacío</span>}</span>;
+  return <span className={ok ? "" : "font-semibold text-destructive"}>{v ?? <span className="opacity-50">vacío</span>}</span>;
 }
 
 /** Campo por campo, solo donde alguna de las dos versiones no acertó. */
@@ -217,6 +218,7 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
         ))}
         {e?.estado === "Terminada" && (
           <DataTable
+            tarjeta={false}
             ariaLabel="Campos que no coincidieron"
             rows={filas}
             getRowKey={(f) => f.clave}
@@ -321,7 +323,7 @@ function Prompts() {
         renderExpanded={(v) => (
           <details className="px-3 pb-3 text-xs">
             <summary className="cursor-pointer font-semibold">Ver el texto</summary>
-            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">{v.texto}</pre>
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-secondary p-3 text-[11px]">{v.texto}</pre>
           </details>
         )}
         columns={[

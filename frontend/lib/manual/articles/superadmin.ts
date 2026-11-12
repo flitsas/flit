@@ -51,13 +51,12 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "1. Compañías",
         paragraphs: [
           "Administradores → Compañías. Catálogo de compañías B2B con el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. Arriba de la tabla está el panel con NIT, Razón social, Estado y Fecha desde/hasta, con «Buscar» y «Limpiar». Además, cada columna con datos tiene un embudo en su encabezado para filtrarla (ver «Tablas: cómo leerlas y moverte entre páginas»); los filtros del panel y los de las columnas se combinan. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
-          "Abrir una fila lleva a la ficha completa de la compañía, con 9 pestañas (más «Clientes hijos» y «Marca» si es cabeza de red):",
+          "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas (más «Clientes hijos» y «Marca» si es cabeza de red):",
         ],
         bullets: [
           "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
           "Trámites: familias habilitadas (Matrículas, Traspaso, Otros), cada una en un acordeón con un resumen («Sin restricciones» o «N restricciones activas») y con el estado de cada opción escrito junto a su switch (por ejemplo Permitido o Bloqueado), más la lista blanca de trámites permitidos. Debajo, la sección «Improntas» tiene el interruptor «Generación de improntas» (visible solo para el Super Admin), con el estado escrito junto a él: Habilitada o Deshabilitada. Si lo desactivas, el asistente no genera la impronta automáticamente y el radicador la carga a mano; solo aplica a trámites nuevos. Se guarda con «Guardar todo».",
-          "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. Esa tabla y la de Bloqueos tienen un buscador arriba por nombre o código y, además, un embudo en el encabezado de cada columna (Organismo, Código, Estado, Convenio; en Bloqueos, Estado en red); recorren todos los organismos, no solo la página que estás viendo.",
-          "Documentos: la tabla lista todos los documentos del catálogo con su estado: Obligatorio, Opcional, Oculto o Base (el documento que aún no tiene parámetro para esa compañía). Ya no hay botón «Agregar parámetro»: se edita desde la fila, con el ícono de editar, para elegir el estado. Filtra con el embudo de las columnas Documento (nombre o código) y Estado.",
+          "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. Esa tabla y la de Bloqueos tienen un buscador arriba por nombre o código y, además, un embudo en el encabezado de cada columna (Organismo, Código, Estado; en Bloqueos, Estado en red); recorren todos los organismos, no solo la página que estás viendo.",
           "Representantes legales: un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página». Encima hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla. La firma de cada representante se gestiona en su ficha.",
           "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos; las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
           "Usuarios: usuarios de la compañía con buscador y selectores de perfil, rol y estado arriba, un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha) e «Invitar usuario».",
@@ -501,7 +500,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
   },
   {
     slug: "4-superadmin/7-plataforma-persona-natural",
-    title: "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes y contenido del portal)",
+    title: "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes, contenido, reportes y diseño web)",
     audience: "Super Admin",
     sectionId: "superadmin",
     keywords: [
@@ -546,9 +545,18 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "publicar cambios",
       "cambios sin publicar",
       "publicaciones anteriores",
+      "reportes del portal",
+      "descargar excel portal",
+      "medios de pago",
+      "pasarela de pago",
+      "valor de la gestion",
+      "diseno web",
+      "marca de la web",
+      "logo de la web",
+      "dominio principal",
     ],
     summary:
-      "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los ajustes del portal y los textos que ve el ciudadano.",
+      "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los medios de pago, los ajustes, los textos que ve el ciudadano, los reportes y el diseño de la web.",
     blocks: [
       {
         id: "entrada",
@@ -556,7 +564,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Plataforma → «Persona Natural». Es la pantalla desde la que el equipo FLIT decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan. Solo la ve el Super Admin con el permiso de administrar Persona Natural: los demás perfiles no tienen la entrada en el menú y, si abren la dirección directa, ven el mensaje «No tienes permiso para administrar el portal de Persona Natural.».",
           "Arriba está el «Estado de la configuración». Dice que para ofrecer un trámite al ciudadano necesitas tres cosas, y muestra cada una como «Hecho» o «Pendiente» con un botón que te lleva directo a donde se resuelve: 1. «Un tipo de trámite» (botón «Elegir trámites»), 2. «Un organismo de tránsito» (botón «Elegir organismos») y 3. «Una tarifa vigente» (botón «Configurar tarifas»). Debajo, una frase resume lo que el ciudadano ve hoy, por ejemplo «Hoy el ciudadano puede iniciar 2 tipos de trámite en 5 organismos de tránsito», o qué falta si todavía no puede iniciar ninguno. Si hay organismos habilitados sin tarifa, un aviso lo dice. Cuando los tres pasos están hechos, el panel se reduce a una sola línea («Configuración completa. Hoy el ciudadano puede iniciar…») con el botón «Ver pasos» para expandirlo; si falta algo, se muestra completo. El estado se actualiza solo cuando cambias algo.",
-          "Debajo hay cinco pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal» y «Contenido». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
+          "Debajo hay siete pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal», «Contenido», «Reportes» y «Diseño web». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
         ],
       },
       {
@@ -566,7 +574,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
           "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Solo aparecen los trámites que en FLIT 2 están activos, publicados y con el asistente encendido; si uno deja de cumplirlo, sale de la lista y el portal deja de ofrecerlo. Cada uno muestra su categoría, el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. La tabla lista solo los trámites habilitados en FLIT 2, y todos se pueden ofrecer: ningún trámite de la lista tiene el interruptor bloqueado. En el portal web y en el punto, cada trámite pide los mismos datos propios que en FLIT 2 (por ejemplo, en un cambio de color se escoge el color nuevo y se adjunta el soporte), y el portal sigue siendo solo para personas naturales.",
           "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal», el interruptor «Canal del punto» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento, «Ofrecer en el portal» y «Canal del punto». Ambas tablas tienen paginación con «Filas por página».",
-          "«Canal del punto» es independiente de «Ofrecer en el portal». Encenderlo no publica el organismo en el portal, y apagar el portal no apaga el punto. Con el canal apagado la fila no muestra «Enlace y QR». Con el canal encendido, «Enlace y QR» abre un cuadro con la dirección de ese organismo, el botón «Copiar enlace» y el código QR de esa misma dirección. «Descargar QR» guarda la imagen para imprimirla. La placa y el documento no van en la dirección: quien atiende en el organismo entrega el enlace o el QR, y la persona los abre en el punto. Ahí ve «Iniciar» y «Consultar» (sin Cotizar), con los mismos trámites que el portal ofrece en ese organismo. Tras Iniciar con placa, documento y tipo, el punto muestra el Diagnóstico: si puede continuar o no, con los motivos, igual que en el portal web. Después de «Actores» sigue «Requisitos», con la misma pantalla del portal web: los documentos que pide FLIT 2.0 para ese tipo y organismo, que la persona carga o reemplaza ahí mismo, y en el traspaso el valor de venta, precargado con el avalúo de Fasecolda y editable. «Continuar» solo pasa a Pago cuando están todos los obligatorios; si falta alguno, la pantalla dice cuáles. Si el canal está apagado, el código no existe o el organismo no está activo en FLIT, la página explica el motivo y no deja entrar. Si el organismo ya no está activo en FLIT, el interruptor del canal queda bloqueado mientras esté apagado.",
+          "«Canal del punto» es independiente de «Ofrecer en el portal». Encenderlo no publica el organismo en el portal, y apagar el portal no apaga el punto. Con el canal apagado la fila no muestra «Enlace y QR». Con el canal encendido, «Enlace y QR» abre un cuadro con la dirección de ese organismo, el botón «Copiar enlace» y el código QR de esa misma dirección. «Descargar QR» guarda la imagen para imprimirla. Si el organismo tiene dominios propios activos, la dirección y el QR usan su dominio principal y el cuadro lista los demás en «Otras direcciones activas del organismo». La placa y el documento no van en la dirección: quien atiende en el organismo entrega el enlace o el QR, y la persona los abre en el punto. Ahí ve «Iniciar» y «Consultar» (sin Cotizar), con los mismos trámites que el portal ofrece en ese organismo. Tras Iniciar con placa, documento y tipo, el punto muestra el Diagnóstico: si puede continuar o no, con los motivos, igual que en el portal web. Después de «Actores» sigue «Requisitos», con la misma pantalla del portal web: los documentos que pide FLIT 2.0 para ese tipo y organismo, que la persona carga o reemplaza ahí mismo, y en el traspaso el valor de venta, precargado con el avalúo de Fasecolda y editable. «Continuar» solo pasa a Pago cuando están todos los obligatorios; si falta alguno, la pantalla dice cuáles. Si el canal está apagado, el código no existe o el organismo no está activo en FLIT, la página explica el motivo y no deja entrar. Si el organismo ya no está activo en FLIT, el interruptor del canal queda bloqueado mientras esté apagado.",
         ],
         bullets: [
           "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
@@ -592,7 +600,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         ],
         bullets: [
           "Crear una tarifa nueva: botón «Nueva tarifa». Elige el trámite y el organismo (o «Todos los organismos (valor general)»), indica desde qué fecha rige («Rige desde»; debajo ves «Desde el … el portal cotiza con estos valores») y escribe el valor en pesos de al menos un cargo; los puntos de miles se acomodan al escribir y también al borrar un dígito. Los Derechos de tránsito y el Servicio digital siempre se registran para un trámite concreto; «Todos los trámites (solo cargos adicionales)» sirve solo para los demás cargos.",
-          "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva. Las tarifas anteriores ya no ofrecen cambiar valores.",
+          "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva; si la nueva empieza la misma fecha, la reemplaza. Las tarifas anteriores ya no ofrecen cambiar valores.",
           "Fecha de inicio: puede ser hoy o una fecha futura; no se admite una fecha pasada.",
           "Ver el historial: ícono de historial en la fila («Ver historial de…»). Muestra, por cargo, los valores anteriores con su vigencia, estado y la fecha en que se registraron.",
         ],
@@ -604,7 +612,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             variant: "warning",
             title: "Mensajes frecuentes",
-            text: "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que empieza ese mismo día o después. Elige una fecha de inicio posterior.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»",
+            text: "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que se cruza con esa fecha. Elige otra fecha de inicio.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»",
           },
         ],
       },
@@ -651,6 +659,29 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
             alt: "Flujo de publicación del contenido del portal: se editan las preguntas, banners y enlaces, se revisa cómo quedaría, si está bien se publica y el ciudadano lo ve, y si no se vuelve a editar",
             caption: "De los cambios a lo publicado: el ciudadano solo ve lo que se publicó.",
           },
+        ],
+      },
+      {
+        id: "medios-de-pago",
+        title: "6. Medios de pago de la web",
+        paragraphs: [
+          "La pestaña «Tarifas» tiene dos pasos, que ves como pestañas: «1 · Tarifas» (cuánto cuesta cada trámite) y «2 · Medios de pago» (en qué medio se cobra). En el paso 2, «Medios de pago» define qué se cobra en la web de persona. Si un valor no tiene monto, el botón «Definir precio» abre el formulario de la tarifa de ese trámite y, al cerrarlo, vuelves al paso 2 con el monto ya cargado. La tarjeta de «Pasarela de pago» enciende o apaga el medio y dice cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», y en la columna del medio eliges si cada uno se cobra, con el total y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican. La web no ofrece «PIN en caja»: ese medio solo existe en el punto de un organismo. El monto se define en las tarifas; aquí solo se ve.",
+          "Si un trámite no tiene valor general, se muestra el mayor valor por organismo, porque a quien elija ese organismo sí se le cobrará. Cada organismo administra lo suyo desde su hub (ver «Portal Persona Natural del organismo: reportes, cobro, diseño y dominios»); el valor de la gestión solo lo mueve el Super Admin.",
+        ],
+      },
+      {
+        id: "reportes",
+        title: "7. Reportes",
+        paragraphs: [
+          "La pestaña «Reportes» lista los trámites que llegaron por la web de persona y por los puntos de los organismos, con su canal, organismo, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Filtra por los campos de la barra y descarga el resultado en Excel, con las mismas filas y columnas que ves en pantalla.",
+        ],
+      },
+      {
+        id: "diseno-web",
+        title: "8. Diseño web",
+        paragraphs: [
+          "La pestaña «Diseño web» define el nombre, el logo y los colores de la web de persona. Lo que cambias se guarda como borrador y la vista previa muestra cómo quedará. Al publicar, la web muestra los colores y el logo desde la siguiente carga; los portales de los organismos no cambian.",
+          "Sin diseño publicado, la web usa la marca FLIT. Al retirarlo, vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez. Si los colores no se leerían bien, un mensaje lo dice y «Ajustar automáticamente» los corrige.",
         ],
       },
     ],
@@ -757,6 +788,204 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             variant: "info",
             text: "Capturas pendientes: este artículo aún no tiene imágenes del portal ni del punto; se agregarán cuando el pipeline de capturas cubra esos portales.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/9-validaciones-manuales",
+    title: "Validación de identidad manual",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "validaciones manuales",
+      "validacion manual",
+      "identidad manual",
+      "flujo manual",
+      "activar flujo manual",
+      "regenerar enlace",
+      "copiar enlace",
+      "enlace de captura",
+      "enlace vencido",
+      "correo no salio",
+      "aprobar identidad",
+      "rechazar identidad",
+      "esperando captura",
+      "pendiente de revision",
+    ],
+    summary:
+      "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "1. Qué es y cuándo usarla",
+        paragraphs: [
+          "La validación manual es la alternativa cuando la persona no logra validar su identidad por el camino normal. La persona toma sus fotos y su firma desde un enlace, y tú decides si aprueba o no. Solo el Super Admin puede activarla y resolverla.",
+          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 24 horas.",
+        ],
+      },
+      {
+        id: "activar",
+        title: "2. Activar el flujo manual",
+        paragraphs: [],
+        bullets: [
+          "Paso 1: entra a Validaciones y abre el detalle de la validación.",
+          "Paso 2: en Acciones, elige «Activar flujo manual» y confirma.",
+          "Paso 3: el caso aparece en la pestaña «Validaciones manuales» con el estado «Esperando captura».",
+        ],
+      },
+      {
+        id: "enlace",
+        title: "3. Copiar o regenerar el enlace",
+        paragraphs: [
+          "En la fila, abre «Acciones» y usa «Copiar enlace» cuando el correo no llegó o el cliente prefiere recibirlo por otro canal.",
+        ],
+        bullets: [
+          "Paso 1: en la pestaña «Validaciones manuales», busca la fila de la persona.",
+          "Paso 2: en la columna Acciones, pulsa el ícono de copiar enlace. Verás el mensaje «Enlace copiado».",
+          "Paso 3: pégalo en el canal que uses con el cliente.",
+          "Copiar no cambia el enlace ni envía otro correo: el enlace que ya salió sigue funcionando.",
+          "La acción aparece mientras el caso espera una captura, también si fue rechazado y la persona debe repetirla.",
+          "Si el enlace venció o no se puede recuperar, verás el motivo y la opción «Regenerar enlace». Regenerar crea un enlace nuevo, envía el correo y deja sin servicio el anterior.",
+          "Los enlaces emitidos antes de que existiera esta opción no se pueden copiar: toca regenerarlos una vez.",
+          "Cada copia queda registrada con quién la hizo y cuándo.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "El enlace le da acceso a la captura de esa persona. Compártelo solo con ella.",
+          },
+        ],
+      },
+      {
+        id: "revisar",
+        title: "4. Revisar y decidir",
+        paragraphs: [
+          "Cuando la persona envía sus fotos y su firma, el caso pasa a «Pendiente de revisión». Abre el detalle desde la fila para ver las imágenes y decidir.",
+        ],
+        bullets: [
+          "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
+          "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+        ],
+      },
+      {
+        id: "estados",
+        title: "5. Estados",
+        paragraphs: [],
+        bullets: [
+          "Esperando captura: la persona aún no envía sus fotos.",
+          "Pendiente de revisión: ya envió la captura y falta tu decisión.",
+          "Aprobada manual: la aprobaste y la identidad está vigente.",
+          "Rechazada: la rechazaste y la persona puede repetir la captura.",
+          "Vencida: el plazo terminó sin completarse.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/10-fotos-captura-manual",
+    title: "Fotos de la captura manual: cuáles se revisan y qué significa «No verificada»",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "no verificada",
+      "foto no verificada",
+      "fotos captura manual",
+      "validar fotos",
+      "continuar sin verificar",
+      "lado del documento",
+      "revision manual fotos",
+    ],
+    summary:
+      "Qué revisa la página de captura en cada foto, cuándo la persona puede continuar sin verificar y cómo leer el aviso «No verificada» en la revisión.",
+    blocks: [
+      {
+        id: "que-revisa",
+        title: "1. Qué se revisa en cada foto",
+        paragraphs: [
+          "Al tomar cada foto, la página de captura la revisa en el mismo celular de la persona. Para esta revisión, la imagen no se envía a ningún servicio externo.",
+        ],
+        bullets: [
+          "Selfie: debe aparecer un solo rostro dentro del óvalo.",
+          "Anverso: debe verse un documento con un rostro.",
+          "Reverso: debe verse un documento con código de barras o QR.",
+          "Pasaporte: se revisa que sea un documento, pero no el lado. La persona toma igual las tres fotos.",
+        ],
+      },
+      {
+        id: "repetir",
+        title: "2. Si la foto no pasa",
+        paragraphs: [
+          "La persona ve el motivo y repite la foto. Tras tres fotos rechazadas de un mismo lado, si la siguiente tampoco pasa, puede elegir «Continuar sin verificar». También puede continuar si su celular no logra hacer la revisión.",
+        ],
+      },
+      {
+        id: "no-verificada",
+        title: "3. Qué hacer con una foto «No verificada»",
+        paragraphs: [
+          "En el detalle de revisión, esas fotos muestran «No verificada» y el motivo. Es información para que las mires con más cuidado: no impide aprobar ni rechazar.",
+          "Una foto verificada tampoco es una aprobación. La revisión no comprueba si la persona está presente ni si el rostro coincide con el del documento: esa decisión sigue siendo tuya.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Las capturas enviadas antes de esta revisión no muestran este aviso.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/11-carta-identidad-manual",
+    title: "Carta de identidad de una validación manual",
+    audience: "Todos",
+    sectionId: "superadmin",
+    keywords: [
+      "carta de identidad",
+      "carta selfie",
+      "certificado de identidad",
+      "certificado de validacion de identidad",
+      "descargar certificado",
+      "certificado en preparacion",
+      "validacion manual aprobada",
+      "codigo de integridad",
+      "serie de la carta",
+      "sello del fur",
+      "consolidado",
+      "expediente",
+    ],
+    summary:
+      "Qué es la carta que FLIT emite al aprobar una identidad manual, dónde queda en el trámite y cómo descargarla.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "Qué es",
+        paragraphs: [
+          "Cuando el Super Admin aprueba una validación de identidad manual, FLIT emite una carta con el resultado, los datos de la persona, sus fotos y su firma. Cumple el mismo papel que el certificado de una validación automática.",
+          "La carta se genera una sola vez. Si esa identidad aprobada se reutiliza en otro trámite de la misma persona, ese trámite recibe la misma carta.",
+        ],
+      },
+      {
+        id: "tramite",
+        title: "Dónde queda en el trámite",
+        paragraphs: [
+          "La carta entra al expediente y al consolidado, asociada a su actor. Si el trámite tiene varias personas en un mismo rol, cada una tiene su propia carta. En una persona jurídica, la carta es la de su representante legal.",
+          "Un trámite puede combinar actores validados de forma automática y manual: cada uno conserva su propio documento.",
+          "En el FUR, el sello de una identidad manual muestra la serie de la carta. El código de integridad completo se consulta en la carta.",
+        ],
+      },
+      {
+        id: "descargar",
+        title: "Cómo descargarla",
+        paragraphs: [
+          "Paso 1. Abre el detalle de la validación aprobada, desde el trámite, la prevalidación o las validaciones manuales.",
+          "Paso 2. Pulsa «Descargar certificado». El PDF se guarda en tu equipo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo.",
           },
         ],
       },

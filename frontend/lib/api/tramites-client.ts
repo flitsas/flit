@@ -1,3 +1,4 @@
+import { resolverGrupoPlaca } from '@/lib/tramites/plate-format';
 import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import { apiBaseForPageRoot } from './base-url';
@@ -77,6 +78,7 @@ import type {
   ReconcileIdentityResult,
   ActivarIdentidadManualResult,
   RegenerarEnlaceManualResult,
+  CopiarEnlaceManualResult,
   ProcedureInstanceSummary,
   EnviarAlOtResult,
   RuntPersonLookupInput,
@@ -129,6 +131,8 @@ interface PreflightPreviewDto extends PreflightSnapshotDto {
   /** Epic #12550 — `corta` | `larga` en matrícula inicial; ausente/null en el resto. */
   route?: string | null;
   transitOffice?: { id: string; code: string; name: string; cityName?: string | null } | null;
+  /** HU9 — grupo de placa de la clase consultada (catálogo del backend). */
+  grupoPlaca?: string | null;
 }
 
 function mapChecks(dtos: PreflightSnapshotDto['checks']): PreflightSnapshot['checks'] {
@@ -642,6 +646,7 @@ function biometricPersonParams(filters: TenantBiometricPersonFilters): URLSearch
   add('name', filters.name);
   add('documentType', filters.documentType);
   add('documentNumber', filters.documentNumber);
+  add('referenceNumber', filters.referenceNumber);
   add('status', filters.status);
   add('createdFrom', filters.createdFrom);
   add('createdTo', filters.createdTo);
@@ -655,6 +660,33 @@ function biometricPersonParams(filters: TenantBiometricPersonFilters): URLSearch
     params.set('standalone', String(filters.standalone));
   }
   return params;
+}
+
+async function leerCertificadoPdf(
+  res: Response,
+  validationId: string,
+): Promise<{ blob: Blob; filename: string; mimetype: string }> {
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(problemMessage(res, body));
+  }
+  const blob = await res.blob();
+  const mimetype = res.headers.get('content-type') ?? 'application/pdf';
+  const cd = res.headers.get('content-disposition') ?? '';
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  const raw = star?.[1] ?? plain?.[1] ?? '';
+  let filename = raw.trim();
+  try {
+    filename = raw ? decodeURIComponent(raw.trim()) : '';
+  } catch {
+    // raw no era URI-encoded; se usa tal cual.
+  }
+  return {
+    blob,
+    filename: filename || `certificado_identidad_${validationId}.pdf`,
+    mimetype,
+  };
 }
 
 export function tenantHeader(tenantId?: string): HeadersInit {
@@ -1736,6 +1768,8 @@ export const tramitesClient = {
             cityName: dto.transitOffice.cityName ?? null,
           }
         : null,
+      // HU9 — solo los cuatro grupos válidos; cualquier otro valor (o ausente) queda null.
+      grupoPlaca: resolverGrupoPlaca(dto.grupoPlaca, null),
     };
   },
 
@@ -2313,27 +2347,20 @@ export const tramitesClient = {
       ),
       { headers: tenantHeader(tenantId) },
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(problemMessage(res, body));
-    }
-    const blob = await res.blob();
-    const mimetype = res.headers.get('content-type') ?? 'application/pdf';
-    const cd = res.headers.get('content-disposition') ?? '';
-    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
-    const plain = /filename="?([^";]+)"?/i.exec(cd);
-    const raw = star?.[1] ?? plain?.[1] ?? '';
-    let filename = raw.trim();
-    try {
-      filename = raw ? decodeURIComponent(raw.trim()) : '';
-    } catch {
-      // raw no era URI-encoded; se usa tal cual.
-    }
-    return {
-      blob,
-      filename: filename || `certificado_identidad_${validationId}.pdf`,
-      mimetype,
-    };
+    return leerCertificadoPdf(res, validationId);
+  },
+
+  // HU #14303 — GET del certificado/carta por validación, SIN trámite (prevalidación, detalle manual).
+  // 503 = carta aún no disponible; 404/403 como el resto. El mensaje es el del ProblemDetails.
+  downloadValidationCertificado: async (
+    validationId: string,
+    tenantId?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/biometric-validations/${validationId}/certificado`),
+      { headers: tenantHeader(tenantId) },
+    );
+    return leerCertificadoPdf(res, validationId);
   },
 
   // POST reconciliar una validación con el proveedor (fallback si el webhook no llegó): consulta el
@@ -2349,6 +2376,18 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  // POST reconciliar con el proveedor por `validationId` (con trámite o prevalidación sin trámite). Lo usa
+  // «Actualizar estado» del detalle de persona (módulo Validaciones). Exige `validaciones.manage` en el
+  // backend. Errores Problem: 403, 404, 409 (no es Kyverum), 502, 503, 500 → el `detail` va en el mensaje.
+  reconcileBiometricValidation: (
+    validationId: string,
+    tenantId?: string,
+  ): Promise<ReconcileIdentityResult> =>
+    request<ReconcileIdentityResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/reconcile`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
   // HU #13288 (Épica #13202) — SOLO Super Admin (el backend responde 403 al resto). Cross-tenant: el tenant
   // sale de la fila, no de X-Tenant-Id. Errores: 404, 409 (identidad_aprobada_vigente | tramite_inactivo).
   activateManualIdentity: (validationId: string): Promise<ActivarIdentidadManualResult> =>
@@ -2361,6 +2400,14 @@ export const tramitesClient = {
   regenerateManualLink: (validationId: string): Promise<RegenerarEnlaceManualResult> =>
     request<RegenerarEnlaceManualResult>(
       `/api/v1/tramites/biometric-validations/${validationId}/regenerate-manual-link`,
+      { method: 'POST' },
+    ),
+
+  // HU #14306 (Épica #14271) — SOLO Super Admin. Devuelve el enlace de captura vigente para copiarlo al portapapeles
+  // (no se persiste ni se registra). 409 `code`: enlace_vencido | enlace_no_disponible | flujo_manual_no_activo.
+  copyManualLink: (validationId: string): Promise<CopiarEnlaceManualResult> =>
+    request<CopiarEnlaceManualResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/manual-link/copy`,
       { method: 'POST' },
     ),
 
@@ -2689,6 +2736,17 @@ export const tramitesClient = {
     ),
 
   /**
+   * HU #14547 — regenera SOLO el mandato (firmante recalculado con la configuración vigente de
+   * Mandatos) y vuelve a armar el consolidado del gestor y el maestro del OT. Rol SuperAdmin estricto
+   * en el backend (403 para el resto); 409 en aprobado/anulado/revocado o migrado de solo lectura.
+   */
+  regenerarMandatoYConsolidado: (instanceId: string, tenantId?: string) =>
+    request<RegenerarMandatoYConsolidadoResult>(
+      `/api/v1/admin/tramites/${instanceId}/mandato/regenerar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  /**
    * HU #12158 — registra un PDF externo como el consolidado del trámite (Source="user"). Multipart
    * (campo `file`): NO usa `request()` (fija Content-Type: application/json) — mismo patrón que
    * `analyzeDocument`/`analyzeBatch` de este archivo.
@@ -2801,6 +2859,40 @@ export const tramitesClient = {
       { headers: tenantHeader(tenantId) },
     ),
 };
+
+/** HU #14547 — aviso no bloqueante de la regeneración del mandato (el `mensaje` ya viene en texto de negocio). */
+export interface RegenerarMandatoAviso {
+  codigo:
+    | 'maestro_radicado_conservado'
+    | 'maestro_fallo'
+    | 'mandato_sin_firmar'
+    | 'mandato_personalizado_conservado'
+    | 'consolidado_fallo'
+    | (string & {});
+  mensaje: string;
+}
+
+/** HU #14547 — respuesta 200 de `POST /api/v1/admin/tramites/{id}/mandato/regenerar`. */
+export interface RegenerarMandatoYConsolidadoResult {
+  mandato: {
+    attachmentId: string | null;
+    firmanteAnteriorId: string | null;
+    firmanteNuevoId: string | null;
+    sinFirmar: boolean;
+  };
+  /** `fallo` = éxito parcial (200): el mandato sí se regeneró; llega el aviso `consolidado_fallo`. */
+  consolidado: {
+    estado: 'regenerado' | 'fallo';
+    attachmentId: string | null;
+    generadoEn: string | null;
+  };
+  maestro: {
+    estado: 'regenerado' | 'radicado_conservado' | 'fallo';
+    attachmentId: string | null;
+    generadoEn: string | null;
+  };
+  avisos: RegenerarMandatoAviso[];
+}
 
 /** HU #12159 — resultado del cambio de estado administrativo (espejo de `AdminCambiarEstadoResult`). */
 export interface AdminCambiarEstadoResult {

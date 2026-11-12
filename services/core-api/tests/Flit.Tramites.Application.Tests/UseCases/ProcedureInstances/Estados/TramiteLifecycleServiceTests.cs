@@ -577,6 +577,29 @@ public sealed class TramiteLifecycleServiceTests
         await _operabilityGate.Received(1).IsOperableAsync(officeId, Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// HU #14318 AC5 — el organismo del trámite cambia al enviarlo al OT (se promueve el elegido en el FUR), pero el canal y el
+    /// OT del punto con el que nació el trámite no se tocan.
+    /// </summary>
+    [Fact]
+    public async Task AC5_Entrega_CambiaElOrganismoDelTramite_SinAlterarElCanalNiElOtDelCanal()
+    {
+        var otDelPunto = Guid.NewGuid();
+        var otElegido = Guid.NewGuid();
+        var i = Wire(TramiteEstado.Preparado);
+        i.Channel = "pn_punto";
+        i.ChannelTransitOfficeId = otDelPunto;
+        i.TransitOfficeId = otDelPunto;
+        SeleccionarOt(i, otElegido);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.TransitOfficeId.Should().Be(otElegido, "el organismo del trámite sí cambia");
+        i.Channel.Should().Be("pn_punto");
+        i.ChannelTransitOfficeId.Should().Be(otDelPunto, "el OT del canal es el del punto y no se reescribe");
+    }
+
     // HU #10604 (R19) — RNMC no es bloqueante: una medida correctiva pendiente NO veta el envío al OT.
     [Fact]
     public async Task Entrega_RnmcMedidaPendiente_NoBloqueaEnvio()

@@ -40,7 +40,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         id: "entrar",
         title: "1. Qué ves al entrar",
         paragraphs: [
-          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
+          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
           "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador, selectores de perfil, rol y estado, y un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha).",
         ],
         callouts: [
@@ -70,7 +70,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         bullets: [
           "Trámites: qué familias puede radicar tu compañía (matrículas, traspasos, otros) y sus restricciones («Solo vehículos propios», validar SOAT ante el RUNT, etc.).",
           "Configuración Empresa: proveedores de consulta y de avalúo, a quién avisar al aprobar o rechazar un trámite, la lista blanca de correos para invitaciones, y los organismos de tránsito habilitados para tu compañía.",
-          "Documentos: plantillas y documentos personalizados que se generan dentro de los trámites.",
+          "Plantillas y documentos personalizados: los que se generan dentro de los trámites.",
           "Placas preasignadas: consulta de las placas que los organismos te han asignado.",
           "Historial de Cambios: quién cambió qué configuración de tu compañía y cuándo.",
         ],
@@ -154,11 +154,14 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "convenio",
-        title: "3. Convenio con el organismo",
+        id: "firma-mandatario",
+        title: "3. Cómo firma el mandatario el contrato de mandato",
         paragraphs: [
-          "Cuando existe un convenio comercial registrado entre tu compañía y el organismo, el contrato de mandato no lleva recuadro de firma del mandatario: firma solo el mandante. Los datos del mandatario siguen en el cuerpo del contrato.",
-          "Sin convenio, el recuadro del mandatario lleva su firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Cómo sale el recuadro del mandatario en el contrato depende de dos cosas: el modelo, que eliges al registrar al mandatario, y el tipo de mandato, que fija Plataforma para cada compañía y organismo; por defecto es «Mandatario de la compañía». Con ese tipo, los datos del mandatario van en el cuerpo del contrato de mandato y el recuadro sale según el modelo, salvo que la configuración de mandato del organismo disponga otra cosa.",
+          "Persona natural: el recuadro lleva la firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Persona jurídica: no tiene firma personal, así que el recuadro sale «Sin firmar», con la línea para firmar a mano y los datos de la entidad. Si en el baúl de firmas hay una firma vigente registrada con el NIT de la entidad, esa firma se estampa.",
+          "Formato en blanco: el recuadro sale «Sin firmar», con la línea para firmar a mano y el documento en blanco.",
+          "Si Plataforma fijó otro tipo de mandato para tu compañía en ese organismo, el modelo no cambia el resultado. Con «Institucional (organismo)», el contrato no lleva recuadro del mandatario y firma solo el mandante; el cuerpo nombra al organismo o a su unión temporal con su nombre y NIT si el formato de contrato los incluye; si no, esos datos quedan en blanco. Con «Abierto (sin mandatario)», nombre, documento y firma quedan en líneas en blanco, en el cuerpo y en el recuadro, para llenarse a mano; si el organismo tiene datos institucionales, pueden aparecer en el contrato. El recuadro también lleva la marca «Sin firmar».",
         ],
       },
     ],

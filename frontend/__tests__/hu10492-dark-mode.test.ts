@@ -50,8 +50,9 @@ describe("HU #10492 — AC1: bordes sin override inline (token semántico theme-
   });
 
   it("contrato: los bordes condicionales de error (#FF4E00) se preservan intactos", () => {
-    // El codemod solo debía tocar el borde base #DFE5ED, nunca el de error.
-    const anyError = contents.some((c) => /borderColor:.*#FF4E00.*#DFE5ED/.test(c));
+    // El codemod solo debía tocar el borde base #DFE5ED, nunca el de error. Con el UI kit
+    // (HU #14484) ambos son tokens: error --destructive y base --border.
+    const anyError = contents.some((c) => /borderColor:.*var\(--destructive\).*var\(--border\)/.test(c));
     expect(anyError).toBe(true);
   });
 });
@@ -63,7 +64,8 @@ describe("HU #10492 — AC2: pantalla RBAC con tema oscuro completo", () => {
   );
 
   it("happy path: el contenedor raíz usa app-bg y texto theme-aware", () => {
-    expect(rbac).toMatch(/className="app-bg[^"]*dark:text-white/);
+    // HU #14484: text-flit-primary ya cambia solo en oscuro; no necesita dark:text-white.
+    expect(rbac).toMatch(/className="app-bg[^"]*text-flit-primary/);
   });
 
   it("edge: ya no fuerza el fondo claro inline (#EEF5FF) en el raíz", () => {
@@ -79,19 +81,20 @@ describe("HU #10492 — AC2: pantalla RBAC con tema oscuro completo", () => {
   });
 });
 
-describe("HU #10492 — AC3: token de borde = gris de marca en claro, white/10 en oscuro", () => {
+describe("HU #10492 — AC3: token de borde = gris de marca en claro y borde propio en oscuro (valores del UI kit, HU #14474)", () => {
   const css = readDesignCss();
 
-  it("happy path: :root define --border como el oklch de #DFE5ED", () => {
-    expect(css).toMatch(/--border:\s*oklch\(0\.9197 0\.0127 255\.51\)/);
+  it("happy path: :root define --border como el gris de marca #DFE5ED", () => {
+    expect(css).toMatch(/--border:\s*#dfe5ed/i);
   });
 
-  it("contrato: .dark mantiene --border translúcido (white/10)", () => {
+  it("contrato: .dark redefine --border con el borde oscuro de la propuesta (#22375c)", () => {
     const darkBlock = css.slice(css.indexOf(".dark"));
-    expect(darkBlock).toMatch(/--border:\s*oklch\(1 0 0 \/ 10%\)/);
+    expect(darkBlock).toMatch(/--border:\s*#22375c/i);
   });
 
   it("edge: no regresión — el token de marca --color-flit-gray sigue siendo #DFE5ED", () => {
-    expect(css).toMatch(/--color-flit-gray:\s*#dfe5ed/i);
+    // HU #14478: con respaldo por tema (var(--flit-gray-tema, #dfe5ed)); en claro sigue siendo #DFE5ED.
+    expect(css).toMatch(/--color-flit-gray:\s*(?:var\(--flit-gray-tema,\s*)?#dfe5ed/i);
   });
 });

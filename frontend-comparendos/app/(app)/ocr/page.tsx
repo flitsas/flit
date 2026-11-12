@@ -13,6 +13,7 @@ import { Chip } from "@/components/ui/Chip";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
+import { errorTamanoPaquete, mensajeErrorCarga, textoTotal, totalPaquete } from "@/lib/limites";
 import { P } from "@/lib/nav";
 import {
   agregarArchivos,
@@ -87,6 +88,9 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
   const errores = erroresPaquete(nombre, elegidos);
   const validos = elegidos.filter((a) => !a.error).length;
   const invalidos = elegidos.length - validos;
+  const total = totalPaquete(elegidos);
+  const excedido = errorTamanoPaquete(total);
+  const bloqueado = enviando || errores.length > 0 || excedido !== null;
 
   // La FileList es viva: se copia antes de que el input se vacíe (`value = ""`), no dentro del actualizador del estado.
   const agregar = (lista: FileList | null) => {
@@ -103,7 +107,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
       toast.show(iniciar ? `Paquete creado con ${validos} archivos: ya se está procesando.` : "Paquete creado. Inícialo cuando quieras.", "success");
       onCreado(r.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo crear el paquete.");
+      setError(mensajeErrorCarga(e));
     } finally {
       setEnviando(false);
     }
@@ -116,13 +120,13 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
       busy={enviando}
       size="xl"
       title="Nuevo paquete OCR"
-      description={`Hasta ${MAXIMO_DOCUMENTOS} archivos JPG, PNG, TIFF o PDF de hasta 20 MB. Cada archivo es un comparendo (un PDF de varias páginas también).`}
+      description={`Hasta ${MAXIMO_DOCUMENTOS} archivos JPG, PNG, TIFF o PDF de hasta 20 MB cada uno y 100 MB en total. Cada archivo es un comparendo (un PDF de varias páginas también).`}
       footer={
         <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" className={controlCls(false)} disabled={enviando || errores.length > 0} onClick={() => crear(false)}>
+          <button type="button" className={controlCls(false)} disabled={bloqueado} onClick={() => crear(false)}>
             Crear sin iniciar
           </button>
-          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={enviando || errores.length > 0} onClick={() => crear(true)}>
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={bloqueado} onClick={() => crear(true)}>
             {enviando ? "Subiendo…" : "Iniciar procesamiento"}
           </button>
         </div>
@@ -150,7 +154,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             agregar(e.dataTransfer.files);
           }}
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center text-xs transition ${
-            arrastrando ? "border-flit-brand bg-[#EFF6FF] dark:bg-flit-brand/10" : "border-[#DFE5ED] dark:border-white/15"
+            arrastrando ? "border-flit-brand bg-secondary dark:bg-flit-brand/10" : "border-border"
           }`}
         >
           <Upload className="h-5 w-5 text-flit-brand" aria-hidden />
@@ -172,16 +176,18 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs">
               <span>
-                <b>{validos}</b> archivos listos{invalidos > 0 && <> · <b className="text-[#B42318]">{invalidos}</b> rechazados</>}
+                <b>{validos}</b> archivos listos{invalidos > 0 && <> · <b className="text-destructive">{invalidos}</b> rechazados</>}
+                {" · "}
+                <b className={excedido ? "text-destructive" : ""}>{textoTotal(total)}</b>
               </span>
-              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setElegidos([])}>
+              <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setElegidos([])}>
                 Quitar todos
               </button>
             </div>
-            <ul className="max-h-60 overflow-y-auto rounded-xl border border-[#DFE5ED] text-xs dark:border-white/15">
+            <ul className="max-h-60 overflow-y-auto rounded-xl border border-border text-xs">
               {elegidos.map((a, i) => (
-                <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-[#EEF1F6] px-3 py-1.5 last:border-0 dark:border-white/10">
-                  <span className={`truncate ${a.error ? "text-[#B42318]" : ""}`}>
+                <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5 last:border-0">
+                  <span className={`truncate ${a.error ? "text-destructive" : ""}`}>
                     {a.archivo.name}
                     <span className="ml-2 opacity-60">{(a.archivo.size / 1024 / 1024).toFixed(1)} MB</span>
                     {a.error && <span className="ml-2 font-semibold">· {a.error}</span>}
@@ -194,6 +200,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             </ul>
           </div>
         )}
+        {excedido && <InlineAlert tone="warning">{excedido}</InlineAlert>}
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
       </div>
     </Modal>
@@ -308,11 +315,11 @@ function Paquetes() {
       <div className="flex flex-wrap gap-2">
         <Contador etiqueta="Paquetes" valor={c?.paquetes} />
         <Contador etiqueta="Documentos" valor={c?.documentos} />
-        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-[#3B4FD6]" />
-        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[#1E7B3C]" />
-        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[#B45309]" />
-        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-[#B42318]" />
-        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[#6D28D9]" />
+        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-flit-brand-ink" />
+        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[var(--flit-success-ink)]" />
+        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[var(--badge-warning-fg)]" />
+        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-destructive" />
+        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[var(--badge-purple-fg)]" />
         <Contador etiqueta="Registrados" valor={c?.registrados} />
       </div>
 

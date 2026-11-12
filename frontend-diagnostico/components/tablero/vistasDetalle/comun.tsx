@@ -6,12 +6,12 @@ import type { CSSProperties, ReactNode } from "react";
 /** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px (misma que la grilla). */
 export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider";
 export const CABECERA_TABLA_ESTILO: CSSProperties = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" };
-export const CELDA_TABLA_CLS = "px-3 py-2 align-top text-xs text-flit-primary dark:text-white";
+export const CELDA_TABLA_CLS = "px-3 py-2 align-top text-xs text-flit-primary";
 export const FILA_TABLA_CLS = "border-t border-[var(--table-row-border)]";
-export const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)] dark:text-slate-300";
+export const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
 
 /** Tarjeta interna del detalle (borde gris de marca, radio 12px). */
-export const TARJETA_DETALLE_CLS = "rounded-xl border border-[var(--color-flit-gray)] p-4 dark:border-white/10";
+export const TARJETA_DETALLE_CLS = "rounded-xl border border-border p-4";
 
 /** Lista de datos rótulo/valor en dos columnas. */
 export function ListaDatos({ children }: { children: ReactNode }) {
@@ -22,7 +22,7 @@ export function Dato({ rotulo, children }: { rotulo: string; children: ReactNode
   return (
     <div className="flex flex-col gap-0.5">
       <dt className={TEXTO_SECUNDARIO_CLS}>{rotulo}</dt>
-      <dd className="break-all text-sm font-medium text-flit-primary dark:text-white">{children}</dd>
+      <dd className="break-all text-sm font-medium text-flit-primary">{children}</dd>
     </div>
   );
 }
@@ -48,5 +48,5 @@ export function Etiqueta({ tono, children }: { tono: TonoEtiqueta; children: Rea
 
 /** Mensaje de estado vacío dentro del detalle. */
 export function Vacio({ children }: { children: ReactNode }) {
-  return <p className={`${TARJETA_DETALLE_CLS} text-sm text-[var(--nav-texto)] dark:text-slate-300`}>{children}</p>;
+  return <p className={`${TARJETA_DETALLE_CLS} text-sm text-muted-foreground`}>{children}</p>;
 }

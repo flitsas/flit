@@ -10,6 +10,17 @@ import type {
 import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CERRAR,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_ICONO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_PIE,
+  DIALOGO_VELO,
+} from '@/components/operacion/dialogo-propio';
 /**
 
  * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
@@ -236,31 +247,31 @@ export function PrevalidacionForm({
 
   const fieldClass = (field: keyof FormValues) =>
     `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-50 ${
-      touched[field] && errors[field] ? 'border-[#FF4E00]' : 'border-[#DDE5F0]'
+      touched[field] && errors[field] ? 'border-destructive' : 'border-border'
     }`;
 
   return (
     /* Overlay */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="prevalidacion-form-title"
     >
-      <div className="relative w-full max-w-lg rounded-2xl border border-[#DFE5ED] bg-white shadow-xl dark:bg-[#162744]">
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-5">
-          <h2 id="prevalidacion-form-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
+      <div className={`${DIALOGO_PANEL} w-full max-w-lg`}>
+        {/* Header: franja del Modal (homologación #14507) */}
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h2 id="prevalidacion-form-title" className={DIALOGO_FRANJA_TITULO}>
             Nueva prevalidación de identidad
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario"
-            className="rounded-lg p-1 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:hover:bg-white/10"
+            className={DIALOGO_FRANJA_CERRAR}
           >
-            <X className="h-5 w-5 opacity-60" aria-hidden="true" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -268,8 +279,8 @@ export function PrevalidacionForm({
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
           <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
             <div>
-              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Tipo de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-foreground">
+                Tipo de documento <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <select
                 id="pv-docType"
@@ -294,14 +305,14 @@ export function PrevalidacionForm({
                 ))}
               </select>
               {touched.documentType && errors.documentType && (
-                <p id="pv-docType-err" className="mt-1 text-xs text-[#FF4E00]" role="alert">
+                <p id="pv-docType-err" className="mt-1 text-xs text-destructive" role="alert">
                   {errors.documentType}
                 </p>
               )}
             </div>
             <div>
-              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Número de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-foreground">
+                Número de documento <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <input
                 id="pv-docNum"
@@ -319,7 +330,7 @@ export function PrevalidacionForm({
                 aria-invalid={!!(touched.documentNumber && errors.documentNumber)}
               />
               {touched.documentNumber && errors.documentNumber && (
-                <p id="pv-docNum-err" className="mt-1 text-xs text-[#FF4E00]" role="alert">
+                <p id="pv-docNum-err" className="mt-1 text-xs text-destructive" role="alert">
                   {errors.documentNumber}
                 </p>
               )}
@@ -327,8 +338,8 @@ export function PrevalidacionForm({
 
             {/* Nombre */}
             <div>
-              <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Nombre completo <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-foreground">
+                Nombre completo <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <input
                 id="pv-name"
@@ -342,7 +353,7 @@ export function PrevalidacionForm({
                 aria-invalid={!!(touched.name && errors.name)}
               />
               {touched.name && errors.name && (
-                <p id="pv-name-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
+                <p id="pv-name-err" className="mt-1 text-[11px] text-destructive" role="alert">
                   {errors.name}
                 </p>
               )}
@@ -350,8 +361,8 @@ export function PrevalidacionForm({
 
             {/* Correo */}
             <div>
-              <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
-                Correo electrónico <span aria-hidden="true" className="text-[#FF4E00]">*</span>
+              <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-foreground">
+                Correo electrónico <span aria-hidden="true" className="text-destructive">*</span>
               </label>
               <input
                 id="pv-email"
@@ -369,7 +380,7 @@ export function PrevalidacionForm({
                 A este correo se enviará el enlace de captura biométrica.
               </p>
               {touched.email && errors.email && (
-                <p id="pv-email-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
+                <p id="pv-email-err" className="mt-1 text-[11px] text-destructive" role="alert">
                   {errors.email}
                 </p>
               )}
@@ -379,7 +390,7 @@ export function PrevalidacionForm({
             {existingConflict && (
               <div
                 className="space-y-2 rounded-xl border p-3 text-xs"
-                style={{ borderColor: '#5B8A1F', background: 'rgba(91,138,31,0.08)', color: '#3F5F14' }}
+                style={{ borderColor: 'var(--badge-success-border)', background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
                 role="status"
                 aria-live="polite"
               >
@@ -403,8 +414,7 @@ export function PrevalidacionForm({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                    style={{ background: '#5B8A1F' }}
+                    className={buttonClass({ variant: 'navy', size: 'sm' })}
                   >
                     Ver el proceso existente
                   </button>
@@ -416,7 +426,7 @@ export function PrevalidacionForm({
             {apiError && (
               <div
                 className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-                style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+                style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
                 role="alert"
                 aria-live="polite"
               >
@@ -427,12 +437,12 @@ export function PrevalidacionForm({
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-3 border-t px-6 py-4">
+          <div className={`flex justify-end gap-3 px-6 py-4 ${DIALOGO_PIE}`}>
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+              className={buttonClass({ variant: 'secondary', size: 'sm' })}
             >
               Cancelar
             </button>
@@ -440,8 +450,7 @@ export function PrevalidacionForm({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-                style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
+                className={buttonClass({ size: 'sm' })}
               >
                 Crear prevalidación
               </button>
@@ -452,16 +461,20 @@ export function PrevalidacionForm({
         {/* HU #11267 AC3 — confirmación con destinatario */}
         {confirmOpen && (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/40 px-4"
+            className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--overlay)] px-4"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="pv-confirm-title"
           >
-            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg dark:bg-[#0B0F14]">
-              <h3 id="pv-confirm-title" className="text-sm font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
-                Confirmar envío de prevalidación
-              </h3>
-              <p className="mt-2 text-xs opacity-80">
+            <div className={`${DIALOGO_PANEL} w-full max-w-sm`}>
+              <div className={DIALOGO_FRANJA}>
+                <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+                <h3 id="pv-confirm-title" className={DIALOGO_FRANJA_TITULO}>
+                  Confirmar envío de prevalidación
+                </h3>
+              </div>
+              <div className="p-5">
+              <p className="text-xs opacity-80">
                 Se enviará el enlace de captura a <strong>{values.email.trim()}</strong>. ¿Continuar?
               </p>
               <div className="mt-4 flex justify-end gap-2">
@@ -469,7 +482,7 @@ export function PrevalidacionForm({
                   type="button"
                   onClick={() => setConfirmOpen(false)}
                   disabled={submitting}
-                  className="rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                  className={buttonClass({ variant: 'secondary', size: 'sm' })}
                 >
                   Volver
                 </button>
@@ -477,12 +490,12 @@ export function PrevalidacionForm({
                   type="button"
                   onClick={() => void sendPrevalidacion()}
                   disabled={submitting}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                  style={{ background: 'var(--color-flit-brand)' }}
+                  className={buttonClass({ size: 'sm' })}
                 >
                   {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                   {submitting ? 'Enviando…' : 'Confirmar y enviar'}
                 </button>
+              </div>
               </div>
             </div>
           </div>
@@ -520,20 +533,20 @@ export function PrevalidacionSuccessPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="pv-success-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl dark:bg-[#0B0F14] text-center">
-        <CheckCircle2
-          className="mx-auto h-12 w-12"
-          style={{ color: '#5B8A1F' }}
-          aria-hidden="true"
-        />
-        <h2 id="pv-success-title" className="mt-3 text-base font-semibold text-flit-primary dark:text-white">
-          Prevalidación creada
-        </h2>
+      <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <CheckCircle2 className={DIALOGO_FRANJA_ICONO} aria-hidden="true" />
+          <h2 id="pv-success-title" className={DIALOGO_FRANJA_TITULO}>
+            Prevalidación creada
+          </h2>
+        </div>
+        <div className="p-8 pt-6 text-center">
         {result.enqueued ? (
           <p className="mt-2 text-sm opacity-70">
             El proveedor no respondió en este momento. La validación quedó encolada y el sistema la
@@ -559,7 +572,7 @@ export function PrevalidacionSuccessPanel({
             <button
               type="button"
               onClick={() => void copiar()}
-              className="mt-3 rounded-xl border px-4 py-2 text-sm font-medium text-flit-brand transition hover:bg-flit-brand/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+              className={buttonClass({ variant: 'secondary', size: 'sm', className: 'mt-3' })}
               aria-live="polite"
             >
               {copied ? 'Copiado ✓' : 'Copiar enlace'}
@@ -575,18 +588,18 @@ export function PrevalidacionSuccessPanel({
           <button
             type="button"
             onClick={onNew}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:text-white dark:hover:bg-white/10"
+            className={buttonClass({ variant: 'secondary', size: 'sm' })}
           >
             Crear otra
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+            className={buttonClass({ size: 'sm' })}
           >
             Ver listado
           </button>
+        </div>
         </div>
       </div>
     </div>

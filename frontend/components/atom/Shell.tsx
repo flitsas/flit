@@ -21,6 +21,7 @@ import { extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/comp
 import { DrFlitAssistant } from "@/components/dr-flit";
 import { LoteDescargaTracker, LoteDescargaTrackerProvider } from "@/components/shared/LoteDescargaTracker";
 import { tramitesNav } from "./dock/tramitesNav";
+import { ACCIONES_BUSCADOR, PLACA_BUSCADOR } from "@/components/inicio/destinos";
 
 export type ModuleId =
   | "dashboard"
@@ -167,6 +168,9 @@ export function Shell({
         homeHref="/"
         search={search}
         onLogout={onLogout}
+        // HU #14480 — buscador Ctrl K: atajos del listado y placa, solo si el rol ve Trámites en el dock.
+        searchActions={ACCIONES_BUSCADOR}
+        plateSearch={PLACA_BUSCADOR}
         layout="app"
         overlay={
           <>

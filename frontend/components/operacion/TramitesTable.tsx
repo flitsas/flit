@@ -10,6 +10,7 @@ import {
   Download,
   ArrowUpDown,
   CheckCircle2,
+  ChevronDown,
   Eye,
   FileCheck,
   FileStack,
@@ -49,7 +50,6 @@ import {
   textoExcluidosNoIct,
 } from '@/lib/tramites/pausa-lote';
 import { TramitesListToolbar } from './TramitesListToolbar';
-import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { SoatSoporteAsignado } from './SoatSoporteAsignado';
 import { ImpuestoDepartamentalCheck, useImpuestoPagadoPorFlito } from './ImpuestoDepartamentalCheck';
 import { esErrorFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
@@ -63,6 +63,7 @@ import {
 import {
   ESTADOS_TRAMITE,
   FILTRO_RECHAZADO_PREASIGNACION,
+  estadoChipClass,
   estadoChipStyle,
   estadoLabel,
   estadoLabelConOrigen,
@@ -71,12 +72,22 @@ import {
   revocationRequestListColor,
   revocationRequestListLabel,
 } from '@/lib/tramites/estados';
+import { Placa } from '@flit/ui/Placa';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+  DIALOGO_VELO,
+} from './dialogo-propio';
 import {
   TRAMITES_COLUMNS,
   TRAMITES_SELECTABLE_COLUMNS,
   applyNetworkScopeColumns,
   TRAMITES_COLUMN_KEYS,
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+  TRAMITES_COLUMNS_RESHOWN_ONCE,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   buildTramitesGridLayout,
   buildTramitesColWidths,
@@ -110,6 +121,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_640_CLS,
 } from '@/components/atom/table-styles';
 import { PageNav } from '@/components/atom/PageNav';
 import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePaginacion';
@@ -139,6 +151,7 @@ export type OpenDetalleOptions = { panel?: TramiteDetalleInitialPanel };
 import { TramiteTrackingModal } from './TramiteTrackingModal';
 import { useAdminTramiteAcciones } from './AdminTramiteAcciones';
 import type {
+  ActorListado,
   BiometricParte,
   FirmaParteEstado,
   InstanceStatus,
@@ -147,7 +160,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
-import { IdentidadParteTrackingModal } from './IdentidadParteTrackingModal';
+import { IdentidadParteTrackingModal, type ActorTracking } from './IdentidadParteTrackingModal';
 
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
@@ -160,6 +173,11 @@ const SERVER_LIST_TAKE = 200;
  * (Continuar/Ver) llevan al mismo destino. Se refresca al montar, al pulsar
  * Actualizar y cada vez que cambia `refreshKey`.
  */
+
+/** Nombre visible de cada columna, para el `data-label` de las tarjetas en celular. */
+const ETIQUETA_COLUMNA: Record<string, string> = Object.fromEntries(
+  TRAMITES_COLUMNS.map((c) => [c.key, c.label]),
+);
 
 // N 03 (RF01) — chip de estado de negocio en español; labels/colores desde la fuente única
 // lib/tramites/estados.ts (fallback titlecase para valores desconocidos). ADR-0059: un rechazo
@@ -219,7 +237,7 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda
 
   if (idv === 'rechazado') {
     return {
-      chip: { label: 'Validación rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
+      chip: { label: 'Validación rechazada', bg: 'var(--badge-danger-bg)', color: 'var(--destructive)', border: 'var(--badge-danger-border)' },
       ready: false,
       ayuda: AYUDA_NO_TERMINALES,
     };
@@ -231,20 +249,20 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda
     const ayuda = `${AYUDA_ORIGEN} ${AYUDA_NO_TERMINALES}`;
     if (item.signaturePending) {
       return {
-        chip: { label: 'Pendiente firma', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
+        chip: { label: 'Pendiente firma', bg: 'var(--badge-purple-bg)', color: 'var(--badge-purple-fg)', border: 'var(--badge-purple-border)' },
         ready: false,
         ayuda,
       };
     }
     if (item.canSubmit) {
       return {
-        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.4)' },
+        chip: { label: 'Listo para radicar', bg: 'var(--badge-success-bg)', color: 'var(--flit-success-ink)', border: 'var(--badge-success-border)' },
         ready: true,
         ayuda,
       };
     }
     return {
-      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.35)' },
+      chip: { label: 'Identidad validada', bg: 'var(--badge-success-bg)', color: 'var(--flit-success-ink)', border: 'var(--badge-success-border)' },
       ready: false,
       ayuda,
     };
@@ -252,7 +270,7 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda
 
   // en_proceso | enviado | null (sin iniciar) → esperando la validación del cliente.
   return {
-    chip: { label: 'Pendiente validación', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
+    chip: { label: 'Pendiente validación', bg: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)', border: 'var(--badge-warning-border)' },
     ready: false,
     ayuda: AYUDA_NO_TERMINALES,
   };
@@ -286,8 +304,8 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         <span
           id={tipId}
           role="tooltip"
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-flit-primary dark:text-white/90"
-          style={{ borderColor: '#DFE5ED' }}
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-card p-2.5 text-left text-xs leading-snug text-foreground shadow-lg"
+          style={{ borderColor: 'var(--border)' }}
         >
           {ayuda}
         </span>
@@ -410,6 +428,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS, {
     catalog: TRAMITES_COLUMN_KEYS,
     addedSinceLegacy: TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
+    reshowOnce: TRAMITES_COLUMNS_RESHOWN_ONCE,
   });
   // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
   // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
@@ -551,6 +570,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     item: InstanceSummary;
     parte: BiometricParte;
     rotulo: string;
+    actor?: ActorTracking | null;
   } | null>(null);
 
   // HU #12104 — exportación a Excel. `exportNotice` es el resultado (cuántas filas, cuántos
@@ -584,6 +604,36 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     const id = setTimeout(() => setBusquedaAplicada(search), 350);
     return () => clearTimeout(id);
   }, [search]);
+
+  // HU #14481/#14480 (Epic #14471) — entrada con filtro desde la URL: las cifras de Inicio y el buscador Ctrl K llegan
+  // con ?placa=, ?estado= o ?atajo=. Se siembra UNA vez al montar, con el mismo patrón que la bandeja del OT
+  // (ClientProceduresSection, ?placa/?vin/?status): sin parámetros el listado arranca igual que siempre, y un valor
+  // desconocido se ignora para no dejar el filtro en una opción que no existe. Se lee window.location para no exigir
+  // un boundary de router ni tocar las pruebas que montan la tabla fuera de una app real.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const placa = params.get('placa')?.trim().toUpperCase().replace(/\s+/g, '');
+    const estadoParam = params.get('estado')?.trim();
+    const atajoParam = params.get('atajo')?.trim();
+    /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
+    if (placa) {
+      setSearch(placa);
+      setBusquedaAplicada(placa);
+    }
+    const atajoDef = atajoParam ? ATAJOS_GESTOR.find((a) => a.key === atajoParam) : undefined;
+    if (atajoDef) {
+      // Igual que elegirlo en la búsqueda rápida: el atajo trae su estado.
+      setAtajo(atajoDef.key);
+      setEstado(atajoDef.estado ?? '');
+    } else if (
+      estadoParam &&
+      ((ESTADOS_TRAMITE as readonly string[]).includes(estadoParam) || estadoParam === FILTRO_RECHAZADO_PREASIGNACION)
+    ) {
+      setEstado(estadoParam as EstadoFiltro);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   // HU #12107 — catálogo de campos filtrables. Degrada con elegancia: si no carga, la tabla se
   // pinta igual con su listado y la barra ofrece reintentar (AC7). Nunca bloquea el render.
@@ -677,7 +727,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       }
     } catch (err) {
       // Bug #13194 (P4) — gate de firma: en asignado el asistente ya no es editable, así que el
-      // mensaje no remite al paso 4 sino a la prevalidación del módulo Identidad o al baúl del RL.
+      // mensaje no remite al paso 4: dice quién falta por firmar y qué sigue.
       if (esErrorFirmaPendiente(err)) {
         setProcessError(
           mensajeFirmaPendiente((err as { problem?: Record<string, unknown> | null }).problem, 'asignado'),
@@ -841,10 +891,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     [networkActive, childTenantId],
   );
 
+  // Cada carga se numera y solo la más reciente pinta: si los filtros cambian mientras una consulta sigue en
+  // vuelo (p. ej. el estado sembrado desde la URL, HU #14481), la respuesta vieja no puede pisar a la nueva.
+  const cargaVigenteRef = useRef(0);
+
   const load = useCallback(async () => {
     // HU #12363 — la cabeza espera a conocer su alcance guardado: si no, pediría primero «lo propio»
     // y acto seguido «la red», y la primera respuesta se pintaría para desaparecer al instante.
     if (!alcanceListo) return;
+    const carga = ++cargaVigenteRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -856,6 +911,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       // encadenarlas solo sumaría latencia. Los conteos no pueden salir de `data` — esa es la
       // PÁGINA, y la tira habla del universo entero.
       const [page1, counts] = await Promise.all([buscarPagina(query), contarEstados(query)]);
+      if (carga !== cargaVigenteRef.current) return;
       setItems(page1.items);
       setTotal(page1.total);
       setEstadoCounts(counts);
@@ -873,9 +929,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       const ultimaPagina = Math.max(1, Math.ceil(page1.total / pageSize));
       if (page > ultimaPagina) setPage(ultimaPagina);
     } catch (err) {
+      if (carga !== cargaVigenteRef.current) return;
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
-      setLoading(false);
+      if (carga === cargaVigenteRef.current) setLoading(false);
     }
   }, [alcanceListo, buildListQuery, buscarPagina, contarEstados, page, pageSize]);
 
@@ -1346,6 +1403,29 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       <ModuleTitle
         title="Gestión Integral de trámites"
         subtitle="Administra, monitorea y radica tus trámites ante organismos de tránsito en tiempo real."
+        action={
+          puedeCrearAlguna ? (
+            <button
+              type="button"
+              onClick={() => onNewTramite?.()}
+              disabled={blockNew.matricula && blockNew.traspaso}
+              title={
+                blockNew.matricula && blockNew.traspaso
+                  ? 'La compañía tiene bloqueada la creación de trámites.'
+                  : undefined
+              }
+              // HU #14482: `.btn` principal en la zona de acciones de la cabecera, como el page-header de la
+              // propuesta (antes, a la derecha de la tira de estados). Rótulo en una línea.
+              className={buttonClass({
+                variant: 'primary',
+                size: 'md',
+                className: 'shrink-0',
+              })}
+            >
+              <span>Nuevo trámite</span>
+            </button>
+          ) : undefined
+        }
       />
 
       <div className="flex min-w-0 flex-col gap-4">
@@ -1394,7 +1474,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 fieldsError ? (
                   // Un catálogo que no carga NO deja la pantalla inservible: la tabla ya se pintó
                   // con su listado y aquí solo se dice qué falta y cómo reintentarlo.
-                  <div className="px-1 py-2 text-xs text-flit-primary/70 dark:text-white/60">
+                  <div className="px-1 py-2 text-xs text-muted-foreground">
                     <p>No se pudieron cargar los filtros.</p>
                     <button
                       type="button"
@@ -1477,14 +1557,14 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         {exportNotice ? (
           <p
             role="status"
-            className="text-xs text-flit-primary/70 dark:text-white/60"
+            className="text-xs text-muted-foreground"
             data-testid="tramites-export-aviso"
           >
             {exportNotice}
           </p>
         ) : null}
 
-        {/* KPIs por estado (filtro) + CTA Nuevo trámite */}
+        {/* KPIs por estado (filtro). HU #14482: «Nuevo trámite» pasó a la cabecera; la tira ocupa todo el ancho. */}
         <div className="flex items-stretch gap-4">
           {!loading && !error ? (
             <div className="min-w-0 flex-1">
@@ -1495,26 +1575,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 onSelect={handleEstadoChange}
               />
             </div>
-          ) : null}
-          {puedeCrearAlguna ? (
-          <button
-            type="button"
-            onClick={() => onNewTramite?.()}
-            disabled={blockNew.matricula && blockNew.traspaso}
-            title={
-              blockNew.matricula && blockNew.traspaso
-                ? 'La compañía tiene bloqueada la creación de trámites.'
-                : undefined
-            }
-            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-90 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-            style={{ background: WIZARD_CTA_GRADIENT }}
-          >
-            <span>
-              Nuevo
-              <br />
-              trámite
-            </span>
-          </button>
           ) : null}
         </div>
 
@@ -1583,7 +1643,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               <button
                 type="button"
                 onClick={() => void handleBulkPause(true)}
-                className="inline-flex items-center gap-1 rounded-lg border border-flit-primary/20 px-2.5 py-1 font-semibold text-flit-primary transition hover:bg-flit-primary/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-strong)] px-2.5 py-1 font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand "
               >
                 <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
               </button>
@@ -1598,18 +1658,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               </button>
             ) : null}
             {muestraPausa && particionPausa.excluidosRed > 0 ? (
-              <span className="inline-flex items-center gap-1 text-flit-primary/70 dark:text-white/70">
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                 {textoExcluidosRed(particionPausa.excluidosRed)}
               </span>
             ) : null}
             {muestraPausa && particionPausa.excluidosNoIct > 0 ? (
-              <span className="text-flit-primary/70 dark:text-white/70">
+              <span className="text-muted-foreground">
                 {textoExcluidosNoIct(particionPausa.excluidosNoIct)}
               </span>
             ) : null}
             {!pausaEnModo ? (
-              <span className="text-flit-primary/70 dark:text-white/70">{NOTA_PAUSA_MODO_FILTRO}</span>
+              <span className="text-muted-foreground">{NOTA_PAUSA_MODO_FILTRO}</span>
             ) : null}
           </BarraSeleccionLote>
         ) : null}
@@ -1712,27 +1772,29 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         tenantId={isAdmin ? identidadTracking?.item.tenantId : undefined}
         parte={identidadTracking?.parte ?? 'comprador'}
         rotulo={identidadTracking?.rotulo ?? 'Comprador'}
+        actor={identidadTracking?.actor ?? null}
       />
 
       {processTarget && (
         <div
-          // Overlay FLIT (component.modal): rgba(22,39,68,0.45) + blur 6px. Antes era
-          // `bg-slate-900/40`, y la escala slate de Tailwind no es paleta de este producto.
-          className="fixed inset-0 z-[90] flex items-center justify-center px-4 backdrop-blur-[6px]"
-          style={{ background: 'rgba(22,39,68,0.45)' }}
+          // Homologación #14507: velo, panel y franja del Modal, en su sitio (mismo foco y cierre).
+          className={`fixed inset-0 z-[90] flex items-center justify-center px-4 ${DIALOGO_VELO}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-flit-primary"
-            style={{ border: '1px solid #DFE5ED' }}
+            className={`${DIALOGO_PANEL} flex max-h-[90dvh] w-full max-w-md flex-col`}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
-              Enviar al organismo de tránsito
-            </h2>
-            <p className="mt-1 text-sm opacity-80">
+            <div className={DIALOGO_FRANJA}>
+              <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+              <h2 id="procesar-plate-title" className={DIALOGO_FRANJA_TITULO}>
+                Enviar al organismo de tránsito
+              </h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            <p className="text-sm opacity-80">
               {processTarget.referenceNumber}
               {processTarget.placa ? ` · ${processTarget.placa}` : ''}
             </p>
@@ -1783,8 +1845,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               {processWarning ? (
                 <button
                   type="button"
-                  className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
-                  style={{ background: WIZARD_CTA_GRADIENT }}
+                  className={buttonClass({ className: 'flex-1' })}
                   onClick={() => setProcessTarget(null)}
                 >
                   Entendido
@@ -1793,7 +1854,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 <>
                   <button
                     type="button"
-                    className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                    className={buttonClass({ variant: 'secondary', className: 'flex-1' })}
                     onClick={() => setProcessTarget(null)}
                     disabled={processActing}
                   >
@@ -1801,8 +1862,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   </button>
                   <button
                     type="button"
-                    className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: WIZARD_CTA_GRADIENT }}
+                    className={buttonClass({ className: 'flex-1' })}
                     disabled={processActing}
                     onClick={() => void confirmProcesar()}
                   >
@@ -1810,6 +1870,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   </button>
                 </>
               )}
+            </div>
             </div>
           </div>
         </div>
@@ -1913,8 +1974,8 @@ function SortableHeaderCell({
             ? `Ordenar ${column.label}. Ahora: ${activa.label} ${sortDir === 'asc' ? 'ascendente' : 'descendente'}`
             : `Ordenar ${column.label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:bg-[#EEF5FF] dark:hover:bg-white/5 ${
-          activa ? 'text-[#2C6BED] dark:text-[#7FB0FF]' : ''
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 normal-case text-inherit transition-colors hover:bg-white/10 ${
+          activa ? 'text-[color:var(--di-highlight-decor)]' : ''
         }`}
       >
         {column.label}
@@ -1926,18 +1987,18 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-flit-primary"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-border bg-card normal-case shadow-xl"
         >
-          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
           </p>
           <div className="p-1.5">
             {opciones.map((opcion) => (
               <div
                 key={opcion.id}
-                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-border [&+&]:pt-2"
               >
-                <p className="mb-1.5 text-xs font-medium text-flit-primary dark:text-white">
+                <p className="mb-1.5 text-xs font-medium text-foreground">
                   {opcion.label}
                 </p>
                 <span className="flex items-center gap-1.5">
@@ -1957,8 +2018,8 @@ function SortableHeaderCell({
                         }}
                         className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                           seleccionada
-                            ? 'border-[#2C6BED] bg-[#2C6BED] text-white'
-                            : 'border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10'
+                            ? 'border-flit-brand bg-flit-brand text-white'
+                            : 'border-border text-muted-foreground hover:bg-secondary'
                         }`}
                       >
                         <Flecha className="h-3 w-3" aria-hidden="true" />
@@ -2077,6 +2138,8 @@ function TableBody({
     item: InstanceSummary;
     parte: BiometricParte;
     rotulo: string;
+    /** ADR-0053 — copropietario concreto; sin él, el tracking es de toda la parte. */
+    actor?: ActorTracking | null;
   }) => void;
   /** HU #12196 — el usuario tiene acceso al módulo de historial por placa (gate RBAC del dock). */
   puedeVerHistorialPlaca: boolean;
@@ -2174,10 +2237,11 @@ function TableBody({
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
     // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
     // fundió con "Mostrando X de Y" de `PageNav` — un solo lugar para el recuento.
-    <div className="flex flex-col">
+    <div className={`flex flex-col ${TABLA_TARJETA_640_CLS}`}>
       <div className="overflow-x-auto">
         <table
           aria-label="Trámites en curso"
+          className="di-tabla-tarjetas"
           style={{
             // `width: 100%` + `minWidth`: la tabla ocupa SIEMPRE el ancho del contenedor y los
             // porcentajes del `<colgroup>` reparten ese ancho entre las columnas visibles. Sin el
@@ -2329,19 +2393,42 @@ function TableBody({
  */
 function ActorCell({
   nombre,
+  actores,
   rotulo,
   estado,
   onOpenTracking,
+  onOpenTrackingActor,
+  desplegado = false,
+  onToggleDesplegado,
 }: {
   nombre: string | null | undefined;
+  /**
+   * ADR-0053 — todos los propietarios del lado, principal primero, con la firma de cada uno. Con 2+
+   * la celda muestra al principal y un desplegable con todos; sin la lista (backend anterior) o con
+   * uno solo, la celda es la de siempre.
+   */
+  actores?: ActorListado[] | null;
   /** Parte a la que pertenece la celda; solo se usa para nombrar la acción de trazabilidad. */
   rotulo: string;
   /** `null` = la parte YA está en la fila pero aún no tiene acreditación; se dice, no se calla. */
   estado?: FirmaParteEstado | null;
   /** Click en la acreditación → modal de tracking de identidad de esta parte. */
   onOpenTracking?: () => void;
+  /**
+   * ADR-0053 — click en la firma de UN copropietario del desplegable → tracking de identidad de esa
+   * persona (no de todo el lado), igual que la línea de firma de la celda plegada.
+   */
+  onOpenTrackingActor?: (actor: ActorListado, posicion: number) => void;
+  /**
+   * Desplegable controlado por la fila: así el ícono «Con múltiples propietarios» de Marcas abre
+   * los dos lados a la vez, y el botón de cada celda sigue abriendo solo el suyo.
+   */
+  desplegado?: boolean;
+  onToggleDesplegado?: () => void;
 }) {
-  const texto = nombre?.trim();
+  const copropietarios = (actores ?? []).filter((a) => a.nombre.trim());
+  const multiples = copropietarios.length > 1;
+  const texto = multiples ? copropietarios[0].nombre.trim() : nombre?.trim();
   // Sin actor en la celda no hay firma que reportar: "Sin registrar" debajo de un guion se lee
   // como una acreditación pendiente de alguien que ni siquiera está capturado todavía. Cubre los
   // dos casos de una: la parte que NO EXISTE en ese tipo de trámite (el vendedor en matrícula
@@ -2355,15 +2442,109 @@ function ActorCell({
       {FIRMA_TEXTO[estado].label}
     </span>
   ) : (
-    <span className="whitespace-nowrap text-xs text-flit-primary/70 dark:text-white/70">
+    <span className="whitespace-nowrap text-xs text-muted-foreground">
       Sin registrar
     </span>
   );
 
+  // ADR-0053 — desplegable de copropietarios: cada persona con SU firma. La firma de la parte (abajo,
+  // plegado) es «todos firman»; abierto se ve quién falta.
+  const conmutador = multiples ? (
+    <button
+      type="button"
+      onClick={(e) => {
+        // La fila entera abre el asistente: el desplegable no debe navegar.
+        e.stopPropagation();
+        onToggleDesplegado?.();
+      }}
+      aria-expanded={desplegado}
+      aria-label={
+        desplegado
+          ? `Ocultar los propietarios de ${rotulo}`
+          : `Ver los ${copropietarios.length} propietarios de ${rotulo} y su firma`
+      }
+      className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 text-[11px] font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white/90"
+    >
+      <ChevronDown
+        className={`h-3 w-3 transition-transform ${desplegado ? 'rotate-180' : ''}`}
+        aria-hidden="true"
+      />
+      {desplegado ? 'Ocultar' : `+${copropietarios.length - 1} propietario${copropietarios.length > 2 ? 's' : ''}`}
+    </button>
+  ) : null;
+
+  if (multiples && desplegado) {
+    return (
+      <span className="flex min-w-0 flex-col items-start gap-1">
+        <ul
+          className="flex w-full flex-col gap-1.5 leading-snug text-flit-primary dark:text-white/90"
+          aria-label={`${rotulo}: ${copropietarios.length} propietarios`}
+        >
+          {copropietarios.map((a, i) => (
+            // Divisoria fina entre propietarios: los nombres largos envuelven a dos líneas y, sin
+            // ella, dos nombres seguidos se leían como uno solo de cuatro líneas.
+            <li
+              key={`${i}-${a.nombre}`}
+              className={
+                i > 0
+                  ? 'flex w-full flex-col gap-0.5 border-t border-flit-primary/15 pt-1.5 dark:border-white/15'
+                  : 'flex w-full flex-col gap-0.5'
+              }
+            >
+              <span className="break-words">{a.nombre}</span>
+              {a.firmaEstado
+                ? (() => {
+                    const firma = FIRMA_TEXTO[a.firmaEstado];
+                    // Punto de color + texto: el color solo no puede portar el significado.
+                    const contenido = (
+                      <>
+                        {/* Punto grande, como en FLIT 1: se lee de un vistazo al recorrer la lista. */}
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ background: firma.color }}
+                          aria-hidden="true"
+                        />
+                        {firma.label}
+                      </>
+                    );
+                    return onOpenTrackingActor ? (
+                      // Mismo gesto que la firma de la celda plegada: abre el tracking de identidad,
+                      // pero de ESTA persona.
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenTrackingActor(a, i + 1);
+                        }}
+                        aria-label={`Ver tracking de identidad de ${a.nombre}`}
+                        title={`Ver tracking de identidad · ${a.nombre}`}
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded text-xs font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
+                        style={{ color: firma.color }}
+                      >
+                        {contenido}
+                      </button>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold"
+                        style={{ color: firma.color }}
+                      >
+                        {contenido}
+                      </span>
+                    );
+                  })()
+                : null}
+            </li>
+          ))}
+        </ul>
+        {conmutador}
+      </span>
+    );
+  }
+
   return (
     <span className="flex min-w-0 flex-col items-start gap-0.5">
       <span
-        className="block w-full break-words leading-snug text-flit-primary dark:text-white/90"
+        className="block w-full break-words leading-snug text-foreground"
         title={texto || undefined}
       >
         {texto || '—'}
@@ -2386,6 +2567,7 @@ function ActorCell({
           valor
         )
       ) : null}
+      {conmutador}
     </span>
   );
 }
@@ -2446,6 +2628,8 @@ function TramiteRow({
     item: InstanceSummary;
     parte: BiometricParte;
     rotulo: string;
+    /** ADR-0053 — copropietario concreto; sin él, el tracking es de toda la parte. */
+    actor?: ActorTracking | null;
   }) => void;
   /** HU #12196 — el usuario tiene acceso al módulo de historial por placa (gate RBAC del dock). */
   puedeVerHistorialPlaca: boolean;
@@ -2609,7 +2793,7 @@ function TramiteRow({
   const showRejectPopover =
     !!motivoRechazo || enSubsanacion || subsanacionCount > 0;
   const popoverRef = useRef<HTMLDivElement>(null);
-  const iconColor = enSubsanacion ? '#b45309' : '#c2410c';
+  const iconColor = enSubsanacion ? 'var(--badge-warning-fg)' : 'var(--destructive)';
 
   // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
   // recordar reanudarlo para poder radicarlo.
@@ -2661,6 +2845,17 @@ function TramiteRow({
   // preferencias de columnas ya guardadas por cada usuario.
   const shows = (key: string) => visibleColumns.includes(key);
 
+  // ADR-0053 — desplegables de copropietarios de la fila. Cada celda abre el suyo; el ícono
+  // «Con múltiples propietarios» de Marcas abre (o cierra) los dos a la vez.
+  const [propietariosAbiertos, setPropietariosAbiertos] = useState({ vendedor: false, comprador: false });
+  const alternarPropietarios = (lado: 'vendedor' | 'comprador') =>
+    setPropietariosAbiertos((prev) => ({ ...prev, [lado]: !prev[lado] }));
+  const alternarTodosLosPropietarios = () =>
+    setPropietariosAbiertos((prev) => {
+      const abrir = !(prev.vendedor && prev.comprador);
+      return { vendedor: abrir, comprador: abrir };
+    });
+
   const cellsByKey: Record<string, React.ReactNode> = {
     radicado: (
       <span className="flex min-w-0 flex-col gap-0.5">
@@ -2671,7 +2866,7 @@ function TramiteRow({
             item.prioritario ? (
               <Star
                 className="h-4 w-4 shrink-0"
-                style={{ color: '#F59E0B', fill: '#F59E0B' }}
+                style={{ color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }}
                 role="img"
                 aria-label="Trámite prioritario"
               />
@@ -2696,7 +2891,7 @@ function TramiteRow({
               className="h-4 w-4"
               style={
                 item.prioritario
-                  ? { color: '#F59E0B', fill: '#F59E0B' }
+                  ? { color: 'var(--badge-warning-fg)', fill: 'var(--badge-warning-fg)' }
                   : { color: 'var(--color-flit-primary)', opacity: 0.3 }
               }
               aria-hidden="true"
@@ -2714,7 +2909,9 @@ function TramiteRow({
               handleOpen();
             }}
             aria-label={`Abrir trámite ${item.referenceNumber}`}
-            className="min-w-0 truncate font-mono font-semibold text-flit-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white"
+            // Propuesta: «Abrir» como enlace. El radicado es el control que abre el trámite, así que
+            // lleva el azul de acción con subrayado al pasar.
+            className="min-w-0 truncate font-mono font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
             {item.referenceNumber}
           </button>
@@ -2758,13 +2955,17 @@ function TramiteRow({
     // muda allí en vez de salir dos veces.
     placa: (
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="block truncate font-mono font-semibold tracking-wider text-flit-primary dark:text-white">
-          {item.placa ?? '—'}
-        </span>
+        {/* Propuesta: la placa de la fila es la placa amarilla (`Placa` de @flit/ui), con el texto tal
+            cual viene. Sin placa, el guion. */}
+        {item.placa ? (
+          <Placa placa={item.placa} className="self-start" />
+        ) : (
+          <span className="block truncate font-mono font-semibold tracking-wider text-foreground">—</span>
+        )}
         {/* El VIN no envuelve: es un token de 17 caracteres sin espacios y partirlo en dos líneas
             no ayuda a compararlo de un vistazo. El piso de la columna cabe los 17 enteros. */}
         {!shows('vin') ? (
-          <span className="block truncate font-mono text-xs text-flit-primary/80 dark:text-white/70">
+          <span className="block truncate font-mono text-xs text-muted-foreground">
             {item.vin ?? '—'}
           </span>
         ) : null}
@@ -2796,7 +2997,7 @@ function TramiteRow({
     // disponible como columna propia («Paso», grupo Desglose adicional) para quien la active.
     tramite: (
       <span
-        className="block min-w-0 break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
+        className="block min-w-0 break-words leading-snug text-xs font-semibold text-foreground"
         // Los nombres de OTROS son largos («Levantamiento de prenda») y la celda es angosta, así
         // que envuelven en vez de cortarse: es el rótulo que distingue un trámite de otro. El
         // `title` se conserva para el caso extremo de una palabra sola más ancha que la celda.
@@ -2808,31 +3009,55 @@ function TramiteRow({
     propietario: (
       <ActorCell
         nombre={item.vendedorNombre}
+        actores={item.vendedoresActores}
+        desplegado={propietariosAbiertos.vendedor}
+        onToggleDesplegado={() => alternarPropietarios('vendedor')}
         rotulo="Vendedor"
         estado={item.firmaVendedorEstado}
         onOpenTracking={() =>
           onOpenIdentidadTracking({ item, parte: 'vendedor', rotulo: 'Vendedor' })
         }
+        onOpenTrackingActor={(actor, posicion) => {
+          const ordinal = actor.ordinal ?? posicion;
+          onOpenIdentidadTracking({
+            item,
+            parte: 'vendedor',
+            rotulo: `Vendedor ${ordinal}`,
+            actor: { ordinal, numeroDocumento: actor.numeroDocumento ?? null, nombre: actor.nombre },
+          });
+        }}
       />
     ),
     comprador: (
       <ActorCell
         nombre={item.compradorNombre}
+        actores={item.compradoresActores}
+        desplegado={propietariosAbiertos.comprador}
+        onToggleDesplegado={() => alternarPropietarios('comprador')}
         rotulo="Comprador"
         estado={item.firmaCompradorEstado}
         onOpenTracking={() =>
           onOpenIdentidadTracking({ item, parte: 'comprador', rotulo: 'Comprador' })
         }
+        onOpenTrackingActor={(actor, posicion) => {
+          const ordinal = actor.ordinal ?? posicion;
+          onOpenIdentidadTracking({
+            item,
+            parte: 'comprador',
+            rotulo: `Comprador ${ordinal}`,
+            actor: { ordinal, numeroDocumento: actor.numeroDocumento ?? null, nombre: actor.nombre },
+          });
+        }}
       />
     ),
     vin: (
-      <span className="block truncate font-mono text-xs text-flit-primary/80 dark:text-white/70">
+      <span className="block truncate font-mono text-xs text-muted-foreground">
         {item.vin ?? '—'}
       </span>
     ),
     vehiculo: (
       <span
-        className="block break-words leading-snug text-flit-primary/90 dark:text-white/80"
+        className="block break-words leading-snug text-foreground"
         title={vehiculo(item)}
       >
         {vehiculo(item)}
@@ -2840,7 +3065,18 @@ function TramiteRow({
     ),
     paso: (
       <span className="block min-w-0">
-        <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
+        {/* Barra de avance del prototipo (`.avance`) pintada como fondo de la cifra: sin marcado
+            nuevo; el ancho sale del mismo pasoActual/totalPasos que ya se muestra. */}
+        <span
+          className="block pb-2 font-mono text-xs text-muted-foreground"
+          style={
+            item.totalPasos
+              ? {
+                  background: `var(--di-gradient-brand) left bottom / ${Math.min(100, Math.round((100 * (item.pasoActual ?? 0)) / item.totalPasos))}% 6px no-repeat, linear-gradient(var(--di-surface-sunken), var(--di-surface-sunken)) left bottom / 100% 6px no-repeat`,
+                }
+              : undefined
+          }
+        >
           {item.pasoActual}/{item.totalPasos}
         </span>
         <span className="block truncate text-[10px] opacity-55">
@@ -2873,6 +3109,7 @@ function TramiteRow({
                  mismo tono. El nombre accesible sigue siendo el completo. */
               <span className="flex flex-col items-start gap-0.5">
                 <StatusBadge
+                  className={estadoChipClass(item.estado)}
                   label={estadoLabel(item.estado)}
                   ariaLabel={chip.label}
                   bg={chip.bg}
@@ -2884,7 +3121,13 @@ function TramiteRow({
                 </span>
               </span>
             ) : (
-              <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+              <StatusBadge
+                className={estadoChipClass(item.estado)}
+                label={chip.label}
+                bg={chip.bg}
+                color={chip.color}
+                border={chip.border}
+              />
             )}
           </button>
           {showRejectPopover ? (
@@ -2899,7 +3142,7 @@ function TramiteRow({
               aria-haspopup="dialog"
               aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
               title="Ver motivo del OT y subsanación"
-              className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
+              className="rounded-md p-0.5 transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
             >
               <AlertCircle
                 className="h-3.5 w-3.5"
@@ -2911,16 +3154,16 @@ function TramiteRow({
               <div
                 role="dialog"
                 aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-flit-primary"
-                style={{ borderColor: 'rgba(255,78,0,0.28)' }}
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-card p-3 shadow-lg"
+                style={{ borderColor: 'var(--badge-danger-border)' }}
                 onClick={(e) => e.stopPropagation()}
               >
                 {motivoRechazo ? (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-[#c2410c]">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
                       Motivo del OT
                     </p>
-                    <p className="mt-1 text-sm text-flit-primary dark:text-white/90 whitespace-pre-wrap">
+                    <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">
                       {motivoRechazo}
                     </p>
                   </div>
@@ -2930,7 +3173,7 @@ function TramiteRow({
                     className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
                     style={
                       motivoRechazo
-                        ? { borderColor: 'rgba(223,229,237,0.8)' }
+                        ? { borderColor: 'var(--border)' }
                         : undefined
                     }
                   >
@@ -2938,9 +3181,9 @@ function TramiteRow({
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
                         style={{
-                          background: 'rgba(245,158,11,0.12)',
-                          color: '#b45309',
-                          borderColor: 'rgba(245,158,11,0.3)',
+                          background: 'var(--badge-warning-bg)',
+                          color: 'var(--badge-warning-fg)',
+                          borderColor: 'var(--badge-warning-border)',
                         }}
                       >
                         En subsanación
@@ -2950,9 +3193,9 @@ function TramiteRow({
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
                         style={{
-                          background: 'rgba(99,102,241,0.10)',
-                          color: '#4f46e5',
-                          borderColor: 'rgba(99,102,241,0.28)',
+                          background: 'var(--badge-purple-bg)',
+                          color: 'var(--badge-purple-fg)',
+                          borderColor: 'var(--badge-purple-border)',
                         }}
                       >
                         Subsanado ×{subsanacionCount}
@@ -2969,7 +3212,7 @@ function TramiteRow({
             Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
         {muestraPausado ? (
           <span
-            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-flit-primary/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[var(--border-strong)] bg-secondary px-2 py-0.5 text-xs font-semibold text-muted-foreground"
             title={item.pausedObservation ?? 'Trámite pausado'}
             aria-label={
               item.pausedObservation
@@ -3002,13 +3245,13 @@ function TramiteRow({
       </span>
     ),
     fechaCreacion: (
-      <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
+      <span className="block font-mono text-xs text-muted-foreground">
         {shortDate(item.createdAt)}
       </span>
     ),
     // Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar.
     fechaActualizacion: (
-      <span className="block font-mono text-xs text-flit-primary/70 dark:text-white/60">
+      <span className="block font-mono text-xs text-muted-foreground">
         {item.updatedAt ? shortDate(item.updatedAt) : '—'}
       </span>
     ),
@@ -3016,7 +3259,7 @@ function TramiteRow({
     // "SECRETARIA DISTRITAL DE…" no distingue una secretaría de otra, que es justo para lo que
     // está la columna. Envuelve en varias líneas; la fila crece lo que haga falta.
     secretaria: (
-      <span className="block text-xs leading-snug text-balance break-words text-flit-primary/90 dark:text-white/80">
+      <span className="block text-xs leading-snug text-balance break-words text-foreground">
         {item.organismoTransito ?? '—'}
       </span>
     ),
@@ -3029,7 +3272,7 @@ function TramiteRow({
     gestor: (
       <span className="block min-w-0">
         <span
-          className="block break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-foreground"
           title={item.companiaNombre ?? undefined}
         >
           {item.companiaNombre ?? '—'}
@@ -3043,7 +3286,7 @@ function TramiteRow({
       </span>
     ),
     fuente: (
-      <span className="block truncate text-xs text-flit-primary/90 dark:text-white/80">
+      <span className="block truncate text-xs text-foreground">
         {FUENTE_LABEL[item.fuente ?? 'dashboard']}
       </span>
     ),
@@ -3053,7 +3296,7 @@ function TramiteRow({
     cliente: (
       <span className="block min-w-0" data-testid={`tramite-cliente-${item.id}`}>
         <span
-          className="block break-words leading-snug text-xs font-semibold text-flit-primary dark:text-white"
+          className="block break-words leading-snug text-xs font-semibold text-foreground"
           title={tenantNameRed ?? undefined}
         >
           {tenantNameRed ?? '—'}
@@ -3081,34 +3324,60 @@ function TramiteRow({
             data-testid="tramite-confirmado-runt"
             className={`inline-flex min-w-[36px] items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide ${
               item.runtConfirmed === 'yes'
-                ? 'bg-flit-tech/20 text-[#0B6F6C] dark:text-flit-tech'
-                : 'bg-[#FF4E00]/10 text-[#B33600] dark:text-[#FF8A5B]'
+                ? 'bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]'
+                : 'bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]'
             }`}
           >
             {item.runtConfirmed === 'yes' ? 'SÍ' : 'NO'}
           </span>
         ) : (
-          <span className="text-xs text-flit-primary/45 dark:text-white/40">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </span>
     ),
     marcas: (
       <span className="flex items-center gap-1.5">
         {marcasDe(item).length === 0 ? (
-          <span className="text-xs text-flit-primary/45 dark:text-white/40">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         ) : (
-          marcasDe(item).map((marca) => (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              key={marca.id}
-              src={marca.src}
-              alt={marca.label}
-              title={marca.label}
-              width={26}
-              height={26}
-              className="h-[26px] w-[26px] shrink-0"
-            />
-          ))
+          marcasDe(item).map((marca) =>
+            marca.id === 'multiples-propietarios' ? (
+              // Atajo de fila: abre (o cierra) a la vez los propietarios de vendedor y comprador.
+              // Es la única marca accionable; las demás siguen siendo informativas.
+              <button
+                key={marca.id}
+                type="button"
+                onClick={(e) => {
+                  // La fila entera abre el asistente: este clic solo despliega.
+                  e.stopPropagation();
+                  alternarTodosLosPropietarios();
+                }}
+                aria-expanded={propietariosAbiertos.vendedor && propietariosAbiertos.comprador}
+                title={`${marca.label} — clic para ver a todos con su firma`}
+                className="shrink-0 rounded-full transition hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={marca.src}
+                  alt={`${marca.label}: ver propietarios y su firma`}
+                  width={26}
+                  height={26}
+                  className="h-[26px] w-[26px]"
+                />
+              </button>
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                key={marca.id}
+                src={marca.src}
+                alt={marca.label}
+                title={marca.label}
+                width={26}
+                height={26}
+                className="h-[26px] w-[26px] shrink-0"
+              />
+            ),
+          )
         )}
       </span>
     ),
@@ -3127,19 +3396,18 @@ function TramiteRow({
     );
   }
 
-  // `<tr>` conserva el onClick (comodidad de ratón) pero PIERDE role/tabIndex/onKeyDown/aria-label:
-  // un <tr role="button"> rompería la semántica de tabla. El acceso por teclado/lector de pantalla
-  // vive en el botón del radicado (ver cellsByKey.radicado), con el mismo aria-label de antes.
+  // Ajuste 2026-11-10 — la fila ya NO abre el trámite: un clic en cualquier celda (para seleccionar
+  // y copiar una placa, un nombre o un documento) abría el asistente/detalle. Solo el botón del
+  // radicado abre (ver cellsByKey.radicado), además de «Ver»/«Continuar» del menú Acciones.
   return (
     <tr
-      onClick={handleOpen}
-      className={`group cursor-pointer bg-white text-xs dark:bg-flit-primary ${TABLA_ROW_HOVER_CLS}`}
+      className={`group bg-[var(--di-surface-elevated)] text-xs [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
       {includeSelectColumn ? (
         <td
-          className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle dark:border-white/10"
+          className="rounded-l-xl border-y border-l border-[color:var(--di-border)] px-4 py-3 align-middle"
           onClick={(e) => e.stopPropagation()}
         >
           {/* HU #13380 — UNA casilla por fila: la misma selección sirve a la descarga masiva y a la
@@ -3167,7 +3435,10 @@ function TramiteRow({
       {visibleColumns.map((key, index) => (
         <td
           key={key}
-          className={`border-y border-[#DFE5ED] px-4 py-3 align-middle text-xs dark:border-white/10 ${
+          // Excepción aprobada del rediseño: en celular la fila se lee como tarjeta y cada celda
+          // muestra el nombre de su columna desde `data-label` (styles/tramites-propuesta.css).
+          data-label={ETIQUETA_COLUMNA[key]}
+          className={`border-y border-[color:var(--di-border)] px-4 py-3 align-middle text-xs ${
             !includeSelectColumn && index === 0 ? 'border-l rounded-l-xl' : ''
           }`}
         >
@@ -3180,14 +3451,14 @@ function TramiteRow({
           de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
           botones en la misma celda. */}
       <td
-        className="rounded-r-xl border-y border-r border-[#DFE5ED] px-4 py-3 text-right align-middle dark:border-white/10"
+        className="rounded-r-xl border-y border-r border-[color:var(--di-border)] px-4 py-3 text-right align-middle"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
         <ActionsMenu
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
-          className="bg-white dark:bg-flit-primary"
+          className="bg-card"
           attention={puedeEnviarAlOt}
           attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
@@ -3204,7 +3475,7 @@ function TramiteRow({
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
       >
-        <p className="text-sm text-flit-primary/80 dark:text-white/80">
+        <p className="text-sm text-muted-foreground">
           Este trámite está <strong>pausado</strong>. Recuerda reanudarlo (despausarlo) para poder
           radicarlo. ¿Deseas continuar de todos modos?
         </p>
@@ -3212,7 +3483,7 @@ function TramiteRow({
           <button
             type="button"
             onClick={() => setConfirmPauseOpen(false)}
-            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-flit-primary/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+            className="rounded-full border border-border px-4 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cancelar
           </button>
@@ -3223,7 +3494,7 @@ function TramiteRow({
               onOpen(item.id, item.tenantId);
             }}
             className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+            style={{ background: 'var(--di-gradient-action)' }}
           >
             Continuar de todos modos
           </button>

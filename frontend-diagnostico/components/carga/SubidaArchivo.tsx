@@ -68,11 +68,11 @@ export function ZonaArchivo({ archivo, onElegir, cargando, disabled = false, err
       ) : (
         <label
           htmlFor={id}
-          className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--flit-brand-ink)] bg-white px-6 py-8 text-center text-[var(--flit-brand-ink)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--nav-focus)] dark:bg-transparent ${disabled ? "" : "cursor-pointer"} ${FOCO_CLS}`}
+          className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--flit-brand-ink)] bg-card px-6 py-8 text-center text-[var(--flit-brand-ink)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring ${disabled ? "" : "cursor-pointer"} ${FOCO_CLS}`}
         >
           <UploadCloud className="h-8 w-8" aria-hidden="true" strokeWidth={1.5} />
           <span className="text-sm font-semibold">Archivo de vehículos (.xlsx o .csv)</span>
-          {archivo && <span className="break-all text-sm font-semibold text-flit-primary dark:text-white">{archivo.name}</span>}
+          {archivo && <span className="break-all text-sm font-semibold text-flit-primary">{archivo.name}</span>}
           <span className="text-xs">{archivo ? "Haz clic para cambiarlo." : "Haz clic para elegirlo."} Máximo 5 MB.</span>
           <input
             id={id}

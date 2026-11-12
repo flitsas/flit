@@ -30,7 +30,7 @@ export default function AdminFurPage() {
           subtitle="Simula cómo se construye el Formulario Único de Registro con datos sintéticos. Solo SuperAdmin."
         />
 
-        <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
           <FurSimulatorPanel />
         </div>
       </div>

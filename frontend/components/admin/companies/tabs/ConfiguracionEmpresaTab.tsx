@@ -110,7 +110,7 @@ export function ConfiguracionEmpresaTab({
                 className={`inline-flex min-h-[40px] items-center rounded-full border px-4 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand ${
                   current
                     ? "border-flit-brand bg-[color-mix(in_srgb,var(--color-flit-brand)_12%,transparent)] text-flit-brand"
-                    : "border-[#DFE5ED] bg-white text-flit-primary hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:border-white/10 dark:bg-transparent dark:text-white"
+                    : "border-border bg-card text-flit-primary hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)]"
                 }`}
               >
                 {b.label}
@@ -164,7 +164,7 @@ export function ConfiguracionEmpresaTab({
             value={form.enrutamientoSMTP}
             onChange={(e) => onChange({ enrutamientoSMTP: e.target.value as EnrutamientoSMTP })}
             className={FIELD_CLASS}
-            style={{ borderColor: fieldErrors?.enrutamientoSMTP ? "#FF4E00" : "#DFE5ED" }}
+            style={{ borderColor: fieldErrors?.enrutamientoSMTP ? "var(--destructive)" : "var(--border)" }}
           >
             {(Object.keys(SMTP_LABELS) as EnrutamientoSMTP[]).map((value) => (
               <option key={value} value={value}>
@@ -177,7 +177,7 @@ export function ConfiguracionEmpresaTab({
             text="Canal por el que salen los correos de notificación. «Colas FLIT» los envía con la infraestructura de correo de FLIT; «API Renting cliente» los entrega a través del sistema propio de la compañía."
           />
           {fieldErrors?.enrutamientoSMTP && (
-            <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
               {fieldErrors.enrutamientoSMTP}
             </p>
           )}
@@ -203,7 +203,7 @@ export function ConfiguracionEmpresaTab({
         </div>
 
         <fieldset>
-          <legend className="text-sm font-semibold text-flit-primary dark:text-white">Destinatarios de avisos de estado</legend>
+          <legend className="text-sm font-semibold text-flit-primary">Destinatarios de avisos de estado</legend>
           <ClampedText
             className="mb-3 mt-0.5"
             text="El aviso llega a los perfiles encendidos. Comprador y vendedor/propietario cubren persona natural, jurídica (empresa y representante legal) y locatario si existe. Si hay más de un correo, el comprador va como destinatario principal y el resto en copia oculta."
@@ -240,10 +240,10 @@ export function ConfiguracionEmpresaTab({
               onChange={(e) => onChange({ destinatarioExtraEmail: e.target.value })}
               placeholder="opcional@empresa.com"
               className={FIELD_CLASS}
-              style={{ borderColor: extraEmailError ? "#FF4E00" : "#DFE5ED" }}
+              style={{ borderColor: extraEmailError ? "var(--destructive)" : "var(--border)" }}
             />
             {extraEmailError && (
-              <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+              <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
                 {extraEmailError}
               </p>
             )}
@@ -268,7 +268,7 @@ export function ConfiguracionEmpresaTab({
           ))}
         </div>
         {fieldErrors?.metodosRecaudo && (
-          <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+          <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
             {fieldErrors.metodosRecaudo}
           </p>
         )}
@@ -308,7 +308,7 @@ export function ConfiguracionEmpresaTab({
             ))}
           </div>
           {fieldErrors?.finesQuerySource && (
-            <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
               {fieldErrors.finesQuerySource}
             </p>
           )}

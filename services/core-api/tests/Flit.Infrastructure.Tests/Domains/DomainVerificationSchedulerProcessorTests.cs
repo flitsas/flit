@@ -47,10 +47,10 @@ public sealed class DomainVerificationSchedulerProcessorTests
         var processed = await processor.TickAsync(Ct);
 
         processed.Should().Be(0);
-        await repo.DidNotReceive().GetByTenantIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await repo.DidNotReceive().GetByTenantIdAsync(Arg.Any<Guid>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
         await repo.DidNotReceive().ApplyCheckOutcomeAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(),
-            Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class DomainVerificationSchedulerProcessorTests
         var repo = Substitute.For<ITenantDomainRepository>();
         repo.ClaimDueForCheckAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<DomainCheckClaim>)[new DomainCheckClaim(tenantId, "app.example.com", TenantDomainStatus.Pending, null, 0)]);
-        repo.GetByTenantIdAsync(tenantId, Arg.Any<CancellationToken>()).Returns(new TenantDomain
+        repo.GetByTenantIdAsync(tenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(new TenantDomain
         {
             TenantId = tenantId,
             Host = "app.example.com",
@@ -81,7 +81,36 @@ public sealed class DomainVerificationSchedulerProcessorTests
         processed.Should().Be(1);
         await repo.Received(1).ApplyCheckOutcomeAsync(
             Arg.Is(tenantId), Arg.Is(TenantDomainStatus.Verified), Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Is(0), Arg.Any<DateTimeOffset?>(),
-            Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Is(DomainVerificationSchedulerProcessor.JobActor), Arg.Any<CancellationToken>());
+            Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Is(DomainVerificationSchedulerProcessor.JobActor), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DominioDeProducto_SeCompruebaConSuPropiaFilaYSuPropioToken()
+    {
+        var tenantId = Guid.NewGuid();
+        var repo = Substitute.For<ITenantDomainRepository>();
+        repo.ClaimDueForCheckAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<DomainCheckClaim>)[new DomainCheckClaim(tenantId, "tramites.cliente.com", TenantDomainStatus.Pending, null, 0, "tramites")]);
+        repo.GetByTenantIdAsync(tenantId, "tramites", Arg.Any<CancellationToken>()).Returns(new TenantDomain
+        {
+            TenantId = tenantId,
+            Purpose = "tramites",
+            Host = "tramites.cliente.com",
+            Status = TenantDomainStatus.Pending,
+            VerificationToken = "tok-tramites-000001",
+            CheckAttempts = 0,
+            StatusChangedAt = Now,
+            RowVersion = 0,
+        });
+        var dns = Substitute.For<Flit.Admin.Application.Companies.Domains.Verification.IDnsTxtResolver>();
+        dns.LookupAsync("tramites.cliente.com", Arg.Any<CancellationToken>()).Returns(DnsTxtLookupResult.Success(["tok-tramites-000001"]));
+        var processor = NewProcessor(repo, dns, out _);
+
+        await processor.TickAsync(Ct);
+
+        await repo.Received(1).ApplyCheckOutcomeAsync(
+            tenantId, TenantDomainStatus.Verified, Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), "tramites", Arg.Any<CancellationToken>());
+        await repo.DidNotReceive().GetByTenantIdAsync(tenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -96,8 +125,8 @@ public sealed class DomainVerificationSchedulerProcessorTests
                 new DomainCheckClaim(tenant1, "roto.example.com", TenantDomainStatus.Pending, null, 0),
                 new DomainCheckClaim(tenant2, "bien.example.com", TenantDomainStatus.Pending, null, 0),
             ]);
-        repo.GetByTenantIdAsync(tenant1, Arg.Any<CancellationToken>()).Returns<TenantDomain?>(_ => throw new InvalidOperationException("BD caída"));
-        repo.GetByTenantIdAsync(tenant2, Arg.Any<CancellationToken>()).Returns(new TenantDomain
+        repo.GetByTenantIdAsync(tenant1, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns<TenantDomain?>(_ => throw new InvalidOperationException("BD caída"));
+        repo.GetByTenantIdAsync(tenant2, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(new TenantDomain
         {
             TenantId = tenant2,
             Host = "bien.example.com",
@@ -118,7 +147,7 @@ public sealed class DomainVerificationSchedulerProcessorTests
         processed.Should().Be(1); // solo la fila sana cuenta; la rota no tumba el ciclo
         await repo.Received(1).ApplyCheckOutcomeAsync(
             Arg.Is(tenant2), Arg.Is(TenantDomainStatus.Verified), Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Is(0), Arg.Any<DateTimeOffset?>(),
-            Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Is(DomainVerificationSchedulerProcessor.JobActor), Arg.Any<CancellationToken>());
+            Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Is(DomainVerificationSchedulerProcessor.JobActor), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
     }
 }
 

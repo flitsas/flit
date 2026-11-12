@@ -130,6 +130,8 @@ builder.Services.AddPublicBrandingRateLimiter();
 builder.Services.AddExternalClientRateLimiter(builder.Configuration);
 // HU #13289 (Épica #13202) — policy manual-capture (por IP) de la captura manual pública; no fija OnRejected.
 builder.Services.AddManualCaptureRateLimiter();
+// Feature #14420 (HU #14424 AC4) — límite del dryRun de la invitación masiva, por usuario (no por IP).
+builder.Services.AddBulkInvitationDryRunLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -256,6 +258,8 @@ app.UseRateLimiter();
 // X-Flit-Domain que fija Flit.Gateway. Va ANTES de auth: el login/recuperación (#12422) necesita
 // el dominio de la petición sin depender de un JWT (hoy sin validar — Bug diferido).
 app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
+// HU #14383 (Feature #14380) — un dominio de portal de organismo no abre el login de FLIT.
+app.UseMiddleware<Flit.Api.Middleware.PortalDomainGuardMiddleware>();
 
 app.UseAuthentication();
 

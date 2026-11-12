@@ -32,6 +32,7 @@ import {
   defaultCompanyQueryColumns,
   estadoEmpresa,
 } from "../consultas/company-columns";
+import { renderCeldaIdentidad } from "../consultas/ActoresValidacionCell";
 
 export interface ConsultasTabProps {
   /** Solo SuperAdmin: la compañía que se está mirando. El resto va con la suya. */
@@ -108,7 +109,7 @@ export function ConsultasTab({
   if (needsCompany && !superAdmin) {
     return (
       <div
-        className="rounded-2xl border border-[#DFE5ED] p-8 text-center dark:border-white/10"
+        className="rounded-2xl border border-border p-8 text-center"
         data-testid="empresa-query-sin-compania"
       >
         <p className="text-sm font-medium">Selecciona una compañía para consultar sus trámites.</p>
@@ -134,13 +135,15 @@ export function ConsultasTab({
             <span
               className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
               style={{
-                background: `${estadoEmpresa(fila.status).color}1A`,
+                background: `color-mix(in srgb, ${estadoEmpresa(fila.status).color} 10%, transparent)`,
                 color: estadoEmpresa(fila.status).color,
               }}
             >
               {estadoEmpresa(fila.status).label}
             </span>
-          ) : null
+          ) : (
+            renderCeldaIdentidad(columnId, fila)
+          )
         }
       />
     );
@@ -160,13 +163,15 @@ export function ConsultasTab({
           <span
             className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
             style={{
-              background: `${estadoEmpresa(fila.status).color}1A`,
+              background: `color-mix(in srgb, ${estadoEmpresa(fila.status).color} 10%, transparent)`,
               color: estadoEmpresa(fila.status).color,
             }}
           >
             {estadoEmpresa(fila.status).label}
           </span>
-        ) : null
+        ) : (
+          renderCeldaIdentidad(columnId, fila)
+        )
       }
     />
   );

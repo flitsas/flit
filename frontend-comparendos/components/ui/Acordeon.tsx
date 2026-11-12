@@ -28,7 +28,7 @@ export function Acordeon({
   const abierto = controlado ?? propio;
   const alternar = () => (onAlternar ? onAlternar(!abierto) : setPropio((a) => !a));
   return (
-    <section id={id} className="scroll-mt-4 rounded-2xl border border-[#DFE5ED] dark:border-white/10">
+    <section id={id} className="scroll-mt-4 rounded-2xl border border-border">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <button type="button" className="flex flex-1 items-center gap-2 text-left text-sm font-semibold" onClick={alternar} aria-expanded={abierto}>
           <ChevronDown className={`h-4 w-4 transition ${abierto ? "rotate-180" : ""}`} aria-hidden />
@@ -36,7 +36,7 @@ export function Acordeon({
         </button>
         {extra}
       </div>
-      {abierto && <div className="border-t border-[#DFE5ED] px-4 py-4 dark:border-white/10">{children}</div>}
+      {abierto && <div className="border-t border-border px-4 py-4">{children}</div>}
     </section>
   );
 }
@@ -47,7 +47,7 @@ export function Datos({ filas }: { filas: [string, ReactNode][] }) {
     <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
       {filas.map(([etiqueta, valor]) => (
         <div key={etiqueta} className="flex flex-col">
-          <dt className="text-[11px] font-semibold text-[#5B6B82] dark:text-slate-400">{etiqueta}</dt>
+          <dt className="text-[11px] font-semibold text-muted-foreground">{etiqueta}</dt>
           <dd>{valor === null || valor === undefined || valor === "" ? "—" : valor}</dd>
         </div>
       ))}

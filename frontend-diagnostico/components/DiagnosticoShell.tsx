@@ -6,6 +6,7 @@ import { ListChecks, Settings, ShieldCheck } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { SesionDiagnostico } from "@/lib/sesion";
 
@@ -29,10 +30,11 @@ export function useSesion(): EstadoSesion {
   return useContext(SesionContext);
 }
 
-// El catálogo del dock crece con los módulos del producto. La pantalla 10 (HU #13744) la ve quien puede leer la
+// El catálogo del dock crece con los módulos del producto. Cada grupo y entrada lleva su ilustración (HU #14487), solo
+// presentación. La pantalla 10 (HU #13744) la ve quien puede leer la
 // configuración de su compañía o editar contratos desde el backoffice FLIT; la API vuelve a exigir cada permiso.
 const NAV: NavCatalog = {
-  sections: [{ id: "ajustes", label: "Ajustes", icon: Settings, side: "right" }],
+  sections: [{ id: "ajustes", label: "Ajustes", icon: Settings, side: "right", ilustracion: rutaIlustracion("configuracion") }],
   items: [
     {
       key: "configuracion",
@@ -40,6 +42,7 @@ const NAV: NavCatalog = {
       href: "/configuracion",
       section: "ajustes",
       icon: Settings,
+      ilustracion: rutaIlustracion("configuracion"),
       permission: ["diagnostico.configuracion.ver", "diagnostico.configuracion.contrato.editar"],
     },
   ],
@@ -52,10 +55,10 @@ const NAV: NavCatalog = {
  * de la compañía no la lleva.
  */
 const NAV_BACKOFFICE: NavCatalog = {
-  sections: [{ id: "backoffice", label: "Backoffice", icon: ShieldCheck, side: "left" }, ...NAV.sections],
+  sections: [{ id: "backoffice", label: "Backoffice", icon: ShieldCheck, side: "left", ilustracion: rutaIlustracion("diagnostico") }, ...NAV.sections],
   items: [
-    { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: ShieldCheck },
-    { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: ListChecks },
+    { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: ShieldCheck, ilustracion: rutaIlustracion("diagnostico") },
+    { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: ListChecks, ilustracion: rutaIlustracion("fuentes-oficiales") },
     ...NAV.items,
   ],
 };
@@ -111,7 +114,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
           <button
             type="button"
             onClick={recargar}
-            className="rounded-full border border-current px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)]"
+            className="rounded-full border border-current px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             Reintentar
           </button>
@@ -124,7 +127,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
   return (
     <SesionContext.Provider value={valor}>
       <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl} layout="app">
-        <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6 dark:text-white">{contenido}</div>
+        <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>
       </SuiteShell>
     </SesionContext.Provider>
   );

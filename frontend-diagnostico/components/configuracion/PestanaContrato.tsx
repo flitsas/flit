@@ -77,7 +77,7 @@ function ContratoSoloLectura({ contrato }: { contrato: NivelContrato }) {
       <div className="flex items-start gap-3">
         <FileText className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />
         <div>
-          <h2 id="contrato-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+          <h2 id="contrato-titulo" className="text-lg font-semibold text-flit-primary">
             Lo contratado por tu compañía
           </h2>
           <p className={AYUDA_CLS}>Solo lectura: el contrato lo administra el backoffice FLIT.</p>
@@ -89,7 +89,7 @@ function ContratoSoloLectura({ contrato }: { contrato: NivelContrato }) {
           <ListaFuentes fuentes={contrato.fuentes_habilitadas} />
         </dd>
         <dt className={ETIQUETA_CLS}>Límite de vehículos por lote</dt>
-        <dd className="text-sm font-semibold text-flit-primary dark:text-white">{contrato.limite_vehiculos_lote}</dd>
+        <dd className="text-sm font-semibold text-flit-primary">{contrato.limite_vehiculos_lote}</dd>
       </dl>
     </section>
   );
@@ -233,7 +233,7 @@ function EditorContratoBackoffice() {
   return (
     <section aria-labelledby="backoffice-titulo" className={`${TARJETA_CLS} flex flex-col gap-5`}>
       <div>
-        <h2 id="backoffice-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+        <h2 id="backoffice-titulo" className="text-lg font-semibold text-flit-primary">
           Contrato de una empresa (backoffice FLIT)
         </h2>
         <p className={AYUDA_CLS}>Busca la empresa por nombre o NIT para ver y editar su contrato.</p>
@@ -275,7 +275,7 @@ function EditorContratoBackoffice() {
         <div className="flex items-start gap-3">
           <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />
           <div>
-            <h3 className="text-base font-semibold text-flit-primary dark:text-white">{elegida.nombre}</h3>
+            <h3 className="text-base font-semibold text-flit-primary">{elegida.nombre}</h3>
             <p className={AYUDA_CLS}>{etiquetaNit(elegida.nit)}</p>
           </div>
         </div>
@@ -347,7 +347,7 @@ function EditorContratoBackoffice() {
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-flit-gray)] px-4 py-3 dark:border-white/15">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3">
             <div>
               <p id="contrato-ia" className={ETIQUETA_CLS}>
                 Suspender la redacción con IA
@@ -362,12 +362,12 @@ function EditorContratoBackoffice() {
               disabled={ocupado}
               onClick={() => setBorrador({ ...borrador, suspendida: !borrador.suspendida })}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:opacity-50 ${FOCO_CLS} ${
-                borrador.suspendida ? "bg-[var(--color-flit-alert)]" : "bg-[var(--color-flit-gray)] dark:bg-white/20"
+                borrador.suspendida ? "bg-[var(--color-flit-alert)]" : "bg-[var(--border-strong)]"
               }`}
             >
               <span
                 aria-hidden="true"
-                className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${borrador.suspendida ? "translate-x-5" : "translate-x-0.5"}`}
+                className={`inline-block h-5 w-5 rounded-full bg-card shadow transition dark:bg-foreground ${borrador.suspendida ? "translate-x-5" : "translate-x-0.5"}`}
               />
             </button>
           </div>
@@ -446,7 +446,7 @@ function CasillaFuenteContrato({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombre}</span>
-        {bloqueada && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {bloqueada && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
         {estado === "ya-no-disponible" && <TriangleAlert className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" aria-hidden="true" />}
       </label>
       {bloqueada && (

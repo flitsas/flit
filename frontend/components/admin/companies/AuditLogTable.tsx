@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Eye, MinusCircle, ShieldAlert } from "lucide-react";
 import type { AuditLogEntry } from "@/lib/api/types";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { RangoFechas } from "@/components/atom/RangoFechas";
 import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { Modal } from "@/components/atom/Modal";
 import { SearchInput } from "@/components/atom/SearchInput";
@@ -20,6 +20,8 @@ import {
   technicalKey,
   type ParsedAuditValue,
 } from "./auditLogLabels";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 // Tabla del historial de auditoría (HU #10194, AC5). Columnas: Fecha, Campo modificado, Valor
 // anterior, Valor nuevo, Operador. El orden DESC por fecha lo garantiza el backend; la tabla
@@ -40,10 +42,8 @@ export interface AuditLogTableProps {
   filtros?: TablaFiltrosEstado;
 }
 
-const FIELD_CLS =
-  "h-10 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-flit-primary " +
-  "focus:outline-none focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 " +
-  "dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const FIELD_CLS = `${TRAMITES_INPUT_CLS} font-medium`;
 
 const ALL_EVENTS = "";
 
@@ -123,7 +123,7 @@ export function AuditLogTable({
       header: titulo("campo", "Campo modificado"),
       render: (entry) => (
         <span
-          className="font-medium text-flit-primary dark:text-white"
+          className="font-medium text-flit-primary"
           title={technicalKey(entry.entityName, entry.fieldName)}
         >
           {eventLabel(entry.entityName, entry.fieldName)}
@@ -160,12 +160,13 @@ export function AuditLogTable({
   return (
     <div className="flex flex-col gap-3">
       <div role="search" aria-label="Filtros del historial" className="flex flex-wrap items-end gap-3">
-        <DateRangePicker
-          label="Fechas"
+        <RangoFechas
+          etiqueta="Fechas"
+          etiquetaTodo="Todas las fechas"
           value={range}
           onChange={setRange}
-          placeholder="Todas las fechas"
-          className="w-auto"
+          permiteSinRango
+          idPrefix="audit-filter-fechas"
         />
         <div className="flex flex-col gap-1">
           <label htmlFor="audit-filter-event" className="text-xs font-semibold">
@@ -190,13 +191,13 @@ export function AuditLogTable({
           onChange={setQuery}
           label="Buscar en el historial"
           placeholder="Buscar cambio, valor u operador"
-          className="h-10 flex-1"
+          className="h-9 flex-1"
         />
         {filtersActive ? (
           <button
             type="button"
             onClick={clearFilters}
-            className="h-10 rounded-xl border border-[#DFE5ED] px-4 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:hover:bg-white/5"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             Limpiar filtros
           </button>
@@ -317,7 +318,7 @@ function AuditDetailModal({ entry, onClose }: { entry: AuditLogEntry | null; onC
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold hover:bg-[#F4F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:hover:bg-white/5"
+            className="rounded-xl border border-border px-4 py-2 text-xs font-semibold hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             Cerrar
           </button>
@@ -345,7 +346,7 @@ function DetailBlock({ title, parsed }: { title: string; parsed: ParsedAuditValu
     <div>
       <p className="mb-1 font-semibold">{title}</p>
       {parsed.kind === "complex" ? (
-        <pre className="max-h-64 overflow-auto rounded-xl border border-[#DFE5ED] bg-[#F4F7FC] p-3 font-mono text-xs dark:border-white/15 dark:bg-white/5">
+        <pre className="max-h-64 overflow-auto rounded-xl border border-border bg-secondary p-3 font-mono text-xs">
           {parsed.pretty}
         </pre>
       ) : (

@@ -85,7 +85,7 @@ function PairRow({
         {action.enabled ? "Habilitado" : "Deshabilitado"}
       </span>
       <span
-        className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
+        className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
         data-origin={action.origin}
       >
         <Icon className="h-3 w-3" aria-hidden="true" />
@@ -103,7 +103,7 @@ function PairRow({
           disabled={controlsOff}
           onClick={() => onBackToRole(action)}
           aria-label={`Volver ${label} (${moduleName}) a lo que dicta el rol`}
-          className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
         >
           <RotateCcw className="h-3 w-3" aria-hidden="true" />
           Volver al rol

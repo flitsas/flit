@@ -141,8 +141,11 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToList();
     }
 
+    // AsSplitQuery: en un solo JOIN las colecciones se multiplican entre sí; en PDN daba ~2.800 filas y
+    // temporales en disco por cada trámite (321 ms de media, picos de 46 s).
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .AsSplitQuery()
             .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
@@ -157,6 +160,7 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, TenantScope scope, CancellationToken ct) =>
         db.ProcedureInstances
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.StatusHistory)
@@ -285,6 +289,7 @@ internal sealed partial class ProcedureInstanceRepository(
 
     public Task<ProcedureInstance?> GetByIdWithFurGraphAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
+            .AsSplitQuery()
             .Include(x => x.ProcedureType)
             .Include(x => x.FieldValues)
             .Include(x => x.Actors)
@@ -465,6 +470,22 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToListAsync(ct);
 
         return rows.ToDictionary(r => r.Id, r => r.LegalName);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> GetTransitOfficeNamesAsync(
+        IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct)
+    {
+        if (transitOfficeIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = transitOfficeIds.Distinct().ToList();
+        var rows = await db.TransitOffices
+            .AsNoTracking()
+            .Where(o => distinct.Contains(o.Id))
+            .Select(o => new { o.Id, o.Name })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.Id, r => r.Name);
     }
 
     public async Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
@@ -678,9 +699,11 @@ internal sealed partial class ProcedureInstanceRepository(
     }
 
     public async Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
-        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct)
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt, CancellationToken ct)
     {
-        // HU #13824 — identidad vencida a mano que los trámites fuera de borrador siguen honrando hasta su fin previo.
+        // HU #13824 — identidad vencida a mano que los trámites fuera de borrador siguen honrando hasta su fin previo,
+        // siempre que el trámite haya salido de borrador antes del vencimiento (ConservaFirmaTrasVencimientoManual).
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
@@ -694,13 +717,44 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToListAsync(ct);
 
         // Estado "no borrador" cualquiera: la protección solo depende de que el trámite ya no sea borrador.
-        return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now));
+        return candidates.FirstOrDefault(v =>
+            BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now, salidaDeBorradorAt));
     }
 
-    public async Task<IReadOnlySet<string>> ListProtegidasPorVencimientoManualKeysAsync(
+    public async Task<DateTimeOffset?> GetSalidaDeBorradorAtAsync(Guid instanceId, Guid tenantId, CancellationToken ct)
+    {
+        var salida = await db.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == instanceId
+                && h.TenantId == tenantId
+                && h.FromStatus == TramiteEstado.Borrador)
+            .OrderBy(h => h.ChangedAt)
+            .Select(h => (DateTimeOffset?)h.ChangedAt)
+            .FirstOrDefaultAsync(ct);
+        return salida;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ListSalidasDeBorradorAsync(
+        IReadOnlyCollection<Guid> tenantIds, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct)
+    {
+        if (instanceIds.Count == 0 || tenantIds.Count == 0)
+            return new Dictionary<Guid, DateTimeOffset>();
+
+        var filas = await db.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => tenantIds.Contains(h.TenantId)
+                && instanceIds.Contains(h.ProcedureInstanceId)
+                && h.FromStatus == TramiteEstado.Borrador)
+            .GroupBy(h => h.ProcedureInstanceId)
+            .Select(g => new { Id = g.Key, Salida = g.Min(h => h.ChangedAt) })
+            .ToListAsync(ct);
+        return filas.ToDictionary(f => f.Id, f => f.Salida);
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>> ListProtegidasPorVencimientoManualKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct)
     {
-        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var keys = new Dictionary<string, IReadOnlyList<IdentidadVencidaManual>>(StringComparer.Ordinal);
         if (tenantIds.Count == 0)
             return keys;
 
@@ -719,9 +773,17 @@ internal sealed partial class ProcedureInstanceRepository(
                     || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .ToListAsync(ct);
 
+        // Por llave se devuelven TODAS las identidades vencidas a mano (aprobación + vencimiento): el listado compara contra
+        // la salida de borrador de cada trámite y basta con que CUALQUIERA cumpla (misma regla que el gate).
         foreach (var v in candidates)
-            if (BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now))
-                keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
+        {
+            if (!BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now) || v.ExpiredManuallyAt is not { } vencidaA)
+                continue;
+            var key = BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber);
+            if (!keys.TryGetValue(key, out var lista))
+                keys[key] = lista = new List<IdentidadVencidaManual>();
+            ((List<IdentidadVencidaManual>)lista).Add(new IdentidadVencidaManual(v.ValidatedAt, vencidaA));
+        }
 
         return keys;
     }
@@ -1120,9 +1182,11 @@ internal sealed partial class ProcedureInstanceRepository(
     /// <summary>
     /// CTE compartida del listado agrupado por persona (HU #11270): normaliza el documento, cuenta el
     /// grupo, se queda con la validación más reciente de cada persona (DISTINCT ON) y aplica los filtros
-    /// de estado/fecha/vigencia sobre ESA fila. La usan tanto la página de filas como el conteo por
-    /// estado de los KPIs, para que ambos hablen exactamente del mismo conjunto (si divergieran, los
-    /// contadores no cuadrarían con las filas que el gestor tiene delante).
+    /// de estado/fecha/vigencia sobre ESA fila. El número de radicado ({15}) filtra en <c>base</c>, antes de
+    /// agrupar: se muestra la validación ligada a ese trámite y el contador solo cuenta las que coinciden.
+    /// La usan tanto la página de filas como el conteo por estado de los KPIs, para que ambos hablen
+    /// exactamente del mismo conjunto (si divergieran, los contadores no cuadrarían con las filas que el
+    /// gestor tiene delante).
     /// </summary>
     private const string GroupedByPersonCteSql = """
             WITH base AS (
@@ -1181,6 +1245,10 @@ internal sealed partial class ProcedureInstanceRepository(
                   AND ({4}::boolean IS NULL
                        OR ({4} = TRUE AND v.procedure_instance_id IS NULL)
                        OR ({4} = FALSE AND v.procedure_instance_id IS NOT NULL))
+                  -- Radicado por COINCIDENCIA PARCIAL, igual que el listado plano (ILIKE + ESCAPE). Una
+                  -- prevalidación standalone no tiene trámite (pi.reference_number NULL): no coincide.
+                  AND ({15}::text IS NULL
+                       OR pi.reference_number ILIKE '%' || {15} || '%' ESCAPE '\')
             ),
             counted AS (
                 -- La persona es compañía + documento: la misma cédula en dos compañías son dos personas
@@ -1237,7 +1305,7 @@ internal sealed partial class ProcedureInstanceRepository(
             )
         """;
 
-    /// <summary>Página de personas ordenada por registro. Params propios: {14} skip, {15} take.</summary>
+    /// <summary>Página de personas ordenada por registro. Params propios: {16} skip, {17} take.</summary>
     private const string GroupedByPersonRowsSql = GroupedByPersonCteSql + "\n" + """
             -- Columnas en snake_case SIN alias PascalCase: UseSnakeCaseNamingConvention
             -- mapea CreatedAt→created_at. AS "CreatedAt" hacía que EF buscara created_at
@@ -1270,7 +1338,7 @@ internal sealed partial class ProcedureInstanceRepository(
                 COUNT(*) OVER() AS total_persons
             FROM filtered
             ORDER BY created_at DESC
-            OFFSET {15} LIMIT {16}
+            OFFSET {16} LIMIT {17}
         """;
 
     /// <summary>
@@ -1292,8 +1360,8 @@ internal sealed partial class ProcedureInstanceRepository(
         """;
 
     /// <summary>
-    /// Parámetros {0}..{14} compartidos por ambas colas de <see cref="GroupedByPersonCteSql"/>
-    /// ({14} = <c>now</c>, que solo usa la cola de conteo). La página añade {15} skip y {16} take.
+    /// Parámetros {0}..{15} compartidos por ambas colas de <see cref="GroupedByPersonCteSql"/>
+    /// ({14} = <c>now</c>; {15} = radicado escapado para LIKE). La página añade {16} skip y {17} take.
     /// </summary>
     private static object[] BuildGroupedByPersonParams(
         TenantScope scope,
@@ -1318,6 +1386,10 @@ internal sealed partial class ProcedureInstanceRepository(
         var expiraHasta = filter?.ExpiraHasta;
         var venceEnDias = filter?.VenceEnDias;
         var standalone = filter?.Standalone;
+        // Va dentro de un ILIKE '%…%': se escapan los comodines para tratarlos como literales.
+        var referenceNumber = string.IsNullOrWhiteSpace(filter?.ReferenceNumber)
+            ? null
+            : EscapeLike(filter!.ReferenceNumber!.Trim().ToUpperInvariant());
 
         var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
         var cortePorVencer = now.AddDays(-(BiometricRules.VigenciaDias - BiometricRules.VigenciaPorVencerDias));
@@ -1356,6 +1428,7 @@ internal sealed partial class ProcedureInstanceRepository(
             Db(cortePorVencer),
             Db(corteVenceEn),
             Db(now),
+            Db(referenceNumber),
         ];
     }
 
@@ -1437,6 +1510,17 @@ internal sealed partial class ProcedureInstanceRepository(
                 all = standalone
                     ? all.Where(v => v.ProcedureInstanceId is null).ToList()
                     : all.Where(v => v.ProcedureInstanceId is not null).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.ReferenceNumber))
+            {
+                // Coincidencia parcial sin distinguir mayúsculas, igual que el ILIKE de la consulta Npgsql;
+                // antes de agrupar, para que la fila y el contador hablen de las validaciones de ese trámite.
+                var radicado = filter.ReferenceNumber.Trim();
+                all = all
+                    .Where(v => v.ProcedureInstance?.ReferenceNumber is { } rn
+                        && rn.Contains(radicado, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
         }
 
@@ -1883,8 +1967,17 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.SignatureImagePath, signature)
                 .SetProperty(x => x.SignatureImageSha256, signatureSha)
                 .SetProperty(x => x.Status, status)
+                // HU #14305 — el enlace se consumió: se borra el token cifrado (RegistrarCapturaManual lo dejó en null).
+                .SetProperty(x => x.ManualCaptureTokenEncrypted, validation.ManualCaptureTokenEncrypted)
                 // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
                 .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
+                // HU #14310 — resultado de la validación de fotos; sobrescribe el de la captura anterior.
+                .SetProperty(x => x.FaceCheckStatus, validation.FaceCheckStatus)
+                .SetProperty(x => x.FaceCheckReason, validation.FaceCheckReason)
+                .SetProperty(x => x.IdFrontCheckStatus, validation.IdFrontCheckStatus)
+                .SetProperty(x => x.IdFrontCheckReason, validation.IdFrontCheckReason)
+                .SetProperty(x => x.IdBackCheckStatus, validation.IdBackCheckStatus)
+                .SetProperty(x => x.IdBackCheckReason, validation.IdBackCheckReason)
                 .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
                 .SetProperty(x => x.ReviewedAt, validation.ReviewedAt)
                 .SetProperty(x => x.UpdatedAt, updatedAt), ct);
@@ -1919,6 +2012,18 @@ internal sealed partial class ProcedureInstanceRepository(
 
     public async Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct) =>
         await db.ProcedureInstanceEvents.AddAsync(evt, ct);
+
+    /// <inheritdoc />
+    public Task<DateTimeOffset?> GetUltimoCambioEstadoCreatedAtAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct) =>
+        db.ProcedureInstanceEvents.AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == procedureInstanceId
+                && e.TenantId == tenantId
+                && e.Tipo == "cambio_estado")
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Select(e => (DateTimeOffset?)e.CreatedAt)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<IReadOnlySet<string>> ListRuntConsultedDocumentKeysAsync(
         Guid id, Guid tenantId, CancellationToken ct)

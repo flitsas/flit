@@ -98,7 +98,7 @@ export function EstadoComposition({ resumen }: { resumen: OtReportSummary }) {
                 style={{ background: meta.color }}
               />
               <span className="font-semibold">{meta.label}</span>
-              <span className="tabular-nums text-[#6B7280] dark:text-white/50">
+              <span className="tabular-nums text-muted-foreground">
                 {formatInt(slice.value)} · {pct.toFixed(1)} %
               </span>
             </li>
@@ -151,11 +151,11 @@ export function buildTrendData(serie: OtReportSeriesPoint[]): TrendPoint[] {
 
 const SERIES = [
   { key: "radicados", label: "Radicados", color: "var(--color-flit-brand)" },
-  { key: "aprobados", label: "Aprobados", color: "#8CC63F" },
-  { key: "rechazados", label: "Rechazados", color: "#FF4E00" },
+  { key: "aprobados", label: "Aprobados", color: "var(--serie-verde)" },
+  { key: "rechazados", label: "Rechazados", color: "var(--serie-naranja)" },
 ] as const;
 
-const ACUMULADO_COLOR = "#F9AC00";
+const ACUMULADO_COLOR = "var(--serie-ambar)";
 
 /**
  * Radicados contra decisiones a lo largo del periodo, con el pendiente acumulado encima.
@@ -237,8 +237,8 @@ export function TrendChart({
         <span
           className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
           style={{
-            background: saldoFinal > 0 ? "#F9AC001A" : "#8CC63F1A",
-            color: saldoFinal > 0 ? "#B47800" : "#5B8A22",
+            background: saldoFinal > 0 ? "var(--di-warning-soft)" : "var(--di-success-soft)",
+            color: saldoFinal > 0 ? "var(--di-warning)" : "var(--di-success)",
           }}
           data-testid="ot-report-tendencia-saldo"
         >
@@ -267,7 +267,7 @@ export function TrendChart({
                   if (point && onZoom) onZoom(point.desde, point.hasta, point.label);
                 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={tickInterval} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
                 <YAxis
@@ -304,7 +304,7 @@ export function TrendChart({
             </ResponsiveContainer>
           </div>
 
-          <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+          <p className="text-[11px] text-muted-foreground">
             Agrupado {granularidadLabel(granularidad)}. La línea es el pendiente acumulado dentro del
             rango: si sube, entra más de lo que sale.
             {onZoom ? " Haz clic en un periodo para acotar el informe a esos días." : ""}
@@ -330,6 +330,7 @@ export function TrendChart({
             getRowKey={(point) => point.bucket}
             ariaLabel="Valores periodo a periodo"
             minWidth={448}
+            tarjeta={false}
             pagination={{
               page: pg.page,
               pageSize: pg.pageSize,
@@ -361,7 +362,7 @@ function TrendTooltip({
   const point = payload[0]!.payload;
 
   return (
-    <div className="rounded-xl bg-[#162744]/95 px-3 py-2 text-[11px] text-white shadow-lg">
+    <div className="rounded-xl bg-[var(--di-accent)]/95 px-3 py-2 text-[11px] text-[color:var(--di-on-accent)] shadow-lg">
       <p className="mb-1 font-semibold">{point.label}</p>
       {SERIES.map((s) => (
         <p key={s.key} className="flex items-center gap-1.5">
@@ -404,7 +405,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
   }
 
   // Del verde al rojo según el tramo: el color hace el trabajo de decir qué tramo es bueno.
-  const colors = ["#8CC63F", "var(--color-flit-tech)", "var(--color-flit-brand)", "#F9AC00", "#FF4E00"];
+  const colors = ["var(--serie-verde)", "var(--color-flit-tech)", "var(--color-flit-brand)", "var(--serie-ambar)", "var(--serie-naranja)"];
 
   return (
     <div className="flex flex-col gap-2" data-testid="ot-report-histograma">
@@ -416,7 +417,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
             className="grid grid-cols-[minmax(7rem,9rem)_1fr_auto] items-center gap-3 text-xs"
           >
             <span>{bucket.label}</span>
-            <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+            <span className="h-2 overflow-hidden rounded bg-secondary">
               <span
                 className="block h-full rounded"
                 style={{
@@ -427,7 +428,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
             </span>
             <span className="tabular-nums font-semibold">
               {formatInt(bucket.tramites)}{" "}
-              <span className="font-normal text-[#6B7280] dark:text-white/50">
+              <span className="font-normal text-muted-foreground">
                 ({pct.toFixed(0)} %)
               </span>
             </span>

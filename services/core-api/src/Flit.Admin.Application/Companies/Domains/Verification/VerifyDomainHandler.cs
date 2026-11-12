@@ -39,9 +39,12 @@ public sealed class VerifyDomainHandler(
     private readonly DomainVerificationOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
 
-    public async Task<VerifyDomainResult> HandleAsync(Guid tenantId, Guid? changedByUserId, CancellationToken cancellationToken = default)
+    public Task<VerifyDomainResult> HandleAsync(Guid tenantId, Guid? changedByUserId, CancellationToken cancellationToken = default) =>
+        HandleAsync(tenantId, changedByUserId, TenantDomainPurposes.Hub, cancellationToken);
+
+    public async Task<VerifyDomainResult> HandleAsync(Guid tenantId, Guid? changedByUserId, string purpose, CancellationToken cancellationToken = default)
     {
-        var current = await _repository.GetByTenantIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var current = await _repository.GetByTenantIdAsync(tenantId, purpose, cancellationToken).ConfigureAwait(false);
         if (current is null)
         {
             return VerifyDomainResult.NotFound();
@@ -74,6 +77,7 @@ public sealed class VerifyDomainHandler(
             now,
             changedByUserId,
             changedByJob: null,
+            purpose,
             cancellationToken).ConfigureAwait(false);
 
         if (updated is null)
@@ -89,31 +93,6 @@ public sealed class VerifyDomainHandler(
     }
 
     /// <summary>Consulta el TXT y lo reduce a los 4 casos de <see cref="DnsCheckOutcome"/> (AC7). Nunca loguea el valor crudo del TXT (auditoría DnsClient).</summary>
-    internal async Task<DnsCheckOutcome> CheckAsync(string host, string expectedToken, CancellationToken cancellationToken)
-    {
-        var lookup = await _dnsResolver.LookupAsync(host, cancellationToken).ConfigureAwait(false);
-        if (lookup.Error is not null)
-        {
-            return DnsCheckOutcome.Error;
-        }
-
-        if (!lookup.Found || lookup.Values.Count == 0)
-        {
-            return DnsCheckOutcome.NotFound;
-        }
-
-        return lookup.Values.Any(v => string.Equals(NormalizeTxtValue(v), expectedToken, StringComparison.Ordinal))
-            ? DnsCheckOutcome.Matches
-            : DnsCheckOutcome.Mismatch;
-    }
-
-    /// <summary>El registro TXT suele publicarse como <c>flit-verify=&lt;token&gt;</c>; también se acepta el token desnudo.</summary>
-    private static string NormalizeTxtValue(string rawValue)
-    {
-        const string prefix = "flit-verify=";
-        var trimmed = rawValue.Trim().Trim('"');
-        return trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            ? trimmed[prefix.Length..]
-            : trimmed;
-    }
+    internal Task<DnsCheckOutcome> CheckAsync(string host, string expectedToken, CancellationToken cancellationToken) =>
+        DomainTxtCheck.EvaluarAsync(_dnsResolver, host, expectedToken, cancellationToken);
 }

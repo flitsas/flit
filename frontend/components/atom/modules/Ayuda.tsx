@@ -26,7 +26,7 @@ export const AYUDA_FAQ = [
 
 export function Ayuda() {
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Centro de Ayuda"
         subtitle="Documentación operativa, chat DR. FLIT y canales de soporte."
@@ -51,7 +51,7 @@ export function Ayuda() {
         ].map((k) => {
           const Icon = k.i;
           const card = (
-            <div className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border h-full">
+            <div className="rounded-2xl p-4 bg-card border-border border h-full">
               <div
                 className="h-10 w-10 rounded-xl grid place-items-center mb-2"
                 style={{ background: "color-mix(in srgb, var(--color-flit-tech) 15%, transparent)" }}
@@ -71,12 +71,12 @@ export function Ayuda() {
           );
         })}
       </div>
-      <div className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border">
+      <div className="rounded-2xl p-5 bg-card border-border border">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h2 className="text-sm font-bold">Preguntas frecuentes</h2>
           <Link
             href="/manual"
-            className="text-xs font-semibold text-[#0F766E] hover:underline"
+            className="text-xs font-semibold text-flit-brand-ink hover:underline"
           >
             Abrir Centro de Ayuda →
           </Link>

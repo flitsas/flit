@@ -23,7 +23,7 @@ public sealed record Registro(Guid DocumentoId, Guid ComparendoId, string Numero
 /// Carga por OCR (HUs #13469–#13471; §6.18, RN-050 a RN-064). Paquetes de 1 a 200 archivos que un LLM lee uno a uno;
 /// el operador revisa, corrige o completa y registra. Todo lo que cambia el operador queda en el log de ediciones.
 /// </summary>
-public sealed class ServicioOcr(
+public sealed partial class ServicioOcr(
     ComparendosDb db,
     RegistroArchivos archivos,
     IProveedorOcr proveedor,
@@ -32,12 +32,15 @@ public sealed class ServicioOcr(
     CalendarioService calendario,
     Capacidades capacidades,
     ServicioCorreo correo,
-    Reloj reloj)
+    Reloj reloj,
+    Contraventor.ServicioContraventor contraventor,
+    ILogger<ServicioOcr> logger)
 {
     public const int MaximoDocumentos = 200;
     public const long MaximoBytes = 20L * 1024 * 1024;
     public const int MaximoIntentos = 3;
     public const int MaximoReprocesos = 3;
+    public const string MotivoConfirmacionNumero = "Número confirmado por el operador";
     public static readonly string[] Formatos = ["application/pdf", "image/jpeg", "image/png", "image/tiff"];
     private static readonly TimeSpan[] Esperas = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(45)];
     private static readonly EstadoDocumentoOcr[] Finales = [EstadoDocumentoOcr.Registrado, EstadoDocumentoOcr.Descartado, EstadoDocumentoOcr.Duplicado];
@@ -249,8 +252,23 @@ public sealed class ServicioOcr(
             CamposOcr.FechaInfraccion => ValoresOcr.Fecha(V(n)) is null,
             CamposOcr.Placa => Placa.Normalizar(V(n)) is null,
             CamposOcr.Valor => Infraestructura.Excel.LectorExcel.Valor(new(V(n) ?? string.Empty, null)) is not > 0,
+            // GDC punto 6: un NIT con el dígito de verificación equivocado no sirve para registrar.
+            CamposOcr.NumeroDocumento => string.IsNullOrWhiteSpace(V(n)) || (EsNit(campos) && Nit.ErrorDigito(V(n)) is not null),
             _ => string.IsNullOrWhiteSpace(V(n)),
         }).ToList();
+    }
+
+    private static bool EsNit(IEnumerable<DocumentoOcrCampo> campos) => ValoresOcr.Documento(Valor(campos, CamposOcr.TipoDocumento)) == TipoDocumento.NIT;
+
+    /// <summary>
+    /// GDC punto 14: el número leído trae el aviso de 19 o 21 dígitos y el operador no lo ha corregido ni confirmado
+    /// (guardar el campo, aunque sea con el mismo valor, deja <c>ValorCorregido</c>). Mientras tanto no se registra.
+    /// </summary>
+    public static bool NumeroPorConfirmar(IEnumerable<DocumentoOcrCampo> campos)
+    {
+        ArgumentNullException.ThrowIfNull(campos);
+        var numero = campos.FirstOrDefault(c => c.NombreCampo == CamposOcr.Numero);
+        return numero is { ValorCorregido: null } && NumeroComparendo.AvisoDeLectura(numero.ValorFinal) is not null;
     }
 
     /// <summary>Número, duplicados y obligatorios → DUPLICADO, INCOMPLETO o COMPLETO.</summary>
@@ -340,9 +358,14 @@ public sealed class ServicioOcr(
 
         var campos = await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ToListAsync(ct).ConfigureAwait(false);
         var ahora = reloj.Ahora;
+        var tipoFinal = cambios.TryGetValue(CamposOcr.TipoDocumento, out var t) ? t : Valor(campos, CamposOcr.TipoDocumento);
         foreach (var (nombre, valor) in cambios)
         {
             var nuevo = string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+            // GDC punto 6: un NIT válido se guarda en un único formato (base sin puntos ni dígito); uno con el dígito
+            // equivocado se guarda tal cual, como borrador, y queda en los faltantes hasta que se corrija.
+            if (nombre == CamposOcr.NumeroDocumento && ValoresOcr.Documento(tipoFinal) == TipoDocumento.NIT && Nit.Normalizar(nuevo) is { } nit)
+                nuevo = nit;
             var campo = campos.FirstOrDefault(c => c.NombreCampo == nombre);
             if (campo is null)
             {
@@ -351,12 +374,14 @@ public sealed class ServicioOcr(
                 campos.Add(campo);
             }
 
-            if (campo.ValorFinal == nuevo)
+            // GDC punto 14: guardar el número sin cambios lo confirma (queda en el historial); los demás campos iguales se ignoran.
+            var confirmaNumero = nombre == CamposOcr.Numero && nuevo is not null && campo.ValorCorregido is null;
+            if (campo.ValorFinal == nuevo && !confirmaNumero)
                 continue;
             db.DocumentoOcrEdiciones.Add(new DocumentoOcrEdicion
             {
                 Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, Campo = nombre, ValorAnterior = campo.ValorFinal, ValorNuevo = nuevo, UsuarioId = usuario, UsuarioNombre = usuarioNombre, EditadoEn = ahora,
-                Motivo = string.IsNullOrWhiteSpace(motivo) ? null : motivo.Trim(),
+                Motivo = !string.IsNullOrWhiteSpace(motivo) ? motivo.Trim() : campo.ValorFinal == nuevo ? MotivoConfirmacionNumero : null,
             });
             (campo.ValorCorregido, campo.ValorFinal) = (nuevo, nuevo);
         }
@@ -372,11 +397,15 @@ public sealed class ServicioOcr(
     {
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(actor);
+        var campos = await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ToListAsync(ct).ConfigureAwait(false);
+        // GDC punto 6: el NIT con el dígito equivocado deja el documento incompleto; se responde con el motivo exacto.
+        if (doc.Estado is EstadoDocumentoOcr.Completo or EstadoDocumentoOcr.Incompleto && EsNit(campos)
+            && Valor(campos, CamposOcr.NumeroDocumento) is { } documento && Nit.ErrorDigito(documento) is { } errorNit)
+            throw new ReglaException("NIT_DV_INVALIDO", $"{errorNit} Corrígelo y guarda antes de registrar.");
         if (doc.Estado != EstadoDocumentoOcr.Completo)
             throw ReglaException.Conflicto("DOCUMENTO_NO_COMPLETO", doc.Estado == EstadoDocumentoOcr.Duplicado
                 ? "El comparendo ya existe: no se puede registrar de nuevo."
                 : "Solo se registran documentos completos.");
-        var campos = await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ToListAsync(ct).ConfigureAwait(false);
         await EvaluarAsync(doc, campos, ct).ConfigureAwait(false);
         if (doc.Estado != EstadoDocumentoOcr.Completo)
         {
@@ -384,6 +413,10 @@ public sealed class ServicioOcr(
             throw ReglaException.Conflicto(doc.Estado == EstadoDocumentoOcr.Duplicado ? "COMPARENDO_DUPLICADO" : "DOCUMENTO_NO_COMPLETO",
                 doc.Estado == EstadoDocumentoOcr.Duplicado ? "El comparendo ya existe: no se puede registrar de nuevo." : "Faltan campos obligatorios.");
         }
+
+        if (NumeroPorConfirmar(campos))
+            throw ReglaException.Conflicto("NUMERO_POR_CONFIRMAR",
+                $"{NumeroComparendo.AvisoDeLectura(Valor(campos, CamposOcr.Numero))} Abre el documento para hacerlo.");
 
         string? V(string n) => Valor(campos, n);
         // RN-059: tipo 3 si al salir del LLM le faltaba algún obligatorio (ausente o ilegible) y el operador lo completó.
@@ -396,7 +429,7 @@ public sealed class ServicioOcr(
             Numero = V(CamposOcr.Numero)!,
             Placa = V(CamposOcr.Placa),
             TipoDocumentoInfractor = ValoresOcr.Documento(V(CamposOcr.TipoDocumento)),
-            NumeroDocumentoInfractor = V(CamposOcr.NumeroDocumento),
+            NumeroDocumentoInfractor = EsNit(campos) ? Nit.Normalizar(V(CamposOcr.NumeroDocumento)) ?? V(CamposOcr.NumeroDocumento) : V(CamposOcr.NumeroDocumento),
             NombreInfractor = V(CamposOcr.Nombre),
             CodigoInfraccion = V(CamposOcr.CodigoInfraccion)?.ToUpperInvariant(),
             DescripcionInfraccion = V(CamposOcr.DescripcionInfraccion),
@@ -447,9 +480,42 @@ public sealed class ServicioOcr(
             throw ReglaException.Conflicto("COMPARENDO_DUPLICADO", "El comparendo se registró por otra vía mientras lo revisabas.");
         }
 
+        // HU #14364 / GDC ID5: consulta Renting inmediata al registrar; el job 06:00 queda como reintento.
+        if (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente)
+            await ConsultarContraventorAlRegistrarAsync(c, ct).ConfigureAwait(false);
+
         var yaMonitoreada = c.Placa is { } placa
             && await db.PlacasMonitoreadas.AnyAsync(p => p.TenantId == c.TenantId && p.Placa == placa && p.Activo, ct).ConfigureAwait(false);
         return new Registro(doc.Id, c.Id, c.Numero, c.Placa, yaMonitoreada, c.TipoIngreso);
+    }
+
+    /// <summary>
+    /// Dispara la consulta de conductor en el mismo registro OCR. Un fallo de precondiciones (OT bloqueado, sin
+    /// placa/fecha, NIT sin API) deja el comparendo en asignación manual; cualquier otro error deja el estado que
+    /// haya escrito <see cref="Contraventor.ServicioContraventor.ConsultarAsync"/> (o Pendiente) para el reintento.
+    /// </summary>
+    private async Task ConsultarContraventorAlRegistrarAsync(Comparendo c, CancellationToken ct)
+    {
+        try
+        {
+            await contraventor.ConsultarAsync(c, Actor.Api("Consulta automática al registrar OCR"), confirmarReemplazo: false, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (ReglaException ex) when (ex.Codigo is "OT_BLOQUEADO" or "SIN_DATOS_CONSULTA" or "NIT_SIN_API" or "SIN_INTEGRACION")
+        {
+            c.EstadoConsultaContraventor = EstadoConsultaContraventor.NoAplica;
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (ReglaException)
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // El comparendo ya está registrado; el job diario reintentará. Sin datos personales: el mensaje puede traer
+            // placa o documento, así que solo se registran los ids y el tipo de error.
+            LogConsultaInmediataFallida(logger, ex.GetType().Name, c.Id, c.TenantId);
+        }
     }
 
     /// <summary>
@@ -564,4 +630,7 @@ public sealed class ServicioOcr(
             RemitenteNombre = config.RemitenteNombre,
         }, ct).ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "La consulta inmediata de conductor falló al registrar por OCR ({TipoError}; comparendo {ComparendoId}, empresa {TenantId}): queda para el reintento diario.")]
+    private static partial void LogConsultaInmediataFallida(ILogger logger, string tipoError, Guid comparendoId, Guid tenantId);
 }

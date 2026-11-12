@@ -37,6 +37,7 @@ internal static class ApiEndpoints
         app.MapExternalAttachmentEndpoints(); // HU #13263 (Épica #12741) — POST /api/v1/external/tramites/{id}/adjuntos
         app.MapExternalSyncEndpoints(); // HU #13081 (Épica #12737) — GET /api/v1/external/tramites/sync
         app.MapSecurityEndpoints();
+        app.MapSecurityBulkInvitationEndpoints(); // Feature #14420 (HU #14424) — /security/invitations/bulk*
         app.MapUserUiPreferencesEndpoints();
         app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
         app.MapAdminCompaniesEndpoints();
@@ -50,6 +51,8 @@ internal static class ApiEndpoints
         app.MapAdminCompanyChildrenInvitationsEndpoints();
         app.MapAdminOtEndpoints();
         app.MapAdminOtMetricsEndpoints();
+        app.MapAdminOtPortalMarcaEndpoints();
+        app.MapAdminOtPortalDominioEndpoints();
         app.MapAdminOtQueriesEndpoints();
         app.MapAdminPlateRangesEndpoints();
         app.MapOtIntegrationEndpoints();
@@ -84,13 +87,15 @@ internal static class ApiEndpoints
         app.MapAdminExternalClientsEndpoints(); // HU #13088 (Épica #12737) — clientes de integración externos (SuperAdmin)
         app.MapAdminExternalIntegrationsEndpoints(); // HU #14067 (Épica #14021) — integraciones externas por compañía (SuperAdmin)
         app.MapAdminPlataformaPersonaNaturalEndpoints(); // Feature J (Épica #14021) — tarifas, configuración y contenido del portal (SuperAdmin)
+        app.MapAdminOtPortalTarifasEndpoints(); // Épica #14297 (Feature #14387) — precios del portal Persona Natural desde el dashboard del OT
+        app.MapAdminPortalCobroEndpoints(); // HU#14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal
+        app.MapAdminOtPortalReportesEndpoints(); // Épica #14297 (Feature #14396) — reporte de los trámites del portal por organismo
         app.MapAdminRejectionReasonsEndpoints();
         app.MapAdminProcedureDocumentRequirementsEndpoints();
         app.MapAdminDocumentOrderOverridesEndpoints();
         app.MapAdminDocumentRequirementOverridesEndpoints();
         app.MapAdminOtPrendaDocumentPolicyEndpoints();
         app.MapAdminResolvedDocumentMatrixEndpoints();
-        app.MapAdminCompanyDocumentParamsEndpoints();
         app.MapAdminImprontasEndpoints();
         // Feature #12201 (ADR-0056-generacion-documental-standalone) — generación documental SIN trámite.
         // Autorización por permiso (generacion-documental.*), no por policy de grupo.

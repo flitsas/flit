@@ -11,7 +11,9 @@ import {
   hayEnCurso,
   hojaPaquete,
   marcasRevision,
+  registroEnLote,
   MAXIMO_BYTES,
+  MAXIMO_DOCUMENTOS,
   motivoDocumento,
   motivoFallo,
   progreso,
@@ -24,6 +26,10 @@ import {
 const archivo = (name: string, size = 100) => new File([new Uint8Array(size)], name);
 
 describe("errorArchivoOcr", () => {
+  it("HU #14370 / GDC ID10: límites FE alineados a 20 MB / 200 archivos", () => {
+    expect(MAXIMO_BYTES).toBe(20 * 1024 * 1024);
+    expect(MAXIMO_DOCUMENTOS).toBe(200);
+  });
   it("acepta JPG, PNG, TIFF y PDF sin importar mayúsculas", () => {
     for (const n of ["a.jpg", "b.JPEG", "c.png", "d.tif", "e.TIFF", "f.pdf"]) expect(errorArchivoOcr({ name: n, size: 10 })).toBeNull();
   });
@@ -211,5 +217,26 @@ describe("motivo de un documento fallido (HU #13787, B12-7)", () => {
   it("sin mensaje, usa la etiqueta del tipo; sin nada, «Falló»", () => {
     expect(motivoFallo("Timeout", null)).toBe("La lectura tardó demasiado");
     expect(motivoFallo(null, "  ")).toBe("Falló");
+  });
+});
+
+describe("número por verificar (GDC punto 14)", () => {
+  it("el registro en lote no cuenta los completos con el número por confirmar y dice qué hacer", () => {
+    expect(registroEnLote(3, 0)).toEqual({ registrables: 3, aviso: null });
+    const r = registroEnLote(3, 2);
+    expect(r.registrables).toBe(1);
+    expect(r.aviso).toContain("2 documentos completos tienen el número por verificar");
+    expect(r.aviso).toContain("corrígelo o confirma");
+    expect(registroEnLote(1, 1)).toMatchObject({ registrables: 0 });
+    expect(registroEnLote(1, 1).aviso).toContain("1 documento completo tiene");
+  });
+
+  it("el número confirmado deja de marcarse", () => {
+    const campos = [{ nombreCampo: "numero_comparendo", confianza: 0.98, valorFinal: "D056150000000055727159", valorCorregido: null }];
+    const aviso = "El número tiene 21 dígitos…";
+    expect(marcasRevision({ campos, camposFaltantes: [], avisoNumero: aviso, numeroPorConfirmar: true })).toEqual({ numero_comparendo: aviso });
+    expect(
+      marcasRevision({ campos: [{ ...campos[0], valorCorregido: campos[0].valorFinal }], camposFaltantes: [], avisoNumero: aviso, numeroPorConfirmar: false }),
+    ).toEqual({});
   });
 });

@@ -20,3 +20,12 @@ describe("filasDiagnostico con el texto largo de duplicidad", () => {
     expect(filas.map((f) => f.nombre)).toEqual(["Trámite en proceso", "SOAT"]);
   });
 });
+
+describe("requisitos repetidos cuando la consulta no responde", () => {
+  const caido = { codigo: "provider", descripcion: "Consulta no disponible: el servicio de consultas no responde.", estado: "falta" } as const;
+
+  it("muestran un solo motivo y una sola fila", () => {
+    expect(motivosDiagnostico({ puedeContinuar: false, requisitos: [caido, caido] })).toEqual([caido.descripcion]);
+    expect(filasDiagnostico([caido, caido])).toHaveLength(1);
+  });
+});

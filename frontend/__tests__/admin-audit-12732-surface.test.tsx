@@ -54,7 +54,7 @@ import AdminTransitOfficesPage from "@/app/admin/transit-offices/page";
 import AdminCompaniesPage from "@/app/admin/companies/page";
 import { decodeJwtPayload, isOtUser } from "@/lib/auth/jwt";
 
-const LAYOUT_CARD_RE = /rounded-2xl border bg-white\/60|rounded-2xl border bg-card/;
+const LAYOUT_CARD_RE = /rounded-2xl border bg-(?:white|card)\/60/;
 
 describe("HU #12732 — superficie plana en consolas admin", () => {
   beforeEach(() => {

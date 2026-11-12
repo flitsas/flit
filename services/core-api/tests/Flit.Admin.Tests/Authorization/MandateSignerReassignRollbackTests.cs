@@ -33,6 +33,10 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
 {
     private readonly List<Guid> _procedureIds = [];
 
+    // Tipo propio de cada prueba: otras clases borran los trámites de SUS tipos temporales al limpiar
+    // (PersonaNaturalDefinicionGrpcTests) y, en BD compartida, «el primer tipo» podía ser uno de ellos.
+    private readonly Guid _procedureTypeId = Guid.NewGuid();
+
     [Fact]
     public async Task HU13137_AC1_sobre_PostgreSQL_reasigna_los_radicados_y_no_toca_borrador_ni_aprobado()
     {
@@ -81,6 +85,7 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
         using (var db = NewDb())
         {
             db.ProcedureInstances.Where(p => _procedureIds.Contains(p.Id)).ExecuteDelete();
+            db.ProcedureTypes.Where(t => t.Id == _procedureTypeId).ExecuteDelete();
         }
 
         base.Dispose();
@@ -89,13 +94,25 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
     private async Task<Guid> SeedProcedureAsync(Guid signerId, string status)
     {
         await using var db = NewDb();
-        var typeId = await db.ProcedureTypes.AsNoTracking().Select(t => t.Id).FirstAsync(Ct);
+        if (!await db.ProcedureTypes.AnyAsync(t => t.Id == _procedureTypeId, Ct))
+        {
+            db.ProcedureTypes.Add(new ProcedureType
+            {
+                Id = _procedureTypeId,
+                Code = $"HU13137{_procedureTypeId:N}"[..30].ToUpperInvariant(),
+                Name = "Trámite de prueba HU13137",
+                Family = "MATRICULAS",
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
         var id = Guid.NewGuid();
         db.ProcedureInstances.Add(new ProcedureInstance
         {
             Id = id,
             TenantId = _companyA,
-            ProcedureTypeId = typeId,
+            ProcedureTypeId = _procedureTypeId,
             ReferenceNumber = $"T13137-{id:N}"[..24],
             Status = status,
             TransitOfficeId = _officeA,

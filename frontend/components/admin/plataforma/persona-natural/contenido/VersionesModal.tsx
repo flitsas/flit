@@ -58,6 +58,7 @@ export function VersionesModal({ onClose }: { onClose: () => void }) {
             columns={columns}
             rows={pg.paginar(versiones)}
             getRowKey={(v) => String(v.version)}
+            tarjeta={false}
             pagination={{
               page: pg.page,
               pageSize: pg.pageSize,

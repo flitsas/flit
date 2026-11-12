@@ -201,11 +201,11 @@ export function EscrituraRepresentanteUpload({
   return (
     <div
       className="space-y-2 rounded-xl border p-3"
-      style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
+      style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
       aria-label="Escritura del representante legal"
     >
       {/* Copy Flit 2.0 · S2 — alerta de representante no autorizado. */}
-      <p className="text-xs font-semibold" style={{ color: '#B45309' }}>
+      <p className="text-xs font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
         Nuevo representante legal detectado
       </p>
       <p className="text-xs opacity-80">
@@ -214,7 +214,7 @@ export function EscrituraRepresentanteUpload({
         nombramiento.
       </p>
       {error && (
-        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}

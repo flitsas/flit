@@ -9,6 +9,8 @@ import {
 } from "@/components/atom/DateRangePicker";
 import { isValidOptionalRange, sinRango, type DateRange } from "@/components/atom/modules/_reportes/range";
 
+// Reportes ya no usa este calendario (lo reemplazó RangoFechas); sigue vivo en el log de auditoría
+// de compañías y en FechaCalendario (mandatarios).
 describe("DateRangePicker — HU #12724", () => {
   const onChange = vi.fn<(next: DateRange) => void>();
 
@@ -113,23 +115,6 @@ describe("DateRangePicker — HU #12724", () => {
     });
   });
 
-  describe("DateRangeFilter envoltorio", () => {
-    it("conserva el botón Todo el periodo cuando permiteSinRango", async () => {
-      const user = userEvent.setup();
-      const { DateRangeFilter } = await import("@/components/atom/modules/_reportes/DateRangeFilter");
-      const filterChange = vi.fn();
-      render(
-        <DateRangeFilter
-          value={{ from: "2026-09-01", to: "2026-09-15" }}
-          onChange={filterChange}
-          permiteSinRango
-        />,
-      );
-      await user.click(screen.getByRole("button", { name: "Todo el periodo" }));
-      expect(filterChange).toHaveBeenCalledWith(sinRango());
-    });
-  });
-
   // --- Cobertura adicional AC1/AC3/AC4/AC5 (dev-tester HU #12724) ---
 
   describe("contrato DateRange al confirmar (AC1)", () => {
@@ -166,22 +151,9 @@ describe("DateRangePicker — HU #12724", () => {
       render(<DateRangePicker value={sinRango()} onChange={onChange} />);
       await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
       const dialog = screen.getByRole("dialog");
-      expect(dialog.className).toMatch(/dark:bg-\[#0B0F14\]/);
-      expect(dialog.className).toMatch(/dark:text-white/);
-      expect(dialog.className).toMatch(/dark:border-white\/15/);
-    });
-  });
-
-  describe("migración DateRangeFilter sin inputs date (AC4)", () => {
-    // Uso de ejemplo: DateRangeFilter → DateRangePicker; cero input[type=date]
-    it("renderiza DateRangePicker y no usa input type=date", async () => {
-      const { DateRangeFilter } = await import("@/components/atom/modules/_reportes/DateRangeFilter");
-      const { container } = render(
-        <DateRangeFilter value={sinRango()} onChange={onChange} />,
-      );
-      expect(screen.getByTestId("date-range-picker")).toBeInTheDocument();
-      expect(container.querySelectorAll('input[type="date"]')).toHaveLength(0);
-      expect(screen.getByRole("button", { name: /Rango de fechas/i })).toBeInTheDocument();
+      expect(dialog.className).toMatch(/dark:bg-card/);
+      expect(dialog.className).toMatch(/dark:text-foreground/);
+      expect(dialog.className).toMatch(/dark:border-border/);
     });
   });
 

@@ -72,8 +72,8 @@ export function useFocoAtrapado(ancla: React.RefObject<HTMLElement | null>, devo
   }, [ancla, devolverFocoA]);
 }
 
-const TITULO_SECCION_CLS = "text-sm font-semibold text-flit-primary dark:text-white";
-const ROTULO_CLS = "text-xs text-[var(--nav-texto)] dark:text-slate-300";
+const TITULO_SECCION_CLS = "text-sm font-semibold text-flit-primary";
+const ROTULO_CLS = "text-xs text-muted-foreground";
 const ROLES: Record<PersonaDetalle["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
 
 /** Estado de una persona con el mismo chip de la tabla: OK → Ejecutado (OK), ERROR → Error, SIN_RESULTADO → Novedad. */
@@ -99,7 +99,7 @@ function DocumentoPersona({ persona }: { persona: PersonaDetalle }) {
   const numero = completo ? persona.documento!.trim() : persona.documento_enmascarado;
   if (persona.declarado_por_cliente) return <DocumentoDeclarado tipo={persona.tipo_documento} documento={numero} completo={completo} />;
   return (
-    <span className="font-mono text-xs font-medium text-flit-primary dark:text-white">{`${persona.tipo_documento} ${numero}`}</span>
+    <span className="font-mono text-xs font-medium text-flit-primary">{`${persona.tipo_documento} ${numero}`}</span>
   );
 }
 
@@ -116,7 +116,7 @@ function EstadoDePersona({ persona }: { persona: PersonaDetalle }) {
 /** Auditoría por persona: rol, documento enmascarado, consultado_en y estado mapeado (HU #14087 AC7). */
 function TablaPersonas({ personas }: { personas: PersonaDetalle[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
+    <div className="overflow-x-auto rounded-xl border border-border">
       <table aria-label="Personas consultadas" className="w-full border-collapse text-xs">
         <thead>
           <tr>
@@ -162,7 +162,7 @@ function Auditoria({ detalle }: { detalle: Detalle }) {
         <div className="flex flex-col gap-1">
           <dt className={ROTULO_CLS}>Fecha y hora de la consulta</dt>
           <dd className="flex flex-col gap-1">
-            <span className="text-sm font-medium tabular-nums text-flit-primary dark:text-white">{fechaOGuion(detalle.dato_obtenido_en)}</span>
+            <span className="text-sm font-medium tabular-nums text-flit-primary">{fechaOGuion(detalle.dato_obtenido_en)}</span>
             {detalle.reutilizada && (
               <span className={`inline-flex items-center gap-1 ${ROTULO_CLS}`}>
                 <Info className="h-3.5 w-3.5" aria-hidden="true" />

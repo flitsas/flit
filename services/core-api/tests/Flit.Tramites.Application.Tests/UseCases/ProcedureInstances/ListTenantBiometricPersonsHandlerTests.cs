@@ -271,4 +271,42 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         result!.Persons[0].Intentos.Should().Be(detalleIntentos);
         result.Persons[0].MaxIntentos.Should().Be(detalleMaxIntentos);
     }
+    /// <summary>
+    /// Búsqueda por número de radicado en la grilla agrupada: el término llega al repositorio recortado y en
+    /// mayúsculas (el radicado es FT[1-9]-dígitos) y, solo con él, el filtro cuenta como activo — así los KPIs y
+    /// la página se calculan sobre el mismo subconjunto.
+    /// </summary>
+    [Fact]
+    public async Task Radicado_llega_al_repositorio_recortado_en_mayusculas_y_activa_el_filtro()
+    {
+        var tenantId = Guid.NewGuid();
+        _repo.ListBiometricValidationsGroupedByPersonAsync(
+                Arg.Any<TenantScope>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricPersonGroupFilter?>(),
+                Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(((IReadOnlyList<BiometricPersonGroupProjection>)[], 0));
+
+        var (_, error) = await Handler().HandleAsync(
+            tenantId,
+            new TenantBiometricPersonListQuery(ReferenceNumber: "  ft1-0001234 "),
+            TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        await _repo.Received(1).ListBiometricValidationsGroupedByPersonAsync(
+            OnlyTenant(tenantId), 0, 20,
+            Arg.Is<BiometricPersonGroupFilter?>(f => f != null && f.ReferenceNumber == "FT1-0001234"),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).CountBiometricPersonsByEstadoAsync(
+            OnlyTenant(tenantId),
+            Arg.Is<BiometricPersonGroupFilter?>(f => f != null && f.ReferenceNumber == "FT1-0001234"),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Radicado_en_blanco_no_activa_el_filtro()
+    {
+        var filter = new TenantBiometricPersonListQuery(ReferenceNumber: "   ").ToFilter();
+
+        filter.ReferenceNumber.Should().BeNull();
+        filter.HasActiveFilters.Should().BeFalse();
+    }
 }

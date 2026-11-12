@@ -18,6 +18,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { deleteTenantRole, getRoles, type TenantRole } from "@/lib/api/security";
 import { CompanyRoleFormModal, type CompanyRoleFormMode } from "./CompanyRoleFormModal";
@@ -71,14 +72,14 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-[#59677D] dark:text-white/78">
+        <p className="max-w-3xl text-sm text-muted-foreground">
           Crea los roles de tu compañía y define sus permisos. Los roles de FLIT se pueden asignar, pero no cambiar.
         </p>
         <button
           type="button"
           onClick={() => setForm({ kind: "create" })}
-          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "var(--gradient-action)" }}
         >
           Nuevo rol
         </button>
@@ -91,7 +92,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
         onRetry={() => void load()}
         skeletonRows={3}
       >
-        <div className="overflow-x-auto">
+        <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
           <table
             aria-label="Roles de la compañía"
             style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
@@ -113,22 +114,22 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
             </thead>
             <tbody>
               {pg.paginar(roles).map((r) => (
-                <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <tr key={r.id} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
+                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "var(--border)" }}>
                     <span className="block font-semibold">{r.name}</span>
                     {r.description && <span className="block opacity-70">{r.description}</span>}
                   </td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                     {isOwnRole(r) ? (
                       <StatusBadge label="Propio" tone="success" ariaLabel="Rol propio de tu compañía" />
                     ) : (
                       <StatusBadge label="FLIT · solo lectura" tone="neutral" ariaLabel="Rol global de FLIT, solo lectura" />
                     )}
                   </td>
-                  <td className="border-y px-4 py-3 text-center font-bold" style={{ borderColor: "#DFE5ED", color: "var(--color-flit-brand)" }}>
+                  <td className="border-y px-4 py-3 text-center font-bold" style={{ borderColor: "var(--border)", color: "var(--color-flit-brand)" }}>
                     {r.permissionCount}
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "var(--border)" }}>
                     {/* HU #13653: un solo botón «Acciones» con menú, como trámites y mandatos. */}
                     <RowActionsMenu
                       ariaLabel={`Acciones de ${r.name}`}
@@ -212,7 +213,7 @@ function DeleteCompanyRoleDialog({
       }}
       busy={busy}
       icon={Trash2}
-      iconBg="#FF4E00"
+      iconBg="var(--destructive)"
       title="Eliminar rol"
     >
       <div className="space-y-3.5">
@@ -220,7 +221,7 @@ function DeleteCompanyRoleDialog({
           ¿Seguro que deseas eliminar el rol <strong>{role.name}</strong>? No se puede eliminar si hay usuarios con este rol.
         </p>
         {error && (
-          <p role="alert" className="rounded-lg px-3 py-2 text-xs font-medium" style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}>
+          <p role="alert" className="rounded-lg px-3 py-2 text-xs font-medium" style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}>
             {error}
           </p>
         )}
@@ -238,7 +239,7 @@ function DeleteCompanyRoleDialog({
             onClick={() => void confirm()}
             disabled={busy}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "#FF4E00" }}
+            style={{ background: "var(--destructive)" }}
           >
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
             Eliminar

@@ -467,7 +467,7 @@ public sealed class AnalyticsSchedulerProcessorTests
         Guid.NewGuid(), "Empresa Demo", Guid.NewGuid(), "Traspaso", "aprobado",
         false, false, 0, null, null, false, null, false, [], false, null, "bilateral",
         "Usuario Uno", NowUtc.AddDays(-2), NowUtc.AddDays(-1), NowUtc, NowUtc, NowUtc,
-        1.0, 0.5, 0);
+        1.0, 0.5, 0, []);
 
     // ------------------------------------------------------------------
     // Helpers

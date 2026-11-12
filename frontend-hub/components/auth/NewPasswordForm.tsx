@@ -5,7 +5,9 @@ import { useState } from "react";
 import { postJson } from "@/lib/api";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/password-reused";
-import { INPUT_CLASS, SUBMIT_CLASS } from "./AuthCard";
+import { Lock } from "lucide-react";
+import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
+import { ERROR_CLASS, HINT_CLASS, INPUT_CLASS, LABEL_CLASS, LINK_BUTTON_CLASS, STATUS_CLASS, SUBMIT_CLASS } from "./AuthCard";
 
 /**
  * Fijar una contraseña con el token de un enlace: recuperación (HU #10173) o activación de invitación. Mismas reglas
@@ -40,14 +42,14 @@ export function NewPasswordForm({ mode, token }: { mode: NewPasswordMode; token:
   const [loading, setLoading] = useState(false);
 
   if (!token) {
-    return <p role="alert" className="text-sm text-flit-alert">{mode === "reset" ? texts.invalid : "El enlace de activación es inválido. Solicita una nueva invitación."}</p>;
+    return <p role="alert" className={ERROR_CLASS}>{mode === "reset" ? texts.invalid : "El enlace de activación es inválido. Solicita una nueva invitación."}</p>;
   }
 
   if (done) {
     return (
-      <div role="status" className="space-y-4">
-        <p className="text-sm text-slate-700">{texts.done}</p>
-        <Link href="/login" className="inline-block rounded-xl bg-flit-brand px-4 py-2.5 text-sm font-semibold text-white">
+      <div role="status" className="grid gap-4">
+        <p className={STATUS_CLASS}>{texts.done}</p>
+        <Link href="/login" className={LINK_BUTTON_CLASS}>
           Ir a iniciar sesión
         </Link>
       </div>
@@ -88,17 +90,23 @@ export function NewPasswordForm({ mode, token }: { mode: NewPasswordMode; token:
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label={texts.label} noValidate>
+    <form onSubmit={handleSubmit} className="grid gap-4" aria-label={texts.label} noValidate>
       <div>
-        <label htmlFor="np-password" className="mb-1 block text-sm font-medium text-flit-primary">Nueva contraseña</label>
-        <input id="np-password" type="password" autoComplete="new-password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
-        <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
+        <label htmlFor="np-password" className={LABEL_CLASS}>Nueva contraseña</label>
+        <div className="relative">
+          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <input id="np-password" type="password" autoComplete="new-password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        <p className={HINT_CLASS}>{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
-        <label htmlFor="np-confirm" className="mb-1 block text-sm font-medium text-flit-primary">Confirmar contraseña</label>
-        <input id="np-confirm" type="password" autoComplete="new-password" className={INPUT_CLASS} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <label htmlFor="np-confirm" className={LABEL_CLASS}>Confirmar contraseña</label>
+        <div className="relative">
+          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <input id="np-confirm" type="password" autoComplete="new-password" className={INPUT_CLASS} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </div>
       </div>
-      {error && <p role="alert" className="text-sm text-flit-alert">{error}</p>}
+      {error && <p role="alert" className={ERROR_CLASS}>{error}</p>}
       <button type="submit" disabled={loading} className={SUBMIT_CLASS}>
         {loading ? texts.busy : texts.submit}
       </button>

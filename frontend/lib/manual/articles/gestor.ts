@@ -275,7 +275,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "que-es",
         title: "1. Qué es la prevalidación",
         paragraphs: [
-          "Es la verificación de identidad de las partes del trámite (propietario, comprador, mandatario, etc.) mediante proveedor biométrico (Kyverum). Algunos tipos de trámite la exigen como puerta antes de radicar.",
+          "Es la verificación de identidad de las partes del trámite (propietario, comprador, mandatario, etc.) mediante proveedor biométrico (Kyverum). Algunos tipos de trámite la exigen como puerta antes de radicar. La excepción es la matrícula inicial que se radica directamente ante el organismo de tránsito y todavía no tiene placa: esa se puede enviar sin la firma, y la firma se exige cuando el trámite ya tiene placa. No aplica si el organismo recibe los trámites por Quipux ni en los demás tipos de trámite.",
         ],
       },
       {
@@ -402,6 +402,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
           "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
           "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
+          "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite.",
         ],
       },
       {
@@ -583,8 +584,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "2. Estados de la ruta larga",
         paragraphs: [],
         bullets: [
-          "Preasignación: radicaste sin placa. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
-          "Asignado: el organismo asignó la placa (recibes correo). Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+          "Preasignación: radicaste sin placa. Puedes enviar el trámite aunque el actor aún no haya firmado; el correo de validación de identidad le llega igual. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
+          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
           "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
           "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida.",
         ],
@@ -663,7 +664,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           {
             variant: "warning",
             title: "Qué pasa al vencer una identidad",
-            text: "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT.",
+            text: "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar, salvo la matrícula inicial radicada directamente ante el organismo que todavía no tiene placa. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT.",
           },
         ],
       },
@@ -1107,8 +1108,12 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "exportar",
       "grilla",
       "consulta detallada",
+      "canal",
+      "persona natural",
+      "integracion",
+      "todas las companias",
     ],
-    summary: "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas y cómo entrar.",
+    summary: "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas, cómo entrar y cómo ver de qué canal salió cada trámite.",
     blocks: [
       {
         id: "que-es",
@@ -1146,8 +1151,27 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "canal",
+        title: "4. De qué canal salió cada trámite",
+        paragraphs: [
+          "La columna Canal dice por dónde entró cada trámite. La pone el sistema al crearlo y no se puede cambiar.",
+          "Los trámites antiguos que no tienen este dato aparecen como Trámites.",
+        ],
+        bullets: [
+          "Trámites: lo creó un gestor en el producto Trámites.",
+          "Persona Natural Web: llegó del portal Persona Natural.",
+          "Persona Natural OT: llegó del punto de atención de un organismo de tránsito. La fila muestra además cuál organismo.",
+          "Integración: llegó por la integración con terceros.",
+          "Aplicación: reservado para más adelante; por ahora no trae trámites.",
+          "Para filtrar, elige el canal en el selector Canal y pulsa Buscar. Si eliges Persona Natural OT aparece «OT del punto», para ver solo los de un organismo.",
+          "«OT del punto» es distinto del filtro «Organismo de tránsito», que busca por el organismo del trámite.",
+          "Si no hay resultados verás «No hay trámites con ese canal.».",
+          "Cada compañía ve solo sus trámites. El Super Admin puede elegir «Todas las compañías» para comparar los canales entre empresas; la tabla muestra entonces la compañía de cada fila.",
+        ],
+      },
+      {
         id: "consejos",
-        title: "4. Consejos",
+        title: "5. Consejos",
         paragraphs: [],
         bullets: [
           "Acota primero el rango de fechas: la grilla puede crecer rápido si tu compañía maneja mucho volumen.",

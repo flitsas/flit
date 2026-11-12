@@ -178,20 +178,44 @@ describe('mensajeFirmaPendiente', () => {
     );
   });
 
-  it('en asignado: sin notificación remite al módulo Identidad o al baúl del RL, no al paso 4', () => {
-    const msg = mensajeFirmaPendiente({ title: 'firma_pendiente' }, 'asignado');
-    expect(msg).not.toMatch(/paso 4/);
-    expect(msg).toMatch(/módulo Identidad/);
-    expect(msg).toMatch(/baúl de firmas del representante legal/);
-    expect(msg).toMatch(/se envía automáticamente/);
-    const fallida = mensajeFirmaPendiente(
-      { title: 'firma_pendiente', partes: [{ parte: 'comprador', notificacion: 'fallida' }] },
-      'asignado',
-    );
-    expect(fallida).toContain(
-      'No pudimos enviar el enlace de validación al comprador; usa «Validar identidad» en el paso 4 o la prevalidación del módulo Identidad.',
-    );
-    expect(fallida).not.toMatch(/se envía automáticamente/);
+  describe('en asignado: dice quién falta y qué sigue', () => {
+    const asignado = (...partes: { parte: string; notificacion?: string }[]) =>
+      mensajeFirmaPendiente({ title: 'firma_pendiente', partes }, 'asignado');
+
+    it('sin partes usa el genérico, sin mencionar el paso 4 ni el módulo Identidad', () => {
+      const msg = mensajeFirmaPendiente({ title: 'firma_pendiente' }, 'asignado');
+      expect(msg).toBe('Falta una firma. Cuando la persona firme, podrás enviar el trámite.');
+    });
+
+    it('con validación en curso', () => {
+      expect(asignado({ parte: 'comprador', notificacion: 'ya_en_curso' })).toBe(
+        'El comprador aún no ha firmado. Ya tiene el enlace para firmar. Cuando firme, podrás enviar el trámite.',
+      );
+    });
+
+    it('con enlace recién enviado', () => {
+      expect(asignado({ parte: 'comprador', notificacion: 'enviada' })).toBe(
+        'El comprador aún no ha firmado. Le enviamos el enlace a su correo. Cuando firme, podrás enviar el trámite.',
+      );
+    });
+
+    it.each(['fallida', 'no_configurada'])('si el enlace no salió (%s) remite a Reenviar validación', (notificacion) => {
+      expect(asignado({ parte: 'comprador', notificacion })).toBe(
+        'El comprador aún no ha firmado. No pudimos enviar el enlace al comprador: usa «Reenviar validación». Cuando firme, podrás enviar el trámite.',
+      );
+    });
+
+    it('con varias partes usa el plural', () => {
+      expect(
+        asignado({ parte: 'comprador', notificacion: 'enviada' }, { parte: 'vendedor', notificacion: 'ya_en_curso' }),
+      ).toBe('El comprador y el vendedor aún no han firmado. Cuando firmen, podrás enviar el trámite.');
+    });
+
+    it('el mensaje del asistente no cambia', () => {
+      expect(
+        mensajeFirmaPendiente({ title: 'firma_pendiente', partes: [{ parte: 'comprador', notificacion: 'ya_en_curso' }] }),
+      ).toBe('Falta la firma del comprador. Ya hay una validación en curso para el comprador.');
+    });
   });
 
   it('nunca devuelve vacío, ni con problem nulo', () => {

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { buttonClass } from "@flit/ui/Button";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 // Acceso negado por el servidor OIDC (A-07): @flit/auth trae aquí el código (PRODUCT_NOT_ENABLED, …). «Volver» va a
 // ?inicio=1: «/» sin él llevaría a quien tiene un solo producto de vuelta a ese producto (entrada directa, B-11).
@@ -11,12 +13,17 @@ const MESSAGES: Record<string, string> = {
 export default async function Forbidden({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
   const { code } = await searchParams;
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <h1 className="text-2xl font-semibold text-flit-primary">No tienes acceso</h1>
-      <p className="max-w-md text-slate-600">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
-      <Link href="/?inicio=1" className="text-flit-brand underline">
-        Ir a mis productos
-      </Link>
+    <main className="flex min-h-full flex-col items-center justify-center bg-[color:var(--di-surface)] px-4 py-16 text-center">
+      {/* Homologación (HU #14511): estado vacío de la propuesta (`.vacio`), igual que la 403 de Trámites. */}
+      <div className="flex w-full max-w-lg flex-col items-center gap-4 rounded-[20px] border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10">
+        {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
+        <img src={rutaIlustracion("seguridad")} alt="" aria-hidden="true" width={96} height={96} className="h-24 w-24" />
+        <h1 className="text-2xl font-bold text-[color:var(--di-heading)]">No tienes acceso</h1>
+        <p className="max-w-md text-muted-foreground">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
+        <Link href="/?inicio=1" className={buttonClass({ className: "mt-2" })}>
+          Ir a mis productos
+        </Link>
+      </div>
     </main>
   );
 }

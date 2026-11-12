@@ -1,0 +1,8 @@
+{
+  "$schema": "https://likec4.dev/schemas/config.json",
+  "name": "flit",
+  "title": "FLIT 2.0",
+  "include": {
+    "paths": ["../../arquitectura/landscape"]
+  }
+}

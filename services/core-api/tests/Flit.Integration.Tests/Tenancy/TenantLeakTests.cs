@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
@@ -290,17 +291,23 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         options.Should().ContainSingle().Which.TenantId.Should().Be(HierarchyScenario.C1);
     }
 
-    /// <summary>Q12 no devuelve filas con tenant: se comprueba el contenido exacto (C1 → Ot1; el resto → Ot1 también, pero cada uno una sola).</summary>
+    /// <summary>
+    /// Q12 solo devuelve organismos, sin tenant: el conteo del inventario no detecta una fila ajena que mantenga el total en 1.
+    /// Se comprueba el organismo exacto de la semilla: C1 en Ot1 y el resto en Ot2.
+    /// </summary>
     [PostgresFact]
-    public async Task Q13_convenios_de_OT_son_exactamente_los_propios()
+    public async Task Q12_organismos_habilitados_son_exactamente_los_propios()
     {
         await HierarchyScenario.SeedAsync(Fixture);
         await using var ctx = NewContext();
-        var repo = new CompanyAgreementRepository(ctx);
+        var repo = new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance);
 
         foreach (var tenant in HierarchyScenario.Clients)
-            (await repo.ListActiveOfficeIdsAsync(tenant)).Should().Equal([HierarchyScenario.Ot1],
-                $"{HierarchyScenario.CodeOf(tenant)} tiene un único convenio propio");
+        {
+            var esperado = tenant == HierarchyScenario.C1 ? HierarchyScenario.Ot1 : HierarchyScenario.Ot2;
+            (await repo.ListEnabledOfficeIdsAsync(tenant)).Should().Equal([esperado],
+                $"{HierarchyScenario.CodeOf(tenant)} solo tiene su propio grant");
+        }
     }
 
     private static DbTenantScopeResolver NewResolver(Infrastructure.Persistence.FlitDbContext ctx) =>

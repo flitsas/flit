@@ -117,7 +117,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
         <div
           role="tablist"
           aria-label="Carga masiva"
-          className="flex gap-1 border-b border-[#DFE5ED] dark:border-white/10"
+          className="flex gap-1 border-b border-border"
         >
           {(
             [
@@ -134,8 +134,8 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
               data-testid={`carga-masiva-tab-${clave}`}
               className={`-mb-px border-b-2 px-3 pb-2 text-xs font-semibold transition ${
                 pestana === clave
-                  ? 'border-flit-brand text-[#3B4FD6] dark:text-[#8FA8FF]'
-                  : 'border-transparent text-flit-primary/60 hover:text-flit-primary dark:text-white/50 dark:hover:text-white'
+                  ? 'border-flit-brand text-flit-brand-ink'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               {titulo}
@@ -149,7 +149,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
           <>
         {/* Paso 1 — plantilla */}
         <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-flit-primary dark:text-white">
+          <h3 className="text-sm font-semibold text-foreground">
             1. Elige el trámite y descarga su plantilla
           </h3>
 
@@ -168,15 +168,15 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
                   data-testid={`carga-masiva-tipo-${opcion.tipo}`}
                   className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition ${
                     activo
-                      ? 'border-flit-brand bg-[#EFF6FF] dark:bg-flit-brand/10'
-                      : 'border-[#DFE5ED] bg-white hover:bg-[#F8FAFC] dark:border-white/15 dark:bg-[#0B0F14]'
+                      ? 'border-flit-brand bg-[var(--badge-info-bg)]'
+                      : 'border-border bg-card hover:bg-secondary'
                   }`}
                 >
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-flit-primary dark:text-white">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
                     <FileSpreadsheet className="h-3.5 w-3.5 text-flit-brand" aria-hidden="true" />
                     {opcion.titulo}
                   </span>
-                  <span className="text-[11px] leading-snug text-flit-primary/70 dark:text-white/60">
+                  <span className="text-[11px] leading-snug text-muted-foreground">
                     {opcion.descripcion}
                   </span>
                 </button>
@@ -195,15 +195,15 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
             {descargando ? 'Descargando…' : 'Descargar plantilla'}
           </button>
 
-          <p className="text-[11px] leading-snug text-flit-primary/70 dark:text-white/60">
+          <p className="text-[11px] leading-snug text-muted-foreground">
             La plantilla trae una hoja de instrucciones y listas desplegables. No cambies ni muevas
             las columnas de la primera fila: son el contrato que valida el sistema al subir.
           </p>
         </section>
 
         {/* Paso 2 — archivo */}
-        <section className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-5 dark:border-white/10">
-          <h3 className="text-sm font-semibold text-flit-primary dark:text-white">
+        <section className="flex flex-col gap-3 border-t border-border pt-5">
+          <h3 className="text-sm font-semibold text-foreground">
             2. Sube el archivo diligenciado
           </h3>
 
@@ -215,7 +215,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
             disabled={subiendo}
             aria-label="Archivo Excel de carga masiva"
             data-testid="carga-masiva-archivo"
-            className="block w-full text-xs text-flit-primary file:mr-3 file:rounded-xl file:border file:border-[#DFE5ED] file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#1E293B] hover:file:bg-[#EFF6FF] dark:text-white dark:file:border-white/15 dark:file:bg-[#0B0F14] dark:file:text-white"
+            className="block w-full text-xs text-foreground file:mr-3 file:rounded-xl file:border file:border-border file:bg-card file:px-3 file:py-2 file:text-xs file:font-semibold file:text-foreground hover:file:bg-secondary"
           />
 
           {error ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useState, type ReactNode } from "react";
 import { Building2, FileText, ShieldCheck, User, Vault } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
@@ -311,7 +312,7 @@ export function CompanyMandatarioForm({
   };
 
   const inputClass =
-    "w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 dark:bg-[#0B0F14]";
+    "w-full rounded-xl border bg-card px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30";
 
   // Pasos visibles, numerados de corrido (con Persona jurídica o Formato en blanco hay menos).
   let numero = 0;
@@ -342,12 +343,12 @@ export function CompanyMandatarioForm({
       footer={
         <div className="space-y-2">
           {error && (
-            <p className="text-xs leading-tight" style={{ color: "#E5484D" }} role="alert">
+            <p className="text-xs leading-tight" style={{ color: "var(--destructive)" }} role="alert">
               {error}
             </p>
           )}
-          <p className="text-xs leading-snug text-[#59677D] dark:text-white/65" data-testid="mandatario-resumen">
-            <span className="font-semibold text-flit-primary dark:text-white">Al guardar: </span>
+          <p className="text-xs leading-snug text-muted-foreground" data-testid="mandatario-resumen">
+            <span className="font-semibold text-flit-primary">Al guardar: </span>
             {resumen.join(" · ")}
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -355,7 +356,7 @@ export function CompanyMandatarioForm({
               type="button"
               onClick={onCancel}
               disabled={saving}
-              className="rounded-full border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-primary disabled:opacity-50 dark:border-white/15 dark:bg-transparent dark:text-white"
+              className={buttonClass({ variant: "secondary", size: "sm" })}
             >
               Cancelar
             </button>
@@ -363,8 +364,7 @@ export function CompanyMandatarioForm({
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+              className={buttonClass({ size: "sm" })}
             >
               {saving ? "Guardando…" : "Guardar"}
             </button>
@@ -394,7 +394,7 @@ export function CompanyMandatarioForm({
           {descartaDatos && (
             <p
               className="mt-2 text-xs leading-tight"
-              style={{ color: "#8a6000" }}
+              style={{ color: "var(--badge-warning-fg)" }}
               role="status"
               data-testid="mandatario-cambio-modelo-aviso"
             >
@@ -523,7 +523,7 @@ export function CompanyMandatarioForm({
               {avisoValidacion && (
                 <p
                   className="text-xs leading-tight"
-                  style={{ color: "#8a6000" }}
+                  style={{ color: "var(--badge-warning-fg)" }}
                   role="status"
                   data-testid="mandatario-aviso-validacion"
                 >
@@ -574,7 +574,7 @@ export function CompanyMandatarioForm({
           <Paso numero={siguiente()} titulo="Vigencia" id="mandatario-paso-vigencia">
             <div className="space-y-3">
               <div
-                className="inline-flex rounded-full border border-[#DFE5ED] bg-white p-0.5 dark:bg-transparent"
+                className="inline-flex rounded-full border border-border bg-card p-0.5"
                 role="radiogroup"
                 aria-label="Vigencia"
               >
@@ -636,10 +636,10 @@ export function CompanyMandatarioForm({
             <fieldset>
               <legend className="mb-1.5 block text-xs font-semibold">Organismos de tránsito</legend>
               {isHub ? (
-                <p className="text-xs font-semibold text-flit-primary dark:text-white" data-testid="mandatario-organismo-fijo">
+                <p className="text-xs font-semibold text-flit-primary" data-testid="mandatario-organismo-fijo">
                   {visibleOffices[0]?.name ?? "Este organismo"}
                   {visibleOffices[0]?.code ? (
-                    <span className="ml-1 font-normal text-[#59677D]">· {visibleOffices[0].code}</span>
+                    <span className="ml-1 font-normal text-muted-foreground">· {visibleOffices[0].code}</span>
                   ) : null}
                 </p>
               ) : (
@@ -711,13 +711,13 @@ function Paso({
   return (
     <section
       aria-labelledby={`${id}-titulo`}
-      className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/15 dark:bg-[#162744]"
+      className="rounded-2xl border border-border bg-card p-4"
     >
-      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
+      <h3 id={`${id}-titulo`} className="mb-3 flex items-center gap-2 text-sm font-bold text-flit-primary">
         <span
           aria-hidden="true"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-white"
-          style={{ background: "var(--color-flit-brand)" }}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold text-[color:var(--di-on-accent)]"
+          style={{ background: "var(--di-accent)" }}
         >
           {numero}
         </span>
@@ -749,8 +749,8 @@ function TarjetaOpcion({
       className="flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-colors hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_4%,transparent)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand has-[:focus-visible]:ring-offset-2"
       style={
         checked
-          ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" }
-          : { borderColor: "#DFE5ED", background: "#FFFFFF" }
+          ? { borderColor: "var(--badge-success-border)", background: "var(--badge-success-bg)" }
+          : { borderColor: "var(--border)", background: "var(--card)" }
       }
     >
       <input
@@ -764,7 +764,7 @@ function TarjetaOpcion({
       <span className="mt-0.5 shrink-0 text-flit-brand">{icono}</span>
       <span className="min-w-0">
         <span className="block text-xs font-semibold leading-snug text-flit-primary">{label}</span>
-        <span className="mt-0.5 block text-xs text-[#59677D]">{ayuda}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">{ayuda}</span>
       </span>
     </label>
   );
@@ -785,7 +785,7 @@ function Segmento({
   return (
     <label
       className="relative cursor-pointer rounded-full px-4 py-1.5 text-xs font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand"
-      style={checked ? { background: "var(--color-flit-brand)", color: "#FFFFFF" } : { color: "#59677D" }}
+      style={checked ? { background: "var(--di-accent)", color: "var(--di-on-accent)" } : { color: "var(--muted-foreground)" }}
       // El radio está oculto con position:absolute. Si toma el foco, el modal (overlay con
       // desenfoque) lo lleva al inicio del scroll. El clic sigue cambiando la opción.
       onMouseDown={(e) => e.preventDefault()}
@@ -806,7 +806,7 @@ function Segmento({
 function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
   return (
-    <p id={id} className="mt-1 text-xs leading-tight" style={{ color: "#E5484D" }} role="alert">
+    <p id={id} className="mt-1 text-xs leading-tight" style={{ color: "var(--destructive)" }} role="alert">
       {message}
     </p>
   );

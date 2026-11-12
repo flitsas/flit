@@ -14,6 +14,8 @@ import {
   type DefinicionFuentesObligatorias,
   type FuenteConfigurable,
 } from "@/lib/backoffice/fuentes-obligatorias";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Configurador de fuentes obligatorias (ADR-0078) en /backoffice/fuentes-obligatorias.
@@ -85,7 +87,7 @@ function Vacio() {
     <div className="flex flex-col items-center gap-3 py-10 text-center">
       <ClipboardList className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
       <h2 className="text-lg font-semibold">No hay definiciones guardadas</h2>
-      <p className="max-w-md text-sm text-[var(--nav-texto)]">Esta pantalla solo muestra las cabeceras que ya existen.</p>
+      <p className="max-w-md text-sm text-muted-foreground">Esta pantalla solo muestra las cabeceras que ya existen.</p>
     </div>
   );
 }
@@ -197,15 +199,21 @@ export function FuentesObligatoriasBackoffice() {
 
   return (
     <>
-      <section aria-labelledby="fuentes-obl-titulo" className={TARJETA_CLS}>
-        <h1 id="fuentes-obl-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-          Fuentes obligatorias
-        </h1>
-        <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">
-          Define las fuentes que el alta exige, por familia o por tipo de trámite. La lista es de FLIT y es la misma para todas las compañías.
-        </p>
-        <p className="mt-2 text-sm text-[var(--nav-texto)]">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="fuentes-obl-titulo"
+        tituloId="fuentes-obl-titulo"
+        titulo="Fuentes obligatorias"
+        descripcion={
+          <>
+            <p>
+              Define las fuentes que el alta exige, por familia o por tipo de trámite. La lista es de FLIT y es la misma para todas las compañías.
+            </p>
+            <p className="mt-2">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
+          </>
+        }
+        ilustracion={rutaIlustracion("fuentes-oficiales")}
+      />
       {cuerpo}
     </>
   );
@@ -220,10 +228,10 @@ function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlter
 
   return (
     <section aria-labelledby={tituloId} className={`${TARJETA_CLS} flex flex-col gap-4`}>
-      <h2 id={tituloId} className="text-lg font-semibold text-flit-primary dark:text-white">
+      <h2 id={tituloId} className="text-lg font-semibold text-flit-primary">
         {titulo}
       </h2>
-      {seleccion.length === 0 && <p className="text-sm text-[var(--nav-texto)]">Definición guardada con la lista vacía.</p>}
+      {seleccion.length === 0 && <p className="text-sm text-muted-foreground">Definición guardada con la lista vacía.</p>}
       <fieldset className="flex flex-col gap-2">
         <legend className={ETIQUETA_CLS}>Fuentes</legend>
         <ul className="flex flex-col gap-2">
@@ -287,7 +295,7 @@ function CasillaFuente({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombreFuente(fuente)}</span>
-        {motivo && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {motivo && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
       </label>
       {motivo && (
         <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>

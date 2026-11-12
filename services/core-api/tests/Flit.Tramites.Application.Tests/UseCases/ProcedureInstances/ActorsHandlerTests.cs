@@ -168,6 +168,43 @@ public sealed class ActorsHandlerTests
         result.Should().NotBeNull();
     }
 
+    // HU #14498 / ADR-0082 — PPT (Permiso por Protección Temporal).
+
+    [Fact]
+    public async Task Put_PptAlfanumerico_EsValido_YPersisteTipo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var actor = new ActorInput("comprador", "PPT", "V12345678", "Ana PPT", "a@x.com", null);
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Actors.Should().ContainSingle(a =>
+            a.TipoDocumento == "PPT" && a.NumeroDocumento == "V12345678");
+    }
+
+    [Theory]
+    [InlineData("V12-345")]
+    [InlineData("V12 345")]
+    [InlineData("V12.345")]
+    public async Task Put_PptConCaracteresNoAlfanumericos_ReturnsInvalidDocumentNumber(string doc)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var actor = new ActorInput("comprador", "PPT", doc, "Ana PPT", "a@x.com", null);
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().Be("invalid_document_number");
+        result.Should().BeNull();
+    }
+
     // ── HU #10542 / #10544: tipo de persona y representante legal ──────────────
 
     [Fact]

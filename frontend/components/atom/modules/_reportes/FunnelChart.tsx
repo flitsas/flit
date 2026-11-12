@@ -39,7 +39,7 @@ export function FunnelChart({ states, previousStates, onSelectStage }: FunnelCha
             <Tooltip
               formatter={(value: number) => [formatInt(value), "Trámites"]}
               labelFormatter={(label: string) => statusLabel(label)}
-              contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
+              contentStyle={{ background: "var(--primary)", border: "none", borderRadius: 10, color: "var(--primary-foreground)", fontSize: 11 }}
             />
             <Bar
               dataKey="count"

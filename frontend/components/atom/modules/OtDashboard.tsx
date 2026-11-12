@@ -31,16 +31,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  ExternalLink,
-  Inbox,
-  Timer,
-} from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
+import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { getToken } from "@/lib/api/client";
@@ -193,7 +187,7 @@ export function OtDashboard() {
 
   return (
     <div
-      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-flit-primary dark:text-white"
+      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-foreground"
       data-testid="ot-inicio"
     >
       {/* Banner + KPIs: misma grilla que el dashboard del gestor (`Dashboard.tsx`) — banner en
@@ -213,7 +207,7 @@ export function OtDashboard() {
       </div>
 
       {estado === "sin-permiso" ? (
-        <p role="status" className="rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 text-sm text-[#6B7280] dark:border-white/15 dark:bg-white/5 dark:text-white/70">
+        <p role="status" className="rounded-2xl border border-border bg-card px-5 py-4 text-sm text-muted-foreground">
           {MENSAJE_SIN_PERMISO_COLA}
         </p>
       ) : estado === "error" ? (
@@ -236,8 +230,15 @@ export function OtDashboard() {
 /** Cada cuánto rota el banner. Mismo ritmo que el del gestor, para que la plataforma se sienta una. */
 const ROTACION_MS = 6000;
 
-/** Fondo del carrusel, IGUAL en todos los slides (mensaje fijo y banner) — ver `Bienvenida`. */
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
+/**
+ * Fondo del slide fijo (la cola). HU #14481 (propuesta), misma receta que el Inicio del gestor: el `.page-header` del
+ * prototipo, una tarjeta clara de superficie a cielo con texto en tinta, en vez del degradado azul y turquesa con
+ * texto blanco. Los banners con imagen conservan su fondo y su velo.
+ */
+const BRAND_GRADIENT = "linear-gradient(120deg,var(--di-surface-elevated) 35%,var(--di-sky) 100%)";
+
+/** Ilustración del slide fijo: la de organismos de tránsito del prototipo, a la izquierda como `.page-header__ilus`. */
+const ILUSTRACION_COLA = rutaIlustracion("organismos");
 
 type MensajeSlide = {
   kind: "mensaje";
@@ -349,10 +350,15 @@ function Bienvenida({
   // en el siguiente render; mientras tanto no debe intentar leer un slide inexistente.
   const mensaje = mensajes[actual] ?? mensajes[0];
   const bannerColor = useDominantColor(mensaje.kind === "banner" ? mensaje.imageUrl : undefined);
+  const fijo = mensaje.kind === "mensaje";
 
   return (
     <header
-      className={`relative flex flex-col justify-between overflow-hidden rounded-2xl text-white ${className}`}
+      className={`relative flex flex-col justify-between overflow-hidden ${
+        fijo
+          ? "rounded-[28px] border border-[color:var(--di-border)] text-[color:var(--di-heading)] shadow-[var(--shadow-card)]"
+          : "rounded-2xl text-white"
+      } ${className}`}
       style={{ minHeight: "220px" }}
     >
       {/* Capa de fondo: gradiente de marca fijo en el slide de la cola; en un banner, el color
@@ -381,10 +387,23 @@ function Bienvenida({
           cualquier imagen de banner; sobre el gradiente es imperceptible. */}
       <div
         className="absolute inset-0"
-        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
+        style={{
+          background: fijo
+            ? "transparent"
+            : "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)",
+        }}
       />
       {mensaje.kind === "mensaje" && (
-        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
+        // Círculos del prototipo: el turquesa lleno arriba a la derecha y, con `outline`, el aro grande de cielo
+        // alrededor (`.page-header::before/::after`), sin marcado nuevo.
+        <div
+          className="absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90 max-sm:-right-12 max-sm:-top-[60px] max-sm:h-[120px] max-sm:w-[120px]"
+          style={{
+            background: "var(--di-highlight-decor)",
+            outline: "1.5px solid color-mix(in srgb, var(--di-sky-line) 50%, transparent)",
+            outlineOffset: "95px",
+          }}
+        />
       )}
 
       {/* Sin título visible del banner (solo el banner): el enlace cubre toda la imagen — al
@@ -411,15 +430,32 @@ function Bienvenida({
           solo ocupe una franja arriba y otra abajo — sin esto, el hueco vacío del medio tapaba el
           enlace del banner de abajo y ni el hover ni el clic le llegaban nunca. Se restaura
           pointer-events-auto solo en la franja de controles (puntos/flechas), que sí son clicables. */}
-      <div className="relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none">
+      {/* En el slide fijo, la ilustración va de fondo a la izquierda de esta misma caja (92 px; 58 px en celular),
+          como `.page-header__ilus`, sin marcado nuevo. Va arriba, a la altura del antetítulo y el título: la columna de
+          cifras estira el banner, y centrada en vertical quedaba flotando lejos del texto. */}
+      <div
+        className={`relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none ${
+          fijo
+            ? "bg-no-repeat bg-[length:92px_92px] bg-[position:24px_20px] pl-[132px] max-sm:bg-[length:58px_58px] max-sm:bg-[position:14px_20px] max-sm:pl-[84px]"
+            : ""
+        }`}
+        style={fijo ? { backgroundImage: `url("${ILUSTRACION_COLA}")` } : undefined}
+      >
         <div className="max-w-[85%]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
+          {/* Antetítulo del prototipo (`.antetitulo`): el nombre del organismo en versalitas, en el azul de acento. */}
+          <p
+            className={`text-[11px] uppercase ${
+              fijo ? "font-bold tracking-[0.06em] text-[color:var(--di-highlight)]" : "font-semibold tracking-wide opacity-80"
+            }`}
+          >
             {organismo ?? "Organismo de tránsito"}
           </p>
           {mensaje.kind === "mensaje" ? (
             <>
-              <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
-              <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
+              <h1 className="mt-1 text-2xl font-bold leading-tight text-[color:var(--di-heading)] md:text-3xl after:mt-2.5 after:block after:h-[5px] after:w-16 after:rounded-full after:bg-[linear-gradient(90deg,var(--di-sky-line),var(--di-sky))] after:content-['']">
+                {mensaje.title}
+              </h1>
+              <p className="mt-2.5 text-sm leading-snug text-[color:var(--di-text-secondary)]">{mensaje.body}</p>
             </>
           ) : (
             <span className="sr-only">{mensaje.name}</span>
@@ -438,7 +474,13 @@ function Bienvenida({
                 className="h-1.5 rounded-full transition-all"
                 style={{
                   width: i === actual ? 16 : 5,
-                  background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
+                  background: fijo
+                    ? i === actual
+                      ? "var(--di-action)"
+                      : "var(--di-border-control)"
+                    : i === actual
+                      ? "#ffffff"
+                      : "rgba(255,255,255,0.5)",
                 }}
               />
             ))}
@@ -449,7 +491,11 @@ function Bienvenida({
               onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
               disabled={mensajes.length <= 1}
               aria-label="Mensaje anterior"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
+              className={`grid h-6 w-6 place-items-center rounded-full disabled:cursor-not-allowed disabled:opacity-40 ${
+                fijo
+                  ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
+                  : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
+              }`}
             >
               <ChevronLeft className="h-3 w-3" aria-hidden="true" />
             </button>
@@ -458,7 +504,11 @@ function Bienvenida({
               onClick={() => setActual((i) => (i + 1) % mensajes.length)}
               disabled={mensajes.length <= 1}
               aria-label="Mensaje siguiente"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
+              className={`grid h-6 w-6 place-items-center rounded-full disabled:cursor-not-allowed disabled:opacity-40 ${
+                fijo
+                  ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
+                  : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
+              }`}
             >
               <ChevronRight className="h-3 w-3" aria-hidden="true" />
             </button>
@@ -543,13 +593,13 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
     <Tarjeta titulo={`Actividad de los últimos ${ACTIVIDAD_DIAS} días`}>
       {estado === "cargando" && <Esqueleto filas={1} />}
       {estado === "error" && (
-        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p role="alert" className="py-6 text-center text-sm text-muted-foreground">
           No se pudo cargar la actividad reciente.
         </p>
       )}
       {estado === "listo" && !hayMovimiento && (
         // Un gráfico en blanco no distingue «no pasó nada» de «no cargó». Se dice con palabras.
-        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p className="py-6 text-center text-sm text-muted-foreground">
           No hubo movimiento en los últimos {ACTIVIDAD_DIAS} días.
         </p>
       )}
@@ -557,13 +607,13 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
         <div className="h-56 w-full" data-testid="ot-inicio-actividad">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={serie ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F5" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip cursor={{ fill: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }} />
               <Bar dataKey="radicados" name="Radicados" fill="var(--color-flit-brand)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="aprobados" name="Aprobados" fill="#8CC63F" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="rechazados" name="Rechazados" fill="#FF4E00" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="aprobados" name="Aprobados" fill="var(--flit-success-ink)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="rechazados" name="Rechazados" fill="var(--color-flit-alert)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -597,14 +647,14 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
     {
       id: "aprobados",
       name: "Aprobados",
-      color: "#8CC63F",
+      color: "var(--flit-success-ink)",
       value: resumen.aprobados,
       hint: "Aprobados por el organismo.",
     },
     {
       id: "rechazados",
       name: "Rechazados",
-      color: "#FF4E00",
+      color: "var(--color-flit-alert)",
       value: resumen.rechazados + resumen.enSubsanacion,
       hint: "Rechazados, con o sin subsanación abierta.",
     },
@@ -619,14 +669,14 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
     {
       id: "revocados",
       name: "Revocados",
-      color: "#8B5CF6",
+      color: "var(--badge-purple-fg)",
       value: resumen.revocados,
       hint: "Aprobados que el organismo revocó después.",
     },
     {
       id: "anulados",
       name: "Anulados",
-      color: "#94A3B8",
+      color: "var(--badge-neutral-fg)",
       value: resumen.anulados,
       hint: "La empresa los dio de baja después de radicarlos.",
     },
@@ -649,12 +699,12 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
     <Tarjeta titulo={`En qué quedó lo recibido en ${ACTIVIDAD_DIAS} días`}>
       {estado === "cargando" && <Esqueleto filas={1} />}
       {estado === "error" && (
-        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p role="alert" className="py-6 text-center text-sm text-muted-foreground">
           No se pudo cargar la composición del periodo.
         </p>
       )}
       {estado === "listo" && total === 0 && (
-        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+        <p className="py-6 text-center text-sm text-muted-foreground">
           No se recibió ningún trámite en los últimos {ACTIVIDAD_DIAS} días.
         </p>
       )}
@@ -688,7 +738,7 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
             <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
               <div>
                 <p className="text-xl font-bold tabular-nums">{formatPct(pctAprobados)}</p>
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Aprobados
                 </p>
               </div>
@@ -712,13 +762,13 @@ function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSum
                 </span>
                 <span className="shrink-0 tabular-nums">
                   <b className="font-semibold">{g.value}</b>{" "}
-                  <span className="text-[#9AA5B4] dark:text-white/40">
+                  <span className="text-muted-foreground">
                     ({formatPct((g.value / total) * 100)})
                   </span>
                 </span>
               </li>
             ))}
-            <li className="mt-1 border-t border-[#EEF1F5] pt-1.5 text-[11px] text-[#9AA5B4] dark:border-white/10 dark:text-white/40">
+            <li className="mt-1 border-t border-border pt-1.5 text-[11px] text-muted-foreground">
               {total} recibidos en total
             </li>
           </ul>
@@ -741,19 +791,19 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
   return (
     <div
       role="alert"
-      className="flex flex-col items-start gap-3 rounded-2xl border border-[#FF4E00]/40 bg-[#FF4E00]/[0.07] px-5 py-4"
+      className="flex flex-col items-start gap-3 rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-5 py-4"
     >
-      <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-[#FF4E00]" aria-hidden="true" />
+      <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--badge-warning-fg)]" aria-hidden="true" />
         No se pudo cargar el estado de la cola
       </p>
-      <p className="text-xs text-[#6B7280] dark:text-white/60">
+      <p className="text-xs text-muted-foreground">
         {message ?? "Intenta de nuevo en un momento."}
       </p>
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold transition hover:border-flit-brand dark:border-white/15"
+        className={buttonClass({ variant: "secondary", size: "sm" })}
       >
         Reintentar
       </button>
@@ -798,16 +848,15 @@ function PanelOperativoKpis({
         label={OT_KPI_ESPERAN_MI_DECISION}
         value={cola?.porRevisar}
         cargando={cargando}
-        color="var(--color-flit-brand)"
-        icon={Inbox}
+        ilustracion="pendientes"
+        pendiente
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, OT_KPI_ESPERAN_MI_DECISION)}
       />
       <Kpi
         label="Pendientes en total"
         value={pendientes}
         cargando={cargando}
-        color="#F9AC00"
-        icon={Clock}
+        ilustracion="calendario"
         hint="Incluye lo que espera a un tercero"
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
       />
@@ -815,8 +864,7 @@ function PanelOperativoKpis({
         label={OT_KPI_ENTREGADOS_HOY}
         value={movimiento?.entregadosHoy}
         cargando={cargando}
-        color="#8CC63F"
-        icon={CheckCircle2}
+        ilustracion="tramites"
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, OT_KPI_ENTREGADOS_HOY)}
       />
       <Kpi
@@ -835,9 +883,8 @@ function PanelOperativoKpis({
                 formatHours(movimiento?.tiempoMedianoDecisionHoras)
         }
         cargando={cargando}
-        color="var(--color-flit-tech)"
         sinDato={sinMediana}
-        icon={Timer}
+        ilustracion="procesos"
         hint={
           sinMediana
             ? `Ninguna decisión en los últimos ${VENTANA_MEDIANA_DIAS} días`
@@ -863,7 +910,7 @@ function PanelOperativoResto({
     <div className="flex flex-col gap-4">
       {sinPendientes ? (
         <Tarjeta>
-          <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
+          <p className="py-6 text-center text-sm text-muted-foreground">
             No hay trámites pendientes en este momento.
           </p>
         </Tarjeta>
@@ -897,7 +944,7 @@ function PanelOperativoResto({
                     onAbrir(OT_DRILLDOWN_BUCKETS.enEsperaDelCliente, "En espera del cliente")
                   }
                 />
-                <p className="text-[11px] text-[#9AA5B4] dark:text-white/40">
+                <p className="text-[11px] text-muted-foreground">
                   Solo «Por revisar» espera una acción del organismo.
                 </p>
               </div>
@@ -945,9 +992,10 @@ function PanelOperativoResto({
 
 function Tarjeta({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#0B0F14]">
+    // `.card` de la propuesta: borde --di-border y radio de 20 px; el título como `.card__cabeza h2`, sin versalitas.
+    <section className="rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-5 shadow-[var(--shadow-card)]">
       {titulo && (
-        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
+        <h2 className="mb-4 text-[0.9375rem] font-semibold leading-tight text-[color:var(--di-heading)]">
           {titulo}
         </h2>
       )}
@@ -994,8 +1042,8 @@ function Kpi({
   label,
   value,
   cargando,
-  color,
-  icon: Icon,
+  ilustracion,
+  pendiente,
   hint,
   sinDato,
   onAbrir,
@@ -1003,10 +1051,12 @@ function Kpi({
   label: string;
   value: number | string | undefined;
   cargando: boolean;
-  color: string;
-  icon: typeof Inbox;
+  /** Ilustración del prototipo a la derecha de la cifra (HU #14481). */
+  ilustracion: Ilustracion;
+  /** Lo que espera al organismo: con trámites, la tarjeta lleva el borde turquesa (`.metrica--pendiente`). */
+  pendiente?: boolean;
   hint?: string;
-  /** No hay cifra que mostrar. Se apaga el color de acento: una cifra ausente no es un resultado. */
+  /** No hay cifra que mostrar. Se apaga la tinta: una cifra ausente no es un resultado. */
   sinDato?: boolean;
   onAbrir?: () => void;
 }) {
@@ -1015,30 +1065,27 @@ function Kpi({
   const tamano = numero === null && typeof value === "string" && value.length > 6
     ? "text-lg"
     : "text-3xl";
+  // Un bloque en cero NO se ofrece como enlace (ver `Navegable`): sin `onClick`, la tarjeta queda quieta.
+  const navegable = !cargando && numero !== null && numero > 0 && Boolean(onAbrir);
   return (
-    <Navegable
-      navegable={!cargando && numero !== null && numero > 0}
-      etiqueta={`Ver los ${numero} trámites: ${label.toLowerCase()}`}
-      onAbrir={onAbrir}
-      className="flex w-full items-center justify-between rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
-    >
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium opacity-70">{label}</p>
-        <p
-          className={`mt-1 font-bold tabular-nums ${tamano} ${sinDato ? "text-[#9AA5B4] dark:text-white/40" : ""}`}
-          style={sinDato ? undefined : { color }}
-        >
-          {cargando ? "—" : (value ?? 0)}
-        </p>
-        {hint && <p className="mt-0.5 text-[10px] text-[#9AA5B4] dark:text-white/35">{hint}</p>}
-      </div>
-      <div
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
-        style={{ background: `${color}1A` }}
-      >
-        <Icon className="h-5 w-5" style={{ color }} aria-hidden="true" />
-      </div>
-    </Navegable>
+    // HU #14481 (propuesta), receta del Inicio del gestor: `TarjetaMetrica` —etiqueta, cifra en tinta e ilustración—
+    // en vez del número de color y el ícono en un círculo. En la columna angosta junto al banner la tarjeta va a una
+    // columna y la ilustración se fija abajo a la derecha (con `max-w-none`, o la rejilla la aplasta). `content-start`:
+    // si la fila la estira (la mediana es más alta), la cifra sigue pegada bajo el rótulo en vez de caer al fondo. El
+    // pie es la aclaración de la cifra, no una acción: va en el gris terciario.
+    <TarjetaMetrica
+      className="relative w-full grid-cols-1 content-start p-4 [&>img]:absolute [&>img]:bottom-3.5 [&>img]:right-3.5 [&>img]:h-9 [&>img]:w-9 [&>img]:max-w-none [&>img]:shrink-0 [&>span:nth-child(2)]:pr-11 [&>span:nth-child(4)]:pr-11 [&>span:nth-child(4)]:font-normal [&>span:nth-child(4)]:text-[color:var(--di-text-tertiary)]"
+      etiqueta={label}
+      cifra={<span className={tamano}>{cargando ? "—" : (value ?? 0)}</span>}
+      colorCifra={sinDato ? "var(--di-text-tertiary)" : undefined}
+      ilustracion={rutaIlustracion(ilustracion)}
+      pie={hint}
+      pendiente={Boolean(pendiente) && navegable}
+      onClick={navegable ? onAbrir : undefined}
+      // El nombre accesible dice a dónde lleva: el texto visible es una etiqueta y un número, que por sí solos no
+      // anuncian que haya una lista detrás.
+      aria-label={navegable ? `Ver los ${numero} trámites: ${label.toLowerCase()}` : undefined}
+    />
   );
 }
 
@@ -1071,12 +1118,14 @@ function Espera({
         {label}
         {miTurno && <span className="sr-only"> (espera una acción del organismo)</span>}
       </span>
-      <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+      {/* `.avance__barra` de la propuesta: pista hundida y relleno en sus tonos, sin verde. Lo que espera al
+          organismo va en el degradado azul → turquesa; lo que espera a un tercero, en cielo. */}
+      <span className="h-2 overflow-hidden rounded-full bg-[var(--di-surface-sunken)]">
         <span
-          className="block h-full rounded"
+          className="block h-full rounded-full"
           style={{
             width: `${pct}%`,
-            background: miTurno ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "#C9D2E0",
+            background: miTurno ? "var(--di-gradient-brand)" : "color-mix(in srgb, var(--di-sky-line) 40%, transparent)",
           }}
         />
       </span>
@@ -1108,14 +1157,14 @@ function Tramo({
       onAbrir={onAbrir}
       className={`w-full rounded-xl border px-3 py-3 text-center ${
         encendida
-          ? "border-[#FF4E00]/45 bg-[#FF4E00]/[0.06]"
-          : "border-[#DFE5ED] dark:border-white/10"
+          ? "border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)]"
+          : "border-[color:var(--di-border)] bg-[var(--di-surface-elevated)]"
       }`}
     >
-      <p className={`text-2xl font-bold tabular-nums ${encendida ? "text-[#FF4E00]" : ""}`}>
+      <p className={`text-2xl font-bold tabular-nums ${encendida ? "text-[var(--badge-warning-fg)]" : "text-[color:var(--di-text-primary)]"}`}>
         {value}
       </p>
-      <p className="mt-0.5 text-[10px] text-[#6B7280] dark:text-white/50">{label}</p>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">{label}</p>
     </Navegable>
   );
 }
@@ -1124,7 +1173,7 @@ function Esqueleto({ filas }: { filas: number }) {
   return (
     <div className="flex flex-col gap-3" aria-hidden="true">
       {Array.from({ length: filas }, (_, i) => (
-        <div key={i} className="h-8 animate-pulse rounded-lg bg-[#EEF1F5] dark:bg-white/5" />
+        <div key={i} className="h-8 animate-pulse rounded-lg bg-secondary" />
       ))}
     </div>
   );

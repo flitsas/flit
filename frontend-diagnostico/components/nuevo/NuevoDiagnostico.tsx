@@ -18,6 +18,8 @@ import { CreacionExpress } from "./CreacionExpress";
 import { CreacionMasiva } from "./CreacionMasiva";
 import { DosZonas } from "./DosZonas";
 import { SelectorModo } from "./SelectorModo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -91,7 +93,7 @@ export function NuevoDiagnostico() {
         <h2 id="nuevo-vacio" className="text-lg font-semibold">
           No tienes permiso para crear diagnósticos
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (carga.tipo !== "listo") {
@@ -134,17 +136,19 @@ export function NuevoDiagnostico() {
 
   return (
     <>
-      <section aria-labelledby="nuevo-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between`}>
-        <div>
-          <h1 id="nuevo-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-            Nuevo diagnóstico
-          </h1>
-          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
-        </div>
-        {puedeCrear && (
-          <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
-        )}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="nuevo-titulo"
+        tituloId="nuevo-titulo"
+        titulo="Nuevo diagnóstico"
+        descripcion={sesion?.empresa.nombre}
+        ilustracion={rutaIlustracion("diagnostico")}
+        acciones={
+          puedeCrear && (
+            <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
+          )
+        }
+      />
       {contenido}
     </>
   );

@@ -75,8 +75,8 @@ function Boton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex-1 rounded-xl border py-2.5 text-sm font-medium text-flit-primary transition hover:bg-[#162744]/[0.04] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:text-white"
-      style={{ borderColor: '#DFE5ED' }}
+      className="flex-1 rounded-xl border py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+      style={{ borderColor: 'var(--border)' }}
     >
       {children}
     </button>
@@ -148,7 +148,7 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
               {enlace ? (
                 <div className="space-y-2">
                   <label
-                    className="block text-xs font-semibold text-flit-primary dark:text-white"
+                    className="block text-xs font-semibold text-foreground"
                     htmlFor="vencer-identidad-enlace"
                   >
                     Enlace nuevo
@@ -158,8 +158,8 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
                     readOnly
                     value={enlace}
                     onFocus={(e) => e.currentTarget.select()}
-                    className="w-full rounded-xl border px-3 py-2 text-xs text-flit-primary dark:border-white/15 dark:bg-transparent dark:text-white"
-                    style={{ borderColor: '#DFE5ED' }}
+                    className="w-full rounded-xl border px-3 py-2 text-xs text-foreground dark:bg-transparent"
+                    style={{ borderColor: 'var(--border)' }}
                   />
                   <button
                     type="button"
@@ -170,7 +170,7 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
                     Copiar enlace
                   </button>
                   {copiado ? (
-                    <p className="text-xs font-semibold" style={{ color: '#8CC63F' }}>
+                    <p className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }}>
                       Enlace copiado.
                     </p>
                   ) : null}
@@ -186,7 +186,7 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-sm text-flit-primary dark:text-white">
+            <p className="text-sm text-foreground">
               La vigencia de esta identidad termina ahora y se envía un enlace nuevo para que la persona la
               vuelva a hacer. Los trámites en borrador que la usaban quedan sin firmar; los ya radicados
               conservan su firma.

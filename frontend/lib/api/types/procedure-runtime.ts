@@ -1,3 +1,5 @@
+import type { OtGrupoPlaca } from '@/lib/api/types-ot';
+
 import type { QueryCondition } from '@/lib/api/queries';
 // Tipos espejo de los DTOs de instancia de trámite (runtime/operación).
 // La CONFIG dinámica (steps/sections/fields) se reutiliza desde
@@ -193,6 +195,12 @@ export interface PreflightPreviewResult {
    * habilitados de la compañía. `null` en Ruta Larga (lo elige el gestor).
    */
   transitOffice: PreflightPreviewTransitOffice | null;
+  /**
+   * HU9 (registro diferido 2026-11-09) — grupo de formato de placa de la clase consultada, resuelto
+   * por el backend con su catálogo (misma regla de HU8). Opcional: sin él el paso 1 usa las listas
+   * exactas por `vehicle_class` (HU5).
+   */
+  grupoPlaca?: OtGrupoPlaca | null;
 }
 
 export type MatriculaRuta = 'corta' | 'larga';
@@ -267,6 +275,19 @@ export interface InstanceSummary {
    */
   tienePrenda?: boolean;
   tieneTransformacion?: boolean;
+  /**
+   * ADR-0053 (Múltiple Propietario) — algún lado del trámite tiene 2+ propietarios. Marca
+   * informativa de la fila, como prenda y transformación.
+   */
+  multiplesPropietarios?: boolean;
+  /**
+   * ADR-0053 — todos los propietarios de cada lado, principal primero, con la acreditación de CADA
+   * persona. `vendedorNombre`/`compradorNombre` traen solo al principal; con copropietarios la celda
+   * ofrece un desplegable con esta lista. Ausentes en backends anteriores al campo: la celda cae al
+   * nombre único de siempre.
+   */
+  vendedoresActores?: ActorListado[] | null;
+  compradoresActores?: ActorListado[] | null;
   /**
    * Feature #12276 (HU #12312) — «Confirmado en RUNT». Exactamente uno de tres valores en trámites
    * aprobados; `null`/ausente cuando no aplica. La celda pinta SÍ / NO / — y NADA más: intentos,
@@ -369,6 +390,13 @@ export interface InstanceSummary {
 export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
 
 /**
+ * Épica #14296 — canal por el que entró el trámite (código del contrato). Distinto de `fuente`: la
+ * fuente es la columna del listado de trámites; el canal es el eje de Reportes Detallados y del
+ * detalle.
+ */
+export type TramiteCanal = 'tramites' | 'pn_web' | 'pn_punto' | 'integracion' | 'aplicacion';
+
+/**
  * Cómo queda acreditada una parte en el listado. Son los ÚNICOS tres estados válidos:
  * - `pendiente`: la validación de identidad no se ha realizado (y no hay firma del baúl).
  * - `firmado`: identidad validada y aprobada, o firma del baúl vigente.
@@ -377,6 +405,21 @@ export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
  * No habla de la firma electrónica de la compraventa: ese es otro eje (`signaturePending`).
  */
 export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
+
+/**
+ * ADR-0053 — un propietario de un lado en el listado: nombre y acreditación de esa persona.
+ * `firmaEstado` es `null` cuando el tipo no manda a ese lado a validar identidad.
+ */
+export interface ActorListado {
+  nombre: string;
+  firmaEstado: FirmaParteEstado | null;
+  /**
+   * Posición del propietario dentro del lado (1 = principal) y su documento: con ellos la tabla abre
+   * el tracking de identidad de ESA persona. Opcionales para backends anteriores al campo.
+   */
+  ordinal?: number;
+  numeroDocumento?: string | null;
+}
 
 /**
  * Query params de GET /api/v1/tramites/instances (filtros + orden server-side).
@@ -540,6 +583,14 @@ export interface Actor {
 export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
+  /**
+   * HU #14322 (Épica #14296) — canal de entrada. Ausente en un backend anterior al campo o en un
+   * trámite histórico: la pantalla lo muestra como «Trámites».
+   */
+  channel?: TramiteCanal | null;
+  /** Solo con canal `pn_punto`: el OT del punto. */
+  channelTransitOfficeId?: string | null;
+  channelTransitOfficeName?: string | null;
   status: InstanceStatus;
   /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
   rejectedFrom?: RejectedFrom | null;
@@ -656,7 +707,7 @@ export interface FieldValueInput {
  */
 export type ActorRol = 'comprador' | 'vendedor' | 'locatario';
 
-export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
+export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI' | 'PPT';
 
 /**
  * Tipo de persona del actor (HU #10542/#10543). Para persona natural, el documento de
@@ -1438,6 +1489,12 @@ export interface WizardState {
   totalSteps: number;
   steps: WizardStep[];
   canSubmit: boolean;
+  /**
+   * Matrícula Inicial por preasignación sin placa asignada: el trámite se puede enviar sin la firma
+   * (identidad aprobada y vigente); se pedirá cuando el organismo asigne la placa. Lo decide el
+   * backend; el cliente no recalcula la regla. Ausente ⇒ false.
+   */
+  firmaExentaPorPreasignacion?: boolean;
   /** Códigos de bloqueo de envío (mapeados a copy en la UI). */
   blockers: string[];
   /** N 03 — estado de negocio actual del trámite (borrador|anulado|preparado|entregado|aprobado|rechazado). */
@@ -1672,6 +1729,16 @@ export interface BiometricValidation {
    * Nunca trae el nombre del revisor.
    */
   approvalOrigin?: 'automatica' | 'manual' | null;
+  /**
+   * HU #14303 — true solo si la validación es manual, está aprobada y su carta ya se generó. Ausente/false en
+   * manual aprobada = «certificado en preparación». No aplica a Kyverum (su certificado no cambia).
+   */
+  cartaDisponible?: boolean;
+  /**
+   * Ajustes 2026-11-10 — id de la verificación en Kyverum Verify (soporte con el proveedor).
+   * `null`/ausente si la validación no llegó a Verify (manual, simulada) o la respuesta es anterior al campo.
+   */
+  kyverumVerificationId?: string | null;
 }
 
 /**
@@ -1711,6 +1778,12 @@ export interface RegenerarEnlaceManualResult {
   expiresAt: string;
   activatedAt: string;
   emailEnviado: boolean;
+}
+
+/** Respuesta de POST .../biometric-validations/{id}/manual-link/copy (HU #14306). El `url` NO se guarda en ningún estado persistente. */
+export interface CopiarEnlaceManualResult {
+  url: string;
+  expiresAt: string;
 }
 
 /**
@@ -2025,6 +2098,8 @@ export interface TenantBiometricPersonFilters {
   name?: string;
   documentType?: string;
   documentNumber?: string;
+  /** Ajuste 2026-11-10 (D1=a) — radicado (FT…), coincidencia parcial en servidor. */
+  referenceNumber?: string;
   status?: BiometricEstado;
   createdFrom?: string;
   createdTo?: string;

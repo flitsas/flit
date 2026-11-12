@@ -143,7 +143,7 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
       cellClassName: "max-w-[420px] break-all text-xs",
       render: (e) => {
         const v = valorEnlace(e);
-        return v.vacio ? <span className="text-[#59677D] dark:text-white/70">{v.texto}</span> : v.texto;
+        return v.vacio ? <span className="text-muted-foreground">{v.texto}</span> : v.texto;
       },
     },
     {

@@ -13,6 +13,12 @@ public enum ResultadoContrato
     Encontrado,
     NoEncontrado,
     Error,
+
+    /// <summary>
+    /// GDC «sin hora»: el comparendo no trae hora y las consultas de las 00:00 y las 23:59 no dan el mismo conductor
+    /// (el contrato cambió ese día). No se asigna: lo revisa la gestora.
+    /// </summary>
+    SinHora,
 }
 
 public sealed record RespuestaContrato(ResultadoContrato Resultado, ConductorEncontrado? Conductor, string? Mensaje, string? CuerpoCrudo);
@@ -27,10 +33,14 @@ public sealed record PruebaContratos(bool Conectado, string? Motivo, int? HttpSt
 /// API de contratos de la gestora: quién tenía el vehículo en una fecha (ADO #12978). Hoy solo existe la de Renting
 /// [Excel P12, P3] y su contrato se recibe al final; por eso el modo simulado: placa terminada en número par → conductor
 /// de prueba; impar → no encontrado; terminada en 0 → error.
+/// <para>
+/// <paramref name="hora"/> (GDC punto 19): la hora de la infracción como la trae el comparendo, hora local sin zona, en
+/// minutos. Se envía tal cual, sin convertir. Nula: core-consultas consulta al mediodía.
+/// </para>
 /// </summary>
 public interface IApiContratos
 {
-    Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct);
+    Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct);
 
     /// <summary>HU #13843: prueba la conexión sin consultar ninguna placa.</summary>
     Task<PruebaContratos> ProbarAsync(CancellationToken ct);
@@ -39,7 +49,7 @@ public interface IApiContratos
 /// <summary>Fuera de DEV, mientras no se conecte la API real: responde error (se reintenta) y nunca inventa un conductor.</summary>
 internal sealed class ApiContratosNoConectada : IApiContratos
 {
-    public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct) =>
+    public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct) =>
         Task.FromResult(new RespuestaContrato(ResultadoContrato.Error, null, "La API de contratos no está conectada en este ambiente.", null));
 
     public Task<PruebaContratos> ProbarAsync(CancellationToken ct) =>
@@ -51,7 +61,7 @@ internal sealed class ApiContratosSimulada : IApiContratos
     public Task<PruebaContratos> ProbarAsync(CancellationToken ct) =>
         Task.FromResult(new PruebaContratos(false, "Este ambiente no tiene conexión con core-consultas: las consultas usan respuestas simuladas.", null, 0, false, null, true));
 
-    public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct)
+    public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(placa);
         var ultimo = placa.Length > 0 ? placa[^1] : 'X';
@@ -75,10 +85,12 @@ internal sealed class ApiContratosSimulada : IApiContratos
 /// </summary>
 internal sealed class ApiContratosCoreConsultas(FuentesComparendosService.FuentesComparendosServiceClient cliente, ApiContratosSimulada? simulada) : IApiContratos
 {
-    public async Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct)
+    public async Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(placa);
         var pedido = new ConsultarContratoConductorRequest { Proveedor = "renting", Placa = placa, Fecha = fecha.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) };
+        if (hora is { } h)
+            pedido.Hora = h.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
         ConsultarContratoConductorResponse r;
         try
         {
@@ -87,7 +99,7 @@ internal sealed class ApiContratosCoreConsultas(FuentesComparendosService.Fuente
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.FailedPrecondition && simulada is not null)
         {
-            return await simulada.ConsultarAsync(tenantId, placa, fecha, ct).ConfigureAwait(false);
+            return await simulada.ConsultarAsync(tenantId, placa, fecha, hora, ct).ConfigureAwait(false);
         }
         catch (RpcException ex) when (ex.StatusCode != StatusCode.Cancelled || !ct.IsCancellationRequested)
         {

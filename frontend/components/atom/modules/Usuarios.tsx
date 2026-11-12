@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList } from "lucide-react";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList, FileSpreadsheet } from "lucide-react";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -11,6 +11,7 @@ import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { ReactivateInvitationButton } from "./users/ReactivateInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { InviteUserModal } from "./users/InviteUserModal";
+import { UsuariosBulkInvite } from "./users/UsuariosBulkInvite";
 import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
 import { UserPermissionsModal } from "./users/UserPermissionsModal";
@@ -27,6 +28,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
@@ -85,6 +87,8 @@ export function Usuarios() {
   const canConfigurePermissions = isSuperAdmin || isAdminCompany;
   const permissionsMode: "superadmin" | "admin" = isSuperAdmin ? "superadmin" : "admin";
   const [open, setOpen] = useState(false);
+  // HU #14427 (Feature #14420) — invitación masiva por Excel.
+  const [bulkOpen, setBulkOpen] = useState(false);
   const pgEliminados = usePaginacion("modulos.Usuarios");
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -367,7 +371,7 @@ export function Usuarios() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
@@ -377,14 +381,25 @@ export function Usuarios() {
           // concedido veria el boton y recibiria un 403 opaco: se gatea con el mismo criterio
           // que el resto de acciones de ciclo de vida.
           tab === "usuarios" && canManageUserLifecycle ? (
-            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
-              Invitar usuario
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* HU #14427: mismo gate que «Invitar usuario» (AC2: sin permiso de invitar no aparece). */}
+              <button
+                type="button"
+                onClick={() => setBulkOpen(true)}
+                className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl border border-[#DFE5ED] bg-white text-sm font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
+              >
+                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+                Importar Excel
+              </button>
+              <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "var(--gradient-action)" }}>
+                Invitar usuario
+              </button>
+            </div>
           ) : undefined
         }
       />
 
-      <div className="flex flex-wrap items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
+      <div className="flex flex-wrap items-center gap-1 border-b border-border shrink-0">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -472,7 +487,7 @@ export function Usuarios() {
         <div className="flex flex-col gap-3">
           {deletedLoading && <CarLoaderModal label="Cargando usuarios eliminados…" />}
           {!deletedLoading && deletedError && (
-            <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+            <div role="alert" className="py-12 text-center text-sm" style={{ color: "var(--destructive)" }}>{deletedError}</div>
           )}
           {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
             <div className="py-12 text-center text-sm opacity-60">
@@ -481,7 +496,7 @@ export function Usuarios() {
           )}
           {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
             <>
-              <div className="overflow-x-auto">
+              <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
                 <table
                   aria-label="Usuarios eliminados"
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
@@ -507,19 +522,19 @@ export function Usuarios() {
                         // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
                         // key cuando el JOIN produce N filas por usuario con N roles.
                         key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                        className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                       >
-                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <p className="font-semibold">{u.fullName}</p>
                           <p className="text-[10px] opacity-60">{u.email}</p>
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <span className="block truncate opacity-70">{u.tenantName ?? "—"}</span>
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <span className="opacity-70">{formatDateTime(u.deletedAt)}</span>
                         </td>
-                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <RowActions
                             actions={[
                               {
@@ -568,7 +583,7 @@ export function Usuarios() {
           <Link
             href="/?m=rbac"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Ir a Roles y permisos (RBAC)
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -585,6 +600,13 @@ export function Usuarios() {
           roles={roles}
           rolesLoading={rolesLoading}
           isSuperAdmin={isSuperAdmin}
+        />
+      )}
+      {bulkOpen && (
+        <UsuariosBulkInvite
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setBulkOpen(false)}
+          onCompleted={() => loadUsers()}
         />
       )}
       {suspendTarget && (

@@ -8,7 +8,7 @@ import { Building2 } from "lucide-react";
 export function CompanyNotice({ message }: { message?: string }) {
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+      className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-8 text-center bg-card"
       data-testid="aviso-selecciona-compania"
     >
       <Building2 className="h-8 w-8" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />

@@ -39,7 +39,7 @@ export function Step7Validar({ validationResult, loading, error, onValidate }: S
       {error && (
         <div
           className="rounded-xl p-3 border text-xs"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--destructive)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
           role="alert"
         >
           {error}
@@ -76,7 +76,7 @@ export function Step7Validar({ validationResult, loading, error, onValidate }: S
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-semibold" style={{ color: '#FF4E00' }}>
+              <p className="text-xs font-semibold" style={{ color: 'var(--destructive)' }}>
                 {validationResult.errors.length} error(es) encontrado(s):
               </p>
               <ul className="space-y-2">
@@ -85,14 +85,14 @@ export function Step7Validar({ validationResult, loading, error, onValidate }: S
                     key={i}
                     className="rounded-xl p-3 border text-xs"
                     style={{
-                      borderColor: '#FF4E00',
-                      background: 'rgba(255,78,0,0.06)',
+                      borderColor: 'var(--destructive)',
+                      background: 'var(--badge-danger-bg)',
                     }}
                   >
                     <div className="flex items-start gap-2">
                       <span
                         className="px-1.5 py-0.5 rounded text-[9px] font-bold text-white shrink-0"
-                        style={{ background: '#FF4E00' }}
+                        style={{ background: 'var(--destructive)' }}
                       >
                         {err.code}
                       </span>

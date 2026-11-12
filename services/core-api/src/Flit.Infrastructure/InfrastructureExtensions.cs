@@ -31,6 +31,7 @@ using Flit.Tramites.Application.Ocr;
 using Flit.Modules.Improntas.Domain;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
+using Flit.Modules.Security.Application.Auth.BulkInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
@@ -194,8 +195,6 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog, DbVehicleBodyworkCatalog>();
         // Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019) — cerrado, 6 valores.
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleServiceTypeCatalog, DbVehicleServiceTypeCatalog>();
-        // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
-        services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
         // HU #11184 — orden del expediente configurado por el OT (admin.ot_document_precedence).
@@ -262,6 +261,8 @@ public static class InfrastructureExtensions
         // HU #10919 (Feature #10918) — plantilla de FUR según la clasificación del vehículo (catálogo
         // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
         services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
+        // HU9 (Caso C 2026-11-09) — grupo de placa del preview del paso 1, misma regla que la bandeja OT (HU8).
+        services.AddSingleton<Flit.Tramites.Application.UseCases.ProcedureInstances.IVehiclePlateGroupResolver, OtClientProcedures.VehiclePlateGroupResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
         services.AddSingleton<IImprontaManualStamper, Documents.Improntas.ImprontaManualStamper>();
         services.AddSingleton<Flit.Tramites.Application.Documents.IImprontaManualSignatureVerifier,
@@ -269,6 +270,8 @@ public static class InfrastructureExtensions
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
+        // HU #14301 — carta de identidad de FLIT (validación manual aprobada) en PDF con la marca FLIT.
+        services.AddSingleton<Flit.Tramites.Application.Identity.IIdentityLetterPdfGenerator, Documents.IdentityLetterPdfGenerator>();
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
         // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
         // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
@@ -314,12 +317,24 @@ public static class InfrastructureExtensions
         services.AddScoped<IRoleChangeOverridesPurger, RoleChangeOverridesPurger>(); // HU #13646
         services.AddScoped<IPermissionAuditReader, PermissionAuditReader>(); // HU #13647
 
+        // Feature #14420 / ADR-0077 — invitación masiva por Excel: topes (BulkInvitations:*), lectura del destino y
+        // roles visibles, y plantilla/parser XLSX. La política y el servicio viven en AddSecurityApplication().
+        services.AddSingleton(
+            configuration.GetSection(BulkInvitationOptions.SectionName).Get<BulkInvitationOptions>()
+            ?? new BulkInvitationOptions());
+        services.AddScoped<IInvitationTargetDirectory, InvitationTargetDirectory>(); // HU #14421
+        services.AddScoped<IBulkInvitationXlsxTemplate, Documents.BulkInvitations.BulkInvitationXlsxTemplate>(); // HU #14422
+        services.AddScoped<IBulkInvitationXlsxParser, Documents.BulkInvitations.BulkInvitationXlsxParser>(); // HU #14422
+
         services.AddSecurityApplication();
 
         // Épica #13216 — HU13389: acceso del OT + scope del tenant cliente + precedencia de la matriz del
         // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
         services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
             OtClientProcedures.OtClientProcedureConsolidadoContext>();
+        // HU #14547 — misma matriz para el maestro que rearma «Regenerar mandato y consolidado» (admin).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoMaestroPrecedenciaProvider,
+            OtClientProcedures.ConsolidadoMaestroPrecedenciaProvider>();
 
         // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
         // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).
@@ -474,6 +489,10 @@ public static class InfrastructureExtensions
         // canal de correo (IEmailSender) y el mismo tema de marca que el resto de avisos.
         services.AddScoped<Flit.Tramites.Application.Identity.IManualCaptureLinkNotifier,
             Flit.Infrastructure.Notifications.Identity.EmailManualCaptureLinkNotifier>();
+        services.AddSingleton<Flit.Tramites.Application.Identity.IManualCaptureTokenProtector,
+            Flit.Infrastructure.Notifications.Identity.DataProtectionManualCaptureTokenProtector>();
+        services.AddSingleton<Flit.Tramites.Application.Identity.IManualCaptureLinkUrlBuilder,
+            Flit.Infrastructure.Notifications.Identity.ManualCaptureLinkUrlBuilder>();
         // HU #11487 — worker de la cola de avisos de correo al asignar placa (ADR-0046).
         services.AddHostedService<PlateAssignmentEmailDispatchProcessor>();
         // HU #12579 (Feature #12565, ADR-0046 Opción B extendido) — worker de la cola de avisos de

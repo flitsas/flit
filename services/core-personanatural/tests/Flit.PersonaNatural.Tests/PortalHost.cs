@@ -112,6 +112,9 @@ internal sealed class PortalHost : IAsyncDisposable
 
     public FachadaFalsa Catalogo { get; } = new();
 
+    /// <summary>HU #14395: fachada de medios de pago de prueba; su precio y sus switches se cambian a mano.</summary>
+    public FachadaMediosFalsa Medios { get; } = new();
+
     public ConsultasRuntFalso Runt { get; } = ConsultasRuntFalso.DeOrganismo("Tránsito de Prueba");
 
     public RegistroDeLogs Logs { get; } = new();
@@ -162,6 +165,7 @@ internal sealed class PortalHost : IAsyncDisposable
             b.Services.AddSingleton<TimeProvider>(host.Reloj);
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaTramites>(host.Catalogo);
+            b.Services.AddSingleton<IFachadaMediosPago>(host.Medios);
             b.Services.AddSingleton<IFachadaDefiniciones>(host.Definiciones);
             // Por omisión el RUNT dice que el vehículo está en el organismo de prueba: la radicación verifica el organismo.
             b.Services.AddSingleton<Flit.PersonaNatural.Api.Consultas.IConsultasRunt>(host.Runt);

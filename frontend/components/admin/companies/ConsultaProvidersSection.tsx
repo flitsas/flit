@@ -65,7 +65,7 @@ export function ConsultaProvidersSection({
       </div>
 
       {configError && (
-        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {configError}
         </p>
       )}
@@ -107,13 +107,13 @@ export function ConsultaProvidersSection({
               onChange({ runtFailoverTimeoutMs: raw === "" ? 0 : Number(raw) });
             }}
             className={FIELD_CLASS}
-            style={{ borderColor: timeoutError ? "#FF4E00" : "#DFE5ED" }}
+            style={{ borderColor: timeoutError ? "var(--destructive)" : "var(--border)" }}
           />
           <p className={`mt-1 ${HELP_TEXT}`}>
             Cuánto espera al proveedor primario antes de intentar con el de contingencia (500–60000 ms).
           </p>
           {timeoutError && (
-            <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
               {timeoutError}
             </p>
           )}
@@ -143,7 +143,7 @@ function ProviderSelect({ id, label, value, options, invalid, onChange }: Provid
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={FIELD_CLASS}
-        style={{ borderColor: invalid ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: invalid ? "var(--destructive)" : "var(--border)" }}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value} disabled={option.disabled}>

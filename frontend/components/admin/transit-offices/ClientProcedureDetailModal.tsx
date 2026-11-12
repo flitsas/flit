@@ -34,6 +34,7 @@ import {
   OT_WARN_TEXT,
 } from "./detalle/ot-detalle-visual";
 import { formatOtProcedureStatus, procedureStatusChip } from "./ot-utils";
+import { estadoChipClass } from "@/lib/tramites/estados";
 
 import { formatFechaHora } from "@/lib/format/date";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -291,10 +292,10 @@ export function ClientProcedureDetailModal({
             title="Ver línea de tiempo del trámite"
             className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+            <StatusBadge className={estadoChipClass(row.status)} label={estadoLabel} {...procedureStatusChip(row.status)} />
           </button>
         </div>
-        <p className="mt-1 text-[12px] text-slate-600 dark:text-white/60">
+        <p className="mt-1 text-[12px] text-muted-foreground">
           Radicado: <span className="font-mono">{row.referenceNumber}</span> · Tipo de trámite:{" "}
           {row.procedureTypeName ?? row.procedureTypeId} · Placa: {row.placa?.trim() || "—"} · VIN:{" "}
           {row.vin?.trim() || "—"}
@@ -318,7 +319,7 @@ export function ClientProcedureDetailModal({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="rounded-xl border bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
+          className="rounded-xl border bg-card p-2 dark:border-border"
           style={{ borderColor: OT_BORDER, color: OT_NAVY }}
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -331,7 +332,7 @@ export function ClientProcedureDetailModal({
       {avisos.length > 0 ? (
         <div
           className="mt-3 flex w-full items-start gap-2 rounded-xl px-3 py-2.5"
-          style={{ background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }}
+          style={{ background: "var(--badge-warning-bg)", border: "1px solid var(--badge-warning-border)" }}
           role="status"
           id={avisosId}
         >
@@ -363,7 +364,7 @@ export function ClientProcedureDetailModal({
                   background: "var(--badge-danger-bg)",
                   border: "1px solid var(--badge-danger-border)",
                 }
-              : { background: `${OT_WARN}1A`, border: `1px solid ${OT_WARN}55` }
+              : { background: "var(--badge-warning-bg)", border: "1px solid var(--badge-warning-border)" }
           }
           role="status"
         >
@@ -441,7 +442,7 @@ export function ClientProcedureDetailModal({
           disabled={!puedeRechazar}
           aria-describedby={!puedeRechazar && avisos.length > 0 ? avisosId : undefined}
           className="h-11 min-w-[200px] rounded-xl px-6 text-[13px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: OT_ORANGE }}
+          style={{ background: OT_ORANGE, color: "var(--destructive-foreground)" }}
         >
           {COPY.E01Rechazar}
         </button>
@@ -463,7 +464,7 @@ export function ClientProcedureDetailModal({
   return (
     <OtDetalleShell open onClose={onClose} title={titulo} header={header} footer={footer}>
       {detailError ? (
-        <p className="m-0 text-[11px]" style={{ color: "#B45309" }} role="alert">
+        <p className="m-0 text-[11px]" style={{ color: "var(--badge-warning-fg)" }} role="alert">
           {detailError}
         </p>
       ) : null}
@@ -474,7 +475,7 @@ export function ClientProcedureDetailModal({
             <OtCargando etiqueta="Cargando la línea de tiempo del trámite" filas={3} />
           ) : detailError && history.length === 0 ? (
             <div
-              className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]"
+              className="rounded-2xl border border-border bg-card p-5"
               role="alert"
             >
               <p className="text-sm font-semibold" style={{ color: OT_NAVY }}>

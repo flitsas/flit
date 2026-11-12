@@ -68,7 +68,7 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
       {loading && !items ? (
         <p className="text-xs opacity-70">Cargando avisos…</p>
       ) : error ? (
-        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       ) : !items || items.length === 0 ? (
@@ -80,7 +80,7 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
           {items.map((item) => (
             <li
               key={item.id}
-              className="rounded-xl border px-3 py-2.5 text-xs text-flit-primary dark:text-white/85"
+              className="rounded-xl border px-3 py-2.5 text-xs text-foreground"
             >
               <div className="flex flex-wrap justify-between gap-2">
                 <strong>
@@ -95,7 +95,7 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
                 {item.recipientMasked ?? 'Sin correo'}
               </div>
               {item.failureReason ? (
-                <div className="mt-1" style={{ color: '#B45309' }}>
+                <div className="mt-1" style={{ color: 'var(--badge-warning-fg)' }}>
                   {item.failureReason}
                 </div>
               ) : null}
@@ -110,14 +110,14 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
 function statusColor(status: string): string {
   switch (status) {
     case 'enviado':
-      return '#2E7D32';
+      return 'var(--flit-success-ink)';
     case 'encolado':
-      return '#1565C0';
+      return 'var(--badge-info-fg)';
     case 'fallido':
-      return '#C62828';
+      return 'var(--destructive)';
     case 'omitido':
-      return '#B45309';
+      return 'var(--badge-warning-fg)';
     default:
-      return '#475569';
+      return 'var(--muted-foreground)';
   }
 }

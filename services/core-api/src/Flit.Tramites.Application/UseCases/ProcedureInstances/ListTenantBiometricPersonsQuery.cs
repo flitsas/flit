@@ -58,7 +58,10 @@ public sealed record TenantBiometricPersonsResponse(
     int PageSize,
     int Total);
 
-/// <summary>Query string de GET /biometric-validations/by-person (solo filtros de persona).</summary>
+/// <summary>
+/// Query string de GET /biometric-validations/by-person: filtros de persona más el número de radicado
+/// (<see cref="ReferenceNumber"/>, coincidencia parcial sobre el trámite ligado a la validación).
+/// </summary>
 public sealed record TenantBiometricPersonListQuery(
     string? Name = null,
     string? DocumentType = null,
@@ -72,7 +75,8 @@ public sealed record TenantBiometricPersonListQuery(
     int? VenceEnDias = null,
     int Page = 1,
     int PageSize = 20,
-    bool? Standalone = null)
+    bool? Standalone = null,
+    string? ReferenceNumber = null)
 {
     public int SafePage() => Page < 1 ? 1 : Page;
     public int SafePageSize() => Math.Clamp(
@@ -112,6 +116,8 @@ public sealed record TenantBiometricPersonListQuery(
         ExpiraHasta = ExpiraHasta,
         VenceEnDias = VenceEnDias,
         Standalone = Standalone,
+        // El radicado se guarda en mayúsculas (FT[1-9]-dígitos); el repositorio compara sin distinguirlas.
+        ReferenceNumber = TrimCap(ReferenceNumber)?.ToUpperInvariant(),
     };
 
     private static string? TrimCap(string? value)
@@ -356,6 +362,7 @@ public sealed class ListTenantBiometricPersonsHandler(
             ExpiraHasta = filter.ExpiraHasta,
             VenceEnDias = filter.VenceEnDias,
             Standalone = filter.Standalone,
+            ReferenceNumber = filter.ReferenceNumber,
         };
     }
 }

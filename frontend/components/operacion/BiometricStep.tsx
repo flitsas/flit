@@ -15,6 +15,7 @@ import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValid
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { useReconcileIdentity } from '@/hooks/useReconcileIdentity';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import {
@@ -576,8 +577,8 @@ function BiometricSkeleton({
     >
       {partes.map((parte) => (
         <div key={parte} className={WIZARD_CARD} aria-hidden="true">
-          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-          <div className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-muted" />
+          <div className="h-12 w-full animate-pulse rounded-xl bg-muted" />
         </div>
       ))}
     </div>
@@ -640,8 +641,8 @@ function ParteBlock({
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-            <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+            <p className="mb-3 text-xs font-bold" style={{ color: 'var(--foreground)' }}>
               Método de Firma
             </p>
             <VaultCoveredView />
@@ -649,18 +650,18 @@ function ParteBlock({
           </div>
           <div
             className="flex items-center justify-center rounded-xl border p-5 text-center"
-            style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-sunken)' }}
           >
             <div>
               <p
                 className="text-[11px] font-medium uppercase tracking-wide"
-                style={{ color: '#59677D' }}
+                style={{ color: 'var(--muted-foreground)' }}
               >
                 Firma electrónica
               </p>
               <p
                 className="mt-2 select-none text-2xl font-semibold italic"
-                style={{ color: '#1A2B4C' }}
+                style={{ color: 'var(--foreground)' }}
               >
                 {sigNombre}
               </p>
@@ -724,13 +725,13 @@ function ParteBlock({
   return (
     <div className="space-y-3">
       <div className={`grid grid-cols-1 gap-4 ${showCaptureSide ? 'md:grid-cols-2' : ''}`}>
-        <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-          <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+        <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--foreground)' }}>
             Datos de Identificación
           </p>
           {info && (
             <>
-              <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+              <p className="mt-2 text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
                 {info.nombre} — {PARTE_LABEL[parte]}
                 {multipleOwners ? ` ${ordinal}` : ''}
               </p>
@@ -740,7 +741,7 @@ function ParteBlock({
           <div className="mt-4">
             <p
               className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: '#59677D' }}
+              style={{ color: 'var(--muted-foreground)' }}
             >
               Estado Biométrico
             </p>
@@ -751,7 +752,7 @@ function ParteBlock({
           <div className="mt-3">{actionView}</div>
         </div>
         {showCaptureSide && validation ? (
-          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
             <KyverumCapturePanel validation={validation} />
           </div>
         ) : null}
@@ -1078,7 +1079,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="rounded-xl border bg-white p-2 dark:bg-[#162744]">
+      <div className="rounded-xl border bg-card p-2">
         <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
       </div>
       <a
@@ -1132,9 +1133,7 @@ function ReconcileAction({
 }) {
   const readOnly = useWizardReadOnly();
   const [visible, setVisible] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
+  const { submitting, message, run } = useReconcileIdentity();
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 15000);
@@ -1145,20 +1144,8 @@ function ReconcileAction({
 
   const handleReconcile = async () => {
     if (!instanceId) return;
-    setError(null);
-    setInfo(null);
-    setSubmitting(true);
-    try {
-      const res = await tramitesClient.reconcileBiometric(instanceId, validationId);
-      if (res.updated) onReconciled();
-      else setInfo('El proveedor aún no resuelve la validación. Intenta de nuevo en unos segundos.');
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudo actualizar el estado.',
-      );
-    } finally {
-      setSubmitting(false);
-    }
+    const res = await run(() => tramitesClient.reconcileBiometric(instanceId, validationId));
+    if (res?.updated) onReconciled();
   };
 
   return (
@@ -1177,12 +1164,12 @@ function ReconcileAction({
         <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
         {submitting ? 'Consultando…' : 'Actualizar estado'}
       </button>
-      {info && (
+      {message?.tone === 'info' && (
         <p className="text-xs opacity-70" role="status" aria-live="polite">
-          {info}
+          {message.text}
         </p>
       )}
-      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      {message?.tone === 'error' && <InlineAlert tone="error">{message.text}</InlineAlert>}
     </div>
   );
 }

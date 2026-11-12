@@ -26,6 +26,7 @@ const originalFetch = global.fetch;
 
 function domain(overrides: Partial<TenantDomainResponse> = {}): TenantDomainResponse {
   return {
+    purpose: "HUB",
     host: "app.movilidadandina.com",
     status: "pending",
     statusReason: null,
@@ -33,8 +34,8 @@ function domain(overrides: Partial<TenantDomainResponse> = {}): TenantDomainResp
     verification: {
       txtName: "_flit-verify.app.movilidadandina.com",
       txtValue: "flit-verify=abc123",
-      cnameName: "app.movilidadandina.com",
-      cnameTarget: "edge.flitsas.online",
+      aName: "app.movilidadandina.com",
+      aValue: "203.0.113.10",
     },
     verifiedAt: null,
     activatedAt: null,

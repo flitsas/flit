@@ -16,6 +16,7 @@ import type {
   FirmaParteEstado,
   InstanceSummary,
   RuntConfirmedValue,
+  TramiteCanal,
   TramiteFuente,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
@@ -48,13 +49,13 @@ export function tramiteLabel(item: InstanceSummary): string {
 }
 
 /**
- * HU #12183 — las dos marcas informativas de la fila, en el orden en que se pintan.
+ * HU #12183 — las marcas informativas de la fila, en el orden en que se pintan.
  *
- * <p>Son <b>dos</b> y solo dos: prenda y transformación. El borrador del requerimiento pedía «un
- * ícono por tipo de trámite», que serían quince y ninguno diría nada que la columna «Trámite» no
- * diga ya con palabras. Estas dos marcan lo que NO se ve en ninguna otra columna.</p>
+ * <p>Prenda, transformación y múltiples propietarios (ADR-0053). El borrador del requerimiento
+ * pedía «un ícono por tipo de trámite», que serían quince y ninguno diría nada que la columna
+ * «Trámite» no diga ya con palabras. Estas marcan lo que NO se ve en ninguna otra columna.</p>
  *
- * <p>El rótulo no es decorativo: los dos íconos son círculos de color —verde y azul— y el color no
+ * <p>El rótulo no es decorativo: los íconos son círculos de color —verde, azul y turquesa— y el color no
  * puede ser el único portador del significado. Va como `alt` de la imagen, así que un lector de
  * pantalla lee «Con prenda» y quien pasa el ratón ve el mismo texto.</p>
  *
@@ -73,6 +74,14 @@ export const MARCAS_TRAMITE = [
     label: 'Con transformación',
     src: '/assets/marcas/transformacion.svg',
     lee: (item: InstanceSummary) => item.tieneTransformacion === true,
+  },
+  {
+    // ADR-0053 — algún lado tiene 2+ propietarios. Como las otras dos, marca algo que la fila no
+    // dice por sí sola: sin ella, un copropietario pasa desapercibido entre los nombres de la celda.
+    id: 'multiples-propietarios',
+    label: 'Con múltiples propietarios',
+    src: '/assets/marcas/multiples-propietarios.svg',
+    lee: (item: InstanceSummary) => item.multiplesPropietarios === true,
   },
 ] as const;
 
@@ -136,11 +145,11 @@ export function stepLabel(item: InstanceSummary): string {
  * junto a las otras dos deudas de contraste abiertas (blanco sobre `#8CC63F` y sobre `#FF4E00`).
  */
 export const FIRMA_TEXTO: Record<FirmaParteEstado, { label: string; color: string }> = {
-  firmado: { label: 'Firmado', color: '#16A34A' },
-  pendiente: { label: 'Sin firma', color: '#F9AC00' },
+  firmado: { label: 'Firmado', color: 'var(--flit-success-ink)' },
+  pendiente: { label: 'Sin firma', color: 'var(--badge-warning-fg)' },
   // La propuesta no dibuja una firma rechazada, así que no hay "tono exacto" que copiar: se queda
   // el naranja de marca en su variante para texto, que sí cumple contraste.
-  rechazado: { label: 'Rechazado', color: '#C2410C' },
+  rechazado: { label: 'Rechazado', color: 'var(--destructive)' },
 };
 
 /** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
@@ -149,6 +158,37 @@ export const FUENTE_LABEL: Record<TramiteFuente, string> = {
   integracion: 'Integración',
   migrado: 'Migrado',
 };
+
+/**
+ * Épica #14296 (HUs #14321/#14322) — ÚNICA fuente de los nombres de canal en el frontend. Los códigos
+ * son los del contrato (`TramiteCanal` en el backend / enum del OpenAPI). Ningún otro archivo escribe
+ * estos textos.
+ */
+export const CANAL_LABEL: Record<TramiteCanal, string> = {
+  tramites: 'Trámites',
+  pn_web: 'Persona Natural Web',
+  pn_punto: 'Persona Natural OT',
+  integracion: 'Integración',
+  aplicacion: 'Aplicación',
+};
+
+/** Canales en el orden en que se ofrecen en los selectores. */
+export const CANALES_ORDENADOS: readonly TramiteCanal[] = [
+  'tramites',
+  'pn_web',
+  'pn_punto',
+  'integracion',
+  'aplicacion',
+];
+
+/** Canal que se muestra cuando el backend no lo trae (histórico o backend anterior). */
+export const CANAL_POR_DEFECTO: TramiteCanal = 'tramites';
+
+/** Nombre del canal; un código desconocido (contrato nuevo) se muestra tal cual, sin inventar. */
+export function canalLabel(canal: string | null | undefined): string {
+  if (!canal) return CANAL_LABEL[CANAL_POR_DEFECTO];
+  return CANAL_LABEL[canal as TramiteCanal] ?? canal;
+}
 
 /**
  * Feature #12276 (HU #12312) — texto de la columna «Confirmado en RUNT»: SÍ, NO o vacío (la celda

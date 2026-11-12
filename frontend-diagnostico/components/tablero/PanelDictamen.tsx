@@ -139,24 +139,24 @@ export function PanelDictamen({
     const { dictamen } = carga;
     contenido = (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-flit-primary dark:text-white">
+        <p className="text-sm text-flit-primary">
           Veredicto:{" "}
           <Etiqueta tono={dictamen.veredicto === "BLOQUEADO" ? "danger" : "success"}>{nombreVeredicto(dictamen.veredicto)}</Etiqueta>
         </p>
-        {dictamen.estado_redaccion === "PENDIENTE" && <p className="text-sm text-flit-primary dark:text-white">redacción IA pendiente</p>}
+        {dictamen.estado_redaccion === "PENDIENTE" && <p className="text-sm text-flit-primary">redacción IA pendiente</p>}
         <ol className="flex flex-col gap-3">
           {dictamen.alertamientos.map((alerta, i) => (
-            <li key={`${i}-${alerta.codigo}`} className="rounded-xl border border-[var(--color-flit-gray)] p-3 dark:border-white/10">
-              <p className="text-sm font-semibold text-flit-primary dark:text-white">{alerta.codigo}</p>
+            <li key={`${i}-${alerta.codigo}`} className="rounded-xl border border-border p-3">
+              <p className="text-sm font-semibold text-flit-primary">{alerta.codigo}</p>
               <p className={`mt-1 ${TEXTO_SECUNDARIO_CLS}`}>{`Efecto: ${alerta.efecto}`}</p>
               <p className={TEXTO_SECUNDARIO_CLS}>{`Fuente: ${alerta.fuente}`}</p>
-              <p className="mt-1 text-sm text-flit-primary dark:text-white">{alerta.texto}</p>
+              <p className="mt-1 text-sm text-flit-primary">{alerta.texto}</p>
             </li>
           ))}
         </ol>
         {ofreceOverride && (
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm font-semibold text-flit-primary dark:text-white">Nuevo veredicto</legend>
+            <legend className="text-sm font-semibold text-flit-primary">Nuevo veredicto</legend>
             {VEREDICTOS.map((opcion) => (
               <label key={opcion.valor} className={OPCION_CLS}>
                 <input
