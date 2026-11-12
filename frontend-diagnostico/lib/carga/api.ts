@@ -6,7 +6,13 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
 
-export type TipoIdentificadorVehiculo = "PLACA_CARRO" | "PLACA_MOTO" | "PLACA_REMOLQUE" | "PLACA_MAQUINARIA" | "VIN";
+export type TipoIdentificadorVehiculo =
+  | "PLACA_CARRO"
+  | "PLACA_MOTO"
+  | "PLACA_REMOLQUE"
+  | "PLACA_MAQUINARIA"
+  | "PLACA_MOTOCARRO"
+  | "VIN";
 
 export interface ErrorFila {
   campo: "Identificador_Vehiculo" | "Tipo_Documento_Locatario" | "Documento_Locatario";

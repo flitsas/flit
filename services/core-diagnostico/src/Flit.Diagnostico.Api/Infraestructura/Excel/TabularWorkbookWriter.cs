@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Xml;
 using System.Text;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
@@ -34,6 +36,7 @@ internal static class TabularWorkbookWriter
         public const uint FechaHora = 3;
         public const uint Decimal = 4;
         public const uint TextoLiteral = 5;
+        public const uint Vinculo = 6;
     }
 
     /// <summary>Primeros caracteres con los que una hoja de cálculo interpreta el texto como fórmula (OWASP CSV/Formula Injection).</summary>
@@ -231,6 +234,256 @@ internal static class TabularWorkbookWriter
         return cell;
     }
 
+    /// <summary>
+    /// Libro de una sola hoja escrito en streaming (ajustes 2026-11-11, punto 8: índice del ZIP masivo). A diferencia de
+    /// <see cref="Write"/>, no junta las filas: arma el paquete .xlsx con un <see cref="ZipArchive"/> en modo Create sobre
+    /// <c>destino</c> (sirve la entrada de otro ZIP, que no admite Seek; el SDK no abre paquetes de solo escritura) y cada
+    /// <see cref="Fila"/> sale al destino con el SAX de <see cref="OpenXmlWriter"/>. Mismos estilos, celdas tipadas y protección contra
+    /// fórmulas que <see cref="Write"/>; además admite filas previas al encabezado (el panel congelado y el autofiltro arrancan en el
+    /// encabezado) y un vínculo relativo por fila (relación externa: abre el archivo hermano donde se descomprima el ZIP). En memoria
+    /// solo quedan la referencia y el destino de cada vínculo.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// using (var hoja = TabularWorkbookWriter.HojaEnStreaming.Abrir(destino, "Índice", [[Cell.Of("Lote")]], [new Column("Placa")]))
+    ///     hoja.Fila([Cell.Of("TST801")], vinculo: (0, "TST801.pdf"));
+    /// </code>
+    /// </example>
+    public sealed class HojaEnStreaming : IDisposable
+    {
+        private const string NsPrincipal = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        private const string NsRelaciones = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        private const string NsPaquete = "http://schemas.openxmlformats.org/package/2006/relationships";
+        private const string TipoVinculo = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+
+        private readonly ZipArchive _paquete;
+        private readonly Stream _parteHoja;
+        private readonly OpenXmlWriter _writer;
+        private readonly string _nombre;
+        private readonly int _columnas;
+        private readonly int _filaEncabezado;
+        private readonly List<(string Referencia, string Ruta)> _vinculos = [];
+        private int _ultimaFila;
+        private bool _cerrada;
+
+        private HojaEnStreaming(Stream destino, string nombre, IReadOnlyList<IReadOnlyList<Cell>> previas, IReadOnlyList<Column> columnas)
+        {
+            _nombre = UniqueSheetName(nombre, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            _columnas = columnas.Count;
+            _filaEncabezado = previas.Count + 1;
+            _paquete = new ZipArchive(destino, ZipArchiveMode.Create, leaveOpen: true);
+            _parteHoja = _paquete.CreateEntry("xl/worksheets/sheet1.xml", CompressionLevel.Optimal).Open();
+            _writer = OpenXmlWriter.Create(_parteHoja, Encoding.UTF8);
+            _writer.WriteStartDocument(true);
+            _writer.WriteStartElement(new Worksheet());
+            _writer.WriteStartElement(new SheetViews());
+            _writer.WriteStartElement(new SheetView { WorkbookViewId = 0U });
+            _writer.WriteElement(new Pane
+            {
+                VerticalSplit = _filaEncabezado,
+                TopLeftCell = $"A{_filaEncabezado + 1}",
+                ActivePane = PaneValues.BottomLeft,
+                State = PaneStateValues.Frozen,
+            });
+            _writer.WriteEndElement(); // SheetView
+            _writer.WriteEndElement(); // SheetViews
+            _writer.WriteStartElement(new Columns());
+            for (var i = 0; i < columnas.Count; i++)
+            {
+                _writer.WriteElement(new DocumentFormat.OpenXml.Spreadsheet.Column
+                {
+                    Min = (uint)(i + 1),
+                    Max = (uint)(i + 1),
+                    Width = columnas[i].Width,
+                    CustomWidth = true,
+                });
+            }
+
+            _writer.WriteEndElement(); // Columns
+            _writer.WriteStartElement(new SheetData());
+            foreach (var previa in previas)
+                Escribir(previa, null);
+
+            _writer.WriteStartElement(new Row { RowIndex = (uint)_filaEncabezado });
+            for (var i = 0; i < columnas.Count; i++)
+            {
+                var celda = new DocumentFormat.OpenXml.Spreadsheet.Cell
+                {
+                    CellReference = $"{ColumnName(i)}{_filaEncabezado}",
+                    DataType = CellValues.InlineString,
+                    StyleIndex = StyleIndex.Header,
+                };
+                celda.AppendChild(new InlineString(new Text(columnas[i].Header) { Space = SpaceProcessingModeValues.Preserve }));
+                _writer.WriteElement(celda);
+            }
+
+            _writer.WriteEndElement();
+            _ultimaFila = _filaEncabezado;
+        }
+
+        /// <summary>
+        /// Abre el libro sobre <paramref name="destino"/> (no lo cierra) con las filas <paramref name="previas"/> arriba (una fila vacía
+        /// es una lista vacía) y el encabezado de <paramref name="columnas"/> debajo.
+        /// </summary>
+        public static HojaEnStreaming Abrir(Stream destino, string nombre, IReadOnlyList<IReadOnlyList<Cell>> previas, IReadOnlyList<Column> columnas)
+        {
+            ArgumentNullException.ThrowIfNull(destino);
+            ArgumentNullException.ThrowIfNull(previas);
+            ArgumentNullException.ThrowIfNull(columnas);
+            if (columnas.Count == 0)
+                throw new ArgumentException("Se requiere al menos una columna.", nameof(columnas));
+            return new HojaEnStreaming(destino, nombre, previas, columnas);
+        }
+
+        /// <summary>
+        /// Escribe una fila de datos; <paramref name="vinculo"/> (columna base 0 y ruta relativa) convierte esa celda en vínculo al
+        /// archivo hermano. Una ruta vacía no lleva vínculo.
+        /// </summary>
+        public void Fila(IReadOnlyList<Cell> valores, (int Columna, string? Ruta)? vinculo = null)
+        {
+            ArgumentNullException.ThrowIfNull(valores);
+            ObjectDisposedException.ThrowIf(_cerrada, this);
+            Escribir(valores, vinculo is { Ruta.Length: > 0 } v ? v : null);
+        }
+
+        private void Escribir(IReadOnlyList<Cell> valores, (int Columna, string? Ruta)? vinculo)
+        {
+            var fila = ++_ultimaFila;
+            _writer.WriteStartElement(new Row { RowIndex = (uint)fila });
+            for (var i = 0; i < valores.Count; i++)
+            {
+                var celda = ToOpenXmlCell(valores[i]);
+                celda.CellReference = $"{ColumnName(i)}{fila}";
+                if (vinculo is { } v && v.Columna == i)
+                {
+                    var ruta = Uri.IsWellFormedUriString(v.Ruta, UriKind.Relative) ? v.Ruta! : Uri.EscapeDataString(v.Ruta!);
+                    _vinculos.Add((celda.CellReference.Value!, ruta));
+                    celda.StyleIndex = StyleIndex.Vinculo;
+                }
+
+                _writer.WriteElement(celda);
+            }
+
+            _writer.WriteEndElement();
+        }
+
+        /// <summary>
+        /// Cierra la hoja (autofiltro del encabezado a la última fila y vínculos) y las demás partes del paquete (libro, estilos,
+        /// relaciones y tipos de contenido); el destino sigue abierto.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_cerrada)
+                return;
+            _cerrada = true;
+            _writer.WriteEndElement(); // SheetData
+            _writer.WriteElement(new AutoFilter { Reference = $"A{_filaEncabezado}:{ColumnName(Math.Max(0, _columnas - 1))}{_ultimaFila}" });
+            if (_vinculos.Count > 0)
+            {
+                _writer.WriteStartElement(new Hyperlinks());
+                for (var i = 0; i < _vinculos.Count; i++)
+                    _writer.WriteElement(new Hyperlink { Reference = _vinculos[i].Referencia, Id = Relacion(i) });
+                _writer.WriteEndElement();
+            }
+
+            _writer.WriteEndElement(); // Worksheet
+            _writer.Close();
+            _writer.Dispose();
+            _parteHoja.Dispose();
+
+            if (_vinculos.Count > 0)
+            {
+                Parte("xl/worksheets/_rels/sheet1.xml.rels", x =>
+                {
+                    x.WriteStartElement("Relationships", NsPaquete);
+                    for (var i = 0; i < _vinculos.Count; i++)
+                        Relacion(x, Relacion(i), TipoVinculo, _vinculos[i].Ruta, externa: true);
+                    x.WriteEndElement();
+                });
+            }
+
+            Parte("xl/workbook.xml", x =>
+            {
+                x.WriteStartElement("workbook", NsPrincipal);
+                x.WriteAttributeString("xmlns", "r", null, NsRelaciones);
+                x.WriteStartElement("sheets", NsPrincipal);
+                x.WriteStartElement("sheet", NsPrincipal);
+                x.WriteAttributeString("name", _nombre);
+                x.WriteAttributeString("sheetId", "1");
+                x.WriteAttributeString("id", NsRelaciones, "rId1");
+                x.WriteEndElement();
+                x.WriteEndElement();
+                x.WriteEndElement();
+            });
+            Parte("xl/_rels/workbook.xml.rels", x =>
+            {
+                x.WriteStartElement("Relationships", NsPaquete);
+                Relacion(x, "rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet1.xml", externa: false);
+                Relacion(x, "rId2", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles", "styles.xml", externa: false);
+                x.WriteEndElement();
+            });
+            using (var estilos = _paquete.CreateEntry("xl/styles.xml", CompressionLevel.Optimal).Open())
+            using (var escritor = new StreamWriter(estilos, new UTF8Encoding(false)))
+                escritor.Write(StylesXml);
+            Parte("_rels/.rels", x =>
+            {
+                x.WriteStartElement("Relationships", NsPaquete);
+                Relacion(x, "rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument", "xl/workbook.xml", externa: false);
+                x.WriteEndElement();
+            });
+            Parte("[Content_Types].xml", x =>
+            {
+                const string ns = "http://schemas.openxmlformats.org/package/2006/content-types";
+                x.WriteStartElement("Types", ns);
+                Defecto(x, ns, "rels", "application/vnd.openxmlformats-package.relationships+xml");
+                Defecto(x, ns, "xml", "application/xml");
+                Sobrescribe(x, ns, "/xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml");
+                Sobrescribe(x, ns, "/xl/worksheets/sheet1.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml");
+                Sobrescribe(x, ns, "/xl/styles.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml");
+                x.WriteEndElement();
+            });
+            _paquete.Dispose();
+        }
+
+        private static string Relacion(int vinculo) => $"rIdV{(vinculo + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+
+        private void Parte(string nombre, Action<XmlWriter> escribir)
+        {
+            using var flujo = _paquete.CreateEntry(nombre, CompressionLevel.Optimal).Open();
+            using var x = XmlWriter.Create(flujo, new XmlWriterSettings { Encoding = new UTF8Encoding(false) });
+            x.WriteStartDocument(true);
+            escribir(x);
+            x.WriteEndDocument();
+        }
+
+        private static void Relacion(XmlWriter x, string id, string tipo, string destino, bool externa)
+        {
+            x.WriteStartElement("Relationship", NsPaquete);
+            x.WriteAttributeString("Id", id);
+            x.WriteAttributeString("Type", tipo);
+            x.WriteAttributeString("Target", destino);
+            if (externa)
+                x.WriteAttributeString("TargetMode", "External");
+            x.WriteEndElement();
+        }
+
+        private static void Defecto(XmlWriter x, string ns, string extension, string tipo)
+        {
+            x.WriteStartElement("Default", ns);
+            x.WriteAttributeString("Extension", extension);
+            x.WriteAttributeString("ContentType", tipo);
+            x.WriteEndElement();
+        }
+
+        private static void Sobrescribe(XmlWriter x, string ns, string parte, string tipo)
+        {
+            x.WriteStartElement("Override", ns);
+            x.WriteAttributeString("PartName", parte);
+            x.WriteAttributeString("ContentType", tipo);
+            x.WriteEndElement();
+        }
+    }
+
     /// <summary>Número de serie de Excel: días desde el 30/12/1899, con la hora como fracción —
     /// misma cuenta que <c>frontend/lib/xlsx.ts#serialOf</c> (el mismo dato tiene que verse
     /// idéntico en el export manual y en el adjunto del correo).</summary>
@@ -280,7 +533,8 @@ internal static class TabularWorkbookWriter
     /// Mismo styles.xml (5 estilos, mismos índices) que <c>frontend/lib/xlsx.ts#STYLES_XML</c>:
     /// encabezado en negrita blanca sobre fondo #162744 (tinta FLIT), y formatos de fecha/fecha-hora/
     /// decimal para que Excel trate esas columnas como lo que son, no como texto. Esta copia agrega el
-    /// índice 5: texto literal (formato «@» y quotePrefix) para las celdas que parecen fórmula.
+    /// índice 5: texto literal (formato «@» y quotePrefix) para las celdas que parecen fórmula, y el 6: vínculo (subrayado azul) de
+    /// <see cref="HojaEnStreaming"/>.
     /// </summary>
     private const string StylesXml =
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
@@ -290,9 +544,10 @@ internal static class TabularWorkbookWriter
         "<numFmt numFmtId=\"165\" formatCode=\"dd/mm/yyyy\\ hh:mm\"/>" +
         "<numFmt numFmtId=\"166\" formatCode=\"#,##0.00\"/>" +
         "</numFmts>" +
-        "<fonts count=\"2\">" +
+        "<fonts count=\"3\">" +
         "<font><sz val=\"11\"/><name val=\"Calibri\"/></font>" +
         "<font><b/><color rgb=\"FFFFFFFF\"/><sz val=\"11\"/><name val=\"Calibri\"/></font>" +
+        "<font><u/><sz val=\"11\"/><color rgb=\"FF0563C1\"/><name val=\"Calibri\"/></font>" +
         "</fonts>" +
         "<fills count=\"3\">" +
         "<fill><patternFill patternType=\"none\"/></fill>" +
@@ -301,13 +556,14 @@ internal static class TabularWorkbookWriter
         "</fills>" +
         "<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>" +
         "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
-        "<cellXfs count=\"6\">" +
+        "<cellXfs count=\"7\">" +
         "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>" +
         "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"0\" xfId=\"0\" applyFont=\"1\" applyFill=\"1\"/>" +
         "<xf numFmtId=\"164\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>" +
         "<xf numFmtId=\"165\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>" +
         "<xf numFmtId=\"166\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>" +
         "<xf numFmtId=\"49\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\" quotePrefix=\"1\"/>" +
+        "<xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>" +
         "</cellXfs>" +
         "</styleSheet>";
 }

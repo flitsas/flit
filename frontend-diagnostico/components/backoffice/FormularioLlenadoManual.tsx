@@ -47,6 +47,7 @@ import {
   type SimitBorrador,
 } from "@/lib/backoffice/esquemasManual";
 import { textoTipoError } from "@/lib/tablero/detalle";
+import { nombreRol } from "@/lib/rotulos";
 
 export interface FormularioLlenadoManualProps {
   consultaId: string;
@@ -356,8 +357,6 @@ function FormEsquema({ b, raiz, errores, onChange }: { b: Borrador; raiz: string
   }
 }
 
-const ROL: Record<PersonaEnError["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
-
 /** Sección de una persona en error: rol, orden, documento enmascarado tal como llega y el formulario de su consulta. */
 function SeccionPersona(props: { persona: PersonaEnError; indice: number; b: Borrador; errores: ErroresCampo; onChange: AlCambiar<Borrador> }) {
   const { persona, indice, b, errores, onChange } = props;
@@ -366,7 +365,7 @@ function SeccionPersona(props: { persona: PersonaEnError; indice: number; b: Bor
   return (
     <fieldset id={idDeCampo(campoPersona)} className={`${TARJETA_DETALLE_CLS} flex flex-col gap-3`}>
       <legend className="px-1 text-sm font-semibold text-flit-primary">
-        {`${ROL[persona.rol]} ${persona.orden} · ${persona.tipo_documento} ${persona.documento_enmascarado}`}
+        {`${nombreRol(persona.rol)} ${persona.orden} · ${persona.tipo_documento} ${persona.documento_enmascarado}`}
       </legend>
       <p className={AYUDA_CLS}>
         {`${textoTipoError(persona.tipo_error)}${persona.declarado_por_cliente ? " Documento declarado por el cliente." : ""}`}

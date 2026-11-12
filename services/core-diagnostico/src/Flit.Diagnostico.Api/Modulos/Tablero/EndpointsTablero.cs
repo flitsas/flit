@@ -43,8 +43,11 @@ internal static class EndpointsTablero
         return services;
     }
 
-    private static async Task<IResult> Grilla(Guid id, long? desde, ConsultaGrilla consulta, CancellationToken ct) =>
-        Results.Ok(await consulta.ObtenerAsync(id, desde ?? 0, ct).ConfigureAwait(false));
+    private static async Task<IResult> Grilla(
+        Guid id, long? desde, ConsultaGrilla consulta, Persistence.DiagnosticoDb db,
+        Microsoft.Extensions.Options.IOptions<Derivacion.OpcionesDerivacion> derivacion, CancellationToken ct) =>
+        Results.Ok(await Derivacion.DerivacionEndpoints.CompletarGrillaAsync(
+            await consulta.ObtenerAsync(id, desde ?? 0, ct).ConfigureAwait(false), db, derivacion.Value, ct).ConfigureAwait(false));
 
     private static async Task<IResult> Cerrar(Guid id, CierrePanel cierre, CancellationToken ct) =>
         Results.Ok(await cierre.CerrarAsync(id, ct).ConfigureAwait(false));

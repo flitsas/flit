@@ -32,7 +32,7 @@ export interface VehiculoExpress {
   orden: number;
   identificador: string;
   identificador_norm: string;
-  tipo_identificador: "PLACA_CARRO" | "PLACA_MOTO" | "PLACA_REMOLQUE" | "PLACA_MAQUINARIA" | "VIN";
+  tipo_identificador: "PLACA_CARRO" | "PLACA_MOTO" | "PLACA_REMOLQUE" | "PLACA_MAQUINARIA" | "PLACA_MOTOCARRO" | "VIN";
   tipo_documento_locatario?: string | null;
   /** Enmascarado («****» y los 4 últimos). */
   documento_locatario?: string | null;

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, MARCA_CLS, OPCION_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
+import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
 import { useFocoAtrapado } from "@/components/tablero/DetalleCelda";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS, Vacio } from "@/components/tablero/vistasDetalle/comun";
 import {
@@ -11,6 +12,9 @@ import {
   esSinDictamen,
   obtenerDictamen,
   obtenerDictamenBackoffice,
+  rotuloAlerta,
+  rotuloEfecto,
+  rotuloFuenteAlerta,
   type Dictamen,
 } from "@/lib/dictamen/api";
 
@@ -42,18 +46,15 @@ export function BotonAbrirDictamen({ identificador, onAbrir }: { identificador: 
   );
 }
 
-const VEREDICTOS = [
-  { valor: "VIABLE", nombre: "Viable" },
-  { valor: "BLOQUEADO", nombre: "Bloqueado" },
-] as const;
-
 const nombreVeredicto = (veredicto: Dictamen["veredicto"]) => (veredicto === "BLOQUEADO" ? "Bloqueado" : "Viable");
 
 /**
  * Panel del dictamen vigente (corte 7), el mismo en el tablero del lote y en la grilla del backoffice. No es una ruta
  * y no entra en el sondeo: al abrirse pide el GET. Cuatro estados: vacío (SIN_DICTAMEN), cargando, error con Reintentar
- * y lleno. En lleno se ven el veredicto (con texto, no solo color) y cada alertamiento en el orden del arreglo. Si la
- * redacción está pendiente, se lee «redacción IA pendiente». El override solo se ofrece en el backoffice con la capacidad.
+ * y lleno. En lleno se ven el veredicto (con texto, no solo color) y cada alertamiento en el orden del arreglo, con su rótulo
+ * y el nombre de la fuente, nunca el código (Punto 5). Si la
+ * redacción está pendiente, se lee «redacción IA pendiente». El override solo se ofrece en el backoffice con la capacidad
+ * (sus campos viven en components/backoffice/CamposOverrideDictamen).
  */
 export function PanelDictamen({
   diagnosticoId,
@@ -147,39 +148,21 @@ export function PanelDictamen({
         <ol className="flex flex-col gap-3">
           {dictamen.alertamientos.map((alerta, i) => (
             <li key={`${i}-${alerta.codigo}`} className="rounded-xl border border-border p-3">
-              <p className="text-sm font-semibold text-flit-primary">{alerta.codigo}</p>
-              <p className={`mt-1 ${TEXTO_SECUNDARIO_CLS}`}>{`Efecto: ${alerta.efecto}`}</p>
-              <p className={TEXTO_SECUNDARIO_CLS}>{`Fuente: ${alerta.fuente}`}</p>
+              <p className="text-sm font-semibold text-flit-primary">{rotuloAlerta(alerta)}</p>
+              <p className={`mt-1 ${TEXTO_SECUNDARIO_CLS}`}>{`Efecto: ${rotuloEfecto(alerta)}`}</p>
+              <p className={TEXTO_SECUNDARIO_CLS}>{`Fuente: ${rotuloFuenteAlerta(alerta)}`}</p>
               <p className="mt-1 text-sm text-flit-primary">{alerta.texto}</p>
             </li>
           ))}
         </ol>
         {ofreceOverride && (
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-sm font-semibold text-flit-primary">Nuevo veredicto</legend>
-            {VEREDICTOS.map((opcion) => (
-              <label key={opcion.valor} className={OPCION_CLS}>
-                <input
-                  type="radio"
-                  name="veredicto-dictamen"
-                  value={opcion.valor}
-                  className={MARCA_CLS}
-                  checked={elegido === opcion.valor}
-                  onChange={() => setElegido(opcion.valor)}
-                />
-                {opcion.nombre}
-              </label>
-            ))}
-            <label className={OPCION_CLS}>
-              <input type="checkbox" className={MARCA_CLS} checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} />
-              Confirmo el cambio de veredicto
-            </label>
-            {aviso && (
-              <InlineAlert tone="error" title="No se reemplazó el veredicto">
-                {aviso}
-              </InlineAlert>
-            )}
-          </fieldset>
+          <CamposOverrideDictamen
+            elegido={elegido}
+            onElegir={setElegido}
+            confirmado={confirmado}
+            onConfirmar={setConfirmado}
+            aviso={aviso}
+          />
         )}
       </div>
     );

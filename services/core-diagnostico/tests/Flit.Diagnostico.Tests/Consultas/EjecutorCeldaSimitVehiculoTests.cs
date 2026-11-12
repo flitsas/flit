@@ -111,19 +111,19 @@ public sealed class EjecutorCeldaSimitVehiculoTests
         var timeout = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST107", Fuente.SimitVehiculo, ct);
         var primero = (await MotorPersonas.IntentosAsync(empresa, timeout.Id, ct)).Should().ContainSingle().Subject;
         (timeout.Estado, timeout.IntentosAuto, timeout.TipoError).Should().Be((EstadoCelda.Pendiente, 1, (string?)null), "queda un reintento");
-        timeout.DisponibleDesde.Should().Be(primero.Fin + PoliticaReintentos.Espera(1), "backoff desde el fin del intento");
+        timeout.DisponibleDesde.Should().Be(primero.Fin + PoliticaReintentos.EsperaPorDefecto, "backoff desde el fin del intento");
         var invalida = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST108", Fuente.SimitVehiculo, ct);
         (invalida.Estado, invalida.TipoError, invalida.IntentosAuto).Should().Be((EstadoCelda.Error, "RESPUESTA_INVALIDA", 0), "un definitivo no se reintenta");
         (await procesador.ProcesarLoteAsync(ct)).Should().Be(0, "antes del backoff no se toma");
 
-        reloj.Avanzar(PoliticaReintentos.Espera(1));
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         var agotada = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST107", Fuente.SimitVehiculo, ct);
         (agotada.Estado, agotada.TipoError, agotada.IntentosAuto).Should().Be((EstadoCelda.Error, "TIMEOUT", 1), "agotado el reintento queda en ERROR reprocesable");
         var intentos = await MotorPersonas.IntentosAsync(empresa, agotada.Id, ct);
         intentos.Should().HaveCount(2).And.OnlyContain(i => i.Estado == ResultadoIntento.Error && i.TipoError == "TIMEOUT" && i.IdentificadorConsultado == "TST107");
-        intentos[1].Inicio.Should().BeOnOrAfter(intentos[0].Fin + PoliticaReintentos.Espera(1));
+        intentos[1].Inicio.Should().BeOnOrAfter(intentos[0].Fin + PoliticaReintentos.EsperaPorDefecto);
         (await MotorPersonas.IntentosAsync(empresa, invalida.Id, ct)).Should().ContainSingle();
         simit.Llamadas.Select(l => l.Placa).Should().BeEquivalentTo(["TST107", "TST107", "TST108"]);
     }

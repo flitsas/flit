@@ -64,7 +64,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         foreach (var esperado in new[]
                  {
                      "Marca Línea Cilindraje CHEVROLET SPARK 1200", "VIN N.º motor N.º chasis", "MOT-0001", "CHS-0001",
-                     "Regrabado serie Estado del vehículo", "ACTIVO",
+                     "Regrabado serie Estado del vehículo", "Activo",
                  })
             PdfDePrueba.Tiene(general, esperado).Should().BeTrue($"«{esperado}» en Información general: {general}");
         PdfDePrueba.Tiene(texto, "N.º serie").Should().BeFalse("el RUNT no trae n.º de serie: va n.º chasis en su lugar");
@@ -93,10 +93,10 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         PdfDePrueba.Tiene(Tramo(texto, "ACCIDENTALIDAD", "PÓLIZA DE RESPONSABILIDAD CIVIL"), "Fecha Gravedad 02/02/2025 SOLO DAÑOS").Should().BeTrue(texto);
 
         var generalConPrenda = Tramo(texto, "INFORMACIÓN GENERAL", "DATOS TÉCNICOS");
-        PdfDePrueba.Tiene(generalConPrenda, "Estado del vehículo Prendas NO ACTIVO SI Tiene gravámenes NO").Should().BeTrue(generalConPrenda);
+        PdfDePrueba.Tiene(generalConPrenda, "Estado del vehículo Prendas NO Activo SI Tiene gravámenes NO").Should().BeTrue(generalConPrenda);
         PdfDePrueba.Tiene(Tramo(texto, "LIMITACIONES A LA PROPIEDAD", "GARANTÍAS MOBILIARIAS"), "EMBARGO EXP-0001 JUZGADO DE PRUEBA").Should().BeTrue(texto);
-        PdfDePrueba.Tiene(Tramo(texto, "GARANTÍAS MOBILIARIAS", "INFRACCIONES DEL RUNT"), "BANCO MOBILIARIO S.A. INSCRITA").Should().BeTrue(texto);
-        PdfDePrueba.Tiene(Tramo(texto, "INFRACCIONES DEL RUNT", "BLINDAJE"), "CMP-0001 16/07/2024 C14 PAGADO").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(Tramo(texto, "GARANTÍAS MOBILIARIAS", "INFRACCIONES DEL RUNT"), "BANCO MOBILIARIO S.A. Inscrita").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(Tramo(texto, "INFRACCIONES DEL RUNT", "BLINDAJE"), "CMP-0001 16/07/2024 C14 Pagado").Should().BeTrue(texto);
         PdfDePrueba.Tiene(Tramo(texto, "BLINDAJE", "TARJETA DE OPERACIÓN"), "Blindado Nivel Fecha NO").Should().BeTrue(texto);
         PdfDePrueba.Tiene(Tramo(texto, "TARJETA DE OPERACIÓN", "PROPIETARIOS"), "ESPECIAL").Should().BeTrue(texto);
     }

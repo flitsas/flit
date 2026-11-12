@@ -4,7 +4,7 @@
 // manual. La API vuelve a validar cada permiso.
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
-import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
+import type { EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
 
 export type EstadoCelda = "PENDIENTE" | "EN_CURSO" | "COMPLETADO" | "ERROR" | "NA";
 export type MotivoNa = "SERVICIO_PUBLICO" | "DEPARTAMENTO_NO_SOPORTADO" | "SIN_DOCUMENTO_LOCATARIO";
@@ -16,7 +16,11 @@ export interface CeldaGrilla {
   id: string;
   fuente: Fuente;
   estado: EstadoCelda;
+  /** Punto 5: nombre de negocio del estado (opcional). El chip del semáforo conserva su texto homologado (HU #14512). */
+  estado_etiqueta?: string | null;
   motivo_na: MotivoNa | null;
+  /** Punto 5: nombre de negocio del motivo de la N/A (opcional; sin él, el diccionario local). */
+  motivo_na_etiqueta?: string | null;
   tipo_error: string | null;
   /** Fecha y hora del dato; en la celda reutilizada, la del dato original (D-10). */
   dato_obtenido_en: string | null;
@@ -44,6 +48,8 @@ export interface FilaVehiculo {
   orden: number;
   identificador: string;
   tipo_identificador: string;
+  /** Punto 5: nombre de negocio del tipo de identificador (opcional; sin él, `TIPOS_IDENTIFICADOR` de lib/rotulos). */
+  tipo_identificador_etiqueta?: string | null;
   placa: string | null;
   vin: string | null;
   /** Todas sus celdas en COMPLETADO o NA (R-7), calculado con todas, no solo con las recibidas. */
@@ -55,7 +61,39 @@ export interface FilaVehiculo {
   documento_declarado?: DocumentoDeclaradoFila | null;
   /** HU #14087: documentos de los propietarios del vehículo, en orden; vacío si aún no se conocen. */
   propietarios?: DocumentoPropietarioFila[];
+  /**
+   * Punto 3 (ola 2026-11-11): alguna celda en ERROR o en PENDIENTE/EN_CURSO sin respuesta hace más de 10 min. Solo entonces
+   * hay «Reintentar placa». Sin la clave (backend previo o fila sin cambios), se trata como false.
+   */
+  pegada?: boolean;
+  /**
+   * Punto 4 (incremento 2, contrato provisional; ver lib/tablero/derivacion.ts): el borrador en Trámites que originó la placa,
+   * si existe. Sin la clave (backend previo), no hay acción de trámite.
+   */
+  tramite?: TramiteFila | null;
+  /** Punto 4: la placa se puede derivar (VIABLE, terminada y sin trámite). */
+  elegible_tramite?: boolean;
+  /** Punto 4: código o texto del motivo por el que no es elegible (NO_VIABLE, NO_TERMINADO, YA_TIENE_TRAMITE, EN_CURSO…). */
+  motivo_no_elegible?: string | null;
+  /**
+   * Punto 4 (contrato del incremento 2): derivación de la fila; null con la derivación apagada. Manda sobre las claves planas
+   * de arriba (que se conservan por compatibilidad). Se lee con `derivacionDeFila` (lib/tablero/derivacion.ts).
+   */
+  derivacion?: {
+    elegible: boolean;
+    motivo_no_elegible: string | null;
+    estado: "PENDIENTE" | "ENVIADO" | "CREADO" | "OMITIDO" | "FALLIDO" | null;
+    tramite: TramiteFila | null;
+  } | null;
   celdas: CeldaGrilla[];
+}
+
+/** Trámite creado desde el diagnóstico (Punto 4): id del borrador en Trámites y su número visible. */
+export interface TramiteFila {
+  id: string;
+  numero: string | number;
+  /** Enlace al borrador que arma el backend ({UrlTramites}/tramites/{id}?t={empresa}); puede ser relativo o faltar. */
+  url?: string;
 }
 
 export interface ColumnasGrilla {
@@ -79,6 +117,8 @@ export interface Grilla {
   id: string;
   nombre: string;
   estado: EstadoDiagnostico;
+  /** Punto 5: nombre de negocio del estado del lote (opcional; sin él, `ESTADOS_LOTE`). */
+  estado_etiqueta?: string | null;
   version: number;
   desde: number;
   columnas: ColumnasGrilla;
@@ -86,6 +126,13 @@ export interface Grilla {
   vehiculos: FilaVehiculo[];
   /** Solo con estimado AL_FINALIZAR y el lote COMPLETADO o INCOMPLETO. */
   estimado_consultas?: EstimadoVsConsumido[];
+  /** Punto 3: placas pegadas del lote; viaja en cada respuesta, como el avance. Sin la clave, 0. */
+  total_pegadas?: number;
+  /** Punto 3: ids de las placas pegadas, en cada respuesta. Cubre las que se pegan solo por tiempo (> 10 min sin cambio de celda),
+   * que el sondeo incremental no reenvía. Sin la clave, se conserva el `pegada` de cada fila. */
+  vehiculos_pegados?: string[];
+  /** Punto 4 (provisional): modo del lote; en SIMPLE, «Crear trámite» pide el tipo. Sin la clave, se pregunta solo si la API lo exige. */
+  modo?: ModoDiagnostico;
 }
 
 export interface PanelCerrado {
@@ -109,6 +156,38 @@ export function cerrarPanel(id: string): Promise<PanelCerrado> {
 /** POST /consultas/{cid}/reprocesar (HU #13746): la celda en ERROR vuelve a PENDIENTE y el lote a EN_PROCESO. */
 export async function reprocesarConsulta(consultaId: string): Promise<void> {
   await apiFetch<unknown>(`/consultas/${encodeURIComponent(consultaId)}/reprocesar`, { method: "POST" });
+}
+
+/** Respuesta de los dos reintentos manuales (Punto 3): cuántas celdas volvieron a PENDIENTE. */
+export interface ResultadoReintento {
+  reencoladas: number;
+}
+
+/** Rutas de los reintentos manuales, aisladas aquí por si el backend cambia el nombre. */
+export const rutaReintentarVehiculo = (id: string, vehiculoId: string) => ruta(id, `/vehiculos/${encodeURIComponent(vehiculoId)}/reintentar`);
+export const rutaReintentarPegadas = (id: string) => ruta(id, "/reintentar-pegadas");
+
+/** POST /diagnosticos/{id}/vehiculos/{vid}/reintentar: solo las celdas pegadas de la placa vuelven a PENDIENTE. */
+export function reintentarVehiculo(id: string, vehiculoId: string): Promise<ResultadoReintento> {
+  return apiFetch<ResultadoReintento>(rutaReintentarVehiculo(id, vehiculoId), { method: "POST" });
+}
+
+/** POST /diagnosticos/{id}/reintentar-pegadas: todas las celdas pegadas del lote vuelven a PENDIENTE. */
+export function reintentarPegadas(id: string): Promise<ResultadoReintento> {
+  return apiFetch<ResultadoReintento>(rutaReintentarPegadas(id), { method: "POST" });
+}
+
+/** «N consultas reenviadas» (singular con 1). */
+export function mensajeReenviadas(reencoladas: number): string {
+  const n = Number.isFinite(reencoladas) ? Math.max(0, Math.trunc(reencoladas)) : 0;
+  if (n === 0) return "No había consultas pegadas para reenviar.";
+  return n === 1 ? "1 consulta reenviada" : `${n} consultas reenviadas`;
+}
+
+/** Mensaje claro de un error de los reintentos manuales; cualquier otro, el de la API. */
+export function mensajeReintento(error: unknown): string {
+  if (error instanceof ApiError && error.status === 403) return "No tienes permiso para reintentar consultas.";
+  return error instanceof Error && error.message ? error.message : "No se pudieron reintentar las consultas.";
 }
 
 const MENSAJES_CIERRE: Record<string, string> = {

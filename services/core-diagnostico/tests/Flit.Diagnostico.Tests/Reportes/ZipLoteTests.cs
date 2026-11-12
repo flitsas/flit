@@ -32,7 +32,7 @@ namespace Flit.Diagnostico.Tests.Reportes;
 /// <c>POST /diagnosticos/{id}/evidencias {"tipo":"ZIP"}</c> responde 202 (o 200 si ya hay uno LISTA con la misma huella), el
 /// empaquetador de la cola lo genera (aquí se llama directo: el trabajador hospedado está apagado en las pruebas) y
 /// <c>GET …/evidencias/{eid}</c> / <c>GET …/evidencias/{eid}/archivo</c> dan el estado y el archivo. Las pruebas leen el CONTENIDO
-/// del ZIP: los nombres de sus entradas, <c>indice.txt</c> y el texto de cada PDF (<see cref="PdfTextExtractor"/>). Postgres real
+/// del ZIP: los nombres de sus entradas, <c>indice.xlsx</c> (punto 8, 2026-11-11) y el texto de cada PDF (<see cref="PdfTextExtractor"/>). Postgres real
 /// (base efímera de <see cref="ApiDePrueba"/>); placas TST5## y payloads ficticios.
 /// </summary>
 /// <example>
@@ -98,7 +98,8 @@ public sealed class ZipLoteTests
             descarga.Headers.CacheControl!.NoStore.Should().BeTrue("lleva documentos enmascarados y datos de la compañía");
             var zip = ZipDePrueba.Leer(await descarga.Content.ReadAsByteArrayAsync(ct));
             zip.Entradas.Keys.Should().BeEquivalentTo(
-                [$"diagnostico-{lote.Id.ToString()[..8]}-TST501.pdf", $"diagnostico-{lote.Id.ToString()[..8]}-TST502.pdf", "indice.txt"]);
+                [$"diagnostico-{lote.Id.ToString()[..8]}-TST501.pdf", $"diagnostico-{lote.Id.ToString()[..8]}-TST502.pdf", "indice.xlsx"]);
+            zip.Entradas.Keys.Should().NotContain("indice.txt", "el índice de texto se reemplazó por el Excel (punto 8)");
             PdfDePrueba.Tiene(zip.TextoPdf("TST501"), "TST501").Should().BeTrue();
             PdfDePrueba.Tiene(zip.TextoPdf("TST502"), "TST502").Should().BeTrue();
 
@@ -152,11 +153,13 @@ public sealed class ZipLoteTests
             PdfDePrueba.Tiene(zip.TextoPdf(placa), placa).Should().BeTrue();
         var lineas = zip.Indice.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         lineas.Should().Contain(l => l.Contains("TST514", StringComparison.Ordinal) && l.Contains("En proceso", StringComparison.Ordinal)
-            && l.Contains("No incluido", StringComparison.Ordinal), zip.Indice);
+            && l.Contains("\tNo\t", StringComparison.Ordinal) && l.Contains("Pendiente", StringComparison.Ordinal), zip.Indice);
         foreach (var placa in new[] { "TST511", "TST512", "TST513" })
             lineas.Should().Contain(l => l.Contains(placa, StringComparison.Ordinal) && l.Contains("Terminado", StringComparison.Ordinal)
-                && l.Contains("Incluido", StringComparison.Ordinal) && !l.Contains("No incluido", StringComparison.Ordinal), zip.Indice);
-        zip.Indice.Should().Contain(lote.Id.ToString());
+                && l.Contains("\tSí\t", StringComparison.Ordinal) && l.Contains(".pdf", StringComparison.Ordinal), zip.Indice);
+        zip.Indice.Should().Contain("Lote del tablero", "la cabecera lleva el nombre del diagnóstico");
+        zip.Indice.Should().NotContain(lote.Id.ToString(), "ya no el GUID");
+        zip.Indice.Should().Contain("3 de 4 vehículos con PDF");
         zip.Indice.Should().NotContainAny(["****", "99999123"], "el índice no lleva documentos");
     }
 
@@ -192,7 +195,7 @@ public sealed class ZipLoteTests
         var completo = zip.TextoPdf("TST521");
         PdfDePrueba.Tiene(completo, TituloSimit).Should().BeTrue(completo);
         completo.IndexOf(PdfDePrueba.Plano("TST-C-0501"), StringComparison.Ordinal).Should().BeGreaterThan(completo.IndexOf(PdfDePrueba.Plano(TituloSimit), StringComparison.Ordinal), completo);
-        zip.Indice.Should().NotContain("No incluido", "con el lote INCOMPLETO ninguno queda fuera");
+        zip.Indice.Should().NotContain("\tNo\t", "con el lote INCOMPLETO ninguno queda fuera");
         zip.Indice.Split('\n').Should().Contain(l => l.Contains("TST523", StringComparison.Ordinal) && l.Contains("Con error", StringComparison.Ordinal), zip.Indice);
         zip.Indice.Should().NotContainAny(["TIMEOUT", "Timeout"]);
     }
@@ -274,6 +277,41 @@ public sealed class ZipLoteTests
         zips[0].Huella.Should().NotBe(zips[1].Huella);
         var zip = await ZipDePrueba.ArchivoOkAsync(cliente, lote.Id, nuevo, ct);
         PdfDePrueba.Tiene(zip.TextoPdf("TST533"), "TST-C-0502").Should().BeTrue("el PDF nuevo trae el dato del llenado manual");
+    }
+
+    // Punto 4 (incremento 3) → punto 8 — el borrador creado desde el diagnóstico sale en la columna Trámite del índice
+    // (vehiculos.tramite_numero) y entra en la huella: con un trámite nuevo, el pedido no reutiliza el ZIP anterior.
+    [Fact]
+    public async Task El_tramite_del_vehiculo_sale_en_el_indice_y_cambia_la_huella_del_zip()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ZipDePrueba.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteTerminadoAsync(empresa, "TST536", ct);
+        var cliente = api.Cliente(PdfDePrueba.Token(api, empresa.Id));
+        var (_, primero) = await ZipDePrueba.PedirAsync(cliente, lote.Id, ct);
+        await ZipDePrueba.DrenarAsync(api, ct);
+        var anterior = primero.GetProperty("id").GetGuid();
+        (await ZipDePrueba.ArchivoOkAsync(cliente, lote.Id, anterior, ct)).Indice.Should().NotContain("TR-000536");
+
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.DiagnosticoId == lote.Id, ct);
+            vehiculo.TramiteId = Guid.NewGuid();
+            vehiculo.TramiteNumero = "TR-000536";
+            vehiculo.TramiteCreadoEn = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var (respuesta, segundo) = await ZipDePrueba.PedirAsync(cliente, lote.Id, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, "el trámite nuevo cambia la huella: no se reutiliza el ZIP anterior");
+        var nuevo = segundo.GetProperty("id").GetGuid();
+        nuevo.Should().NotBe(anterior);
+        await ZipDePrueba.DrenarAsync(api, ct);
+        var zip = await ZipDePrueba.ArchivoOkAsync(cliente, lote.Id, nuevo, ct);
+        zip.Indice.Split('\n').Should().Contain(l => l.Contains("TST536", StringComparison.Ordinal) && l.Contains("TR-000536", StringComparison.Ordinal), zip.Indice);
     }
 
     // AC5 (F07-C7) — lote sin vehículos terminados: 409 SIN_VEHICULOS_TERMINADOS y no se crea evidencia.
@@ -459,7 +497,7 @@ public sealed class ZipLoteTests
             var respuesta = await cliente.GetAsync(ruta, ct);
             var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{ruta}: {cuerpo}");
-            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
             cuerpo.Should().NotContainAny(deBNoCruza);
         }
 
@@ -569,7 +607,7 @@ public sealed class ZipLoteTests
 
 /// <summary>
 /// Ayudas del ZIP del lote (HU #13850): rutas, pedido, estado, el empaquetador de la cola (el trabajador hospedado está apagado
-/// en las pruebas) y la lectura del ZIP: entradas, <c>indice.txt</c> y el texto aplanado de cada PDF. También es el lector del
+/// en las pruebas) y la lectura del ZIP: entradas, <c>indice.xlsx</c> (como texto: una línea por fila, celdas separadas por tabulador) y el texto aplanado de cada PDF. También es el lector del
 /// cuerpo del escenario de fuga (<see cref="EscenariosDeFuga.RutaArchivoEvidencia"/>): un cuerpo que no es ZIP se devuelve tal cual.
 /// </summary>
 /// <example>
@@ -602,7 +640,7 @@ internal static class ZipDePrueba
         ArgumentNullException.ThrowIfNull(cliente);
         var respuesta = await cliente.PostAsJsonAsync(Ruta(id), new Dictionary<string, string> { ["tipo"] = tipo }, ct);
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        return (respuesta, texto.Length == 0 ? default : JsonDocument.Parse(texto).RootElement.Clone());
+        return (respuesta, texto.Length == 0 ? default : JsonElement.Parse(texto).Clone());
     }
 
     public static async Task<JsonElement> EstadoAsync(HttpClient cliente, Guid id, Guid eid, CancellationToken ct)
@@ -611,7 +649,7 @@ internal static class ZipDePrueba
         var respuesta = await cliente.GetAsync(RutaEstado(id, eid), ct);
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        return JsonDocument.Parse(texto).RootElement.Clone();
+        return JsonElement.Parse(texto).Clone();
     }
 
     /// <summary>Una vuelta del empaquetador: true si tomó un ZIP de la cola.</summary>
@@ -671,7 +709,10 @@ internal sealed record ZipLeido(IReadOnlyDictionary<string, byte[]> Entradas)
 {
     public IReadOnlyList<string> Pdfs => [.. Entradas.Keys.Where(n => n.EndsWith(".pdf", StringComparison.Ordinal)).Order(StringComparer.Ordinal)];
 
-    public string Indice => Entradas.TryGetValue("indice.txt", out var bytes) ? Encoding.UTF8.GetString(bytes) : string.Empty;
+    /// <summary><c>indice.xlsx</c> como texto: una línea por fila de la hoja, celdas separadas por tabulador; vacío si no viene.</summary>
+    public string Indice => Entradas.TryGetValue("indice.xlsx", out var bytes)
+        ? string.Join('\n', ExcelDePrueba.Leer(bytes).Hojas.Values.Single().Select(f => string.Join('\t', f)))
+        : string.Empty;
 
     /// <summary>Texto aplanado del PDF cuyo nombre contiene <paramref name="placaONombre"/>.</summary>
     public string TextoPdf(string placaONombre) =>

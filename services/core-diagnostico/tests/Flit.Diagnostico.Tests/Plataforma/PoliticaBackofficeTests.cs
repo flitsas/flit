@@ -9,9 +9,10 @@ using Xunit;
 namespace Flit.Diagnostico.Tests.Plataforma;
 
 /// <summary>
-/// HU #13728 (F00.1-H5), escenarios 1 y 2 — <c>PoliticaBackoffice</c> exige a la vez el permiso
+/// HU #13728 (F00.1-H5), escenarios 1 y 2 — fuera del SuperAdmin, <c>PoliticaBackoffice</c> exige a la vez el permiso
 /// <c>diagnostico.backoffice.ver</c> y el claim <c>tenant_type=FLIT</c> (D-16). Con el rol de backoffice en una compañía que
-/// no es FLIT, o en la compañía FLIT sin el permiso, toda ruta <c>/backoffice/*</c> responde 403.
+/// no es FLIT, o en la compañía FLIT sin el permiso, toda ruta <c>/backoffice/*</c> responde 403. Desde los ajustes del
+/// 2026-11-11 (punto 1) el SuperAdmin de cualquier compañía entra a la configuración.
 /// </summary>
 /// <example>
 /// <code>
@@ -41,9 +42,11 @@ public sealed class PoliticaBackofficeTests
                 .StatusCode.Should().Be(HttpStatusCode.Forbidden, "cualquier ruta /backoffice/*, también una que aún no existe");
         }
 
+        // Ajustes 2026-11-11, punto 1: el SuperAdmin de cualquier compañía sí entra a la configuración del backoffice (la
+        // matriz completa por sección está en PoliticasBackofficeMatrizTests). Sin ?empresa= llega al filtro: 400, no 403.
         var superAdminNoFlit = api.Token(permisos: [Permisos.BackofficeVer], roles: ["SuperAdmin"], tipoEmpresa: "CLIENTE");
-        (await api.Cliente(superAdminNoFlit).GetAsync(url, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden,
-            "ni el SuperAdmin abre el backoffice fuera de la compañía FLIT");
+        (await api.Cliente(superAdminNoFlit).GetAsync(Resumen, ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "el SuperAdmin de una compañía no FLIT pasa la política de configuración y llega a la empresa explícita");
         (await api.Anonimo().GetAsync(url, ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "sin token sigue siendo 401");
     }
 

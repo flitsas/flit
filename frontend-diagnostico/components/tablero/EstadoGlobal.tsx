@@ -4,6 +4,7 @@ import { useId } from "react";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
 import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
+import { rotular } from "@/lib/rotulos";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import type { EstimadoVsConsumido as Estimado, Grilla } from "@/lib/tablero/api";
 
@@ -15,12 +16,19 @@ export const ESTADOS_LOTE: Record<EstadoDiagnostico, { texto: string; tono: Stat
   INCOMPLETO: { texto: "Incompleto", tono: "warning" },
 };
 
+/** Texto y tono del estado del lote: la etiqueta de la API primero; un estado desconocido, gris «Novedad sin clasificar». */
+export function vistaEstadoLote(estado: EstadoDiagnostico, etiqueta?: string | null): { texto: string; tono: StatusTone } {
+  const local = ESTADOS_LOTE[estado];
+  const texto = rotular({ contexto: "estado del lote", codigo: estado, etiqueta, respaldo: (c) => ESTADOS_LOTE[c as EstadoDiagnostico]?.texto });
+  return { texto, tono: local?.tono ?? "neutral" };
+}
+
 /**
  * Estado global y avance del lote (HU #13748, F04-C4/C5): chip del estado, barra de vehículos terminados y, si el lote sigue
  * con consultas abiertas, el aviso de que la grilla se actualiza sola.
  */
 export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando: boolean }) {
-  const { texto, tono } = ESTADOS_LOTE[grilla.estado] ?? { texto: grilla.estado, tono: "neutral" as const };
+  const { texto, tono } = vistaEstadoLote(grilla.estado, grilla.estado_etiqueta);
   const { vehiculos, terminados } = grilla.avance;
   const porcentaje = vehiculos > 0 ? Math.round((terminados / vehiculos) * 100) : 0;
 

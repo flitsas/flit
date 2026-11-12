@@ -54,11 +54,11 @@ internal static class ExcelLote
 
     public const string HojaConsultas = "Consultas";
 
-    public const string Terminado = "Terminado";
+    public const string Terminado = RotulosDiagnostico.VehiculoTerminado;
 
-    public const string EnProceso = "En proceso";
+    public const string EnProceso = RotulosDiagnostico.VehiculoEnProceso;
 
-    public const string ConError = "Con error";
+    public const string ConError = RotulosDiagnostico.VehiculoConError;
 
     public const string AlMenos = "al menos";
 
@@ -112,7 +112,7 @@ internal static class ExcelLote
         {
             var fila = new List<Celda>
             {
-                Celda.Of(v.Orden), Celda.Of(v.Identificador), Celda.Of(v.TipoIdentificador), Celda.Of(v.Placa), Celda.Of(v.Vin),
+                Celda.Of(v.Orden), Celda.Of(v.Identificador), Celda.Of(RotulosDiagnostico.DeTipoIdentificador(v.TipoIdentificador)), Celda.Of(v.Placa), Celda.Of(v.Vin),
                 Celda.Of(EstadoVehiculo(v.Secciones)),
             };
             foreach (var seccion in v.Secciones)
@@ -184,7 +184,7 @@ internal static class ExcelLote
             { Resultado: ResultadoAvaluoDetalle a } =>
             [
                 !a.SinValorComercial && a.ValorSugerido is { } valor ? Celda.Of((double)valor) : Celda.Empty,
-                a.SinValorComercial || a.FuentePrincipal is null ? Celda.Empty : Celda.Of(PdfVehiculo.FuentesAvaluo.GetValueOrDefault(a.FuentePrincipal, a.FuentePrincipal)),
+                a.SinValorComercial || a.FuentePrincipal is null ? Celda.Empty : Celda.Of(RotulosDiagnostico.DeFuenteAvaluo(a.FuentePrincipal)),
                 Celda.Of(a.SinValorComercial ? "Sí" : "No"),
             ],
             { Resultado: ResultadoImpuestoDetalle i } =>

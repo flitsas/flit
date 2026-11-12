@@ -1,4 +1,57 @@
-# Ficha del catálogo de reglas del dictamen — versión 1
+# Ficha del catálogo de reglas del dictamen — versiones 1 y 2
+
+> **Vigente: versión 2 (2026-11-11).** Los dictámenes nuevos se emiten con `catalogo_version = 2`. Los ya emitidos conservan la versión 1 y no se reevalúan; un override de un dictamen v1 vuelve a las plantillas de v1. La v1 sigue sembrada intacta en `diagnostico.reglas_dictamen` (textos, efectos y `vigente`); la v2 se siembra con la migración `P2_CatalogoDictamenV2`. Código: `CatalogoReglasDictamen` (`Filas` = v2, `FilasV1`, `FilasDe(version)`, `Historico`).
+
+## Versión 2 — multas bloqueantes (punto 2 del plan `plan-ajustes-diagnostico-2026-11-11.md`)
+
+Rama `feature/ajustes-diagnostico-2026-11-11`. Decisiones 2.1–2.6 del plan y hallazgos V1–V3 y V8. 17 reglas por tipo de trámite (51 filas): las 14 de v1 más `SIMIT_SIN_VERIFICAR`, `SIMIT_LICENCIA` y `SIMIT_ACUERDO_PAGO`.
+
+### Qué cambia respecto a v1
+
+| Código | Dispara cuando | `TRASPASO_STANDARD` y `TRASPASO_TRANSFERENCIA_DE_DOMINIO` | `TRASPASO_UNILATERAL` |
+| --- | --- | --- | --- |
+| `SIMIT_VEHICULO` | SIMIT del vehículo: comparendos > 0 o sin paz y salvo. Ya no mira licencia ni acuerdos | `BLOQUEA` (política FLIT: la norma pide el paz y salvo de las personas, no del vehículo) | `ADVIERTE` |
+| `SIMIT_PROPIETARIO` | SIMIT del propietario, solo sin leasing: comparendos > 0 o sin paz y salvo | `BLOQUEA` | `ADVIERTE` |
+| `SIMIT_LOCATARIO` | SIMIT del locatario (leasing, o cuando hay documento de locatario): comparendos > 0 o sin paz y salvo | `BLOQUEA` | `ADVIERTE` |
+| `SIMIT_SIN_VERIFICAR` | Falta una consulta SIMIT exigida: la del vehículo; la del propietario sin leasing, o la del locatario en leasing (error, no aplica, sin resultado, leasing sin documento del locatario o sin lectura del locatario). Un solo motivo aunque falten varias; la fuente es la primera que falta (vehículo, propietario, locatario) | `BLOQUEA` | `ADVIERTE` |
+| `SIMIT_LICENCIA` | Algún SIMIT leído (vehículo, propietario o locatario) reporta licencia suspendida o cancelada. Una regla por fuente | `ADVIERTE` | `ADVIERTE` |
+| `SIMIT_ACUERDO_PAGO` | Algún SIMIT leído tiene un acuerdo con saldo pendiente distinto de cero. Una regla por fuente. Si además dice «sin paz y salvo», bloquea por la regla de multas | `ADVIERTE` | `ADVIERTE` |
+| `FUENTE_PENDIENTE` | Solo RUNT del vehículo, RUNT del propietario e impuesto en error. El SIMIT faltante ya no la dispara: lo cubre `SIMIT_SIN_VERIFICAR` | `ADVIERTE` | `ADVIERTE` |
+
+**Bug RTM/SOAT por clase (ola 2026-11-11, hallazgos V4/V5, dictamen de expert-doc-engine; entra en la misma v2, sin v3):**
+
+| Código | Condición v2 | `TRASPASO_STANDARD` / `TRASPASO_TRANSFERENCIA_DE_DOMINIO` | `TRASPASO_UNILATERAL` |
+| --- | --- | --- | --- |
+| `SOAT_NO_VIGENTE` | SOAT no vigente en carro, moto, motocarro o clase desconocida. El remolque/semirremolque está exento y no dispara; la maquinaria dispara `SOAT_MAQUINARIA` | `BLOQUEA` | `BLOQUEA` |
+| `SOAT_MAQUINARIA` (nueva) | SOAT no vigente en maquinaria: NA con advertencia hasta confirmar si se le exige | `ADVIERTE` | `ADVIERTE` |
+| `RTM_NO_VIGENTE` | RTM no vigente desde la primera revisión: 2 años de matrícula para moto, motocarro (mototriciclo, tricimoto, cuatrimoto, cuadriciclo) y carro de servicio público; 5 para el resto de carros y para la clase desconocida. Maquinaria y remolque: no aplica. Sin fecha de matrícula se exige | `BLOQUEA` | `ADVIERTE` (art. 5.3.2.2: el unilateral no valida RTM) |
+
+Clase y servicio salen del detalle RUNT (`clase_vehiculo`, `clasificacion`, `tipo_servicio`), con el RUNT normalizado y el tipo de placa (maquinaria `AA999999`, remolque `R/S` + dígitos) como respaldo (`ClasificadorVehiculoDictamen`). Plantillas: `SOAT_MAQUINARIA` = «La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia y el traspaso sigue viable.»; `RTM_NO_VIGENTE` = «La revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión (2 años de matrícula para motos, motocarros y servicio público; 5 años para particulares), así que el traspaso queda bloqueado.» (en el unilateral termina en «. En el traspaso unilateral es una advertencia y el trámite sigue viable.»). Migración `P7a_DictamenV2RtmSoatPorClase`.
+
+Sin cambio: `ESTADO_VEHICULO`, `LIMITACION`, `GRAVAMEN`, `GARANTIA_MOBILIARIA`, `PRENDA`, `INFRACCION_RUNT`, `LICENCIA_CONDUCTOR` (sigue advirtiendo, nunca bloquea), `IMPUESTO`. En leasing no se evalúa el SIMIT del propietario, ni para multas ni para «sin verificar».
+
+El traspaso unilateral advierte en las reglas de multas por la Res. 20233040017145, art. 5.3.2.2 (no exige paz y salvo). Es una decisión derivada del dictamen normativo y queda pendiente de confirmación del usuario (hallazgo V2).
+
+### Plantillas v2
+
+Las reglas que bloquean no dicen «Es una advertencia». Las que no cambian conservan el texto de v1 (sección 6).
+
+| Código | `TRASPASO_STANDARD` / `TRASPASO_TRANSFERENCIA_DE_DOMINIO` | `TRASPASO_UNILATERAL` |
+| --- | --- | --- |
+| `SIMIT_VEHICULO` | El vehículo tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. Por política de FLIT el traspaso queda bloqueado hasta que se pongan al día. | El vehículo tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. En el traspaso unilateral es una advertencia y el trámite sigue viable. |
+| `SIMIT_PROPIETARIO` | El propietario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. El traspaso queda bloqueado hasta que se ponga al día. | El propietario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. En el traspaso unilateral es una advertencia y el trámite sigue viable. |
+| `SIMIT_LOCATARIO` | El locatario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. El traspaso queda bloqueado hasta que se ponga al día. | El locatario tiene multas pendientes en el SIMIT: comparendos por pagar o no está a paz y salvo. En el traspaso unilateral es una advertencia y el trámite sigue viable. |
+| `SIMIT_SIN_VERIFICAR` | No se pudo verificar en el SIMIT si hay multas pendientes: la consulta falló, no respondió o falta el documento del locatario. El traspaso queda bloqueado hasta completar la consulta. | No se pudo verificar en el SIMIT si hay multas pendientes: la consulta falló, no respondió o falta el documento del locatario. En el traspaso unilateral es una advertencia y el trámite sigue viable. |
+| `SIMIT_LICENCIA` | El SIMIT reporta una licencia de conducción suspendida o cancelada. Es una advertencia y no cambia el veredicto. | (igual) |
+| `SIMIT_ACUERDO_PAGO` | Hay un acuerdo de pago con saldo pendiente en el SIMIT. Es una advertencia y no cambia el veredicto. | (igual) |
+
+Orden de las reglas en el dictamen: `SOAT_NO_VIGENTE`, `SOAT_MAQUINARIA`, `RTM_NO_VIGENTE`, `ESTADO_VEHICULO`, `SIMIT_VEHICULO`, `SIMIT_PROPIETARIO`, `SIMIT_LOCATARIO`, `SIMIT_SIN_VERIFICAR`, `SIMIT_LICENCIA`, `SIMIT_ACUERDO_PAGO`, `LIMITACION`, `GRAVAMEN`, `GARANTIA_MOBILIARIA`, `PRENDA`, `INFRACCION_RUNT`, `LICENCIA_CONDUCTOR`, `IMPUESTO`, `FUENTE_PENDIENTE`.
+
+---
+
+## Versión 1 (2026-11-03) — histórica
+
+Lo que sigue es la ficha original de v1, sin cambios. Rige para los dictámenes emitidos con `catalogo_version = 1`.
 
 Documento para completar a mano. Con las respuestas se arma la siembra de `diagnostico.reglas_dictamen`. La tabla `diagnostico.dictamenes` no se siembra: cada fila nace cuando un vehículo de un lote Con Análisis IA termina, y el motor escribe el veredicto a partir de estas reglas.
 

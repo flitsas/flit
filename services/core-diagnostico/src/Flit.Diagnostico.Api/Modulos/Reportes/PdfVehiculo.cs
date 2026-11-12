@@ -34,8 +34,11 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </example>
 internal static partial class PdfVehiculo
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 6 = impuesto con deuda sin valor, sin deuda y «No confirmado».</summary>
-    public const int VersionPlantilla = 6;
+    /// <summary>
+    /// Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 6 = impuesto con deuda sin valor, sin deuda y
+    /// «No confirmado». 7 = rótulos de negocio (punto 5, 2026-11-11): estados de las fuentes en tipo oración y «Análisis en preparación».
+    /// </summary>
+    public const int VersionPlantilla = 7;
 
     public const string ContentType = "application/pdf";
 
@@ -66,17 +69,7 @@ internal static partial class PdfVehiculo
     /// Títulos de sección por código de fuente (los de la grilla), sin el prefijo de la fuente («RUNT —», «SIMIT —»): el diseño v2
     /// los pinta en mayúsculas (<see cref="TituloVisible"/>).
     /// </summary>
-    public static readonly IReadOnlyDictionary<string, string> Titulos = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["RUNT"] = "Información del vehículo",
-        ["RUNT_PROPIETARIO"] = "Propietarios",
-        ["RUNT_LOCATARIO"] = "Locatarios",
-        ["SIMIT_VEHICULO"] = "Comparendos del vehículo",
-        ["SIMIT_PROPIETARIO"] = "Comparendos de los propietarios",
-        ["SIMIT_LOCATARIO"] = "Comparendos de los locatarios",
-        ["AVALUO"] = "Avalúo comercial",
-        ["IMPUESTO_DEPARTAMENTAL"] = "Impuesto vehicular departamental",
-    };
+    public static IReadOnlyDictionary<string, string> Titulos => RotulosDiagnostico.TitulosSeccion;
 
     /// <summary>Una línea, bajo el título, de qué contiene cada sección.</summary>
     private static readonly Dictionary<string, string> Descripciones = new(StringComparer.Ordinal)
@@ -104,13 +97,8 @@ internal static partial class PdfVehiculo
         ["Impuesto vehicular departamental"] = "Vigencias del impuesto y si figuran pagadas.",
     };
 
-    /// <summary>Nombre de cada fuente del avalúo (también para el Excel del lote, HU #13849).</summary>
-    internal static readonly IReadOnlyDictionary<string, string> FuentesAvaluo = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["fasecolda"] = "Fasecolda",
-        ["mercado_libre"] = "Mercado Libre",
-        ["base_gravable"] = "Base gravable",
-    };
+    /// <summary>Nombre de cada fuente del avalúo (también para el Excel del lote, HU #13849); vive en <see cref="RotulosDiagnostico"/>.</summary>
+    internal static IReadOnlyDictionary<string, string> FuentesAvaluo => RotulosDiagnostico.FuentesAvaluo;
 
     /// <summary>Alto (pt) desde el borde inferior de la hoja hasta el bloque de texto del pie, sobre la banda del membrete.</summary>
     private const float PieDesdeAbajo = 30;
@@ -289,16 +277,12 @@ internal static partial class PdfVehiculo
         ? string.Join(", ", titulares.Select(t => $"{t.TipoDocumento ?? NoRegistra} ({t.TipoPropiedad ?? NoRegistra})"))
         : NoRegistra;
 
-    /// <summary>Estado de SOAT/RTM/póliza en tipo oración: VIGENTE → «Vigente», NO VIGENTE → «No vigente», NO REQUIERE → «No requiere»; null → «No registra».</summary>
-    internal static string Estado(string? estado) => string.IsNullOrWhiteSpace(estado)
-        ? NoRegistra
-        : estado.Trim().ToUpperInvariant() switch
-        {
-            "VIGENTE" => "Vigente",
-            "NO VIGENTE" => "No vigente",
-            "NO REQUIERE" => "No requiere",
-            _ => estado.Trim(),
-        };
+    /// <summary>
+    /// Estado que entrega la fuente (SOAT, RTM, póliza, licencia, comparendo, acuerdo…) en tipo oración por
+    /// <see cref="RotulosDiagnostico.DeEstadoFuente"/>: VIGENTE → «Vigente», NO VIGENTE → «No vigente», PENDIENTE → «Pendiente»; uno
+    /// desconocido sale tal cual; null → «No hay información».
+    /// </summary>
+    internal static string Estado(string? estado) => string.IsNullOrWhiteSpace(estado) ? NoRegistra : RotulosDiagnostico.DeEstadoFuente(estado);
 
     /// <summary>«{Tipo} {Número}» del acreedor (el número de persona natural ya viene enmascarado); sin ninguno, «No registra».</summary>
     private static string DocumentoAcreedor(DetalleRuntGarantia g)
@@ -307,8 +291,8 @@ internal static partial class PdfVehiculo
         return texto.Length == 0 ? NoRegistra : texto;
     }
 
-    /// <summary>El valor o «No registra».</summary>
-    private static string R(string? valor) => string.IsNullOrWhiteSpace(valor) ? NoRegistra : valor;
+    /// <summary>El valor o «No hay información»; un estado conocido de la fuente (VIGENTE, PENDIENTE…) sale con su rótulo (punto 5).</summary>
+    private static string R(string? valor) => Estado(valor);
 
     /// <summary>
     /// Pie: la banda del membrete y, encima a la derecha, una sola línea con «Certificado de Diagnóstico» en azul y «Página X de Y» en
@@ -343,7 +327,7 @@ internal static partial class PdfVehiculo
     {
         cuerpo.Item().Text(VeredictoEnPalabra(dictamen.Veredicto));
         if (dictamen.Estado == "PENDIENTE")
-            cuerpo.Item().Text("redacción IA pendiente");
+            cuerpo.Item().Text(RotulosDiagnostico.AnalisisEnPreparacion);
 
         string? anterior = null;
         foreach (var parrafo in dictamen.Texto.Split('\n'))
@@ -356,12 +340,7 @@ internal static partial class PdfVehiculo
     }
 
     /// <summary>El veredicto se lee en palabra. El color no lo sustituye.</summary>
-    private static string VeredictoEnPalabra(string veredicto) => veredicto switch
-    {
-        "VIABLE" => "Viable",
-        "BLOQUEADO" => "Bloqueado",
-        _ => veredicto,
-    };
+    private static string VeredictoEnPalabra(string veredicto) => RotulosDiagnostico.DeVeredicto(veredicto);
 
     /// <summary>Tabla de la cabecera, al 50 % del ancho: cada dato en una fila, etiqueta a la izquierda y valor a la derecha.</summary>
     private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) =>
@@ -418,7 +397,7 @@ internal static partial class PdfVehiculo
         contenedor.AlignCenter().Text(texto).FontSize(TablaFlit.TamanoTexto).FontColor(FlitDocumentTheme.Gris);
 
     private static void Seccion(IContainer contenedor, SeccionReporte seccion, string? sobretitulo, DetalleRuntReporte? detalle) => SeccionConTitulo(contenedor,
-        Titulos.GetValueOrDefault(seccion.Fuente, seccion.Fuente), seccion.DatoObtenidoEn, col =>
+        RotulosDiagnostico.DeTituloSeccion(seccion.Fuente), seccion.DatoObtenidoEn, col =>
         {
             switch (seccion.Estado)
             {
@@ -510,14 +489,14 @@ internal static partial class PdfVehiculo
                     col.Item().Element(c => Tabla(c,
                     [
                         ("Inscrito en el RUNT", persona.Inscrito ? "Sí" : "No"),
-                        ("Estado como conductor", persona.EstadoConductor ?? NoRegistra),
+                        ("Estado como conductor", Estado(persona.EstadoConductor)),
                     ]));
                     if (persona.Licencias is { Count: > 0 } licencias)
                     {
                         col.Item().Element(c => Grilla(c, ["Número", "Categoría", "Estado", "Vencimiento", "Expedición", "Organismo", "Restricciones", "Suspensión"],
                             [.. licencias.Select(l => new[]
                             {
-                                l.Numero ?? NoRegistra, l.Categoria ?? NoRegistra, l.Estado ?? NoRegistra, l.VigenteHasta ?? NoRegistra,
+                                l.Numero ?? NoRegistra, l.Categoria ?? NoRegistra, Estado(l.Estado), l.VigenteHasta ?? NoRegistra,
                                 l.Expedida ?? NoRegistra, l.Organismo ?? NoRegistra, l.Restricciones ?? NoRegistra,
                                 Suspension(l),
                             })]));
@@ -530,10 +509,10 @@ internal static partial class PdfVehiculo
                             ]));
                         if (persona.Certificados is { Count: > 0 } certificados)
                             col.Item().Element(c => Grilla(c, ["Categoría", "Estado", "Expedición", "Vencimiento", "Tipo", "Número", "Entidad"],
-                                [.. certificados.Select(x => new[] { x.Categoria ?? NoRegistra, x.Estado ?? NoRegistra, x.Expedida ?? NoRegistra, x.Vence ?? NoRegistra, x.Tipo ?? NoRegistra, x.Numero ?? NoRegistra, x.Entidad ?? NoRegistra })]));
+                                [.. certificados.Select(x => new[] { x.Categoria ?? NoRegistra, Estado(x.Estado), x.Expedida ?? NoRegistra, x.Vence ?? NoRegistra, x.Tipo ?? NoRegistra, x.Numero ?? NoRegistra, x.Entidad ?? NoRegistra })]));
                         if (persona.Solicitudes is { Count: > 0 } solicitudes)
                             col.Item().Element(c => Grilla(c, ["Trámite", "Estado solicitud", "Estado trámite", "Fecha", "Entidad", "Registro"],
-                                [.. solicitudes.Select(s => new[] { s.Tramite ?? NoRegistra, s.EstadoSolicitud ?? NoRegistra, s.EstadoTramite ?? NoRegistra, s.Fecha ?? NoRegistra, s.Entidad ?? NoRegistra, s.Registro ?? NoRegistra })]));
+                                [.. solicitudes.Select(s => new[] { s.Tramite ?? NoRegistra, Estado(s.EstadoSolicitud), Estado(s.EstadoTramite), s.Fecha ?? NoRegistra, s.Entidad ?? NoRegistra, s.Registro ?? NoRegistra })]));
                     }
                     else
                     {
@@ -545,7 +524,7 @@ internal static partial class PdfVehiculo
                 Tabla(contenedor,
                 [
                     ("Encontrada en el RUES", rues.Encontrada ? "Sí" : "No"),
-                    ("Estado de la matrícula", rues.EstadoMatricula ?? NoRegistra),
+                    ("Estado de la matrícula", Estado(rues.EstadoMatricula)),
                     ("Última renovación", rues.UltimaRenovacion ?? NoRegistra),
                 ]);
                 break;
@@ -573,7 +552,7 @@ internal static partial class PdfVehiculo
             col.Item().Element(c => Grilla(c, ["Número", "Fecha", "Valor", "Estado", "Organismo"],
                 [.. comparendos.Select(k => new[]
                 {
-                    k.Numero ?? NoRegistra, k.Fecha ?? NoRegistra, ValorTexto(k.Valor), k.Estado ?? NoRegistra, k.Organismo ?? NoRegistra,
+                    k.Numero ?? NoRegistra, k.Fecha ?? NoRegistra, ValorTexto(k.Valor), Estado(k.Estado), k.Organismo ?? NoRegistra,
                 })]));
             var restantes = simit.CantidadComparendos - comparendos.Count;
             if (simit.ComparendosTruncados || restantes > 0)
@@ -582,10 +561,10 @@ internal static partial class PdfVehiculo
 
         if (simit.Multas is { Count: > 0 } multas)
             col.Item().Element(c => Grilla(c, ["Número", "Fecha", "Valor", "Valor a pagar", "Estado de cartera", "Organismo", "Códigos"],
-                [.. multas.Select(m => new[] { m.Numero ?? NoRegistra, m.Fecha ?? NoRegistra, m.Valor ?? NoRegistra, m.ValorPagar ?? NoRegistra, m.EstadoCartera ?? NoRegistra, m.Organismo ?? NoRegistra, m.Codigos ?? NoRegistra })]));
+                [.. multas.Select(m => new[] { m.Numero ?? NoRegistra, m.Fecha ?? NoRegistra, m.Valor ?? NoRegistra, m.ValorPagar ?? NoRegistra, Estado(m.EstadoCartera), m.Organismo ?? NoRegistra, m.Codigos ?? NoRegistra })]));
         if (simit.Acuerdos is { Count: > 0 } acuerdos)
             col.Item().Element(c => Grilla(c, ["Estado", "Cuotas abonadas", "Cuotas pendientes", "Pendiente", "Fecha", "Organismo"],
-                [.. acuerdos.Select(a => new[] { a.Estado ?? NoRegistra, a.CuotasAbonadas ?? NoRegistra, a.CuotasPendientes ?? NoRegistra, a.Pendiente ?? NoRegistra, a.Fecha ?? NoRegistra, a.Organismo ?? NoRegistra })]));
+                [.. acuerdos.Select(a => new[] { Estado(a.Estado), a.CuotasAbonadas ?? NoRegistra, a.CuotasPendientes ?? NoRegistra, a.Pendiente ?? NoRegistra, a.Fecha ?? NoRegistra, a.Organismo ?? NoRegistra })]));
     });
 
     private static string Suspension(LicenciaDetalle licencia)
@@ -616,7 +595,7 @@ internal static partial class PdfVehiculo
             col.Item().Element(c => Grilla(c, ["Fuente", "Estado", "Valor", "Muestras", "Fecha"],
                 [.. fuentes.Select(f => new[]
                 {
-                    NombreFuenteAvaluo(f.Fuente), f.Estado ?? NoRegistra, f.Valor is { } v ? Moneda(v) : NoRegistra,
+                    NombreFuenteAvaluo(f.Fuente), Estado(f.Estado), f.Valor is { } v ? Moneda(v) : NoRegistra,
                     f.Muestras?.ToString(CultureInfo.InvariantCulture) ?? NoRegistra, f.Fecha ?? NoRegistra,
                 })]));
         }
@@ -691,7 +670,7 @@ internal static partial class PdfVehiculo
             : valor ?? NoRegistra;
 
     private static string NombreFuenteAvaluo(string? fuente) =>
-        fuente is null ? NoRegistra : FuentesAvaluo.GetValueOrDefault(fuente, fuente);
+        fuente is null ? NoRegistra : RotulosDiagnostico.DeFuenteAvaluo(fuente);
 
     [GeneratedRegex("[^A-Za-z0-9]", RegexOptions.CultureInvariant)]
     private static partial Regex NoAlfanumerico();

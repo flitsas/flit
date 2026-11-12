@@ -388,7 +388,7 @@ public sealed class PdfVehiculoTests
             var respuesta = await api.Cliente(creador).GetAsync(ruta, ct);
             var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{ruta}: {cuerpo}");
-            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
             cuerpo.Should().NotContainAny(["Lote secreto de B", "TST391", "TST-C-0301", vehiculoB.ToString(), empresas.B.Id.ToString()]);
         }
 
@@ -704,7 +704,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_6() => PdfVehiculo.VersionPlantilla.Should().Be(6);
+    public void Version_de_plantilla_es_7() => PdfVehiculo.VersionPlantilla.Should().Be(7);
 
     /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
     [Fact]
@@ -715,7 +715,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
 
         PdfDePrueba.Tiene(texto, "DICTAMEN").Should().BeFalse(texto);
-        PdfDePrueba.Tiene(texto, "redacción IA pendiente").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Análisis en preparación").Should().BeFalse(texto);
     }
 
     /// <summary>
@@ -732,7 +732,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
-        var orden = new[] { "Bloqueado", "redacción IA pendiente", primero, segundo, "DATOS DEL VEHÍCULO" };
+        var orden = new[] { "Bloqueado", "Análisis en preparación", primero, segundo, "DATOS DEL VEHÍCULO" };
         var desde = 0;
         foreach (var literal in orden)
         {
@@ -762,7 +762,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         }
 
         cuenta.Should().Be(1, texto);
-        PdfDePrueba.Tiene(texto, "redacción IA pendiente").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Análisis en preparación").Should().BeFalse(texto);
         PdfDePrueba.Tiene(texto, "Viable").Should().BeTrue(texto);
     }
 

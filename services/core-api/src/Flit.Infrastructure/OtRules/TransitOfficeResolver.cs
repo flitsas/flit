@@ -86,6 +86,41 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
     }
 
     /// <summary>
+    /// ADR-0084 — mismas dos condiciones (grant vigente de la lista efectiva + entrada activa del catálogo), por el código
+    /// del catálogo. Tolera el cero inicial que algunas fuentes pierden (<c>5001000</c> = <c>05001000</c>); nunca inventa un
+    /// OT: sin coincidencia exacta tras normalizar, <c>null</c>.
+    /// </summary>
+    public async Task<ResolvedTransitOffice?> ResolveEnabledByCodeAsync(
+        Guid tenantId,
+        string transitOfficeCode,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(transitOfficeCode))
+        {
+            return null;
+        }
+
+        var enabledIds = await _effectiveList
+            .ListEffectiveOfficeIdsAsync(tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var target = NormalizeCode(transitOfficeCode);
+        var match = enabledIds
+            .Select(_catalog.GetById)
+            .FirstOrDefault(o => o is not null && NormalizeCode(o.Code) == target);
+
+        return match is null
+            ? null
+            : new ResolvedTransitOffice(match.Id, match.Code, match.Name, match.CityCode, match.CityName);
+    }
+
+    private static string NormalizeCode(string value)
+    {
+        var trimmed = value.Trim().TrimStart('0');
+        return trimmed.Length == 0 ? "0" : trimmed.ToUpperInvariant();
+    }
+
+    /// <summary>
     /// Normaliza un nombre de OT para comparar de forma tolerante: recorta, colapsa espacios internos,
     /// pliega diacríticos españoles (á→a, ñ→n, …) y pasa a mayúsculas invariantes. Así el nombre que
     /// trae el RUNT/Verifik (solo texto, sin DIVIPOLA) casa con el catálogo pese a diferencias de

@@ -21,11 +21,15 @@ public sealed class EvaluadorDictamenTests
     private static readonly string[] Codigos =
     [
         "SOAT_NO_VIGENTE",
+        "SOAT_MAQUINARIA",
         "RTM_NO_VIGENTE",
         "ESTADO_VEHICULO",
         "SIMIT_VEHICULO",
         "SIMIT_PROPIETARIO",
         "SIMIT_LOCATARIO",
+        "SIMIT_SIN_VERIFICAR",
+        "SIMIT_LICENCIA",
+        "SIMIT_ACUERDO_PAGO",
         "LIMITACION",
         "GRAVAMEN",
         "GARANTIA_MOBILIARIA",
@@ -156,19 +160,21 @@ public sealed class EvaluadorDictamenTests
         resultado.Reglas.Should().ContainSingle(x => x.Codigo == "ESTADO_VEHICULO" && x.Efecto == "ADVIERTE" && x.Fuente == "RUNT");
     }
 
+    // Catálogo v2 (punto 2, 2026-11-11): en v1 los cinco casos advertían con SIMIT_VEHICULO. Ahora las multas bloquean
+    // y la licencia y el acuerdo de pago son reglas propias que advierten.
     [Theory]
-    [InlineData("comparendos")]
-    [InlineData("paz")]
-    [InlineData("suspendida")]
-    [InlineData("cancelada")]
-    [InlineData("saldo")]
-    public void Simit_del_vehiculo_advierte(string caso)
+    [InlineData("comparendos", "SIMIT_VEHICULO", "BLOQUEA", "BLOQUEADO")]
+    [InlineData("paz", "SIMIT_VEHICULO", "BLOQUEA", "BLOQUEADO")]
+    [InlineData("suspendida", "SIMIT_LICENCIA", "ADVIERTE", "VIABLE")]
+    [InlineData("cancelada", "SIMIT_LICENCIA", "ADVIERTE", "VIABLE")]
+    [InlineData("saldo", "SIMIT_ACUERDO_PAGO", "ADVIERTE", "VIABLE")]
+    public void Simit_del_vehiculo_separa_multas_de_licencia_y_acuerdo(string caso, string codigo, string efecto, string veredicto)
     {
         var resultado = EvaluadorDictamen.Evaluar(Base() with { SimitVehiculo = Simit(caso) });
 
-        resultado.Veredicto.Should().Be("VIABLE");
+        resultado.Veredicto.Should().Be(veredicto);
         resultado.Reglas.Should().ContainSingle(x =>
-            x.Codigo == "SIMIT_VEHICULO" && x.Efecto == "ADVIERTE" && x.Fuente == "SIMIT_VEHICULO" && x.MontoPesos == null);
+            x.Codigo == codigo && x.Efecto == efecto && x.Fuente == "SIMIT_VEHICULO" && x.MontoPesos == null);
     }
 
     [Fact]
@@ -196,27 +202,31 @@ public sealed class EvaluadorDictamenTests
     }
 
     [Fact]
-    public void En_leasing_sin_documento_de_locatario_advierte_que_no_se_pudo_consultar()
+    public void En_leasing_sin_documento_de_locatario_bloquea_porque_no_se_pudo_verificar()
     {
+        // v1 advertía con SIMIT_LOCATARIO; en v2 (decisión 2.4) es SIMIT_SIN_VERIFICAR y bloquea.
         var resultado = EvaluadorDictamen.Evaluar(Base() with
         {
             Runt = Runt() with { EsLeasing = true, HayDocumentoLocatario = false },
         });
 
-        resultado.Veredicto.Should().Be("VIABLE");
-        resultado.Reglas.Should().ContainSingle(x => x.Codigo == "SIMIT_LOCATARIO" && x.Fuente == "SIMIT_LOCATARIO");
+        resultado.Veredicto.Should().Be("BLOQUEADO");
+        resultado.Reglas.Should().ContainSingle(x => x.Codigo == "SIMIT_SIN_VERIFICAR" && x.Fuente == "SIMIT_LOCATARIO");
     }
 
     [Fact]
     public void Locatario_con_documento_y_saldo_pendiente_advierte()
     {
+        // v1 lo metía en SIMIT_LOCATARIO; en v2 el acuerdo es SIMIT_ACUERDO_PAGO y solo advierte (decisión 2.5).
         var resultado = EvaluadorDictamen.Evaluar(Base() with
         {
             Runt = Runt() with { HayDocumentoLocatario = true },
             SimitLocatario = Simit("saldo"),
         });
 
-        resultado.Reglas.Should().Contain(x => x.Codigo == "SIMIT_LOCATARIO");
+        resultado.Veredicto.Should().Be("VIABLE");
+        resultado.Reglas.Should().ContainSingle(x =>
+            x.Codigo == "SIMIT_ACUERDO_PAGO" && x.Fuente == "SIMIT_LOCATARIO" && x.Efecto == "ADVIERTE");
     }
 
     [Fact]
@@ -339,8 +349,9 @@ public sealed class EvaluadorDictamenTests
     }
 
     [Fact]
-    public void Las_cuatro_fuentes_pendientes_avisan_en_orden_y_siguen_viables()
+    public void Las_cuatro_fuentes_pendientes_avisan_en_orden_y_el_simit_faltante_bloquea()
     {
+        // v1: cuatro FUENTE_PENDIENTE y VIABLE. v2: el SIMIT faltante es un solo SIMIT_SIN_VERIFICAR que bloquea.
         var resultado = EvaluadorDictamen.Evaluar(Base() with
         {
             EstadoRunt = EstadoFuenteDictamen.Error,
@@ -353,19 +364,22 @@ public sealed class EvaluadorDictamenTests
             LicenciaPropietario = null,
         });
 
-        resultado.Veredicto.Should().Be("VIABLE");
-        resultado.Reglas.Select(x => x.Fuente).Should().Equal(
-            "RUNT", "SIMIT_VEHICULO", "RUNT_PROPIETARIO", "SIMIT_PROPIETARIO");
-        resultado.Reglas.Should().OnlyContain(x => x.Codigo == "FUENTE_PENDIENTE" && x.Efecto == "ADVIERTE");
+        resultado.Veredicto.Should().Be("BLOQUEADO");
+        resultado.Reglas.Select(x => (x.Codigo, x.Fuente, x.Efecto)).Should().Equal(
+            ("SIMIT_SIN_VERIFICAR", "SIMIT_VEHICULO", "BLOQUEA"),
+            ("FUENTE_PENDIENTE", "RUNT", "ADVIERTE"),
+            ("FUENTE_PENDIENTE", "RUNT_PROPIETARIO", "ADVIERTE"));
     }
 
     [Fact]
     public void El_soat_bloquea_aunque_otra_fuente_solo_advierte()
     {
+        // v1 usaba el SIMIT del propietario en error como «otra que advierte»; en v2 ese caso bloquea, así que la
+        // advertencia sale del RUNT del propietario.
         var resultado = EvaluadorDictamen.Evaluar(Base() with
         {
-            EstadoSimitPropietario = EstadoFuenteDictamen.Error,
-            SimitPropietario = null,
+            EstadoRuntPropietario = EstadoFuenteDictamen.Error,
+            LicenciaPropietario = null,
             Runt = Runt() with { EstadosSoat = ["NO VIGENTE"] },
         });
 
@@ -391,32 +405,37 @@ public sealed class EvaluadorDictamenTests
     }
 
     [Fact]
-    public void El_catalogo_repite_las_catorce_reglas_en_los_tres_tipos()
+    public void El_catalogo_repite_las_dieciocho_reglas_en_los_tres_tipos()
     {
-        CatalogoReglasDictamen.Version.Should().Be(1);
+        // v2 (punto 2): 14 reglas de v1 + SIMIT_SIN_VERIFICAR, SIMIT_LICENCIA y SIMIT_ACUERDO_PAGO; Bug RTM/SOAT (V4/V5):
+        // + SOAT_MAQUINARIA (advierte) y la RTM advierte en el unilateral (art. 5.3.2.2).
+        CatalogoReglasDictamen.Version.Should().Be(2);
         CatalogoReglasDictamen.TiposTramite.Should().Equal(
             "TRASPASO_STANDARD", "TRASPASO_UNILATERAL", "TRASPASO_TRANSFERENCIA_DE_DOMINIO");
-        CatalogoReglasDictamen.Filas.Should().HaveCount(42);
+        CatalogoReglasDictamen.Filas.Should().HaveCount(54);
         CatalogoReglasDictamen.Filas
             .Select(f => (f.CatalogoVersion, f.TipoTramiteCodigo, f.Codigo))
             .Should().OnlyHaveUniqueItems();
 
+        var multas = new[] { "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "SIMIT_SIN_VERIFICAR" };
         foreach (var tipo in CatalogoReglasDictamen.TiposTramite)
         {
             var filas = CatalogoReglasDictamen.Filas.Where(f => f.TipoTramiteCodigo == tipo).ToList();
             filas.Select(f => f.Codigo).Should().Equal(Codigos);
-            filas.Should().OnlyContain(f => f.CatalogoVersion == 1 && f.PlantillaTexto.Length > 0);
+            filas.Should().OnlyContain(f => f.CatalogoVersion == 2 && f.PlantillaTexto.Length > 0);
             filas.Single(f => f.Codigo == "SOAT_NO_VIGENTE").Efecto.Should().Be("BLOQUEA");
-            filas.Single(f => f.Codigo == "RTM_NO_VIGENTE").Efecto.Should().Be("BLOQUEA");
-            filas.Where(f => f.Codigo is not ("SOAT_NO_VIGENTE" or "RTM_NO_VIGENTE"))
+            var efectoMultas = tipo == "TRASPASO_UNILATERAL" ? "ADVIERTE" : "BLOQUEA";
+            filas.Single(f => f.Codigo == "RTM_NO_VIGENTE").Efecto.Should().Be(efectoMultas);
+            filas.Where(f => multas.Contains(f.Codigo)).Should().OnlyContain(f => f.Efecto == efectoMultas);
+            filas.Where(f => f.Codigo is not ("SOAT_NO_VIGENTE" or "RTM_NO_VIGENTE") && !multas.Contains(f.Codigo))
                 .Should().OnlyContain(f => f.Efecto == "ADVIERTE");
         }
     }
 
     [Fact]
-    public void Las_plantillas_son_las_de_la_ficha()
+    public void Las_plantillas_de_la_version_1_se_conservan()
     {
-        var filas = CatalogoReglasDictamen.Filas.Where(f => f.TipoTramiteCodigo == "TRASPASO_STANDARD");
+        var filas = CatalogoReglasDictamen.FilasDe(1).Where(f => f.TipoTramiteCodigo == "TRASPASO_STANDARD");
 
         filas.ToDictionary(f => f.Codigo, f => f.PlantillaTexto).Should().Equal(Plantillas);
     }

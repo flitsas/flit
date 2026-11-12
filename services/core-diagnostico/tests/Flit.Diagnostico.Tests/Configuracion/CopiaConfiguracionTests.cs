@@ -73,7 +73,7 @@ public sealed class CopiaConfiguracionTests
         deEntidad.LimiteVehiculosLote.Should().Be(500);
 
         // JSON objeto (ck_diagnosticos_configuracion_objeto) con los códigos de la base y sin el interruptor de emergencia.
-        var objeto = JsonDocument.Parse(json).RootElement;
+        var objeto = JsonElement.Parse(json);
         objeto.ValueKind.Should().Be(JsonValueKind.Object);
         Codigos(objeto.GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "AVALUO");
         objeto.GetProperty("visibilidad_usuario").GetString().Should().Be("EMPRESA");

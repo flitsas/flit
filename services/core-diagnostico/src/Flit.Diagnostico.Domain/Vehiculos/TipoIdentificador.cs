@@ -18,6 +18,9 @@ public enum TipoIdentificador
     /// <summary>Placa de maquinaria: dos letras y seis dígitos (HU #13735).</summary>
     PlacaMaquinaria,
 
+    /// <summary>Placa de motocarro (motocarro, mototriciclo o tricimoto): tres dígitos y tres letras (punto 7.1, 2026-11-11).</summary>
+    PlacaMotocarro,
+
     /// <summary>Número de identificación vehicular de 17 caracteres.</summary>
     Vin,
 }

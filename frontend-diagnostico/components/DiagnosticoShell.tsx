@@ -21,9 +21,11 @@ export interface EstadoSesion {
   cargando: boolean;
   error: string | null;
   recargar: () => void;
+  /** Origen de Trámites (TRAMITES_URL): enlaces «Ver trámite #N» del tablero (Punto 4). Vacío fuera del shell. */
+  tramitesUrl?: string;
 }
 
-const SesionContext = createContext<EstadoSesion>({ sesion: null, cargando: true, error: null, recargar: () => {} });
+const SesionContext = createContext<EstadoSesion>({ sesion: null, cargando: true, error: null, recargar: () => {}, tramitesUrl: "" });
 
 /** Sesión de Diagnóstico (GET /api/v1/diagnostico/sesion) para cualquier pantalla dentro del shell. */
 export function useSesion(): EstadoSesion {
@@ -49,9 +51,10 @@ const NAV: NavCatalog = {
 };
 
 /**
- * Dock del backoffice FLIT (HU #13802, F06-C7 y ADR-0078): solo con la capacidad `backoffice` de GET /sesion, que además del
- * permiso diagnostico.backoffice.ver exige ser de la compañía FLIT (el permiso del token solo no basta). El admin de una
- * compañía nunca la ve; la ruta, además, lo lleva a la 403 (AccesoBackoffice). «Fuentes obligatorias» vive solo aquí: `NAV`
+ * Dock del backoffice (HU #13802, F06-C7 y ADR-0078): solo con la capacidad `backoffice` de GET /sesion, que la API da al
+ * SuperAdmin de cualquier compañía o al usuario de la compañía FLIT con diagnostico.backoffice.ver (ola 2026-11-11, punto 1).
+ * El admin de una compañía que no es SuperAdmin nunca la ve; la ruta, además, lo lleva a la 403 (AccesoBackoffice). El
+ * override del dictamen y el llenado manual exigen además `backofficeOperacion` (solo FLIT). «Fuentes obligatorias» vive solo aquí: `NAV`
  * de la compañía no la lleva.
  */
 const NAV_BACKOFFICE: NavCatalog = {
@@ -100,7 +103,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
     setIntento((i) => i + 1);
   }, []);
 
-  const valor = useMemo(() => ({ ...estado, recargar }), [estado, recargar]);
+  const valor = useMemo(() => ({ ...estado, recargar, tramitesUrl }), [estado, recargar, tramitesUrl]);
   const usuario = useMemo(() => ({ ...user, tenantName: estado.sesion?.empresa.nombre || user.tenantName }), [user, estado.sesion]);
 
   let contenido: ReactNode = children;

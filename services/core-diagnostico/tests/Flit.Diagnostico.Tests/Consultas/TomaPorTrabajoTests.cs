@@ -62,7 +62,13 @@ public sealed class TomaPorTrabajoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var ejecutor = new EjecutorDePrueba();
-        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b => ejecutor.Registrar(b.Services));
+        // El conflicto de concurrencia demora el resultado con Diagnostico:Consultas:EsperaReintento y TerminarAsync espera con el
+        // reloj del sistema: desde el Punto 3 la espera por defecto es de 2 min, así que aquí se fija la mínima (1 s).
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b =>
+        {
+            ejecutor.Registrar(b.Services);
+            b.Configuration["Diagnostico:Consultas:EsperaReintento"] = "00:00:01";
+        });
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await Motor.LoteConfirmadoAsync(api, empresa, Motor.Placas(1), ct);

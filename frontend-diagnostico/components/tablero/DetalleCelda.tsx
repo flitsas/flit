@@ -19,6 +19,7 @@ import {
 import { ChipEstadoCelda, fechaDelDato } from "./CeldaSemaforo";
 import { complementoProveedor, licenciasDesdeProveedor } from "@/lib/tablero/etiquetasRespuesta";
 import { RespuestaFuente } from "./RespuestaFuente";
+import { nombreRol } from "@/lib/rotulos";
 import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
@@ -74,7 +75,6 @@ export function useFocoAtrapado(ancla: React.RefObject<HTMLElement | null>, devo
 
 const TITULO_SECCION_CLS = "text-sm font-semibold text-flit-primary";
 const ROTULO_CLS = "text-xs text-muted-foreground";
-const ROLES: Record<PersonaDetalle["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
 
 /** Estado de una persona con el mismo chip de la tabla: OK → Ejecutado (OK), ERROR → Error, SIN_RESULTADO → Novedad. */
 const ESTADO_PERSONA: Record<EstadoPersona, EstadoCelda> = { OK: "COMPLETADO", ERROR: "ERROR", SIN_RESULTADO: "NA" };
@@ -131,7 +131,7 @@ function TablaPersonas({ personas }: { personas: PersonaDetalle[] }) {
           {personas.map((p) => (
             <tr key={p.orden} className={FILA_TABLA_CLS}>
               <td className={`${CELDA_TABLA_CLS} tabular-nums`}>{p.orden}</td>
-              <td className={CELDA_TABLA_CLS}>{ROLES[p.rol] ?? p.rol}</td>
+              <td className={CELDA_TABLA_CLS}>{nombreRol(p.rol)}</td>
               <td className={CELDA_TABLA_CLS}>
                 <DocumentoPersona persona={p} />
               </td>
@@ -223,7 +223,7 @@ const personaResumida = (p: PersonaDetalle) => !p.respuesta_fuente && p.resultad
  */
 function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
   const id = useId();
-  const titulo = `${ROLES[persona.rol] ?? persona.rol} ${persona.orden}`;
+  const titulo = `${nombreRol(persona.rol)} ${persona.orden}`;
   const datos = datosDePersona(persona);
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">

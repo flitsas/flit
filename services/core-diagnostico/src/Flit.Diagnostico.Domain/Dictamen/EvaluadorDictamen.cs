@@ -7,8 +7,9 @@ public sealed record ReglaEvaluada(string Codigo, string Fuente, string Efecto, 
 public sealed record DictamenEvaluado(string Veredicto, IReadOnlyList<ReglaEvaluada> Reglas);
 
 /// <summary>
-/// Motor del catálogo v1. No redacta, no persiste y no lee celdas. Una regla <c>BLOQUEA</c> deja el veredicto en
-/// <c>BLOQUEADO</c>. Si solo hay <c>ADVIERTE</c>, o ninguna dispara, el veredicto es <c>VIABLE</c>.
+/// Motor del catálogo vigente (<see cref="CatalogoReglasDictamen.Version"/>). No redacta, no persiste y no lee celdas.
+/// Una regla <c>BLOQUEA</c> deja el veredicto en <c>BLOQUEADO</c>. Si solo hay <c>ADVIERTE</c>, o ninguna dispara, el
+/// veredicto es <c>VIABLE</c>. Los dictámenes ya emitidos con otra versión no se reevalúan.
 /// </summary>
 public static class EvaluadorDictamen
 {
@@ -21,7 +22,7 @@ public static class EvaluadorDictamen
             throw new ArgumentOutOfRangeException(
                 nameof(hechos),
                 hechos.TipoTramiteCodigo,
-                "El catálogo v1 solo cubre la familia TRASPASO.");
+                "El catálogo de dictamen solo cubre la familia TRASPASO.");
         }
 
         var reglas = new List<ReglaEvaluada>();
@@ -29,26 +30,8 @@ public static class EvaluadorDictamen
         if (runt is not null)
             AgregarCobertura(hechos, runt, reglas);
 
-        if (hechos.EstadoSimitVehiculo == EstadoFuenteDictamen.Disponible)
-        {
-            var simit = hechos.SimitVehiculo ?? throw Lectura("SIMIT del vehículo");
-            if (DisparaSimit(simit))
-                reglas.Add(Emitir(hechos, "SIMIT_VEHICULO", "SIMIT_VEHICULO"));
-        }
-
         var leasing = runt?.EsLeasing == true;
-        if (hechos.EstadoSimitPropietario == EstadoFuenteDictamen.Disponible && !leasing)
-        {
-            var simit = hechos.SimitPropietario ?? throw Lectura("SIMIT del propietario");
-            if (DisparaSimit(simit))
-                reglas.Add(Emitir(hechos, "SIMIT_PROPIETARIO", "SIMIT_PROPIETARIO"));
-        }
-        else if (hechos.EstadoSimitPropietario == EstadoFuenteDictamen.Disponible && hechos.SimitPropietario is null)
-        {
-            throw Lectura("SIMIT del propietario");
-        }
-
-        AgregarLocatario(hechos, runt, reglas);
+        AgregarSimit(hechos, runt, leasing, reglas);
         if (runt is not null)
             AgregarPropiedad(hechos, runt, reglas);
         AgregarLicencia(hechos, leasing, reglas);
@@ -70,11 +53,24 @@ public static class EvaluadorDictamen
         return runt;
     }
 
+    /// <summary>
+    /// SOAT y RTM por clase (ola 2026-11-11, V4/V5): el remolque no exige SOAT y la maquinaria solo advierte
+    /// (<c>SOAT_MAQUINARIA</c>); la RTM se exige desde los años de <see cref="ClasificadorVehiculoDictamen.AniosPrimeraRtm"/>
+    /// (nunca en maquinaria ni remolque) o sin fecha de matrícula. El efecto de cada regla sale del catálogo del tipo.
+    /// </summary>
     private static void AgregarCobertura(HechosDictamen hechos, HechosRuntVehiculo runt, List<ReglaEvaluada> reglas)
     {
         if (!Cubre(runt.EstadosSoat))
-            reglas.Add(Emitir(hechos, "SOAT_NO_VIGENTE", "RUNT"));
-        if (EvaluaRtm(runt.FechaMatricula, hechos.Hoy) && !Cubre(runt.EstadosRtm))
+        {
+            if (runt.Clase == ClaseVehiculoDictamen.Maquinaria)
+                reglas.Add(Emitir(hechos, "SOAT_MAQUINARIA", "RUNT"));
+            else if (runt.Clase != ClaseVehiculoDictamen.Remolque)
+                reglas.Add(Emitir(hechos, "SOAT_NO_VIGENTE", "RUNT"));
+        }
+
+        if (ClasificadorVehiculoDictamen.AniosPrimeraRtm(runt.Clase, runt.Servicio) is { } anios
+            && EvaluaRtm(runt.FechaMatricula, hechos.Hoy, anios)
+            && !Cubre(runt.EstadosRtm))
             reglas.Add(Emitir(hechos, "RTM_NO_VIGENTE", "RUNT"));
         if (EstadoDispara(runt.EstadoVehiculo))
             reglas.Add(Emitir(hechos, "ESTADO_VEHICULO", "RUNT"));
@@ -94,18 +90,56 @@ public static class EvaluadorDictamen
             reglas.Add(Emitir(hechos, "INFRACCION_RUNT", "RUNT"));
     }
 
-    private static void AgregarLocatario(HechosDictamen hechos, HechosRuntVehiculo? runt, List<ReglaEvaluada> reglas)
+    /// <summary>
+    /// SIMIT del catálogo v2. Se exigen el SIMIT del vehículo y el del propietario o, en leasing, el del locatario. Las
+    /// multas (comparendos o sin paz y salvo) disparan la regla de cada fuente; la falta de una consulta exigida da un
+    /// solo <c>SIMIT_SIN_VERIFICAR</c> con la primera fuente que falta. Licencia y acuerdo de pago son reglas aparte.
+    /// </summary>
+    private static void AgregarSimit(HechosDictamen hechos, HechosRuntVehiculo? runt, bool leasing, List<ReglaEvaluada> reglas)
     {
-        if (runt is null)
-            return;
-        if (runt.EsLeasing && !runt.HayDocumentoLocatario)
+        var leidas = new List<(HechosSimit Simit, string Fuente)>(3);
+        string? sinVerificar = null;
+
+        if (hechos.EstadoSimitVehiculo == EstadoFuenteDictamen.Disponible)
+            leidas.Add((hechos.SimitVehiculo ?? throw Lectura("SIMIT del vehículo"), "SIMIT_VEHICULO"));
+        else
+            sinVerificar = "SIMIT_VEHICULO";
+
+        if (hechos.EstadoSimitPropietario == EstadoFuenteDictamen.Disponible && hechos.SimitPropietario is null)
+            throw Lectura("SIMIT del propietario");
+        if (!leasing)
         {
-            reglas.Add(Emitir(hechos, "SIMIT_LOCATARIO", "SIMIT_LOCATARIO"));
-            return;
+            if (hechos.EstadoSimitPropietario == EstadoFuenteDictamen.Disponible)
+                leidas.Add((hechos.SimitPropietario!, "SIMIT_PROPIETARIO"));
+            else
+                sinVerificar ??= "SIMIT_PROPIETARIO";
         }
 
-        if (runt.HayDocumentoLocatario && hechos.SimitLocatario is { } simit && DisparaSimit(simit))
-            reglas.Add(Emitir(hechos, "SIMIT_LOCATARIO", "SIMIT_LOCATARIO"));
+        if (leasing && (!runt!.HayDocumentoLocatario || hechos.SimitLocatario is null))
+            sinVerificar ??= "SIMIT_LOCATARIO";
+        else if (runt?.HayDocumentoLocatario == true && hechos.SimitLocatario is { } locatario)
+            leidas.Add((locatario, "SIMIT_LOCATARIO"));
+
+        foreach (var (simit, fuente) in leidas)
+        {
+            if (TieneMultas(simit))
+                reglas.Add(Emitir(hechos, fuente, fuente));
+        }
+
+        if (sinVerificar is not null)
+            reglas.Add(Emitir(hechos, "SIMIT_SIN_VERIFICAR", sinVerificar));
+
+        foreach (var (simit, fuente) in leidas)
+        {
+            if (simit.Suspendida || simit.Cancelada)
+                reglas.Add(Emitir(hechos, "SIMIT_LICENCIA", fuente));
+        }
+
+        foreach (var (simit, fuente) in leidas)
+        {
+            if (simit.Acuerdos.Any(a => a.SaldoPendientePesos != 0))
+                reglas.Add(Emitir(hechos, "SIMIT_ACUERDO_PAGO", fuente));
+        }
     }
 
     private static void AgregarLicencia(HechosDictamen hechos, bool leasing, List<ReglaEvaluada> reglas)
@@ -122,10 +156,9 @@ public static class EvaluadorDictamen
 
     private static void AgregarFuentes(HechosDictamen hechos, List<ReglaEvaluada> reglas)
     {
+        // Desde v2 el SIMIT faltante no es FUENTE_PENDIENTE: lo cubre SIMIT_SIN_VERIFICAR en AgregarSimit.
         Agregar(hechos.EstadoRunt, "RUNT");
-        Agregar(hechos.EstadoSimitVehiculo, "SIMIT_VEHICULO");
         Agregar(hechos.EstadoRuntPropietario, "RUNT_PROPIETARIO");
-        Agregar(hechos.EstadoSimitPropietario, "SIMIT_PROPIETARIO");
         if (hechos.EstadoImpuesto == EstadoFuenteDictamen.Error)
             reglas.Add(Emitir(hechos, "FUENTE_PENDIENTE", "IMPUESTO_DEPARTAMENTAL"));
 
@@ -139,8 +172,8 @@ public static class EvaluadorDictamen
     private static bool Cubre(IReadOnlyList<string?> estados) =>
         estados.Any(estado => Normalizar(estado) is "VIGENTE" or "NO REQUIERE");
 
-    private static bool EvaluaRtm(DateOnly? fechaMatricula, DateOnly hoy) =>
-        fechaMatricula is null || hoy >= fechaMatricula.Value.AddYears(5);
+    private static bool EvaluaRtm(DateOnly? fechaMatricula, DateOnly hoy, int anios) =>
+        fechaMatricula is null || hoy >= fechaMatricula.Value.AddYears(anios);
 
     private static bool EstadoDispara(string? estado)
     {
@@ -148,15 +181,12 @@ public static class EvaluadorDictamen
         return normalizado is not ("REGISTRADO" or "ACTIVO");
     }
 
-    private static bool DisparaSimit(HechosSimit simit)
+    /// <summary>Multas del catálogo v2: comparendos o sin paz y salvo. Licencia y acuerdo de pago van aparte.</summary>
+    private static bool TieneMultas(HechosSimit simit)
     {
         if (simit.Acuerdos is null)
             throw new ArgumentException("Los acuerdos de SIMIT no pueden ser nulos.", nameof(simit));
-        return simit.CantidadComparendos > 0
-            || simit.PazYSalvo == false
-            || simit.Suspendida
-            || simit.Cancelada
-            || simit.Acuerdos.Any(a => a.SaldoPendientePesos != 0);
+        return simit.CantidadComparendos > 0 || simit.PazYSalvo == false;
     }
 
     private static bool LicenciaDispara(LicenciaConductor licencia)
