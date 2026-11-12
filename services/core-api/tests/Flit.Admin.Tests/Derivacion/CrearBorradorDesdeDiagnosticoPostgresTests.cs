@@ -225,7 +225,13 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
 
         var llamada = () => cliente.CrearBorradorDesdeDiagnosticoAsync(e.Solicitud(), cancellationToken: Ct).ResponseAsync;
 
-        (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.Unimplemented);
+        // Sin mapear, la ruta cae en la autorización por defecto del host: según el orden de los middlewares llega como
+        // UNIMPLEMENTED o UNAUTHENTICATED (mismo criterio que la fachada de persona natural). Lo que importa es que nadie la
+        // atiende ni con el token correcto, y que no se crea nada.
+        (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().BeOneOf(
+            [StatusCode.Unimplemented, StatusCode.Unauthenticated, StatusCode.PermissionDenied],
+            "el servicio ni siquiera se mapea: no lo atiende nadie, ni con el token correcto");
+        (await e.TramitesAsync(Ct)).Should().BeEmpty();
     }
 
     // ── Infraestructura ───────────────────────────────────────────────────────────────────────────────────────────

@@ -30,8 +30,8 @@ internal sealed class LimitadorDerivacion(int permisos) : IDisposable
 
 /// <summary>
 /// Composición del rpc <c>DerivacionTramitesService</c> (ADR-0084, Punto 4 incremento 1). Configuración
-/// <c>Tramites:Derivacion</c>: <c>Habilitada</c> (apagada por defecto; sin ella el servicio no se mapea y responde
-/// UNIMPLEMENTED) y <c>ConcurrenciaMaxima</c> (8; debe ser ≥ la suma de <c>Diagnostico:Derivacion:Concurrencia</c> de las
+/// <c>Tramites:Derivacion</c>: <c>Habilitada</c> (apagada por defecto; sin ella el servicio no se mapea y nadie lo
+/// atiende: el host responde UNIMPLEMENTED o UNAUTHENTICATED, ambos no reintentables para Diagnóstico) y <c>ConcurrenciaMaxima</c> (8; debe ser ≥ la suma de <c>Diagnostico:Derivacion:Concurrencia</c> de las
 /// réplicas de Diagnóstico). Las dependencias se registran siempre (son baratas); el mapeo es lo que se condiciona.
 /// </summary>
 internal static class DerivacionExtensions
