@@ -20,6 +20,7 @@ import {
   rlTextDangerActionClass,
   rlTextDangerActionStyle,
 } from "./rl-flit-styles";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -291,9 +292,9 @@ export function RepresentativeCompaniesAccordion({
                       )}
                       {vigentesCount > 0 && (
                         <span
-                          className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                          style={{ background: RL_COLOR.successBg, color: RL_COLOR.successText }}
+                          {...etiquetaKit("success")}
                         >
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           {vigentesCount} escritura{vigentesCount !== 1 ? "s" : ""} vigente
                           {vigentesCount !== 1 ? "s" : ""}
                         </span>

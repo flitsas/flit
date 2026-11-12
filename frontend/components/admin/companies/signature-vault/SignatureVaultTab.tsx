@@ -35,6 +35,7 @@ import {
   TABLA_ROW_HOVER_CLS,
   TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Pestaña "Baúl de Firmas" (HU #10644): registra, lista, consulta, CORRIGE y anula firmas de
@@ -188,9 +189,9 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                     </td>
                     <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       <span
-                        className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                        style={{ color: badge.color, borderColor: badge.border, background: badge.bg }}
+                        {...etiquetaKit({ c: badge.border, ct: badge.color })}
                       >
+                        <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                         {ESTADO_LABELS[item.estado] ?? item.estado}
                       </span>
                     </td>

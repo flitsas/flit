@@ -32,6 +32,7 @@ import { ApiValidationError } from "@/lib/api/types";
 import type { EnrutamientoSMTP } from "@/lib/api/types";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 export interface PersonalizedDocumentsPanelProps {
 
   tenantId: string;
@@ -319,9 +320,9 @@ function PersonalizedDocumentSection({
       render: (v) =>
         v.isActive ? (
           <span
-            className="rounded-md px-1.5 py-0.5 text-xs font-semibold"
-            style={{ color: "var(--flit-success-ink)", background: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" }}
+            {...etiquetaKit("success")}
           >
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Vigente
           </span>
         ) : (
