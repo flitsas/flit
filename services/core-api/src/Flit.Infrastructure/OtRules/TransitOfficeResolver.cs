@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Domain.Integration;
+using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.OtRules;
 
@@ -25,10 +27,43 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
     private readonly IEffectiveTransitOfficeListResolver _effectiveList;
     private readonly ITransitOfficeCatalog _catalog;
 
-    public TransitOfficeResolver(IEffectiveTransitOfficeListResolver effectiveList, ITransitOfficeCatalog catalog)
+    private readonly FlitDbContext? _context;
+
+    public TransitOfficeResolver(
+        IEffectiveTransitOfficeListResolver effectiveList,
+        ITransitOfficeCatalog catalog,
+        FlitDbContext? context = null)
     {
         _effectiveList = effectiveList ?? throw new ArgumentNullException(nameof(effectiveList));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        _context = context;
+    }
+
+    /// <summary>
+    /// Busca el nombre RUNT en <c>catalogs.transit_offices</c> SIN filtrar por activo ni por grant.
+    /// El catálogo es global (sin tenant_id/RLS). Sin contexto de BD (tests) cae al catálogo activo.
+    /// </summary>
+    public async Task<bool> ExistsInCatalogByNameAsync(
+        string transitOfficeName,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(transitOfficeName))
+        {
+            return false;
+        }
+
+        var target = NormalizeName(transitOfficeName);
+        if (_context is null)
+        {
+            return _catalog.All.Any(o => NormalizeName(o.Name) == target);
+        }
+
+        var names = await _context.TransitOffices
+            .AsNoTracking()
+            .Select(o => o.Name)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return names.Any(n => NormalizeName(n) == target);
     }
 
     public async Task<ResolvedTransitOffice?> ResolveEnabledByNameAsync(

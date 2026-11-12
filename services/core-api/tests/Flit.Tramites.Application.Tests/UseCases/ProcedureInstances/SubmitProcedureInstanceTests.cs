@@ -95,6 +95,16 @@ public sealed class SubmitProcedureInstanceTests
                 UploadedAt = DateTimeOffset.UtcNow,
             });
         }
+        // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         // Biométrica del comprador aprobada.
         i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
@@ -545,6 +555,15 @@ public sealed class SubmitProcedureInstanceTests
         var tenantId = Guid.NewGuid();
         var instance = FullyGated(id, tenantId);
         instance.FieldValues.Clear();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         Wire(instance, ct);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);

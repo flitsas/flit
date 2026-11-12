@@ -69,7 +69,7 @@ public sealed record InstanceSummaryDto(
     string? GestorNombre = null,
     string Fuente = TramiteFuente.Dashboard,  // dashboard | integracion | migrado (ver TramiteFuente)
                                               // Cómo queda ACREDITADA cada parte (ajuste del PO): pendiente | firmado |
-                                              // rechazado, por validación de identidad o firma del baúl — NO por la firma
+                                              // rechazado (solo VID propia rechazada), por validación de identidad o firma del baúl — NO por la firma
                                               // electrónica de la compraventa. null = no aplica (vendedor en matrícula).
     string? FirmaVendedorEstado = null,
     string? FirmaCompradorEstado = null,
@@ -215,21 +215,55 @@ public sealed class ListProcedureInstancesHandler(
         // para que `canSubmit` de la fila coincida con el del wizard.
         var exentas = await ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
 
+        // Radicados con la firma de baúl copiada al radicar: su baúl sale de la copia (una consulta en lote), nunca
+        // del baúl en vivo. Borradores y anteriores a la mejora siguen con `firmaBaul`.
+        var baulPorTramite = await ResolverBaulPorTramiteAsync(repo, instances, ct).ConfigureAwait(false);
+
         return instances
-            .Select(e => ToSummary(
-                e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
-                nombres.GetValueOrDefault(e.TenantId),
-                // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
-                gestores.GetValueOrDefault(e.GestorEfectivoUserId),
-                firmaBaul,
-                conPrenda.Contains(e.Id),
-                revocacionesActivas.GetValueOrDefault(e.Id),
-                exentas.Contains(e.Id),
-                // ADR-0053 — misma comprobación, actor por actor, para el desplegable de copropietarios.
-                IdentityApprovalResolver.ApprovedActorsFromKeys(
-                    e, identidadKeys, now, firmaBaul)))
+            .Select(e =>
+            {
+                var baulDeE = baulPorTramite.TryGetValue(e.Id, out var baulCopiado) ? baulCopiado : firmaBaul;
+                return ToSummary(
+                    e,
+                    IdentityApprovalResolver.ApprovedPartiesFromKeys(
+                        e, identidadKeys, now, baulDeE),
+                    nombres.GetValueOrDefault(e.TenantId),
+                    // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
+                    gestores.GetValueOrDefault(e.GestorEfectivoUserId),
+                    baulDeE,
+                    conPrenda.Contains(e.Id),
+                    revocacionesActivas.GetValueOrDefault(e.Id),
+                    exentas.Contains(e.Id),
+                    // ADR-0053 — misma comprobación, actor por actor, para el desplegable de copropietarios.
+                    IdentityApprovalResolver.ApprovedActorsFromKeys(
+                        e, identidadKeys, now, baulDeE));
+            })
             .ToList();
+    }
+
+    /// <summary>
+    /// Trámites ya radicados con la firma de baúl COPIADA al radicar: su mapa de «baúl vigente» sale de la copia (UNA
+    /// consulta en lote), nunca del baúl en vivo. Los borradores y los anteriores a la mejora no aparecen aquí y siguen
+    /// con el mapa en vivo.
+    /// </summary>
+    internal static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, bool>>> ResolverBaulPorTramiteAsync(
+        IProcedureInstanceRepository repo, IEnumerable<ProcedureInstance> instances, CancellationToken ct)
+    {
+        var conCopia = instances.Where(i => i.FirmaBaulCopiadaAt is not null).ToList();
+        var resultado = new Dictionary<Guid, IReadOnlyDictionary<string, bool>>();
+        if (conCopia.Count == 0)
+            return resultado;
+
+        var copias = await repo.ListFirmaBaulCopiasPorInstanciasAsync(conCopia.Select(i => i.Id).ToList(), ct)
+            .ConfigureAwait(false);
+        foreach (var e in conCopia)
+        {
+            IReadOnlyList<ProcedureInstanceFirmaBaulCopia> deE =
+                copias is not null && copias.TryGetValue(e.Id, out var lista) ? lista : [];
+            resultado[e.Id] = FirmaBaulCopias.ToVigenciaKeys(e.TenantId, deE);
+        }
+
+        return resultado;
     }
 
     /// <summary>
@@ -390,9 +424,13 @@ public sealed class ListProcedureInstancesHandler(
     /// <list type="number">
     ///   <item><b>firmado</b> — identidad aprobada y vigente, o firma del baúl vigente. Lo positivo
     ///   gana: una identidad aprobada acredita a la parte aunque su baúl esté caducado.</item>
-    ///   <item><b>rechazado</b> — identidad rechazada/expirada, o firma del baúl vencida.</item>
-    ///   <item><b>pendiente</b> — no hay nada hecho todavía.</item>
+    ///   <item><b>rechazado</b> — SOLO una VID propia rechazada/expirada del sujeto actual. Un baúl
+    ///   vencido o inactivo ya NO produce «Rechazado»: no es un rechazo de nadie, es la ausencia de firma.</item>
+    ///   <item><b>pendiente</b> — no hay nada hecho todavía, o solo hay un baúl vencido/inactivo (el front lo
+    ///   pinta «Sin firma»).</item>
     /// </list>
+    /// Los trámites ya radicados no leen el baúl en vivo: su mapa sale de la copia tomada al radicar
+    /// (<see cref="FirmaBaulCopias"/>), de modo que el baúl que vence después no les quita la firma.
     /// <c>null</c> = NO APLICA: el tipo no manda a esta parte a validar identidad — el vendedor en
     /// matrícula inicial y, desde ADR-0051, el comprador en <c>TRASPASO_UNILATERAL</c>, donde el
     /// locatario formaliza a su nombre y el único que acredita es el propietario.
@@ -444,8 +482,8 @@ public sealed class ListProcedureInstancesHandler(
 
     /// <summary>
     /// Acreditación de UN actor de la parte, con la precedencia de <see cref="DeriveFirmaParte"/>:
-    /// <paramref name="acreditado"/> (identidad aprobada) o baúl vigente → firmado; rechazo propio o
-    /// baúl vencido → rechazado; si no, pendiente. La usa la columna de la parte (con su principal y el
+    /// <paramref name="acreditado"/> (identidad aprobada) o baúl vigente → firmado; VID propia rechazada/expirada
+    /// → rechazado (un baúl vencido/inactivo ya no rechaza); si no, pendiente. La usa la columna de la parte (con su principal y el
     /// veredicto «todos firman») y el desplegable de copropietarios (ADR-0053, actor por actor).
     /// </summary>
     private static string DeriveFirmaActor(
@@ -487,7 +525,8 @@ public sealed class ListProcedureInstancesHandler(
             .FirstOrDefault();
         var rechazada = ultimaPropia?.Status is BiometricEstados.Rechazado or BiometricEstados.Expirado;
 
-        return rechazada || baulVigente == false
+        // Un baúl vencido/inactivo (baulVigente == false) ya NO rechaza: solo una VID propia rechazada/expirada.
+        return rechazada
             ? FirmaParteEstados.Rechazado
             : FirmaParteEstados.Pendiente;
     }

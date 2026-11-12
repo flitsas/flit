@@ -33,7 +33,11 @@ internal static class IdentityApprovalResolver
         IProcedureInstanceRepository repo, ProcedureInstance instance, DateTimeOffset now, CancellationToken ct,
         ISignatureVaultPolicy? vaultPolicy = null)
     {
-        var vault = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+        // Trámite ya radicado: el baúl se lee de la COPIA tomada al radicar, nunca en vivo (FirmaBaulCopias).
+        // Borrador / anterior a la mejora: baúl en vivo, como siempre.
+        var vault = await FirmaBaulCopias
+            .EfectivaAsync(repo, vaultPolicy ?? NullSignatureVaultPolicy.Instance, instance, ct)
+            .ConfigureAwait(false);
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
         {
