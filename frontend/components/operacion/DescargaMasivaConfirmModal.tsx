@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Download, FileArchive } from 'lucide-react';
+import { FileArchive } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
@@ -251,7 +252,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
               className={BTN_PRIMARIO}
               style={{ background: WIZARD_CTA_GRADIENT }}
             >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
               {creando ? 'Creando la descarga…' : 'Confirmar descarga'}
             </button>
           )}
@@ -400,7 +401,7 @@ export function BotonDescargaMasivaZip<TFiltro>({
         onClick={() => setAbierto(true)}
         className="inline-flex items-center gap-1 rounded-lg border border-flit-brand/40 px-2.5 py-1 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
       >
-        <Download className="h-3.5 w-3.5" aria-hidden="true" /> Descargar ZIP
+        <Icono nombre="nube-bajar" className="h-3.5 w-3.5" /> Descargar ZIP
       </button>
       <DescargaMasivaConfirmModal
         open={abierto}

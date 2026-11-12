@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { isRuesPreviewUnavailable, tramitesClient } from '@/lib/api/tramites-client';
 import { shortRuesRazonSocial } from '@/lib/tramites/rues-razon-social';
 import type {
@@ -333,7 +333,7 @@ export function DeclaracionesTramite({
                           style={{ background: WIZARD_BTN_SOLID }}
                           aria-label="Buscar empresa en RUES"
                         >
-                          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                          <Icono nombre="buscar" className="h-3.5 w-3.5" />
                           {ruesLoading ? 'Consultando…' : 'Buscar'}
                         </button>
                       )}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Clock, Cpu, Hourglass, RefreshCw, X } from "lucide-react";
+import { Cpu } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import type { LogQxHito, LogQxRadicacion } from "@/lib/api/admin-log-qx";
 import {
   codigoQx,
@@ -11,6 +12,11 @@ import {
   resultado,
   secretaria,
 } from "@/lib/logqx/labels";
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_CERRAR = iconoComo("cerrar");
+const ICONO_CHECK = iconoComo("check");
+const ICONO_REINTENTO = iconoComo("reintento");
 
 /**
  * Línea de hitos de una radicación (HU #11789). El servidor ya devuelve las rachas de sondeo
@@ -83,7 +89,7 @@ function Rail({
       : esError
         ? "text-destructive border-destructive"
         : "text-[var(--flit-success-ink)] border-[var(--flit-success-ink)]";
-  const Icon = tipo === "sondeo" ? RefreshCw : esError ? X : Check;
+  const Icon = tipo === "sondeo" ? ICONO_REINTENTO : esError ? ICONO_CERRAR : ICONO_CHECK;
 
   return (
     <div className="flex flex-col items-center">
@@ -129,7 +135,7 @@ function Hito({ hito }: { hito: LogQxHito }) {
         )}
         {duracion && (
           <span className="inline-flex items-center gap-1">
-            <Clock className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="reloj" className="h-3 w-3" />
             <span className="font-mono">{duracion}</span>
           </span>
         )}
@@ -224,7 +230,7 @@ function EsperandoDecision({ nombreSecretaria }: { nombreSecretaria: string }) {
           aria-hidden="true"
           className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] border-destructive bg-card text-destructive"
         >
-          <Hourglass className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
+          <Icono nombre="espera" className="h-3.5 w-3.5" />
         </span>
       </div>
       <div className="min-w-0 rounded-[9px] border border-dashed border-border px-3.5 py-2.5">

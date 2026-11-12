@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Eye } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   AttachmentPreview,
   AvisoDescargaFallida,
@@ -86,7 +86,7 @@ function DownloadButton({
       className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-border"
       style={{ color: AZUL }}
     >
-      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
     </button>
   );
 }
@@ -187,7 +187,7 @@ function ConsultaRow({
           className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-border"
           style={{ color: AZUL }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="ojo" className="h-3.5 w-3.5" />
         </button>
         <DownloadButton filename={attachment.filename} onClick={() => onDescargar(attachment)} />
       </span>
@@ -202,7 +202,7 @@ function RotuloSoloConsulta() {
       className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
       style={{ background: `color-mix(in srgb, ${DETALLE_GREY} 13%, transparent)`, color: 'var(--muted-foreground)' }}
     >
-      <Eye className="h-3 w-3" aria-hidden="true" />
+      <Icono nombre="ojo" className="h-3 w-3" />
       {ETIQUETA_SOLO_CONSULTA}
     </span>
   );

@@ -1,16 +1,8 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  ArrowRightLeft,
-  BadgeCheck,
-  Ban,
-  Paperclip,
-  RefreshCcw,
-  Send,
-  UserCog,
-} from 'lucide-react';
+import { Ban, Paperclip, UserCog } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { INLINE_ALERT_TONES, InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -197,7 +189,7 @@ function CambiarEstadoModal({ open, onClose, item, tenantId, onSuccess, onError 
       onClose={onClose}
       title="Cambiar estado"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={ArrowRightLeft}
+      icono="intercambio"
       description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
       busy={busy}
@@ -434,7 +426,7 @@ function ConsolidadoModal({
       onClose={onClose}
       title="Gestionar consolidado"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={RefreshCcw}
+      icono="reintento"
       description={`Trámite ${item.referenceNumber}`}
       size="sm"
       // Con la confirmación abierta encima, Escape/backdrop solo deben cerrar la confirmación.
@@ -556,7 +548,7 @@ function ConsolidadoModal({
                     color: INLINE_ALERT_TONES.warning.color,
                   }}
                 >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="min-w-0 flex-1 text-xs leading-relaxed">
                     <p className="font-semibold">Avisos de la regeneración</p>
                     <ul
@@ -583,7 +575,7 @@ function ConsolidadoModal({
         onClose={() => setConfirmRegenerarOpen(false)}
         title="Confirmar regeneración del mandato"
         titleClassName="text-base font-bold text-flit-brand"
-        icon={AlertTriangle}
+        icono="alerta"
         iconBg="var(--color-flit-alert)"
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
@@ -783,7 +775,7 @@ function ConsultarRuntModal({ open, onClose, item, onSuccess, onError }: Omit<Mo
       onClose={onClose}
       title="Consultar ahora en RUNT"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={BadgeCheck}
+      icono="check"
       description={`Trámite ${item.referenceNumber}${item.placa ? ` · ${item.placa}` : ''}`}
       size="sm"
       busy={busy}
@@ -894,7 +886,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-cambiar-estado',
       label: 'Cambiar estado',
-      icon: ArrowRightLeft,
+      icon: iconoComo("intercambio"),
       disabled: esAprobado,
       disabledReason: 'Un trámite Aprobado no admite cambio de estado administrativo.',
       onSelect: () => setEstadoOpen(true),
@@ -920,7 +912,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-consolidado',
       label: 'Gestionar consolidado',
-      icon: RefreshCcw,
+      icon: iconoComo("reintento"),
       onSelect: () => setConsolidadoOpen(true),
     });
   }
@@ -928,7 +920,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-reenviar-validacion',
       label: 'Reenviar validación',
-      icon: Send,
+      icon: iconoComo("radicacion"),
       disabled: identidadNoAccionable,
       disabledReason:
         esAprobado || esAnulado
@@ -951,7 +943,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-consultar-runt',
       label: 'Consultar ahora en RUNT',
-      icon: BadgeCheck,
+      icon: iconoComo("check"),
       disabled: !esAprobado || yaConfirmado,
       disabledReason: !esAprobado
         ? 'Solo se confirman en el RUNT los trámites aprobados.'

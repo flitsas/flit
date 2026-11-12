@@ -472,7 +472,7 @@ export function PreflightPanel({
             return (
               <li
                 key={c.key}
-                className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm"
+                className="flex flex-col gap-2 rounded-xl border bg-card p-4"
                 style={{ borderColor: 'var(--border)' }}
               >
                 {/* `flex-wrap`: la pastilla no encoge ni parte (`whitespace-nowrap` + `shrink-0`),

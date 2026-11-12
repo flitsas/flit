@@ -3,25 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFechaHora } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import {
-  AlertCircle,
-  ArrowDown,
-  ArrowUp,
-  Download,
-  ArrowUpDown,
-  CheckCircle2,
-  ChevronDown,
-  Eye,
-  FileCheck,
-  FileStack,
-  FileText,
-  History,
-  Pause,
-  Play,
-  Star,
-  Undo2,
-  Upload,
-} from 'lucide-react';
+import { ArrowUpDown, FileStack, Play, Star } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { COPY } from '@/lib/copy/copy-catalog';
@@ -62,6 +45,8 @@ import {
 } from './TramitesFiltrosBar';
 import {
   ESTADOS_TRAMITE,
+  ESTADO_ICONO,
+  type EstadoTramite,
   FILTRO_RECHAZADO_PREASIGNACION,
   estadoChipClass,
   estadoChipStyle,
@@ -161,6 +146,15 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { IdentidadParteTrackingModal, type ActorTracking } from './IdentidadParteTrackingModal';
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_ABAJO = iconoComo("abajo");
+const ICONO_ARRIBA = iconoComo("arriba");
+const ICONO_CHECK = iconoComo("check");
+const ICONO_DOCUMENTO = iconoComo("documento");
+const ICONO_OJO = iconoComo("ojo");
+const ICONO_PAUSA = iconoComo("pausa");
+const ICONO_RELOJ = iconoComo("reloj");
 
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
@@ -304,7 +298,7 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         <span
           id={tipId}
           role="tooltip"
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-card p-2.5 text-left text-xs leading-snug text-foreground shadow-lg"
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-card p-2.5 text-left text-xs leading-snug text-foreground shadow-[var(--kit-sombra)]"
           style={{ borderColor: 'var(--border)' }}
         >
           {ayuda}
@@ -1513,7 +1507,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                   className={controlCls(false)}
                   data-testid="tramites-export-xlsx"
                 >
-                  <Download className={`h-3.5 w-3.5 ${exporting ? 'animate-pulse' : ''}`} aria-hidden="true" />
+                  <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${exporting ? 'animate-pulse' : ''}`} />
                   {exporting ? 'Exportando…' : COPY.A13}
                 </button>
               }
@@ -1532,7 +1526,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                     className={controlCls(false)}
                     data-testid="tramites-carga-masiva"
                   >
-                    <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
                     Carga masiva
                   </button>
                 ) : null
@@ -1645,7 +1639,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 onClick={() => void handleBulkPause(true)}
                 className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-strong)] px-2.5 py-1 font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand "
               >
-                <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+                <Icono nombre="pausa" className="h-3.5 w-3.5" /> Pausar
               </button>
             ) : null}
             {muestraPausa && accionPausa === 'reanudar' ? (
@@ -1659,7 +1653,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
             ) : null}
             {muestraPausa && particionPausa.excluidosRed > 0 ? (
               <span className="inline-flex items-center gap-1 text-muted-foreground">
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
                 {textoExcluidosRed(particionPausa.excluidosRed)}
               </span>
             ) : null}
@@ -1957,7 +1951,7 @@ function SortableHeaderCell({
   }
 
   const activa = opciones.find((o) => o.sort === sortBy);
-  const Icon = !activa ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+  const Icon = !activa ? ArrowUpDown : sortDir === 'asc' ? ICONO_ARRIBA : ICONO_ABAJO;
 
   return (
     <div className="relative inline-block">
@@ -1987,7 +1981,7 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-border bg-card normal-case shadow-xl"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-border bg-card normal-case shadow-[var(--kit-sombra)]"
         >
           <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
@@ -2004,7 +1998,7 @@ function SortableHeaderCell({
                 <span className="flex items-center gap-1.5">
                   {(['asc', 'desc'] as const).map((dir) => {
                     const seleccionada = sortBy === opcion.sort && sortDir === dir;
-                    const Flecha = dir === 'asc' ? ArrowUp : ArrowDown;
+                    const Flecha = dir === 'asc' ? ICONO_ARRIBA : ICONO_ABAJO;
                     return (
                       <button
                         key={dir}
@@ -2465,10 +2459,7 @@ function ActorCell({
       }
       className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 text-[11px] font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white/90"
     >
-      <ChevronDown
-        className={`h-3 w-3 transition-transform ${desplegado ? 'rotate-180' : ''}`}
-        aria-hidden="true"
-      />
+      <Icono nombre="abajo" className={`h-3 w-3 transition-transform ${desplegado ? 'rotate-180' : ''}`} />
       {desplegado ? 'Ocultar' : `+${copropietarios.length - 1} propietario${copropietarios.length > 2 ? 's' : ''}`}
     </button>
   ) : null;
@@ -2682,7 +2673,7 @@ function TramiteRow({
       : abreAsistente
         ? 'Continuar'
         : 'Ver';
-  const actionIcon = consultaMode ? Eye : async?.ready ? FileCheck : abreAsistente ? Play : Eye;
+  const actionIcon = consultaMode ? ICONO_OJO : async?.ready ? ICONO_DOCUMENTO : abreAsistente ? Play : ICONO_OJO;
   /**
    * "Pausado" y el sub-estado de revocatoria podían apilarse bajo el chip de Estado sin
    * jerarquía entre ellos — se muestra UNO SOLO, el de mayor prioridad. Revocatoria primero
@@ -2719,7 +2710,7 @@ function TramiteRow({
           {
             key: 'pausa',
             label: item.isPaused ? 'Reanudar' : 'Pausar',
-            icon: item.isPaused ? Play : Pause,
+            icon: item.isPaused ? Play : ICONO_PAUSA,
             onSelect: () => onTogglePause(item.id, !item.isPaused, item.tenantId),
           },
         ]
@@ -2729,7 +2720,7 @@ function TramiteRow({
           {
             key: 'enviar-al-ot',
             label: 'Enviar al OT',
-            icon: CheckCircle2,
+            icon: ICONO_CHECK,
             attention: true,
             onSelect: () => onProcesar(item),
           },
@@ -2743,7 +2734,7 @@ function TramiteRow({
           {
             key: 'documentos',
             label: 'Ver documentos',
-            icon: FileText,
+            icon: ICONO_DOCUMENTO,
             onSelect: () => onVerDocumentos(item),
           },
         ]
@@ -2761,7 +2752,7 @@ function TramiteRow({
           {
             key: 'historial-placa',
             label: 'Ver historial de la placa',
-            icon: History,
+            icon: ICONO_RELOJ,
             disabled: !placaDeLaFila,
             disabledReason: 'Este trámite todavía no tiene placa asignada.',
             onSelect: () => onVerHistorialPlaca(placaDeLaFila),
@@ -2925,7 +2916,7 @@ function TramiteRow({
               ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
               label={
                 <span className="inline-flex items-center gap-1">
-                  <Eye className="h-3 w-3" aria-hidden="true" />
+                  <Icono nombre="ojo" className="h-3 w-3" />
                   {ETIQUETA_SOLO_CONSULTA}
                 </span>
               }
@@ -3112,6 +3103,7 @@ function TramiteRow({
                   className={estadoChipClass(item.estado)}
                   label={estadoLabel(item.estado)}
                   ariaLabel={chip.label}
+                  icono={ESTADO_ICONO[item.estado as EstadoTramite]}
                   bg={chip.bg}
                   color={chip.color}
                   border={chip.border}
@@ -3124,6 +3116,7 @@ function TramiteRow({
               <StatusBadge
                 className={estadoChipClass(item.estado)}
                 label={chip.label}
+                icono={ESTADO_ICONO[item.estado as EstadoTramite]}
                 bg={chip.bg}
                 color={chip.color}
                 border={chip.border}
@@ -3144,17 +3137,13 @@ function TramiteRow({
               title="Ver motivo del OT y subsanación"
               className="rounded-md p-0.5 transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
             >
-              <AlertCircle
-                className="h-3.5 w-3.5"
-                style={{ color: iconColor }}
-                aria-hidden="true"
-              />
+              <Icono nombre="alerta" className="h-3.5 w-3.5" style={{ color: iconColor }} />
             </button>
             {popoverOpen ? (
               <div
                 role="dialog"
                 aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-card p-3 shadow-lg"
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-card p-3 shadow-[var(--kit-sombra)]"
                 style={{ borderColor: 'var(--badge-danger-border)' }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -3238,7 +3227,7 @@ function TramiteRow({
             style={{ color: revocationRequestListColor(item.revocationRequestStatus) }}
             title={`Sub-estado de revocatoria: ${revocationRequestListLabel(item.revocationRequestStatus)}`}
           >
-            <Undo2 className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="devolucion" className="h-3 w-3" />
             {revocationRequestListLabel(item.revocationRequestStatus)}
           </span>
         ) : null}
@@ -3470,7 +3459,7 @@ function TramiteRow({
         open={confirmPauseOpen}
         onClose={() => setConfirmPauseOpen(false)}
         title="Trámite pausado"
-        icon={Pause}
+        icono="pausa"
         iconBg="var(--color-flit-primary)"
         description={`Trámite ${item.referenceNumber}`}
         size="sm"

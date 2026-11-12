@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRight, Paperclip } from 'lucide-react';
+import { Paperclip } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type {
   FieldValue,
   ProcedureAttachment,
@@ -482,7 +483,7 @@ function SubtramiteDocCard({
   return (
     <div
       className={cn(
-        'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md',
+        'relative flex flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)]',
         done ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
       )}
       style={{ borderColor: 'var(--border)' }}
@@ -579,7 +580,7 @@ function SubtramiteDocCard({
         {changed && (
           <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-flit-brand)' }}>
             <span className="opacity-70">{up(item.runtValue)}</span>
-            <ArrowRight aria-hidden="true" className="h-3 w-3" />
+            <Icono nombre="derecha" className="h-3 w-3" />
             <span className="font-semibold">{up(item.effectiveValue)}</span>
           </p>
         )}

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import {
   latestRejectionReason,
@@ -107,7 +108,7 @@ export function SubsanacionPanel({
         role="alert"
         aria-live="polite"
       >
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
         <span>No se pudo cargar el detalle de la subsanación: {error}</span>
       </div>
     );
@@ -120,7 +121,7 @@ export function SubsanacionPanel({
       aria-labelledby="subsanacion-heading"
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--badge-warning-fg)' }} />
         <div className="min-w-0">
           <h3 id="subsanacion-heading" className="text-sm font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
             Trámite en subsanación

@@ -214,7 +214,7 @@ export function BlindajeDeclaracionCard({
 
       <div
         className={cn(
-          'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md sm:max-w-sm',
+          'relative flex flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)] sm:max-w-sm',
           listo ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
         )}
         style={{ borderColor: 'var(--border)' }}

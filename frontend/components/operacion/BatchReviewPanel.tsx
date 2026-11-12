@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertTriangle, FileWarning, Layers } from 'lucide-react';
+import { FileWarning } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { OcrStatusPanel, tipoLabel } from './DocumentChecklist';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
@@ -151,7 +152,7 @@ function PieceRow({
           className="mt-2 flex items-start gap-1.5 text-xs font-medium"
           style={{ color: 'var(--badge-warning-fg)' }}
         >
-          <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="mt-px h-3 w-3 shrink-0" />
           <span>
             Ya hay un documento en esta casilla ({conflicto.filename}). Si la marcas, lo reemplazas.
           </span>
@@ -163,7 +164,7 @@ function PieceRow({
           className="mt-2 flex items-start gap-1.5 text-xs font-medium"
           style={{ color: 'var(--badge-warning-fg)' }}
         >
-          <Layers className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+          <Icono nombre="tipos-tramite" className="mt-px h-3 w-3 shrink-0" />
           <span>
             La carga trae otro documento para esta misma casilla. Marca el que quieras conservar.
           </span>

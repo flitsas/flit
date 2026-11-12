@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Info, Loader2 } from 'lucide-react';
+import { Info, Loader2 } from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
 import { useFamilyAccess } from '@/hooks/useFamilyAccess';
@@ -20,6 +21,11 @@ import { OperacionLoadingState } from './states';
 import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
 
 const BLUE = 'var(--color-flit-brand)';
+
+/** Clave del kit a partir de la ruta del catálogo (`/assets/kit/modulo/<clave>.svg`); sin ella, «documento». */
+function claveIcono(ruta: string): string {
+  return ruta.split('/').pop()?.replace(/\.(svg|webp|png)$/, '') ?? 'documento';
+}
 const BORDER = 'var(--border)';
 
 export type { FamiliasBloqueadasResolver as FamiliasBloqueadas };
@@ -139,10 +145,7 @@ function TarjetaSelect({
         style={{ borderColor: BORDER, color: elegida ? 'var(--color-flit-primary)' : 'var(--muted-foreground)' }}
       >
         <span className="truncate pr-2">{elegida?.label ?? placeholder}</span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
+        <Icono nombre="abajo" className={`h-4 w-4 shrink-0 text-muted-foreground transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && typeof document !== 'undefined'
@@ -383,10 +386,10 @@ export function NuevoTramiteModalContent({
                 opacity: inhabilitada ? 0.55 : 1,
               }}
             >
-              {/* HU #14482: ilustración de la propuesta (`.tarjeta__ilus`: 56 px, 44 px en celular), sin aro de fondo. */}
+              {/* UI Kit 2026: el ícono del kit de la clave que declara el catálogo (`/assets/kit/modulo/<clave>.svg`), en su
+                  disco de 56 px. Decorativo. */}
               <div className="mx-auto grid place-items-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={t.icon} alt="" aria-hidden="true" className="h-14 w-14 object-contain max-sm:h-11 max-sm:w-11" />
+                <IconoModulo clave={claveIcono(t.icon)} disco size={56} />
               </div>
 
               <h3 className="mt-4 text-center text-[15px] font-bold text-foreground">

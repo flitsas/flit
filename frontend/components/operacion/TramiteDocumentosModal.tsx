@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Eye, FileText } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { ICON_BUTTON_HIT_AREA } from '@/components/atom/RowActions';
@@ -435,7 +435,7 @@ export function TramiteDocumentosModal({
         open={open}
         onClose={onClose}
         title={`Documentos · ${referenceNumber}`}
-        icon={FileText}
+        icono="documento"
         size="xl"
       >
         {loading && (
@@ -472,7 +472,7 @@ export function TramiteDocumentosModal({
                   className="flex items-center gap-3 rounded-xl border p-3"
                   style={{ borderColor: BORDER }}
                 >
-                  <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+                  <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: BLUE }} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-semibold text-foreground">
                       {documentLabel(d.tipo)}
@@ -494,7 +494,7 @@ export function TramiteDocumentosModal({
                     aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
                     title="Previsualizar"
                   >
-                    <Eye className="h-4 w-4" aria-hidden="true" />
+                    <Icono nombre="ojo" className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
@@ -505,7 +505,7 @@ export function TramiteDocumentosModal({
                     aria-label={`Descargar ${documentLabel(d.tipo)}`}
                     title="Descargar"
                   >
-                    <Download className="h-4 w-4" aria-hidden="true" />
+                    <Icono nombre="nube-bajar" className="h-4 w-4" />
                   </button>
                 </li>
               ))}
@@ -524,7 +524,7 @@ export function TramiteDocumentosModal({
                   onClick={() => void preview.downloadConsolidado()}
                   aria-label="Descargar todo · Expediente consolidado (PDF)"
                 >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                   Descargar todo · Expediente consolidado (PDF)
                 </button>
               );

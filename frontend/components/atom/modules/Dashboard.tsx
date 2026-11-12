@@ -10,14 +10,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import {
-  Activity,
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  ExternalLink,
-} from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchActiveModules,
@@ -41,7 +34,6 @@ import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
 import { estadoAcentoVar, estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { RangoFechas } from "@/components/atom/RangoFechas";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
@@ -159,9 +151,9 @@ function buildWelcomeBody(
 // activos el carrusel solo muestra el slide fijo (AC3).
 
 /** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
-// HU #14481 (propuesta): el slide fijo es el `.page-header` del prototipo, una tarjeta clara de
-// superficie a cielo con texto en tinta, en vez del degradado azul y turquesa con texto blanco.
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--di-surface-elevated) 35%,var(--di-sky) 100%)";
+// UI Kit 2026: el slide fijo es la lámina `.banner-kit__lamina--degradado` del manual, con el contraste AA ya calculado
+// con texto blanco (ui-kit-2026.css), en vez de la tarjeta clara con el círculo turquesa.
+const BRAND_GRADIENT = "linear-gradient(160deg, #007d79 0%, #1670b8 55%, #1d53ff 100%)";
 const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
 
 /**
@@ -530,13 +522,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
         {/* Banner carousel */}
         <div
           className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)] md:min-h-0 ${
-            esBienvenida(s)
-              ? "rounded-[28px] border border-[color:var(--di-border)] text-[color:var(--di-heading)] shadow-[var(--shadow-card)]"
-              : "rounded-2xl text-white"
+            esBienvenida(s) ? "rounded-[9px] text-white" : "rounded-2xl text-white"
           }`}
           data-testid="dashboard-hero-banner"
         >
-          {/* Capa de fondo: gradiente de marca fijo en el slide de bienvenida; en un banner, el
+          {/* Capa de fondo: lámina degradada del kit en el slide de bienvenida; en un banner, el
               color PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con
               el azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja
               margen (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el
@@ -570,30 +560,24 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             }}
           />
           {s.type === "welcome" && (
-            // Círculos del prototipo: el turquesa lleno arriba a la derecha y, con `outline`, el aro
-            // grande de cielo alrededor (`.page-header::before/::after`), sin marcado nuevo.
-            <div
-              className="absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90"
-              style={{
-                background: "var(--di-highlight-decor)",
-                outline: "1.5px solid color-mix(in srgb, var(--di-sky-line) 50%, transparent)",
-                outlineOffset: "95px",
-              }}
-            />
+            // Círculo de la lámina del kit (`.banner-kit__lamina::after`): blanco translúcido arriba a la derecha.
+            <div className="absolute -right-[50px] -top-[70px] h-[190px] w-[190px] rounded-full bg-white/[0.14]" />
           )}
           {s.type === "welcome" ? (
-            // `.page-header` del prototipo: la ilustración de Inicio a la izquierda del texto (el ícono sigue
-            // en el DOM, oculto: era decorativo) y el texto en flujo, con el pie reservado para los puntos del
-            // carrusel, así un aviso largo agranda el banner en vez de cortarse o montarse sobre ellos.
-            <div className="relative flex flex-1 flex-col justify-center gap-2 max-w-[85%] pl-[108px] pr-6 pt-5 pb-12 max-sm:pl-[84px]">
-              <div
-                className="absolute left-6 top-5 h-16 w-16 max-sm:left-4 max-sm:h-14 max-sm:w-14"
-                style={{ background: `url("${rutaIlustracion("inicio")}") center / contain no-repeat` }}
-              >
-                <Activity className="hidden" aria-hidden="true" />
+            // Lámina del kit (`.banner-kit__lamina`): el chip de 42 px con el ícono de Inicio junto al título y el
+            // texto en flujo, con el pie reservado para los puntos del carrusel, así un aviso largo agranda el banner
+            // en vez de cortarse o montarse sobre ellos.
+            <div className="relative flex flex-1 flex-col justify-center gap-2.5 max-w-[85%] px-6 pt-6 pb-16">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
+                >
+                  <IconoModulo clave="inicio" size={22} />
+                </span>
+                <h2 className="text-2xl md:text-[1.75rem] font-bold leading-tight line-clamp-2 min-w-0 text-white">{s.title}</h2>
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
-              <p className="text-sm md:text-base leading-snug line-clamp-3 text-[color:var(--di-text-secondary)]">{s.body}</p>
+              <p className="max-w-[58ch] text-sm md:text-base leading-snug line-clamp-3 text-white">{s.body}</p>
             </div>
           ) : s.linkUrl ? (
             // Sin título visible (solo el banner): el enlace cubre toda la imagen — al acercarse,
@@ -608,8 +592,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             >
               <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
               <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
-                  <ExternalLink className="h-5 w-5" aria-hidden="true" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary">
+                  <Icono nombre="externo" className="h-5 w-5" />
                 </span>
               </span>
             </a>
@@ -629,17 +613,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   key={i}
                   onClick={() => setSlide(i)}
                   aria-label={`Slide ${i + 1}`}
-                  className="h-1.5 rounded-full transition-all"
-                  style={{
-                    width: i === slide ? 16 : 5,
-                    background: esBienvenida(s)
-                      ? i === slide
-                        ? "var(--di-action)"
-                        : "var(--di-border-control)"
-                      : i === slide
-                        ? "#ffffff"
-                        : "rgba(255,255,255,0.5)",
-                  }}
+                  // Puntos del kit (`.banner-kit__punto`): 8 px, el actual de 22 px en blanco pleno.
+                  className={`h-2 rounded-full transition-all ${i === slide ? "bg-current" : "bg-white/50"}`}
+                  style={{ width: i === slide ? 22 : 8 }}
                 />
               ))}
             </div>
@@ -648,25 +624,19 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Anterior"
-                className={`h-6 w-6 rounded-full grid place-items-center disabled:cursor-not-allowed disabled:opacity-40 ${
-                  esBienvenida(s)
-                    ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
-                    : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
-                }`}
+                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
               >
-                <ChevronLeft className="h-3 w-3" />
+                <Icono nombre="izquierda" size={18} />
               </button>
               <button
                 onClick={() => setSlide((v) => (v + 1) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Siguiente"
-                className={`h-6 w-6 rounded-full grid place-items-center disabled:cursor-not-allowed disabled:opacity-40 ${
-                  esBienvenida(s)
-                    ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
-                    : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
-                }`}
+                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
               >
-                <ChevronRight className="h-3 w-3" />
+                <Icono nombre="derecha" size={18} />
               </button>
             </div>
           </div>
@@ -732,8 +702,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                     // rótulo se comía el ancho y la ilustración quedaba en 0 px. Aquí la tarjeta va a
                     // una columna —el rótulo usa todo el ancho y no se parte— y la ilustración se fija
                     // abajo a la derecha, junto a la cifra, con un tamaño que no se encoge.
-                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>img]:absolute [&>img]:bottom-3 [&>img]:right-3 [&>img]:h-10 [&>img]:w-10 [&>img]:shrink-0 [&>img]:max-w-none [&>img]:rounded-full [&>img]:bg-[var(--di-accent-soft)] [&>img]:p-1.5 [&>span:nth-child(2)]:pr-12 [&>span:nth-child(2)]:text-2xl"
-                    ilustracion={rutaIlustracion(k.ilustracion)}
+                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>:nth-child(3)]:absolute [&>:nth-child(3)]:bottom-3 [&>:nth-child(3)]:right-3 [&>:nth-child(3)]:h-10 [&>:nth-child(3)]:w-10 [&>:nth-child(3)]:shrink-0 [&>:nth-child(3)]:max-w-none [&>span:nth-child(2)]:pr-12 [&>span:nth-child(2)]:text-2xl"
+                    icono={k.ilustracion}
                     etiqueta={
                       <span className="block min-w-0">
                         {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
@@ -757,7 +727,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           style={{ color: "var(--di-danger)" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
-                          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
                           <span>—</span>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
                         </span>
@@ -797,7 +767,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
                   style={{ background: "var(--badge-neutral-bg)" }}
                 >
-                  <Clock className="h-5 w-5" style={{ color: "var(--badge-neutral-fg)" }} aria-hidden="true" />
+                  <Icono nombre="reloj" className="h-5 w-5" style={{ color: "var(--badge-neutral-fg)" }} />
                 </div>
                 <div>
                   <p className="text-sm font-bold">{m.label}</p>
@@ -919,7 +889,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   // Aviso pendiente de la propuesta: cielo con texto en tinta; el naranja queda en el ícono.
                   style={{ background: "var(--di-sky)", color: "var(--di-heading)" }}
                 >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--di-alerta-punto)" }} />
+                  <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--di-alerta-punto)" }} />
                   {expiringSoonCount} validación{expiringSoonCount === 1 ? "" : "es"} próxima
                   {expiringSoonCount === 1 ? "" : "s"} a vencer
                 </div>
@@ -969,7 +939,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                         background: "rgba(22,39,68,0.95)",
                         border: "none",
                         borderRadius: 10,
-                        color: "#fff",
+                        color: "white",
                         fontSize: 11,
                       }}
                       labelStyle={{ color: "var(--color-flit-tech)", fontWeight: 600 }}
