@@ -4,10 +4,9 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import type { ProcedureConfiguration, WizardState } from '@/lib/api/types/procedure-runtime';
 
 /**
- * HU #14322 (Épica #14296) — la barra de identidad del asistente (píldora azul «ID TRÁMITE … TIPO …
- * En borrador») muestra el canal y, solo con Persona Natural OT, el OT del punto. Los trámites del
- * portal y del punto quedan en borrador y solo se abren con «Continuar», así que es el único sitio
- * donde se ven. Mismo harness de mocks que `hu10874-subsanacion-wizard.test.tsx`.
+ * HU #14322 (Épica #14296) mostraba el canal en la barra de identidad del asistente. Decisión del
+ * usuario (2026-11-11): el canal NO va en la franja; sigue en su columna de la tabla de trámites.
+ * Estas pruebas cuidan que no vuelva a aparecer. Mismo harness que hu10874-subsanacion-wizard.test.tsx.
  */
 const mocks = vi.hoisted(() => ({
   getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
@@ -131,58 +130,22 @@ beforeEach(() => {
   mocks.ensureIdentity.mockResolvedValue({ outcome: 'ya_vigente' });
 });
 
-describe('HU #14322 — canal en la barra del asistente', () => {
-  it.each(['tramites', 'pn_web', 'integracion', 'aplicacion'] as const)(
-    'canal «%s»: lo muestra tras cargar, sin OT, dentro de la píldora de identidad',
+describe('Franja del asistente sin canal (decisión 2026-11-11, revierte la barra de HU #14322)', () => {
+  it.each(['tramites', 'pn_web', 'integracion', 'aplicacion', 'pn_punto'] as const)(
+    'canal «%s»: la franja no lo muestra (ni el OT del punto) y conserva ID y estado',
     async (codigo) => {
-      detalle({ channel: codigo, channelTransitOfficeName: 'No debe verse' });
+      detalle({ channel: codigo, channelTransitOfficeName: 'Tránsito de Envigado' });
       const strip = await abrir();
-      await waitFor(() =>
-        expect(within(strip).getByTestId('tramite-canal')).toHaveTextContent(`Canal: ${CANAL_LABEL[codigo]}`),
-      );
-      expect(within(strip).queryByTestId('tramite-canal-ot')).not.toBeInTheDocument();
-      expect(strip).toHaveTextContent('RAD-77');
+      await waitFor(() => expect(strip).toHaveTextContent('RAD-77'));
       expect(strip).toHaveTextContent('En borrador');
+      expect(strip).not.toHaveTextContent('Canal:');
+      expect(strip).not.toHaveTextContent(CANAL_LABEL[codigo]);
+      expect(strip).not.toHaveTextContent('Tránsito de Envigado');
+      expect(within(strip).queryByTestId('tramite-canal')).not.toBeInTheDocument();
     },
   );
 
-  it('Persona Natural OT con nombre: muestra canal y OT', async () => {
-    detalle({ channel: 'pn_punto', channelTransitOfficeName: 'Tránsito de Envigado' });
-    const strip = await abrir();
-    await waitFor(() => expect(within(strip).getByTestId('tramite-canal-ot')).toHaveTextContent('Tránsito de Envigado'));
-    expect(within(strip).getByTestId('tramite-canal')).toHaveTextContent('Canal: Persona Natural OT');
-  });
-
-  it('Persona Natural OT sin nombre de OT: solo el canal', async () => {
-    detalle({ channel: 'pn_punto', channelTransitOfficeName: null });
-    const strip = await abrir();
-    await waitFor(() => expect(within(strip).getByTestId('tramite-canal')).toHaveTextContent('Persona Natural OT'));
-    expect(within(strip).queryByTestId('tramite-canal-ot')).not.toBeInTheDocument();
-  });
-
-  it('trámite existente sin dato (histórico o backend anterior): muestra Trámites', async () => {
-    detalle({});
-    const strip = await abrir();
-    await waitFor(() => expect(within(strip).getByTestId('tramite-canal')).toHaveTextContent('Canal: Trámites'));
-  });
-
-  it('un texto largo de OT puede partirse: la píldora no fuerza ancho', async () => {
-    detalle({ channel: 'pn_punto', channelTransitOfficeName: 'Secretaría de Tránsito y Transporte '.repeat(6) });
-    const strip = await abrir();
-    const canal = await within(strip).findByTestId('tramite-canal');
-    expect(canal.className).toMatch(/break-words/);
-    expect(canal.className).toMatch(/max-w-full/);
-  });
-
-  it('es solo texto: sin controles de edición', async () => {
-    detalle({ channel: 'pn_punto', channelTransitOfficeName: 'Tránsito de Envigado' });
-    const strip = await abrir();
-    const canal = await within(strip).findByTestId('tramite-canal');
-    expect(canal.querySelector('input, select, textarea, button, [contenteditable]')).toBeNull();
-    expect(canal.closest('button, a, label')).toBeNull();
-  });
-
-  it('sin trámite creado (nuevo) no muestra el canal', async () => {
+  it('sin trámite creado (nuevo) no consulta el detalle', async () => {
     mocks.getInstance.mockResolvedValue({});
     render(<TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={() => {}} />);
     await screen.findByRole('button', { name: /Cancelar/ });
