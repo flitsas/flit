@@ -111,7 +111,7 @@ public sealed class GrillaTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny(["origen", "MANUAL", "usuario_manual", "payload", "99999123", "locatario_doc", "documento_propietario"]);
         cuerpo.Should().NotContain(lote.Celdas.Single().UsuarioManualId!.Value.ToString());
-        Tablero.CeldasDe(JsonDocument.Parse(cuerpo).RootElement).Single().GetProperty("estado").GetString().Should().Be("COMPLETADO");
+        Tablero.CeldasDe(JsonElement.Parse(cuerpo)).Single().GetProperty("estado").GetString().Should().Be("COMPLETADO");
     }
 
     // HU #14087 AC4 — cada fila trae el documento declarado (rol, tipo, enmascarado) y los propietarios del RUNT en su orden,
@@ -151,7 +151,7 @@ public sealed class GrillaTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny(["1012345678", "900123456", "5566778899", "77441122", "DECLARADO_CLIENTE", "PROVEEDOR"]);
-        var filas = JsonDocument.Parse(cuerpo).RootElement.GetProperty("vehiculos").EnumerateArray()
+        var filas = JsonElement.Parse(cuerpo).GetProperty("vehiculos").EnumerateArray()
             .ToDictionary(f => f.GetProperty("identificador").GetString()!);
 
         var declarado = filas["TST161"].GetProperty("documento_declarado");

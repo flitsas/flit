@@ -53,7 +53,7 @@ public sealed class FuentesObligatoriasBackofficeTests
         textoConEmpresa.Should().Be(texto);
         put.StatusCode.Should().Be(HttpStatusCode.OK, textoPut);
 
-        var definiciones = JsonDocument.Parse(texto).RootElement.GetProperty("definiciones").EnumerateArray().ToList();
+        var definiciones = JsonElement.Parse(texto).GetProperty("definiciones").EnumerateArray().ToList();
         definiciones.Select(d => (d.GetProperty("familia").GetString(), d.GetProperty("tipo_tramite_codigo").GetString()))
             .Should().Equal(
                 ("TRASPASO", null),
@@ -259,7 +259,7 @@ public sealed class FuentesObligatoriasBackofficeTests
         api.Token(permisos: [Permisos.BackofficeVer], roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT");
 
     private static async Task<JsonElement> CuerpoDe(HttpResponseMessage respuesta, CancellationToken ct) =>
-        JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync(ct)).RootElement;
+        JsonElement.Parse(await respuesta.Content.ReadAsStringAsync(ct));
 
     private static IEnumerable<string?> Fuentes(JsonElement definicion) => Codigos(definicion.GetProperty("fuentes"));
 
@@ -314,6 +314,6 @@ public sealed class FuentesObligatoriasBackofficeTests
     {
         var carga = token.Split('.')[1].Replace('-', '+').Replace('_', '/');
         carga = carga.PadRight(carga.Length + ((4 - (carga.Length % 4)) % 4), '=');
-        return JsonDocument.Parse(Convert.FromBase64String(carga)).RootElement.GetProperty("sub").GetGuid();
+        return JsonElement.Parse(Convert.FromBase64String(carga)).GetProperty("sub").GetGuid();
     }
 }

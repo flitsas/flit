@@ -56,7 +56,7 @@ public sealed class EmpresasBackofficeTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var lista = JsonDocument.Parse(texto).RootElement;
+        var lista = JsonElement.Parse(texto);
         lista.ValueKind.Should().Be(JsonValueKind.Array);
         lista.EnumerateArray().Select(e => e.GetProperty("id").GetGuid()).Should().Equal([alfa, media, zeta], "ordenadas por nombre; un id que no es uuid se descarta");
         lista[0].GetProperty("nombre").GetString().Should().Be("Álamo Renting de Prueba");

@@ -191,7 +191,7 @@ public sealed class ConsultaDictamenTests
         OverrideDictamenEndpoints.EsConflictoDeDictamen(Duplicado("ux_dictamen_version")).Should().BeTrue();
         OverrideDictamenEndpoints.EsConflictoDeDictamen(Duplicado("ux_dictamen_vigente")).Should().BeTrue();
         OverrideDictamenEndpoints.EsConflictoDeDictamen(Duplicado("ux_evidencias_vigente")).Should().BeFalse();
-        var cuerpo = JsonDocument.Parse("""{"veredicto":"BLOQUEADO","confirmado":false}""").RootElement;
+        var cuerpo = JsonElement.Parse("""{"veredicto":"BLOQUEADO","confirmado":false}""");
         var acto = () => OverrideDictamenEndpoints.ExigirCuerpo(cuerpo);
         acto.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.ConfirmadoRequerido);
     }

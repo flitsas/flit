@@ -316,9 +316,9 @@ public sealed class ConsultasDiagnosticoBrokerTests
 
         consultas.Atendidos.Should().Contain(a => a.Sobre.Data.GetProperty("rpc").GetString() == RpcConsultas.Conductor);
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.RuntPropietario, ct);
-        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, celda.Id, ct))!)).RootElement;
+        var mapa = JsonElement.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, celda.Id, ct))!));
         var guardado = mapa.EnumerateObject().Should().ContainSingle().Subject.Value.GetString()!;
-        var crudo = JsonDocument.Parse(guardado).RootElement.GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()!;
+        var crudo = JsonElement.Parse(guardado).GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()!;
         crudo.Length.Should().Be(grande.Length, "sin truncar");
         crudo.Should().Be(grande).And.EndWith("\"fin\":\"FIN-DEL-CRUDO\"}");
     }

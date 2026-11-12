@@ -384,7 +384,7 @@ public sealed class ExcelLoteTests
         var ajena = await api.Cliente(creador).GetAsync(ExcelDePrueba.Ruta(deB.Id), ct);
         var cuerpo = await ajena.Content.ReadAsStringAsync(ct);
         ajena.StatusCode.Should().Be(HttpStatusCode.NotFound, cuerpo);
-        JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+        JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
         cuerpo.Should().NotContainAny(["Lote secreto de B", "TST481", deB.Vehiculos.Single().Id.ToString(), empresas.B.Id.ToString()]);
 
         await ConfiguracionPropiosAsync(empresas.A, ct);

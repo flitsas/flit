@@ -309,7 +309,7 @@ internal static class MotorPersonas
     public static List<JsonElement> PersonasDelPayload(string? payload)
     {
         payload.Should().NotBeNull("la celda de persona guarda lo que respondió");
-        return [.. JsonDocument.Parse(payload!).RootElement.GetProperty("personas").EnumerateArray().Select(e => e.Clone())];
+        return [.. JsonElement.Parse(payload!).GetProperty("personas").EnumerateArray().Select(e => e.Clone())];
     }
 
     /// <summary>Admin de la compañía con permiso de reproceso (§6.2).</summary>

@@ -388,7 +388,7 @@ public sealed class PdfVehiculoTests
             var respuesta = await api.Cliente(creador).GetAsync(ruta, ct);
             var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{ruta}: {cuerpo}");
-            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
             cuerpo.Should().NotContainAny(["Lote secreto de B", "TST391", "TST-C-0301", vehiculoB.ToString(), empresas.B.Id.ToString()]);
         }
 

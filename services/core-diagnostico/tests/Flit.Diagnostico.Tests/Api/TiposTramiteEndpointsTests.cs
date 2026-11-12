@@ -36,7 +36,7 @@ public sealed class TiposTramiteEndpointsTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var tipos = JsonDocument.Parse(cuerpo).RootElement.GetProperty("tipos").EnumerateArray().ToList();
+        var tipos = JsonElement.Parse(cuerpo).GetProperty("tipos").EnumerateArray().ToList();
         tipos.Select(t => t.GetProperty("codigo").GetString())
             .Should().Equal("TRASPASO_STANDARD", "TRASPASO_TRANSFERENCIA_DE_DOMINIO", "TRASPASO_UNILATERAL");
         tipos.Select(t => t.GetProperty("nombre").GetString())
@@ -70,7 +70,7 @@ public sealed class TiposTramiteEndpointsTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var tipos = JsonDocument.Parse(cuerpo).RootElement.GetProperty("tipos").EnumerateArray().ToDictionary(t => t.GetProperty("codigo").GetString()!);
+        var tipos = JsonElement.Parse(cuerpo).GetProperty("tipos").EnumerateArray().ToDictionary(t => t.GetProperty("codigo").GetString()!);
         Codigos(tipos["TRASPASO_STANDARD"]).Should().Equal("SIMIT_PROPIETARIO");
         Codigos(tipos["TRASPASO_TRANSFERENCIA_DE_DOMINIO"]).Should().Equal("SIMIT_PROPIETARIO");
         Codigos(tipos["TRASPASO_UNILATERAL"]).Should().BeEmpty();
@@ -104,7 +104,7 @@ public sealed class TiposTramiteEndpointsTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        JsonDocument.Parse(cuerpo).RootElement.GetProperty("tipos").GetArrayLength().Should().Be(3);
+        JsonElement.Parse(cuerpo).GetProperty("tipos").GetArrayLength().Should().Be(3);
         api.Catalogos.Llamadas.Should().Be(3, "una llamada y dos reintentos");
     }
 
@@ -137,7 +137,7 @@ public sealed class TiposTramiteEndpointsTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable, cuerpo);
         respuesta.Headers.RetryAfter.Should().NotBeNull();
         respuesta.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(30));
-        var json = JsonDocument.Parse(cuerpo).RootElement;
+        var json = JsonElement.Parse(cuerpo);
         json.GetProperty("code").GetString().Should().Be(ReglaException.CodigoCatalogoNoDisponible);
         json.TryGetProperty("tipos", out _).Should().BeFalse("no se sirve una lista fija");
         cuerpo.Should().NotContain("TRASPASO_STANDARD");

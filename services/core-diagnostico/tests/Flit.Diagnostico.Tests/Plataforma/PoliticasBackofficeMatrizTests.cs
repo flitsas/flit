@@ -258,7 +258,7 @@ public sealed class PoliticasBackofficeMatrizTests
             return $"esperaba {(int)esperado} {codigo} y respondió {(int)estado} {texto}";
         try
         {
-            var real = JsonDocument.Parse(texto).RootElement.GetProperty("code").GetString();
+            var real = JsonElement.Parse(texto).GetProperty("code").GetString();
             return real == codigo ? null : $"esperaba code={codigo} y llegó {real}";
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)

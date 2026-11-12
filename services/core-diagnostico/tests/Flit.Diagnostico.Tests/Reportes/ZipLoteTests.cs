@@ -497,7 +497,7 @@ public sealed class ZipLoteTests
             var respuesta = await cliente.GetAsync(ruta, ct);
             var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{ruta}: {cuerpo}");
-            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
             cuerpo.Should().NotContainAny(deBNoCruza);
         }
 
@@ -640,7 +640,7 @@ internal static class ZipDePrueba
         ArgumentNullException.ThrowIfNull(cliente);
         var respuesta = await cliente.PostAsJsonAsync(Ruta(id), new Dictionary<string, string> { ["tipo"] = tipo }, ct);
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
-        return (respuesta, texto.Length == 0 ? default : JsonDocument.Parse(texto).RootElement.Clone());
+        return (respuesta, texto.Length == 0 ? default : JsonElement.Parse(texto).Clone());
     }
 
     public static async Task<JsonElement> EstadoAsync(HttpClient cliente, Guid id, Guid eid, CancellationToken ct)
@@ -649,7 +649,7 @@ internal static class ZipDePrueba
         var respuesta = await cliente.GetAsync(RutaEstado(id, eid), ct);
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        return JsonDocument.Parse(texto).RootElement.Clone();
+        return JsonElement.Parse(texto).Clone();
     }
 
     /// <summary>Una vuelta del empaquetador: true si tomó un ZIP de la cola.</summary>

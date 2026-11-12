@@ -39,13 +39,13 @@ public sealed class ValidarFilasTests
 
         var textoAntes = await antes.Content.ReadAsStringAsync(ct);
         antes.StatusCode.Should().Be(HttpStatusCode.OK, textoAntes);
-        var erronea = Fila(JsonDocument.Parse(textoAntes).RootElement, 4);
+        var erronea = Fila(JsonElement.Parse(textoAntes), 4);
         erronea.GetProperty("valida").GetBoolean().Should().BeFalse();
         Errores(erronea).Should().Equal("IDENTIFICADOR_INVALIDO");
 
         var textoDespues = await despues.Content.ReadAsStringAsync(ct);
         despues.StatusCode.Should().Be(HttpStatusCode.OK, textoDespues);
-        var resumen = JsonDocument.Parse(textoDespues).RootElement;
+        var resumen = JsonElement.Parse(textoDespues);
         var corregida = Fila(resumen, 4);
         corregida.GetProperty("valida").GetBoolean().Should().BeTrue(textoDespues);
         corregida.GetProperty("identificador_norm").GetString().Should().Be("ABC12X");
@@ -74,7 +74,7 @@ public sealed class ValidarFilasTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var resumen = JsonDocument.Parse(texto).RootElement;
+        var resumen = JsonElement.Parse(texto);
         Errores(Fila(resumen, 2)).Should().Equal("IDENTIFICADOR_DEMASIADO_LARGO");
         Fila(resumen, 2).GetProperty("identificador_norm").GetString().Should().Be("AB1234567", "no se recorta");
         Errores(Fila(resumen, 3)).Should().Equal("IDENTIFICADOR_DEMASIADO_LARGO");
