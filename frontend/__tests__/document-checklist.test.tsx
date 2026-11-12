@@ -433,6 +433,55 @@ describe('DocumentChecklist — OCR en el buzón', () => {
   });
 });
 
+// Bug #14559 — al cambiar de paso del wizard y volver, la casilla rechazada pasaba a «Cargado»: el
+// veredicto vivía solo en sesión. Ahora el backend lo devuelve en el adjunto y se rehidrata.
+describe('DocumentChecklist — veredicto OCR tras remontar (Bug #14559)', () => {
+  it('rechazado en sesión, desmontar y volver a montar sigue diciendo No coincide', async () => {
+    const user = userEvent.setup();
+    mocks.analyzeDocument.mockResolvedValue({
+      ok: true,
+      tipo: 'soat',
+      data: { es_valido: false, observaciones: 'Es una factura.' },
+    });
+    mocks.uploadAttachment.mockImplementation(async () => {
+      mocks.getAttachments.mockResolvedValue([
+        { ...SOAT_ATT, ocrStatus: 'rejected', ocrReason: 'tipo_invalido' },
+      ]);
+      return { id: SOAT_ATT.id };
+    });
+
+    const primero = render(<DocumentChecklist instanceId={INSTANCE} />);
+    await screen.findByText(/SOAT vigente/);
+    await user.upload(screen.getByLabelText(/Subir SOAT vigente/), pngFile('factura.png'));
+    expect(await screen.findByText('No coincide')).toBeInTheDocument();
+    primero.unmount();
+
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+    await screen.findByText(/soat\.png/);
+    expect(await screen.findByText('No coincide')).toBeInTheDocument();
+    expect(screen.getByLabelText(/OCR SOAT: Rechazado/)).toBeInTheDocument();
+    expect(screen.queryByText('Cargado')).toBeNull();
+  });
+
+  it('al montar con un adjunto ocrStatus rejected se ve No coincide y no Cargado', async () => {
+    mocks.getAttachments.mockResolvedValue([
+      { ...SOAT_ATT, ocrStatus: 'rejected', ocrReason: 'vin_mismatch' },
+    ]);
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+    await screen.findByText(/soat\.png/);
+    expect(await screen.findByText('No coincide')).toBeInTheDocument();
+    expect(screen.queryByText('Cargado')).toBeNull();
+  });
+
+  it('un adjunto sin veredicto (previo al fix) sigue diciendo Cargado', async () => {
+    mocks.getAttachments.mockResolvedValue([{ ...SOAT_ATT, ocrStatus: null }]);
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+    await screen.findByText(/soat\.png/);
+    expect(await screen.findByText('Cargado')).toBeInTheDocument();
+    expect(screen.queryByText('No coincide')).toBeNull();
+  });
+});
+
 describe('DocumentChecklist — generar impronta en el slot', () => {
   const IMPRONTA_OPCIONAL: ChecklistView = {
     items: [

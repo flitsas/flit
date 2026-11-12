@@ -10,6 +10,7 @@ import type {
   ActorContactLookupResult,
   ActorsResponse,
   CamaraComercioRequirement,
+  AttachmentOcrVerdict,
   AttachmentsResponse,
   BiometriaPublicView,
   BiometricParte,
@@ -1586,11 +1587,14 @@ export const tramitesClient = {
   //   1) presign  → el API registra el archivo en el file-manager y devuelve url + method + fields.
   //   2) PUT o POST al storage → el navegador sube el binario (PUT crudo en Contabo; POST policy en MinIO/S3).
   //   3) register → el API persiste la metadata del adjunto (incl. el sha256 que calcula el cliente).
+  // Bug #14559 — `ocr` (opcional): veredicto OCR ya calculado en el cliente; viaja en el register como
+  // códigos cerrados para que el adjunto lo conserve al volver al paso. Informativo (ADR-0085).
   uploadAttachment: async (
     instanceId: string,
     tipo: string,
     file: File,
     tenantId?: string,
+    ocr?: AttachmentOcrVerdict,
   ): Promise<ProcedureAttachment> => {
     const mimetype = file.type || 'application/octet-stream';
     const filename = file.name || 'file';
@@ -1622,6 +1626,8 @@ export const tramitesClient = {
           sizeBytes: file.size,
           sha256,
           storagePath: presign.storagePath,
+          ...(ocr ? { ocrStatus: ocr.status } : {}),
+          ...(ocr?.reason ? { ocrReason: ocr.reason } : {}),
         }),
       },
     );
