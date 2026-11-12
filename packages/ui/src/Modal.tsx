@@ -17,6 +17,14 @@ import { Icono, type NombreIcono } from "./Icono";
 // centrado sobre el título (1,375 rem, azul), subtítulo gris, X discreta arriba a la derecha y velo azul al 50 % con
 // desenfoque de 5 px. Mismas props y mismo comportamiento (Escape, clic fuera, ocupado, portal).
 
+/**
+ * Clases del velo y del panel del Modal, para los diálogos y drawers propios que conservan su componente (foco, Escape,
+ * portal) y solo toman el aspecto del kit: velo azul al 50 % con desenfoque de 5 px y panel blanco con borde de 1 px,
+ * radio de 9 px y sin sombra.
+ */
+export const MODAL_VELO_CLS = "bg-[var(--overlay)] backdrop-blur-[5px]";
+export const MODAL_PANEL_CLS = "rounded-[9px] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground";
+
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
 // Anchos como clases literales (Tailwind JIT necesita el nombre completo).
