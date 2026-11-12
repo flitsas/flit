@@ -182,6 +182,7 @@ import { estadoLabel, revocationRequestLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { InlineAlert } from '@/components/atom/InlineAlert';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -2083,11 +2084,12 @@ export function TramiteWizard(props: Props) {
             {activeRevocationRequest && (
               <span
                 role="status"
-                className="rounded-full border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-2.5 py-0.5 text-[11px] font-semibold"
+                {...etiquetaKit('warning')}
                 aria-label={`Sub-estado de revocatoria: ${
                   revocationRequestLabel(activeRevocationRequest.status) ?? 'en curso'
                 }`}
               >
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {revocationRequestLabel(activeRevocationRequest.status) ?? 'Revocatoria en curso'}
               </span>
             )}

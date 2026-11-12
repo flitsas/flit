@@ -7,6 +7,7 @@ import { WizardCardHeader } from './wizard-atoms';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type { BatchReviewItem, BatchReviewState } from '@/hooks/useProcedureBatchUpload';
 import type { OcrUiResult } from '@/hooks/useProcedureDocuments';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 interface Props {
   state: BatchReviewState;
@@ -204,11 +205,11 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
         action={
           !nada ? (
             <span
-              className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-              style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
+              {...etiquetaKit('info', { className: 'shrink-0' })}
               role="status"
               aria-live="polite"
             >
+              <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
               {aceptadas.length} seleccionado{aceptadas.length === 1 ? '' : 's'}
             </span>
           ) : undefined

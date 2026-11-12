@@ -20,6 +20,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
 const ICONO_CERRAR = iconoComo("cerrar");
@@ -250,12 +251,11 @@ export function IdentityStatusPanel({
         </button>
         {open && needsLive && (
           <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-            style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
+            {...etiquetaKit('info')}
             role="status"
             aria-live="polite"
           >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
+            <span className={`${ETIQUETA_PUNTO_CLS} animate-pulse`} aria-hidden />
             En vivo
           </span>
         )}
@@ -349,9 +349,9 @@ export function IdentityStatusPanel({
                             </span>
                             {row.vigente && (
                               <span
-                                className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                                style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
+                                {...etiquetaKit('success')}
                               >
+                                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                                 Vigente
                               </span>
                             )}

@@ -18,6 +18,7 @@ import {
   parseBlindajeOpcion,
 } from '@/lib/catalogs/blindaje';
 import { WIZARD_INPUT, WIZARD_LABEL } from './wizard-field-styles';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 interface DocumentoSugerido {
   /** Nombre legible del documento a adjuntar. NO es el nombre de archivo del cargue. */
@@ -219,13 +220,8 @@ export function BlindajeDeclaracionCard({
         )}
         style={{ borderColor: 'var(--border)' }}
       >
-        <span
-          className={cn(
-            'absolute right-3 top-3 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs',
-            listo ? 'font-semibold' : 'bg-[var(--badge-danger-bg)] font-medium text-[var(--badge-danger-fg)]',
-          )}
-          style={listo ? { background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' } : undefined}
-        >
+        <span {...etiquetaKit(listo ? 'success' : 'danger', { className: 'absolute right-3 top-3' })}>
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {listo ? 'Validado' : '* Obligatorio'}
         </span>
 
