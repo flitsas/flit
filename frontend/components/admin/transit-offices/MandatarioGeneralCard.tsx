@@ -1,7 +1,6 @@
 "use client";
 
 import { buttonClass } from "@flit/ui/Button";
-import { UserPlus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { MandatarioVigenciaBadge } from "@/components/admin/companies/mandate-signers/MandatarioVigenciaBadge";
@@ -59,7 +58,7 @@ export function MandatarioGeneralCard({
             className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-[color:var(--di-on-action)]"
             style={{ background: hay ? "var(--gradient-action)" : "var(--border-strong)" }}
           >
-            {hay ? <Icono nombre="persona" className="h-6 w-6" /> : <UserPlus className="h-6 w-6" />}
+            {hay ? <Icono nombre="persona" className="h-6 w-6" /> : <Icono nombre="persona" className="h-6 w-6" />}
           </span>
           <div className="min-w-0">
             <p

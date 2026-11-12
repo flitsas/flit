@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Info } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { MANDATO_TIPOS } from "@/lib/plataforma/mandato-templates";
 
 /**
@@ -41,7 +41,7 @@ export function TipoMandatoAyuda({ label = "Tipo de mandato" }: { label?: string
         onClick={() => setOpen((v) => !v)}
         className="inline-flex h-5 w-5 items-center justify-center rounded-full text-inherit hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
       >
-        <Info className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <span

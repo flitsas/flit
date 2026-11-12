@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { UserX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { MandatarioGeneralCard } from "@/components/admin/transit-offices/MandatarioGeneralCard";
@@ -318,7 +317,7 @@ export function OtMandatosSection({
             ? [
                 row.isActive
                   ? {
-                      icon: UserX,
+                      icon: iconoComo("persona"),
                       label: `Desactivar mandatario ${row.fullName}`,
                       tone: "danger" as const,
                       disabled: busySignerId === row.id,

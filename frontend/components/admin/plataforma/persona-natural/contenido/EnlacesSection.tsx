@@ -4,7 +4,6 @@
 // legal sin documento oficial se muestra como «Sin documento oficial»: el portal conserva su aviso actual y no se
 // inventa texto legal. Cada guardado queda en el borrador. Tabla estándar con RowActions y los cuatro estados.
 import { useCallback, useEffect, useState } from "react";
-import { Link2, Save } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -64,14 +63,14 @@ function EnlaceFormModal({ enlace, onClose, onSave }: { enlace: EnlacePn; onClos
       busy={busy}
       title={`Editar: ${ENLACE_LABEL[enlace.codigo]}`}
       description="El ciudadano verá el cambio cuando publiques el contenido."
-      icon={Link2}
+      icono="externo"
       size="md"
       footer={
         <div className="flex justify-end gap-2">
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-enlace-form" variant="primary" icon={Save} loading={busy}>
+          <PnButton type="submit" form="pn-enlace-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
             Guardar enlace
           </PnButton>
         </div>

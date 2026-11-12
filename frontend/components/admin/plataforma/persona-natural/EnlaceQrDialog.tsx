@@ -2,7 +2,7 @@
 
 // HU #14217 — Diálogo «Enlace y QR»: la dirección pública del canal y el QR de esa misma dirección.
 import { useEffect, useRef, useState } from "react";
-import { Copy, QrCode } from "lucide-react";
+import { QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Modal } from "@/components/atom/Modal";
 import { getPortalDominios, principalActivo } from "@/lib/api/admin-ot-portal-dominio";
@@ -150,7 +150,7 @@ export function EnlaceQrDialog({
           </div>
           <PnButton
             variant="primary"
-            icon={Copy}
+            icon={iconoComo("copiar")}
             onClick={() => void copiar()}
             disabled={buscandoDominio}
           >

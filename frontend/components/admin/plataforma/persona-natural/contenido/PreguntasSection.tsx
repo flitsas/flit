@@ -4,7 +4,6 @@
 // subir y bajar), orden editable, filtros por columna y los cuatro estados. Cada cambio avisa a la pestaña para
 // refrescar el estado «borrador / publicado».
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -219,7 +218,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
       {ocultando && (
         <PnConfirmDialog
           title="Ocultar esta pregunta"
-          icon={EyeOff}
+          icono="ojo-tachado"
           tone="danger"
           confirmLabel="Ocultar"
           onClose={() => setOcultando(null)}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -671,6 +670,7 @@ export function MandatoOtConfigForm({
     <>
     <Modal
       open
+      icono="mandato"
       title={
         mode === "mandatario"
           ? `Configurar mandatario de ${office.name}`
@@ -1296,7 +1296,7 @@ function MandatarioActualReadOnly({
                   aria-label="Copiar huella de integridad"
                   onClick={() => void copyHash()}
                 >
-                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="copiar" className="h-3.5 w-3.5" />
                 </button>
               </>
             ) : (

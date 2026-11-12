@@ -3,7 +3,6 @@
 // HU #14076 AC1 — Alta y edición de una pregunta frecuente (texto plano, sin HTML). Modal normal; si falla conserva
 // lo escrito y muestra el motivo. La pregunta nueva va al final de la lista.
 import { useState } from "react";
-import { Save } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PREGUNTA_MAX, RESPUESTA_MAX, type FaqPn, type GuardarFaq } from "@/lib/api/admin-pn-contenido";
@@ -11,6 +10,7 @@ import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_L
 import { PnButton } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarTextoPlano } from "./contenidoReglas";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface PreguntaFormModalProps {
   /** Sin `faq`: alta. */
@@ -58,7 +58,7 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-faq-form" variant="primary" icon={Save} loading={busy}>
+          <PnButton type="submit" form="pn-faq-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
             Guardar pregunta
           </PnButton>
         </div>
