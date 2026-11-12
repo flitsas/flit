@@ -960,4 +960,9 @@
   .suite-icono-btn:focus-visible, .suite-usuario:focus-visible, .dock-menu__cerrar:focus-visible {
     outline: 2px solid var(--kit-azul-texto); outline-offset: 2px;
   }
+
+  /* Entradas del submenú con su ícono de 32 px (propuesta-2), centrado con el nombre. */
+  .dock-entrada { align-items: center; gap: 12px; }
+  .dock-entrada__glifo { width: 32px; height: 32px; }
+  .dock-entrada:hover .dock-entrada__glifo, .dock-entrada[aria-current="page"] .dock-entrada__glifo { color: var(--kit-azul-texto); }
 }

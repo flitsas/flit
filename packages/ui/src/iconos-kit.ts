@@ -1,4 +1,5 @@
 // Íconos del Manual UI Kit 2026 (propuesta-2, assets/kit/kit-iconos.js) más la X del sprite de index.html. GENERADO: no editar a mano.
+// Los controles (check y flechas) traen el trazo en el <svg> raíz del kit: aquí va en un <g> para no perderlo.
 // Azul y tinta en currentColor; acentos naranja y verde fijos; los detalles blancos son recortes (máscara, __K__ = id único).
 export const GLIFOS = {
  // Controles de interfaz (trazo de 24 px, como las flechas, el check y la X del kit): sin glifo en el paquete, dibujados
@@ -182,23 +183,23 @@ export const GLIFOS = {
  },
  "abajo": {
   "vb": "0 0 24 24",
-  "inner": "<path d=\"M6 8.5 L11.35 14.74 Q12 15.5 12.65 14.74 L18 8.5\"/>"
+  "inner": "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 8.5 L11.35 14.74 Q12 15.5 12.65 14.74 L18 8.5\"/></g>"
  },
  "arriba": {
   "vb": "0 0 24 24",
-  "inner": "<path d=\"M6 15.5 L11.35 9.26 Q12 8.5 12.65 9.26 L18 15.5\"/>"
+  "inner": "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 15.5 L11.35 9.26 Q12 8.5 12.65 9.26 L18 15.5\"/></g>"
  },
  "izquierda": {
   "vb": "0 0 24 24",
-  "inner": "<path d=\"M15.5 6 L9.26 11.35 Q8.5 12 9.26 12.65 L15.5 18\"/>"
+  "inner": "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15.5 6 L9.26 11.35 Q8.5 12 9.26 12.65 L15.5 18\"/></g>"
  },
  "derecha": {
   "vb": "0 0 24 24",
-  "inner": "<path d=\"M8.5 6 L14.74 11.35 Q15.5 12 14.74 12.65 L8.5 18\"/>"
+  "inner": "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8.5 6 L14.74 11.35 Q15.5 12 14.74 12.65 L8.5 18\"/></g>"
  },
  "check": {
   "vb": "0 0 24 24",
-  "inner": "<path d=\"M4.5 12.5 L8.79 16.79 Q9.5 17.5 10.17 16.76 L19.5 6.5\"/>"
+  "inner": "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 12.5 L8.79 16.79 Q9.5 17.5 10.17 16.76 L19.5 6.5\"/></g>"
  },
  "empresas": {
   "vb": "-7 103 1038 878",
