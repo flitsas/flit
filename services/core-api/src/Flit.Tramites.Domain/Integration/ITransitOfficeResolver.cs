@@ -34,6 +34,17 @@ public interface ITransitOfficeResolver
         Guid tenantId,
         Guid transitOfficeId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Indica si el nombre RUNT corresponde a algún organismo del CATÁLOGO, sin filtrar por grant del
+    /// tenant ni por activo (a diferencia de <see cref="ResolveEnabledByNameAsync"/>). Permite distinguir
+    /// «el nombre no casa con ningún OT» (el gestor lo asigna) de «es un OT real pero no habilitado»
+    /// (la integración debe fallar). Implementación por defecto: no hay catálogo → <c>false</c>.
+    /// </summary>
+    Task<bool> ExistsInCatalogByNameAsync(
+        string transitOfficeName,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }
 
 /// <summary>

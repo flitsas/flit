@@ -182,6 +182,28 @@ public interface IProcedureInstanceRepository
     Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct = default);
 
+    /// <summary>
+    /// Copias activas de la firma de baúl del trámite, tomadas al radicar (<see cref="ProcedureInstance.FirmaBaulCopiadaAt"/>).
+    /// Las entidades quedan RASTREADAS: el capturador las reemplaza si el trámite vuelve a borrador y se radica otra vez.
+    /// Por defecto vacío (dobles de prueba que no ejercitan la copia).
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceFirmaBaulCopia>> ListFirmaBaulCopiasAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>([]);
+
+    /// <summary>
+    /// Copias activas de varios trámites en UNA consulta (listado, sin N+1), sin rastreo. Por defecto vacío.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>> ListFirmaBaulCopiasPorInstanciasAsync(
+        IReadOnlyCollection<Guid> procedureInstanceIds, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>>(
+            new Dictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>());
+
+    /// <summary>Encola copias nuevas; se persisten con el siguiente guardado de la unidad de trabajo. Por defecto no-op.</summary>
+    Task AddFirmaBaulCopiasAsync(
+        IReadOnlyCollection<ProcedureInstanceFirmaBaulCopia> copias, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
