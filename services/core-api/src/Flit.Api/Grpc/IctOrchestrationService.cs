@@ -581,6 +581,47 @@ public sealed class IctOrchestrationService(
             RefrescarRastreo();
             AppendWarning(reply, "preflight_warning:exception");
         }
+
+        // El preflight hidrata vehicle_service desde el RUNT y pisa lo que mandó ICT. En matrícula el tipo
+        // de servicio que declara el cliente (o el PARTICULAR explícito de core-ict) es el que vale: se
+        // re-aplica DESPUÉS del preflight, incluso si éste falló (el borrador ya existe). Mismo criterio
+        // que CreateFromConsultaCommand (escribe el servicio tras el preflight).
+        var servicio = ServicioMatriculaIct(request);
+        if (servicio is not null)
+        {
+            RefrescarRastreo();
+            try
+            {
+                var (_, servicioError) = await patchHandler.HandleAsync(
+                    instanceId,
+                    tenantId,
+                    new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                        [new FieldValueInput(null, "vehicle_service", servicio, null)]),
+                    ct);
+                if (servicioError is not null)
+                {
+                    AppendWarning(reply, "seed_warning:" + servicioError);
+                }
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                RefrescarRastreo();
+                AppendWarning(reply, "seed_warning:vehicle_service_exception");
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>vehicle_service</c> que ICT declara para una MATRÍCULA (código del catálogo: PUBLICO, PARTICULAR…),
+    /// o <c>null</c> si el trámite no es de matrícula (traspaso y demás: lo hidrata el RUNT) o ICT no lo mandó.
+    /// </summary>
+    internal static string? ServicioMatriculaIct(CreateDraftFromIctRequest request)
+    {
+        var tipo = request.ProcedureTypeCode ?? string.Empty;
+        var esMatricula = tipo.Contains("MATRICULA", StringComparison.OrdinalIgnoreCase)
+                          && !tipo.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase)
+                          && !tipo.Contains("CANCELACION", StringComparison.OrdinalIgnoreCase);
+        return esMatricula ? FieldValueOf(request, "vehicle_service")?.Trim() : null;
     }
 
     /// <summary>
