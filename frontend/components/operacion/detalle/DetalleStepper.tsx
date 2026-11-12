@@ -49,7 +49,7 @@ export function DetalleStepper({
                 aria-controls={`detalle-panel-${paso.id}`}
                 aria-label={`Paso ${i + 1}: ${paso.label}`}
                 onClick={() => onSelect(paso.id)}
-                className="kit-paso__boton rounded-[9px] py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
+                className="kit-paso__boton rounded-[9px] pb-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
               >
                 <span className="kit-paso__num" aria-hidden="true">
                   {done ? (
