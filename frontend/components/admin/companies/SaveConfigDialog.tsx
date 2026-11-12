@@ -2,11 +2,12 @@
 
 import { Modal } from "@/components/atom/Modal";
 import type { ConfigChangeGroup, ConfigChangeItem } from "./settingsForm";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
-const TONE_COLORS: Record<ConfigChangeItem["tone"], string> = {
-  on: "var(--flit-success-ink)",
-  off: "var(--destructive)",
-  neutral: "var(--color-flit-brand)",
+const TONE_KIT: Record<ConfigChangeItem["tone"], "success" | "danger" | "info"> = {
+  on: "success",
+  off: "danger",
+  neutral: "info",
 };
 
 // Ventana emergente de confirmación de "Guardar todo" (HU #10194, AC2). Detecta los cambios
@@ -146,9 +147,9 @@ function ChangeList({ changes }: { changes: ConfigChangeGroup[] }) {
               <li key={item.label} className="flex items-center justify-between gap-3">
                 <span className="opacity-80">{item.label}</span>
                 <span
-                  className="shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold"
-                  style={{ color: TONE_COLORS[item.tone], background: `${TONE_COLORS[item.tone]}1a` }}
+                  {...etiquetaKit(TONE_KIT[item.tone], { className: "shrink-0" })}
                 >
+                  <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                   {item.detail}
                 </span>
               </li>

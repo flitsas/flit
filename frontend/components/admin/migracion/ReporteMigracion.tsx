@@ -10,6 +10,7 @@ import {
 } from "@/lib/migracion/types";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
 /**
 
  * El reporte de una migración, en el mismo orden en que lo imprime la consola por SSH: de dónde
@@ -201,21 +202,20 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
  * la misma fila decía «Simulado» en azul en la tabla y «Simulado» en verde tres centímetros más
  * abajo, en la pantalla donde el color es justo lo que la gente mira para saber si ya migró.
  */
-const TONO_ESTADO: Record<string, string> = {
-  Simulated: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]",
-  Skipped: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
-  NotMigrated: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
-  NoAttachments: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
-  NotFoundInV1: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]",
+const TONO_ESTADO: Record<string, StatusTone> = {
+  Simulated: "info",
+  Skipped: "neutral",
+  NotMigrated: "neutral",
+  NoAttachments: "neutral",
+  NotFoundInV1: "warning",
 };
 
 function Insignia({ estado, conProblemas }: { estado: string; conProblemas: boolean }) {
-  const clases = conProblemas
-    ? "bg-[var(--badge-danger-bg)] text-destructive"
-    : (TONO_ESTADO[estado] ?? "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]");
+  const tono: StatusTone = conProblemas ? "danger" : (TONO_ESTADO[estado] ?? "success");
 
   return (
-    <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${clases}`}>
+    <span {...etiquetaKit(tono)}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {etiquetaEstadoInstancia(estado)}
     </span>
   );
