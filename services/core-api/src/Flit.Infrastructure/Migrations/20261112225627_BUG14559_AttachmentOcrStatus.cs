@@ -1,4 +1,6 @@
-﻿using Flit.Infrastructure.Persistence.Sql;
+﻿using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Sql;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,7 +12,10 @@ namespace Flit.Infrastructure.Migrations
     /// (<c>tramites.procedure_instance_attachments.ocr_status</c> y <c>ocr_reason</c>, códigos cerrados con CHECK), para que
     /// el wizard lo rehidrate al cambiar de paso. Informativo, nunca compuerta. Aditiva, nullable, idempotente y SIN backfill
     /// (los adjuntos previos quedan en NULL). DDL: <c>196-BUG14559-attachment-ocr-status.sql</c>.
+    /// Sin Designer, como las migraciones recientes: sin los atributos la migración no se descubre.
     /// </summary>
+    [DbContext(typeof(FlitDbContext))]
+    [Migration("20261112225627_BUG14559_AttachmentOcrStatus")]
     public partial class BUG14559_AttachmentOcrStatus : Migration
     {
         /// <inheritdoc />
