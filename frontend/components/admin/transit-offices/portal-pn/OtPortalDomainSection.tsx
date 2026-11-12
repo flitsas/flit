@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Star } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
@@ -187,7 +186,7 @@ function DominioItem({
           className="mb-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
           style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-primary)" }}
         >
-          <Star className="h-3 w-3" aria-hidden /> Dominio principal
+          <Icono nombre="medalla" className="h-3 w-3" /> Dominio principal
         </p>
       )}
 
@@ -202,7 +201,7 @@ function DominioItem({
             className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${FOCO}`}
             style={{ borderColor: "var(--color-flit-primary)", color: "var(--color-flit-primary)" }}
           >
-            <Star className="h-3.5 w-3.5" aria-hidden /> Hacer principal
+            <Icono nombre="medalla" className="h-3.5 w-3.5" /> Hacer principal
           </button>
         )}
         <button

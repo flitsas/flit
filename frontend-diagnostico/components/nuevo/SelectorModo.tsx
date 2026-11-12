@@ -1,13 +1,13 @@
 "use client";
 
-import { useId, useRef, type KeyboardEvent } from "react";
-import { FileSpreadsheet, Zap } from "lucide-react";
+import { useId, useRef, type ComponentType, type KeyboardEvent } from "react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { AYUDA_CLS, ETIQUETA_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
 import type { ModoCreacion } from "./borradores";
 
-const MODOS: ReadonlyArray<{ valor: ModoCreacion; etiqueta: string; Icono: typeof Zap }> = [
-  { valor: "express", etiqueta: "Express", Icono: Zap },
-  { valor: "masivo", etiqueta: "Masivo", Icono: FileSpreadsheet },
+const MODOS: ReadonlyArray<{ valor: ModoCreacion; etiqueta: string; Icono: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false"; strokeWidth?: number }> }> = [
+  { valor: "express", etiqueta: "Express", Icono: iconoComo("destello") },
+  { valor: "masivo", etiqueta: "Masivo", Icono: iconoComo("reporte-detallado") },
 ];
 
 export interface SelectorModoProps {

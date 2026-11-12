@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileSpreadsheet } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -146,7 +145,7 @@ function CargaPagos() {
         descripcion="Registra pagos de muchos comparendos con la plantilla de Excel (hasta 1.000 filas). Las filas válidas se registran y las que tienen error vuelven con su motivo."
         acciones={
           <button type="button" className={controlCls(false)} onClick={plantilla}>
-            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
             Descargar plantilla
           </button>
         }

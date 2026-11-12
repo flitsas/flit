@@ -373,7 +373,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             aria-describedby="delete-tag-desc"
             className={`relative w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}
           >
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="papelera" className="-mx-6 -mt-6 mb-4">
               <h3 id="delete-tag-title" className={`text-sm font-bold ${DIALOGO_TITULO_CLS}`}>
                 Eliminar etiqueta
               </h3>

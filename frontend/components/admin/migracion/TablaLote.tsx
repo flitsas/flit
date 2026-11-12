@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ArrowUpRight, Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   ETIQUETA_ESTADO,
@@ -148,7 +147,7 @@ export function TablaLote({
                           style={{ color: "var(--color-flit-brand)" }}
                         >
                           Ver en V2
-                          <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                          <Icono nombre="externo" className="h-3 w-3" />
                         </a>
                       )}
 
@@ -232,7 +231,7 @@ function Estado({ estado }: { estado: EstadoFila }) {
     <span
       className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold ${TONO[estado]}`}
     >
-      {estado === "en_curso" && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+      {estado === "en_curso" && <Icono nombre="girador" className="h-3 w-3 animate-spin" />}
       {ETIQUETA_ESTADO[estado]}
     </span>
   );

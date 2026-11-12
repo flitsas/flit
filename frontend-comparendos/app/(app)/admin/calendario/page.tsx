@@ -46,7 +46,7 @@ function CambiarDia({ dia, onCerrar, onGuardado }: { dia: DiaCalendario; onCerra
   };
 
   return (
-    <Modal
+    <Modal icono="calendario"
       open
       onClose={onCerrar}
       busy={ocupado}

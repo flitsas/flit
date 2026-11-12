@@ -55,6 +55,7 @@ export function TransitOfficeStatusDialog({
       busy={busy}
       size="sm"
       zClassName="z-[90]"
+      icono="encendido"
       title={deactivating ? "Desactivar organismo de tránsito" : "Activar organismo de tránsito"}
       titleClassName="text-lg font-semibold text-foreground"
     >

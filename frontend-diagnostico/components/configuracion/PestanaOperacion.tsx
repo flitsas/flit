@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Save } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ApiError } from "@/lib/api";
 import {
@@ -181,7 +181,7 @@ export function PestanaOperacion({
 
       <div className="flex justify-end">
         <button type="submit" disabled={deshabilitado} className={BOTON_PRIMARIO_CLS}>
-          <Save className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="nube-subir" className="h-4 w-4" />
           {estado.tipo === "guardando" ? "Guardando…" : "Guardar operación"}
         </button>
       </div>

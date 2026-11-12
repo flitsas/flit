@@ -186,7 +186,7 @@ export function PanelDictamen({
   }
 
   return (
-    <Modal
+    <Modal icono="mazo"
       open
       onClose={onClose}
       busy={enviando}

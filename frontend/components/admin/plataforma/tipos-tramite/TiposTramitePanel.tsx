@@ -4,7 +4,6 @@ import { PESTANAS_LISTA_CLS, pestanaClass } from '@flit/ui/Pestanas';
 import { buttonClass } from '@flit/ui/Button';
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useMemo, useState } from 'react';
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
@@ -86,7 +85,7 @@ export function TiposTramitePanel() {
   if (cargando) {
     return (
       <p className="flex items-center gap-2 p-6 text-xs opacity-70">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
         Cargando el catálogo de tipos…
       </p>
     );
@@ -239,7 +238,7 @@ export function TiposTramitePanel() {
 
               {cargandoDetalle ? (
                 <p className="flex items-center gap-2 py-6 text-xs opacity-70">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                   Cargando la configuración…
                 </p>
               ) : errorDetalle ? (
@@ -327,7 +326,7 @@ function ConfirmarRetiro({
       aria-label="Retirar tipo de trámite"
     >
       <div className={`w-full max-w-md overflow-hidden p-5 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-5 -mt-5 mb-4">
+        <FranjaDialogo icono="archivo" className="-mx-5 -mt-5 mb-4">
           <h2 className={`text-base font-semibold ${DIALOGO_TITULO_CLS}`}>
             Retirar «{nombre}» del catálogo
           </h2>

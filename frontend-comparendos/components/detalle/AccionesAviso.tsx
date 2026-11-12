@@ -43,7 +43,7 @@ function ModalAviso({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => v
   };
 
   return (
-    <Modal
+    <Modal icono="campana"
       open
       onClose={onCerrar}
       busy={ocupado}

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Network } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import Link from "next/link";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
@@ -237,7 +236,7 @@ function CompanyDetail() {
         action={
           showNetworkLink ? (
             <Link href={`/admin/companies/${tenantId}/children`} className={ADMIN_BRAND_OUTLINE_BTN_CLS}>
-              <Network className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="integraciones" className="h-3.5 w-3.5" />
               Panel de red
             </Link>
           ) : undefined

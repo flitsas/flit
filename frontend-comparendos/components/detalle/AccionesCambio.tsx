@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CircleX, MailPlus, MessageSquareReply } from "lucide-react";
+import { MailPlus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
@@ -44,7 +44,7 @@ function ResponderCambio({ ctx, solicitud, onCerrar }: { ctx: ContextoDetalle; s
   };
 
   return (
-    <Modal
+    <Modal icono="log-mensajes"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -149,7 +149,7 @@ function Solicitar({ ctx }: { ctx: ContextoDetalle }) {
       <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
         {v.condiciones.map((c) => (
           <li key={c.codigo} className="flex items-start gap-1.5">
-            {c.cumple ? <Icono nombre="check" className="mt-px h-3.5 w-3.5 shrink-0 text-[var(--flit-success-ink)]" etiqueta="Cumple" /> : <CircleX className="mt-px h-3.5 w-3.5 shrink-0 text-destructive" aria-label="No cumple" />}
+            {c.cumple ? <Icono nombre="check" className="mt-px h-3.5 w-3.5 shrink-0 text-[var(--flit-success-ink)]" etiqueta="Cumple" /> : <Icono nombre="cerrar" className="mt-px h-3.5 w-3.5 shrink-0 text-destructive" etiqueta="No cumple" />}
             <span className={c.cumple ? "" : "font-semibold"}>{c.descripcion}</span>
           </li>
         ))}
@@ -172,7 +172,7 @@ function Solicitar({ ctx }: { ctx: ContextoDetalle }) {
           Solicitar cambio
         </button>
       </div>
-      <Modal
+      <Modal icono="intercambio"
         open={confirmar}
         onClose={() => setConfirmar(false)}
         busy={enviando}
@@ -236,7 +236,7 @@ export function AccionesCambio({ ctx }: { ctx: ContextoDetalle }) {
         <div className="flex flex-wrap gap-2">
           {puedeResponder && (
             <button type="button" className={controlCls(false)} onClick={() => setResponder(pendiente)}>
-              <MessageSquareReply className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="log-mensajes" className="h-3.5 w-3.5" />
               Registrar respuesta del organismo
             </button>
           )}

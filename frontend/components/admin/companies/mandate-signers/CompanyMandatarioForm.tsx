@@ -2,7 +2,6 @@
 
 import { buttonClass } from "@flit/ui/Button";
 import { useState, type ReactNode } from "react";
-import { Vault } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import {
@@ -56,7 +55,7 @@ const MODELOS: ReadonlyArray<{ value: SignerModel; label: string; ayuda: string;
 
 const FORMAS: ReadonlyArray<{ value: SignatureMethod; label: string; ayuda: string; icono: ReactNode }> = [
   { value: "biometria", label: "Validación de identidad", ayuda: "La persona valida con un enlace", icono: <Icono nombre="escudo" className="h-5 w-5" /> },
-  { value: "baul", label: "Baúl de firmas", ayuda: "Usa una firma ya guardada", icono: <Vault className="h-5 w-5" aria-hidden="true" /> },
+  { value: "baul", label: "Baúl de firmas", ayuda: "Usa una firma ya guardada", icono: <Icono nombre="candado" className="h-5 w-5" /> },
 ];
 
 /**
@@ -335,6 +334,7 @@ export function CompanyMandatarioForm({
 
   return (
     <Modal
+      icono="persona"
       open
       title={editing ? "Editar mandatario" : "Registrar mandatario"}
       onClose={onCancel}

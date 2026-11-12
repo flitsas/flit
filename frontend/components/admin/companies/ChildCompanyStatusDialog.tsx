@@ -43,6 +43,7 @@ export function ChildCompanyStatusDialog({
 
   return (
     <Modal
+      icono={deactivating ? "asistente-apagado" : "encendido"}
       open
       onClose={onClose}
       busy={busy}

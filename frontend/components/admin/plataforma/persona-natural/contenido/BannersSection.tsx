@@ -4,7 +4,7 @@
 // (editar, activar o desactivar, subir y bajar), orden editable y los cuatro estados. La imagen del borrador se
 // descarga con la sesión del administrador (el endpoint exige Authorization).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff, ImageIcon } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -230,7 +230,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
       {ocultando && (
         <PnConfirmDialog
           title="Ocultar este banner"
-          icon={EyeOff}
+          icono="ojo-tachado"
           tone="danger"
           confirmLabel="Ocultar"
           onClose={() => setOcultando(null)}

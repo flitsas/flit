@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Rocket } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
@@ -189,7 +188,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                     Anterior
                   </button>
                   <button type="button" onClick={() => lanzar(fase.entrada)} className={BOTON_PRIMARIO_CLS}>
-                    <Rocket className="h-4 w-4" aria-hidden="true" />
+                    <Icono nombre="avance" className="h-4 w-4" />
                     Lanzar diagnóstico
                   </button>
                 </div>

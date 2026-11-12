@@ -4,7 +4,6 @@
 // memoria mientras el modal está abierto: no se guarda en almacenamiento del navegador ni en logs, y al cerrar se
 // descarta (el padre pone `null`).
 import { useState } from "react";
-import { Copy } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
@@ -61,7 +60,7 @@ export function ExternalIntegrationSecretModal({ clientId, secret, onClose }: Ex
           </code>
         </div>
         <div>
-          <PnButton variant="secondary" icon={copied ? iconoComo("check") : Copy} onClick={() => void copySecret()}>
+          <PnButton variant="secondary" icon={copied ? iconoComo("check") : iconoComo("copiar")} onClick={() => void copySecret()}>
             {copied ? "Copiada" : "Copiar clave"}
           </PnButton>
         </div>

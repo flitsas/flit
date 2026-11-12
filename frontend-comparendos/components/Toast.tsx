@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { XCircle } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 
 // Toast mínimo sin dependencias externas (HU #10194). Colores de la propuesta (HU #14486): éxito con el azul del
@@ -64,7 +63,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             ) : toast.type === "warning" ? (
               <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.warning }} />
             ) : (
-              <XCircle className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.error }} />
+              <Icono nombre="cerrar" className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.error }} />
             )}
             <p className="flex-1 font-medium">{toast.message}</p>
             <button type="button" aria-label="Cerrar notificación" onClick={() => dismiss(toast.id)}>

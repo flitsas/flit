@@ -3,7 +3,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SearchX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
@@ -28,7 +27,7 @@ import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 const puedeCerrarPanel = (g: Grilla) =>
   g.estado === "EN_PROCESO" && !hayPendientes(g) && g.vehiculos.some((v) => v.celdas.some((c) => c.estado === "ERROR"));
 
-/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (iconoComo("buscar")). */
 type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
 const ICONO_VACIO = iconoComo("portapapeles");
 
@@ -113,7 +112,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     contenido = <VehicleLoader label="Cargando el tablero…" />;
   } else if (error instanceof ApiError && error.status === 404) {
     contenido = (
-      <Vacio titulo="No encontramos este diagnóstico" Icono={SearchX}>
+      <Vacio titulo="No encontramos este diagnóstico" Icono={iconoComo("buscar")}>
         <p className="max-w-md text-sm text-muted-foreground">Puede que no exista o que no tengas acceso a él.</p>
         <Link href="/" className={BOTON_SECUNDARIO_CLS}>
           Volver al inicio

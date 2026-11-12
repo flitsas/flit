@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
@@ -61,7 +60,7 @@ function NuevaEmpresa({
   };
 
   return (
-    <Modal
+    <Modal icono="empresas"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -139,7 +138,7 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
     apiFetch<AuditoriaConfiguracion[]>(`/admin/empresas/${empresaId}/auditoria`, { signal }),
   );
   return (
-    <Modal open onClose={onCerrar} title="Historial de cambios" size="lg">
+    <Modal icono="reloj" open onClose={onCerrar} title="Historial de cambios" size="lg">
       {lista.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
       {lista.estado === "error" && <InlineAlert tone="error">{lista.error}</InlineAlert>}
       {lista.datos?.length === 0 && <p className="text-sm opacity-70">Sin cambios registrados.</p>}
@@ -492,7 +491,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       </section>
 
       {confirmar && (
-        <Modal
+        <Modal icono="alerta"
           open
           onClose={() => {
             setConfirmar(false);
@@ -595,7 +594,7 @@ export default function Empresas() {
           descripcion="Qué capacidades de Comparendos tiene cada empresa y qué tipologías de DP puede usar."
           acciones={
             <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setNueva(true)}>
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="mas" className="h-3.5 w-3.5" />
               Registrar empresa
             </button>
           }
@@ -663,7 +662,7 @@ export default function Empresas() {
           ]}
         />
         {elegida && (
-          <Modal
+          <Modal icono="empresas"
             open
             onClose={() => setElegida(null)}
             title={lista.datos?.find((e) => e.id === elegida)?.nombre ?? "Empresa"}

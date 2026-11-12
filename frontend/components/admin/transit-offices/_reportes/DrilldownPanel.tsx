@@ -54,7 +54,7 @@ export function DrilldownPanel({
       }}
     >
       <div className={`flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden p-4 sm:p-6 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6">
+        <FranjaDialogo icono="reportes" className="-mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6">
           <h3 className={`text-sm font-semibold ${DIALOGO_TITULO_CLS}`}>{label}</h3>
           <button
             type="button"

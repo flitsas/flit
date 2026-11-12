@@ -6,7 +6,6 @@
 // desactivar. Mismo modelo de tabla que Trámites: DataTable + RowActions + paginación numerada + filtros por
 // columna. El secreto vive solo en memoria mientras se muestra su modal.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, PlugZap } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -146,7 +145,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     const estado = externalIntegrationStatus(integration);
     const name = integration.clientId;
     if (estado === "inactive") {
-      return [{ icon: Ban, label: `${name} está desactivada`, onClick: () => {}, disabled: true }];
+      return [{ icon: iconoComo("distinto"), label: `${name} está desactivada`, onClick: () => {}, disabled: true }];
     }
     const actions: RowAction[] = [
       {
@@ -272,7 +271,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
         </div>
         <CreateButton
           label="Crear conexión"
-          icon={PlugZap}
+          icon={iconoComo("integraciones")}
           onClick={() => setCreating(true)}
           disabled={hasActive}
         />

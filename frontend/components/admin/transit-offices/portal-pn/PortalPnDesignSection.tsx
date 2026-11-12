@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Rocket, Save } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { BrandingColorPicker } from "@/components/admin/branding/BrandingColorPicker";
@@ -449,7 +448,7 @@ export function PortalPnDesignSection({
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
                 >
-                  <Save className="h-3.5 w-3.5" aria-hidden />{" "}
+                  <Icono nombre="nube-subir" className="h-3.5 w-3.5" />{" "}
                   {saving ? "Guardando…" : "Guardar borrador"}
                 </button>
                 <button
@@ -459,7 +458,7 @@ export function PortalPnDesignSection({
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "var(--gradient-action)" }}
                 >
-                  <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
+                  <Icono nombre="avance" className="h-3.5 w-3.5" /> Publicar
                 </button>
                 {marca.published && (
                   <button

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Save } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { INTERRUPTOR_ALERTA_CLS, INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { InlineAlert } from "@flit/ui/InlineAlert";
@@ -396,7 +395,7 @@ function EditorContratoBackoffice() {
 
           <div className="flex justify-end">
             <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
-              <Save className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="nube-subir" className="h-4 w-4" />
               {ocupado ? "Guardando…" : "Guardar contrato"}
             </button>
           </div>

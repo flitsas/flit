@@ -42,7 +42,7 @@ function ModalPago({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => vo
   };
 
   return (
-    <Modal
+    <Modal icono="pago"
       open
       onClose={onCerrar}
       busy={ocupado}

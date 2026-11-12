@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileSpreadsheet, Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { HistorialAuditoria } from "@/components/HistorialAuditoria";
@@ -27,7 +27,7 @@ function variantes(n: Nit): string {
 
 function Confirmar({ abierto, titulo, texto, onSi, onNo, ocupado }: { abierto: boolean; titulo: string; texto: string; onSi: () => void; onNo: () => void; ocupado: boolean }) {
   return (
-    <Modal
+    <Modal icono="alerta"
       open={abierto}
       onClose={onNo}
       busy={ocupado}
@@ -104,7 +104,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
         <SearchInput value={buscar} onChange={setBuscar} label="Buscar NIT o titular" placeholder="Buscar por número o titular" />
         {puedeGestionar && (
           <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setNuevo(true)}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="mas" className="h-3.5 w-3.5" />
             Agregar NIT o documento
           </button>
         )}
@@ -166,7 +166,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
 
-      <Modal
+      <Modal icono="documento"
         open={nuevo}
         onClose={() => setNuevo(false)}
         busy={ocupado}
@@ -301,7 +301,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
         <SearchInput value={buscar} onChange={setBuscar} label="Buscar placa" placeholder="Buscar placa" />
         {puedeGestionar && (
           <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => { setNuevo(true); setResultado(null); }}>
-            <Plus className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="mas" className="h-3.5 w-3.5" />
             Agregar placas
           </button>
         )}
@@ -344,7 +344,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
 
-      <Modal
+      <Modal icono="placa"
         open={nuevo}
         onClose={() => setNuevo(false)}
         busy={ocupado}
@@ -377,7 +377,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
               }}
             />
             <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => archivo.current?.click()}>
-              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
               Cargar Excel
             </button>
             <button type="button" className="font-semibold text-flit-brand-ink underline-offset-2 hover:underline" onClick={plantilla}>

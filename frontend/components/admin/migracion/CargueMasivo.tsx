@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Play, Square } from "lucide-react";
+import { Square } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { descargarPlantilla, leerArchivo, type FilaInvalida } from "@/lib/migracion/archivo";
 import { consultarEstado, migrarTramite } from "@/lib/migracion/client";
 import {
@@ -411,9 +412,9 @@ export function CargueMasivo() {
                   }`}
                 >
                   {corriendo ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <Icono nombre="girador" className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Play className="h-4 w-4" aria-hidden="true" />
+                    <Icono nombre="avance" className="h-4 w-4" />
                   )}
                   {corriendo
                     ? "Migrando…"

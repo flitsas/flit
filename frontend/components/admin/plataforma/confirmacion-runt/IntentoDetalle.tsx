@@ -2,7 +2,6 @@
 
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
-import { Ban, CircleDashed } from "lucide-react";
 import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -37,8 +36,8 @@ const TONO: Record<RuntConfirmationVerdict, { fg: string; bg: string; Icon: Comp
   confirmed: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: iconoComo("check") },
   pending: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: iconoComo("espera") },
   discrepancy: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: iconoComo("cerrar") },
-  unverifiable: { fg: "var(--badge-neutral-fg)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
-  error: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
+  unverifiable: { fg: "var(--badge-neutral-fg)", bg: "var(--badge-neutral-bg)", Icon: iconoComo("espera") },
+  error: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: iconoComo("distinto") },
 };
 
 const FLAG_LABEL: Record<string, string> = {

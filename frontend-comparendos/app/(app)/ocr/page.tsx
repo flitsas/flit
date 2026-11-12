@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -115,7 +114,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
   };
 
   return (
-    <Modal
+    <Modal icono="archivo-subir"
       open
       onClose={onCerrar}
       busy={enviando}
@@ -298,7 +297,7 @@ function Paquetes() {
             </button>
             {puedeCrear && (
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setCreando(true)}>
-                <Plus className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="mas" className="h-3.5 w-3.5" />
                 Nuevo paquete
               </button>
             )}

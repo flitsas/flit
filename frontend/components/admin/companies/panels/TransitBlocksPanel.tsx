@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -207,7 +207,7 @@ export function TransitBlocksPanel({
           <RowActions
             actions={[
               {
-                icon: Ban,
+                icon: iconoComo("distinto"),
                 label: `${blocked ? "Desbloquear" : "Bloquear"} ${office.name}`,
                 onClick: () => requestToggle(office),
                 tone: blocked ? "primary" : "danger",
@@ -224,7 +224,7 @@ export function TransitBlocksPanel({
     <>
       <section aria-label="Bloqueos de organismos de tránsito" className="space-y-3">
         <div className="flex items-start gap-2">
-          <Ban className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <Icono nombre="distinto" className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
           <div>
             <h4 className="text-sm font-semibold">Organismos bloqueados (Marca Blanca)</h4>
             <p className="mt-0.5 text-xs opacity-60">

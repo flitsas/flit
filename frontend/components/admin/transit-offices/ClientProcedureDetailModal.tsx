@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { buttonClass } from "@flit/ui/Button";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   fetchOtClientProcedure,
@@ -26,8 +27,6 @@ import { OtCargando } from "./detalle/OtDetallePrimitivos";
 import { pendientesDelTramite } from "./detalle/ot-detalle-pendientes";
 import {
   OT_APROBAR_GRADIENTE,
-  OT_BLUE,
-  OT_BORDER,
   OT_NAVY,
   OT_ORANGE,
   OT_WARN,
@@ -278,8 +277,7 @@ export function ClientProcedureDetailModal({
         <div className="flex flex-wrap items-center gap-2">
           <h2
             id={titleId}
-            className="text-[22px] font-bold leading-tight"
-            style={{ color: OT_BLUE }}
+            className="text-[22px] font-bold leading-tight text-[color:var(--di-heading)]"
           >
             {titulo}
           </h2>
@@ -306,12 +304,7 @@ export function ClientProcedureDetailModal({
           type="button"
           onClick={toggleTimeline}
           aria-pressed={timelineActive}
-          className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={
-            timelineActive
-              ? { background: OT_BLUE, borderColor: OT_BLUE, color: "var(--di-on-action)" }
-              : { borderColor: OT_BORDER, color: OT_NAVY, background: "transparent" }
-          }
+          className={buttonClass({ variant: timelineActive ? "primary" : "secondary", size: "sm" })}
         >
           Línea de Tiempo del Trámite
         </button>
@@ -319,10 +312,9 @@ export function ClientProcedureDetailModal({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="rounded-xl border bg-card p-2 dark:border-border"
-          style={{ borderColor: OT_BORDER, color: OT_NAVY }}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
         >
-          <Icono nombre="cerrar" className="h-4 w-4" />
+          <Icono nombre="cerrar" size={20} />
         </button>
       </div>
 

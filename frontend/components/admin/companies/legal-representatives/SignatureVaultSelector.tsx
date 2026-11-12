@@ -5,7 +5,7 @@
 // AC3 se cubre con un estado especial "lleno pero sin firmas vigentes" dentro del estado lleno.
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { RL_COLOR, RL_INPUT_CLS, RL_GRADIENT } from "./rl-flit-styles";
 import { SignatureCapture } from "@/components/admin/companies/signature-vault/SignatureCapture";
 import type { SignatureVaultItem } from "@/lib/api/admin-signature-vault";
@@ -280,7 +280,7 @@ export function SignatureVaultSelector({
         aria-live="polite"
         data-testid="sig-selector-loading"
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
         Buscando firmas vigentes…
       </div>
     );

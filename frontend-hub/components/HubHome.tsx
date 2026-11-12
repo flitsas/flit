@@ -1,7 +1,6 @@
 "use client";
 
 import { createElement, useEffect, useMemo, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { reauthenticate } from "@flit/auth/client";
 import { AppsSessionError, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
@@ -142,7 +141,7 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
                       </span>
                     )}
                     <span className="flex-1">{item.label}</span>
-                    <ArrowUpRight className="h-4 w-4 text-[color:var(--di-text-tertiary)] transition group-hover:text-[color:var(--di-action)]" aria-hidden="true" />
+                    <Icono nombre="externo" className="h-4 w-4 text-[color:var(--di-text-tertiary)] transition group-hover:text-[color:var(--di-action)]" />
                   </a>
                 </li>
               );

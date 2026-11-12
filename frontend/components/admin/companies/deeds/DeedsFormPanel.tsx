@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
@@ -180,7 +179,7 @@ export function DeedsFormPanel({
       className={`w-full ${rlPrimaryCtaClass} py-2.5`}
       style={rlPrimaryCtaStyle}
     >
-      {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+      {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
       {editing ? "Guardar cambios" : "Registrar escritura"}
     </button>
   );
@@ -190,6 +189,7 @@ export function DeedsFormPanel({
 
   return (
     <Modal
+      icono="documento"
       open={open}
       onClose={onClose}
       title={editing ? "Editar escritura" : "Nueva escritura"}

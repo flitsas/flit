@@ -1,7 +1,6 @@
 "use client";
 
 import type { ComponentType, CSSProperties, ReactNode, SVGProps } from "react";
-import { LoaderCircle, MinusCircle } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
@@ -43,11 +42,11 @@ export type EstadoVisible = EstadoCelda | typeof SIN_SOLICITAR;
  */
 const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono; animado?: boolean }> = {
   PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("reloj") },
-  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: LoaderCircle, animado: true },
+  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("girador"), animado: true },
   COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: iconoComo("check") },
   ERROR: { tono: "danger", texto: "Error", Icono: iconoComo("cerrar") },
   NA: { tono: "warning", texto: "Novedad", Icono: Punto },
-  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: MinusCircle },
+  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: iconoComo("menos") },
 };
 
 const ESTILOS: Record<Tono, CSSProperties> = {

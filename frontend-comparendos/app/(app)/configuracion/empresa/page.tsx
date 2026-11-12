@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
@@ -47,7 +46,7 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
       ))}
       {!soloLectura && (
         <button type="button" className={`${controlCls(false)} w-fit`} onClick={() => onCambio([...valor, { correo: "", tipos: [] }])}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="mas" className="h-3.5 w-3.5" />
           Agregar correo
         </button>
       )}

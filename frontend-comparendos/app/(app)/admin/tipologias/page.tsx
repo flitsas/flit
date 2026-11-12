@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { HistorialAuditoria } from "@/components/HistorialAuditoria";
@@ -62,7 +61,7 @@ function Formulario({ tipologia, onCerrar, onGuardada }: { tipologia: Tipologia 
   };
 
   return (
-    <Modal
+    <Modal icono="causal"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -159,7 +158,7 @@ export default function Tipologias() {
                 Historial de cambios
               </button>
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEditar("nueva")}>
-                <Plus className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="mas" className="h-3.5 w-3.5" />
                 Nueva tipología
               </button>
             </div>

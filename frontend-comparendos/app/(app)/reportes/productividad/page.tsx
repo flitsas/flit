@@ -33,7 +33,7 @@ function DetalleCifra({ sel, periodo, onCerrar, onVer }: { sel: Seleccion; perio
   const filas = lista.datos ?? [];
   const titulo = METRICAS.find((m) => m.clave === sel.metrica)?.titulo ?? sel.metrica;
   return (
-    <Modal open onClose={onCerrar} title={`${titulo} · ${sel.usuario}`} description={`Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}.`} size="xl">
+    <Modal icono="reportes" open onClose={onCerrar} title={`${titulo} · ${sel.usuario}`} description={`Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}.`} size="xl">
       <DataTable
         tarjeta={false}
         ariaLabel="Comparendos de la cifra"

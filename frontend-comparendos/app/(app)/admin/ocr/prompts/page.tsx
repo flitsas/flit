@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FlaskConical, Plus, Scale } from "lucide-react";
+import { FlaskConical } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -77,7 +77,7 @@ function Editor({ inicial, onCerrar, onGuardado }: { inicial: Edicion; onCerrar:
   };
 
   return (
-    <Modal
+    <Modal icono="lapiz"
       open
       onClose={onCerrar}
       busy={enviando}
@@ -142,7 +142,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 
   const campos = Object.entries(resultado?.campos ?? {});
   return (
-    <Modal open onClose={onCerrar} busy={probando} size="2xl" title={`Probar la versión ${v.numeroVersion}`} description="Se envía un archivo de muestra al modelo con este prompt. No se guarda nada.">
+    <Modal icono="destello" open onClose={onCerrar} busy={probando} size="2xl" title={`Probar la versión ${v.numeroVersion}`} description="Se envía un archivo de muestra al modelo con este prompt. No se guarda nada.">
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,.png,.tif,.tiff,.pdf" onChange={(e) => e.target.files?.[0] && probar(e.target.files[0])} />
@@ -196,7 +196,7 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
   );
   const fallos = (e?.detalle ?? []).filter((d) => d.falloCandidata || d.falloVigente);
   return (
-    <Modal
+    <Modal icono="reportes"
       open
       onClose={onCerrar}
       size="2xl"
@@ -302,7 +302,7 @@ function Prompts() {
               className={BOTON_PRIMARIO_CLS}
               onClick={() => setEdicion({ id: null, texto: publicada?.texto ?? "", modelo: publicada?.modelo ?? "" })}
             >
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="mas" className="h-3.5 w-3.5" />
               Nueva versión
             </button>
           </div>
@@ -374,7 +374,7 @@ function Prompts() {
                       Editar
                     </button>
                     <button type="button" className={controlCls(false)} disabled={v.evaluacion?.estado === "EnCurso"} onClick={() => evaluar(v)}>
-                      <Scale className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="mazo" className="h-3.5 w-3.5" />
                       Evaluar
                     </button>
                   </>
@@ -410,7 +410,7 @@ function Prompts() {
       {prueba && <Probar v={prueba} onCerrar={() => setPrueba(null)} />}
       {resultado && <ResultadoEvaluacion id={resultado} onCerrar={() => setResultado(null)} />}
       {publicar && (
-        <Modal
+        <Modal icono="check"
           open
           onClose={() => setPublicar(null)}
           busy={ocupado}
