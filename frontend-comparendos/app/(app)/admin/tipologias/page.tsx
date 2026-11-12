@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { History, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { HistorialAuditoria } from "@/components/HistorialAuditoria";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -154,7 +155,7 @@ export default function Tipologias() {
           acciones={
             <div className="flex flex-wrap gap-2">
               <button type="button" className={controlCls(false)} onClick={() => setHistorial(true)}>
-                <History className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="reloj" className="h-3.5 w-3.5" />
                 Historial de cambios
               </button>
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEditar("nueva")}>

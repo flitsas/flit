@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Caja de búsqueda de las tablas (modelo de trámites): lupa a la izquierda, texto ≥ 12px y anillo de foco
@@ -24,7 +24,7 @@ export function SearchInput({
     <div
       className={`flex min-w-[200px] items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5 focus-within:border-flit-brand focus-within:ring-2 focus-within:ring-flit-brand/30 ${className}`}
     >
-      <Search className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+      <Icono nombre="buscar" className="h-4 w-4 shrink-0 opacity-60" />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}

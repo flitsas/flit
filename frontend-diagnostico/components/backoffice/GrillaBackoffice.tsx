@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ClipboardList, PencilLine, RefreshCw, SearchX } from "lucide-react";
+import { SearchX } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -27,7 +28,6 @@ import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface GrillaBackofficeProps {
   diagnosticoId: string;
@@ -54,13 +54,17 @@ const rutaLista = (empresa: string) => `/backoffice/diagnosticos?empresa=${encod
 export function MarcaManual() {
   return (
     <Etiqueta tono="info">
-      <PencilLine className="h-3 w-3" aria-hidden="true" />
+      <Icono nombre="lapiz" className="h-3 w-3" />
       Manual
     </Etiqueta>
   );
 }
 
-function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; children?: React.ReactNode; Icono?: typeof ClipboardList }) {
+/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
+type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
+const ICONO_VACIO = iconoComo("portapapeles");
+
+function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; children?: React.ReactNode; Icono?: IconoVacio }) {
   return (
     <section aria-labelledby="grilla-bo-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
       <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
@@ -162,7 +166,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
           setLlenado({ celda, vehiculo, disparador: e.currentTarget });
         }}
       >
-        <PencilLine className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="lapiz" className="h-3.5 w-3.5" />
         Llenar a mano
       </button>
     );
@@ -258,16 +262,16 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
         tituloId="grilla-bo-titulo"
         titulo={titulo}
         descripcion={<span className="break-all">{`Backoffice · Compañía ${empresa}`}</span>}
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
         acciones={
           <>
             <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="izquierda" className="h-4 w-4" />
               Volver a los lotes
             </Link>
             {carga.tipo === "listo" && (
               <button type="button" onClick={() => void releer()} disabled={leyendo} aria-busy={leyendo} className={BOTON_SECUNDARIO_CLS}>
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="reintento" className="h-4 w-4" />
                 Actualizar
               </button>
             )}

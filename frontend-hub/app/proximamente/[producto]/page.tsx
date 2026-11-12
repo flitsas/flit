@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check, Mail } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { getSession } from "@flit/auth/server";
 import { HubShell } from "@/components/HubShell";
 import { ProductArt } from "@/components/ui/ProductIcon";
@@ -27,7 +27,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
   const content = (
     <section className="mx-auto max-w-3xl py-10">
       <Link href="/?inicio=1" className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition hover:text-[color:var(--di-action)]">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Volver al inicio
+        <Icono nombre="izquierda" className="h-4 w-4" /> Volver al inicio
       </Link>
       <div className="mt-6 rounded-[20px] border border-border bg-card p-8 shadow-[var(--shadow-card)] md:p-10">
         <div className="flex items-center gap-4">
@@ -46,7 +46,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
           {product.features.map((f) => (
             <li key={f} className="flex gap-3 text-sm leading-relaxed">
               <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]">
-                <Check className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="check" className="h-3 w-3" />
               </span>
               {f}
             </li>
@@ -58,7 +58,7 @@ export default async function ProximamentePage({ params }: { params: Promise<{ p
             href={`mailto:${CONTACT.email}?subject=${encodeURIComponent(`Quiero saber cuándo llega ${product.name}`)}`}
             className={buttonClass()}
           >
-            <Mail className="h-4 w-4" aria-hidden="true" /> Avísame cuando llegue
+            <Icono nombre="correo" className="h-4 w-4" /> Avísame cuando llegue
           </a>
         </div>
       </div>

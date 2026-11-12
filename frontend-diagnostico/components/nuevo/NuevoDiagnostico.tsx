@@ -19,7 +19,6 @@ import { CreacionMasiva } from "./CreacionMasiva";
 import { DosZonas } from "./DosZonas";
 import { SelectorModo } from "./SelectorModo";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -142,7 +141,7 @@ export function NuevoDiagnostico() {
         tituloId="nuevo-titulo"
         titulo="Nuevo diagnóstico"
         descripcion={sesion?.empresa.nombre}
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
         acciones={
           puedeCrear && (
             <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />

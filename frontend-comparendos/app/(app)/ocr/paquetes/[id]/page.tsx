@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCheck, Download, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { Play } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -139,7 +140,7 @@ function Detalle({ id }: { id: string }) {
   return (
     <section className="flex flex-col gap-6">
       <Link href="/ocr" className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Paquetes OCR
       </Link>
       <Encabezado
@@ -155,16 +156,16 @@ function Detalle({ id }: { id: string }) {
         acciones={
           <>
             <button type="button" className={controlCls(false)} onClick={carga.recargar}>
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="reintento" className="h-3.5 w-3.5" />
               Actualizar
             </button>
             <button type="button" className={controlCls(false)} disabled={ocupado} onClick={exportar}>
-              <Download className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
               Exportar
             </button>
             {opera && !cerrado && reprocesables > 0 && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setReprocesando(true)}>
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="reintento" className="h-3.5 w-3.5" />
                 Reprocesar incompletos
               </button>
             )}
@@ -176,13 +177,13 @@ function Detalle({ id }: { id: string }) {
             )}
             {opera && !cerrado && p.cantidadFallidos > 0 && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setDescartando(true)}>
-                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="papelera" className="h-3.5 w-3.5" />
                 Descartar fallidos
               </button>
             )}
             {opera && !cerrado && lote.registrables > 0 && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={registrarCompletos}>
-                <CheckCheck className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="doble-check" className="h-3.5 w-3.5" />
                 {ocupado ? "Registrando…" : lote.registrables === 1 ? "Registrar el completo" : `Registrar los ${lote.registrables} completos`}
               </button>
             )}
@@ -262,7 +263,7 @@ function Detalle({ id }: { id: string }) {
                   {d.numeroComparendoExtraido ?? "—"}
                   {d.avisoNumero && d.numeroPorConfirmar !== false && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--badge-warning-fg)]" title={d.avisoNumero}>
-                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                      <Icono nombre="alerta" className="h-3 w-3" />
                       Verificar número
                     </span>
                   )}

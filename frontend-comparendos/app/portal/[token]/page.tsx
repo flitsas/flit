@@ -110,7 +110,7 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
           )}
         </header>
 
-        <section className="rounded-xl border-l-4 bg-card p-4 shadow-sm" style={{ borderColor: color }}>
+        <section className="rounded-xl border-l-4 bg-card p-4" style={{ borderColor: color }}>
           <p className="flex items-baseline gap-2 text-sm font-semibold" style={{ color }}>
             <MarcaVentana ventana={portal.descuento.ventana} />
             <span>{portal.descuento.texto}</span>
@@ -118,7 +118,7 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
           <p className="mt-2 text-sm text-muted-foreground">{portal.dondePagar}</p>
         </section>
 
-        <section className="rounded-xl bg-card p-4 shadow-sm">
+        <section className="rounded-xl border border-border bg-card p-4">
           <dl>
             <Dato etiqueta="Placa" valor={c.placa} />
             <Dato etiqueta="Fecha de la infracción" valor={`${formatoFecha(c.fechaImposicion)}${c.hora ? `, ${c.hora.slice(0, 5)}` : ""}`} />
@@ -131,7 +131,7 @@ export default async function PortalConductor({ params }: { params: Promise<{ to
         </section>
 
         {(portal.evidencia.foto || portal.evidencia.documento) && (
-          <section className="rounded-xl bg-card p-4 shadow-sm">
+          <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="mb-2 text-sm font-semibold text-flit-primary">Evidencia</h2>
             {portal.evidencia.foto ? (
               // eslint-disable-next-line @next/next/no-img-element -- la foto viene de la fuente con su propia URL

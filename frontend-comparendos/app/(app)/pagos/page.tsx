@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, FileSpreadsheet, Upload } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -63,7 +64,7 @@ function Resultado({ id }: { id: string }) {
               Solo filas con error
             </button>
             <button type="button" className={controlCls(false)} onClick={descargarErrores}>
-              <Download className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
               Excel de errores
             </button>
           </>
@@ -162,7 +163,7 @@ function CargaPagos() {
               onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])}
             />
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={subiendo} onClick={() => input.current?.click()}>
-              <Upload className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
               {subiendo ? "Procesando…" : "Cargar Excel de pagos"}
             </button>
             <span className="text-xs opacity-70">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { RefreshCw, Upload, UserRoundPen } from "lucide-react";
+import { UserRoundPen } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -146,7 +147,7 @@ function CargarDocumento({ ctx }: { ctx: ContextoDetalle }) {
       </select>
       <input ref={input} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
       <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-        <Upload className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
         {ocupado ? "Cargando…" : "Cargar documento"}
       </button>
     </div>
@@ -278,7 +279,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
             title={agotada ? "Ya se intentó 3 veces sin respuesta: asigna el conductor a mano." : undefined}
             onClick={() => consultar()}
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="reintento" className="h-3.5 w-3.5" />
             {consultando ? "Consultando…" : "Consultar conductor"}
           </button>
         )}

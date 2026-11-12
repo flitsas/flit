@@ -1,7 +1,8 @@
 "use client";
 
 import type { ComponentType, CSSProperties, ReactNode, SVGProps } from "react";
-import { Check, Clock, LoaderCircle, MinusCircle, X } from "lucide-react";
+import { LoaderCircle, MinusCircle } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
@@ -41,10 +42,10 @@ export type EstadoVisible = EstadoCelda | typeof SIN_SOLICITAR;
  * El estado nunca depende solo del color: cada chip lleva icono y texto.
  */
 const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono; animado?: boolean }> = {
-  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: Clock },
+  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("reloj") },
   EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: LoaderCircle, animado: true },
-  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: Check },
-  ERROR: { tono: "danger", texto: "Error", Icono: X },
+  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: iconoComo("check") },
+  ERROR: { tono: "danger", texto: "Error", Icono: iconoComo("cerrar") },
   NA: { tono: "warning", texto: "Novedad", Icono: Punto },
   SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: MinusCircle },
 };

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Upload } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -96,7 +97,7 @@ function SubirDocumento({ rl, doc, onSubido }: { rl: Representante; doc: (typeof
         )}
         <input ref={input} type="file" accept={doc.acepta} className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-          <Upload className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           {ocupado ? "Cargando…" : archivoId ? "Reemplazar" : "Cargar"}
         </button>
       </div>

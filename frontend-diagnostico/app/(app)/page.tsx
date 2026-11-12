@@ -6,7 +6,6 @@ import { useSesion } from "@/components/DiagnosticoShell";
 import { CapturaExpress } from "@/components/express/CapturaExpress";
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Pantalla base de Diagnóstico (HU #13732): la tarjeta título con la compañía de la sesión. El shell solo la muestra con
@@ -30,7 +29,7 @@ export default function Inicio() {
         tituloId="diagnostico-titulo"
         titulo="Diagnóstico vehicular"
         descripcion={empresa}
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
         acciones={puedeCrear && <CapturaExpress />}
       />
 
