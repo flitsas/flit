@@ -60,6 +60,10 @@ internal static class ProcedureInstanceEndpoints
             {
                 TenantId = effectiveTenant,
                 CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
+                // HU #14318 (AC6) — el canal lo fija el servidor: el gestor nunca lo impone. El alta por esta
+                // ruta es del producto Trámites (canal tramites, sin OT del canal), diga lo que diga el body.
+                Channel = TramiteCanal.Tramites,
+                ChannelTransitOfficeId = null,
             };
 
             // Bloqueo por familia (config compañía → Trámites). Activo = no permitir crear.

@@ -7,7 +7,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
-import { fetchAllCompanies } from "@/lib/api/admin-companies";
+import { fetchAllCompanies, fetchTransitOffices } from "@/lib/api/admin-companies";
 import {
   exportDetailedReport,
   exportNetworkDetailedReport,
@@ -58,6 +58,27 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [transitOffices, setTransitOffices] = useState<TransitOfficeOption[]>([]);
   const [exporting, setExporting] = useState(false);
+  // Épica #14296 — catálogo global de OT (activos) para «OT del punto». Solo SuperAdmin (el endpoint
+  // exige SuperAdmin u ot_admin): se pide UNA vez y sirve con una compañía elegida o con todas, porque
+  // el trámite de un punto puede ser de un OT no habilitado para esa compañía.
+  const [catalogOffices, setCatalogOffices] = useState<TransitOfficeOption[]>([]);
+
+  useEffect(() => {
+    if (!isSuper) return;
+    // GET /api/v1/admin/transit-offices: catálogo completo de OT activos, sin paginación ni tope
+    // (el backend solo filtra por `search`, que aquí no se envía), así que no se trunca nada.
+    const controller = new AbortController();
+    fetchTransitOffices(undefined, controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          setCatalogOffices(items.map((o) => ({ id: o.id, code: o.code, name: o.name, cityCode: o.cityCode })));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCatalogOffices([]);
+      });
+    return () => controller.abort();
+  }, [isSuper]);
 
   useEffect(() => {
     if (!isSuper) return;
@@ -115,8 +136,8 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         setErrorMessage("El rango de fechas no es válido.");
         return;
       }
-      if (isSuper && !applied.tenantId) {
-        // SuperAdmin sin compañía elegida: el backend exige tenantId. No consultamos (evita el
+      if (isSuper && !applied.tenantId && !applied.allCompanies) {
+        // SuperAdmin sin compañía elegida (ni «Todas las compañías»): el backend exige tenantId. No consultamos (evita el
         // 400) y guiamos a seleccionar una compañía en lugar de mostrar un error.
         setData(null);
         setErrorMessage(undefined);
@@ -205,6 +226,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         companies={companies}
         procedureTypes={procedureTypes}
         transitOffices={transitOffices}
+        channelTransitOffices={isSuper && catalogOffices.length > 0 ? catalogOffices : transitOffices}
         compact={embedded}
         networkScopeSelector={
           net.isGroupParent ? (
@@ -242,9 +264,11 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         uiStatus={uiStatus}
         errorMessage={errorMessage}
         emptyMessage={
-          isSuper && !applied.tenantId
+          isSuper && !applied.tenantId && !applied.allCompanies
             ? "Selecciona una compañía para ver sus trámites."
-            : "No hay trámites en el rango de fechas seleccionado."
+            : applied.channel
+              ? "No hay trámites con ese canal."
+              : "No hay trámites en el rango de fechas seleccionado."
         }
         onRetry={() => setReloadKey((k) => k + 1)}
         page={page}
@@ -252,15 +276,15 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
         networkScope={networkActive}
+        allCompanies={isSuper && Boolean(applied.allCompanies) && !networkActive}
       />
     </div>
   );
 }
 
 function describeError(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 400) return "Revisa el rango de fechas y la compañía seleccionada.";
-    if (error.status === 403) return "No tienes permiso para consultar este reporte.";
-  }
+  // Épica #14296 (AC4) — el motivo exacto que entrega la API, sin reescribirlo: el cliente HTTP ya
+  // lo extrae del cuerpo (error/detail/title). Solo lo que no es una respuesta de la API cae al genérico.
+  if (error instanceof ApiError && error.message.trim()) return error.message;
   return "No se pudo cargar el reporte detallado.";
 }

@@ -37,4 +37,11 @@ public interface INetworkDetailedReportReadRepository
         NetworkDetailedReportFilter filter,
         Func<NetworkDetailedProcedureRowDto, CancellationToken, Task> onRowAsync,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14320 — identificadores de TODOS los clientes de la plataforma, para el modo «todas las compañías»
+    /// del SuperAdmin. Solo lo invoca quien ya verificó el rol; el resultado alimenta el mismo parámetro de
+    /// arreglo (<c>= ANY(@tenants)</c>) de las consultas de red.
+    /// </summary>
+    Task<IReadOnlySet<Guid>> ListAllTenantIdsAsync(CancellationToken ct = default);
 }

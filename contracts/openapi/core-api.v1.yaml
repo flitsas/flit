@@ -6580,6 +6580,131 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/detailed-report/procedures:
+    get:
+      operationId: detailedReportProcedures
+      tags: [Analytics]
+      summary: Consulta paginada del reporte detallado con filtros por atributos del trámite
+      description: >
+        Feature #10813. Con una compañía (`tenantId` obligatorio para SuperAdmin; el resto usa la de su token).
+        HU #14319 — cada fila trae el canal efectivo (`channel`; sin dato se lee como `tramites`, incluido el
+        migrado de FLIT 1.0) y el organismo del canal; `channel` y `channelTransitOfficeId` filtran con el mismo
+        predicado en listado, conteo y resumen. Un canal fuera del catálogo responde 400 con el motivo.
+        HU #14320 — `allCompanies=true` (solo SuperAdmin; otro rol responde 403 sin datos) consulta TODAS las
+        compañías en la misma pantalla: `tenantId` no se envía (enviarlo es 400), cada fila agrega `tenantId` y
+        `tenantName` y la respuesta es `AllCompaniesDetailedProceduresPage`. El acceso queda auditado en la
+        auditoría de acceso consolidado (`network.reports.procedures`). Sin `allCompanies`, el comportamiento con
+        una compañía elegida no cambia (SuperAdmin sin `tenantId` sigue en 400). Sin permiso nuevo:
+        `reportes.detallados.read`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Compañía a consultar (SuperAdmin). No se envía con `allCompanies=true`.
+        - $ref: "#/components/parameters/ReportAllCompanies"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Página del reporte (`DetailedProceduresPage`; con `allCompanies=true`, `AllCompaniesDetailedProceduresPage`).
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/DetailedProceduresPage"
+                  - $ref: "#/components/schemas/AllCompaniesDetailedProceduresPage"
+        "400":
+          description: Fechas ausentes, rango inválido, canal fuera del catálogo, falta `tenantId` (SuperAdmin sin `allCompanies`) o `allCompanies` con `tenantId`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin permiso de reportes detallados, tenant ajeno, o `allCompanies=true` de un rol distinto de SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/detailed-report/procedures/export:
+    get:
+      operationId: detailedReportExportExcel
+      tags: [Analytics]
+      summary: Exporta a Excel el reporte detallado filtrado
+      description: >
+        Feature #10816. Mismos filtros que `GET /api/v1/detailed-report/procedures` (sin paginación). HU #14319 —
+        el archivo termina con las columnas «Canal» (nombre visible del catálogo) y «OT del canal». HU #14320 —
+        con `allCompanies=true` (solo SuperAdmin) exporta las mismas filas que el listado e incluye «Compañía» como
+        primera columna; sin registros deja solo la cabecera; el acceso queda auditado (`network.reports.export`).
+        Sin permiso nuevo: `reportes.detallados.export`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/NetworkStatsFrom"
+        - $ref: "#/components/parameters/NetworkStatsTo"
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/ReportAllCompanies"
+        - $ref: "#/components/parameters/NetworkReportTransitOfficeId"
+        - $ref: "#/components/parameters/NetworkReportProcedureTypeId"
+        - $ref: "#/components/parameters/NetworkReportCategory"
+        - $ref: "#/components/parameters/NetworkReportStatus"
+        - $ref: "#/components/parameters/NetworkReportReferenceNumber"
+        - $ref: "#/components/parameters/NetworkReportPersonDocument"
+        - $ref: "#/components/parameters/NetworkReportPersonName"
+        - $ref: "#/components/parameters/NetworkReportHasTransformation"
+        - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
+      responses:
+        "200":
+          description: Archivo `reporte_detallado_{from}_{to}.xlsx` (o `reporte_detallado_todas_las_companias_{from}_{to}.xlsx` con `allCompanies`).
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Fechas ausentes, rango inválido, canal fuera del catálogo, `allCompanies` con `tenantId` o sin registros (modo una compañía).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Sin token válido.
+        "403":
+          description: Sin permiso de exportación, tenant ajeno, o `allCompanies=true` de un rol distinto de SuperAdmin.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/tramites/network/reports/procedures:
     get:
       operationId: tramitesNetworkReportsProcedures
@@ -6596,7 +6721,8 @@ paths:
         (AC3). El conjunto viaja a la base como un único parámetro de arreglo (`tenant_id = ANY(@tenants)`);
         un conjunto vacío produce un reporte sin registros, nunca uno sin filtro (AC4). Ni el listado ni la
         exportación incluyen contenido ni enlaces de documentos generados o anexos (AC6). Las rutas de
-        `/api/v1/detailed-report` no cambian ni reciben parámetros nuevos (AC7). Cada petición deja un
+        `/api/v1/detailed-report` no reciben `childTenantId` ni el alcance de red (AC7; HU #14319 agrega
+        `channel` y `channelTransitOfficeId` a ambas familias). Cada petición deja un
         registro en la auditoría de acceso consolidado (`network.reports.procedures`, HU #12361) con los
         filtros de texto libre registrados solo por nombre.
       security:
@@ -6614,6 +6740,8 @@ paths:
         - $ref: "#/components/parameters/NetworkReportPersonName"
         - $ref: "#/components/parameters/NetworkReportHasTransformation"
         - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
         - name: page
           in: query
           required: false
@@ -6625,7 +6753,7 @@ paths:
           description: Tamaño de página (por defecto 20; por encima de 100 cae al tope).
       responses:
         "200":
-          description: Página del reporte detallado de la red.
+          description: Página del reporte detallado de la red (cada fila con `channel`, `channelTransitOfficeId` y `channelTransitOfficeName`, HU #14319).
           content:
             application/json:
               schema:
@@ -6673,9 +6801,13 @@ paths:
         - $ref: "#/components/parameters/NetworkReportPersonName"
         - $ref: "#/components/parameters/NetworkReportHasTransformation"
         - $ref: "#/components/parameters/NetworkReportIsLeasing"
+        - $ref: "#/components/parameters/ReportChannel"
+        - $ref: "#/components/parameters/ReportChannelTransitOfficeId"
       responses:
         "200":
-          description: Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»).
+          description: >
+            Archivo `reporte_red_{from}_{to}.xlsx` (hoja «Reporte detallado»); desde HU #14319 termina con las
+            columnas «Canal» (nombre visible) y «OT del canal».
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema:
@@ -13468,6 +13600,30 @@ components:
       in: query
       required: false
       schema: { type: boolean }
+    ReportAllCompanies:
+      name: allCompanies
+      in: query
+      required: false
+      schema: { type: boolean, default: false }
+      description: >
+        Solo SuperAdmin (HU #14320): consulta todas las compañías; otro rol responde 403 sin datos. No se envía
+        junto con `tenantId`. Cada fila agrega `tenantId` y `tenantName`. El acceso queda auditado.
+    ReportChannel:
+      name: channel
+      in: query
+      required: false
+      schema:
+        $ref: "#/components/schemas/TramiteCanal"
+      description: >
+        Canal del trámite (HU #14319). Sin dato, todos. Una fila sin canal cuenta como `tramites`; `integracion` (ICT)
+        solo aparece al filtrar por ese canal. `aplicacion` responde vacío sin error. Un código fuera del catálogo
+        responde 400 con el motivo. Sin permiso adicional: se rige por el de reportes detallados.
+    ReportChannelTransitOfficeId:
+      name: channelTransitOfficeId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+      description: Organismo del punto de atención del canal Persona Natural OT (HU #14319). Distinto de `transitOfficeId`.
     NetworkAccessAuditFrom:
       name: from
       in: query
@@ -13508,6 +13664,17 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Trámites · Canal del trámite (HU #14317, Feature #14315, Épica #14296) ────
+    TramiteCanal:
+      type: string
+      description: >-
+        Canal por el que entró el trámite. Nombres visibles: tramites = Trámites, pn_web = Persona Natural Web,
+        pn_punto = Persona Natural OT, integracion = Integración, aplicacion = Aplicación (reservado, hoy no se
+        asigna). Lo devuelven el detalle del trámite (`ProcedureInstanceDetail.channel`, HU #14318) y los reportes
+        detallados, que además lo filtran (HU #14319). Un trámite sin dato, incluido el migrado, se lee como `tramites`.
+        El cliente nunca lo envía al crear: lo fija el servidor.
+      enum: [tramites, pn_web, pn_punto, integracion, aplicacion]
+
     # ── Admin · Identidad de marca (HU #12412, Feature #12366, ADR-0060 D1) ────
     BrandColors:
       type: object
@@ -17888,7 +18055,116 @@ components:
         isLeasing: { type: boolean }
         paymentType: { type: string }
         transferType: { type: string, nullable: true }
-      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType]
+        channel:
+          $ref: "#/components/schemas/TramiteCanal"
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo del punto de atención (HU #14319); solo con `channel = pn_punto`.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: Nombre del organismo del canal (HU #14319).
+      required: [tenantId, tenantName, id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType, channel]
+
+    DetailedProcedureRow:
+      type: object
+      description: >
+        Fila del reporte detallado (`GET /api/v1/detailed-report/procedures`, Feature #10813). HU #14319 agrega el
+        canal efectivo y el organismo del canal.
+      properties:
+        id: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        procedureTypeName: { type: string }
+        category: { type: string, enum: [matriculas, traspasos, otros] }
+        status: { type: string }
+        createdByDisplayName: { type: string }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        personDocument: { type: string }
+        personFullName: { type: string }
+        hasTransformation: { type: boolean }
+        transformationDetail: { type: string, nullable: true }
+        isLeasing: { type: boolean }
+        paymentType: { type: string }
+        transferType: { type: string, nullable: true }
+        channel:
+          $ref: "#/components/schemas/TramiteCanal"
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Organismo del punto de atención (HU #14319); solo con `channel = pn_punto`.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: Nombre del organismo del canal (HU #14319).
+      required: [id, referenceNumber, procedureTypeName, category, status, createdByDisplayName, personDocument, personFullName, hasTransformation, isLeasing, paymentType, channel]
+
+    DetailedReportSummary:
+      type: object
+      description: Totales del reporte detallado (HU #10819).
+      properties:
+        totalCount: { type: integer }
+        byStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              count: { type: integer }
+            required: [status, count]
+        byCategory:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+        byProcedureType:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              count: { type: integer }
+            required: [label, count]
+      required: [totalCount, byStatus, byCategory, byProcedureType]
+
+    DetailedProceduresPage:
+      type: object
+      description: Respuesta de `GET /api/v1/detailed-report/procedures` con una compañía (Feature #10813).
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/DetailedReportSummary"
+      required: [items, totalCount, page, pageSize, summary]
+
+    AllCompaniesDetailedProceduresPage:
+      type: object
+      description: >
+        Respuesta de `GET /api/v1/detailed-report/procedures?allCompanies=true` (HU #14320, solo SuperAdmin): las
+        mismas filas con `tenantId` y `tenantName` de la compañía dueña, y los totales con desglose por compañía
+        (`summary.byTenant`). Sin `scope`: en este modo el alcance es el universo completo.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkDetailedProcedureRow"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        summary:
+          $ref: "#/components/schemas/NetworkDetailedReportSummary"
+      required: [items, totalCount, page, pageSize, summary]
 
     NetworkTenantCount:
       type: object
@@ -18086,9 +18362,26 @@ components:
       description: >
         Detalle de `GET /api/v1/tramites/instances/{id}` (gestor y SuperAdmin) y objeto `instance` de
         `GET /api/v1/tramites/network/instances/{id}`. Aquí se documentan solo los campos de vigencia de
-        la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
+        la HU #12791 y el canal (HU #14318); el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
       additionalProperties: true
       properties:
+        channel:
+          allOf:
+            - $ref: "#/components/schemas/TramiteCanal"
+          description: >
+            HU #14318 (Feature #14315, Épica #14296) — canal por el que entró el trámite. Solo lectura: se
+            fija al crear. Un trámite sin dato (histórico o migrado de V1) devuelve `tramites`. Aditivo.
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            HU #14318 — organismo de tránsito del punto de atención; solo con `channel = pn_punto`, `null` en
+            los demás. Distinto del organismo del trámite, que puede cambiar al enviarlo al OT. Aditivo.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: HU #14318 — nombre del organismo de `channelTransitOfficeId`; `null` si no aplica. Aditivo.
         improntaGeneracionHabilitada:
           type: boolean
           description: >

@@ -216,6 +216,21 @@ public sealed class ProcedureInstance
     public Guid? ParentTenantIdAtCreation { get; set; }
 
     /// <summary>
+    /// HU #14317 (Épica #14296) — canal por el que entró el trámite (<c>Tramites.Enums.TramiteCanal</c>:
+    /// tramites, pn_web, pn_punto, integracion, aplicacion). <c>null</c> = sin dato (histórico). Se fija al
+    /// crear y no se edita (EF: <c>AfterSaveBehavior.Throw</c>). Hoy nadie lo asigna: lo harán las HUs de
+    /// creación. Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations).
+    /// </summary>
+    public string? Channel { get; set; }
+
+    /// <summary>
+    /// HU #14317 — organismo de tránsito del punto de atención (<c>catalogs.transit_offices.id</c>); no nulo
+    /// si y solo si <see cref="Channel"/> es <c>pn_punto</c> (CHECK en la base). Distinto del organismo del
+    /// trámite, que puede cambiar al enviarlo al OT. Inmutable como <see cref="Channel"/>.
+    /// </summary>
+    public Guid? ChannelTransitOfficeId { get; set; }
+
+    /// <summary>
     /// HU #13402 (Feature #13399, Épica #13039) — valor del parámetro de la compañía «generar
     /// improntas automáticamente» (<c>admin.tenant_operational_policies.generate_improntas</c>)
     /// CONGELADO al crear el trámite. Cambiar o reactivar el parámetro después no altera trámites
