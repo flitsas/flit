@@ -6,7 +6,7 @@
 // confirmación. La lista trae solo los organismos activos en FLIT (y los ya habilitados que dejaron de serlo, marcados
 // «Ya no está activo en FLIT», que solo se pueden apagar).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff, Power } from "lucide-react";
+import { EyeOff } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -360,7 +360,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
       {apagandoCanal && (
         <PnConfirmDialog
           title="Apagar el canal del punto"
-          icon={Power}
+          icono="encendido"
           tone="danger"
           confirmLabel="Apagar canal"
           onClose={() => setApagandoCanal(null)}

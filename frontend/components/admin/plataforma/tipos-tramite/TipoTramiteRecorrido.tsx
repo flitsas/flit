@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowDown, ArrowUp, Loader2, Trash2 } from 'lucide-react';
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import type { ProcedureStep, ProcedureStepInput } from '@/lib/api/types/procedure-parametrization';
 import type { WizardSectionType } from '@/lib/api/types/procedure-runtime';
@@ -157,17 +158,17 @@ export function TipoTramiteRecorrido({
 
             <span className="flex items-center gap-1">
               <IconoBoton label={`Subir el paso ${i + 1}`} onClick={() => mover(i, -1)} disabled={i === 0}>
-                <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="arriba" className="h-3.5 w-3.5" />
               </IconoBoton>
               <IconoBoton
                 label={`Bajar el paso ${i + 1}`}
                 onClick={() => mover(i, 1)}
                 disabled={i === borrador.length - 1}
               >
-                <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="abajo" className="h-3.5 w-3.5" />
               </IconoBoton>
               <IconoBoton label={`Quitar el paso ${i + 1}`} onClick={() => eliminar(i)}>
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="papelera" className="h-3.5 w-3.5" />
               </IconoBoton>
             </span>
           </li>

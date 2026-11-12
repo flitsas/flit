@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { UserX } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { MandatarioGeneralCard } from "@/components/admin/transit-offices/MandatarioGeneralCard";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
@@ -87,7 +88,7 @@ export function OtFormatoContratoChip({ formato }: { formato: OtFormatoVista | n
         className="inline-flex items-center gap-2 rounded-full border border-[var(--badge-info-border)] bg-[var(--badge-info-bg)] px-3 py-1.5 text-xs text-muted-foreground"
         data-testid="ot-formato-contrato"
       >
-        <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden />
+        <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0 text-flit-brand" />
         <span>
           Formato de contrato:{" "}
           <span className="font-semibold text-foreground">{formato.nombre}</span>
@@ -305,7 +306,7 @@ export function OtMandatosSection({
           ...(canRegisterSigner && puedeEditarMandatario(row)
             ? [
                 {
-                  icon: Pencil,
+                  icon: iconoComo("lapiz"),
                   label: `Editar mandatario ${row.fullName}`,
                   tone: "primary" as const,
                   onClick: () => setEditingSigner(row),
@@ -323,7 +324,7 @@ export function OtMandatosSection({
                       onClick: () => setBaja({ signer: row, accion: "desactivar" }),
                     }
                   : {
-                      icon: RotateCcw,
+                      icon: iconoComo("reintento"),
                       label: `Reactivar mandatario ${row.fullName}`,
                       disabled: busySignerId === row.id,
                       onClick: () => void reactivar(row),
@@ -333,7 +334,7 @@ export function OtMandatosSection({
           ...(canRegisterSigner && puedeEditarMandatario(row) && puedeReenviarValidacion(row)
             ? [
                 {
-                  icon: Send,
+                  icon: iconoComo("radicacion"),
                   label: `Reenviar validación a ${row.fullName}`,
                   disabled: busySignerId === row.id,
                   onClick: () => void reenviarDesdeFila(row),
@@ -343,7 +344,7 @@ export function OtMandatosSection({
           ...(canRegisterSigner && puedeEliminarMandatario(row)
             ? [
                 {
-                  icon: Trash2,
+                  icon: iconoComo("papelera"),
                   label: `Eliminar mandatario ${row.fullName}`,
                   tone: "danger" as const,
                   disabled: busySignerId === row.id,
@@ -354,7 +355,7 @@ export function OtMandatosSection({
           ...(modeloDe(row) === "natural"
             ? [
                 {
-                  icon: Eye,
+                  icon: iconoComo("ojo"),
                   label: `Ver firma de ${row.fullName}`,
                   tone: "primary" as const,
                   onClick: () => setPreviewSigner(row),

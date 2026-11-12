@@ -1,7 +1,9 @@
 'use client';
 
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from '@flit/ui/Interruptor';
 import { useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { SuperadminApiError, superadminClient } from '@/lib/api/superadmin-client';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 
@@ -53,13 +55,9 @@ export function TipoTramiteBarrera({
           aria-label={`Operable en el asistente: ${tipo.name}`}
           disabled={guardando}
           onClick={() => void alternar()}
-          className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
-          style={{ background: tipo.wizardEnabled ? 'var(--color-flit-brand)' : 'var(--border-strong)' }}
+          className={INTERRUPTOR_CLS}
         >
-          <span
-            className="inline-block h-4 w-4 transform rounded-full bg-white transition"
-            style={{ transform: tipo.wizardEnabled ? 'translateX(1.5rem)' : 'translateX(0.25rem)' }}
-          />
+          <span className={INTERRUPTOR_PERILLA_CLS} />
         </button>
         <span className="text-xs font-medium text-flit-primary">
           {guardando ? (
@@ -82,7 +80,7 @@ export function TipoTramiteBarrera({
           role="alert"
         >
           <p className="mb-1.5 flex items-center gap-1.5 font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="alerta" className="h-3.5 w-3.5" />
             Todavía no se puede habilitar
           </p>
           <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-muted-foreground">

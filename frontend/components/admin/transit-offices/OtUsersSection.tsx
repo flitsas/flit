@@ -3,7 +3,8 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Clock, FileSpreadsheet, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { Ban, FileSpreadsheet, MailX, ShieldOff } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -207,7 +208,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
 
     if (!isInvitationRow(u) && isSuperAdmin) {
       actions.push({
-        icon: History,
+        icon: iconoComo("reloj"),
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
@@ -218,7 +219,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // aviso deshabilitado; las canceladas no tienen cuenta ni invitación vigente.
     if (canConfigurePermissions && u.status !== "cancelled") {
       actions.push({
-        icon: ShieldCheck,
+        icon: iconoComo("escudo"),
         label: `Permisos por módulo de ${u.fullName}`,
         tone: "primary",
         onClick: () => setPermissionsTarget(u),
@@ -229,7 +230,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // hay cuenta real que editar. HU #13655: quien no es administrador no edita a un administrador.
     if (!isInvitationRow(u) && (isUserAdmin || !isAdministratorRoleCode(u.roleCode))) {
       actions.push({
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         label: `Editar usuario ${u.fullName}`,
         tone: "primary",
         onClick: () => setEditTarget(u),
@@ -246,7 +247,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         });
       } else {
         actions.push({
-          icon: Clock,
+          icon: iconoComo("reloj"),
           label: `Suspender temporalmente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
@@ -263,7 +264,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // AC2 (HU #10623): eliminar es exclusivo de SuperAdmin y nunca sobre la propia fila.
     if (!isInvitationRow(u) && isSuperAdmin && u.id !== currentUserId) {
       actions.push({
-        icon: Trash2,
+        icon: iconoComo("papelera"),
         label: `Eliminar usuario ${u.fullName}`,
         tone: "danger",
         onClick: () => setDeleteTarget(u),
@@ -449,7 +450,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-secondary"
               style={{ color: "var(--color-flit-brand)" }}
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="papelera" className="h-3.5 w-3.5" />
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
             </button>
           )}
@@ -882,7 +883,7 @@ function DeletedUsersTable({
           <RowActions
             actions={[
               {
-                icon: RotateCcw,
+                icon: iconoComo("reintento"),
                 label: `Restaurar usuario ${u.fullName}`,
                 tone: "primary",
                 onClick: () => onRestore(u),

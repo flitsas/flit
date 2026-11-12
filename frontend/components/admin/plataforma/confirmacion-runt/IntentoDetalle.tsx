@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Ban, Check, CircleDashed, Hourglass, X, type LucideIcon } from "lucide-react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { Ban, CircleDashed } from "lucide-react";
+import type { IconoComoProps } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -20,6 +22,7 @@ import {
 import { formatFechaHora } from "@/lib/format/date";
 import { proveedorLabel, QUERY_KIND_LABEL } from "./historial-columns";
 import { leerRespuestaRunt, type RuntRespuestaVista } from "./runt-respuesta";
+import { iconoComo } from "@flit/ui/Icono";
 
 type Pestana = "veredicto" | "respuesta" | "json";
 
@@ -30,10 +33,10 @@ const PESTANAS: Array<{ id: Pestana; label: string }> = [
 ];
 
 /** Mismo mapa de tonos que los hitos de Trazabilidad ICT: color + ícono, y el texto siempre al lado. */
-const TONO: Record<RuntConfirmationVerdict, { fg: string; bg: string; Icon: LucideIcon }> = {
-  confirmed: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: Check },
-  pending: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: Hourglass },
-  discrepancy: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: X },
+const TONO: Record<RuntConfirmationVerdict, { fg: string; bg: string; Icon: ComponentType<IconoComoProps> }> = {
+  confirmed: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: iconoComo("check") },
+  pending: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: iconoComo("espera") },
+  discrepancy: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: iconoComo("cerrar") },
   unverifiable: { fg: "var(--badge-neutral-fg)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
   error: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
 };
@@ -148,7 +151,7 @@ export function IntentoDetalle({
       className="mx-1 rounded-2xl border border-flit-brand/30 bg-card dark:border-border"
       data-testid="intento-detalle"
     >
-      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className="flex flex-wrap gap-1 border-b border-border px-3">
+      <div role="tablist" aria-label={`Detalle del intento ${row.attemptNo} del trámite ${row.referenceNumber}`} className={`${PESTANAS_LISTA_CLS} px-3`}>
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
           const deshabilitada = p.id !== "veredicto" && !row.hasRaw;
@@ -161,10 +164,9 @@ export function IntentoDetalle({
               disabled={deshabilitada}
               title={deshabilitada ? "Este intento no guardó respuesta del proveedor" : undefined}
               onClick={() => setPestana(p.id)}
-              className={`relative whitespace-nowrap px-3 py-2.5 text-xs font-semibold transition disabled:opacity-35 ${activa ? "text-flit-brand" : "opacity-60 hover:opacity-100"}`}
+              className={pestanaClass(activa, "disabled:cursor-not-allowed disabled:opacity-35")}
             >
               {p.label}
-              {activa && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-t bg-flit-brand" aria-hidden="true" />}
             </button>
           );
         })}

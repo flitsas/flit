@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { OT_BLUE, OT_CARD } from "./ot-detalle-visual";
 
 /**
@@ -43,11 +43,7 @@ export function OtDetalleAcordeon({
           <span className="text-sm font-semibold" style={{ color: OT_BLUE }}>
             {titulo}
           </span>
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 transition-transform ${abierto ? "rotate-180" : ""}`}
-            style={{ color: OT_BLUE }}
-            aria-hidden="true"
-          />
+          <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition-transform ${abierto ? "rotate-180" : ""}`} style={{ color: OT_BLUE }} />
         </button>
         {derecha ? <div className="shrink-0">{derecha}</div> : null}
       </div>

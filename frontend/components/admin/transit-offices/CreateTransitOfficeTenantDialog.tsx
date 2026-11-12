@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Landmark, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
@@ -168,7 +168,7 @@ export function CreateTransitOfficeTenantDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={Landmark}
+      icono="banco"
       title="Activar Organismo de Tránsito"
       titleClassName="text-base font-bold text-flit-brand"
     >

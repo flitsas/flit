@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Estado vacío / “en construcción” del hub OT — patrón AlertCard + empty administrativo.
@@ -29,7 +29,7 @@ export function OtUnderConstructionState({
         style={{ color: "var(--color-flit-brand)" }}
         aria-hidden="true"
       >
-        <BarChart3 className="h-6 w-6" strokeWidth={1.8} />
+        <Icono nombre="reportes" className="h-6 w-6" />
       </div>
       <p
         className="text-3xl font-bold tracking-tight text-muted-foreground"

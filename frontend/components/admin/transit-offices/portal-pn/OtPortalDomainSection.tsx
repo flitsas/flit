@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Star, Undo2 } from "lucide-react";
+import { Star } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
 import { DomainStatusPanel, type DomainClient } from "@/components/admin/domain/DomainStatusPanel";
@@ -211,7 +212,7 @@ function DominioItem({
           className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${FOCO}`}
           style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
         >
-          <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar
+          <Icono nombre="devolucion" className="h-3.5 w-3.5" /> Retirar
         </button>
       </div>
 

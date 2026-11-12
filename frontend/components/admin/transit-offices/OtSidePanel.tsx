@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ReactNode } from "react";
 import { Modal, type ModalSize } from "@/components/atom/Modal";
 
@@ -74,7 +74,7 @@ export function OtSidePanel({
             disabled={disabled}
             className="shrink-0 text-muted-foreground hover:text-muted-foreground dark:hover:text-foreground"
           >
-            <X className="h-5 w-5" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </div>
       )}

@@ -4,7 +4,8 @@
 // crear y opcional al editar; el texto alternativo es obligatorio. Cada regla se valida aquí con un mensaje claro y
 // no se guarda nada mientras algo falle. La vigencia es opcional, con hora de Colombia. Texto plano, sin HTML.
 import { useEffect, useRef, useState } from "react";
-import { ImageIcon, Save, UploadCloud } from "lucide-react";
+import { ImageIcon, Save } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import {
@@ -138,7 +139,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
           </InlineAlert>
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 hover:bg-secondary">
-              <UploadCloud className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="nube-subir" className="h-4 w-4" />
               {archivo || banner ? "Cambiar imagen" : "Elegir imagen"}
               <input
                 ref={inputRef}

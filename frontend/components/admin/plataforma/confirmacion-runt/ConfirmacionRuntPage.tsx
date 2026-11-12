@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { notFound, useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ToastProvider } from "@/components/admin/Toast";
@@ -53,7 +53,7 @@ export function ConfirmacionRuntPage({
           className="flex w-fit items-center gap-1.5 text-xs font-semibold"
           style={{ color: "var(--color-flit-brand)" }}
         >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="izquierda" className="h-3.5 w-3.5" />
           Volver al inicio
         </button>
 

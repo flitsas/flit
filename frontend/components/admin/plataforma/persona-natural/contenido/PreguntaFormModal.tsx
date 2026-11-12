@@ -3,7 +3,7 @@
 // HU #14076 AC1 — Alta y edición de una pregunta frecuente (texto plano, sin HTML). Modal normal; si falla conserva
 // lo escrito y muestra el motivo. La pregunta nueva va al final de la lista.
 import { useState } from "react";
-import { HelpCircle, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PREGUNTA_MAX, RESPUESTA_MAX, type FaqPn, type GuardarFaq } from "@/lib/api/admin-pn-contenido";
@@ -51,7 +51,7 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
       busy={busy}
       title={faq ? "Editar pregunta frecuente" : "Nueva pregunta frecuente"}
       description="Escribe en texto simple, sin formato ni código. El ciudadano lo verá cuando publiques el contenido."
-      icon={HelpCircle}
+      icono="ayuda"
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
