@@ -324,7 +324,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
             await e.Db.SaveChangesAsync(ct);
             foreach (var slug in new[] { "tramites.create", "traspasos.create" }.Where(s => s != sinPermiso))
             {
-                var permiso = await e.Db.RbacActions.AsNoTracking().Where(a => a.Slug == slug && a.IsActive).Select(a => a.Id).FirstAsync(ct);
+                var permiso = await PermisoAsync(e, slug, ahora, ct);
                 e.Db.RoleGrants.Add(new RoleGrant { Id = Guid.NewGuid(), RoleId = rol, PermissionId = permiso, CreatedAt = ahora });
             }
 
@@ -335,6 +335,25 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
             await e.Db.SaveChangesAsync(ct);
             e.Db.ChangeTracker.Clear();
             return e;
+        }
+
+        /// <summary>
+        /// La acción RBAC con ese slug. El catálogo lo siembra el seed de desarrollo, no las migraciones: en una base vacía
+        /// (CI) no existe y se crea con un módulo propio de prueba, como en <c>OidcProductTokenTests</c>. La regla del autor
+        /// evalúa por slug, sin importar el módulo.
+        /// </summary>
+        private static async Task<Guid> PermisoAsync(Escenario e, string slug, DateTimeOffset ahora, CancellationToken ct)
+        {
+            var existente = await e.Db.RbacActions.AsNoTracking().Where(a => a.Slug == slug && a.IsActive).Select(a => a.Id).FirstOrDefaultAsync(ct);
+            if (existente != Guid.Empty)
+                return existente;
+
+            var modulo = new SecurityModule { Id = Guid.NewGuid(), Code = $"dgp4{e._sufijo}{slug.Split('.')[0]}", Name = "Módulo de prueba derivación", ProductCode = "tramites", SortOrder = 99, IsActive = true, CreatedAt = ahora };
+            var accion = new RbacAction { Id = Guid.NewGuid(), ModuleId = modulo.Id, Slug = slug, Name = "Crear", HttpMethod = "POST", RoutePattern = "/prueba-derivacion", IsActive = true, CreatedAt = ahora };
+            e.Db.SecurityModules.Add(modulo);
+            e.Db.RbacActions.Add(accion);
+            await e.Db.SaveChangesAsync(ct);
+            return accion.Id;
         }
 
         public CrearBorradorDesdeDiagnosticoRequest Solicitud(string? tipo = null, string? organismoNombre = null, string? organismoCodigo = null) => new()
