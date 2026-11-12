@@ -1,17 +1,8 @@
 'use client';
 
-import { useId, type Ref } from 'react';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronsRight,
-  Clock,
-  Download,
-  FileArchive,
-  Loader2,
-  Network,
-  XCircle,
-} from 'lucide-react';
+import { useId, type ComponentType, type Ref } from 'react';
+import { ChevronsRight, FileArchive, Loader2, Network, XCircle } from "lucide-react";
+import { Icono as IconoKit, iconoComo, type IconoComoProps } from "@flit/ui/Icono";
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import { MENSAJE_REINTENTAR_DESCARGA } from '@/lib/api/consolidado-lotes-client';
 import {
@@ -114,10 +105,10 @@ export function textoEstadoLote(lote: LoteConsolidados, expirado: boolean): stri
   }
 }
 
-const ICONO: Record<StatusTone, typeof Clock> = {
-  info: Clock,
-  warning: AlertTriangle,
-  success: CheckCircle2,
+const ICONO: Record<StatusTone, ComponentType<IconoComoProps>> = {
+  info: iconoComo("reloj"),
+  warning: iconoComo("alerta"),
+  success: iconoComo("check"),
   danger: XCircle,
   neutral: FileArchive,
 };
@@ -349,7 +340,7 @@ export function LoteDescargaAlertCard({
                     {descargando ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                     ) : (
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      <IconoKit nombre="nube-bajar" className="h-3.5 w-3.5" />
                     )}
                     Descargar
                   </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ChevronDown, ChevronRight, KeyRound, Trash2, PowerOff, Power, Pencil } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import {
   superadminClient,
   RbacModule,
@@ -129,7 +129,7 @@ export function RbacAdmin() {
           aria-label={expanded[mod.id] ? "Colapsar permisos" : "Expandir permisos"}
           className="opacity-60 hover:opacity-100"
         >
-          {expanded[mod.id] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {expanded[mod.id] ? <Icono nombre="abajo" className="h-4 w-4" /> : <Icono nombre="derecha" className="h-4 w-4" />}
         </button>
       ),
     },
@@ -160,11 +160,11 @@ export function RbacAdmin() {
           ariaLabel={`Acciones de ${mod.name}`}
           subject={mod.name}
           actions={destructivasAlFinal([
-            { icon: KeyRound, label: `Agregar permiso a ${mod.name}`, tone: "primary", onClick: () => setCreatePermissionForModule(mod) },
+            { icon: iconoComo("rol"), label: `Agregar permiso a ${mod.name}`, tone: "primary", onClick: () => setCreatePermissionForModule(mod) },
             mod.isActive
-              ? { icon: PowerOff, label: `Desactivar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeactivateModule(mod.id) }
-              : { icon: Power, label: `Activar módulo ${mod.name}`, onClick: () => void handleActivateModule(mod.id) },
-            { icon: Trash2, label: `Eliminar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeleteModule(mod.id) },
+              ? { icon: iconoComo("asistente-apagado"), label: `Desactivar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeactivateModule(mod.id) }
+              : { icon: iconoComo("encendido"), label: `Activar módulo ${mod.name}`, onClick: () => void handleActivateModule(mod.id) },
+            { icon: iconoComo("papelera"), label: `Eliminar módulo ${mod.name}`, tone: "danger", onClick: () => void handleDeleteModule(mod.id) },
           ])}
         />
       ),
@@ -444,17 +444,17 @@ function RolesTabContent() {
                 subject={r.name}
                 actions={destructivasAlFinal([
                   {
-                    icon: Pencil,
+                    icon: iconoComo("lapiz"),
                     label: `Editar permisos de ${r.name}`,
                     tone: "primary",
                     disabled: busyIds[r.id],
                     onClick: () => setEditTarget({ role: r, targetEntityType: type }),
                   },
                   r.isActive
-                    ? { icon: PowerOff, label: `Desactivar rol ${r.name}`, tone: "danger", disabled: busyIds[r.id], onClick: () => void handleToggleActive(r, type) }
-                    : { icon: Power, label: `Activar rol ${r.name}`, disabled: busyIds[r.id], onClick: () => void handleToggleActive(r, type) },
+                    ? { icon: iconoComo("asistente-apagado"), label: `Desactivar rol ${r.name}`, tone: "danger", disabled: busyIds[r.id], onClick: () => void handleToggleActive(r, type) }
+                    : { icon: iconoComo("encendido"), label: `Activar rol ${r.name}`, disabled: busyIds[r.id], onClick: () => void handleToggleActive(r, type) },
                   {
-                    icon: Trash2,
+                    icon: iconoComo("papelera"),
                     label: `Eliminar rol ${r.name}`,
                     tone: "danger",
                     disabled: busyIds[r.id] || r.isSystem,

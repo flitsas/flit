@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { LifeBuoy, MessageCircle, BookOpen, Mail, Scale } from "lucide-react";
+import { Scale } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
 import { NORMATIVA_RESOLUCION_SLUG } from "@/lib/manual/articles/normativa";
 import { ModuleTitle } from "./ModuleTitle";
@@ -36,18 +37,18 @@ export function Ayuda() {
           {
             l: "Manual FLIT",
             d: "Docs por perfil",
-            i: BookOpen,
+            i: iconoComo("ayuda"),
             href: "/manual",
           },
-          { l: "Chat DR. FLIT", d: "«Necesito ayuda»", i: MessageCircle },
+          { l: "Chat DR. FLIT", d: "«Necesito ayuda»", i: iconoComo("log-mensajes") },
           {
             l: "Normativa",
             d: "Res. 20233040017145/2023",
             i: Scale,
             href: `/manual/${NORMATIVA_RESOLUCION_SLUG}`,
           },
-          { l: "Email soporte", d: DR_FLIT_SUPPORT_EMAIL, i: Mail },
-          { l: "Soporte prioritario", d: "Plan Enterprise", i: LifeBuoy },
+          { l: "Email soporte", d: DR_FLIT_SUPPORT_EMAIL, i: iconoComo("correo") },
+          { l: "Soporte prioritario", d: "Plan Enterprise", i: iconoComo("ayuda") },
         ].map((k) => {
           const Icon = k.i;
           const card = (

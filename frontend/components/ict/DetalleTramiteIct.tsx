@@ -3,9 +3,11 @@
 // Detalle de un trámite de la integración (HU #11819). Cuatro capas, de la más útil a la más
 // técnica: el recorrido responde «dónde se atascó», las consultas responden «por qué», los datos
 // responden «con qué llegó» y el log queda al fondo para cuando nada de lo anterior baste.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { Ban, Check, CircleDashed, Eye, EyeOff, Hourglass, X, type LucideIcon } from "lucide-react";
+import { Ban, CircleDashed, EyeOff } from "lucide-react";
+import { Icono, iconoComo, type IconoComoProps } from "@flit/ui/Icono";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchConsultasFuenteIct,
@@ -56,10 +58,10 @@ const PESTANAS: { id: Pestana; label: string }[] = [
  * Iconos de `lucide` y nunca glifos sueltos (✓ ✕ ○): el navegador los pinta como emoji y
  * desentonan con el resto de la aplicación.
  */
-const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: LucideIcon }> = {
-  ok: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: Check },
-  error: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: X },
-  espera: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: Hourglass },
+const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: ComponentType<IconoComoProps> }> = {
+  ok: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: iconoComo("check") },
+  error: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: iconoComo("cerrar") },
+  espera: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: iconoComo("espera") },
   anulado: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
   pendiente: { fg: "var(--muted-foreground)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
 };
@@ -72,7 +74,7 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
       <div
         role="tablist"
         aria-label={`Detalle del trámite ${tramite.numero}`}
-        className="flex gap-1 overflow-x-auto border-b border-border px-3"
+        className={`${PESTANAS_LISTA_CLS} px-3`}
       >
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
@@ -84,14 +86,12 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
               aria-selected={activa}
               onClick={() => setPestana(p.id)}
               // Mismo patrón que TramitesListToolbar: color más subrayado absoluto, no pastilla.
-              className={`relative whitespace-nowrap px-3 py-2.5 text-xs font-semibold transition ${
-                activa ? "text-flit-brand" : "opacity-60 hover:opacity-100"
-              }`}
+              className={pestanaClass(activa)}
             >
               {p.label}
               {activa && (
                 <span
-                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-t bg-flit-brand"
+                  className="hidden"
                   aria-hidden="true"
                 />
               )}
@@ -369,7 +369,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
                           className="justify-start"
                           actions={[
                             {
-                              icon: abierta === c.id ? EyeOff : Eye,
+                              icon: abierta === c.id ? EyeOff : iconoComo("ojo"),
                               label: `${abierta === c.id ? "Ocultar" : "Ver"} respuesta de ${c.tipoConsultaEtiqueta}`,
                               tone: "primary",
                               onClick: () => setAbierta(abierta === c.id ? null : c.id),
@@ -518,7 +518,7 @@ function PanelDatos({ numero }: { numero: number }) {
               {revelado ? (
                 <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
               ) : (
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
               )}
               {revelando
                 ? "Revelando…"

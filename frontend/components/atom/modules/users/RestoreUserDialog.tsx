@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 
@@ -62,7 +62,7 @@ export function RestoreUserDialog({ user, onClose, onRestored, onRestore }: Rest
       open
       onClose={handleClose}
       busy={busy}
-      icon={RotateCcw}
+      icono="reintento"
       iconBg="var(--color-flit-tech)"
       title="Restaurar usuario"
       description={user.email}

@@ -10,7 +10,7 @@ import { getToken } from "@/lib/api/client";
 import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
 import {
   AUTH_ERROR_CLASS,
@@ -100,7 +100,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           Nueva contraseña
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="rp-password"
             type="password"
@@ -117,7 +117,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
           Confirmar contraseña
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="rp-confirm"
             type="password"

@@ -1,18 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AlertCircle,
-  Calendar,
-  FileText,
-  Hash,
-  Mail,
-  RefreshCw,
-  ScanFace,
-  ShieldCheck,
-  User,
-  X,
-} from 'lucide-react';
+import { Hash } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -153,7 +143,7 @@ export function PrevalidacionDetailDrawer({
               className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)]"
               aria-hidden
             >
-              <ScanFace className="h-4 w-4" />
+              <Icono nombre="biometria" className="h-4 w-4" />
             </span>
             <h2 id={titleId} className={`${DIALOGO_FRANJA_TITULO} truncate`}>
               {title}
@@ -165,7 +155,7 @@ export function PrevalidacionDetailDrawer({
             aria-label="Cerrar proceso"
             className={DIALOGO_FRANJA_CERRAR}
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </div>
       )}
@@ -185,7 +175,7 @@ export function PrevalidacionDetailDrawer({
               style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">No se pudo cargar el proceso.</p>
                 <p className="opacity-80">{error}</p>
@@ -198,7 +188,7 @@ export function PrevalidacionDetailDrawer({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {awaiting ? (
                   <div className="flex items-center gap-2">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} aria-hidden />
+                    <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} />
                     <p className="text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                       Esperando validación de {detail.name}
                     </p>
@@ -211,22 +201,22 @@ export function PrevalidacionDetailDrawer({
 
               {/* Campos con iconos — lectura rápida, sin tabla densa */}
               <div className="grid gap-2 sm:grid-cols-2">
-                <IdentityInfoTile icon={User} label="Persona" value={detail.name} />
+                <IdentityInfoTile icon={iconoComo("persona")} label="Persona" value={detail.name} />
                 <IdentityInfoTile
-                  icon={FileText}
+                  icon={iconoComo("documento")}
                   label="Documento"
                   value={`${detail.documentType} ${detail.documentNumber}`}
                   mono
                 />
-                <IdentityInfoTile icon={Mail} label="Correo" value={detail.email || '—'} />
+                <IdentityInfoTile icon={iconoComo("correo")} label="Correo" value={detail.email || '—'} />
                 <IdentityInfoTile
                   icon={Hash}
                   label="Intentos Kyverum"
                   value={`${detail.intentos} / ${detail.maxIntentos}`}
                 />
-                <IdentityInfoTile icon={Calendar} label="Enlace vigente hasta" value={detail.expired ? 'Vencido' : formatFecha(detail.expiresAt)} />
+                <IdentityInfoTile icon={iconoComo("calendario")} label="Enlace vigente hasta" value={detail.expired ? 'Vencido' : formatFecha(detail.expiresAt)} />
                 <IdentityInfoTile
-                  icon={ShieldCheck}
+                  icon={iconoComo("escudo")}
                   label="Score"
                   value={detail.score != null ? String(detail.score) : '—'}
                 />

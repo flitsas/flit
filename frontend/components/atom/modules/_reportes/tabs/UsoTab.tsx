@@ -16,7 +16,6 @@ import { CompanyNotice } from "../CompanyNotice";
 import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatDurationMs, formatInt, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { PeakHoursHeatmap } from "../PeakHoursHeatmap";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -97,14 +96,14 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4 max-w-xl">
             <KpiCard
               label="Duración media del wizard"
-              ilustracion={rutaIlustracion("calendario")}
+              icono="tiempo"
               value={formatDurationMs(usage.data.current.avgWizardDurationMs)}
               tooltip="Promedio del tiempo total desde que se abre el wizard hasta radicar el trámite."
               color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Duración mediana del wizard"
-              ilustracion={rutaIlustracion("calendario")}
+              icono="tiempo"
               value={formatDurationMs(usage.data.current.medianWizardDurationMs)}
               tooltip="Mediana del tiempo total del wizard: la mitad de los trámites se radica en este tiempo o menos."
               color="var(--color-flit-tech)"

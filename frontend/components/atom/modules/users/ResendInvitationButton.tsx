@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Send } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useCooldown } from "@/hooks/useCooldown";
 import { ApiError } from "@/lib/api/types";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
@@ -113,7 +114,7 @@ export function ResendInvitationButton({
         className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
         style={{ color: "var(--color-flit-brand)" }}
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icono nombre="radicacion" className="h-4 w-4" />}
       </button>
       {message && (
         <p

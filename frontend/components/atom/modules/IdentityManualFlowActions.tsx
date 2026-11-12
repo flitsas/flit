@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, AlertTriangle, ExternalLink, Link2, RefreshCw, Send } from 'lucide-react';
+import { Link2 } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -23,8 +24,8 @@ import {
   DIALOGO_FRANJA_CIRCULO,
   DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
-  DIALOGO_VELO,
 } from '@/components/operacion/dialogo-propio';
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
@@ -105,10 +106,10 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
 
   const items: ActionsMenuItem[] = [];
   if (puedeActivar) {
-    items.push({ key: 'activar', label: 'Activar flujo manual', icon: Send, onSelect: () => openDialog('activar') });
+    items.push({ key: 'activar', label: 'Activar flujo manual', icon: iconoComo("radicacion"), onSelect: () => openDialog('activar') });
   }
   if (esperaCaptura) {
-    items.push({ key: 'regenerar', label: 'Regenerar enlace', icon: RefreshCw, onSelect: () => openDialog('regenerar') });
+    items.push({ key: 'regenerar', label: 'Regenerar enlace', icon: iconoComo("reintento"), onSelect: () => openDialog('regenerar') });
   }
   const verEnManuales = onVerEnManuales && tieneDetalleManual(v) ? onVerEnManuales : undefined;
   if (items.length === 0 && !correoFallo && !verEnManuales) return null;
@@ -122,7 +123,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
               label={
                 <span className="inline-flex items-center gap-1.5">
                   {rechazada ? (
-                    <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="alerta" className="h-3.5 w-3.5" />
                   ) : (
                     <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
@@ -142,7 +143,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {verEnManuales && (
             <button type="button" className={GHOST_BTN} onClick={() => verEnManuales(v.id)}>
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="externo" className="h-3.5 w-3.5" />
               Ver en validaciones manuales
             </button>
           )}
@@ -166,7 +167,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
             color: 'var(--badge-warning-fg)',
           }}
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
           <p>{AVISO_CORREO}</p>
         </div>
       )}
@@ -264,7 +265,7 @@ function ManualFlowConfirmDialog({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${MODAL_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -296,7 +297,7 @@ function ManualFlowConfirmDialog({
                 color: 'var(--badge-warning-fg)',
               }}
             >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               Se cancelará la validación de Kyverum en curso
             </p>
           )}
@@ -311,7 +312,7 @@ function ManualFlowConfirmDialog({
               color: 'var(--badge-danger-fg)',
             }}
           >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
           </div>
         )}

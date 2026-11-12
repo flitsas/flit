@@ -8,25 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Bell,
-  CheckCircle2,
-  CalendarX,
-  ChevronDown,
-  Clock,
-  Copy,
-  ExternalLink,
-  ListTree,
-  Pencil,
-  RotateCcw,
-  ScanFace,
-  Send,
-  ShieldCheck,
-  X,
-  XCircle,
-} from 'lucide-react';
+import { CalendarX, Copy, ListTree, XCircle } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
 import { SectionTabs } from '@/components/atom/SectionTabs';
@@ -117,8 +100,8 @@ import {
   DIALOGO_FRANJA_CIRCULO,
   DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
-  DIALOGO_VELO,
 } from '@/components/operacion/dialogo-propio';
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -1129,7 +1112,7 @@ function ValidacionesLista({
               aria-busy={stuckLoading}
               className="relative grid h-7 w-7 place-items-center rounded-lg border border-border bg-card transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
             >
-              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="campana" className="h-3.5 w-3.5" />
               {!stuckLoading && stuck && stuck.total > 0 ? (
                 <span
                   className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold text-white bg-flit-alert"
@@ -1245,7 +1228,7 @@ function ValidacionesLista({
           role="alert"
           aria-live="polite"
         >
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
           <div className="space-y-2">
             <p className="font-semibold">No se pudieron cargar las validaciones.</p>
             <p className="opacity-80">{error}</p>
@@ -1268,7 +1251,7 @@ function ValidacionesLista({
           className="flex-1 min-h-0 grid place-items-center rounded-2xl border"
         >
           <div className="text-center max-w-md px-6 py-10">
-            <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
+            <Icono nombre="biometria" className="mx-auto h-10 w-10 opacity-30" />
             {filtersActive ? (
               // AC2 — hubo respuesta vacía CON filtros activos: no es el estado inicial sin datos.
               <>
@@ -1430,7 +1413,7 @@ function ValidacionesLista({
       {/* Confirmación de envío (HU #10944, AC2): reenvío standalone o reintento de trámite */}
       {confirmAction && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
+          className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="val-resend-confirm-title"
@@ -1547,7 +1530,7 @@ function CompanyPickerDialog({
   const [elegida, setElegida] = useState('');
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="val-pick-company-title"
@@ -1705,7 +1688,7 @@ function StuckIncidenciasDialog({
   const total = stuck?.total ?? 0;
   return (
     <div
-      className={`fixed inset-0 z-50 grid place-items-center p-6 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-50 grid place-items-center p-6 ${MODAL_VELO_CLS}`}
       role="presentation"
       onClick={onClose}
     >
@@ -1723,7 +1706,7 @@ function StuckIncidenciasDialog({
           aria-label="Cerrar"
           className="absolute right-4 top-3 z-[2] grid h-10 w-10 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)] sm:right-5 sm:top-4"
         >
-          <X className="h-5 w-5" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-5 w-5" />
         </button>
         <div className={`${DIALOGO_FRANJA} pr-16`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
@@ -1879,10 +1862,7 @@ function StuckEventsBanner({
                         {group.events.length} evento{group.events.length === 1 ? '' : 's'} pendiente
                         {group.events.length === 1 ? '' : 's'}
                       </span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-                      aria-hidden="true"
-                    />
+                    <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </span>
                   </button>
                   {open && (
@@ -1924,7 +1904,7 @@ function StuckEventsBanner({
       aria-label="Validaciones de identidad atascadas"
     >
       <div className="flex items-center gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} />
         <button
           type="button"
           onClick={() => setOpenPanel((v) => !v)}
@@ -1937,10 +1917,7 @@ function StuckEventsBanner({
             {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
             {stuck.total === 1 ? '' : 's'}
           </span>
-          <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 transition-transform ${openPanel ? 'rotate-180' : ''}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="abajo" className={`h-3.5 w-3.5 shrink-0 transition-transform ${openPanel ? 'rotate-180' : ''}`} />
         </button>
         {stuck.total > 1 && (
           <button
@@ -1951,7 +1928,7 @@ function StuckEventsBanner({
             style={{ borderColor: 'var(--badge-warning-border)', color: 'var(--badge-warning-fg)' }}
             aria-label="Reintentar todas las validaciones atascadas"
           >
-            <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <Icono nombre="reintento" className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} />
             {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
           </button>
         )}
@@ -2004,7 +1981,7 @@ function StuckRow({
         className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white bg-flit-alert disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         aria-label={`Reintentar la validación de ${event.name ?? 'persona no disponible'}`}
       >
-        <RotateCcw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
+        <Icono nombre="reintento" className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} />
         {busy ? 'Reencolando…' : 'Reintentar'}
       </button>
     </li>
@@ -2028,14 +2005,14 @@ function StatsCards({
   loading: boolean;
 }) {
   const cards = [
-    { l: 'Total personas', v: totalPersonas, i: ShieldCheck, c: 'var(--badge-info-fg)', b: 'var(--badge-info-bg)' },
-    { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: 'var(--badge-success-fg)', b: 'var(--badge-success-bg)' },
-    { l: 'En proceso', v: stats?.enProceso, i: Clock, c: 'var(--badge-warning-fg)', b: 'var(--badge-warning-bg)' },
+    { l: 'Total personas', v: totalPersonas, i: iconoComo("escudo"), c: 'var(--badge-info-fg)', b: 'var(--badge-info-bg)' },
+    { l: 'Aprobadas', v: stats?.aprobadas, i: iconoComo("check"), c: 'var(--badge-success-fg)', b: 'var(--badge-success-bg)' },
+    { l: 'En proceso', v: stats?.enProceso, i: iconoComo("reloj"), c: 'var(--badge-warning-fg)', b: 'var(--badge-warning-bg)' },
     { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: 'var(--badge-danger-fg)', b: 'var(--badge-danger-bg)' },
   ];
   return (
     <div
-      className="grid grid-cols-2 divide-x divide-border rounded-2xl border border-border bg-card shadow-sm sm:grid-cols-4 shrink-0"
+      className="grid grid-cols-2 divide-x divide-border rounded-2xl border border-border bg-card sm:grid-cols-4 shrink-0"
     >
       {cards.map((k) => {
         const Icon = k.i;
@@ -2451,7 +2428,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'abrir',
       label: 'Abrir captura',
-      icon: ExternalLink,
+      icon: iconoComo("externo"),
       onSelect: () => {
         window.open(r.captureUrl!, '_blank', 'noopener,noreferrer');
       },
@@ -2462,14 +2439,14 @@ function ValidacionRow({
     actionItems.push({
       key: 'nueva',
       label: 'Nueva prevalidación',
-      icon: ScanFace,
+      icon: iconoComo("biometria"),
       onSelect: () => onNewFor(r),
     });
   } else if (!isTramite) {
     actionItems.push({
       key: 'editar',
       label: 'Editar',
-      icon: Pencil,
+      icon: iconoComo("lapiz"),
       onSelect: () => onEdit(r),
     });
   }
@@ -2485,7 +2462,7 @@ function ValidacionRow({
         // Mismo rótulo que en las prevalidaciones: para el gestor la acción es "reenviar", aunque
         // por dentro sean endpoints distintos (aquí nace una validación nueva para la parte).
         label: 'Reenviar',
-        icon: sinParte ? Clock : Send,
+        icon: sinParte ? iconoComo("reloj") : iconoComo("radicacion"),
         onSelect: () => onRetryClick(r),
         disabled: sinParte,
         disabledReason: sinParte
@@ -2506,7 +2483,7 @@ function ValidacionRow({
       actionItems.push({
         key: 'admin-reenviar',
         label: 'Reenviar',
-        icon: Send,
+        icon: iconoComo("radicacion"),
         onSelect: () => onAdminReenviarClick(r),
       });
     }
@@ -2516,7 +2493,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'reenviar',
       label: 'Reenviar',
-      icon: resendDisabledReason ? Clock : Send,
+      icon: resendDisabledReason ? iconoComo("reloj") : iconoComo("radicacion"),
       onSelect: () => onResendClick(r),
       disabled: resendDisabledReason !== null,
       disabledReason: resendDisabledReason ?? undefined,

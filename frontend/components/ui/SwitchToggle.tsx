@@ -5,6 +5,8 @@
 // h-5 w-10 teal #00DBD5 encendido / gris #DFE5ED apagado), pero SIN caja ni etiqueta visible:
 // solo el control, con nombre accesible vía `label` (aria-label). Implementado como checkbox
 // visualmente oculto para conservar semántica (role="switch") y foco por teclado.
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
+
 export interface SwitchToggleProps {
   checked: boolean;
   onChange: (next: boolean) => void;
@@ -42,13 +44,11 @@ export function SwitchToggle({
       />
       <span
         aria-hidden="true"
-        className="h-5 w-10 rounded-full transition peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand"
-        style={{ background: checked ? "var(--color-flit-brand)" : "var(--border-strong)" }}
+        className={`${INTERRUPTOR_CLS} peer-checked:[background-image:url('/assets/kit/interruptor-encendido.svg')] peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand`}
       />
       <span
         aria-hidden="true"
-        className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-        style={{ left: checked ? "calc(100% - 18px)" : "2px" }}
+        className={INTERRUPTOR_PERILLA_CLS}
       />
     </label>
   );

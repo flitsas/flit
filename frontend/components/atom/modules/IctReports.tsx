@@ -14,7 +14,8 @@
 // estados de carga. No es una preferencia estética: quien ya sabe leer los reportes de su empresa
 // no debería tener que reaprender dónde está el rango de fechas al entrar a ICT.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, FileSpreadsheet, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { Pagination } from "@/components/atom/Pagination";
 import { usePaginacion, useTamanoDePagina } from "@/components/atom/usePaginacion";
@@ -62,7 +63,6 @@ import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
 import { formatDurationMs, formatInt, formatNumber, formatPct } from "./_reportes/format";
 import { KpiCard } from "./_reportes/KpiCard";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 import { useAnalyticsQuery } from "./_reportes/useAnalyticsQuery";
@@ -316,7 +316,7 @@ export function IctReports() {
           className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-secondary"
           data-testid="ict-reportes-abrir-programacion"
         >
-          <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="calendario" className="h-4 w-4" />
           Programación y alertas
         </button>
         {/* «Consultas» ya trae su propio "Exportar a Excel" dentro de la consola. */}
@@ -630,7 +630,7 @@ function NovedadesTab({
                 novedad es trabajo que vuelve, no un indicador neutro. */}
             <KpiCard
               label="Novedades en el periodo"
-              ilustracion={rutaIlustracion("notificaciones")}
+              icono="notificaciones"
               value={formatInt(report.total)}
               tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -715,7 +715,7 @@ function AtascadosTab({
             {/* Ámbar de "esperando": un atascado no es un fallo, es algo detenido. */}
             <KpiCard
               label="Atascados ahora"
-              ilustracion={rutaIlustracion("vencidos")}
+              icono="vencidos"
               value={formatInt(report.total)}
               tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
               color="var(--badge-warning-fg)"
@@ -788,7 +788,7 @@ function JobsTab({
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Corridas en el periodo"
-              ilustracion={rutaIlustracion("procesos")}
+              icono="procesos"
               value={formatInt(report.total)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -799,7 +799,7 @@ function JobsTab({
             {/* `totalFueraDeSla` y no `corridasFueraDeSla.length`: la lista es una página. */}
             <KpiCard
               label="Corridas fuera de SLA"
-              ilustracion={rutaIlustracion("vencidos")}
+              icono="vencidos"
               value={formatInt(report.totalFueraDeSla)}
               tooltip="Corridas que superaron el tiempo esperado para su job, en todo el periodo."
               color={report.totalFueraDeSla > 0 ? "var(--destructive)" : "var(--flit-success-ink)"}
@@ -902,7 +902,7 @@ function WebhooksTab({
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label="Webhooks en el periodo"
-              ilustracion={rutaIlustracion("integraciones")}
+              icono="integraciones"
               value={formatInt(report.total)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
@@ -910,21 +910,21 @@ function WebhooksTab({
             />
             <KpiCard
               label="Entregados"
-              ilustracion={rutaIlustracion("trazabilidad")}
+              icono="trazabilidad"
               value={estadoValor(report.totalEntregados, report.total)}
               tooltip="Entregas que el sistema del cliente confirmó en el periodo. Entregados + fallidos + pendientes suman el total."
               color={ESTADO_WEBHOOK_COLOR.Entregado}
             />
             <KpiCard
               label="Fallidos"
-              ilustracion={rutaIlustracion("causales")}
+              icono="causales"
               value={estadoValor(report.totalFallidos, report.total)}
               tooltip="Entregas que se intentaron y el sistema del cliente rechazó o no respondió, en el periodo."
               color={ESTADO_WEBHOOK_COLOR.Fallido}
             />
             <KpiCard
               label="Pendientes"
-              ilustracion={rutaIlustracion("pendientes")}
+              icono="pendientes"
               value={estadoValor(report.totalPendientes, report.total)}
               tooltip="Notificaciones que todavía no se han intentado entregar, en el periodo."
               color={ESTADO_WEBHOOK_COLOR.Pendiente}

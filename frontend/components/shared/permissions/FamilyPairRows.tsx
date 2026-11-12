@@ -1,10 +1,12 @@
 "use client";
 
-import { RotateCcw, ShieldCheck, UserCog } from "lucide-react";
+import { UserCog } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import type { ActionView } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
 import { CREATE_NEEDS_READ_HINT } from "./FamilyPairCheckboxes";
 import { OUT_OF_CAP_LOCKED_TOOLTIP, OUT_OF_CAP_TOOLTIP, OutOfCapChip, SoloSaChip } from "./PermissionChips";
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 
 // HU #13666 (Feature #13636 F-F) — par Ver / Crear de un tipo de servicio en «Permisos por módulo» de un usuario.
 // Cada fila lleva su estado («Heredado del rol» / «Individual»). «Crear» queda deshabilitado mientras el «Ver» EFECTIVO
@@ -12,7 +14,7 @@ import { OUT_OF_CAP_LOCKED_TOOLTIP, OUT_OF_CAP_TOOLTIP, OutOfCapChip, SoloSaChip
 // (regla «crear exige ver» de overrides individuales) y la sección refresca la lista tras el cambio.
 
 const ORIGIN_TEXT = { inherited: "Heredado del rol", individual: "Individual" } as const;
-const ORIGIN_ICON = { inherited: ShieldCheck, individual: UserCog } as const;
+const ORIGIN_ICON = { inherited: iconoComo("escudo"), individual: UserCog } as const;
 
 function PairRow({
   label,
@@ -48,19 +50,11 @@ function PairRow({
         disabled={controlsOff || disabled}
         title={hint}
         onClick={() => onToggle(action)}
-        className="relative h-5 w-9 shrink-0 rounded-full border transition disabled:opacity-50"
-        style={{
-          background: action.enabled ? "var(--permiso-habilitado)" : "transparent",
-          borderColor: action.enabled ? "var(--permiso-habilitado)" : "var(--permiso-deshabilitado)",
-        }}
+        className={INTERRUPTOR_CLS}
       >
         <span
           aria-hidden="true"
-          className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-all"
-          style={{
-            left: action.enabled ? "1.15rem" : "0.15rem",
-            background: action.enabled ? "#FFFFFF" : "var(--permiso-deshabilitado)",
-          }}
+          className={INTERRUPTOR_PERILLA_CLS}
         />
       </button>
       <span className="min-w-0 flex-1 text-xs">
@@ -105,7 +99,7 @@ function PairRow({
           aria-label={`Volver ${label} (${moduleName}) a lo que dicta el rol`}
           className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
         >
-          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3 w-3" />
           Volver al rol
         </button>
       )}

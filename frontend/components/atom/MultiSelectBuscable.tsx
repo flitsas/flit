@@ -7,7 +7,7 @@
 // directamente como chips conmutables, sin buscador.
 
 import { useId, useMemo, useState } from "react";
-import { Check, Search, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 export interface OpcionSeleccionable {
   id: string;
@@ -187,7 +187,7 @@ export function MultiSelectBuscable({
                   onChange={() => alternar(o)}
                   aria-label={etiquetaAccesible(o)}
                 />
-                {activa ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                {activa ? <Icono nombre="check" className="h-3.5 w-3.5" /> : null}
                 <span className="text-flit-primary">{o.label}</span>
                 {o.detalle ? <span className="font-normal text-muted-foreground">· {o.detalle}</span> : null}
               </label>
@@ -238,7 +238,7 @@ export function MultiSelectBuscable({
                 aria-label={`Quitar ${s.label}`}
                 className="rounded-full p-0.5 hover:bg-black/5"
               >
-                <X className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="cerrar" className="h-3 w-3" />
               </button>
             </li>
           ))}
@@ -246,10 +246,7 @@ export function MultiSelectBuscable({
       ) : null}
 
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-60"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-60" />
         <label htmlFor={`${baseId}-buscar`} className="sr-only">
           {buscarLabel}
         </label>

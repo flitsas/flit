@@ -1,24 +1,13 @@
 "use client";
 
 import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
-import {
-  BadgeCheck,
-  Ban,
-  CheckCircle2,
-  ChevronRight,
-  CircleDashed,
-  Clock,
-  FileCheck2,
-  RefreshCw,
-  Search,
-  X,
-  XCircle,
-} from "lucide-react";
+import { Ban, CircleDashed, XCircle } from "lucide-react";
+import { Icono, iconoComo, type IconoComoProps } from "@flit/ui/Icono";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { Pagination } from "@/components/atom/Pagination";
@@ -339,7 +328,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
             onClick={quitarTramite}
             className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 font-medium text-flit-brand hover:bg-flit-brand/10"
           >
-            <X className="h-3 w-3" aria-hidden="true" /> Ver todos
+            <Icono nombre="cerrar" className="h-3 w-3" /> Ver todos
           </button>
         </div>
       )}
@@ -476,7 +465,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         <span className="flex-1" />
         {(hayFiltros || fetching) && (
           <button type="button" onClick={limpiar} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         )}
         <button
@@ -484,7 +473,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           disabled={fetching}
           className={buttonClass({ variant: "primary", size: "sm" })}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" /> Aplicar
+          <Icono nombre="buscar" className="h-3.5 w-3.5" /> Aplicar
         </button>
       </form>
 
@@ -589,12 +578,12 @@ const COLUMNAS = [
 ] as const;
 
 /** Icono por estado, en la línea de `ESTADO_ICON` de la tira de KPIs de trámites. */
-const ESTADO_ICON: Record<LogQxBandejaEstado, typeof CircleDashed> = {
+const ESTADO_ICON: Record<LogQxBandejaEstado, ComponentType<IconoComoProps>> = {
   sin_radicar: CircleDashed,
-  pendiente: FileCheck2,
-  radicado: BadgeCheck,
-  en_tramite: RefreshCw,
-  aprobado: CheckCircle2,
+  pendiente: iconoComo("documento"),
+  radicado: iconoComo("check"),
+  en_tramite: iconoComo("reintento"),
+  aprobado: iconoComo("check"),
   rechazado: XCircle,
   fallido: Ban,
 };
@@ -640,7 +629,7 @@ function FilaTramite({
     <>
       <tr
         className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
-          abierta ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
+          abierta ? "shadow-none" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -654,10 +643,7 @@ function FilaTramite({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
@@ -857,7 +843,7 @@ function resumen(e: LogQxBandejaEntry): string {
  * Los iconos son del set de la app (lucide) y no glifos sueltos (⏳, ✓, ○): esos se renderizan
  * como emoji, con su propio color y su propia caja, y desentonan con el resto de la consola.
  */
-function pasos(e: LogQxBandejaEntry): { Icon: typeof CircleDashed; color: string; label: string }[] {
+function pasos(e: LogQxBandejaEntry): { Icon: ComponentType<IconoComoProps>; color: string; label: string }[] {
   const gris = ESTADO_BANDEJA.sin_radicar.style.accent;
   const espera = ESTADO_BANDEJA.en_tramite.style.accent;
   const ok = ESTADO_BANDEJA.aprobado.style.accent;
@@ -866,27 +852,27 @@ function pasos(e: LogQxBandejaEntry): { Icon: typeof CircleDashed; color: string
   if (e.estado === "sin_radicar") {
     return [
       { Icon: CircleDashed, color: gris, label: "Sin encolar" },
-      { Icon: Clock, color: espera, label: "Elegible, a la espera" },
+      { Icon: iconoComo("reloj"), color: espera, label: "Elegible, a la espera" },
     ];
   }
 
-  const out: { Icon: typeof CircleDashed; color: string; label: string }[] = [];
+  const out: { Icon: ComponentType<IconoComoProps>; color: string; label: string }[] = [];
 
   if (e.estado === "pendiente") {
     out.push({ Icon: CircleDashed, color: gris, label: "En cola" });
   } else if (e.estado !== "fallido") {
-    out.push({ Icon: BadgeCheck, color: ok, label: "Radicado" });
+    out.push({ Icon: iconoComo("check"), color: ok, label: "Radicado" });
   }
 
   if (e.pollCount > 0) {
-    out.push({ Icon: RefreshCw, color: espera, label: `${e.pollCount} consultas` });
+    out.push({ Icon: iconoComo("reintento"), color: espera, label: `${e.pollCount} consultas` });
   }
 
-  if (e.estado === "en_tramite") out.push({ Icon: Clock, color: espera, label: "Sin decisión" });
+  if (e.estado === "en_tramite") out.push({ Icon: iconoComo("reloj"), color: espera, label: "Sin decisión" });
   if (e.estado === "radicado") {
-    out.push({ Icon: Clock, color: espera, label: "Primera consulta pendiente" });
+    out.push({ Icon: iconoComo("reloj"), color: espera, label: "Primera consulta pendiente" });
   }
-  if (e.estado === "aprobado") out.push({ Icon: CheckCircle2, color: ok, label: "Aprobado" });
+  if (e.estado === "aprobado") out.push({ Icon: iconoComo("check"), color: ok, label: "Aprobado" });
   if (e.estado === "rechazado") out.push({ Icon: XCircle, color: mal, label: "Rechazado" });
   if (e.estado === "fallido") {
     out.push({ Icon: Ban, color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });

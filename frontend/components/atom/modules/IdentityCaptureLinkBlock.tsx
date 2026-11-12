@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, ExternalLink } from 'lucide-react';
+import { Copy } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { QRCodeSVG } from 'qrcode.react';
 
 /** Hay URL de captura Kyverum para pintar QR (identidad standalone o validación de trámite). */
@@ -55,13 +56,13 @@ export function IdentityCaptureLinkBlock({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
               background: 'var(--di-gradient-action)',
               outlineColor: 'var(--di-action)',
             }}
           >
-            <ExternalLink className="h-3 w-3" aria-hidden />
+            <Icono nombre="externo" className="h-3 w-3" />
             {ctaLabel}
           </a>
           <CopyLinkButton captureUrl={href} />

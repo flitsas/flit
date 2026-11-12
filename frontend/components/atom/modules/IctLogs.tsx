@@ -5,7 +5,7 @@
 // Las Consultas personalizadas y la Programación de informes viven en su propio módulo, "Reportes
 // ICT" (HU #11619) — separar los logs técnicos de los reportes de autoservicio.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
@@ -200,7 +200,7 @@ function LogsTab() {
         <span className="flex-1" />
         {hayFiltros ? (
           <button type="button" onClick={clearFilters} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         ) : null}
         <button
@@ -277,10 +277,7 @@ function LogsTab() {
                             className="rounded-l-xl border-y border-l px-3 py-3 align-middle"
                             style={{ borderColor: BORDER }}
                           >
-                            <ChevronRight
-                              className={`h-4 w-4 text-flit-brand transition ${open ? "rotate-90" : ""}`}
-                              aria-hidden="true"
-                            />
+                            <Icono nombre="derecha" className={`h-4 w-4 text-flit-brand transition ${open ? "rotate-90" : ""}`} />
                             <span className="sr-only">{open ? "Ocultar detalle" : "Ver detalle"}</span>
                           </td>
                           <td className="border-y px-4 py-3 align-middle whitespace-nowrap" style={{ borderColor: BORDER }}>
@@ -658,7 +655,7 @@ function IctAlertEventsList() {
                       <RowActions
                         actions={[
                           {
-                            icon: Check,
+                            icon: iconoComo("check"),
                             label: `Reconocer alerta ${e.ruleName}`,
                             tone: "primary",
                             disabled: acking === e.id,

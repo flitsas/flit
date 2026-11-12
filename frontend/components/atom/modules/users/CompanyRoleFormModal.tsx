@@ -10,7 +10,7 @@
 // HU #13666 (Feature #13636 F-F): los tipos de servicio (Matrículas, Traspasos, Otros trámites) se muestran como el par
 // Ver / Crear del Panel SA: «Crear» deshabilitado sin «Ver», y quitar «Ver» quita «Crear» (regla «crear exige ver»).
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Shield } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
 import { RoleEditorSections } from "@/components/shared/permissions/RoleEditorSections";
@@ -293,7 +293,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
       busy={busy}
       title={title}
       description={description_}
-      icon={Shield}
+      icono="escudo"
       size="lg"
       footer={
         <div className="flex justify-end gap-2">

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { buttonClass } from '@flit/ui/Button';
@@ -11,8 +11,8 @@ import {
   DIALOGO_FRANJA_CIRCULO,
   DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
-  DIALOGO_VELO,
 } from '@/components/operacion/dialogo-propio';
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
 
 /**
@@ -142,7 +142,7 @@ function RegenerarDialog({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${MODAL_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -175,7 +175,7 @@ function RegenerarDialog({
               color: 'var(--badge-danger-fg)',
             }}
           >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
           </div>
         )}

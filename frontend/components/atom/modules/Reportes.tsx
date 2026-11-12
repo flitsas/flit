@@ -5,7 +5,8 @@
 // compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
 // se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, Network, ShieldQuestion } from "lucide-react";
+import { Network, ShieldQuestion } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
@@ -262,7 +263,7 @@ export function Reportes() {
             className={ADMIN_BRAND_OUTLINE_BTN_CLS}
             data-testid="reportes-abrir-programacion"
           >
-            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="calendario" className="h-4 w-4" />
             Programación y alertas
           </button>
         )}

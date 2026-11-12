@@ -1,10 +1,12 @@
 "use client";
 
-import { ChevronRight, BookOpen, Headphones, Scale } from "lucide-react";
+import { Headphones, Scale } from "lucide-react";
+import type { ComponentType } from "react";
+import { Icono, iconoComo, type IconoComoProps } from "@flit/ui/Icono";
 import { DR_FLIT_HELP_OPTIONS, type DrFlitHelpOptionId } from "./dr-flit-intents";
 
-const ICONS: Record<DrFlitHelpOptionId, typeof BookOpen> = {
-  "necesito-ayuda": BookOpen,
+const ICONS: Record<DrFlitHelpOptionId, ComponentType<IconoComoProps>> = {
+  "necesito-ayuda": iconoComo("ayuda"),
   normativa: Scale,
   soporte: Headphones,
 };
@@ -56,11 +58,7 @@ export function DrFlitHelpOptions({
                     style={{ color: "var(--dr-flit-brand-title)" }}
                   >
                     {option.label}
-                    <ChevronRight
-                      className="h-4 w-4 shrink-0"
-                      style={{ color: "var(--dr-flit-brand-blue)" }}
-                      aria-hidden
-                    />
+                    <Icono nombre="derecha" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
                   </span>
                   {option.description && (
                     <span

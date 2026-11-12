@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { MoreVertical, Ban, RefreshCw, Eraser, Eye } from "lucide-react";
+import { Ban, Eraser } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 
 const ROWS = [
@@ -90,13 +91,13 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
                       <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap" style={{ background: c.bg, color: c.color, borderColor: c.border }}>{r.estado}</span>
                     </div>
                     <div className="flex items-center justify-end gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)]"><Eye className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /></button>
-                      <button className="p-1.5 rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)]"><MoreVertical className="h-4 w-4 text-muted-foreground" /></button>
+                      <button className="p-1.5 rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)]"><Icono nombre="ojo" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /></button>
+                      <button className="p-1.5 rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)]"><Icono nombre="puntos" className="h-4 w-4 text-muted-foreground" /></button>
                     </div>
                     {hover === r.id && (
                       <div className="absolute right-4 top-12 z-20 bg-card dark:bg-secondary border border-border dark:border-border rounded-xl p-1 w-56 max-w-[80vw] shadow-[var(--shadow-modal)]">
                         <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)] text-flit-primary dark:text-foreground"><Ban className="h-3.5 w-3.5" style={{ color: "var(--color-flit-alert)" }} /> Solicitud de anulación</button>
-                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)] text-flit-primary dark:text-foreground"><RefreshCw className="h-3.5 w-3.5" style={{ color: "var(--color-flit-brand)" }} /> Cambio de estado manual</button>
+                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)] text-flit-primary dark:text-foreground"><Icono nombre="reintento" className="h-3.5 w-3.5" style={{ color: "var(--color-flit-brand)" }} /> Cambio de estado manual</button>
                         <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)] text-flit-primary dark:text-foreground"><Eraser className="h-3.5 w-3.5" style={{ color: "var(--color-flit-tech)" }} /> Limpiar consolidado</button>
                         <div className="px-3 py-1.5 text-[10px] font-mono text-flit-primary/50 dark:text-muted-foreground border-t border-border dark:border-border mt-1">tramites.admin.maestro ✓</div>
                       </div>

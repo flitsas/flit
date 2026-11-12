@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { exportAnalyticsExcel, exportExecutivePdf } from "@/lib/api/analytics";
 import { ApiError } from "@/lib/api/types";
 import type { AnalyticsCategory } from "@/lib/api/types";
@@ -83,7 +84,7 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
           {busy === "pdf" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
           ) : (
-            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="documento" className="h-3.5 w-3.5" />
           )}
           {busy === "pdf" ? "Generando…" : "Resumen Ejecutivo PDF"}
         </button>

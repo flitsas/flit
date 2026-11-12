@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Upload } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { biometricPublicClient } from '@/lib/api/tramites-client';
 import type {
   BiometriaPublicView,
@@ -143,7 +143,7 @@ export function BiometricCapture({ token }: Props) {
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
           style={{ background: "var(--badge-success-bg)" }}
         >
-          <Check className="h-7 w-7" style={{ color: "var(--flit-success-ink)" }} />
+          <Icono nombre="check" className="h-7 w-7" style={{ color: "var(--flit-success-ink)" }} />
         </div>
         <h1 className="text-lg font-bold text-center">¡Validación aprobada!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
@@ -214,7 +214,7 @@ export function BiometricCapture({ token }: Props) {
                   className="h-12 w-12 rounded-lg grid place-items-center border"
                   aria-hidden="true"
                 >
-                  <Upload className="h-4 w-4 opacity-40" />
+                  <Icono nombre="nube-subir" className="h-4 w-4 opacity-40" />
                 </span>
               )}
             </div>
