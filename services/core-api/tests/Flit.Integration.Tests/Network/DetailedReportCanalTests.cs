@@ -1,3 +1,4 @@
+using Flit.Analytics.Application.CompanyQueries;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Analytics.Application.Dtos;
@@ -29,6 +30,11 @@ namespace Flit.Integration.Tests.Network;
 /// </summary>
 public sealed class DetailedReportCanalTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
+    // Posición de «Canal» (y, tras él, «OT del canal»): el bloque de identidad por rol (contrato v3) va DESPUÉS, así que
+    // ya no se cuenta desde el final de la fila.
+    private static readonly int CanalRed = DetailedReportExcelExporter.NetworkHeaders.Length - 2;
+    private static readonly int CanalViejo = DetailedReportExcelExporter.NetworkHeaders.Length - 3;
+
     private static readonly DateOnly From = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-10));
     private static readonly DateOnly To = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
 
@@ -179,24 +185,25 @@ public sealed class DetailedReportCanalTests(PostgresDatabaseFixture fixture) : 
         using var redOut = new MemoryStream();
         await exporter.ExportNetworkAsync(redOut, filtroRed);
         var hojaRed = ReadSheet(redOut.ToArray());
-        hojaRed[0].Should().Equal(DetailedReportExcelExporter.NetworkHeaders);
-        hojaRed[0].TakeLast(2).Should().Equal("Canal", "OT del canal");
+        // Contrato v3: los grupos Comprador y Vendedor van después de las columnas de siempre (mínimo 1 bloque por rol).
+        hojaRed[0].Should().Equal([.. DetailedReportExcelExporter.NetworkHeaders, .. ActoresExcelColumns.Headers(default, ActoresExcelColumns.Grupo.Comprador), .. ActoresExcelColumns.Headers(default, ActoresExcelColumns.Grupo.Vendedor)]);
+        hojaRed[0].Skip(CanalRed).Take(2).Should().Equal("Canal", "OT del canal");
         hojaRed.Skip(1).Should().HaveCount(listado.Items.TotalCount).And.HaveCount(2, "C1 borrador (Ot1) y C2 entregado (Ot2)");
-        hojaRed.Skip(1).Select(r => r[^2]).Should().OnlyContain(c => c == TramiteCanal.NombreVisible(TramiteCanal.PersonaNaturalOt));
-        hojaRed.Skip(1).Select(r => r[^1]).Should().Contain(nombreOt1);
+        hojaRed.Skip(1).Select(r => r[CanalRed]).Should().OnlyContain(c => c == TramiteCanal.NombreVisible(TramiteCanal.PersonaNaturalOt));
+        hojaRed.Skip(1).Select(r => r[CanalRed + 1]).Should().Contain(nombreOt1);
 
         using var viejoOut = new MemoryStream();
         await exporter.ExportAsync(viejoOut, OldFilter(HierarchyScenario.C1) with { Channel = TramiteCanal.PersonaNaturalOt });
         var hojaViejo = ReadSheet(viejoOut.ToArray());
-        hojaViejo[0].TakeLast(2).Should().Equal("Canal", "OT del canal");
+        hojaViejo[0].Skip(CanalViejo).Take(2).Should().Equal("Canal", "OT del canal");
         var fila = hojaViejo.Skip(1).Should().ContainSingle().Subject;
-        fila[^2].Should().Be("Persona Natural OT");
-        fila[^1].Should().Be(nombreOt1);
+        fila[CanalViejo].Should().Be("Persona Natural OT");
+        fila[CanalViejo + 1].Should().Be(nombreOt1);
 
         // Canal sin dato: Trámites en la celda, OT vacío.
         using var historicoOut = new MemoryStream();
         await exporter.ExportAsync(historicoOut, OldFilter(HierarchyScenario.P));
-        ReadSheet(historicoOut.ToArray()).Skip(1).Should().OnlyContain(r => r[r.Count - 2] == "Trámites" && r[r.Count - 1] == string.Empty);
+        ReadSheet(historicoOut.ToArray()).Skip(1).Should().OnlyContain(r => r[CanalViejo] == "Trámites" && r[CanalViejo + 1] == string.Empty);
     }
 
     // ── #14320 AC1 / AC2 / AC3 — todas las compañías ─────────────────────────────────────────

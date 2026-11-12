@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Eye, MinusCircle, ShieldAlert } from "lucide-react";
 import type { AuditLogEntry } from "@/lib/api/types";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { RangoFechas } from "@/components/atom/RangoFechas";
 import { Modal } from "@/components/atom/Modal";
 import { SearchInput } from "@/components/atom/SearchInput";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -144,12 +144,13 @@ export function AuditLogTable({
   return (
     <div className="flex flex-col gap-3">
       <div role="search" aria-label="Filtros del historial" className="flex flex-wrap items-end gap-3">
-        <DateRangePicker
-          label="Fechas"
+        <RangoFechas
+          etiqueta="Fechas"
+          etiquetaTodo="Todas las fechas"
           value={range}
           onChange={setRange}
-          placeholder="Todas las fechas"
-          className="w-auto"
+          permiteSinRango
+          idPrefix="audit-filter-fechas"
         />
         <div className="flex flex-col gap-1">
           <label htmlFor="audit-filter-event" className="text-xs font-semibold">
