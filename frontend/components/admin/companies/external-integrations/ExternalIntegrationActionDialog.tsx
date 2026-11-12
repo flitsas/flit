@@ -4,7 +4,7 @@
 // anterior al instante), bloquear, desbloquear y desactivar. Toda acción pide confirmación con un mensaje claro; si
 // la API la rechaza (409), el motivo se muestra aquí mismo y el diálogo no se cierra.
 import { useState } from "react";
-import { KeyRound, LockKeyhole, LockOpen, Power, type LucideIcon } from "lucide-react";
+import { iconoComo, type NombreIcono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
@@ -15,7 +15,7 @@ export type ExternalIntegrationAction = "rotate" | "block" | "unblock" | "deacti
 
 interface Copy {
   title: string;
-  icon: LucideIcon;
+  icono: NombreIcono;
   body: string;
   warning?: string;
   confirm: string;
@@ -30,7 +30,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     case "rotate":
       return {
         title: "Generar una clave nueva",
-        icon: KeyRound,
+        icono: "rol",
         body: `Se genera una clave secreta nueva para ${name} y se muestra una sola vez. Entrégala al servicio del portal por un canal seguro.`,
         confirm: "Generar clave nueva",
         danger: false,
@@ -38,7 +38,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     case "block":
       return {
         title: "Bloquear conexión",
-        icon: LockKeyhole,
+        icono: "candado",
         body: `${name} no podrá obtener accesos nuevos hasta que la desbloquees.`,
         warning: PASES_VIGENTES,
         confirm: "Bloquear",
@@ -47,7 +47,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     case "unblock":
       return {
         title: "Desbloquear conexión",
-        icon: LockOpen,
+        icono: "candado-abierto",
         body: `${name} podrá volver a pedir accesos de inmediato con su clave vigente.`,
         confirm: "Desbloquear",
         danger: false,
@@ -56,7 +56,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     default:
       return {
         title: "Desactivar conexión",
-        icon: Power,
+        icono: "encendido",
         body: `${name} se desactiva de forma definitiva: no podrá obtener accesos y no se puede volver a activar. Para reconectar el portal tendrás que crear una conexión nueva.`,
         warning: PASES_VIGENTES,
         confirm: "Desactivar",
@@ -101,7 +101,7 @@ export function ExternalIntegrationActionDialog({
       onClose={onClose}
       busy={busy}
       title={copy.title}
-      icon={copy.icon}
+      icono={copy.icono}
       iconBg={copy.danger ? "var(--destructive)" : "var(--color-flit-brand)"}
       size="sm"
       footer={
@@ -111,7 +111,7 @@ export function ExternalIntegrationActionDialog({
           </PnButton>
           <PnButton
             variant={copy.danger ? "danger" : "primary"}
-            icon={copy.icon}
+            icon={iconoComo(copy.icono)}
             loading={busy}
             onClick={() => void handleConfirm()}
           >

@@ -4,7 +4,8 @@
 // memoria mientras el modal está abierto: no se guarda en almacenamiento del navegador ni en logs, y al cerrar se
 // descarta (el padre pone `null`).
 import { useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Copy } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { Modal } from "@/components/atom/Modal";
@@ -33,7 +34,7 @@ export function ExternalIntegrationSecretModal({ clientId, secret, onClose }: Ex
       closeOnBackdrop={false}
       footer={
         <div className="flex justify-end">
-          <PnButton variant="primary" icon={Check} onClick={onClose}>
+          <PnButton variant="primary" icon={iconoComo("check")} onClick={onClose}>
             Ya la copié, cerrar
           </PnButton>
         </div>
@@ -60,7 +61,7 @@ export function ExternalIntegrationSecretModal({ clientId, secret, onClose }: Ex
           </code>
         </div>
         <div>
-          <PnButton variant="secondary" icon={copied ? Check : Copy} onClick={() => void copySecret()}>
+          <PnButton variant="secondary" icon={copied ? iconoComo("check") : Copy} onClick={() => void copySecret()}>
             {copied ? "Copiada" : "Copiar clave"}
           </PnButton>
         </div>
