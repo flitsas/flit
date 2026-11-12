@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 
 const STEPS = [
@@ -293,7 +292,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   </div>
                   <div className="flex-1">
                     <button onClick={() => { setOcrPct(0); setOcrRunning(true); }} disabled={ocrRunning} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center gap-2" style={{ background: "var(--color-flit-brand)" }}>
-                      {ocrRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icono nombre="destello" className="h-4 w-4" />} Simular Procesamiento OCR (IA)
+                      {ocrRunning ? <Icono nombre="girador" className="h-4 w-4 animate-spin" /> : <Icono nombre="destello" className="h-4 w-4" />} Simular Procesamiento OCR (IA)
                     </button>
                     {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-success-fg)" }}>✓ Coincidencia ≥90% · Aprobación automática</p>}
                     {ocrPct >= 70 && ocrPct < 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-warning-fg)" }}>⚠ Coincidencia 70-89% · Advertencia ámbar inyectada</p>}

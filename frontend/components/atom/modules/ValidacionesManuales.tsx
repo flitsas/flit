@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Info, Link2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
@@ -183,7 +182,7 @@ export function ValidacionesManuales({
                     key: 'copiar-enlace',
                     label: 'Copiar enlace',
                     ariaLabel: `Copiar enlace de ${r.fullName}`,
-                    icon: Link2,
+                    icon: iconoComo("externo"),
                     onSelect: () => void copiar(r.id),
                   },
                 ]
@@ -267,7 +266,7 @@ export function ValidacionesManuales({
             color: 'var(--badge-info-fg)',
           }}
         >
-          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <Icono nombre="exclamacion" className="mt-0.5 h-4 w-4 shrink-0" />
           <p className="flex-1">No encontramos esa validación manual.</p>
           <button
             type="button"

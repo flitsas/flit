@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Menu } from "lucide-react";
 import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { getNavTree, type ManualArticle } from "@/lib/manual/catalog";
 import { MANUAL_VERSION, MANUAL_VERSION_DATE } from "@/lib/manual/articles/meta";
@@ -181,7 +180,7 @@ export function ManualShell({
               onClick={() => setMobileOpen(true)}
               aria-label="Abrir menú"
             >
-              <Menu className="h-5 w-5" style={{ color: "var(--manual-text)" }} />
+              <Icono nombre="lista" className="h-5 w-5" style={{ color: "var(--manual-text)" }} />
             </button>
             <div className="min-w-0 flex-1">
               <ManualSearch />

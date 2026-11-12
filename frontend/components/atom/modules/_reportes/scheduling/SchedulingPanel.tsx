@@ -79,7 +79,7 @@ export function SchedulingPanel({
         className={`w-full max-w-4xl overflow-hidden ${DIALOGO_PANEL_CLS}`}
       >
         <header>
-          <FranjaDialogo>
+          <FranjaDialogo icono="calendario">
           <div>
             <h2 className={`text-lg font-bold ${DIALOGO_TITULO_CLS}`}>
               Programación y alertas

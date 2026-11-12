@@ -1,6 +1,5 @@
 "use client";
 
-import { UserCog } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { ActionView } from "@/lib/permissions/modulePermissions";
@@ -15,7 +14,7 @@ import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 // (regla «crear exige ver» de overrides individuales) y la sección refresca la lista tras el cambio.
 
 const ORIGIN_TEXT = { inherited: "Heredado del rol", individual: "Individual" } as const;
-const ORIGIN_ICON = { inherited: iconoComo("escudo"), individual: UserCog } as const;
+const ORIGIN_ICON = { inherited: iconoComo("escudo"), individual: iconoComo("rol") } as const;
 
 function PairRow({
   label,

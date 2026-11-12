@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -96,7 +95,7 @@ function CopyLinkButton({ captureUrl }: { captureUrl: string }) {
         }}
         aria-label="Copiar enlace de captura"
       >
-        <Copy className="h-3 w-3" aria-hidden />
+        <Icono nombre="copiar" className="h-3 w-3" />
         {copied ? 'Copiado' : 'Copiar enlace'}
       </button>
       <span className="sr-only" role="status" aria-live="polite">

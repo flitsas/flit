@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { CalendarX, Copy, ListTree, XCircle } from "lucide-react";
+import { CalendarX, ListTree } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -97,12 +97,10 @@ import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
 import { useTamanoDePagina } from '@/components/atom/usePaginacion';
 import { buttonClass } from '@flit/ui/Button';
 import {
-  DIALOGO_FRANJA,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
-import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -1420,9 +1418,10 @@ function ValidacionesLista({
           aria-labelledby="val-resend-confirm-title"
         >
           <div className={`${DIALOGO_PANEL} w-full max-w-sm`}>
-            <div className={DIALOGO_FRANJA}>
+            <div className={MODAL_CABECERA_CLS}>
               <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-              <h2 id="val-resend-confirm-title" className={DIALOGO_FRANJA_TITULO}>
+              <Icono nombre="radicacion" disco size={52} />
+              <h2 id="val-resend-confirm-title" className={MODAL_TITULO_CLS}>
                 Reenviar validación
               </h2>
             </div>
@@ -1537,9 +1536,10 @@ function CompanyPickerDialog({
       aria-labelledby="val-pick-company-title"
     >
       <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <h2 id="val-pick-company-title" className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="empresas" disco size={52} />
+          <h2 id="val-pick-company-title" className={MODAL_TITULO_CLS}>
             ¿Para qué compañía es la prevalidación?
           </h2>
         </div>
@@ -1709,9 +1709,10 @@ function StuckIncidenciasDialog({
         >
           <Icono nombre="cerrar" className="h-5 w-5" />
         </button>
-        <div className={`${DIALOGO_FRANJA} pr-16`}>
+        <div className={`${MODAL_CABECERA_CLS}`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <h2 id="incidencias-title" className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="alerta" disco size={52} />
+          <h2 id="incidencias-title" className={MODAL_TITULO_CLS}>
             Gestión de incidencias en validaciones
           </h2>
         </div>
@@ -2009,7 +2010,7 @@ function StatsCards({
     { l: 'Total personas', v: totalPersonas, i: iconoComo("escudo"), c: 'var(--badge-info-fg)', b: 'var(--badge-info-bg)' },
     { l: 'Aprobadas', v: stats?.aprobadas, i: iconoComo("check"), c: 'var(--badge-success-fg)', b: 'var(--badge-success-bg)' },
     { l: 'En proceso', v: stats?.enProceso, i: iconoComo("reloj"), c: 'var(--badge-warning-fg)', b: 'var(--badge-warning-bg)' },
-    { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: 'var(--badge-danger-fg)', b: 'var(--badge-danger-bg)' },
+    { l: 'Rechazadas', v: stats?.rechazadas, i: iconoComo("cerrar"), c: 'var(--badge-danger-fg)', b: 'var(--badge-danger-bg)' },
   ];
   return (
     <div
@@ -2421,7 +2422,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'copiar',
       label: copied ? 'Enlace copiado' : 'Copiar enlace',
-      icon: Copy,
+      icon: iconoComo("copiar"),
       onSelect: () => {
         void copiarEnlace();
       },

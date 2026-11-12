@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -21,12 +20,10 @@ import {
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { buttonClass } from '@flit/ui/Button';
 import {
-  DIALOGO_FRANJA,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
-import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
@@ -126,7 +123,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
                   {rechazada ? (
                     <Icono nombre="alerta" className="h-3.5 w-3.5" />
                   ) : (
-                    <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="externo" className="h-3.5 w-3.5" />
                   )}
                   {rechazada ? CHIP_RECHAZADA : 'Flujo manual activo'}
                 </span>
@@ -280,9 +277,10 @@ function ManualFlowConfirmDialog({
         aria-describedby={descId}
         className={`${DIALOGO_PANEL} w-full max-w-md`}
       >
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <h2 id={titleId} className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="identidad" disco size={52} />
+          <h2 id={titleId} className={MODAL_TITULO_CLS}>
             {titulo}
           </h2>
         </div>

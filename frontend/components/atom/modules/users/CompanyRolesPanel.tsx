@@ -5,7 +5,7 @@
 // Patrón de tabla de trámites (table-styles, botón «Acciones» con menú, Pagination numerada con «Filas por página»), modal normal
 // y los 4 estados (cargando, error, vacío, lleno). Backend: HU #13441 (/api/v1/security/roles).
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Modal } from "@/components/atom/Modal";
@@ -242,7 +242,7 @@ function DeleteCompanyRoleDialog({
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: "var(--destructive)" }}
           >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+            {busy && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
             Eliminar
           </button>
         </div>

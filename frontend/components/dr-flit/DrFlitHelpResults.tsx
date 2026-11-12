@@ -1,6 +1,5 @@
 "use client";
 
-import { Scale } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import type { DrFlitHelpResult } from "./dr-flit-types";
 
@@ -33,7 +32,7 @@ export function DrFlitHelpResults({
               aria-hidden="true"
             >
               {item.primarySource ? (
-                <Scale className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
+                <Icono nombre="mazo" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
               ) : (
                 <Icono nombre="ayuda" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
               )}

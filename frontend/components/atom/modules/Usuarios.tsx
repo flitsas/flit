@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Ban, ShieldOff, MailX, PlugZap, FileSpreadsheet } from "lucide-react";
+import { ShieldOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
@@ -54,7 +54,7 @@ const ALL_TABS = [
   { id: "roles", label: "Roles y permisos", icon: iconoComo("escudo") },
   { id: "clientes-ict", label: "Clientes ICT", icon: iconoComo("rol") },
   // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
-  { id: "clientes-integracion", label: "Clientes de integración", icon: PlugZap },
+  { id: "clientes-integracion", label: "Clientes de integración", icon: iconoComo("integraciones") },
   // HU #13654 (Feature #13103): auditoría de permisos individuales, solo Super Admin en el Panel SA.
   { id: "auditoria-permisos", label: "Auditoría de permisos", icon: iconoComo("portapapeles") },
   { id: "eliminados", label: "Eliminados", icon: iconoComo("papelera") },
@@ -307,7 +307,7 @@ export function Usuarios() {
           onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
         });
         actions.push({
-          icon: Ban,
+          icon: iconoComo("distinto"),
           label: `Desactivar indefinidamente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
@@ -331,7 +331,7 @@ export function Usuarios() {
     // tiene nada que cancelar — su acción es "Reactivar", ver extraActionsFor de UsersTable).
     if (u.status === "pending") {
       actions.push({
-        icon: MailX,
+        icon: iconoComo("correo"),
         label: `Cancelar invitación a ${u.fullName}`,
         tone: "danger",
         onClick: () => setCancelTarget(u),
@@ -390,7 +390,7 @@ export function Usuarios() {
                 onClick={() => setBulkOpen(true)}
                 className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl border border-[color:var(--di-border)] bg-card text-sm font-semibold text-flit-primary transition hover:bg-[var(--kit-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-foreground"
               >
-                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="reporte-detallado" className="h-4 w-4" />
                 Importar Excel
               </button>
               <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "var(--gradient-action)" }}>

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Scale } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
 import { NORMATIVA_RESOLUCION_SLUG } from "@/lib/manual/articles/normativa";
@@ -44,7 +43,7 @@ export function Ayuda() {
           {
             l: "Normativa",
             d: "Res. 20233040017145/2023",
-            i: Scale,
+            i: iconoComo("mazo"),
             href: `/manual/${NORMATIVA_RESOLUCION_SLUG}`,
           },
           { l: "Email soporte", d: DR_FLIT_SUPPORT_EMAIL, i: iconoComo("correo") },

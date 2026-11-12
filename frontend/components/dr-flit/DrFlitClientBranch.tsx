@@ -1,6 +1,5 @@
 "use client";
 
-import { FileStack } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import {
@@ -9,7 +8,7 @@ import {
 } from "./dr-flit-intents";
 
 const ICONS = {
-  tramites: FileStack,
+  tramites: iconoComo("archivo"),
   validaciones: iconoComo("escudo"),
 } as const;
 

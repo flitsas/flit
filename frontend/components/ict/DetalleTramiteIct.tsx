@@ -5,7 +5,6 @@
 // responden «con qué llegó» y el log queda al fondo para cuando nada de lo anterior baste.
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { Ban, CircleDashed, EyeOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
@@ -63,8 +62,8 @@ const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: ComponentTy
   ok: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: iconoComo("check") },
   error: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: iconoComo("cerrar") },
   espera: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: iconoComo("espera") },
-  anulado: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: Ban },
-  pendiente: { fg: "var(--muted-foreground)", bg: "var(--badge-neutral-bg)", Icon: CircleDashed },
+  anulado: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: iconoComo("distinto") },
+  pendiente: { fg: "var(--muted-foreground)", bg: "var(--badge-neutral-bg)", Icon: iconoComo("espera") },
 };
 
 export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; esAdmin: boolean }) {
@@ -370,7 +369,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
                           className="justify-start"
                           actions={[
                             {
-                              icon: abierta === c.id ? EyeOff : iconoComo("ojo"),
+                              icon: abierta === c.id ? iconoComo("ojo-tachado") : iconoComo("ojo"),
                               label: `${abierta === c.id ? "Ocultar" : "Ver"} respuesta de ${c.tipoConsultaEtiqueta}`,
                               tone: "primary",
                               onClick: () => setAbierta(abierta === c.id ? null : c.id),
@@ -517,7 +516,7 @@ function PanelDatos({ numero }: { numero: number }) {
               className="inline-flex items-center gap-1.5 rounded-lg bg-flit-brand/10 px-3 py-1.5 text-[11px] font-semibold text-flit-brand hover:bg-flit-brand/20 disabled:opacity-50"
             >
               {revelado ? (
-                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo-tachado" className="h-3.5 w-3.5" />
               ) : (
                 <Icono nombre="ojo" className="h-3.5 w-3.5" />
               )}

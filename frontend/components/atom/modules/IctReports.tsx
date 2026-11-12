@@ -14,7 +14,6 @@
 // estados de carga. No es una preferencia estética: quien ya sabe leer los reportes de su empresa
 // no debería tener que reaprender dónde está el rango de fechas al entrar a ICT.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileSpreadsheet, Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { Pagination } from "@/components/atom/Pagination";
@@ -421,9 +420,9 @@ function ExcelExportButton({
         data-testid="ict-reportes-exportar-excel"
       >
         {busy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
         ) : (
-          <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
         )}
         {busy ? "Exportando…" : "Exportar Excel"}
       </button>

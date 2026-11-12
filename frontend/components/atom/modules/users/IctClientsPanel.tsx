@@ -5,7 +5,6 @@
 // cualquier compañía (selector); un admin no-super, solo la suya. El SECRETO lo genera el sistema y se
 // muestra UNA sola vez (no se puede recuperar) — se regenera con "Regenerar secreto".
 import { useCallback, useEffect, useState } from "react";
-import { Copy } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -219,7 +218,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                 onClick={copySecret}
                 className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-flit-brand hover:bg-flit-brand/10"
               >
-                {copied ? <Icono nombre="check" className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? <Icono nombre="check" className="h-3.5 w-3.5" /> : <Icono nombre="copiar" className="h-3.5 w-3.5" />}
                 {copied ? "Copiado" : "Copiar"}
               </button>
               <button

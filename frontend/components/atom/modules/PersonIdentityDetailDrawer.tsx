@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Copy } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -31,13 +30,10 @@ import type {
 import { formatFechaHora } from '@/lib/format/date';
 import { buttonClass } from '@flit/ui/Button';
 import {
-  DIALOGO_FRANJA,
-  DIALOGO_FRANJA_CERRAR,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
-import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -269,11 +265,12 @@ export function PersonIdentityDetailDrawer({
       <div
         className={`${DIALOGO_PANEL} z-10 flex max-h-[90vh] w-full max-w-5xl flex-col`}
       >
-        <header className={`${DIALOGO_FRANJA} mb-4 justify-between`}>
+        <header className={`${MODAL_CABECERA_CLS} mb-4`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <Icono nombre="identidad" disco size={52} />
           <h2
             id="person-identity-process-title"
-            className={`${DIALOGO_FRANJA_TITULO} truncate`}
+            className={`${MODAL_TITULO_CLS} truncate`}
           >
             Historial y tracking de identidad
           </h2>
@@ -287,7 +284,7 @@ export function PersonIdentityDetailDrawer({
               <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
             </span>
           ) : null}
-          <div className="relative z-[1] flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => void handleActualizar()}
@@ -303,7 +300,7 @@ export function PersonIdentityDetailDrawer({
               type="button"
               onClick={onClose}
               aria-label="Cerrar proceso"
-              className={DIALOGO_FRANJA_CERRAR}
+              className={MODAL_CERRAR_CLS}
             >
               <Icono nombre="cerrar" className="h-5 w-5" />
             </button>
@@ -621,7 +618,7 @@ function VerifyIdStat({ verificationId }: { verificationId?: string | null }) {
             className="grid h-6 w-6 shrink-0 place-items-center rounded-full border hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
             style={{ borderColor: 'var(--di-action)', color: 'var(--di-action)' }}
           >
-            {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Copy className="h-3 w-3" aria-hidden />}
+            {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
           </button>
         </div>
       ) : (

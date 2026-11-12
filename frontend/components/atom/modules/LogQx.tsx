@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
-import { Ban, CircleDashed, XCircle } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { ModuleTitle } from "./ModuleTitle";
@@ -580,13 +579,13 @@ const COLUMNAS = [
 
 /** Icono por estado, en la línea de `ESTADO_ICON` de la tira de KPIs de trámites. */
 const ESTADO_ICON: Record<LogQxBandejaEstado, ComponentType<IconoComoProps>> = {
-  sin_radicar: CircleDashed,
+  sin_radicar: iconoComo("espera"),
   pendiente: iconoComo("documento"),
   radicado: iconoComo("check"),
   en_tramite: iconoComo("reintento"),
   aprobado: iconoComo("check"),
-  rechazado: XCircle,
-  fallido: Ban,
+  rechazado: iconoComo("cerrar"),
+  fallido: iconoComo("distinto"),
 };
 
 const tdCls = "border-y px-4 py-3 align-middle";
@@ -852,7 +851,7 @@ function pasos(e: LogQxBandejaEntry): { Icon: ComponentType<IconoComoProps>; col
 
   if (e.estado === "sin_radicar") {
     return [
-      { Icon: CircleDashed, color: gris, label: "Sin encolar" },
+      { Icon: iconoComo("espera"), color: gris, label: "Sin encolar" },
       { Icon: iconoComo("reloj"), color: espera, label: "Elegible, a la espera" },
     ];
   }
@@ -860,7 +859,7 @@ function pasos(e: LogQxBandejaEntry): { Icon: ComponentType<IconoComoProps>; col
   const out: { Icon: ComponentType<IconoComoProps>; color: string; label: string }[] = [];
 
   if (e.estado === "pendiente") {
-    out.push({ Icon: CircleDashed, color: gris, label: "En cola" });
+    out.push({ Icon: iconoComo("espera"), color: gris, label: "En cola" });
   } else if (e.estado !== "fallido") {
     out.push({ Icon: iconoComo("check"), color: ok, label: "Radicado" });
   }
@@ -874,9 +873,9 @@ function pasos(e: LogQxBandejaEntry): { Icon: ComponentType<IconoComoProps>; col
     out.push({ Icon: iconoComo("reloj"), color: espera, label: "Primera consulta pendiente" });
   }
   if (e.estado === "aprobado") out.push({ Icon: iconoComo("check"), color: ok, label: "Aprobado" });
-  if (e.estado === "rechazado") out.push({ Icon: XCircle, color: mal, label: "Rechazado" });
+  if (e.estado === "rechazado") out.push({ Icon: iconoComo("cerrar"), color: mal, label: "Rechazado" });
   if (e.estado === "fallido") {
-    out.push({ Icon: Ban, color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
+    out.push({ Icon: iconoComo("distinto"), color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
   }
 
   return out;

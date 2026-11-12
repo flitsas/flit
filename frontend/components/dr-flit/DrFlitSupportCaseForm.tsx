@@ -1,6 +1,5 @@
 "use client";
 
-import { Paperclip } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { DR_FLIT_SUPPORT_MAX_ATTACHMENTS } from "@/lib/api/dr-flit-client";
@@ -287,7 +286,7 @@ export function DrFlitSupportCaseForm({
             className="flex flex-col items-center gap-1.5 rounded-[var(--dr-flit-radius-card)] border-2 border-dashed px-3 py-4 text-center"
             style={{ borderColor: "var(--dr-flit-brand-blue)", background: "var(--dr-flit-card-bg)" }}
           >
-            <Paperclip className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} aria-hidden="true" />
+            <Icono nombre="archivo" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
             <label htmlFor={fieldId("archivos")} className="cursor-pointer text-sm font-semibold" style={{ color: "var(--dr-flit-brand-blue)" }}>
               {uploading ? "Subiendo…" : "Elegir archivos"}
             </label>

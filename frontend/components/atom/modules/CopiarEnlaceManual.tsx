@@ -7,12 +7,10 @@ import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { buttonClass } from '@flit/ui/Button';
 import {
-  DIALOGO_FRANJA,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
-import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
 
 /**
@@ -155,9 +153,10 @@ function RegenerarDialog({
         aria-describedby={descId}
         className={`${DIALOGO_PANEL} w-full max-w-md`}
       >
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <h2 id={titleId} className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="alerta" disco size={52} />
+          <h2 id={titleId} className={MODAL_TITULO_CLS}>
             No se pudo copiar el enlace
           </h2>
         </div>

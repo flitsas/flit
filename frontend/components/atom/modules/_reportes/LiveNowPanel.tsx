@@ -3,7 +3,7 @@
 // Panel "Ahora mismo" (Reportes 2.0, HU-C · pestaña Resumen): estado del tenant HOY
 // (hora Bogotá) vía GET /live-overview con auto-refresh configurable, botón de pausa
 // e indicador "actualizado hace Xs". Los chips por estado hacen drill-down.
-import { Play, Radio } from "lucide-react";
+import { Radio } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { statusColor, statusLabel } from "./categories";
@@ -70,7 +70,7 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
               aria-pressed={live.paused}
               className="h-7 w-7 grid place-items-center rounded-lg border hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)]"
             >
-              {live.paused ? <Play className="h-3.5 w-3.5" /> : <Icono nombre="pausa" className="h-3.5 w-3.5" />}
+              {live.paused ? <Icono nombre="avance" className="h-3.5 w-3.5" /> : <Icono nombre="pausa" className="h-3.5 w-3.5" />}
             </button>
           </div>
         )}

@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { FileSpreadsheet, Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { download } from "@/components/consultas/export";
@@ -24,7 +23,7 @@ import {
   isBulkInviteOutcomeUncertain,
   validateBulkInviteFile,
 } from "@/lib/users/bulkInviteErrors";
-import { MODAL_PANEL_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_DESCRIPCION_CLS, MODAL_PANEL_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 
 const PRIMARY_FILL = "var(--kit-azul-relleno)";
 const MAX_MB = BULK_INVITE_MAX_FILE_BYTES / (1024 * 1024);
@@ -221,20 +220,16 @@ export function BulkInviteModal({
         data-testid="bulk-invite-modal"
         className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-2xl flex-col p-4 sm:p-6 ${MODAL_PANEL_CLS}`}
       >
-        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-              style={{ background: "var(--color-flit-brand)" }}
-              aria-hidden="true"
-            >
-              <FileSpreadsheet className="h-4.5 w-4.5 text-white" />
+        <div className={`${MODAL_CABECERA_CLS} -mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6`}>
+          <div className="flex min-w-0 flex-col items-center gap-2">
+            <span className="contents" aria-hidden="true">
+              <Icono nombre="reporte-detallado" disco size={52} />
             </span>
             <div className="min-w-0">
-              <h2 id={titleId} className="text-base font-bold text-flit-primary dark:text-white">
+              <h2 id={titleId} className={MODAL_TITULO_CLS}>
                 Importar usuarios desde Excel
               </h2>
-              <p id={descId} className="mt-0.5 text-xs opacity-70">
+              <p id={descId} className={MODAL_DESCRIPCION_CLS}>
                 Invita hasta {BULK_INVITE_MAX_ROWS} usuarios por archivo. Cada fila lleva nombre, correo y un rol.
               </p>
             </div>
@@ -244,7 +239,7 @@ export function BulkInviteModal({
             aria-label="Cerrar"
             onClick={requestClose}
             disabled={busy}
-            className="shrink-0 rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-white"
+            className={`${MODAL_CERRAR_CLS} disabled:cursor-not-allowed disabled:opacity-40`}
           >
             <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
@@ -343,7 +338,7 @@ export function BulkInviteModal({
               className="flex items-center gap-2 rounded-xl border border-[color:var(--di-border)] p-3 text-xs"
               data-testid="bulk-invite-loading"
             >
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+              <Icono nombre="girador" className="h-4 w-4 shrink-0 animate-spin" style={{ color: "var(--color-flit-brand)" }} />
               <span>
                 {phase === "validating"
                   ? "Validando el archivo…"

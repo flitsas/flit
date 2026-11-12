@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { UserCog } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
@@ -89,7 +88,7 @@ export const PII_WARNING =
   "Este permiso da acceso a datos personales protegidos por la Ley 1581 de 2012. Confirma que el usuario lo requiere para su función.";
 const VIGENCIA_FALLBACK = "El cambio se aplicará la próxima vez que la persona inicie sesión.";
 
-const ORIGIN_ICON = { inherited: iconoComo("escudo"), individual: UserCog, partial: iconoComo("punto") } as const;
+const ORIGIN_ICON = { inherited: iconoComo("escudo"), individual: iconoComo("rol"), partial: iconoComo("punto") } as const;
 
 type LoadState =
   | { status: "loading" }

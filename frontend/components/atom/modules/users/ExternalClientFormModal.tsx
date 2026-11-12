@@ -7,7 +7,7 @@
 // Feature #13261: permiso opcional de envío de adjuntos (comprobante de impuesto). El PATCH reemplaza la lista
 // completa, así que al editar se conservan los permisos que este formulario no administra.
 import { useState } from "react";
-import { Loader2, PlugZap } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import {
   EXTERNAL_CLIENT_ID_PATTERN,
@@ -93,7 +93,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
           ? "El identificador no se puede cambiar."
           : "Sistema externo que lee el feed de trámites de todas las compañías (p. ej. Flito). El secreto se genera al crear y se muestra una sola vez."
       }
-      icon={PlugZap}
+      icono="integraciones"
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -112,7 +112,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
             className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
             style={{ background: "var(--gradient-action)" }}
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {busy && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
             {editing ? "Guardar cambios" : "Crear cliente"}
           </button>
         </div>

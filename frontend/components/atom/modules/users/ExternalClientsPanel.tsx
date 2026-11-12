@@ -7,7 +7,6 @@
 // El secreto solo existe en memoria mientras se muestra la tarjeta (AC2/AC4): no se guarda en estado
 // persistente, almacenamiento del navegador ni logs, y al cerrar la tarjeta se descarta.
 import { useCallback, useEffect, useState } from "react";
-import { Copy, PlugZap } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -219,7 +218,7 @@ export function ExternalClientsPanel() {
           className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ background: "var(--gradient-action)" }}
         >
-          <PlugZap className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="integraciones" className="h-4 w-4" />
           Nuevo cliente
         </button>
       </div>
@@ -249,7 +248,7 @@ export function ExternalClientsPanel() {
                 onClick={() => void copySecret()}
                 className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
-                {copied ? <Icono nombre="check" className="h-4 w-4" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+                {copied ? <Icono nombre="check" className="h-4 w-4" /> : <Icono nombre="copiar" className="h-4 w-4" />}
                 {copied ? "Copiado" : "Copiar secreto"}
               </button>
               <button

@@ -175,7 +175,7 @@ function AprobarDialog({ detail, client, onClose, onDone, onStale }: DialogoProp
   };
 
   return (
-    <Modal open onClose={onClose} busy={busy} title="Aprobar validación" size="sm" zClassName="z-[110]">
+    <Modal open onClose={onClose} busy={busy} title="Aprobar validación" icono="check" size="sm" zClassName="z-[110]">
       <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
         <p className="text-sm">
           La validación de <strong>{detail.fullName}</strong> quedará vigente 30 días.
@@ -225,7 +225,7 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
   };
 
   return (
-    <Modal open onClose={onClose} busy={busy} title="Rechazar validación" size="sm" zClassName="z-[110]">
+    <Modal open onClose={onClose} busy={busy} title="Rechazar validación" icono="distinto" size="sm" zClassName="z-[110]">
       <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
         <div>
           <label htmlFor={selectId} className={WIZARD_LABEL}>

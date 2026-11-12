@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ImageOff, ZoomIn } from "lucide-react";
+import { ImageOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
@@ -143,7 +143,7 @@ export function ManualImageGallery({
                     {/* eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida */}
                     <img src={estado.url} alt={alt} className="h-full w-full object-contain" />
                     <span className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground transition group-hover:text-flit-brand">
-                      <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="buscar" className="h-3.5 w-3.5" />
                     </span>
                   </button>
                 ) : estado.status === 'loading' ? (
@@ -240,7 +240,7 @@ function ManualImageViewer({
     MANUAL_FOCO;
 
   return (
-    <Modal open onClose={onClose} title={title} size="xl" zClassName="z-[110]">
+    <Modal open onClose={onClose} title={title} icono="biometria" size="xl" zClassName="z-[110]">
       <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-3 outline-none">
         <div className="flex items-center justify-center gap-3">
           <button type="button" onClick={() => ir(-1)} disabled={navegables.length < 2} aria-label="Imagen anterior" className={botonNav}>

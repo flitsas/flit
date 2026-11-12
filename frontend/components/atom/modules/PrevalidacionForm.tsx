@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { tramitesClient, getIdentitySendConflict, TramitesApiError } from '@/lib/api/tramites-client';
 import type {
@@ -13,15 +12,11 @@ import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 import { formatFechaHora } from '@/lib/format/date';
 import { buttonClass } from '@flit/ui/Button';
 import {
-  DIALOGO_FRANJA,
-  DIALOGO_FRANJA_CERRAR,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_ICONO,
-  DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
   DIALOGO_PIE,
 } from '@/components/operacion/dialogo-propio';
-import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 /**
 
  * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
@@ -261,16 +256,17 @@ export function PrevalidacionForm({
     >
       <div className={`${DIALOGO_PANEL} w-full max-w-lg`}>
         {/* Header: franja del Modal (homologación #14507) */}
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <h2 id="prevalidacion-form-title" className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="identidad" disco size={52} />
+          <h2 id="prevalidacion-form-title" className={MODAL_TITULO_CLS}>
             Nueva prevalidación de identidad
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario"
-            className={DIALOGO_FRANJA_CERRAR}
+            className={MODAL_CERRAR_CLS}
           >
             <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
@@ -468,9 +464,10 @@ export function PrevalidacionForm({
             aria-labelledby="pv-confirm-title"
           >
             <div className={`${DIALOGO_PANEL} w-full max-w-sm`}>
-              <div className={DIALOGO_FRANJA}>
+              <div className={MODAL_CABECERA_CLS}>
                 <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-                <h3 id="pv-confirm-title" className={DIALOGO_FRANJA_TITULO}>
+                <Icono nombre="radicacion" disco size={52} />
+                <h3 id="pv-confirm-title" className={MODAL_TITULO_CLS}>
                   Confirmar envío de prevalidación
                 </h3>
               </div>
@@ -493,7 +490,7 @@ export function PrevalidacionForm({
                   disabled={submitting}
                   className={buttonClass({ size: 'sm' })}
                 >
-                  {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                  {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
                   {submitting ? 'Enviando…' : 'Confirmar y enviar'}
                 </button>
               </div>
@@ -540,10 +537,10 @@ export function PrevalidacionSuccessPanel({
       aria-labelledby="pv-success-title"
     >
       <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <Icono nombre="check" className={DIALOGO_FRANJA_ICONO} />
-          <h2 id="pv-success-title" className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="check" disco size={52} />
+          <h2 id="pv-success-title" className={MODAL_TITULO_CLS}>
             Prevalidación creada
           </h2>
         </div>

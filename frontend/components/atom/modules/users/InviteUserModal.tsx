@@ -224,7 +224,7 @@ export function InviteUserModal({
   return (
     <div className={`fixed inset-0 z-50 grid place-items-center overflow-y-auto px-4 py-6 ${DIALOGO_VELO_CLS}`}>
       <div className={`max-h-[90dvh] w-full max-w-md overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-6 -mt-6 mb-5">
+        <FranjaDialogo className="-mx-6 -mt-6 mb-5" icono="persona">
           <div>
             <h3 className={`text-lg font-bold ${DIALOGO_TITULO_CLS}`}>Invitar usuario</h3>
             <p className="mt-0.5 text-xs opacity-85">Asigna el acceso para colaborar dentro de FLIT.</p>

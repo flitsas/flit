@@ -1,5 +1,5 @@
 import type { ManualCallout } from "@/lib/manual/types";
-import { Info, Lightbulb } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import type { ComponentType } from "react";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 
@@ -10,7 +10,7 @@ const styles: Record<
   info: {
     border: "var(--di-sky-line)",
     bg: "var(--di-accent-soft)",
-    icon: Info,
+    icon: iconoComo("exclamacion"),
     label: "Información",
   },
   tip: {

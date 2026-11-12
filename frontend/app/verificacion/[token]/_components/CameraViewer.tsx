@@ -2,7 +2,7 @@
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useEffect, useRef, useState } from "react";
-import { CameraOff, Loader2 } from "lucide-react";
+import { CameraOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   MAX_INTENTOS,
@@ -187,7 +187,7 @@ export function CameraViewer({
         <img ref={previewRef} alt="Vista previa de la foto capturada" className="block h-auto w-full rounded-2xl bg-slate-900" />
         {revisando ? (
           <p role="status" className="flex items-center justify-center gap-2 text-base text-muted-foreground">
-            <Loader2 aria-hidden="true" className="size-5 motion-safe:animate-spin" />
+            <Icono nombre="girador" className="size-5 motion-safe:animate-spin" />
             Revisando tu foto…
           </p>
         ) : null}
@@ -273,7 +273,7 @@ export function CameraViewer({
         />
         {!ready ? (
           <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 p-6 text-center text-white">
-            <Loader2 aria-hidden="true" className="size-8 motion-safe:animate-spin" />
+            <Icono nombre="girador" className="size-8 motion-safe:animate-spin" />
             <p className="text-base">Abriendo cámara… toca «Permitir» cuando tu navegador lo pida.</p>
           </div>
         ) : (

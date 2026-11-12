@@ -5,6 +5,7 @@ import { Hash } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from '@/components/atom/Modal';
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS } from '@flit/ui/Modal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -24,10 +25,7 @@ import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/proce
 
 import { formatFechaHora } from '@/lib/format/date';
 import {
-  DIALOGO_FRANJA,
-  DIALOGO_FRANJA_CERRAR,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_TITULO,
 } from '@/components/operacion/dialogo-propio';
 /**
 
@@ -137,16 +135,13 @@ export function PrevalidacionDetailDrawer({
       zClassName="z-50"
       header={({ titleId }) => (
         // Franja del Modal (homologación #14507): el encabezado propio sale a sangre del margen del panel.
-        <div className={`${DIALOGO_FRANJA} -mx-4 -mt-4 justify-between sm:-mx-6 sm:-mt-6`}>
+        <div className={`${MODAL_CABECERA_CLS} -mx-4 -mt-4 sm:-mx-6 sm:-mt-6`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <div className="relative z-[1] flex min-w-0 items-center gap-2">
-            <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)]"
-              aria-hidden
-            >
-              <Icono nombre="biometria" className="h-4 w-4" />
+          <div className="flex min-w-0 max-w-full flex-col items-center gap-2">
+            <span aria-hidden className="contents">
+              <Icono nombre="biometria" disco size={52} />
             </span>
-            <h2 id={titleId} className={`${DIALOGO_FRANJA_TITULO} truncate`}>
+            <h2 id={titleId} className={`${MODAL_TITULO_CLS} truncate`}>
               {title}
             </h2>
           </div>
@@ -154,7 +149,7 @@ export function PrevalidacionDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Cerrar proceso"
-            className={DIALOGO_FRANJA_CERRAR}
+            className={MODAL_CERRAR_CLS}
           >
             <Icono nombre="cerrar" className="h-5 w-5" />
           </button>

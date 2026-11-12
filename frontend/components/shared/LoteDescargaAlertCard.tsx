@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, type ComponentType, type Ref } from 'react';
-import { ChevronsRight, FileArchive, Loader2, Network, XCircle } from "lucide-react";
+import { ChevronsRight } from "lucide-react";
 import { Icono as IconoKit } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import type { StatusTone } from '@/components/atom/StatusBadge';
@@ -110,8 +110,8 @@ const ICONO: Record<StatusTone, ComponentType<IconoComoProps>> = {
   info: iconoComo("reloj"),
   warning: iconoComo("alerta"),
   success: iconoComo("check"),
-  danger: XCircle,
-  neutral: FileArchive,
+  danger: iconoComo("cerrar"),
+  neutral: iconoComo("archivo"),
 };
 
 /** Icono del tono (check success / alerta warning / X danger / reloj info / archivo neutral), decorativo. */
@@ -257,7 +257,7 @@ export function LoteDescargaAlertCard({
             data-testid="lote-alcance-red"
             className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 text-xs font-semibold text-flit-brand"
           >
-            <Network className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <IconoKit nombre="integraciones" className="h-3 w-3 shrink-0" />
             <span className="sr-only">Alcance: </span>
             <span className="truncate" title={alcance}>
               {alcance}
@@ -306,7 +306,7 @@ export function LoteDescargaAlertCard({
                   className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-wait disabled:opacity-60"
                   style={{ color: 'var(--badge-danger-fg)' }}
                 >
-                  {cancelando ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+                  {cancelando ? <IconoKit nombre="girador" className="h-3.5 w-3.5 animate-spin" /> : null}
                   Cancelar
                 </button>
               ) : null}
@@ -339,7 +339,7 @@ export function LoteDescargaAlertCard({
                     className="inline-flex shrink-0 items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-wait disabled:opacity-60"
                   >
                     {descargando ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      <IconoKit nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                     ) : (
                       <IconoKit nombre="nube-bajar" className="h-3.5 w-3.5" />
                     )}

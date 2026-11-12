@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { XCircle } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
@@ -151,7 +150,7 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
   if (detail.status === 'rechazado') {
     return (
       <div className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.danger}`}>
-        <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Icono nombre="cerrar" className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0">
           {detail.rejectionReasonCode && (
             <>

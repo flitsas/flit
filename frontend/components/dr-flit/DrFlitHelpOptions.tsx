@@ -1,6 +1,6 @@
 "use client";
 
-import { Headphones, Scale } from "lucide-react";
+import { Headphones } from "lucide-react";
 import type { ComponentType } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
@@ -8,7 +8,7 @@ import { DR_FLIT_HELP_OPTIONS, type DrFlitHelpOptionId } from "./dr-flit-intents
 
 const ICONS: Record<DrFlitHelpOptionId, ComponentType<IconoComoProps>> = {
   "necesito-ayuda": iconoComo("ayuda"),
-  normativa: Scale,
+  normativa: iconoComo("mazo"),
   soporte: Headphones,
 };
 
