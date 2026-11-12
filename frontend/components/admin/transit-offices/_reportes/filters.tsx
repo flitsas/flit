@@ -7,7 +7,7 @@
 // moverlo no cambiaba un solo número. Al partir los filtros por pestaña, cada control queda al lado
 // de lo que de verdad gobierna.
 
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { RangoFechas } from "@/components/atom/RangoFechas";
 import {
   TipoTramiteSelect,
   type GrupoTiposTramite,
@@ -122,12 +122,7 @@ export function DateRangeFields({
   onChange: (range: DateRange) => void;
 }) {
   return (
-    <DateRangePicker
-      value={range}
-      onChange={onChange}
-      label="Rango de fechas"
-      className="min-w-[240px]"
-    />
+    <RangoFechas value={range} onChange={onChange} />
   );
 }
 

@@ -13,7 +13,16 @@ import {
   type DataColumn,
 } from "@/components/consultas/columns";
 import { formatDateTime, formatDays, formatInt } from "@/components/consultas/format";
-import type { CompanyQueryRow } from "@/lib/api/company-queries";
+import type { CompanyQueryRow, MaxActoresPorRol } from "@/lib/api/company-queries";
+import {
+  actoresDelGrupo,
+  bloquesDelGrupo,
+  encabezadoBloque,
+  etiquetaValidacion,
+  motivoVisible,
+  textoDelGrupo,
+  type GrupoPersonas,
+} from "./identidad-validacion";
 import { bogotaClock } from "@/lib/xlsx";
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -74,6 +83,87 @@ const GRUPO_PERSONAS = "Personas";
 const GRUPO_CARACTERISTICAS = "Características";
 const GRUPO_COMERCIAL = "Comercial";
 const GRUPO_TIEMPOS = "Tiempos";
+
+/**
+ * Las cuatro columnas de un rol: la persona y su validación, intentos y motivo de rechazo. En
+ * pantalla son cuatro columnas juntas, con una línea de 46 px por actor; en el archivo se escriben
+ * persona por persona, en el sitio de la primera visible (ver `expandirPorBloque`).
+ *
+ * `comprador` y `vendedor` conservan sus ids de siempre: los filtros, las consultas guardadas y los
+ * reportes programados los usan.
+ */
+function columnasDelRol(grupo: GrupoPersonas): DataColumn<CompanyQueryRow>[] {
+  const nombre = grupo === "comprador" ? "Comprador" : "Vendedor";
+  const bloques = (max: MaxActoresPorRol | undefined) => bloquesDelGrupo(max, grupo);
+  // Las columnas nuevas no existían: sin el máximo del servidor no se inventa su ancho.
+  const soloConMax = (max: MaxActoresPorRol | undefined) => (max ? bloques(max) : 0);
+  const actorN = (r: CompanyQueryRow, n: number) => actoresDelGrupo(r.actores, grupo)[n - 1];
+
+  return [
+    {
+      id: grupo,
+      label: nombre,
+      group: GRUPO_PERSONAS,
+      value: (r) => r[grupo] ?? "—",
+      raw: (r) => r[grupo],
+      width: 26,
+      expandirPorBloque: {
+        grupo,
+        bloques,
+        header: (n) => encabezadoBloque(null, grupo, n),
+        // Backend anterior (sin `actores`): el texto de siempre en el primer bloque.
+        cell: (r, n) =>
+          (r.actores?.length ?? 0) === 0 ? (n === 1 ? r[grupo] : null) : (actorN(r, n)?.nombre ?? null),
+      },
+    },
+    {
+      id: `validacion_${grupo}`,
+      label: `Validación ${grupo}`,
+      group: GRUPO_PERSONAS,
+      value: (r) => textoDelGrupo(r.actores, grupo, (a) => etiquetaValidacion(a.estadoValidacion)),
+      width: 24,
+      expandirPorBloque: {
+        grupo,
+        bloques: soloConMax,
+        header: (n) => encabezadoBloque("Validación", grupo, n),
+        cell: (r, n) => {
+          const a = actorN(r, n);
+          return a ? etiquetaValidacion(a.estadoValidacion) : null;
+        },
+      },
+    },
+    {
+      id: `intentos_${grupo}`,
+      label: `Intentos ${grupo}`,
+      group: GRUPO_PERSONAS,
+      value: (r) => textoDelGrupo(r.actores, grupo, (a) => String(a.intentos)),
+      numeric: true,
+      width: 10,
+      expandirPorBloque: {
+        grupo,
+        bloques: soloConMax,
+        header: (n) => encabezadoBloque("Intentos", grupo, n),
+        cell: (r, n) => actorN(r, n)?.intentos ?? null,
+      },
+    },
+    {
+      id: `motivo_${grupo}`,
+      label: `Motivo rechazo ${grupo}`,
+      group: GRUPO_PERSONAS,
+      value: (r) => textoDelGrupo(r.actores, grupo, (a) => motivoVisible(a.motivoRechazo) ?? "—"),
+      width: 36,
+      expandirPorBloque: {
+        grupo,
+        bloques: soloConMax,
+        header: (n) => encabezadoBloque("Motivo rechazo", grupo, n),
+        cell: (r, n) => {
+          const a = actorN(r, n);
+          return a ? (motivoVisible(a.motivoRechazo) ?? "") : null;
+        },
+      },
+    },
+  ];
+}
 
 export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   {
@@ -149,22 +239,8 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     value: (r) => r.radicadoPor,
     width: 22,
   },
-  {
-    id: "comprador",
-    label: "Comprador",
-    group: GRUPO_PERSONAS,
-    value: (r) => r.comprador ?? "—",
-    raw: (r) => r.comprador,
-    width: 26,
-  },
-  {
-    id: "vendedor",
-    label: "Vendedor",
-    group: GRUPO_PERSONAS,
-    value: (r) => r.vendedor ?? "—",
-    raw: (r) => r.vendedor,
-    width: 26,
-  },
+  ...columnasDelRol("comprador"),
+  ...columnasDelRol("vendedor"),
   {
     id: "prenda",
     label: "Prenda",
@@ -375,8 +451,9 @@ export function buildCompanyQueryCsv(
   rows: CompanyQueryRow[],
   visibleColumnIds: string[],
   notas: string[] = [],
+  maxActoresPorRol?: MaxActoresPorRol,
 ): string {
-  const csv = buildCsv(COMPANY_QUERY_COLUMNS, rows, visibleColumnIds);
+  const csv = buildCsv(COMPANY_QUERY_COLUMNS, rows, visibleColumnIds, maxActoresPorRol);
   return notas.length > 0
     ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
     : csv;
@@ -386,6 +463,14 @@ export function buildCompanyQueryXlsx(
   rows: CompanyQueryRow[],
   visibleColumnIds: string[],
   notas: string[] = [],
+  maxActoresPorRol?: MaxActoresPorRol,
 ): Uint8Array<ArrayBuffer> {
-  return buildWorkbook("Consulta", COMPANY_QUERY_COLUMNS, rows, visibleColumnIds, notas);
+  return buildWorkbook(
+    "Consulta",
+    COMPANY_QUERY_COLUMNS,
+    rows,
+    visibleColumnIds,
+    notas,
+    maxActoresPorRol,
+  );
 }

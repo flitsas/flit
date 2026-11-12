@@ -32,6 +32,7 @@ import {
   defaultCompanyQueryColumns,
   estadoEmpresa,
 } from "../consultas/company-columns";
+import { renderCeldaIdentidad } from "../consultas/ActoresValidacionCell";
 
 export interface ConsultasTabProps {
   /** Solo SuperAdmin: la compañía que se está mirando. El resto va con la suya. */
@@ -140,7 +141,9 @@ export function ConsultasTab({
             >
               {estadoEmpresa(fila.status).label}
             </span>
-          ) : null
+          ) : (
+            renderCeldaIdentidad(columnId, fila)
+          )
         }
       />
     );
@@ -166,7 +169,9 @@ export function ConsultasTab({
           >
             {estadoEmpresa(fila.status).label}
           </span>
-        ) : null
+        ) : (
+          renderCeldaIdentidad(columnId, fila)
+        )
       }
     />
   );
