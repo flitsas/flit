@@ -412,6 +412,7 @@ public sealed class FurManifestGuardTests
         requested_process_5=cb:286.9,124,10.1
         requested_process_7=cb:71.3,150.2,10.1
         requested_process_8=cb:119.5,150.2,10.1
+        requested_process_9=cb:167.7,150.2,10.1
         requested_process_10=cb:215.9,150.2,10.1
         requested_process_17=cb:286.9,177,10.1
         requested_process_18=cb:343.3,177,10.1
