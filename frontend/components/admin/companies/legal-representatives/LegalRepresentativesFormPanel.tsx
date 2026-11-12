@@ -1029,7 +1029,7 @@ function FullScreenShell({
         aria-modal="true"
         aria-label={ariaLabel}
       >
-        <FranjaDialogo>
+        <FranjaDialogo icono="usuarios">
           <h2 className={DIALOGO_TITULO_CLS}>
             {title}
           </h2>
