@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.6"
+  version: "1.0.7"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -15331,6 +15331,16 @@ components:
         sha256: { type: string }
         source: { type: string, example: user }
         uploadedAt: { type: string, format: date-time }
+        ocrStatus:
+          type: string
+          nullable: true
+          enum: [verified, rejected, skipped]
+          description: Veredicto OCR declarado por el cliente al registrar. Informativo; no es compuerta (ADR-0085, Bug #14559).
+        ocrReason:
+          type: string
+          nullable: true
+          enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
+          description: Código cerrado del motivo, solo con ocrStatus rejected/skipped. Informativo; no es compuerta (ADR-0085).
     PresignAttachmentRequest:
       type: object
       required: [tipo, filename, mimetype, sizeBytes]
@@ -15349,6 +15359,16 @@ components:
         sizeBytes: { type: integer, format: int64 }
         sha256: { type: string }
         storagePath: { type: string }
+        ocrStatus:
+          type: string
+          nullable: true
+          enum: [verified, rejected, skipped]
+          description: Opcional. Veredicto OCR calculado por el cliente; el servidor normaliza (trim + minúsculas) y guarda null si es desconocido, sin 400 (ADR-0085, Bug #14559).
+        ocrReason:
+          type: string
+          nullable: true
+          enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
+          description: Opcional. Código cerrado; se descarta (null) si es desconocido o si ocrStatus no es rejected/skipped (ADR-0085).
     ChecklistItemDto:
       type: object
       properties:
