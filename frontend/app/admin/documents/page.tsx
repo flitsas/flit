@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FilePlus, Layers } from "lucide-react";
+import { FilePlus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -187,7 +188,7 @@ function DocumentsCatalog() {
   return (
     <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
       <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" /> Volver al inicio
       </button>
 
       <ModuleTitle
@@ -200,7 +201,7 @@ function DocumentsCatalog() {
               onClick={() => router.push("/admin/documents/procedures")}
               className={ADMIN_BRAND_OUTLINE_BTN_CLS}
             >
-              <Layers className="h-4 w-4" aria-hidden="true" /> Configurar por trámite
+              <Icono nombre="tipos-tramite" className="h-4 w-4" /> Configurar por trámite
             </button>
             <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
           </div>

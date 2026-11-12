@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Info, XCircle } from "lucide-react";
+import { ArrowUpRight, Info, XCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   enlaceTramite,
   etiquetaConteo,
@@ -76,10 +77,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
             <ul className="mt-2 flex flex-col gap-1">
               {instancia.avisos.map((aviso, i) => (
                 <li key={i} className="flex items-start gap-1.5">
-                  <AlertTriangle
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--badge-warning-fg)]"
-                    aria-hidden="true"
-                  />
+                  <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--badge-warning-fg)]" />
                   <span className="opacity-90">{aviso}</span>
                 </li>
               ))}
@@ -137,7 +135,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
 
   return (
     <Titular
-      icono={<CheckCircle2 className="h-5 w-5 text-[var(--flit-success-ink)]" aria-hidden="true" />}
+      icono={<Icono nombre="check" className="h-5 w-5 text-[var(--flit-success-ink)]" />}
       texto={yaMigrado ? "El trámite ya estaba migrado" : "Migración completada"}
       detalle={
         yaMigrado

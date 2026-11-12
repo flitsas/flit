@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -63,7 +63,7 @@ export default function NetworkChildrenPage() {
         onClick={() => router.push(`/admin/companies/${headTenantId}`)}
         className={ADMIN_BACK_LINK_CLS}
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Volver a configuración
       </button>
 

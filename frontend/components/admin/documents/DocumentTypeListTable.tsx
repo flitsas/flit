@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import type { DocumentType } from "@/lib/api/types-documents";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -114,13 +114,13 @@ export function DocumentTypeListTable({
                     <RowActions
                       actions={[
                         {
-                          icon: Pencil,
+                          icon: iconoComo("lapiz"),
                           label: `Editar ${d.nombre}`,
                           onClick: () => onEdit(d),
                           tone: "primary",
                         },
                         {
-                          icon: Trash2,
+                          icon: iconoComo("papelera"),
                           label: `Eliminar ${d.nombre}`,
                           onClick: () => onDelete(d),
                           tone: "danger",

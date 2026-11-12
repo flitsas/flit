@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Download, FileSpreadsheet, Upload } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import {
   createStandaloneBatch,
@@ -191,7 +192,7 @@ export function LoteCargaPanel() {
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ background: "var(--color-flit-brand)" }}
         >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
           {descargando ? "Preparando la plantilla…" : "Descargar plantilla (.xlsx)"}
         </button>
       </div>
@@ -258,7 +259,7 @@ export function LoteCargaPanel() {
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ background: "var(--color-flit-brand)" }}
         >
-          <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           {subiendo ? "Cargando el lote…" : "Cargar y procesar"}
         </button>
 

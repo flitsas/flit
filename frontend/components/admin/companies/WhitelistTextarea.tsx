@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Mail, Save } from "lucide-react";
+import { Save } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { WhitelistEntry } from "@/lib/api/types";
 
 // Gestión de la lista blanca de correos (HU #10194, AC3). Textarea multilínea
@@ -70,7 +71,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
   return (
     <section aria-label="Lista blanca de correos" className="space-y-3">
       <div className="flex items-center gap-2">
-        <Mail className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
+        <Icono nombre="correo" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
         <h4 className="text-sm font-semibold">Lista Blanca</h4>
       </div>
       <p className="text-xs opacity-70">

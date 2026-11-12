@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Clock, Copy, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ComponentType, type CSSProperties } from "react";
+import { Copy } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { RowActions } from "@/components/atom/RowActions";
 import {
@@ -64,11 +65,11 @@ export interface DomainStatusPanelProps {
   emptyMessage?: string;
 }
 
-const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: typeof Clock; color: string }> = {
-  pending: { label: "Pendiente de comprobación", Icon: Clock, color: "var(--badge-warning-fg)" },
-  verified: { label: "Comprobado", Icon: ShieldCheck, color: "var(--color-flit-brand)" },
-  active: { label: "Activo", Icon: CheckCircle2, color: "var(--flit-success-ink)" },
-  failed: { label: "Comprobación fallida", Icon: ShieldAlert, color: "var(--destructive)" },
+const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: ComponentType<{ className?: string; style?: CSSProperties }>; color: string }> = {
+  pending: { label: "Pendiente de comprobación", Icon: iconoComo("reloj"), color: "var(--badge-warning-fg)" },
+  verified: { label: "Comprobado", Icon: iconoComo("escudo"), color: "var(--color-flit-brand)" },
+  active: { label: "Activo", Icon: iconoComo("check"), color: "var(--flit-success-ink)" },
+  failed: { label: "Comprobación fallida", Icon: iconoComo("alerta"), color: "var(--destructive)" },
 };
 
 const REASON_MESSAGES: Record<string, string> = {
@@ -223,7 +224,7 @@ export function DomainStatusPanel({
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: "var(--gradient-action)" }}
             >
-              <RefreshCw className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden />
+              <Icono nombre="reintento" className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
               {verifying
                 ? "Comprobando…"
                 : cooldownSeconds !== null && cooldownSeconds > 0
@@ -380,7 +381,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       <RowActions
         actions={[
           {
-            icon: copied ? Check : Copy,
+            icon: copied ? iconoComo("check") : Copy,
             label,
             onClick: () => void copy(),
             tone: "primary",

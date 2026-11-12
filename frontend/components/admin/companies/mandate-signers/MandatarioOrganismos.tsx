@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Building2, CheckCircle2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 
 export interface MandatarioOrganismosProps {
@@ -62,9 +62,9 @@ export function MandatarioOrganismos({
         }}
       >
         {conAviso ? (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
         ) : (
-          <Building2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <Icono nombre="empresas" className="h-3.5 w-3.5 shrink-0" />
         )}
         {etiqueta}
       </button>
@@ -73,7 +73,7 @@ export function MandatarioOrganismos({
         <Modal
           open
           onClose={() => setOpen(false)}
-          icon={Building2}
+          icono="empresas"
           iconBg="var(--color-flit-brand)"
           title={`Organismos de ${signerName}`}
           titleClassName="text-base font-bold text-flit-primary"
@@ -101,9 +101,9 @@ export function MandatarioOrganismos({
                     }}
                   >
                     {o.bloqueado ? (
-                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                      <Icono nombre="alerta" className="h-3 w-3" />
                     ) : (
-                      <CheckCircle2 className="h-3 w-3" aria-hidden />
+                      <Icono nombre="check" className="h-3 w-3" />
                     )}
                     {o.bloqueado ? "No puede firmar" : "Puede firmar"}
                   </span>

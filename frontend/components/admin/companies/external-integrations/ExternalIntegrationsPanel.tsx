@@ -6,7 +6,8 @@
 // desactivar. Mismo modelo de tabla que Trámites: DataTable + RowActions + paginación numerada + filtros por
 // columna. El secreto vive solo en memoria mientras se muestra su modal.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, KeyRound, LockKeyhole, LockOpen, PlugZap, Power } from "lucide-react";
+import { Ban, PlugZap } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -149,7 +150,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     }
     const actions: RowAction[] = [
       {
-        icon: KeyRound,
+        icon: iconoComo("rol"),
         label: `Generar clave nueva para ${name}`,
         tone: "primary",
         disabled: estado === "blocked",
@@ -160,20 +161,20 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     actions.push(
       estado === "blocked"
         ? {
-            icon: LockOpen,
+            icon: iconoComo("candado-abierto"),
             label: `Desbloquear ${name}`,
             tone: "primary",
             onClick: () => setPending({ action: "unblock", integration }),
           }
         : {
-            icon: LockKeyhole,
+            icon: iconoComo("candado"),
             label: `Bloquear ${name}`,
             tone: "danger",
             onClick: () => setPending({ action: "block", integration }),
           },
     );
     actions.push({
-      icon: Power,
+      icon: iconoComo("encendido"),
       label: `Desactivar ${name}`,
       tone: "danger",
       onClick: () => setPending({ action: "deactivate", integration }),

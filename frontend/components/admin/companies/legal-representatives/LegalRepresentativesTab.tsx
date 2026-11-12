@@ -1,17 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Building2,
-  CheckCircle2,
-  Loader2,
-  MailCheck,
-  Pencil,
-  Trash2,
-  Vault,
-  type LucideIcon,
-} from "lucide-react";
+import { Loader2, MailCheck, Vault, type LucideIcon } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -500,9 +491,9 @@ export function LegalRepresentativesTab({
                                 label={
                                   <span className="inline-flex items-center gap-1">
                                     {item.hasSignatureOrIdentity ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" />
                                     ) : (
-                                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                                     )}
                                     {st.label}
                                   </span>
@@ -517,18 +508,18 @@ export function LegalRepresentativesTab({
                               <RowActions
                                 actions={[
                                   {
-                                    icon: Pencil,
+                                    icon: iconoComo("lapiz"),
                                     label: `Editar persona y firma de ${fullName(item)}`,
                                     onClick: () => openEdit(item),
                                     tone: "primary",
                                   },
                                   {
-                                    icon: Building2,
+                                    icon: iconoComo("empresas"),
                                     label: `Asociar empresas de ${fullName(item)}`,
                                     onClick: () => openCompanies(item),
                                   },
                                   {
-                                    icon: Trash2,
+                                    icon: iconoComo("papelera"),
                                     label: `Eliminar ${fullName(item)}`,
                                     onClick: () => setToDelete(item),
                                     tone: "danger",
@@ -580,7 +571,7 @@ export function LegalRepresentativesTab({
           onClose={() => setToDelete(null)}
           busy={deleting}
           size="sm"
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg={RL_COLOR.danger}
           title="Eliminar representante"
         >

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { ApiValidationError, TENANT_TYPE_LABELS, defaultChildTenantType } from "@/lib/api/types";
@@ -113,7 +113,7 @@ export function CreateChildCompanyDialog({
       open={open}
       onClose={handleClose}
       busy={submitting}
-      icon={Building2}
+      icono="empresas"
       title="Agregar cliente a la red"
       titleClassName="text-base font-bold text-flit-brand"
     >

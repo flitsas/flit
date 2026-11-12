@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Settings2, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -304,7 +305,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                           <RowActions
                             actions={[
                               {
-                                icon: Settings2,
+                                icon: iconoComo("ajustes"),
                                 label: `Abrir configuración de ${child.razonSocial}`,
                                 tone: "primary",
                                 onClick: () =>
@@ -313,7 +314,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                                   ),
                               },
                               {
-                                icon: Mail,
+                                icon: iconoComo("correo"),
                                 label: `Invitar usuario a ${child.razonSocial}`,
                                 tone: "primary",
                                 onClick: () => setInviteTarget(child),
