@@ -338,7 +338,7 @@ function DomainAdminSection({ tenantId }: { tenantId: string }) {
   const [reloadToken, setReloadToken] = useState(0);
 
   return (
-    <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
+    <section className="rounded-2xl border bg-card/60 p-4" aria-labelledby="domain-admin-title">
       <div className="mb-3">
         <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
           Dominio de la red
@@ -350,7 +350,7 @@ function DomainAdminSection({ tenantId }: { tenantId: string }) {
 
       <DomainStatusPanel mode="admin" tenantId={tenantId} onLoaded={setDomain} reloadToken={reloadToken} />
 
-      <div className="mt-4 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
+      <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
         <DomainRegisterForm
           tenantId={tenantId}
           domain={domain}
