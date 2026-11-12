@@ -2,7 +2,6 @@
 
 import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from '@flit/ui/Interruptor';
 import { useState } from 'react';
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { SuperadminApiError, superadminClient } from '@/lib/api/superadmin-client';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
@@ -62,7 +61,7 @@ export function TipoTramiteBarrera({
         <span className="text-xs font-medium text-flit-primary">
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-3 w-3 animate-spin" />
               Guardando…
             </span>
           ) : tipo.wizardEnabled ? (

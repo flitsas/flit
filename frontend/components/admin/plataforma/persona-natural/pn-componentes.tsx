@@ -4,8 +4,8 @@
 // deshabilitado y cargando), diálogo de confirmación para acciones que cambian lo que ve el ciudadano y encabezado de
 // sección con ayuda breve. Todo sale de los tokens de `pn-ui.ts` (línea base de globals.css).
 import { useState, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from "react";
-import { Loader2, type LucideIcon } from "lucide-react";
-import type { NombreIcono } from "@flit/ui/Icono";
+import { type LucideIcon } from "lucide-react";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
 import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -46,7 +46,7 @@ export function PnButton({
       style={style}
     >
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="h-4 w-4 animate-spin" />
       ) : (
         Icon && <Icon className="h-4 w-4" aria-hidden="true" />
       )}

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Info } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -257,7 +256,7 @@ export function NotificacionesBankPanel() {
         if (row.kind === "kyverum") {
           return (
             <span className="inline-flex max-w-[220px] items-start justify-end gap-1.5 text-right text-[11px] text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="exclamacion" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               El correo lo emite el proveedor; FLIT no controla su contenido.
             </span>
           );

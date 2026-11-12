@@ -3,7 +3,7 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, FileSpreadsheet, MailX, ShieldOff } from "lucide-react";
+import { ShieldOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -254,7 +254,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
         });
         actions.push({
-          icon: Ban,
+          icon: iconoComo("distinto"),
           label: `Desactivar indefinidamente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
@@ -275,7 +275,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes.
     if (u.status === "pending") {
       actions.push({
-        icon: MailX,
+        icon: iconoComo("correo"),
         label: `Cancelar invitación a ${u.fullName}`,
         tone: "danger",
         onClick: () => setCancelTarget(u),
@@ -464,7 +464,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
               style={{ color: "var(--color-flit-brand)" }}
             >
-              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
               Importar Excel
             </button>
           )}
@@ -738,7 +738,7 @@ function OtInviteUserDialog({
       aria-labelledby="ot-invite-user-title"
     >
       <div className={`w-full max-w-md overflow-hidden p-6 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-6 -mt-6 mb-5">
+        <FranjaDialogo icono="persona" className="-mx-6 -mt-6 mb-5">
           <div>
             <h2 id="ot-invite-user-title" className={`text-base font-bold mb-1 ${DIALOGO_TITULO_CLS}`}>
               Invitar usuario

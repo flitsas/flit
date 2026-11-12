@@ -6,7 +6,6 @@
 // cambió la configuración (409) se avisa con la opción de recargar y NO se pierde lo escrito hasta que se decida.
 // Sin datos bancarios ni de pago (decisión del PO: otra épica).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Save } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { ReactNode } from "react";
@@ -426,7 +425,7 @@ export function ParametrosTab() {
               )}
               <CreateButton
                 type="submit"
-                icon={Save}
+                icon={iconoComo("nube-subir")}
                 label={busy ? "Guardando…" : "Guardar ajustes"}
                 disabled={busy || !hayCambios}
               />

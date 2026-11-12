@@ -3,7 +3,7 @@
 import { buttonClass } from '@flit/ui/Button';
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { FAMILIA_OPCIONES } from '@/lib/api/types/familia-labels';
 import type {
@@ -69,7 +69,7 @@ export function NuevoTipoTramiteModal({
       aria-label="Nuevo tipo de trámite"
     >
       <div className={`w-full max-w-lg overflow-hidden p-5 ${DIALOGO_PANEL_CLS}`}>
-        <FranjaDialogo className="-mx-5 -mt-5 mb-1">
+        <FranjaDialogo icono="tipos-tramite" className="-mx-5 -mt-5 mb-1">
           <div>
             <h2 className={`text-base font-semibold ${DIALOGO_TITULO_CLS}`}>
               Nuevo tipo de trámite
@@ -182,7 +182,7 @@ export function NuevoTipoTramiteModal({
           >
             {guardando ? (
               <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                <Icono nombre="girador" className="h-3 w-3 animate-spin" />
                 Creando…
               </span>
             ) : (

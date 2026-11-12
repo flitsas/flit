@@ -4,7 +4,7 @@
 // crear y opcional al editar; el texto alternativo es obligatorio. Cada regla se valida aquí con un mensaje claro y
 // no se guarda nada mientras algo falle. La vigencia es opcional, con hora de Colombia. Texto plano, sin HTML.
 import { useEffect, useRef, useState } from "react";
-import { ImageIcon, Save } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
@@ -21,6 +21,7 @@ import { PnButton } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { BannerImagen } from "./BannerImagen";
 import { validarEnlace, validarImagenBanner, validarTextoPlano } from "./contenidoReglas";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 type Errores = Partial<Record<"titulo" | "textoAlternativo" | "archivo" | "enlaceUrl" | "vigencia" | "general", string>>;
 
@@ -113,7 +114,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-banner-form" variant="primary" icon={Save} loading={busy}>
+          <PnButton type="submit" form="pn-banner-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
             Guardar banner
           </PnButton>
         </div>

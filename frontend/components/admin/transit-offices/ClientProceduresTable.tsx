@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpDown, FileStack, Paperclip, Scale, Star, Tag } from "lucide-react";
+import { ArrowUpDown, Tag } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -321,11 +321,7 @@ function renderCelda(
       return (
         <span className="flex items-center gap-1.5">
           {row.prioritario && (
-            <Star
-              className="h-3.5 w-3.5 shrink-0"
-              style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }}
-              aria-label="Trámite prioritario"
-            />
+            <Icono nombre="medalla" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }} etiqueta="Trámite prioritario" />
           )}
           {/* Ajuste 2026-11-10 (D3=b) — el radicado es el ÚNICO control que abre el detalle: la fila
               ya no lo hace, para poder seleccionar y copiar datos sin abrir nada. Mismo aspecto que
@@ -520,7 +516,7 @@ export function ClientProceduresTable({
       items.push({
         key: "decidir-revocatoria",
         label: "Decidir revocatoria",
-        icon: Scale,
+        icon: iconoComo("mazo"),
         disabled: !conSolicitudActiva,
         disabledReason: "El gestor no ha solicitado la revocatoria de este trámite.",
         onSelect: () => onDecideRevocation(row),
@@ -545,14 +541,14 @@ export function ClientProceduresTable({
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {
-      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
+      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: iconoComo("archivo"), onSelect: () => onAdjuntarLt(row) });
     }
 
     if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
       items.push({
         key: "consolidado",
         label: COPY.A12,
-        icon: FileStack,
+        icon: iconoComo("archivo"),
         // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
         // clic dispararía una segunda generación del mismo expediente.
         disabled: consolidadoActingId === row.id,

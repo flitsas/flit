@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import type { CreateOtRuleRequest, OtRule, OtRuleCondition } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
@@ -133,7 +132,7 @@ export function RuleFormPanel({
           style={{ background: "var(--color-flit-brand)" }}
           onClick={() => void submit()}
         >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
           {editing ? "Cerrar" : "Guardar regla"}
         </button>
       }
