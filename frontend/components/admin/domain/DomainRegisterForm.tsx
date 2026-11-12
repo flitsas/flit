@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Save } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import {
   domainErrorCode,
@@ -147,7 +146,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           style={{ background: "var(--gradient-action)" }}
         >
-          <Save className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           {saving ? "Guardando…" : isChange ? "Cambiar dominio" : "Registrar dominio"}
         </button>
         )}

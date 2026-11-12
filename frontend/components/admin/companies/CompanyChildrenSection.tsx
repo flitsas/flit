@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, Unlink } from "lucide-react";
+import { Unlink } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { RowActions } from "@/components/atom/RowActions";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -114,7 +115,7 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
         </div>
         <CreateButton
           label="Vincular cliente existente"
-          icon={Link2}
+          icon={iconoComo("externo")}
           onClick={() => setLinkOpen(true)}
         />
       </div>

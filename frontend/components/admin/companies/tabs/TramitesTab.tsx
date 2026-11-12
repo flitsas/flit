@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { MinusCircle } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ToggleSwitch, type ToggleSwitchState } from "../ToggleSwitch";
@@ -193,7 +192,7 @@ function ImprontasSection({
                 {enabled ? (
                   <Icono nombre="check" className="h-3.5 w-3.5" />
                 ) : (
-                  <MinusCircle className="h-3.5 w-3.5" aria-hidden />
+                  <Icono nombre="menos" className="h-3.5 w-3.5" />
                 )}
                 {enabled ? "Habilitada" : "Deshabilitada"}
               </span>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload } from "@/lib/auth/jwt";
@@ -207,7 +206,7 @@ export function ImprontaFormPanel() {
           style={{ color: "var(--color-flit-primary)" }}
           data-testid="impronta-loading"
         >
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-3.5 w-3.5 shrink-0 animate-spin" />
           Generando impronta… puede tardar unos segundos porque se consulta un servicio externo
           (RUNT).
         </p>
@@ -267,7 +266,7 @@ export function ImprontaFormPanel() {
         style={{ background: "var(--gradient-action)" }}
       >
         {submitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-4 w-4 animate-spin" />
         ) : (
           <Icono nombre="nube-bajar" className="h-4 w-4" />
         )}

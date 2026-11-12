@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { UserX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -591,7 +590,7 @@ export function CompanyMandatariosPanel({
                                         : []),
                                       signer.isActive
                                         ? {
-                                            icon: UserX,
+                                            icon: iconoComo("persona"),
                                             label: `Desactivar mandatario ${signer.fullName}`,
                                             onClick: () =>
                                               setBaja({ signer, accion: "desactivar" }),

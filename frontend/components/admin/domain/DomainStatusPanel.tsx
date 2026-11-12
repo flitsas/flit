@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ComponentType, type CSSProperties } from "react";
-import { Copy } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -382,7 +381,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       <RowActions
         actions={[
           {
-            icon: copied ? iconoComo("check") : Copy,
+            icon: copied ? iconoComo("check") : iconoComo("copiar"),
             label,
             onClick: () => void copy(),
             tone: "primary",

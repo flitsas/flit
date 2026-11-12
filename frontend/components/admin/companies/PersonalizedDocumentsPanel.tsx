@@ -6,7 +6,6 @@
 // SIEMPRE de la configuración que devuelve la API (nunca de una lista fija en el bundle). Precedente
 // visual: panel de escrituras/representantes legales (`DeedsFormPanel`, `RepresentativesAndVaultTab`).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
@@ -459,7 +458,7 @@ function PersonalizedDocumentSection({
             className="flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
             style={{ background: "var(--gradient-action)" }}
           >
-            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+            {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
             Cargar y activar
           </button>
         </div>
@@ -514,7 +513,7 @@ function PersonalizedDocumentSection({
         >
           {preview.loading && (
             <p className="flex items-center gap-2 text-sm opacity-70">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Generando vista previa…
+              <Icono nombre="girador" className="h-4 w-4 animate-spin" /> Generando vista previa…
             </p>
           )}
           {preview.error && (

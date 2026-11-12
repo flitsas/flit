@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import {
   assignRole,
@@ -193,7 +193,7 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
           className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40 focus-visible:ring-offset-2"
           style={{ background: "var(--gradient-action)" }}
         >
-          <UserPlus className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="persona" className="h-3.5 w-3.5" />
           Invitar usuario
         </button>
       </div>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { MODAL_VELO_CLS } from "@flit/ui/Modal";
-import { Loader2 } from "lucide-react";
+import { cn } from "@flit/ui/cn";
+import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { Icono } from "@flit/ui/Icono";
 import type { ReactNode } from "react";
 import { Modal } from "@/components/atom/Modal";
@@ -468,7 +469,7 @@ export function LegalRepresentativesFormPanel({
         className={`w-full ${rlPrimaryCtaClass} py-2.5`}
         style={rlPrimaryCtaStyle}
       >
-        {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+        {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
         {mode === "edit"
           ? "Guardar cambios"
           : mode === "companies"
@@ -495,6 +496,7 @@ export function LegalRepresentativesFormPanel({
 
   return (
     <Modal
+      icono="usuarios"
       open={open}
       onClose={onClose}
       title={title}
@@ -1019,27 +1021,22 @@ function FullScreenShell({
         onClick={onClose}
       />
       <div
-        className="relative m-0 flex h-full w-full flex-col sm:m-4 sm:h-[calc(100%-2rem)] sm:w-[calc(100%-2rem)] sm:rounded-2xl sm:border"
-        style={{
-          background: RL_COLOR.modal,
-          borderColor: RL_COLOR.border,
-          boxShadow: "var(--shadow-modal)",
-        }}
+        className={cn(
+          DIALOGO_PANEL_CLS,
+          "relative m-0 flex h-full w-full flex-col rounded-none border-0 sm:m-4 sm:h-[calc(100%-2rem)] sm:w-[calc(100%-2rem)] sm:rounded-[9px] sm:border",
+        )}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
       >
-        <div
-          className="flex items-center justify-between border-b px-4 py-3 sm:px-6"
-          style={{ borderColor: RL_COLOR.border }}
-        >
-          <h2 className="text-sm font-bold sm:text-base" style={{ color: RL_COLOR.navy }}>
+        <FranjaDialogo>
+          <h2 className={DIALOGO_TITULO_CLS}>
             {title}
           </h2>
-          <button type="button" aria-label="Cerrar" onClick={onClose}>
-            <Icono nombre="cerrar" className="h-4 w-4" style={{ color: RL_COLOR.navy }} />
+          <button type="button" aria-label="Cerrar" onClick={onClose} className={DIALOGO_CERRAR_CLS}>
+            <Icono nombre="cerrar" className="h-4 w-4" />
           </button>
-        </div>
+        </FranjaDialogo>
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
         {footer && (
           <div className="border-t p-4 sm:px-6" style={{ borderColor: RL_COLOR.border }}>

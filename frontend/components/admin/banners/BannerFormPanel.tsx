@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
@@ -139,6 +138,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
 
   return (
     <Modal
+      icono="megafono"
       open={open}
       onClose={onClose}
       title={editing ? "Editar banner" : "Nuevo banner"}
@@ -320,7 +320,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-60"
           style={{ background: "var(--gradient-action)" }}
         >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
           {editing ? "Guardar cambios" : "Crear banner"}
         </button>
       </div>
