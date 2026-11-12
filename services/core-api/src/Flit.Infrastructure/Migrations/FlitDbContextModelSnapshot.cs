@@ -8451,122 +8451,6 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstanceFirmaBaulCopia", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("CapturedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("captured_at");
-
-                    b.Property<string>("CodigoHash")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("codigo_hash");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTimeOffset?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<string>("DocumentNumber")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("document_number");
-
-                    b.Property<string>("DocumentType")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("document_type");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("full_name");
-
-                    b.Property<string>("PartyRole")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("party_role");
-
-                    b.Property<Guid>("ProcedureInstanceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("procedure_instance_id");
-
-                    b.Property<string>("SignatureHash")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("signature_hash");
-
-                    b.Property<Guid>("SignatureVaultId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("signature_vault_id");
-
-                    b.Property<string>("SlotKey")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("slot_key");
-
-                    b.Property<string>("SourceStoragePath")
-                        .HasColumnType("text")
-                        .HasColumnName("source_storage_path");
-
-                    b.Property<string>("StoragePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("storage_path");
-
-                    b.Property<string>("StorageSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("storage_sha256");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<DateOnly>("VigenciaDesde")
-                        .HasColumnType("date")
-                        .HasColumnName("vigencia_desde");
-
-                    b.Property<DateOnly>("VigenciaHasta")
-                        .HasColumnType("date")
-                        .HasColumnName("vigencia_hasta");
-
-                    b.HasKey("Id")
-                        .HasName("pk_procedure_instance_signature_vault_copies");
-
-                    b.HasIndex("TenantId", "ProcedureInstanceId")
-                        .HasDatabaseName("ix_procedure_instance_signature_vault_copies_instance");
-
-                    b.ToTable("procedure_instance_signature_vault_copies", "tramites", t =>
-                        {
-                            t.ExcludeFromMigrations();
-                        });
-                });
-
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ExternalDataSource", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10088,6 +9972,16 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("mimetype");
 
+                    b.Property<string>("OcrReason")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("ocr_reason");
+
+                    b.Property<string>("OcrStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ocr_status");
+
                     b.Property<Guid>("ProcedureInstanceId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
@@ -10159,6 +10053,10 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("procedure_instance_attachments", "tramites", t =>
                         {
                             t.HasTrigger("tr_procedure_instance_attachments_audit");
+
+                            t.HasCheckConstraint("ck_procedure_instance_attachments_ocr_reason", "ocr_reason IS NULL OR (ocr_status IS NOT NULL AND ocr_status IN ('rejected','skipped') AND ocr_reason IN ('vin_mismatch','tipo_invalido','no_confirmado','ilegible','excede_tamano','analisis_fallido'))");
+
+                            t.HasCheckConstraint("ck_procedure_instance_attachments_ocr_status", "ocr_status IS NULL OR ocr_status IN ('verified','rejected','skipped')");
                         });
                 });
 
@@ -10699,6 +10597,122 @@ namespace Flit.Infrastructure.Migrations
                             t.HasTrigger("tr_procedure_instance_field_values_audit");
 
                             t.HasTrigger("tr_procedure_instance_field_values_immutable");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstanceFirmaBaulCopia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CapturedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at");
+
+                    b.Property<string>("CodigoHash")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("codigo_hash");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("document_type");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("PartyRole")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("party_role");
+
+                    b.Property<Guid>("ProcedureInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_instance_id");
+
+                    b.Property<string>("SignatureHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("signature_hash");
+
+                    b.Property<Guid>("SignatureVaultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("signature_vault_id");
+
+                    b.Property<string>("SlotKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("slot_key");
+
+                    b.Property<string>("SourceStoragePath")
+                        .HasColumnType("text")
+                        .HasColumnName("source_storage_path");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("storage_path");
+
+                    b.Property<string>("StorageSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("storage_sha256");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateOnly>("VigenciaDesde")
+                        .HasColumnType("date")
+                        .HasColumnName("vigencia_desde");
+
+                    b.Property<DateOnly>("VigenciaHasta")
+                        .HasColumnType("date")
+                        .HasColumnName("vigencia_hasta");
+
+                    b.HasKey("Id")
+                        .HasName("pk_procedure_instance_signature_vault_copies");
+
+                    b.HasIndex("TenantId", "ProcedureInstanceId")
+                        .HasDatabaseName("ix_procedure_instance_signature_vault_copies_instance");
+
+                    b.ToTable("procedure_instance_signature_vault_copies", "tramites", t =>
+                        {
+                            t.ExcludeFromMigrations();
                         });
                 });
 
