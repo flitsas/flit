@@ -596,6 +596,9 @@
   /* Interruptor (`.interruptor`): el dibujo del paquete como fondo. */
   .kit-interruptor { background: url("/assets/kit/interruptor-apagado.svg") center / contain no-repeat; }
   .kit-interruptor[aria-checked="true"] { background-image: url("/assets/kit/interruptor-encendido.svg"); }
+  /* Variante de alerta: el mismo dibujo del paquete con el naranja del manual, para un interruptor cuyo «encendido» es una
+   * emergencia (p. ej. «Suspender la redacción con IA»). En verde se leería como «todo bien». */
+  .kit-interruptor--alerta[aria-checked="true"] { background-image: url("/assets/kit/interruptor-encendido-alerta.svg"); }
 
   /* Avance horizontal (`ol.pasos`). */
   .kit-pasos { display: flex; margin: 0; padding: 16px 16px 4px; list-style: none; overflow-x: auto; }
