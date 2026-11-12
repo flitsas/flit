@@ -2,7 +2,8 @@
 
 import { Modal } from "@/components/atom/Modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { History, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { fetchAdminAuditLog } from "@/lib/api/audit";
 import type { AdminAuditLogEntry, AdminAuditModule } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/types";
@@ -190,7 +191,7 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="mb-1 flex items-center gap-2" style={{ color: "var(--color-flit-brand)" }}>
-              <History className="h-4 w-4 shrink-0" aria-hidden />
+              <Icono nombre="reloj" className="h-4 w-4 shrink-0" />
               <span className="text-[10px] font-semibold uppercase tracking-wider">Auditoría</span>
             </div>
             <h2 id={titleId} className="truncate text-sm font-bold">
@@ -204,7 +205,7 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
             aria-label="Cerrar"
             className="rounded-lg p-1.5 transition hover:bg-secondary"
           >
-            <X className="h-4 w-4" />
+            <Icono nombre="cerrar" className="h-4 w-4" />
           </button>
         </div>
       )}

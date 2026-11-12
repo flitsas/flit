@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { TopProducer } from "@/lib/api/types";
 
@@ -54,7 +54,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
     <section className="rounded-2xl p-5 bg-card border flex flex-col">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h2 className="text-sm font-bold flex items-center gap-2">
-          <Users className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /> Top 5 productividad
+          <Icono nombre="usuarios" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /> Top 5 productividad
         </h2>
         {selected.size > 0 && (
           <button

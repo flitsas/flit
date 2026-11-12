@@ -2,7 +2,8 @@
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CameraOff, Loader2, RefreshCw } from "lucide-react";
+import { CameraOff, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   MAX_INTENTOS,
   RESULTADO_VERIFICADA,
@@ -193,7 +194,7 @@ export function CameraViewer({
         {rechazada ? (
           <div role="alert" aria-live="assertive" data-testid="rechazo-foto" className="flex flex-col items-center gap-1 text-center">
             <p className="flex items-center gap-2 text-base font-semibold text-flit-alert">
-              <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
+              <Icono nombre="alerta" className="size-5 shrink-0" />
               {rechazada.mensaje}
             </p>
             {!rechazada.puedeContinuar && rechazada.fallos >= MAX_INTENTOS ? (
@@ -240,7 +241,7 @@ export function CameraViewer({
   if (status === "denied" || status === "no-camera" || status === "unsupported" || status === "error") {
     return (
       <div role="alert" className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-secondary p-5 text-center">
-        {status === "denied" ? <AlertTriangle aria-hidden="true" className="size-8 text-flit-alert" /> : <CameraOff aria-hidden="true" className="size-8 text-flit-alert" />}
+        {status === "denied" ? <Icono nombre="alerta" className="size-8 text-flit-alert" /> : <CameraOff aria-hidden="true" className="size-8 text-flit-alert" />}
         <p className="text-base font-semibold text-flit-primary">{TITLES[status]}</p>
         <p className="text-base text-muted-foreground">{BODIES[status]}</p>
         {status === "denied" || status === "error" ? (
@@ -308,7 +309,7 @@ export function CameraViewer({
           onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
           className="inline-flex min-h-11 items-center justify-center gap-2 self-center rounded-xl px-4 text-sm font-semibold text-flit-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
         >
-          <RefreshCw aria-hidden="true" className="size-4" />
+          <Icono nombre="reintento" className="size-4" />
           Cambiar cámara
         </button>
       ) : null}

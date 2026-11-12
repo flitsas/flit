@@ -7,7 +7,8 @@
 // El secreto solo existe en memoria mientras se muestra la tarjeta (AC2/AC4): no se guarda en estado
 // persistente, almacenamiento del navegador ni logs, y al cerrar la tarjeta se descarta.
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, KeyRound, LockOpen, Pencil, PlugZap, Power, RefreshCcw, X } from "lucide-react";
+import { Copy, PlugZap } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
@@ -99,9 +100,9 @@ export function ExternalClientsPanel() {
 
   function actionsFor(client: ExternalClient): RowAction[] {
     const actions: RowAction[] = [
-      { icon: Pencil, label: `Editar ${client.clientId}`, onClick: () => setForm({ mode: "edit", client }) },
+      { icon: iconoComo("lapiz"), label: `Editar ${client.clientId}`, onClick: () => setForm({ mode: "edit", client }) },
       {
-        icon: RefreshCcw,
+        icon: iconoComo("reintento"),
         label: `Regenerar secreto de ${client.clientId}`,
         tone: "primary",
         onClick: () => setPending({ action: "regenerate", client }),
@@ -110,7 +111,7 @@ export function ExternalClientsPanel() {
     // AC5: «Desbloquear» solo tiene sentido si está bloqueado.
     if (isExternalClientLocked(client)) {
       actions.push({
-        icon: LockOpen,
+        icon: iconoComo("candado-abierto"),
         label: `Desbloquear ${client.clientId}`,
         tone: "primary",
         onClick: () => setPending({ action: "unlock", client }),
@@ -118,14 +119,14 @@ export function ExternalClientsPanel() {
     }
     if (!client.mustRotate) {
       actions.push({
-        icon: KeyRound,
+        icon: iconoComo("rol"),
         label: `Obligar a rotar el secreto de ${client.clientId}`,
         tone: "danger",
         onClick: () => setPending({ action: "must-rotate", client }),
       });
     }
     actions.push({
-      icon: Power,
+      icon: iconoComo("encendido"),
       label: `${client.isActive ? "Desactivar" : "Activar"} ${client.clientId}`,
       tone: client.isActive ? "danger" : "primary",
       onClick: () => setPending({ action: "toggle-active", client }),
@@ -230,7 +231,7 @@ export function ExternalClientsPanel() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-2">
               <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-flit-primary">
-                <KeyRound className="h-4 w-4 text-flit-brand" aria-hidden="true" />
+                <Icono nombre="rol" className="h-4 w-4 text-flit-brand" />
                 Secreto de «{revealed.clientId}»
               </h3>
               <p className="text-xs font-semibold text-destructive">
@@ -247,7 +248,7 @@ export function ExternalClientsPanel() {
                 onClick={() => void copySecret()}
                 className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
-                {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+                {copied ? <Icono nombre="check" className="h-4 w-4" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
                 {copied ? "Copiado" : "Copiar secreto"}
               </button>
               <button
@@ -256,7 +257,7 @@ export function ExternalClientsPanel() {
                 onClick={() => setRevealed(null)}
                 className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-flit-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
-                <X className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="cerrar" className="h-4 w-4" />
               </button>
             </div>
           </div>

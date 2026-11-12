@@ -81,7 +81,7 @@ export function ColumnPicker<TRow>({
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-2xl"
+          className="absolute right-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-[var(--kit-sombra)]"
           data-testid={`${testId}-panel`}
         >
           {groups.map((group) => (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Landmark, Shield } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
@@ -18,7 +18,7 @@ import { BulkInviteModal } from "./BulkInviteModal";
 /** El perfil FLIT queda fuera de v1 (ADR-0077): no pertenece a ninguna compañía ni organismo. */
 type BulkProfile = Exclude<UserProfileKind, "FLIT">;
 const BULK_PROFILES: readonly BulkProfile[] = ["GESTOR", "OT"];
-const PROFILE_ICON: Record<BulkProfile, typeof Shield> = { GESTOR: Shield, OT: Landmark };
+const PROFILE_ICON: Record<BulkProfile, ReturnType<typeof iconoComo>> = { GESTOR: iconoComo("escudo"), OT: iconoComo("banco") };
 
 export interface UsuariosBulkInviteProps {
   /** SuperAdmin elige Perfil + destino; AdminCompany tiene el destino fijo (su compañía, perfil Gestor). */
@@ -107,7 +107,7 @@ export function UsuariosBulkInvite({ isSuperAdmin, onClose, onCompleted }: Usuar
                           key={p}
                           className="flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-xs transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand"
                           style={{
-                            borderColor: active ? "var(--color-flit-brand)" : "#DFE5ED",
+                            borderColor: active ? "var(--color-flit-brand)" : "var(--di-border)",
                             background: active ? "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" : undefined,
                           }}
                         >

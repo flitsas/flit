@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, UserCheck } from 'lucide-react';
+import { iconoComo } from "@flit/ui/Icono";
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -12,9 +12,9 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
  */
 export type ApprovalOrigin = 'automatica' | 'manual';
 
-const META: Record<ApprovalOrigin, { label: string; tone: StatusTone; Icon: typeof Bot }> = {
-  automatica: { label: 'Automática', tone: 'neutral', Icon: Bot },
-  manual: { label: 'Manual', tone: 'info', Icon: UserCheck },
+const META: Record<ApprovalOrigin, { label: string; tone: StatusTone; Icon: ReturnType<typeof iconoComo> }> = {
+  automatica: { label: 'Automática', tone: 'neutral', Icon: iconoComo("asistente") },
+  manual: { label: 'Manual', tone: 'info', Icon: iconoComo("persona") },
 };
 
 /** «Manual» es del Super Admin FLIT: la compañía y el cliente no lo ven (ni el chip ni su rótulo). */

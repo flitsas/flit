@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 
@@ -73,7 +73,7 @@ export function DeleteUserDialog({ user, onClose, onDeleted, onDelete }: DeleteU
       open
       onClose={handleClose}
       busy={busy}
-      icon={Trash2}
+      icono="papelera"
       iconBg="var(--destructive)"
       title="Eliminar usuario"
       description={user.email}

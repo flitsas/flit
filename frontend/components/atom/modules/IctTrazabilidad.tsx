@@ -5,7 +5,7 @@
 // Lo que aporta es el nivel que faltaba: el trámite.
 import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from "./ModuleTitle";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -460,7 +460,7 @@ export function IctTrazabilidad() {
         )}
         {(hayFiltros || cargando) && (
           <button type="button" onClick={limpiar} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         )}
         <button
@@ -617,10 +617,7 @@ function FilaTramite({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{tramite.numero}</span>

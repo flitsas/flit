@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
+import { iconoComo } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -293,8 +294,8 @@ export function SchedulesSection({
                     <td data-label="Acciones" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                       <RowActions
                         actions={[
-                          { icon: Pencil, label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
-                          { icon: Trash2, label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
+                          { icon: iconoComo("lapiz"), label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
+                          { icon: iconoComo("papelera"), label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
                         ]}
                       />
                     </td>

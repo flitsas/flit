@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, FileText } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { portalPublicClient } from '@/lib/api/tramites-client';
 import type {
   PortalDocumentoStatus,
@@ -58,7 +58,7 @@ export function PortalParticipant({ token }: Props) {
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
           style={{ background: 'color-mix(in srgb, var(--color-flit-tech) 15%, transparent)' }}
         >
-          <Check className="h-7 w-7" style={{ color: 'var(--color-flit-tech)' }} />
+          <Icono nombre="check" className="h-7 w-7" style={{ color: 'var(--color-flit-tech)' }} />
         </div>
         <h1 className="text-lg font-bold text-center">¡Listo!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
@@ -353,7 +353,7 @@ function BiometricaTask({
         </p>
       ) : !pendiente ? (
         <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: "var(--flit-success-ink)" }}>
-          <Check className="h-3.5 w-3.5" /> Identidad verificada
+          <Icono nombre="check" className="h-3.5 w-3.5" /> Identidad verificada
         </p>
       ) : (
         <p className="text-[11px] opacity-70">
@@ -410,7 +410,7 @@ function FirmaTask({ token, onRefresh }: { token: string; onRefresh: () => void 
       <h2 className="text-sm font-bold mb-1">Firma de la compraventa</h2>
       {firma?.firmada ? (
         <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: "var(--flit-success-ink)" }}>
-          <Check className="h-3.5 w-3.5" /> Firmaste la compraventa
+          <Icono nombre="check" className="h-3.5 w-3.5" /> Firmaste la compraventa
         </p>
       ) : firma && firma.signatureId === null ? (
         <p className="text-[11px] opacity-70">
@@ -483,7 +483,7 @@ function FinalizarTask({
         className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold text-primary-foreground disabled:opacity-50 flex items-center justify-center gap-2"
         style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
-        <FileText className="h-4 w-4" aria-hidden="true" />
+        <Icono nombre="documento" className="h-4 w-4" />
         {busy ? 'Finalizando…' : 'Finalizar mi parte'}
       </button>
       {error && (

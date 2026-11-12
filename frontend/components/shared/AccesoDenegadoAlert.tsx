@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PORTAL_PN_MODULE_ID } from "@/lib/nav/module-access";
 
@@ -31,7 +31,7 @@ export function AccesoDenegadoAlert({ onClose, modulo }: { onClose: () => void; 
           className="rounded-md p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ color: "var(--badge-warning-fg)" }}
         >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-3.5 w-3.5" />
         </button>
       }
     >

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, Eye, ScanFace, ShieldCheck, XCircle } from 'lucide-react';
+import { XCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
@@ -100,7 +101,7 @@ export function ManualReviewDetailModal({
 
   return (
     // Con el visor o un diálogo de confirmación abiertos, Escape cierra solo ese: el detalle queda `busy`.
-    <Modal open onClose={onClose} busy={visorAbierto || accionAbierta} title="Detalle de validación manual" icon={ScanFace} size="xl">
+    <Modal open onClose={onClose} busy={visorAbierto || accionAbierta} title="Detalle de validación manual" icono="biometria" size="xl">
       <DetalleCuerpo
         id={id}
         client={client}
@@ -139,7 +140,7 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
     return (
       <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 text-sm ${MANUAL_AVISO.success}`}>
         <p className="flex items-center gap-2 font-semibold">
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Identidad aprobada
+          <Icono nombre="check" className="h-4 w-4 shrink-0" /> Identidad aprobada
         </p>
         <CertificadoIdentidadAccion
           validation={{ id: detail.id, status: 'aprobado', provider: 'manual', cartaDisponible: detail.cartaDisponible }}
@@ -170,7 +171,7 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
   if (sinCapturas) {
     return (
       <div role="status" className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.info}`}>
-        <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Icono nombre="reloj" className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0">
           <p className="font-semibold">El cliente aún no ha capturado.</p>
           {detail.linkExpiresAt && (
@@ -188,9 +189,9 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
     return (
       <div className={`${MANUAL_AVISO_BASE} ${noVerificadas > 0 ? MANUAL_AVISO.warning : MANUAL_AVISO.info}`}>
         {noVerificadas > 0 ? (
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
         ) : (
-          <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <Icono nombre="ojo" className="mt-0.5 h-4 w-4 shrink-0" />
         )}
         <div className="min-w-0">
           <p className="font-semibold">Revisa las fotos y decide</p>
@@ -267,7 +268,7 @@ function DetalleCuerpo({
                 )}
               </dl>
               <div className="mt-3 flex items-start gap-2 text-sm">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-flit-brand" aria-hidden />
+                <Icono nombre="escudo" className="mt-0.5 h-4 w-4 shrink-0 text-flit-brand" />
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-muted-foreground">Consentimiento de tratamiento de datos</p>
                   <p className="mt-0.5 font-semibold text-foreground">
@@ -285,9 +286,9 @@ function DetalleCuerpo({
                 className={`${MANUAL_AVISO_BASE} items-center font-semibold ${avisoConProblema ? MANUAL_AVISO.warning : MANUAL_AVISO.success}`}
               >
                 {avisoConProblema ? (
-                  <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                  <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
                 ) : (
-                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <Icono nombre="check" className="h-4 w-4 shrink-0" />
                 )}{' '}
                 {mensaje}
               </p>

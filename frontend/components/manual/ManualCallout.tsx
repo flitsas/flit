@@ -1,9 +1,11 @@
 import type { ManualCallout } from "@/lib/manual/types";
-import { Info, Lightbulb, AlertTriangle } from "lucide-react";
+import { Info, Lightbulb } from "lucide-react";
+import type { ComponentType } from "react";
+import { iconoComo, type IconoComoProps } from "@flit/ui/Icono";
 
 const styles: Record<
   ManualCallout["variant"],
-  { border: string; bg: string; icon: typeof Info; label: string }
+  { border: string; bg: string; icon: ComponentType<IconoComoProps>; label: string }
 > = {
   info: {
     border: "var(--di-sky-line)",
@@ -20,7 +22,7 @@ const styles: Record<
   warning: {
     border: "var(--badge-warning-border)",
     bg: "var(--badge-warning-bg)",
-    icon: AlertTriangle,
+    icon: iconoComo("alerta"),
     label: "Importante",
   },
 };

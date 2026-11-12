@@ -7,7 +7,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Download, FileText } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 
 export type PreviewState = "idle" | "loading" | "loaded" | "error";
@@ -66,7 +66,7 @@ export function DocumentPreviewModal({
       open={open}
       onClose={onClose}
       title={title}
-      icon={FileText}
+      icono="documento"
       size="lg"
       // La previsualización SIEMPRE va encima de lo que la abrió, y hoy la abren superficies que
       // ya están muy arriba en la pila: el shell del detalle de trámite (z-1100) y el modal del
@@ -115,7 +115,7 @@ export function DocumentPreviewModal({
                 aria-label="Descargar documento"
                 onClick={onDownload}
               >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                 Descargar
               </button>
             )}
@@ -128,10 +128,7 @@ export function DocumentPreviewModal({
             className="flex-1 flex flex-col items-center justify-center gap-4 py-12"
             data-testid="preview-idle"
           >
-            <FileText
-              className="h-12 w-12 opacity-30"
-              aria-hidden="true"
-            />
+            <Icono nombre="documento" className="h-12 w-12 opacity-30" />
             <p className="text-sm opacity-60 text-center">
               No hay previsualización disponible.
             </p>
@@ -143,7 +140,7 @@ export function DocumentPreviewModal({
                 aria-label="Descargar documento"
                 onClick={onDownload}
               >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                 Descargar
               </button>
             )}
@@ -182,10 +179,7 @@ export function DocumentPreviewModal({
                 className="flex-1 flex flex-col items-center justify-center gap-4 py-12"
                 data-testid="preview-fallback"
               >
-                <FileText
-                  className="h-12 w-12 opacity-30"
-                  aria-hidden="true"
-                />
+                <Icono nombre="documento" className="h-12 w-12 opacity-30" />
                 <p className="text-sm opacity-60 text-center">
                   Este tipo de archivo no se puede previsualizar.
                 </p>
@@ -197,7 +191,7 @@ export function DocumentPreviewModal({
                     aria-label="Descargar documento"
                     onClick={onDownload}
                   >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                     Descargar
                   </button>
                 )}
@@ -213,7 +207,7 @@ export function DocumentPreviewModal({
                   aria-label="Descargar documento"
                   onClick={onDownload}
                 >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                   Descargar
                 </button>
               </div>

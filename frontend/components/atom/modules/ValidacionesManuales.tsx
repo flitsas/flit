@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Eye, Info, Link2, Search } from 'lucide-react';
+import { Info, Link2 } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
 import { ActionsMenu } from '@/components/atom/ActionsMenu';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -171,7 +172,7 @@ export function ValidacionesManuales({
               key: 'ver-detalle',
               label: 'Ver detalle',
               ariaLabel: `Ver detalle de ${r.fullName}`,
-              icon: Eye,
+              icon: iconoComo("ojo"),
               onSelect: () => setDetalleId(r.id),
             },
             // HU #14306: solo si espera captura del cliente (no aprobada ni con captura enviada).
@@ -200,7 +201,7 @@ export function ValidacionesManuales({
             Nombre o número de documento
           </label>
           <div className="relative mt-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-70" aria-hidden />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-70" />
             <input
               id={`${idBase}-q`}
               type="search"

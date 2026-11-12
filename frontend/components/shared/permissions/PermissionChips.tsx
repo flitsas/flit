@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 // Chips compartidos de la sección «Permisos por módulo» (filas sueltas y par Ver/Crear).
 
@@ -22,7 +22,7 @@ export function OutOfCapChip({ tooltip, id }: { tooltip: string; id: string }) {
       className="inline-flex items-center gap-1 rounded-full border border-current px-2 py-0.5 text-[10px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
       style={{ color: "var(--badge-danger-fg)" }}
     >
-      <Lock className="h-3 w-3" aria-hidden="true" />
+      <Icono nombre="candado" className="h-3 w-3" />
       {OUT_OF_CAP_LABEL}
       <span id={id} role="tooltip" className="sr-only">
         {tooltip}
@@ -46,7 +46,7 @@ export function SoloSaChip() {
         borderColor: "var(--badge-pending-border)",
       }}
     >
-      <Lock className="h-3 w-3" aria-hidden="true" />
+      <Icono nombre="candado" className="h-3 w-3" />
       Solo SA
       <span id={tipId} className="sr-only">
         {SOLO_SA_TOOLTIP}

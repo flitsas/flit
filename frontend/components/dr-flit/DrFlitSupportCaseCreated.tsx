@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DrFlitSupportCaseCreated as CaseCreated } from "./dr-flit-chat-types";
 
 /**
@@ -25,12 +25,12 @@ export function DrFlitSupportCaseCreated({
       }}
     >
       <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--dr-flit-text)" }}>
-        <CheckCircle2 className="h-5 w-5 shrink-0" style={{ color: "var(--dr-flit-success)" }} aria-hidden="true" />
+        <Icono nombre="check" className="h-5 w-5 shrink-0" style={{ color: "var(--dr-flit-success)" }} />
         Tu caso #{result.caseId} quedó radicado
       </p>
       {result.attachmentsFailed > 0 ? (
         <p className="flex items-center gap-2 text-xs" style={{ color: "var(--dr-flit-text)" }}>
-          <AlertCircle className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} aria-hidden="true" />
+          <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
           {result.attachmentsFailed === 1
             ? "1 adjunto no se pudo incluir en el caso."
             : `${result.attachmentsFailed} adjuntos no se pudieron incluir en el caso.`}{" "}
@@ -45,7 +45,7 @@ export function DrFlitSupportCaseCreated({
           style={{ color: "var(--dr-flit-brand-title)" }}
         >
           Abrir el caso en Azure DevOps
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="externo" className="h-3.5 w-3.5" />
         </button>
       ) : null}
     </section>

@@ -15,8 +15,9 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
-import { Bookmark, CalendarPlus, Check, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CalendarPlus, Lightbulb, type LucideIcon } from "lucide-react";
+import { Icono, iconoComo, type IconoComoProps, type NombreIcono } from "@flit/ui/Icono";
+import { useMemo, useState, type ComponentType } from "react";
 
 import { Modal } from "@/components/atom/Modal";
 import { RANGE_PRESETS, type SavedQuery } from "@/lib/api/queries";
@@ -63,7 +64,7 @@ export function SavedQueryList({
 
   return (
     <div className="flex flex-col gap-4" data-testid={`${testIdPrefix}-guardadas`}>
-      <Grupo titulo="Mis consultas" cuenta={propias.length} icono={Bookmark}>
+      <Grupo titulo="Mis consultas" cuenta={propias.length} icono={iconoComo("marcador")}>
         {propias.length === 0 ? (
           // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
           <p className="rounded-xl border border-dashed border-border px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
@@ -85,7 +86,7 @@ export function SavedQueryList({
             testIdPrefix={testIdPrefix}
             grupoId="guardadas"
             modalTitulo="Mis consultas"
-            modalIcono={Bookmark}
+            modalIcono="marcador"
           />
         )}
       </Grupo>
@@ -158,7 +159,7 @@ function ConsultasConDesborde({
   /** Distingue los data-testid del «Ver todas» y el buscador de este grupo del otro grupo. */
   grupoId: string;
   modalTitulo: string;
-  modalIcono: typeof Bookmark;
+  modalIcono: NombreIcono | LucideIcon;
 }) {
   const [modalAbierto, setModalAbierto] = useState(false);
 
@@ -211,7 +212,7 @@ function ConsultasConDesborde({
           open={modalAbierto}
           onClose={() => setModalAbierto(false)}
           title={modalTitulo}
-          icon={modalIcono}
+          {...(typeof modalIcono === "string" ? { icono: modalIcono } : { icon: modalIcono })}
           size="sm"
         >
           <BuscadorDeConsultas
@@ -272,10 +273,7 @@ function BuscadorDeConsultas({
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           autoFocus
           type="search"
@@ -334,7 +332,7 @@ function Grupo({
   cuenta: number;
   nota?: string;
   /** Distingue el grupo de un vistazo, sin depender solo del texto del título. */
-  icono: typeof Bookmark;
+  icono: ComponentType<IconoComoProps>;
   /** Traza la línea de separación con el grupo anterior. */
   separado?: boolean;
   children: React.ReactNode;
@@ -442,7 +440,7 @@ function Item({
             {query.nombre}
           </span>
           {activo && !modificada && (
-            <Check className="mt-[3px] h-3 w-3 shrink-0 text-flit-brand" aria-hidden="true" />
+            <Icono nombre="check" className="mt-[3px] h-3 w-3 shrink-0 text-flit-brand" />
           )}
         </span>
 
@@ -460,10 +458,7 @@ function Item({
 
         {/* La flecha solo aparece al apuntar: basta para decir «esto se abre» sin competir con el
             nombre, que es lo que la persona viene a leer. */}
-        <ChevronRight
-          className="pointer-events-none absolute right-1.5 top-2.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-          aria-hidden="true"
-        />
+        <Icono nombre="derecha" className="pointer-events-none absolute right-1.5 top-2.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
       </button>
 
       {/* Programar y borrar comparten la esquina inferior derecha, en un grupo — así ninguno tapa
@@ -489,7 +484,7 @@ function Item({
               title={`Borrar «${query.nombre}»`}
               className="rounded-md p-1 text-muted-foreground transition hover:bg-[var(--badge-danger-bg)] hover:text-destructive"
             >
-              <Trash2 className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="papelera" className="h-3 w-3" />
             </button>
           )}
         </span>

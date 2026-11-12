@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
+import { BellPlus } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -157,7 +158,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
             className={cn(subTabClass(subView === "history"), "flex items-center gap-1")}
             style={subView === "history" ? { background: "var(--color-flit-brand)" } : undefined}
           >
-            <History className="h-3.5 w-3.5" aria-hidden="true" /> Historial de disparos
+            <Icono nombre="reloj" className="h-3.5 w-3.5" /> Historial de disparos
           </button>
         </div>
         {subView === "rules" && !formOpen && !needsCompany && (
@@ -238,8 +239,8 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                         <td data-label="Acciones" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                           <RowActions
                             actions={[
-                              { icon: Pencil, label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
-                              { icon: Trash2, label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
+                              { icon: iconoComo("lapiz"), label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
+                              { icon: iconoComo("papelera"), label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
                             ]}
                           />
                         </td>

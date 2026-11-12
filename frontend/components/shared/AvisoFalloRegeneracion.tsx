@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   COPY_FALLO_REGENERACION,
   textoAvisoFalloRegeneracion,
@@ -50,11 +50,7 @@ export function AvisoFalloRegeneracion({
         borderColor: 'var(--badge-warning-border)',
       }}
     >
-      <AlertTriangle
-        className="mt-0.5 h-4 w-4 shrink-0"
-        style={{ color: 'var(--badge-warning-fg)' }}
-        aria-hidden="true"
-      />
+      <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} />
       <p className="min-w-0 flex-1 text-xs">
         <span className="font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
           {COPY_FALLO_REGENERACION.titulo[fallo.documento]}.
@@ -72,7 +68,7 @@ export function AvisoFalloRegeneracion({
           className="inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50 dark:bg-transparent"
           style={{ borderColor: 'var(--badge-warning-border)', color: 'var(--badge-warning-fg)' }}
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           {COPY_FALLO_REGENERACION.reintentar}
         </button>
       ) : null}

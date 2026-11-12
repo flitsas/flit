@@ -3,7 +3,7 @@
 // Barra de pestañas del módulo Reportes (Reportes 2.0, HU-C).
 // Copia local del patrón `components/admin/transit-offices/OtTabBar.tsx`,
 // con soporte de dark mode en el color del texto inactivo.
-import { cn } from "@/lib/utils";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 export interface ReportesTabItem {
   id: string;
@@ -20,7 +20,7 @@ export interface ReportesTabBarProps {
 export function ReportesTabBar({ tabs, activeId, onChange, ariaLabel }: ReportesTabBarProps) {
   return (
     <div
-      className="flex items-center gap-1 overflow-x-auto border-b"
+      className={PESTANAS_LISTA_CLS}
       role="tablist"
       aria-label={ariaLabel}
     >
@@ -33,16 +33,12 @@ export function ReportesTabBar({ tabs, activeId, onChange, ariaLabel }: Reportes
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.id)}
-            className={cn(
-              "relative shrink-0 px-4 py-2.5 text-xs font-semibold transition",
-              active ? "text-flit-brand opacity-100" : "text-flit-primary opacity-65",
-            )}
+            className={pestanaClass(active)}
           >
             {tab.label}
             {active && (
               <span
-                className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "var(--color-flit-brand)" }}
+                className="hidden"
               />
             )}
           </button>

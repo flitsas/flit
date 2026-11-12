@@ -129,7 +129,7 @@ export function ColumnSelector({
           role="dialog"
           aria-label={`Elegir columnas visibles de ${label.toLowerCase()}`}
           aria-describedby={hintId}
-          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-card shadow-lg dark:bg-secondary"
+          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-card shadow-[var(--kit-sombra)] dark:bg-secondary"
         >
           {/* Cabecera y aviso quedan FIJOS; solo scrollea la lista. El scroll va en un `div`, no
               en el `<fieldset>`: fieldset no funciona como contenedor flex con overflow y la

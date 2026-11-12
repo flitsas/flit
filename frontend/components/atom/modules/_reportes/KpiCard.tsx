@@ -19,8 +19,8 @@ export interface KpiCardProps {
   variation?: number | null;
   /** Ya no se aplica (HU #14476): la cifra va en el texto principal, como en el prototipo. Se conserva por API. */
   color?: string;
-  /** Ilustración decorativa a la derecha (`ilustracionDe(...)` de `@flit/ui/ilustraciones`). */
-  ilustracion?: string;
+  /** Ícono del kit a la derecha: clave de MAPA_ICONO (`@flit/ui/iconos-mapas`). */
+  icono?: string;
   /** `true` cuando subir es MALO (p. ej. % de rechazo): invierte el color de la flecha. */
   invertVariationColor?: boolean;
   testId?: string;
@@ -35,7 +35,7 @@ export function KpiCard({
   tooltip,
   variation,
   invertVariationColor = false,
-  ilustracion,
+  icono,
   testId,
 }: KpiCardProps) {
   // HU #14476 — la tarjeta de cifra del prototipo «Diseño Inteligente» (`TarjetaMetrica`): la cifra va en el texto
@@ -45,7 +45,7 @@ export function KpiCard({
     <TarjetaMetrica
       etiqueta={label}
       cifra={value}
-      ilustracion={ilustracion}
+      icono={icono}
       title={tooltip}
       data-testid={testId}
       className="min-h-[96px]"

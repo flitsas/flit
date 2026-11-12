@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ChevronDown, FileText, FolderOpen, Menu, X } from "lucide-react";
+import { Menu } from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { getNavTree, type ManualArticle } from "@/lib/manual/catalog";
 import { MANUAL_VERSION, MANUAL_VERSION_DATE } from "@/lib/manual/articles/meta";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { ManualSearch } from "./ManualSearch";
 import { ManualToc } from "./ManualToc";
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
 
 // Homologación (HU #14511): deja el logo «FLIT Docs» y usa el acceso de la vista «Ayuda» de la propuesta (`vAyuda`).
 function ManualLogo() {
@@ -17,14 +18,7 @@ function ManualLogo() {
       href="/manual"
       className="m-3 flex min-h-[72px] items-center gap-3.5 rounded-xl px-3 py-3 transition-colors hover:bg-[var(--manual-active-bg)]"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={rutaIlustracion("ayuda")}
-        alt=""
-        aria-hidden
-        className="h-10 w-10 shrink-0 object-contain"
-        draggable={false}
-      />
+      <IconoModulo clave="ayuda" disco size={40} className="shrink-0" />
       <span className="leading-tight">
         <span className="block text-base font-bold" style={{ color: "var(--manual-heading)" }}>
           Ayuda
@@ -63,12 +57,9 @@ function SidebarNav({
               onClick={() => setOpenSections((s) => ({ ...s, [section.id]: !open }))}
               aria-expanded={open}
             >
-              <FolderOpen className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+              <Icono nombre="carpeta" className="h-4 w-4 shrink-0 opacity-70" />
               <span className="flex-1">{section.label}</span>
-              <ChevronDown
-                className={`h-4 w-4 shrink-0 opacity-60 transition-transform ${open ? "" : "-rotate-90"}`}
-                aria-hidden
-              />
+              <Icono nombre="abajo" className={`h-4 w-4 shrink-0 opacity-60 transition-transform ${open ? "" : "-rotate-90"}`} />
             </button>
             {open && (
               <ul className="mt-0.5 space-y-0.5 list-none m-0 p-0 pl-1">
@@ -91,10 +82,7 @@ function SidebarNav({
                             : { color: "var(--manual-text)" }
                         }
                       >
-                        <FileText
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60"
-                          aria-hidden
-                        />
+                        <Icono nombre="documento" className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-60" />
                         <span>{a.title}</span>
                       </Link>
                     </li>
@@ -130,7 +118,7 @@ export function ManualShell({
       {mobileOpen && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-[var(--overlay)] backdrop-blur-md lg:hidden"
+          className={`fixed inset-0 z-40 lg:hidden ${MODAL_VELO_CLS}`}
           aria-label="Cerrar menú"
           onClick={() => setMobileOpen(false)}
         />
@@ -155,7 +143,7 @@ export function ManualShell({
               onClick={() => setMobileOpen(false)}
               aria-label="Cerrar menú lateral"
             >
-              <X className="h-5 w-5" style={{ color: "var(--manual-text)" }} />
+              <Icono nombre="cerrar" className="h-5 w-5" style={{ color: "var(--manual-text)" }} />
             </button>
           </div>
 

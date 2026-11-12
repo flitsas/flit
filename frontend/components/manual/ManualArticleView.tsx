@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ManualArticle } from "@/lib/manual/catalog";
 import { getAdjacentArticles } from "@/lib/manual/catalog";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { ManualCalloutBox } from "./ManualCallout";
 import { ManualMediaFigure } from "./ManualMediaFigure";
 
@@ -14,7 +13,7 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
     // Homologación (HU #14511): vista «Ayuda» de la propuesta (`vAyuda`): cabecera con ilustración y el cuerpo en tarjeta.
     <article className="grid gap-5">
       <CabeceraModulo
-        ilustracion={rutaIlustracion("ayuda")}
+        icono="ayuda"
         encima={
           <p
             className="inline-flex rounded-full px-3 py-1 text-xs font-semibold"
@@ -127,7 +126,7 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
               className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide"
               style={{ color: "var(--manual-text-soft)" }}
             >
-              <ChevronLeft className="h-4 w-4" aria-hidden />
+              <Icono nombre="izquierda" className="h-4 w-4" />
               Anterior tema
             </span>
             <span
@@ -151,7 +150,7 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
               style={{ color: "var(--manual-text-soft)" }}
             >
               Siguiente tema
-              <ChevronRight className="h-4 w-4" aria-hidden />
+              <Icono nombre="derecha" className="h-4 w-4" />
             </span>
             <span
               className="mt-2 text-sm font-semibold group-hover:underline"
