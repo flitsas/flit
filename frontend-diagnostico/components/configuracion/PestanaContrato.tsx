@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Save } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
-import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
+import { INTERRUPTOR_ALERTA_CLS, INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SearchableSelect, type SearchableSelectOption } from "@flit/ui/SearchableSelect";
@@ -363,7 +363,7 @@ function EditorContratoBackoffice() {
               aria-labelledby="contrato-ia"
               disabled={ocupado}
               onClick={() => setBorrador({ ...borrador, suspendida: !borrador.suspendida })}
-              className={`${INTERRUPTOR_CLS} ${FOCO_CLS}`}
+              className={`${INTERRUPTOR_CLS} ${INTERRUPTOR_ALERTA_CLS} ${FOCO_CLS}`}
             >
               <span
                 aria-hidden="true"
