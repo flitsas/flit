@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Braces, Code2, Heading2, Heading3, Italic, List, ListOrdered, Table, Underline } from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Bold, Braces, Code2, Heading2, Heading3, Italic, Underline } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { controlCls, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { limpiarHtml, TABLA_SIMPLE } from "@/lib/editorHtml";
 import type { VariablePlantilla } from "@/lib/tipos";
@@ -74,13 +75,13 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
         <Boton titulo="Título" onClick={() => comando("formatBlock", "h2")}><Heading2 className="h-4 w-4" /></Boton>
         <Boton titulo="Subtítulo" onClick={() => comando("formatBlock", "h3")}><Heading3 className="h-4 w-4" /></Boton>
         <Boton titulo="Párrafo" onClick={() => comando("formatBlock", "p")}><span className="text-xs font-bold">P</span></Boton>
-        <Boton titulo="Lista con viñetas" onClick={() => comando("insertUnorderedList")}><List className="h-4 w-4" /></Boton>
-        <Boton titulo="Lista numerada" onClick={() => comando("insertOrderedList")}><ListOrdered className="h-4 w-4" /></Boton>
+        <Boton titulo="Lista con viñetas" onClick={() => comando("insertUnorderedList")}><Icono nombre="lista" className="h-4 w-4" /></Boton>
+        <Boton titulo="Lista numerada" onClick={() => comando("insertOrderedList")}><Icono nombre="lista" className="h-4 w-4" /></Boton>
         <Boton titulo="Alinear a la izquierda" onClick={() => comando("justifyLeft")}><AlignLeft className="h-4 w-4" /></Boton>
         <Boton titulo="Centrar" onClick={() => comando("justifyCenter")}><AlignCenter className="h-4 w-4" /></Boton>
         <Boton titulo="Alinear a la derecha" onClick={() => comando("justifyRight")}><AlignRight className="h-4 w-4" /></Boton>
         <Boton titulo="Justificar" onClick={() => comando("justifyFull")}><AlignJustify className="h-4 w-4" /></Boton>
-        <Boton titulo="Tabla" onClick={() => comando("insertHTML", TABLA_SIMPLE)}><Table className="h-4 w-4" /></Boton>
+        <Boton titulo="Tabla" onClick={() => comando("insertHTML", TABLA_SIMPLE)}><Icono nombre="reporte-detallado" className="h-4 w-4" /></Boton>
         <span className="mx-1 h-5 w-px bg-border" />
         <button type="button" className={controlCls(verVariables)} onMouseDown={(e) => e.preventDefault()} onClick={() => setVerVariables((v) => !v)}>
           <Braces className="h-3.5 w-3.5" aria-hidden />

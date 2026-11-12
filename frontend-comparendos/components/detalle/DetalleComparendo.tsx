@@ -31,6 +31,7 @@ import { formatoFecha, formatoFechaHora, formatoPesos } from "@/lib/format/date"
 import { tienePermiso } from "@/lib/sesion";
 import type { CambioCampo, DetalleComparendo as Detalle } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 const ORIGEN_CONTRAVENTOR: Record<string, string> = { Api: "Automático", Manual: "Manual", MigracionV1: "Migrado de V1" };
 
@@ -54,9 +55,9 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-2" role="tablist">
+      <div className={PESTANAS_LISTA_CLS} role="tablist">
         {(["datos", "fuentes", "cambios"] as const).map((p) => (
-          <button key={p} type="button" role="tab" aria-selected={pestana === p} className={controlCls(pestana === p)} onClick={() => setPestana(p)}>
+          <button key={p} type="button" role="tab" aria-selected={pestana === p} className={pestanaClass(pestana === p)} onClick={() => setPestana(p)}>
             {p === "datos" ? "Datos" : p === "fuentes" ? "Fuentes" : "Historial de cambios"}
           </button>
         ))}

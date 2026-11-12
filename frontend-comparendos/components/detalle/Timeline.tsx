@@ -141,7 +141,7 @@ export function Timeline({
         <div className="pointer-events-none sticky bottom-3 flex justify-end">
           <button
             type="button"
-            className={`${BOTON_PRIMARIO_CLS} pointer-events-auto rounded-full shadow-lg`}
+            className={`${BOTON_PRIMARIO_CLS} pointer-events-auto rounded-full`}
             onClick={() => setEscribiendo(true)}
           >
             <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />

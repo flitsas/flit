@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 import { esEmpresaValida } from "@/lib/configuracion";
@@ -57,7 +57,7 @@ export function SelectorEmpresa({ valor, onElegir }: SelectorEmpresaProps) {
           className={`${CAMPO_CLS} max-w-md font-mono`}
         />
         <button type="submit" className={BOTON_PRIMARIO_CLS}>
-          <Search className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="buscar" className="h-4 w-4" />
           Ver lotes
         </button>
       </div>

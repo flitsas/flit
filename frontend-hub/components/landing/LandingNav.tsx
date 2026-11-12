@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Menu, X } from "lucide-react";
+import { Menu } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { BrandLogo } from "@flit/brand/BrandLogo";
 import { ThemeToggle } from "@flit/shell/theme";
 import { PRODUCTS } from "@/lib/products";
@@ -60,7 +61,7 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
               className={`${linkClass} inline-flex items-center gap-1`}
             >
               Productos
-              <ChevronDown className={`h-4 w-4 transition ${productsOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+              <Icono nombre="abajo" className={`h-4 w-4 transition ${productsOpen ? "rotate-180" : ""}`} />
             </button>
             {productsOpen && (
               <div
@@ -110,7 +111,7 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
             aria-controls="landing-menu-movil"
             onClick={() => setMobileOpen((v) => !v)}
           >
-            {mobileOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+            {mobileOpen ? <Icono nombre="cerrar" className="h-5 w-5" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
           </button>
         </div>
       </nav>

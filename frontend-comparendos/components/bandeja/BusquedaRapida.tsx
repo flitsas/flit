@@ -1,14 +1,16 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { AlertTriangle, ChevronDown, Clock, UserX } from "lucide-react";
+import type { ComponentType } from "react";
+import { UserX } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import type { Contadores } from "@/lib/tipos";
 import { TEXTO_JURIDICO, TEXTO_RAPIDO, type FiltroJuridico, type FiltroRapido } from "@/lib/filtros";
 
-const RAPIDOS: { id: FiltroRapido; color: string; icono: typeof Clock; contador: "proximosAVencer" | "sinContraventor" | "rechazadosOt" }[] = [
-  { id: "ProximosAVencer", color: "var(--badge-danger-fg)", icono: Clock, contador: "proximosAVencer" },
+const RAPIDOS: { id: FiltroRapido; color: string; icono: ComponentType<{ className?: string; "aria-hidden"?: boolean }>; contador: "proximosAVencer" | "sinContraventor" | "rechazadosOt" }[] = [
+  { id: "ProximosAVencer", color: "var(--badge-danger-fg)", icono: iconoComo("reloj"), contador: "proximosAVencer" },
   { id: "SinContraventor", color: "var(--badge-purple-fg)", icono: UserX, contador: "sinContraventor" },
-  { id: "RechazadosOt", color: "var(--badge-warning-fg)", icono: AlertTriangle, contador: "rechazadosOt" },
+  { id: "RechazadosOt", color: "var(--badge-warning-fg)", icono: iconoComo("alerta"), contador: "rechazadosOt" },
 ];
 
 // C-321 y Pico y placa eléctricos no están: siguen sin definición (S-57) y la HU #13870 los oculta hasta que existan.
@@ -89,7 +91,7 @@ export function BusquedaRapida({
           className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-flit-primary transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
         >
           Búsqueda rápida
-          <ChevronDown className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? "rotate-180" : ""}`} aria-hidden />
+          <Icono nombre="abajo" className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? "rotate-180" : ""}`} />
         </button>
       </h2>
       <div id="bandeja-busqueda-rapida" hidden={!abierto} className="px-4 pb-3">

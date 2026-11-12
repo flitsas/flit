@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, CircleX, FileText, MailPlus, MessageSquareReply, Send } from "lucide-react";
+import { CircleX, MailPlus, MessageSquareReply } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -148,7 +149,7 @@ function Solicitar({ ctx }: { ctx: ContextoDetalle }) {
       <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
         {v.condiciones.map((c) => (
           <li key={c.codigo} className="flex items-start gap-1.5">
-            {c.cumple ? <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0 text-[var(--flit-success-ink)]" aria-label="Cumple" /> : <CircleX className="mt-px h-3.5 w-3.5 shrink-0 text-destructive" aria-label="No cumple" />}
+            {c.cumple ? <Icono nombre="check" className="mt-px h-3.5 w-3.5 shrink-0 text-[var(--flit-success-ink)]" etiqueta="Cumple" /> : <CircleX className="mt-px h-3.5 w-3.5 shrink-0 text-destructive" aria-label="No cumple" />}
             <span className={c.cumple ? "" : "font-semibold"}>{c.descripcion}</span>
           </li>
         ))}
@@ -156,18 +157,18 @@ function Solicitar({ ctx }: { ctx: ContextoDetalle }) {
       <div className="flex flex-wrap gap-2">
         {v.condiciones.find((c) => c.codigo === "CONDUCTOR")?.cumple && (
           <button type="button" className={controlCls(false)} onClick={verFormato}>
-            <FileText className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="documento" className="h-3.5 w-3.5" />
             Ver formato
           </button>
         )}
         {v.condiciones.find((c) => c.codigo === "CONDUCTOR")?.cumple && (
           <button type="button" className={controlCls(false)} onClick={verCarta}>
-            <FileText className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="documento" className="h-3.5 w-3.5" />
             Ver carta al conductor
           </button>
         )}
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!v.viable} onClick={() => setConfirmar(true)}>
-          <Send className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="radicacion" className="h-3.5 w-3.5" />
           Solicitar cambio
         </button>
       </div>

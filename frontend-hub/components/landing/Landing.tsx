@@ -1,5 +1,6 @@
 import { createElement } from "react";
-import { ArrowRight, ArrowUpRight, Check, Globe, KeyRound, Mail, Palette, Plug, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUpRight, Globe, Palette } from "lucide-react";
+import { Icono, iconoComo } from "@flit/ui/Icono";
 import { BrandLogo } from "@flit/brand/BrandLogo";
 import { PRODUCTS, type ProductInfo } from "@/lib/products";
 import { COMPANY, CONTACT, PILLARS, STEPS, demoMailto } from "@/lib/site";
@@ -14,7 +15,7 @@ import { buttonClass } from "@flit/ui/Button";
 // panel de tinta (--di-ingreso-*, igual en los dos temas), ilustraciones de producto, tarjetas `.card` y botones píldora.
 // Tiene modo oscuro. Sin precios por decisión de negocio. El texto vive en lib/products.ts y lib/site.ts.
 
-const PILLAR_ICONS = { "key-round": KeyRound, plug: Plug, "shield-check": ShieldCheck, palette: Palette } as const;
+const PILLAR_ICONS = { "key-round": iconoComo("rol"), plug: iconoComo("integraciones"), "shield-check": iconoComo("escudo"), palette: Palette } as const;
 
 const card =
   "rounded-[20px] border border-[color:var(--di-border)] bg-[color:var(--di-surface-elevated)] shadow-[var(--shadow-card)]";
@@ -29,8 +30,6 @@ const TINTA = {
     "radial-gradient(70% 60% at 0% 100%, color-mix(in srgb, var(--di-ingreso-azul) 38%, transparent), transparent 70%)," +
     "var(--di-ingreso-fondo)",
 };
-/** Texto con el degradado del titular del ingreso. */
-const DEGRADADO_TINTA = { backgroundImage: "linear-gradient(90deg, var(--di-ingreso-acento-1), var(--di-ingreso-acento-2))" };
 /** Botón de contorno claro sobre la tinta. */
 const BOTON_TINTA =
   "inline-flex min-h-11 items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--di-ingreso-texto)_45%,transparent)] px-6 text-sm font-semibold text-[color:var(--di-ingreso-texto)] transition hover:bg-[color:color-mix(in_srgb,var(--di-ingreso-texto)_10%,transparent)]";
@@ -83,19 +82,19 @@ function Hero({ loginUrl }: { loginUrl: string }) {
               borderColor: "color-mix(in srgb, var(--di-ingreso-texto) 16%, transparent)",
             }}
           >
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="destello" className="h-3.5 w-3.5" />
             {COMPANY.headline}
           </p>
           <h1 className="mt-6 text-4xl font-extrabold leading-[1.08] tracking-[-0.01em] md:text-5xl lg:text-6xl">
             Trámites, comparendos y vehículos{" "}
-            <span className="bg-clip-text text-transparent" style={DEGRADADO_TINTA}>
+            <span className="text-[color:var(--di-ingreso-acento-1)]">
               en una sola plataforma
             </span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-[color:var(--di-ingreso-texto-2)]">{COMPANY.summary}</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a href={loginUrl} className={buttonClass({ className: "px-6" })}>
-              Iniciar sesión <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              Iniciar sesión <Icono nombre="derecha" className="h-4 w-4" />
             </a>
             <a href={demoMailto()} className={BOTON_TINTA}>
               Solicitar una demostración
@@ -104,7 +103,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
           <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[color:var(--di-ingreso-texto-2)]">
             {["Integrado con RUNT y SIMIT", "Una sola cuenta para todo", "Auditoría de cada operación"].map((t) => (
               <li key={t} className="inline-flex items-center gap-2">
-                <Check className="h-4 w-4 text-[color:var(--di-ingreso-acento-2)]" aria-hidden="true" />
+                <Icono nombre="check" className="h-4 w-4 text-[color:var(--di-ingreso-acento-2)]" />
                 {t}
               </li>
             ))}
@@ -132,7 +131,7 @@ function Hero({ loginUrl }: { loginUrl: string }) {
             {PRODUCTS.map((p) => (
               <li
                 key={p.code}
-                className="flex items-center gap-4 rounded-2xl bg-[color:var(--di-ingreso-tarjeta)] p-4 text-[color:var(--di-ingreso-fondo)] shadow-[var(--di-ingreso-sombra-tarjeta)]"
+                className="flex items-center gap-4 rounded-2xl bg-[color:var(--di-ingreso-tarjeta)] p-4 text-[color:var(--di-ingreso-fondo)]"
               >
                 <ProductArt code={p.code} icon={p.icon} size="sm" muted={p.status === "soon"} />
                 <div className="min-w-0 flex-1">
@@ -171,7 +170,7 @@ function ProductsOverview() {
             <h3 className={`mt-4 text-lg font-semibold ${titulo}`}>{p.name}</h3>
             <p className={`mt-2 flex-1 text-sm leading-relaxed ${muted}`}>{p.tagline}</p>
             <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[color:var(--di-action)]">
-              Conocer más <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
+              Conocer más <Icono nombre="derecha" className="h-4 w-4 transition group-hover:translate-x-0.5" />
             </span>
           </a>
         ))}
@@ -200,14 +199,14 @@ function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInf
           <div className="mt-8 flex flex-wrap gap-3">
             {available ? (
               <a href={loginUrl} className={buttonClass()}>
-                Entrar a {p.name} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                Entrar a {p.name} <Icono nombre="derecha" className="h-4 w-4" />
               </a>
             ) : (
               <a
                 href={`mailto:${CONTACT.email}?subject=${encodeURIComponent(`Quiero saber cuándo llega ${p.name}`)}`}
                 className={buttonClass()}
               >
-                Quiero saber cuándo llega <Mail className="h-4 w-4" aria-hidden="true" />
+                Quiero saber cuándo llega <Icono nombre="correo" className="h-4 w-4" />
               </a>
             )}
             <a href={demoMailto()} className={buttonClass({ variant: "ghost" })}>
@@ -222,7 +221,7 @@ function ProductSection({ product: p, reverse, loginUrl }: { product: ProductInf
             {p.features.map((f) => (
               <li key={f} className="flex gap-3 text-sm leading-relaxed">
                 <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[color:var(--di-success-soft)] text-[color:var(--di-success)]">
-                  <Check className="h-3 w-3" aria-hidden="true" />
+                  <Icono nombre="check" className="h-3 w-3" />
                 </span>
                 {f}
               </li>
@@ -275,7 +274,7 @@ function About() {
       <ul className="grid gap-4">
         {COMPANY.values.map((v, i) => (
           <li key={v.title} className={`${card} flex gap-5 p-6`}>
-            <span className="bg-clip-text text-3xl font-bold text-transparent" style={{ backgroundImage: "var(--di-gradient-action)" }}>
+            <span className="text-3xl font-bold text-[color:var(--kit-azul-texto)]">
               0{i + 1}
             </span>
             <div>
@@ -335,7 +334,7 @@ function Contact() {
         </p>
         <div className="relative mt-8 flex flex-wrap justify-center gap-3">
           <a href={demoMailto()} className={buttonClass({ className: "px-6" })}>
-            <Mail className="h-4 w-4" aria-hidden="true" /> {CONTACT.email}
+            <Icono nombre="correo" className="h-4 w-4" /> {CONTACT.email}
           </a>
           <a href={CONTACT.web} target="_blank" rel="noopener" className={BOTON_TINTA}>
             <Globe className="h-4 w-4" aria-hidden="true" /> {CONTACT.web.replace("https://", "")}

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ApiError } from "@/lib/api";
 import { accesoNegado, analizarCarga, confirmarVehiculos, type FilaCapturada, type FilaResumen, type ResumenValidacion as Resumen } from "@/lib/carga/api";
@@ -176,7 +176,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
           Archivo analizado: <span className="break-all font-semibold text-flit-primary">{analisis.archivo.name}</span>
         </p>
         <button type="button" onClick={subirOtro} disabled={ocupado} className={BOTON_SECUNDARIO_CLS}>
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-4 w-4" />
           Subir otro archivo
         </button>
       </div>
@@ -257,7 +257,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
               <div className="flex justify-end">
                 <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
                   {fase === "guardando" ? "Guardando…" : fase === "analizando" ? "Analizando…" : "Validar archivo"}
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  <Icono nombre="derecha" className="h-4 w-4" />
                 </button>
               </div>
             )}

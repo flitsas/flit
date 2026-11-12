@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -22,7 +22,6 @@ import {
 } from "@/lib/tablero/detalle";
 import { VistaDetalleCelda } from "./DetalleCelda";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle; causa: unknown } | { tipo: "listo"; detalle: Detalle };
 
@@ -161,10 +160,10 @@ export function PaginaDetalleConsulta({
           />
         }
         debajo={detalle && nota?.(detalle)}
-        ilustracion={rutaIlustracion("diagnostico")}
+        icono="diagnostico"
         acciones={
           <Link href={rutaDiagnostico} className={BOTON_SECUNDARIO_CLS}>
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="izquierda" className="h-4 w-4" />
             Volver al diagnóstico
           </Link>
         }

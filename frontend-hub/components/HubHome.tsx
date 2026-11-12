@@ -1,14 +1,14 @@
 "use client";
 
 import { createElement, useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { reauthenticate } from "@flit/auth/client";
 import { AppsSessionError, fetchMyApps, type SuiteApp } from "@flit/shell/apps";
 import { buildDock } from "@flit/shell/nav";
 import { ProductArt } from "@/components/ui/ProductIcon";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 import { productInfo } from "@/lib/products";
 import { hubNav, type HubUser } from "./HubShell";
 
@@ -67,7 +67,7 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
             Elige el producto con el que quieres trabajar hoy.
           </>
         }
-        ilustracion={rutaIlustracion("inicio")}
+        icono="inicio"
       />
 
       <section aria-labelledby="hub-productos">
@@ -108,7 +108,7 @@ export function HubHome({ user, tramitesUrl, apps: initial }: { user: HubUser; t
                     {info && <p className={`mt-1.5 flex-1 text-sm leading-relaxed ${muted}`}>{info.tagline}</p>}
                     <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-[color:var(--di-action)]">
                       {soon ? "Ver qué viene" : `Abrir ${app.name}`}
-                      <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
+                      <Icono nombre="derecha" className="h-4 w-4 transition group-hover:translate-x-0.5" />
                     </span>
                   </a>
                 </li>

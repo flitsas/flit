@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { ClipboardList, Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
@@ -15,7 +15,6 @@ import {
   type FuenteConfigurable,
 } from "@/lib/backoffice/fuentes-obligatorias";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 /**
  * Configurador de fuentes obligatorias (ADR-0078) en /backoffice/fuentes-obligatorias.
@@ -85,7 +84,7 @@ function aBorrador(def: DefinicionFuentesObligatorias): Borrador {
 function Vacio() {
   return (
     <div className="flex flex-col items-center gap-3 py-10 text-center">
-      <ClipboardList className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+      <Icono nombre="portapapeles" className="h-10 w-10 text-flit-brand" />
       <h2 className="text-lg font-semibold">No hay definiciones guardadas</h2>
       <p className="max-w-md text-sm text-muted-foreground">Esta pantalla solo muestra las cabeceras que ya existen.</p>
     </div>
@@ -212,7 +211,7 @@ export function FuentesObligatoriasBackoffice() {
             <p className="mt-2">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
           </>
         }
-        ilustracion={rutaIlustracion("fuentes-oficiales")}
+        icono="fuentes-oficiales"
       />
       {cuerpo}
     </>
@@ -295,7 +294,7 @@ function CasillaFuente({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombreFuente(fuente)}</span>
-        {motivo && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
+        {motivo && <Icono nombre="candado" className="h-3.5 w-3.5 text-muted-foreground" />}
       </label>
       {motivo && (
         <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>
