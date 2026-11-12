@@ -69,8 +69,7 @@ export function IngresoLayout({
 }) {
   return (
     <div className="grid min-h-screen w-full grid-cols-1 min-[961px]:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-      <section
-        aria-label="FLIT"
+      <div
         className="relative flex flex-col gap-6 p-[clamp(28px,4.5vw,64px)] text-[color:var(--di-ingreso-texto)]"
         style={{ background: "var(--di-ingreso-fondo)" }}
       >
@@ -147,7 +146,7 @@ export function IngresoLayout({
           <p className="m-0">FLIT S.A.S. · Medellín, Colombia · Certificada ISO/IEC 27001:2022</p>
           {pie}
         </div>
-      </section>
+      </div>
 
       <div className="grid place-items-center bg-[color:var(--di-surface)] px-[clamp(16px,5vw,64px)] py-8">
         <div className="grid w-[min(440px,100%)] gap-[18px] rounded-[9px] border border-[color:var(--di-border)] bg-[color:var(--di-surface-elevated)] p-[clamp(24px,3vw,40px)] shadow-none">
