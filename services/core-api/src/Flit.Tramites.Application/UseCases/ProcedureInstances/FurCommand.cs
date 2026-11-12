@@ -1111,6 +1111,11 @@ public sealed class GenerarFurHandler(
         Dictionary<string, byte[]>? images = null;
         Dictionary<string, FirmaBaulMetadata>? metadata = null;
 
+        // Trámite radicado ⇒ la firma sale de la COPIA tomada al radicar (imagen propia del trámite), nunca del
+        // baúl en vivo: así una regeneración posterior (aprobación del OT, asignación de placa) conserva la firma
+        // aunque el baúl haya vencido. Borrador ⇒ baúl en vivo.
+        var vault = await FirmaBaulCopias.EfectivaAsync(repo, _vaultPolicy, instance, ct);
+
         foreach (var slot in SignatureSlots(instance, roles))
         {
             if (slot.Actor is null || !FirmaBaulCobertura.Aplica(slot.Actor))
@@ -1120,7 +1125,7 @@ public sealed class GenerarFurHandler(
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
 
-            var match = await _vaultPolicy.ResolveAsync(
+            var match = await vault.ResolveAsync(
                 instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct);
             if (match is null || string.IsNullOrWhiteSpace(match.StoragePath))
                 continue;

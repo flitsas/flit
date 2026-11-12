@@ -779,6 +779,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.TransitionProcedur
 Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.UltimoBloqueoFirma => Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.UltimoBloqueoFirma (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.FinalizarPortalHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.FinalizarPortalHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.FinalizeDraftProcedureInstanceHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.FinalizeDraftProcedureInstanceHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.FirmaBaulCopiaCapturer => Flit.Tramites.Application.UseCases.ProcedureInstances.FirmaBaulCopiaCapturer (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.FirmarImprontaManualSiListaHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.FirmarImprontaManualSiListaHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GeneracionDocumentalGestorGuard => Flit.Tramites.Application.UseCases.ProcedureInstances.GeneracionDocumentalGestorGuard (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoConRespaldoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoConRespaldoHandler (Scoped)

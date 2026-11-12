@@ -180,6 +180,7 @@ public sealed class FurPreviewSampleTests
         mapped["requested_process_5"].Text.Should().Be("X");
         mapped["requested_process_17"].Text.Should().Be("X");
         mapped["requested_process_18"].Text.Should().Be("X");
+        mapped["requested_process_9"].Text.Should().Be("X");
         mapped["requested_process_12"].Text.Should().Be("X");
         mapped["alert_data_code_4"].Text.Should().Be("X");
         mapped["alert_data_code_2"].Text.Should().BeEmpty();

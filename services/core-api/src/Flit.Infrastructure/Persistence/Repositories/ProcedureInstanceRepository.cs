@@ -572,6 +572,33 @@ internal sealed partial class ProcedureInstanceRepository(
         return result;
     }
 
+    public async Task<IReadOnlyList<ProcedureInstanceFirmaBaulCopia>> ListFirmaBaulCopiasAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct) =>
+        await db.ProcedureInstanceFirmaBaulCopias
+            .Where(c => c.ProcedureInstanceId == procedureInstanceId && c.TenantId == tenantId && c.DeletedAt == null)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>> ListFirmaBaulCopiasPorInstanciasAsync(
+        IReadOnlyCollection<Guid> procedureInstanceIds, CancellationToken ct)
+    {
+        if (procedureInstanceIds.Count == 0)
+            return new Dictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>();
+
+        var ids = procedureInstanceIds.Distinct().ToList();
+        var rows = await db.ProcedureInstanceFirmaBaulCopias
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.ProcedureInstanceId) && c.DeletedAt == null)
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(c => c.ProcedureInstanceId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ProcedureInstanceFirmaBaulCopia>)g.ToList());
+    }
+
+    public async Task AddFirmaBaulCopiasAsync(
+        IReadOnlyCollection<ProcedureInstanceFirmaBaulCopia> copias, CancellationToken ct) =>
+        await db.ProcedureInstanceFirmaBaulCopias.AddRangeAsync(copias, ct);
+
     /// <summary>Estado "activa" del baúl (ADR-0025): las revocadas no cuentan como vigentes.</summary>
     private const string SignatureVaultEstadoActiva = "activa";
 
