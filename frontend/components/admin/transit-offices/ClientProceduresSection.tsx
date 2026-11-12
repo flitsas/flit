@@ -116,6 +116,7 @@ import { XLSX_MIME } from "@/lib/xlsx";
 import { estadoPlacaOt, grupoPlacaPideDigito, resolverGrupoPlaca } from "@/lib/tramites/plate-format";
 import { PlacaOtField } from "./PlacaOtField";
 import { usePaginacion } from "@/components/atom/usePaginacion";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 // Bug #13055 — tamaño inicial; el usuario lo cambia con «Filas por página».
 
@@ -1609,10 +1610,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     <div className="space-y-4">
       {isReadOnly && (
         <div className="flex items-center gap-2">
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
-          >
+          <span {...etiquetaKit("danger")}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Solo lectura
           </span>
           <span className="text-[11px] opacity-60">

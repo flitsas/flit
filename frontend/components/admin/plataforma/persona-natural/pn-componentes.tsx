@@ -11,6 +11,7 @@ import { Modal } from "@/components/atom/Modal";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PN_CANCEL_BTN_CLS, PN_DANGER_BTN_STYLE, PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "./pn-ui";
 import { pnErrorMessage } from "./pnErrors";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 export type PnButtonVariant = "primary" | "secondary" | "danger";
 
@@ -110,7 +111,8 @@ export function PnSeccionHeader({
           <h2 id={id} className="flex flex-wrap items-center gap-2 text-base font-bold text-flit-primary">
             {titulo}
             {contador && (
-              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-[color:var(--flit-brand-ink)]">
+              <span {...etiquetaKit("neutral")}>
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {contador}
               </span>
             )}

@@ -25,6 +25,7 @@ import { ESTADO_ORDER, estadoMeta, formatInt } from "./report-columns";
 import { Empty } from "./shared";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 // ── Composición por estado ─────────────────────────────────────────────────────
 
@@ -234,14 +235,8 @@ export function TrendChart({
           Recibí <strong className="tabular-nums">{formatInt(totalRadicados)}</strong> y decidí{" "}
           <strong className="tabular-nums">{formatInt(totalDecididos)}</strong>
         </span>
-        <span
-          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={{
-            background: saldoFinal > 0 ? "var(--di-warning-soft)" : "var(--di-success-soft)",
-            color: saldoFinal > 0 ? "var(--di-warning)" : "var(--di-success)",
-          }}
-          data-testid="ot-report-tendencia-saldo"
-        >
+        <span {...etiquetaKit(saldoFinal > 0 ? "warning" : "success")} data-testid="ot-report-tendencia-saldo">
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {saldoFinal > 0
             ? `Se acumularon ${formatInt(saldoFinal)} sin decidir`
             : saldoFinal < 0
