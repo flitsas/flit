@@ -1,7 +1,7 @@
 'use client';
 
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { EditarSeccionButton, type DestinoEdicion } from './EditarSeccionButton';
 import type {
   BiometricParte,
@@ -11,7 +11,7 @@ import type {
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { ESTADO_ICONO, type EstadoTramite, estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { COPY } from '@/lib/copy/copy-catalog';
@@ -182,7 +182,7 @@ interface Props {
   resolverEdicion?: ResolverEdicion;
 }
 
-const BORDER = '#DFE5ED';
+const BORDER = 'var(--border)';
 const BLUE = 'var(--color-flit-brand)';
 
 // `ResumenDisclosure` desapareció: transformaciones y prenda eran las últimas que lo usaban y ahora
@@ -285,11 +285,11 @@ function PrendaDocumentoVerButton({
               .finally(() => setBusy(false));
           }}
         >
-          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5 shrink-0" />
           {busy ? 'Abriendo…' : 'Ver'}
         </button>
         {error ? (
-          <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+          <span className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </span>
         ) : null}
@@ -324,7 +324,7 @@ function IdentidadStatusBanner({
           style={{ background: 'var(--color-flit-brand)', color: 'white' }}
           aria-hidden
         >
-          <FileSignature className="h-5 w-5" />
+          <Icono nombre="firma" className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
@@ -342,7 +342,7 @@ function IdentidadStatusBanner({
     return (
       <div
         className="flex items-center gap-3 rounded-xl p-3"
-        style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
+        style={{ background: 'var(--badge-success-bg)', border: '1px solid var(--badge-success-border)' }}
         role="status"
         aria-live="polite"
         data-testid="identidad-verificada"
@@ -353,7 +353,7 @@ function IdentidadStatusBanner({
           style={{ background: 'var(--flit-success-ink)', color: 'white' }}
           aria-hidden
         >
-          <Check className="h-5 w-5" />
+          <Icono nombre="check" className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           {/* Copy Flit 2.0 · S4. El puntaje se retira por decisión de producto: el número no le
@@ -376,21 +376,21 @@ function IdentidadStatusBanner({
   return (
     <div
       className="flex items-center gap-3 rounded-xl p-3"
-      style={{ background: '#EEF5FF', border: '1px solid #DFE5ED' }}
+      style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}
       role="status"
       aria-live="polite"
       data-testid="identidad-pendiente"
     >
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-        style={{ background: '#59677D', color: 'white' }}
+        style={{ background: 'var(--muted-foreground)', color: 'var(--card)' }}
         aria-hidden
       >
-        <Clock className="h-5 w-5" />
+        <Icono nombre="reloj" className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
         {/* Copy Flit 2.0 · S4. */}
-        <p className="text-xs font-bold" style={{ color: '#59677D' }}>
+        <p className="text-xs font-bold" style={{ color: 'var(--muted-foreground)' }}>
           Validación de identidad pendiente.
         </p>
         <p className="text-xs opacity-70">
@@ -473,7 +473,7 @@ function CertificadoIdButton({
             : 'Disponible cuando la validación esté aprobada'
         }
       >
-        <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0" />
         {busy ? 'Abriendo…' : label}
       </button>
       {!aprobado && (
@@ -482,7 +482,7 @@ function CertificadoIdButton({
         </span>
       )}
       {error && (
-        <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+        <span className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </span>
       )}
@@ -640,7 +640,7 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
         style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
         {copied ? 'Copiado' : 'Copiar'}
       </button>
     </div>
@@ -990,10 +990,10 @@ export default function MatriculaResumen({
                             background: 'var(--badge-warning-bg)',
                             color: 'var(--badge-warning-fg)',
                           }
-                        : { borderColor: BORDER, color: '#59677D' }
+                        : { borderColor: BORDER, color: 'var(--muted-foreground)' }
                     }
                   >
-                    <Star className="h-3.5 w-3.5" fill={prioritario ? 'currentColor' : 'none'} aria-hidden="true" />
+                    <Icono nombre="medalla" className="h-3.5 w-3.5" />
                     Trámite Prioritario
                   </button>
                 ) : null}
@@ -1019,6 +1019,8 @@ export default function MatriculaResumen({
                 ) : null}
                 <StatusBadge
                   label={estadoLabelConOrigen(status, rejectedFrom)}
+                  className={estadoChipClass(status)}
+                  icono={ESTADO_ICONO[status as EstadoTramite]}
                   bg={estadoChipStyle(status).bg}
                   color={estadoChipStyle(status).color}
                   border={estadoChipStyle(status).border}

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { Chip } from "@/components/ui/Chip";
@@ -49,7 +49,7 @@ function Avance({ l }: { l: Lote }) {
   const pct = avanceLote(l);
   return (
     <div className="flex min-w-32 items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#EEF1F6] dark:bg-white/10">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-flit-brand" style={{ width: `${pct}%` }} />
       </div>
       <span className="tabular-nums opacity-70">{pct}%</span>
@@ -75,7 +75,7 @@ function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const items = l?.items ?? [];
 
   return (
-    <Modal open onClose={onCerrar} size="2xl" title="Envío masivo de derechos de petición" description={l ? `Creado ${formatoFechaHora(l.creadoEn)}` : undefined}>
+    <Modal icono="radicacion" open onClose={onCerrar} size="2xl" title="Envío masivo de derechos de petición" description={l ? `Creado ${formatoFechaHora(l.creadoEn)}` : undefined}>
       {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
       {l && (
         <div className="flex flex-col gap-3">
@@ -86,11 +86,12 @@ function DetalleLote({ id, onCerrar }: { id: string; onCerrar: () => void }) {
             </span>
             <Avance l={l} />
             <button type="button" className={`${controlCls(false)} ml-auto`} disabled={items.length === 0} onClick={() => exportar(l)}>
-              <Download className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
               Exportar resumen
             </button>
           </div>
           <DataTable
+            tarjeta={false}
             ariaLabel="Comparendos del lote"
             rows={pg.paginar(items)}
             getRowKey={(i) => i.comparendoId}

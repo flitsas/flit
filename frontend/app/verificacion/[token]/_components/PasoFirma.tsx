@@ -101,7 +101,7 @@ export function PasoFirma({
         aria-label="Texto de autorización"
         tabIndex={0}
         data-testid="autorizacion-firma"
-        className="max-h-40 overflow-y-auto rounded-2xl border border-flit-gray bg-slate-50 p-3 text-xs leading-snug text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+        className="max-h-40 overflow-y-auto rounded-2xl border border-border bg-secondary p-3 text-xs leading-snug text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
       >
         {AUTORIZACION_FIRMA_TEXT}
       </div>
@@ -112,7 +112,7 @@ export function PasoFirma({
         La firma se traza en pantalla y no tiene alternativa de teclado. Si no puedes trazarla, pídele ayuda a FLIT 2.0.
       </p>
       {error ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           {error}
         </p>
       ) : null}

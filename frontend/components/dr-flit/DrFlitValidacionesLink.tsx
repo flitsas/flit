@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 export function DrFlitValidacionesLink({
   href,
@@ -25,10 +25,7 @@ export function DrFlitValidacionesLink({
         style={{ background: "var(--dr-flit-icon-tint)" }}
         aria-hidden="true"
       >
-        <ShieldCheck
-          className="h-5 w-5"
-          style={{ color: "var(--dr-flit-brand-blue)" }}
-        />
+        <Icono nombre="escudo" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
       </span>
       <span className="min-w-0 flex-1">
         <span

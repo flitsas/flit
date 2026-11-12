@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp, GripVertical, Trash2 } from "lucide-react";
+import { GripVertical } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
 import { catalogDocumentTitle } from "@/lib/tramites/document-labels";
 import { DocumentCatalogCaption } from "@/components/shared/DocumentCatalogCaption";
@@ -52,9 +53,9 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
             setDragIndex(null);
           }}
           onDragEnd={() => setDragIndex(null)}
-          className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+          className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
         >
-          <span className="cursor-grab text-slate-400" aria-hidden="true">
+          <span className="cursor-grab text-muted-foreground" aria-hidden="true">
             <GripVertical className="h-4 w-4" />
           </span>
 
@@ -80,7 +81,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               aria-label={`Subir ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-30"
             >
-              <ArrowUp className="h-3.5 w-3.5" />
+              <Icono nombre="arriba" className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -89,7 +90,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               aria-label={`Bajar ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-30"
             >
-              <ArrowDown className="h-3.5 w-3.5" />
+              <Icono nombre="abajo" className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -97,9 +98,9 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               disabled={busy}
               aria-label={`Eliminar override de ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-40"
-              style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+              style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Icono nombre="papelera" className="h-3.5 w-3.5" />
             </button>
           </div>
         </li>

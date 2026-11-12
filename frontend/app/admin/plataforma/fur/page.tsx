@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { FurSimulatorPanel } from "@/components/admin/plataforma/FurSimulatorPanel";
@@ -21,7 +21,7 @@ export default function AdminFurPage() {
           className="flex w-fit items-center gap-1.5 text-xs font-semibold"
           style={{ color: "var(--color-flit-brand)" }}
         >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="izquierda" className="h-3.5 w-3.5" />
           Volver al inicio
         </button>
 
@@ -30,7 +30,7 @@ export default function AdminFurPage() {
           subtitle="Simula cómo se construye el Formulario Único de Registro con datos sintéticos. Solo SuperAdmin."
         />
 
-        <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+        <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
           <FurSimulatorPanel />
         </div>
       </div>

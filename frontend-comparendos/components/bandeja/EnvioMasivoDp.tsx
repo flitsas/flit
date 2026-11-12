@@ -47,7 +47,7 @@ export function EnvioMasivoDp({ filas, onCerrar }: { filas: FilaBandeja[]; onCer
   };
 
   return (
-    <Modal
+    <Modal icono="radicacion"
       open
       onClose={onCerrar}
       busy={ocupado}

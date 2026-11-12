@@ -38,16 +38,16 @@ export interface IctEstadoMeta {
 }
 
 export const ICT_ESTADO_META: Record<string, IctEstadoMeta> = {
-  recibido: { label: "Recibido", color: "#94A3B8" },
-  en_validacion_negocio: { label: "En validación de negocio", color: "#F9AC00" },
+  recibido: { label: "Recibido", color: "var(--badge-neutral-fg)" },
+  en_validacion_negocio: { label: "En validación de negocio", color: "var(--badge-warning-fg)" },
   en_validacion_externa: { label: "En validación externa", color: "var(--color-flit-brand)" },
-  con_novedades: { label: "Con novedades", color: "#FF4E00" },
-  borrador_creado: { label: "Borrador creado", color: "#8CC63F" },
-  anulado: { label: "Anulado", color: "#64748B" },
+  con_novedades: { label: "Con novedades", color: "var(--destructive)" },
+  borrador_creado: { label: "Borrador creado", color: "var(--flit-success-ink)" },
+  anulado: { label: "Anulado", color: "var(--muted-foreground)" },
 };
 
 export function ictEstadoMeta(estado: string): IctEstadoMeta {
-  return ICT_ESTADO_META[estado] ?? { label: estado, color: "#CBD5E1" };
+  return ICT_ESTADO_META[estado] ?? { label: estado, color: "var(--border)" };
 }
 
 export const ICT_QUERY_COLUMNS: IctQueryColumn[] = [

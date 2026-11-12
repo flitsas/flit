@@ -18,7 +18,7 @@
  * <p>El <b>DV del NIT se muestra calculado</b> y no se captura: en cliente es solo visual
  * (`lib/documentos/nit-dv.ts`); el backend es la fuente de verdad y el formulario no lo envía.</p>
  */
-import { RefreshCw, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { calcularDigitoVerificacion } from "@/lib/documentos/nit-dv";
 import type {
   TransferParteInput,
@@ -103,7 +103,7 @@ export function ParteFields({
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
           style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="buscar" className="h-3.5 w-3.5" />
           {consultando
             ? "Consultando…"
             : esJuridica
@@ -136,15 +136,15 @@ export function ParteFields({
         <div
           role="alert"
           data-testid={`tf-${parte}-prefill-error`}
-          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-800"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           <span>No se pudo consultar esta parte. {prefill.error}</span>
           <button
             type="button"
             onClick={() => void prefill.ejecutar()}
-            className="flex items-center gap-1 rounded-lg border border-red-300 px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className="flex items-center gap-1 rounded-lg border border-[var(--badge-danger-border)] px-2 py-1 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
-            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3 w-3" />
             Reintentar la consulta
           </button>
         </div>
@@ -227,7 +227,7 @@ export function ParteFields({
               key={`${issue.code}-${issue.field}`}
               id={`${campoId("numerodoc")}-error`}
               role="alert"
-              className="mt-1 text-[11px] text-red-700"
+              className="mt-1 text-[11px] text-destructive"
             >
               <span className="font-semibold">{issue.code}</span> — {issue.message}
             </p>

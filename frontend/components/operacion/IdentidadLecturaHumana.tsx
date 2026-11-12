@@ -11,6 +11,7 @@ import {
 import type { BiometricValidation, IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 /**
 
  * HU #12186 — la validación de identidad de UNA persona, contada para quien gestiona el trámite.
@@ -86,9 +87,9 @@ export function IdentidadLecturaHumana({
   return (
     <section
       aria-label={`Validación de identidad de ${validation.name}`}
-      className="rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#162744]"
+      className="rounded-2xl border border-border bg-card"
     >
-      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-[#DFE5ED] px-4 py-3 dark:border-white/10">
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-border px-4 py-3">
         <span className="text-sm font-bold text-flit-primary dark:text-white">{validation.name}</span>
         <span className="text-xs text-flit-primary/55 dark:text-white/50">
           {[validation.documentType, validation.documentNumber].filter(Boolean).join(' ')}
@@ -102,7 +103,7 @@ export function IdentidadLecturaHumana({
       {/* Qué pasó y, si hay algo que hacer, qué. Un rechazo que no dice por qué obliga a llamar a
           soporte; con el motivo y la salida, el gestor resuelve solo. */}
       {estado.explicacion || estado.accion ? (
-        <div className="border-b border-[#DFE5ED] px-4 py-3 dark:border-white/10">
+        <div className="border-b border-border px-4 py-3">
           {estado.explicacion ? (
             <p className="text-xs leading-relaxed text-flit-primary/85 dark:text-white/75">
               {estado.explicacion}
@@ -136,7 +137,7 @@ export function IdentidadLecturaHumana({
                 setFallo(false);
                 setReintento((n) => n + 1);
               }}
-              className="mt-1 text-xs font-semibold text-[#3B4FD6] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 dark:text-[#8FA8FF]"
+              className="mt-1 text-xs font-semibold text-flit-brand-ink underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               Reintentar
             </button>
@@ -149,7 +150,7 @@ export function IdentidadLecturaHumana({
           <ol
             aria-label="Historial de la validación"
             className="relative space-y-3 border-l pl-4"
-            style={{ borderColor: '#DFE5ED' }}
+            style={{ borderColor: 'var(--border)' }}
           >
             {hitos.map((hito, i) => (
               <Hito key={hito.id} hito={hito} vigente={i === 0} />
@@ -176,27 +177,27 @@ export function IdentidadLecturaHumana({
   );
 }
 
-const TONO_CLS: Record<TonoIdentidad, string> = {
-  ok: 'bg-[#8CC63F]/15 text-[#3F6212]',
-  pendiente: 'bg-[#F9AC00]/15 text-[#92400E]',
-  alerta: 'bg-[#FF4E00]/12 text-[#C2410C]',
-  neutro: 'bg-flit-brand/12 text-[#1E40AF]',
+/** UI Kit 2026: tono de la etiqueta del kit por significado (el «neutro» de identidad es informativo). */
+const TONO_KIT: Record<TonoIdentidad, 'success' | 'warning' | 'danger' | 'info'> = {
+  ok: 'success',
+  pendiente: 'warning',
+  alerta: 'danger',
+  neutro: 'info',
 };
 
 function Pildora({ label, tono }: { label: string; tono: TonoIdentidad }) {
   return (
-    <span
-      className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONO_CLS[tono]}`}
-    >
+    <span {...etiquetaKit(TONO_KIT[tono])}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {label}
     </span>
   );
 }
 
 const TONO_PUNTO: Record<TonoIdentidad, string> = {
-  ok: '#8CC63F',
-  pendiente: '#F9AC00',
-  alerta: '#FF4E00',
+  ok: 'var(--flit-success-ink)',
+  pendiente: 'var(--badge-warning-fg)',
+  alerta: 'var(--destructive)',
   neutro: 'var(--color-flit-brand)',
 };
 
@@ -209,7 +210,7 @@ function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
           background: TONO_PUNTO[hito.tono],
           // El vigente lleva halo; los anteriores, no. La lista está en orden inverso, así que el
           // vigente es el primero. El color por sí solo no distingue nada: el texto ya lo dice.
-          boxShadow: vigente ? `0 0 0 3px ${TONO_PUNTO[hito.tono]}33` : undefined,
+          boxShadow: vigente ? `0 0 0 3px color-mix(in srgb, ${TONO_PUNTO[hito.tono]} 20%, transparent)` : undefined,
         }}
         aria-hidden="true"
       />

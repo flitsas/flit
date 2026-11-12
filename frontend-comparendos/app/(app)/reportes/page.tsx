@@ -17,31 +17,19 @@ import { etiquetaMes, formatoTasa, nombreMes, SERIES, valorSerie, type Dashboard
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 
 const AZUL = "var(--color-flit-brand)";
-const AZUL_CLARO = "#B9C8FF";
+const AZUL_CLARO = "color-mix(in srgb, var(--color-flit-brand) 35%, transparent)";
 const PAGOS = [
   { nombre: "CC · cambio de contraventor", color: "var(--color-flit-brand)", clave: "pagosCc" },
-  { nombre: "PC · pagó el contraventor", color: "#16A34A", clave: "pagosPc" },
-  { nombre: "BC · banco / empresa", color: "#F59E0B", clave: "pagosBc" },
+  { nombre: "PC · pagó el contraventor", color: "var(--flit-success-ink)", clave: "pagosPc" },
+  { nombre: "BC · banco / empresa", color: "var(--color-flit-alert)", clave: "pagosBc" },
 ] as const;
 
+/** Cifra del tablero con la tarjeta de la propuesta (HU #14486, `TarjetaMetrica` de @flit/ui). */
 function Kpi({ titulo, valor, detalle, onClick }: { titulo: string; valor: string; detalle?: string; onClick?: () => void }) {
-  const contenido = (
-    <>
-      <span className="text-xs font-semibold text-[#5B6B82] dark:text-slate-300">{titulo}</span>
-      <span className="text-2xl font-semibold text-flit-primary dark:text-white">{valor}</span>
-      {detalle && <span className="text-xs text-[#5B6B82] dark:text-slate-300">{detalle}</span>}
-    </>
-  );
-  const cls = "flex flex-col gap-1 rounded-2xl border border-[#DFE5ED] p-4 text-left dark:border-white/10";
-  return onClick ? (
-    <button type="button" className={`${cls} transition hover:border-flit-brand focus:outline-none focus:ring-2 focus:ring-flit-brand/30`} onClick={onClick}>
-      {contenido}
-    </button>
-  ) : (
-    <div className={cls}>{contenido}</div>
-  );
+  return <TarjetaMetrica etiqueta={titulo} cifra={valor} pie={detalle} onClick={onClick} />;
 }
 
 function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; valor: string | null; onCambio: (id: string | null) => void }) {

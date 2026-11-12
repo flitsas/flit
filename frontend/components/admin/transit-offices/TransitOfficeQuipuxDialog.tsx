@@ -9,7 +9,6 @@
 // (`operation_mode`): aquello describe al OT CLIENTE de FLIT, esto describe a la secretaría
 // DESTINO a la que FLIT radica y que normalmente ni siquiera es cliente.
 import { useState } from "react";
-import { Send } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { ApiValidationError } from "@/lib/api/types";
@@ -92,7 +91,7 @@ export function TransitOfficeQuipuxDialog({
       busy={busy}
       size="md"
       zClassName="z-[90]"
-      icon={Send}
+      icono="radicacion"
       title="Radicación por Quipux"
       description={office.name}
     >
@@ -121,7 +120,7 @@ export function TransitOfficeQuipuxDialog({
             banderas): es el estado normal de las secretarías todavía no integradas.
           </p>
           {formatoInvalido && (
-            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
               El código DIVIPO debe ser numérico (máximo 20 dígitos). Conserva los ceros a la
               izquierda.
             </p>
@@ -163,7 +162,7 @@ export function TransitOfficeQuipuxDialog({
           <p
             role="alert"
             className="rounded-xl px-3 py-2 text-[11px]"
-            style={{ background: "#FFF4EC", color: "#7A2E00", border: "1px solid #FFD9C2" }}
+            style={{ background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)", border: "1px solid var(--badge-warning-border)" }}
           >
             <span className="font-semibold">Falta el código DIVIPO.</span> Para activar una
             familia primero debes cargar el código: sin él la secretaría no radica, así que no
@@ -178,7 +177,7 @@ export function TransitOfficeQuipuxDialog({
         )}
 
         {error && (
-          <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="text-sm" style={{ color: "var(--destructive)" }}>
             {error}
           </p>
         )}
@@ -197,7 +196,7 @@ export function TransitOfficeQuipuxDialog({
             onClick={save}
             disabled={busy || formatoInvalido || sinDivipoConBanderas}
             className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {busy ? "Guardando…" : "Guardar"}
           </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { controlCls } from './tramites-control-styles';
 import {
   REVOCATION_REQUEST_LIST_STATUSES,
@@ -45,9 +45,9 @@ export interface RevocationRequestsFiltersBarProps {
 }
 
 const INPUT_CLS =
-  'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-flit-primary outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
+  'h-9 rounded-xl border border-border bg-card px-3 text-xs text-foreground outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2';
 const POPOVER_SURFACE_CLS =
-  'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
+  'rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]';
 
 /** Cierre por clic fuera Y por Escape, con el foco devuelto al disparador — mismo criterio que `TramitesFiltrosBar`. */
 function usePopoverDismiss(
@@ -107,7 +107,7 @@ function EstadoPopover({ selected, onChange, disabled }: EstadoPopoverProps) {
         className={controlCls(activo)}
       >
         {activo ? `Estado (${selected.length})` : 'Estado'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -118,13 +118,13 @@ function EstadoPopover({ selected, onChange, disabled }: EstadoPopoverProps) {
           className={`absolute left-0 top-full z-30 mt-2 w-64 p-3 ${POPOVER_SURFACE_CLS}`}
         >
           <fieldset className="flex flex-col gap-2">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-[#59677D]">
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Sub-estado de revocatoria
             </legend>
             {REVOCATION_REQUEST_LIST_STATUSES.map((estado) => {
               const checked = selected.includes(estado);
               return (
-                <label key={estado} className="flex items-center gap-2 text-xs text-flit-primary dark:text-white">
+                <label key={estado} className="flex items-center gap-2 text-xs text-foreground">
                   <input
                     type="checkbox"
                     checked={checked}
@@ -179,7 +179,7 @@ export function RevocationRequestsFiltersBar({
   return (
     <div className="flex flex-wrap items-end gap-3" role="group" aria-label="Filtros de revocatorias">
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[#59677D]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Solicitada desde
         </span>
         <input
@@ -193,7 +193,7 @@ export function RevocationRequestsFiltersBar({
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-[#59677D]">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Solicitada hasta
         </span>
         <input
@@ -208,7 +208,7 @@ export function RevocationRequestsFiltersBar({
 
       {transitOfficeOptions ? (
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[#59677D]">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Organismo de tránsito
           </span>
           <select

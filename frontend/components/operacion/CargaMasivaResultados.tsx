@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { Pagination } from '@/components/atom/Pagination';
@@ -105,7 +105,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
   if (lotes.length === 0) {
     return (
-      <p className="text-xs text-flit-primary/70 dark:text-white/60" data-testid="carga-masiva-sin-lotes">
+      <p className="text-xs text-muted-foreground" data-testid="carga-masiva-sin-lotes">
         Todavía no has cargado ningún archivo. Cuando lo hagas, aquí verás en qué quedó cada fila.
       </p>
     );
@@ -116,14 +116,14 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   return (
     <div className="flex flex-col gap-4" data-testid="carga-masiva-resultados">
       <div className="flex items-center justify-between gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-flit-primary dark:text-white">
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-foreground">
           <span className="shrink-0 font-semibold">Lote</span>
           <select
             value={detalle?.batch.id ?? ''}
             onChange={(e) => void verDetalle(e.target.value)}
             aria-label="Lote de carga masiva"
             data-testid="carga-masiva-selector-lote"
-            className="h-9 min-w-0 flex-1 rounded-xl border border-[#DFE5ED] bg-white px-2 text-xs dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
+            className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-card px-2 text-xs"
           >
             {/* Con hora: dos cargas del mismo archivo el mismo día eran indistinguibles. */}
             {lotes.map((lote) => (
@@ -140,7 +140,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
           className={controlCls(false)}
           data-testid="carga-masiva-actualizar"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Actualizar
         </button>
       </div>
@@ -156,7 +156,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
               </span>
             </InlineAlert>
           ) : (
-            <p className="text-xs text-flit-primary dark:text-white" data-testid="carga-masiva-contadores">
+            <p className="text-xs text-foreground" data-testid="carga-masiva-contadores">
               {`${detalle.batch.counts.created} creados · ${detalle.batch.counts.createdPending} por retomar · ${detalle.batch.counts.notCreated} no creados`}
             </p>
           )}
@@ -183,16 +183,16 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                 {pg.paginar(detalle.rows).map((fila) => (
                   <tr
                     key={fila.rowNumber}
-                    className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                    className={`bg-card align-top ${TABLA_ROW_HOVER_CLS}`}
                     data-testid={`carga-masiva-fila-${fila.rowNumber}`}
                   >
                     <td
-                      className="rounded-l-xl border-y border-l px-4 py-3 text-flit-primary dark:text-white"
+                      className="rounded-l-xl border-y border-l px-4 py-3 text-foreground"
                       style={BORDE_FILA}
                     >
                       {fila.rowNumber}
                     </td>
-                    <td className="border-y px-4 py-3 text-flit-primary dark:text-white" style={BORDE_FILA}>
+                    <td className="border-y px-4 py-3 text-foreground" style={BORDE_FILA}>
                       {fila.identificador ?? '—'}
                     </td>
                     <td className="border-y px-4 py-3" style={BORDE_FILA}>
@@ -200,19 +200,19 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                         <button
                           type="button"
                           onClick={() => abrirTramite(fila.procedureInstanceId!)}
-                          className="text-left font-semibold text-[#3B4FD6] underline-offset-2 hover:underline dark:text-[#8FA8FF]"
+                          className="text-left font-semibold text-flit-brand-ink underline-offset-2 hover:underline"
                           data-testid={`carga-masiva-abrir-${fila.rowNumber}`}
                         >
                           {etiquetaOutcome(fila.outcome)}
                         </button>
                       ) : (
-                        <span className="text-flit-primary dark:text-white">
+                        <span className="text-foreground">
                           {etiquetaOutcome(fila.outcome)}
                         </span>
                       )}
                     </td>
                     <td
-                      className="rounded-r-xl border-y border-r px-4 py-3 text-flit-primary/70 dark:text-white/60"
+                      className="rounded-r-xl border-y border-r px-4 py-3 text-muted-foreground"
                       style={BORDE_FILA}
                     >
                       {fila.motivo ? mensajeMotivo(fila.motivo) : '—'}

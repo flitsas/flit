@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Clock, Cpu, Hourglass, RefreshCw, X } from "lucide-react";
+import { Cpu } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { LogQxHito, LogQxRadicacion } from "@/lib/api/admin-log-qx";
 import {
   codigoQx,
@@ -11,6 +13,11 @@ import {
   resultado,
   secretaria,
 } from "@/lib/logqx/labels";
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_CERRAR = iconoComo("cerrar");
+const ICONO_CHECK = iconoComo("check");
+const ICONO_REINTENTO = iconoComo("reintento");
 
 /**
  * Línea de hitos de una radicación (HU #11789). El servidor ya devuelve las rachas de sondeo
@@ -81,19 +88,19 @@ function Rail({
     tipo === "sondeo"
       ? "text-flit-brand border-flit-brand"
       : esError
-        ? "text-[#C2410C] border-[#C2410C]"
-        : "text-[#15803D] border-[#15803D]";
-  const Icon = tipo === "sondeo" ? RefreshCw : esError ? X : Check;
+        ? "text-destructive border-destructive"
+        : "text-[var(--flit-success-ink)] border-[var(--flit-success-ink)]";
+  const Icon = tipo === "sondeo" ? ICONO_REINTENTO : esError ? ICONO_CERRAR : ICONO_CHECK;
 
   return (
     <div className="flex flex-col items-center">
       <span
         aria-hidden="true"
-        className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] bg-white dark:bg-[#0B0F14] ${color}`}
+        className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] bg-card ${color}`}
       >
         <Icon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
       </span>
-      {!ultima && <span className="-mb-3.5 mt-0.5 w-0.5 flex-1 bg-[#DFE5ED] dark:bg-white/10" />}
+      {!ultima && <span className="-mb-3.5 mt-0.5 w-0.5 flex-1 bg-flit-gray" />}
     </div>
   );
 }
@@ -104,13 +111,13 @@ function Hito({ hito }: { hito: LogQxHito }) {
   const duracion = formatDuracion(hito.durationMs);
 
   return (
-    <div className="min-w-0 rounded-[9px] border border-[#DFE5ED] bg-white px-3.5 py-2.5 dark:border-white/10 dark:bg-[#0B0F14]">
+    <div className="min-w-0 rounded-[9px] border border-border bg-card px-3.5 py-2.5">
       <div className="flex flex-wrap items-baseline gap-2.5">
         <h3 className="text-[13.5px] font-semibold">{etapa(hito.stage)}</h3>
         {hito.outcome !== "ok" && (
           <span
             className={`text-[10px] font-bold uppercase ${
-              hito.outcome === "error_definitivo" ? "text-[#991B1B]" : "text-[#C2410C]"
+              hito.outcome === "error_definitivo" ? "text-destructive" : "text-destructive"
             }`}
           >
             {res.label}
@@ -129,14 +136,14 @@ function Hito({ hito }: { hito: LogQxHito }) {
         )}
         {duracion && (
           <span className="inline-flex items-center gap-1">
-            <Clock className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="reloj" className="h-3 w-3" />
             <span className="font-mono">{duracion}</span>
           </span>
         )}
       </div>
 
       {hito.mensaje && (
-        <p className="mt-2 rounded-r-md border-l-2 border-[#C9D6EA] bg-[#F4F7FC] px-3 py-1.5 text-[12.5px] italic opacity-80 dark:border-white/15 dark:bg-white/5">
+        <p className="mt-2 rounded-r-md border-l-2 border-border bg-secondary px-3 py-1.5 text-[12.5px] italic opacity-80">
           “{hito.mensaje}”
         </p>
       )}
@@ -157,7 +164,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
   return (
     // El bloque se distingue del hito por el borde discontinuo y el fondo hundido, sin rayado:
     // la trama diagonal competía con el texto y ensuciaba la pantalla más de lo que separaba.
-    <div className="min-w-0 rounded-[9px] border border-dashed border-[#C9D6EA] bg-[#F4F7FC] px-3.5 py-2.5 dark:border-white/15 dark:bg-white/[0.03]">
+    <div className="min-w-0 rounded-[9px] border border-dashed border-border bg-secondary px-3.5 py-2.5">
       <div className="flex flex-wrap items-baseline gap-2.5">
         <h3 className="text-[13px] font-semibold opacity-75">Consultando estado del trámite</h3>
         <time className="ml-auto font-mono text-[11.5px] tabular-nums opacity-55">
@@ -192,7 +199,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
       {abierto && (
         <div
           id={detalleId}
-          className="mt-2 border-t border-dashed border-[#C9D6EA] pt-2 text-[12px] opacity-75 dark:border-white/15"
+          className="mt-2 border-t border-dashed border-border pt-2 text-[12px] opacity-75"
         >
           <p>
             Son {hito.consultas?.toLocaleString("es-CO")} consultas de estado consecutivas, todas
@@ -222,12 +229,12 @@ function EsperandoDecision({ nombreSecretaria }: { nombreSecretaria: string }) {
       <div className="flex flex-col items-center">
         <span
           aria-hidden="true"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] border-[#C2410C] bg-white text-[#C2410C] dark:bg-[#0B0F14]"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full border-[1.5px] border-destructive bg-card text-destructive"
         >
-          <Hourglass className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
+          <Icono nombre="espera" className="h-3.5 w-3.5" />
         </span>
       </div>
-      <div className="min-w-0 rounded-[9px] border border-dashed border-[#DFE5ED] px-3.5 py-2.5 dark:border-white/10">
+      <div className="min-w-0 rounded-[9px] border border-dashed border-border px-3.5 py-2.5">
         <h3 className="text-[13.5px] font-semibold">
           Esperando la decisión de {secretaria(nombreSecretaria)}
         </h3>

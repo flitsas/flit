@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { WIZARD_CTA_GRADIENT } from '@/components/operacion/wizard-field-styles';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_PANEL,
+} from '@/components/operacion/dialogo-propio';
+import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
 
 /**
@@ -18,10 +23,6 @@ import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/
 const MSG_COPIADO = 'Enlace copiado';
 const MSG_PORTAPAPELES = 'No se pudo copiar el enlace. Inténtalo de nuevo.';
 
-const BTN =
-  'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70';
-const GHOST_BTN = `${BTN} border border-[#DFE5ED] bg-white text-flit-primary hover:bg-[#F4F8FF] dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5`;
-const CTA_BTN = `${BTN} text-white hover:opacity-90`;
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface Pendiente {
@@ -139,8 +140,7 @@ function RegenerarDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${MODAL_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -151,12 +151,17 @@ function RegenerarDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-md rounded-[18px] border border-[#DFE5ED] bg-white p-5 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+        className={`${DIALOGO_PANEL} w-full max-w-md`}
       >
-        <h2 id={titleId} className="text-base font-bold">
-          No se pudo copiar el enlace
-        </h2>
-        <p id={descId} className="mt-3 text-sm text-flit-primary dark:text-white/80">
+        <div className={MODAL_CABECERA_CLS}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <Icono nombre="alerta" disco size={52} />
+          <h2 id={titleId} className={MODAL_TITULO_CLS}>
+            No se pudo copiar el enlace
+          </h2>
+        </div>
+        <div className="p-5">
+        <p id={descId} className="text-sm text-flit-primary dark:text-foreground">
           {mensaje} Regenera uno nuevo: el anterior dejará de funcionar y se enviará el nuevo por correo.
         </p>
         {error && (
@@ -169,24 +174,24 @@ function RegenerarDialog({
               color: 'var(--badge-danger-fg)',
             }}
           >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className={GHOST_BTN} onClick={onClose} disabled={busy}>
+          <button type="button" className={buttonClass({ variant: 'secondary', size: 'sm' })} onClick={onClose} disabled={busy}>
             Cancelar
           </button>
           <button
             type="button"
-            className={CTA_BTN}
-            style={{ background: WIZARD_CTA_GRADIENT }}
+            className={buttonClass({ size: 'sm' })}
             onClick={onConfirm}
             disabled={busy}
             aria-busy={busy}
           >
             {busy ? 'Enviando…' : 'Regenerar enlace'}
           </button>
+        </div>
         </div>
       </div>
     </div>,

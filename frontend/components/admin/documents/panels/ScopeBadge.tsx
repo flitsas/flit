@@ -1,25 +1,24 @@
 "use client";
 
 import type { OverrideScope, ResolutionLevel } from "@/lib/api/types-documents";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusBadgeTone } from "@flit/ui/StatusBadge";
 
 // Badge de nivel/scope documental (HU #10198, AC3/AC4/AC5). Colores con contraste
-// AA: CLIENTE (azul), OT (turquesa), DEFAULT (gris). Reutilizado por el formulario
+// AA: CLIENTE (azul), OT (tinta), DEFAULT (gris), con los tonos de badge del kit (HU #14510). Reutilizado por el formulario
 // de overrides, las listas de overrides y la matriz resuelta.
 type BadgeLevel = OverrideScope | ResolutionLevel;
 
-const STYLES: Record<BadgeLevel, { bg: string; fg: string; label: string }> = {
-  CLIENTE: { bg: "var(--color-flit-brand)", fg: "#FFFFFF", label: "CLIENTE" },
-  OT: { bg: "var(--color-flit-tech)", fg: "#0a3d3b", label: "OT" },
-  DEFAULT: { bg: "#DFE5ED", fg: "#162744", label: "DEFAULT" },
+const STYLES: Record<BadgeLevel, { tono: StatusBadgeTone; label: string }> = {
+  CLIENTE: { tono: "info", label: "CLIENTE" },
+  OT: { tono: "tinta", label: "OT" },
+  DEFAULT: { tono: "neutral", label: "DEFAULT" },
 };
 
 export function ScopeBadge({ scope }: { scope: BadgeLevel }) {
   const style = STYLES[scope];
   return (
-    <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
-      style={{ background: style.bg, color: style.fg }}
-    >
+    <span {...etiquetaKit(style.tono, { className: "uppercase tracking-wide" })}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {style.label}
     </span>
   );

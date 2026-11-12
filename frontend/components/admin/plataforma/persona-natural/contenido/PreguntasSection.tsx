@@ -4,7 +4,6 @@
 // subir y bajar), orden editable, filtros por columna y los cuatro estados. Cada cambio avisa a la pestaña para
 // refrescar el estado «borrador / publicado».
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, EyeOff, HelpCircle, Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -28,6 +27,7 @@ import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { PnConfirmDialog, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { PreguntaFormModal } from "./PreguntaFormModal";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "pregunta", label: "Pregunta", tipo: "texto" },
@@ -131,10 +131,10 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
 
   function actionsFor(faq: FaqPn, indice: number): RowAction[] {
     return [
-      { icon: Pencil, label: `Editar la pregunta «${resumen(faq.pregunta, 40)}»`, tone: "primary", onClick: () => setForm({ faq }) },
-      { icon: ArrowUp, label: `Subir la pregunta «${resumen(faq.pregunta, 40)}»`, disabled: ocupado || indice === 0, disabledTitle: "Ya es la primera", onClick: () => void mover(faq, -1) },
+      { icon: iconoComo("lapiz"), label: `Editar la pregunta «${resumen(faq.pregunta, 40)}»`, tone: "primary", onClick: () => setForm({ faq }) },
+      { icon: iconoComo("arriba"), label: `Subir la pregunta «${resumen(faq.pregunta, 40)}»`, disabled: ocupado || indice === 0, disabledTitle: "Ya es la primera", onClick: () => void mover(faq, -1) },
       {
-        icon: ArrowDown,
+        icon: iconoComo("abajo"),
         label: `Bajar la pregunta «${resumen(faq.pregunta, 40)}»`,
         disabled: ocupado || indice === faqs.length - 1,
         disabledTitle: "Ya es la última",
@@ -155,7 +155,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
       cellClassName: "max-w-[320px]",
       render: (f) => f.pregunta,
     },
-    { key: "respuesta", header: "Respuesta", cellClassName: "max-w-[360px] text-xs text-[#59677D] dark:text-white/78", render: (f) => resumen(f.respuesta, 140) },
+    { key: "respuesta", header: "Respuesta", cellClassName: "max-w-[360px] text-xs text-muted-foreground", render: (f) => resumen(f.respuesta, 140) },
     {
       key: "estado",
       header: (
@@ -187,7 +187,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
         contador={status === "ready" || status === "empty" ? `${plural(faqs.length, "pregunta", "preguntas")} · ${plural(faqs.filter((f) => f.activa).length, "visible", "visibles")}` : undefined}
         titulo="Preguntas frecuentes"
         descripcion="Al empezar, aquí están las preguntas que el portal ya muestra al ciudadano. Se muestran en este orden (usa las flechas para subir o bajar); las ocultas no aparecen en el portal."
-        accion={<CreateButton label="Nueva pregunta" icon={HelpCircle} onClick={nueva} />}
+        accion={<CreateButton label="Nueva pregunta" icon={iconoComo("ayuda")} onClick={nueva} />}
       />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando preguntas frecuentes…" />
@@ -218,7 +218,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
       {ocultando && (
         <PnConfirmDialog
           title="Ocultar esta pregunta"
-          icon={EyeOff}
+          icono="ojo-tachado"
           tone="danger"
           confirmLabel="Ocultar"
           onClose={() => setOcultando(null)}

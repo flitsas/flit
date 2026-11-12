@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, enabledTone, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -67,7 +67,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
   };
 
   return (
-    <Modal
+    <Modal icono="integraciones"
       open={trabajo !== null}
       onClose={onCerrar}
       busy={ocupado}
@@ -133,7 +133,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                         key={d.valor}
                         type="button"
                         aria-pressed={marcado}
-                        className={`${CHIP_DIA_CLS} ${marcado ? "border-[#3B4FD6] bg-[#3B4FD6] text-white" : "border-current/20 opacity-70"}`}
+                        className={`${CHIP_DIA_CLS} ${marcado ? "border-flit-brand-ink bg-flit-brand-ink text-primary-foreground" : "border-current/20 opacity-70"}`}
                         onClick={() => alternarDia(d.valor)}
                       >
                         {d.corto}
@@ -164,12 +164,12 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                       />
                       {prog.horas.length > 1 && (
                         <button type="button" className="text-xs opacity-60 hover:opacity-100" aria-label={`Quitar la hora ${i + 1}`} onClick={() => cambiar({ horas: prog.horas.filter((_, j) => j !== i) })}>
-                          <X className="h-3.5 w-3.5" aria-hidden />
+                          <Icono nombre="cerrar" className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </span>
                   ))}
-                  <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => cambiar({ horas: [...prog.horas, siguienteHora(prog.horas)] })}>
+                  <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => cambiar({ horas: [...prog.horas, siguienteHora(prog.horas)] })}>
                     + Otra hora
                   </button>
                 </div>
@@ -222,7 +222,7 @@ function EjecutarTrabajo({ trabajo, onCerrar, onLanzado }: { trabajo: Trabajo | 
   };
 
   return (
-    <Modal
+    <Modal icono="avance"
       open={trabajo !== null}
       onClose={onCerrar}
       busy={ocupado}
@@ -276,7 +276,7 @@ function EjecutarAhora({ abierto, canalInicial, onCerrar }: { abierto: boolean; 
   };
 
   return (
-    <Modal
+    <Modal icono="avance"
       open={abierto}
       onClose={onCerrar}
       busy={ocupado}
@@ -315,7 +315,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
   const carga = useCarga(id ? `ciclo:${id}` : null, (signal) => apiFetch<DetalleCiclo>(`/admin/ingesta/ciclos/${id}`, { signal }));
   const d = carga.datos;
   return (
-    <Modal open={id !== null} onClose={onCerrar} title="Detalle del ciclo" size="2xl">
+    <Modal icono="reloj" open={id !== null} onClose={onCerrar} title="Detalle del ciclo" size="2xl">
       {carga.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
       {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
       {d && (
@@ -330,6 +330,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
           {d.ciclo.mensajeError && <InlineAlert tone="error" compact>{d.ciclo.mensajeError}</InlineAlert>}
           <h3 className="text-sm font-semibold">Por empresa y clave</h3>
           <DataTable
+            tarjeta={false}
             ariaLabel="Resultado por empresa"
             rows={d.logs}
             getRowKey={(l) => l.id}
@@ -350,6 +351,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
           />
           <h3 className="text-sm font-semibold">Consultas a la fuente</h3>
           <DataTable
+            tarjeta={false}
             ariaLabel="Consultas a la fuente"
             rows={d.consultas}
             getRowKey={(c) => c.id}
@@ -370,7 +372,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
                   c.tieneRespuesta ? (
                     <button
                       type="button"
-                      className="font-semibold text-[#3B4FD6] hover:underline"
+                      className="font-semibold text-flit-brand-ink hover:underline"
                       onClick={() => apiDownload(`/admin/ingesta/consultas/${c.id}/respuesta`, "respuesta-error.txt").catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"))}
                     >
                       Respuesta del error
@@ -418,7 +420,7 @@ export default function Ingesta() {
           descripcion="Cuándo se consultan SIMIT y la fuente municipal, y qué pasó en cada ciclo."
           acciones={
             <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEjecutar("SimitNit")}>
-              <Play className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="avance" className="h-3.5 w-3.5" />
               Ejecutar ahora
             </button>
           }
@@ -446,7 +448,7 @@ export default function Ingesta() {
               render: (t) => (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline"
                   onClick={(e) => {
                     e.stopPropagation();
                     const c = canalDeIngesta(t.tipo);
@@ -454,7 +456,7 @@ export default function Ingesta() {
                     else setLanzar(t);
                   }}
                 >
-                  <Play className="h-3 w-3" aria-hidden />
+                  <Icono nombre="avance" className="h-3 w-3" />
                   Ejecutar ahora
                 </button>
               ),

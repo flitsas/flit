@@ -1,52 +1,41 @@
-/* DR. FLIT — tokens alineados a flit_design_tokens.json (Design Guardian).
-   Scope: .dr-flit — no introduce paleta ajena al prototipo FLIT. */
+/* DR. FLIT — tokens del UI kit «Diseño Inteligente» (packages/ui/tokens.css).
+   Scope: .dr-flit — no introduce paleta ajena al kit. */
 .dr-flit {
-  --dr-flit-brand: #162744;
-  --dr-flit-brand-blue: #4f74c9;
-  --dr-flit-brand-title: #526fb8;
-  --dr-flit-cyan: #4fd4cc;
-  --dr-flit-action: #4f74c9;
-  --dr-flit-accent: #f05a35;
-  --dr-flit-success: #70cf3a;
-  --dr-flit-bubble: #eef5ff;
-  --dr-flit-border: #dde5f0;
-  --dr-flit-border-input: #d9dee8;
-  --dr-flit-text: #162744;
-  --dr-flit-text-secondary: #59677d;
-  --dr-flit-text-muted: #7d8798;
-  --dr-flit-text-inverse: #ffffff;
-  --dr-flit-panel-bg: #eef5ff;
-  --dr-flit-card-bg: #ffffff;
-  --dr-flit-overlay: rgba(22, 39, 68, 0.45);
-  --dr-flit-focus: #4f74c9;
-  --dr-flit-icon-tint: rgba(79, 116, 201, 0.12);
-  --dr-flit-code-bg: rgba(22, 39, 68, 0.08);
-  --dr-flit-gradient-primary: linear-gradient(90deg, #4fd4cc 0%, #4f74c9 100%);
-  --dr-flit-gradient-header: linear-gradient(180deg, #4fd4cc 0%, #4f74c9 100%);
-  --dr-flit-gradient-fab: linear-gradient(135deg, #4fd4cc 0%, #4f74c9 100%);
-  --dr-flit-radius-widget: 24px;
+  --dr-flit-brand: var(--color-flit-primary);
+  --dr-flit-brand-blue: var(--color-flit-brand);
+  --dr-flit-brand-title: var(--flit-brand-ink);
+  --dr-flit-cyan: var(--color-flit-tech);
+  --dr-flit-action: var(--color-flit-brand);
+  --dr-flit-accent: var(--color-flit-alert);
+  --dr-flit-success: var(--flit-success-ink);
+  --dr-flit-bubble: var(--secondary);
+  --dr-flit-border: var(--border);
+  --dr-flit-border-input: var(--input);
+  --dr-flit-text: var(--foreground);
+  --dr-flit-text-secondary: var(--muted-foreground);
+  --dr-flit-text-muted: var(--muted-foreground);
+  --dr-flit-text-inverse: var(--di-on-action);
+  --dr-flit-panel-bg: var(--di-surface);
+  --dr-flit-card-bg: var(--card);
+  --dr-flit-overlay: var(--overlay);
+  --dr-flit-focus: var(--ring);
+  --dr-flit-icon-tint: var(--badge-info-bg);
+  --dr-flit-code-bg: var(--surface-sunken);
+  /* Con texto encima: el degradado de acción de la propuesta (botones y lanzador). */
+  --dr-flit-gradient-primary: var(--di-gradient-action);
+  --dr-flit-gradient-fab: var(--di-gradient-action);
+  /* Cabecera del panel: la franja tinta del Modal (homologación, HU #14511); su texto va en --di-on-accent. */
+  --dr-flit-gradient-header: var(--di-accent);
+  --dr-flit-radius-widget: var(--di-radius-modal);
   --dr-flit-radius-chat: 18px;
   --dr-flit-radius-card: 18px;
-  --dr-flit-shadow-fab: 0 10px 22px rgba(79, 116, 201, 0.22);
-  --dr-flit-shadow-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
-  --dr-flit-shadow-card: 0 8px 24px rgba(22, 39, 68, 0.08);
+  --dr-flit-shadow-fab: var(--shadow-button);
+  --dr-flit-shadow-panel: var(--shadow-modal);
+  --dr-flit-shadow-card: var(--shadow-card);
   --dr-flit-font: var(--font-poppins, Inter, system-ui, sans-serif);
 }
 
-/* Alineado a Shell dark existente (#0B0F14), sin paleta propia. */
-.dark .dr-flit {
-  --dr-flit-bubble: rgba(85, 126, 255, 0.12);
-  --dr-flit-panel-bg: #0b0f14;
-  --dr-flit-card-bg: #0b0f14;
-  --dr-flit-text: #ffffff;
-  --dr-flit-text-secondary: rgba(255, 255, 255, 0.65);
-  --dr-flit-text-muted: rgba(255, 255, 255, 0.55);
-  --dr-flit-border: rgba(255, 255, 255, 0.1);
-  --dr-flit-border-input: rgba(255, 255, 255, 0.14);
-  --dr-flit-code-bg: rgba(255, 255, 255, 0.08);
-  --dr-flit-icon-tint: rgba(0, 219, 213, 0.15);
-  --dr-flit-overlay: rgba(22, 39, 68, 0.55);
-}
+/* Oscuro: los tokens de la propuesta (--di-*) ya cambian solos. */
 
 @keyframes drFlitSlideIn {
   from {

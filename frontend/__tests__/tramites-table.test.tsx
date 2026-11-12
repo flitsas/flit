@@ -1615,7 +1615,7 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
       }),
     );
     const enviar = await screen.findByRole('menuitem', { name: 'Enviar al OT' });
-    expect(enviar).toHaveClass('bg-amber-50');
+    expect(enviar).toHaveClass('bg-[var(--badge-warning-bg)]');
     await userEvent.keyboard('{Escape}');
 
     await userEvent.click(await screen.findByRole('button', { name: /Acciones del trámite TR-PRE/ }));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus, Upload } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -84,11 +84,11 @@ function SubirDocumento({ rl, doc, onSubido }: { rl: Representante; doc: (typeof
   };
 
   return (
-    <div className="flex items-center justify-between gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/15">
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2">
       <span className="text-xs font-semibold">{doc.texto}</span>
       <div className="flex items-center gap-2">
         {archivoId ? (
-          <button type="button" className="text-xs text-[#3B4FD6] hover:underline" onClick={() => apiDownload(`/archivos/${archivoId}`, doc.tipo).catch(() => toast.show("No se pudo descargar.", "error"))}>
+          <button type="button" className="text-xs text-flit-brand-ink hover:underline" onClick={() => apiDownload(`/archivos/${archivoId}`, doc.tipo).catch(() => toast.show("No se pudo descargar.", "error"))}>
             Ver
           </button>
         ) : (
@@ -96,7 +96,7 @@ function SubirDocumento({ rl, doc, onSubido }: { rl: Representante; doc: (typeof
         )}
         <input ref={input} type="file" accept={doc.acepta} className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-          <Upload className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           {ocupado ? "Cargando…" : archivoId ? "Reemplazar" : "Cargar"}
         </button>
       </div>
@@ -130,7 +130,7 @@ function Formulario({ rl, nits, onCerrar, onGuardado }: { rl: Representante | nu
   };
 
   return (
-    <Modal
+    <Modal icono="firma"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -234,7 +234,7 @@ export default function Representantes() {
           acciones={
             puedeGestionar && (
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEditar("nuevo")}>
-                <Plus className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="mas" className="h-3.5 w-3.5" />
                 Nuevo representante
               </button>
             )
@@ -283,7 +283,7 @@ export default function Representantes() {
                 header: "",
                 align: "right",
                 render: (r) => (
-                  <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={(e) => { e.stopPropagation(); setDocumentos(r.id); }}>
+                  <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={(e) => { e.stopPropagation(); setDocumentos(r.id); }}>
                     Documentos
                   </button>
                 ),
@@ -305,7 +305,7 @@ export default function Representantes() {
           />
         )}
         {rlDocumentos && (
-          <Modal open onClose={() => setDocumentos(null)} title={`Documentos de ${rlDocumentos.nombres}`} size="md">
+          <Modal icono="documento" open onClose={() => setDocumentos(null)} title={`Documentos de ${rlDocumentos.nombres}`} size="md">
             <div className="flex flex-col gap-2">
               {DOCUMENTOS.map((d) =>
                 puedeGestionar ? (

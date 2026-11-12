@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 
-import { AlertCircle, ChevronDown, ShieldCheck } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * HU #12931 — autorización del tratamiento de datos antes de usar el chat con IA o radicar un caso. Es
@@ -41,7 +41,7 @@ export function DrFlitConsentPrompt({
           style={{ background: "var(--dr-flit-icon-tint)" }}
           aria-hidden="true"
         >
-          <ShieldCheck className="h-4 w-4" style={{ color: "var(--dr-flit-brand-blue)" }} />
+          <Icono nombre="escudo" className="h-4 w-4" style={{ color: "var(--dr-flit-brand-blue)" }} />
         </span>
         <div
           className="min-w-0 flex-1 space-y-1.5 text-xs leading-relaxed"
@@ -63,10 +63,7 @@ export function DrFlitConsentPrompt({
             style={{ color: "var(--dr-flit-brand-blue)" }}
           >
             {showDetail ? "Ocultar detalle" : "Ver detalle"}
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${showDetail ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
+            <Icono nombre="abajo" className={`h-3.5 w-3.5 transition-transform ${showDetail ? "rotate-180" : ""}`} />
           </button>
           <div id={detailId} hidden={!showDetail} className="space-y-1.5">
             <p>
@@ -92,11 +89,7 @@ export function DrFlitConsentPrompt({
           className="flex items-center gap-2 text-xs"
           style={{ color: "var(--dr-flit-text)" }}
         >
-          <AlertCircle
-            className="h-4 w-4 shrink-0"
-            style={{ color: "var(--dr-flit-accent)" }}
-            aria-hidden="true"
-          />
+          <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
           {error}
         </p>
       ) : null}
@@ -106,7 +99,7 @@ export function DrFlitConsentPrompt({
           type="button"
           onClick={onAccept}
           disabled={accepting}
-          className="w-full rounded-full px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-95 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+          className="w-full rounded-full px-4 py-3 text-sm font-semibold text-(--dr-flit-text-inverse) transition-opacity hover:opacity-95 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
           style={{ background: "var(--dr-flit-gradient-primary)" }}
         >
           {accepting ? "Registrando…" : "Acepto y continuar"}

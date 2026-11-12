@@ -7,32 +7,38 @@
 @theme inline {
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-placa: var(--font-barlow-condensed), "Barlow Condensed", "Arial Narrow", sans-serif;
   /* HU #12419 (ADR-0060 §D5) — alias a `--brand-*` con el hex FLIT como valor por defecto. Sin
    * `<style id="brand-tokens">` inyectado (host FLIT, BrandStyle.tsx), `var(--brand-primary, …)`
    * resuelve al fallback y el CSS computa EXACTAMENTE los mismos valores de siempre (AC7).
    * primary = identidad (títulos, encabezados); secondary = acción (botones, enlaces, menú activo).
    * `--brand-accent` (cierre del degradado) y `--brand-bg` (fondo tintado) los deriva BrandStyle
    * del secundario; alert/gray son semánticos de FLIT y no varían por red. */
-  --color-flit-primary: var(--brand-primary, #162744);
+  /* Tinta de títulos: sin marca de socio, #162744 en claro y #e6f0ff en oscuro (--flit-primary-tema, HU #14478).
+   * Una Marca Blanca la sigue fijando con su --brand-primary en los dos temas (BrandStyle). */
+  --color-flit-primary: var(--brand-primary, var(--flit-primary-tema, #162744));
   --color-flit-brand: var(--brand-secondary, #557eff);
   --color-flit-brand-ink: var(--flit-brand-ink);
   --color-flit-tech: var(--brand-accent, #00dbd5);
   --color-flit-alert: #ff4e00;
-  --color-flit-bg: var(--brand-bg, #eef5ff);
-  --color-flit-gray: #dfe5ed;
+  /* Fondo y gris de marca con respaldo por tema (pedido de S3, HU #14478): iguales en claro; en oscuro, el fondo y el
+   * borde oscuros del kit. En oscuro BrandStyle anula --brand-bg para que no quede el fondo claro del socio. */
+  --color-flit-bg: var(--brand-bg, var(--flit-bg-tema, #e6f0ff));
+  --color-flit-gray: var(--flit-gray-tema, #a9c9fc);
   /* Dock inferior — utilities desde tokens §2D (GUIA-DOCK) alineados a flit_design_tokens */
   --color-nav-app: var(--nav-app-bg);
   --color-nav-ink: var(--nav-texto-fuerte);
   --color-nav-soft: var(--nav-borde);
   --color-nav-texto: var(--nav-texto);
   --radius-nav-pill: var(--nav-radio-pill);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  /* UI Kit 2026: radio estándar de 9 px en todo contenedor; solo los controles diminutos bajan. `rounded-full` no cambia. */
+  --radius-sm: 5px;
+  --radius-md: 7px;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -68,200 +74,558 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/*
+ * Manual UI Kit Ecosistema FLIT 2026 (rama propuesta-2 de Johan, docs/design/propuesta-ui-kit-2026/ui-kit-2026.css).
+ * Mismos NOMBRES de siempre, valores del kit. Reglas del manual:
+ *  - Azul #557EFF en rellenos, íconos y discos; #1D53FF cuando es TEXTO o botón con texto blanco (4,6:1, AA).
+ *  - Tinta #162744, turquesa #00DBD5, borde y separación #A9C9FC, fondo #E6F0FF.
+ *  - Semánticos: verde #8CC63F, rojo #C10000, amarillo #F9AC00, naranja #FF4E00; su texto oscurecido a AA.
+ *  - Degradado turquesa/azul solo para identidad (isotipo, ingreso). Nunca en botones ni estados.
+ *  - Radio estándar 9 px. Borde 1 px #A9C9FC. Sombra solo en el menú principal y sus menús (3 3 3 #557EFF al 30 %).
+ * El oscuro no lo define el manual: son los valores derivados de la propuesta.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  /* Borde de marca #DFE5ED (== --color-flit-gray): token semántico unificado para todos los
-     contenedores. En dark pasa a white/10 (ver .dark). HU#10492 — evita el override inline
-     borderColor:#DFE5ED que dejaba "líneas claras" en modo oscuro. */
-  --border: oklch(0.9197 0.0127 255.51);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --radius: 9px;
 
-  /* Badges de estado — paleta semántica unificada (HU #10844). Cinco tones; forma
-     tintada (fondo translúcido + texto + borde). Reemplaza los colores crudos que cada
-     dominio pasaba a mano y los badges de relleno sólido (OtStatusBadge).
-     ACTUALIZACIÓN: success pasa de cian (#00DBD5) a verde tintado alineado al PDF 20 ago +
-     prototipo Lovable (OK = { color:#4F7A12, bg:#F3FBE8, border:#CDEB9C }). La semántica
-     verde = válido/completo ya era correcta en prototype_rules.md; el cian era un error
-     de implementación. Warning alineado a #F9AC00 (ámbar FLIT del PDF 20 ago). */
-  --badge-success-bg: #F3FBE8;
-  --badge-success-fg: #4F7A12;
-  --badge-success-border: #CDEB9C;
-  --badge-warning-bg: rgba(249, 172, 0, 0.15);
-  --badge-warning-fg: #b45309;
-  --badge-warning-border: rgba(249, 172, 0, 0.40);
-  --badge-danger-bg: rgba(255, 78, 0, 0.12);
-  --badge-danger-fg: #c2410c;
-  --badge-danger-border: rgba(255, 78, 0, 0.32);
-  /* HU #12726 (C.3) — alertas «pendiente por acción» en detalle de trámite. Basado en
-     --color-flit-alert (#FF4E00); texto #BF3B00 ≈ 5.2:1 sobre el fondo tintado (AA). */
-  --badge-pending-bg: rgba(255, 78, 0, 0.12);
-  --badge-pending-fg: #bf3b00;
-  --badge-pending-border: rgba(255, 78, 0, 0.32);
-  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 14%, transparent);
-  --badge-info-fg: var(--brand-ink, #3b4fd6);
-  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 35%, transparent);
-  --badge-neutral-bg: rgba(223, 229, 237, 0.55);
-  --badge-neutral-fg: #445569;
-  --badge-neutral-border: rgba(223, 229, 237, 0.9);
+  /* Kit en crudo, para las piezas que lo piden por nombre. */
+  --kit-azul: #557eff;
+  --kit-azul-texto: var(--brand-ink, #1d53ff);
+  --kit-azul-relleno: var(--brand-ink, #1d53ff);
+  --kit-azul-hover: #1746e0;
+  --kit-turquesa: #00dbd5;
+  --kit-tinta: #162744;
+  --kit-verde: #8cc63f;
+  --kit-rojo: #c10000;
+  --kit-amarillo: #f9ac00;
+  --kit-naranja: #ff4e00;
+  --kit-naranja-boton: #d44100;
+  --kit-gris: #546b7d;
+  --kit-gris-disco: #5e6a7b;
+  --kit-linea: #a9c9fc;
+  --kit-fondo: #e6f0ff;
+  --kit-hover: #e1ebfb;
+  --kit-sombra: 3px 3px 3px #557eff4d;
+  --kit-margen: clamp(16px, 2.2vw, 32px);
 
-  /* Tinta legible del verde cuando el verde de marca (#8CC63F) se usa como color de TEXTO: en
-     plano da 2.05:1 sobre blanco y no se lee. El verde de marca sigue valiendo como relleno de
-     punto, borde o fondo tintado; esta variable es solo para texto.
+  --background: #ffffff;
+  --foreground: #162744;
+  --card: #ffffff;
+  --card-foreground: #162744;
+  --popover: #ffffff;
+  --popover-foreground: #162744;
+  --primary: #162744;
+  --primary-foreground: #ffffff;
+  --secondary: #e1ebfb;
+  --secondary-foreground: #162744;
+  --muted: #e1ebfb;
+  --muted-foreground: #546b7d;
+  --accent: #e1ebfb;
+  --accent-foreground: #162744;
+  --destructive: #c10000;
+  --destructive-foreground: #ffffff;
+  /* Borde de todo contenedor: la línea del kit. */
+  --border: #a9c9fc;
+  --input: #a9c9fc;
+  --ring: #1d53ff;
+  --chart-1: #557eff;
+  --chart-2: #00dbd5;
+  --chart-3: #f9ac00;
+  --chart-4: #8cc63f;
+  --chart-5: #ff4e00;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #162744;
+  --sidebar-primary: #1d53ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e1ebfb;
+  --sidebar-accent-foreground: #162744;
+  --sidebar-border: #a9c9fc;
+  --sidebar-ring: #1d53ff;
 
-     El valor es el tono `OK` del propio repo de propuesta, no uno inventado: #4F7A12, que además
-     da 5.09:1 sobre blanco y cumple AA. Se llegó a él después de usar un #4A7019 propio —más
-     apagado y sin razón para existiendo este—. */
-  --flit-success-ink: #4f7a12;
+  /* Etiquetas por tono: relleno al 10 %, borde en el color pleno y texto oscurecido a AA (README, contraste). */
+  --badge-success-bg: #8cc63f1a;
+  --badge-success-fg: #4f7121;
+  --badge-success-border: #8cc63f;
+  --badge-warning-bg: #ff4e001a;
+  --badge-warning-fg: #bd3a00;
+  --badge-warning-border: #ff4e00;
+  --badge-danger-bg: #c100001a;
+  --badge-danger-fg: #c10000;
+  --badge-danger-border: #c10000;
+  --badge-pending-bg: #ff4e001a;
+  --badge-pending-fg: #bd3a00;
+  --badge-pending-border: #ff4e00;
+  --badge-info-bg: #557eff1a;
+  --badge-info-fg: var(--brand-ink, #1d53ff);
+  --badge-info-border: var(--brand-ink, #1d53ff);
+  --badge-neutral-bg: #5e6a7b1a;
+  --badge-neutral-fg: #5e6a7b;
+  --badge-neutral-border: #5e6a7b;
+  --badge-purple-bg: #f9ac001a;
+  --badge-purple-fg: #8b6000;
+  --badge-purple-border: #f9ac00;
+  --badge-tinta-bg: #1627441a;
+  --badge-tinta-fg: #162744;
+  --badge-tinta-border: #162744;
 
-  /* Tinta legible del azul de marca (#557eff) cuando se usa como TEXTO pequeño: sobre blanco da
-     3,61:1 (no AA). El azul de marca sigue en iconos, bordes y rellenos; esta variable es solo
-     para labels y copy. HU #12723 — #476BD9 sobre #FFFFFF = 4,80:1 (WCAG 2.1 AA). */
-  --flit-brand-ink: var(--brand-ink, #476bd9);
+  /* Verde de marca cuando es TEXTO: #8CC63F da 2,05:1 sobre blanco; #4F7121 = 4,6:1 (UI Kit 2026, contraste AA). */
+  --flit-success-ink: #4f7121;
+  /* Tinta legible del azul de marca cuando se usa como TEXTO: #557EFF da 3,61:1 sobre blanco (no AA). El azul de marca
+     sigue en íconos, bordes y rellenos; esta variable es solo para texto. UI Kit 2026: #1D53FF sobre #FFFFFF = 5,62:1. */
+  --flit-brand-ink: var(--brand-ink, #1d53ff);
 
-  /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
-     tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
-     gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
-     blanco que se aplanaba sobre paneles blancos; la fila lleva borde definido + sombra sutil
-     que la hace flotar aunque el contenedor sea blanco. */
-  --table-header-bg: #dfe5ed;
+  /* Tabla del kit: contenedor con borde, cabecera #A9C9FC con texto tinta, filas separadas por línea. */
+  --table-header-bg: #a9c9fc;
   --table-header-fg: #162744;
-  --table-row-border: #dfe5ed;
-  --table-row-hover: #f4f8ff;
+  --table-row-border: #a9c9fc;
+  --table-row-hover: #e1ebfb;
 
-  /* Permisos por módulo (HU #13652): estado habilitado / deshabilitado de un permiso de usuario.
-     Siempre acompañados de texto o icono (no solo color). Contraste sobre blanco: 4.6:1 y 5.7:1. */
-  --permiso-habilitado: #4f74c9;
-  --permiso-deshabilitado: #59677d;
+  --permiso-habilitado: #1d53ff;
+  --permiso-deshabilitado: #546b7d;
 
-  /* Dock inferior flotante — Contrato D (GUIA-DOCK-INFERIOR-FLOTANTE) × flit_design_tokens.
-     Solo presentación: no cambia catálogo, permisos ni layout de navegación. */
-  --nav-vidrio: rgba(255, 255, 255, 0.94);
-  --nav-vidrio-dark: rgba(22, 39, 68, 0.9);
+  /* Menú principal (dock): píldora blanca; activo en azul con punto; la única sombra del kit. */
+  --nav-vidrio: var(--card);
+  --nav-vidrio-dark: #162744;
   --nav-panel-bg: #ffffff;
-  --nav-borde: #dde5f0;
-  --nav-app-bg: var(--brand-tint, #eaf2ff);
-  --nav-texto: #59677d;
+  --nav-borde: #a9c9fc;
+  --nav-app-bg: var(--brand-tint, #e6f0ff);
+  --nav-texto: #162744;
   --nav-texto-fuerte: var(--color-flit-primary);
-  --nav-texto-tenue: #667085;
-  --nav-focus: var(--brand-ink, #4f74c9);
-  /* Mismo degradado horizontal del isotipo central (favicon.svg: #557EFF → #00DBD5); en una
-     Marca Blanca, sus colores. */
-  --nav-activo: linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%);
+  --nav-texto-tenue: #546b7d;
+  --nav-focus: var(--brand-ink, #1d53ff);
+  --nav-activo: var(--brand-ink, #1d53ff);
+  --nav-activo-disco: #e1ebfb;
   --nav-radio-pill: 999px;
-  --nav-radio-panel: 18px;
-  --nav-sombra-dock: 0 8px 24px rgba(22, 39, 68, 0.08);
-  --nav-sombra-panel: 0 24px 60px rgba(22, 39, 68, 0.18);
-  --nav-sombra-activo: 0 10px 22px color-mix(in srgb, var(--brand-ink, #4f74c9) 22%, transparent);
+  --nav-radio-panel: 9px;
+  --nav-sombra-dock: 3px 3px 3px #557eff4d;
+  --nav-sombra-panel: 3px 3px 3px #557eff4d;
+  --nav-sombra-activo: none;
   --nav-duracion: 180ms;
   --nav-ease: cubic-bezier(0.2, 0, 0, 1);
   --alto-navegacion: 0px;
 
+  /* Botones planos: el «degradado» de acción es un solo color. El degradado de marca queda para identidad. */
+  --gradient-action: linear-gradient(var(--brand-ink, #1d53ff), var(--brand-ink, #1d53ff));
+  --gradient-brand: linear-gradient(135deg, var(--color-flit-tech) 0%, var(--color-flit-brand) 100%);
+  --surface-sunken: #e6f0ff;
+  --border-strong: #a9c9fc;
+  --shadow-card: none;
+  --shadow-card-hover: none;
+  --shadow-modal: none;
+  --shadow-button: none;
+  --placa-fondo: #ffd100;
+  --placa-texto: #111111;
+  /* Velo de diálogos: azul al 50 % (el desenfoque de 5 px lo pone cada velo). */
+  --overlay: #557eff80;
+
+  /* Estados del trámite: etiqueta con punta del kit (README, tabla de tonos). bg 10 %, fg texto AA, borde pleno. */
+  --estado-borrador-bg: #5e6a7b1a;
+  --estado-borrador-fg: #5e6a7b;
+  --estado-borrador-border: #5e6a7b;
+  --estado-preparado-bg: #557eff1a;
+  --estado-preparado-fg: #1d53ff;
+  --estado-preparado-border: #1d53ff;
+  --estado-preasignacion-bg: #f77a001a;
+  --estado-preasignacion-fg: #a54f00;
+  --estado-preasignacion-border: #f77a00;
+  --estado-asignado-bg: #557eff1a;
+  --estado-asignado-fg: #1d53ff;
+  --estado-asignado-border: #1d53ff;
+  --estado-entregado-bg: #00a99d1a;
+  --estado-entregado-fg: #00736b;
+  --estado-entregado-border: #00a99d;
+  --estado-aprobado-bg: #8cc63f1a;
+  --estado-aprobado-fg: #4f7121;
+  --estado-aprobado-border: #8cc63f;
+  --estado-rechazado-bg: #c100001a;
+  --estado-rechazado-fg: #c10000;
+  --estado-rechazado-border: #c10000;
+  --estado-anulado-bg: #c1272d1a;
+  --estado-anulado-fg: #c1272d;
+  --estado-anulado-border: #c1272d;
+  --estado-revocado-bg: #f9ac001a;
+  --estado-revocado-fg: #8b6000;
+  --estado-revocado-border: #f9ac00;
+  --estado-subsanacion-bg: #ff4e001a;
+  --estado-subsanacion-fg: #bd3a00;
+  --estado-subsanacion-border: #ff4e00;
+
+  /* Acento de cada estado = color del disco de su ícono (assets/kit/estado-*.svg). Elemento gráfico, no texto. */
+  --estado-borrador-acento: #5e6a7b;
+  --estado-preparado-acento: #557eff;
+  --estado-preasignacion-acento: #f77a00;
+  --estado-asignado-acento: #557eff;
+  --estado-entregado-acento: #14c4a6;
+  --estado-aprobado-acento: #8cc63f;
+  --estado-rechazado-acento: #ff0000;
+  --estado-anulado-acento: #c1272d;
+  --estado-revocado-acento: #f9b130;
+  --estado-subsanacion-acento: #ff4e00;
+  --estado-solicitud-revocatoria-acento: #f9ac00;
+
+  /* Tokens del prototipo (`--color-x` de la propuesta = `--di-x` aquí). */
+  --di-accent: var(--brand-primary, #162744);
+  --di-accent-hover: #0d1a30;
+  --di-accent-soft: #557eff1a;
+  --di-on-accent: #ffffff;
+  --di-action: var(--brand-ink, #1d53ff);
+  --di-on-action: #ffffff;
+  --di-gradient-action: var(--gradient-action);
+  --di-gradient-action-hover: linear-gradient(#1746e0, #1746e0);
+  --di-gradient-brand: var(--gradient-brand);
+  --di-highlight-decor: #ff4e00;
+  --di-highlight: var(--brand-ink, #1d53ff);
+  --di-highlight-display: var(--brand-ink, #1d53ff);
+  --di-sky: #e6f0ff;
+  --di-sky-line: #a9c9fc;
+  --di-surface: var(--color-flit-bg);
+  --di-surface-elevated: #ffffff;
+  --di-surface-sunken: #e6f0ff;
+  --di-hover: #e1ebfb;
+  --di-text-primary: #162744;
+  --di-text-secondary: #162744;
+  --di-text-tertiary: #546b7d;
+  --di-heading: var(--brand-ink, #1d53ff);
+  --di-border: #a9c9fc;
+  --di-border-strong: #a9c9fc;
+  --di-border-control: #a9c9fc;
+  --serie-verde: var(--estado-aprobado-acento);
+  --serie-ambar: var(--estado-solicitud-revocatoria-acento);
+  --serie-naranja: var(--color-flit-alert);
+  --serie-violeta: var(--estado-revocado-acento);
+  --serie-gris: var(--estado-borrador-acento);
+  --serie-gris-control: #91a5b5;
+  --serie-gris-claro: #a9c9fc;
+  --di-divider: #a9c9fc;
+  --di-warning: #bd3a00;
+  --di-warning-soft: #ff4e001a;
+  --di-danger: #c10000;
+  --di-danger-soft: #c100001a;
+  --di-alerta-punto: #ff4e00;
+  --di-info: var(--brand-ink, #1d53ff);
+  --di-info-soft: #557eff1a;
+  --di-success: #4f7121;
+  --di-success-dot: #8cc63f;
+  --di-success-soft: #8cc63f1a;
+  --di-success-line: #8cc63f;
+  --di-radius-header: 9px;
+  --di-radius-modal: 9px;
+  --di-radius-chip: 9px;
+  --di-text-cifra: 1.5rem;
+  /* Ingreso: panel de marca en tinta en los dos temas (propuesta-2, «ingreso sobrio»). */
+  --di-ingreso-fondo: #162744;
+  --di-ingreso-texto: #ffffff;
+  --di-ingreso-texto-2: #dbe6fb;
+  --di-ingreso-acento-1: #8fb0ff;
+  --di-ingreso-acento-2: #00dbd5;
+  --di-ingreso-azul: #1d53ff;
+  --di-ingreso-tarjeta: #ffffff;
+  --di-ingreso-sombra-escena: none;
+  --di-ingreso-tarjeta-texto-2: #546b7d;
+  --di-ingreso-sombra-tarjeta: none;
+  --di-motion-fast: 120ms;
+  --di-motion-base: 180ms;
+  --di-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --kit-azul: #557eff;
+  --kit-azul-texto: var(--brand-ink, #8fb0ff);
+  --kit-azul-relleno: #1d53ff;
+  --kit-azul-hover: #4669e0;
+  --kit-gris: #a9b8d4;
+  --kit-gris-disco: #5e6a7b;
+  --kit-linea: #3a5688;
+  --kit-fondo: #0d1a30;
+  --kit-hover: #22385e;
+  --kit-sombra: 3px 3px 3px #00000059;
 
-  /* Badges de estado — variantes para modo oscuro (HU #10844).
-     Success: verde oscuro tintado (PDF 20 ago). Warning: #F9AC00 familia. */
-  --badge-success-bg: rgba(140, 198, 63, 0.22);
-  --badge-success-fg: #B8E986;
-  --badge-success-border: rgba(140, 198, 63, 0.45);
-  --badge-warning-bg: rgba(249, 172, 0, 0.20);
-  --badge-warning-fg: #fbbf24;
-  --badge-warning-border: rgba(249, 172, 0, 0.40);
-  --badge-danger-bg: rgba(255, 78, 0, 0.2);
-  --badge-danger-fg: #fca574;
-  --badge-danger-border: rgba(255, 78, 0, 0.4);
-  --badge-pending-bg: rgba(255, 78, 0, 0.2);
-  --badge-pending-fg: #fca574;
-  --badge-pending-border: rgba(255, 78, 0, 0.4);
-  --badge-info-bg: color-mix(in srgb, var(--color-flit-brand) 22%, transparent);
-  --badge-info-fg: var(--brand-ink, #a5b8ff);
-  --badge-info-border: color-mix(in srgb, var(--color-flit-brand) 40%, transparent);
-  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
-  --badge-neutral-fg: #cbd5e1;
-  --badge-neutral-border: rgba(255, 255, 255, 0.15);
+  --background: #0d1a30;
+  --foreground: #e6f0ff;
+  --card: #162744;
+  --card-foreground: #e6f0ff;
+  --popover: #162744;
+  --popover-foreground: #e6f0ff;
+  --primary: #a9c9fc;
+  --primary-foreground: #0d1a30;
+  --secondary: #22385e;
+  --secondary-foreground: #e6f0ff;
+  --muted: #22385e;
+  --muted-foreground: #a9b8d4;
+  --accent: #22385e;
+  --accent-foreground: #e6f0ff;
+  --destructive: #ff6b6b;
+  --destructive-foreground: #0d1a30;
+  --border: #3a5688;
+  --input: #3a5688;
+  --ring: #8fb0ff;
+  --chart-1: #8fb0ff;
+  --chart-2: #2fd6c9;
+  --chart-3: #f9ac00;
+  --chart-4: #a6d95f;
+  --chart-5: #ff7a40;
+  --sidebar: #162744;
+  --sidebar-foreground: #e6f0ff;
+  --sidebar-primary: #1d53ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #22385e;
+  --sidebar-accent-foreground: #e6f0ff;
+  --sidebar-border: #3a5688;
+  --sidebar-ring: #8fb0ff;
 
-  /* Verde de marca como texto: sobre el fondo oscuro el mismo tono ya es legible (no necesita el
-     oscurecimiento que sí requiere sobre blanco). */
-  --flit-success-ink: #8cc63f;
+  --badge-success-bg: #8cc63f1a;
+  --badge-success-fg: #a6d95f;
+  --badge-success-border: #a6d95f;
+  --badge-warning-bg: #ff4e001a;
+  --badge-warning-fg: #ff7a40;
+  --badge-warning-border: #ff7a40;
+  --badge-danger-bg: #c100001a;
+  --badge-danger-fg: #ff6b6b;
+  --badge-danger-border: #ff6b6b;
+  --badge-pending-bg: #ff4e001a;
+  --badge-pending-fg: #ff7a40;
+  --badge-pending-border: #ff7a40;
+  --badge-info-bg: #557eff1a;
+  --badge-info-fg: var(--brand-ink, #8fb0ff);
+  --badge-info-border: var(--brand-ink, #8fb0ff);
+  --badge-neutral-bg: #a9b8d41a;
+  --badge-neutral-fg: #a9b8d4;
+  --badge-neutral-border: #a9b8d4;
+  --badge-purple-bg: #f9ac001a;
+  --badge-purple-fg: #f9ac00;
+  --badge-purple-border: #f9ac00;
+  --badge-tinta-bg: #e6f0ff1a;
+  --badge-tinta-fg: #e6f0ff;
+  --badge-tinta-border: #e6f0ff;
 
-  /* Azul de marca como texto sobre fondo dock oscuro (#162744): #6FA5FF = 6,04:1 (HU #12723). */
-  --flit-brand-ink: var(--brand-ink, #6fa5ff);
+  --flit-success-ink: #a6d95f;
+  /* Azul de marca como texto en oscuro: #8FB0FF sobre la superficie #162744 = 6,98:1. */
+  --flit-brand-ink: var(--brand-ink, #8fb0ff);
 
-  /* Tabla card-list — variantes para modo oscuro (HU #10844). */
-  --table-header-bg: rgba(255, 255, 255, 0.06);
-  --table-header-fg: rgba(255, 255, 255, 0.72);
-  --table-row-border: rgba(255, 255, 255, 0.1);
-  --table-row-hover: rgba(255, 255, 255, 0.04);
+  --table-header-bg: #3a5688;
+  --table-header-fg: #e6f0ff;
+  --table-row-border: #3a5688;
+  --table-row-hover: #22385e;
 
-  /* Dock — superficies y texto en tema oscuro (píldoras inactivas legibles). */
-  --nav-vidrio: var(--nav-vidrio-dark);
-  --nav-borde: rgba(255, 255, 255, 0.1);
-  --nav-app-bg: rgba(255, 255, 255, 0.08);
-  --nav-texto: rgba(255, 255, 255, 0.78);
-  --nav-texto-fuerte: #ffffff;
-  --nav-texto-tenue: rgba(255, 255, 255, 0.55);
+  --permiso-habilitado: #8fb0ff;
+  --permiso-deshabilitado: #a9b8d4;
+
+  --nav-vidrio: var(--card);
   --nav-panel-bg: #162744;
+  --nav-borde: #3a5688;
+  --nav-app-bg: #0d1a30;
+  --nav-texto: #e6f0ff;
+  --nav-texto-fuerte: #ffffff;
+  --nav-texto-tenue: #a9b8d4;
+  --nav-focus: #8fb0ff;
+  --nav-activo: var(--brand-ink, #8fb0ff);
+  --nav-activo-disco: #22385e;
+  --nav-sombra-dock: 3px 3px 3px #00000059;
+  --nav-sombra-panel: 3px 3px 3px #00000059;
+
+  /* En oscuro el azul se separa: #1D53FF en rellenos con texto blanco, #8FB0FF en texto y trazos. */
+  --gradient-action: linear-gradient(#1d53ff, #1d53ff);
+  --surface-sunken: #1c3158;
+  --border-strong: #3a5688;
+  --overlay: #0d1a30a6;
+
+  --flit-primary-tema: #e6f0ff;
+  --flit-bg-tema: #0d1a30;
+  --flit-gray-tema: #3a5688;
+
+  --di-accent: var(--brand-primary, #557eff);
+  --di-accent-hover: #4669e0;
+  --di-accent-soft: #557eff33;
+  --di-on-accent: #ffffff;
+  --di-action: var(--brand-ink, #8fb0ff);
+  --di-gradient-action-hover: linear-gradient(#4669e0, #4669e0);
+  --di-highlight-decor: #ff4e00;
+  --di-highlight: #8fb0ff;
+  --di-highlight-display: #8fb0ff;
+  --di-sky: #1c3158;
+  --di-sky-line: #3a5688;
+  --di-surface-elevated: #162744;
+  --di-surface-sunken: #1c3158;
+  --di-hover: #22385e;
+  --di-text-primary: #e6f0ff;
+  --di-text-secondary: #e6f0ff;
+  --di-text-tertiary: #a9b8d4;
+  --di-heading: #a9c9fc;
+  --di-border: #3a5688;
+  --di-border-strong: #3a5688;
+  --di-border-control: #3a5688;
+  --serie-gris-control: #a9b8d4;
+  --serie-gris-claro: #3a5688;
+  --di-divider: #2c4470;
+  --di-warning: #ff7a40;
+  --di-warning-soft: #ff4e001a;
+  --di-danger: #ff6b6b;
+  --di-danger-soft: #c100001a;
+  --di-alerta-punto: #ff4e00;
+  --di-info: #8fb0ff;
+  --di-info-soft: #557eff1a;
+  --di-success: #a6d95f;
+  --di-success-dot: #8cc63f;
+  --di-success-soft: #8cc63f1a;
+  --di-success-line: #8cc63f;
+  --di-ingreso-tarjeta: #162744;
+  --di-ingreso-tarjeta-texto-2: #a9b8d4;
+
+  --estado-borrador-bg: #a9b8d41a;
+  --estado-borrador-fg: #a9b8d4;
+  --estado-borrador-border: #a9b8d4;
+  --estado-preparado-bg: #557eff1a;
+  --estado-preparado-fg: #8fb0ff;
+  --estado-preparado-border: #8fb0ff;
+  --estado-preasignacion-bg: #f77a001a;
+  --estado-preasignacion-fg: #f77a00;
+  --estado-preasignacion-border: #f77a00;
+  --estado-asignado-bg: #557eff1a;
+  --estado-asignado-fg: #8fb0ff;
+  --estado-asignado-border: #8fb0ff;
+  --estado-entregado-bg: #00a99d1a;
+  --estado-entregado-fg: #2fd6c9;
+  --estado-entregado-border: #2fd6c9;
+  --estado-aprobado-bg: #8cc63f1a;
+  --estado-aprobado-fg: #a6d95f;
+  --estado-aprobado-border: #a6d95f;
+  --estado-rechazado-bg: #c100001a;
+  --estado-rechazado-fg: #ff6b6b;
+  --estado-rechazado-border: #ff6b6b;
+  --estado-anulado-bg: #c1272d1a;
+  --estado-anulado-fg: #ff6b6b;
+  --estado-anulado-border: #ff6b6b;
+  --estado-revocado-bg: #f9ac001a;
+  --estado-revocado-fg: #f9ac00;
+  --estado-revocado-border: #f9ac00;
+  --estado-subsanacion-bg: #ff4e001a;
+  --estado-subsanacion-fg: #ff7a40;
+  --estado-subsanacion-border: #ff7a40;
+  --estado-borrador-acento: #a9b8d4;
+  --estado-anulado-acento: #ff6b6b;
 }
+
+/* Ilustración del ingreso flotando (propuesta.css @keyframes flotar); quieta si la persona pidió menos movimiento. */
+@keyframes di-flotar {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.di-flotar { animation: di-flotar 7s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .di-flotar { animation: none; }
+}
+
+/* ===================== Piezas del Manual UI Kit 2026 (propuesta-2, ui-kit-2026.css) ===================== */
+@layer components {
+  /* Íconos (@flit/ui/Icono): glifo en currentColor; el disco es el `.kico` de la propuesta. */
+  .kit-icono { display: inline-block; flex-shrink: 0; vertical-align: -0.125em; }
+  .kit-disco {
+    display: inline-grid; place-items: center; flex-shrink: 0; border-radius: 9999px;
+    background: var(--kit-hover); color: var(--kit-azul);
+  }
+  .dark .kit-disco { color: #a9c9fc; }
+  .kit-imagen { display: inline-block; flex-shrink: 0; object-fit: contain; }
+
+  /* Etiqueta de estado con punta (@flit/ui/StatusBadge): contorno 1 px del color pleno, relleno al 10 %. */
+  .kit-etiqueta {
+    --c: var(--badge-neutral-border);
+    position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 22px 4px 10px; border-radius: 999px 0 0 999px;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 11px) 50%, 100% 100%, 0 100%);
+    color: var(--ct, var(--c)); border: 0;
+    font-size: 0.8125rem; font-weight: 700; line-height: 1.25;
+  }
+  /* Contorno con punta en el color pleno; encima, el relleno opaco al 10 %. El fondo en línea del chip queda debajo. */
+  .kit-etiqueta::before {
+    content: ""; position: absolute; inset: 0; z-index: -2; border-radius: inherit; clip-path: inherit;
+    background: var(--c);
+  }
+  .kit-etiqueta::after {
+    content: ""; position: absolute; inset: 1px 2px 1px 1px; z-index: -1; border-radius: inherit;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%);
+    background: color-mix(in srgb, var(--c) 10%, var(--di-surface-elevated));
+  }
+  .kit-etiqueta--icono { padding-left: 4px; }
+  .kit-etiqueta__punto { width: 8px; height: 8px; flex-shrink: 0; border-radius: 9999px; background: var(--c); }
+  .kit-etiqueta__icono { width: 20px; height: 20px; flex-shrink: 0; }
+}
+
+/* Tabla del kit (`.tabla-wrap` de la propuesta-2). Escritorio: filas separadas por línea, sin filas-tarjeta. Las reglas
+ * van solo por encima del corte a tarjetas (900 px; 640 px en /tramites) para no pelear con las recetas móviles. */
+@media (min-width: 901px) {
+  .kit-tabla:not(.kit-tabla--640) table { border-spacing: 0 !important; }
+  .kit-tabla:not(.kit-tabla--640) thead th { border: 0 !important; border-radius: 0 !important; }
+  .kit-tabla:not(.kit-tabla--640) tbody > tr > td {
+    border: 0 !important; border-top: 1px solid var(--table-row-border) !important; border-radius: 0 !important;
+    background: transparent; padding-top: 8px; padding-bottom: 8px; box-shadow: none !important;
+  }
+  .kit-tabla:not(.kit-tabla--640) tbody > tr:first-child > td { border-top: 0 !important; }
+  .kit-tabla:not(.kit-tabla--640) tbody > tr { background: transparent !important; box-shadow: none !important; }
+  .kit-tabla:not(.kit-tabla--640) tbody > tr:hover > td { background: var(--table-row-hover); }
+}
+@media (min-width: 641px) {
+  .kit-tabla--640 table { border-spacing: 0 !important; }
+  .kit-tabla--640 thead th { border: 0 !important; border-radius: 0 !important; }
+  .kit-tabla--640 tbody > tr > td {
+    border: 0 !important; border-top: 1px solid var(--table-row-border) !important; border-radius: 0 !important;
+    background: transparent; padding-top: 8px; padding-bottom: 8px; box-shadow: none !important;
+  }
+  .kit-tabla--640 tbody > tr:first-child > td { border-top: 0 !important; }
+  .kit-tabla--640 tbody > tr { background: transparent !important; box-shadow: none !important; }
+  .kit-tabla--640 tbody > tr:hover > td { background: var(--table-row-hover); }
+}
+/* Paginación dentro del contenedor de la tabla: separada por la línea del kit y con el relleno de las celdas. */
+.kit-tabla > .kit-paginacion, .kit-tabla .kit-paginacion { padding: 4px 14px 12px; border-top: 1px solid var(--table-row-border); }
+@media (max-width: 900px) { .kit-tabla:not(.kit-tabla--640) .kit-paginacion { padding: 0; border-top: 0; } }
+@media (max-width: 640px) { .kit-tabla--640 .kit-paginacion { padding: 0; border-top: 0; } }
+
+@layer components {
+  /* Pestañas (`.pestanas`): línea inferior gris de 2 px; activa azul con 3 px. */
+  .kit-pestana {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 18px;
+    border: 0; border-bottom: 2px solid var(--kit-gris); background: transparent; color: var(--kit-gris);
+    font-size: 0.875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+    text-decoration: none; cursor: pointer; transition: color var(--di-motion-fast) var(--di-ease);
+  }
+  .kit-pestana:hover { color: var(--kit-azul-texto); }
+  .kit-pestana:focus-visible { outline: 2px solid var(--kit-azul-texto); outline-offset: -2px; }
+  .kit-pestana--activa, .kit-pestana[aria-current="page"], .kit-pestana[aria-selected="true"] {
+    color: var(--kit-azul-texto); border-bottom: 3px solid var(--kit-azul-texto);
+  }
+  @media (max-width: 640px) { .kit-pestana { padding: 0 16px; } }
+
+  /* Interruptor (`.interruptor`): el dibujo del paquete como fondo. */
+  .kit-interruptor { background: url("/assets/kit/interruptor-apagado.svg") center / contain no-repeat; }
+  .kit-interruptor[aria-checked="true"] { background-image: url("/assets/kit/interruptor-encendido.svg"); }
+  /* Variante de alerta: el mismo dibujo del paquete con el naranja del manual, para un interruptor cuyo «encendido» es una
+   * emergencia (p. ej. «Suspender la redacción con IA»). En verde se leería como «todo bien». */
+  .kit-interruptor--alerta[aria-checked="true"] { background-image: url("/assets/kit/interruptor-encendido-alerta.svg"); }
+
+  /* Avance horizontal (`ol.pasos`). */
+  .kit-pasos { display: flex; margin: 0; padding: 16px 16px 4px; list-style: none; overflow-x: auto; }
+  .kit-paso { position: relative; flex: 1 1 0; min-width: 96px; }
+  /* La línea va de centro a centro por DEBAJO de los círculos (z-index 0 frente a 1): si no, el paso siguiente la pinta
+   * encima del disco del anterior. */
+  .kit-paso + .kit-paso::before {
+    content: ""; position: absolute; top: 15px; left: -50%; width: 100%; height: 2px; background: var(--kit-linea); z-index: 0;
+  }
+  .kit-paso[data-estado="hecho"]::before, .kit-paso[data-estado="actual"]::before { background: var(--kit-azul-texto); }
+  .kit-paso__boton {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%;
+    border: 0; background: transparent; padding: 0; color: inherit; text-align: center; font: inherit;
+  }
+  button.kit-paso__boton { cursor: pointer; }
+  .kit-paso__num {
+    position: relative; z-index: 1;
+    display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9999px;
+    border: 2px solid var(--kit-gris); background: var(--di-surface-elevated); color: var(--kit-gris);
+    font-weight: 700; font-size: 0.875rem;
+  }
+  .kit-paso[data-estado="hecho"] .kit-paso__num { border-color: var(--kit-verde); background: var(--kit-verde); color: #fff; }
+  .kit-paso[data-estado="actual"] .kit-paso__num {
+    border-color: var(--kit-azul-texto); color: var(--kit-azul-texto); outline: 4px solid var(--kit-hover);
+  }
+  .kit-paso__etiqueta { font-size: 0.875rem; font-weight: 400; color: var(--di-text-primary); }
+  .kit-paso[data-estado="actual"] .kit-paso__etiqueta { font-weight: 700; color: var(--kit-azul-texto); }
+}
+
+/* «girador» del kit (`.girador`): el ícono gira solo cuando la pieza lo pide con `animate-spin`, como el Loader2 de antes. */

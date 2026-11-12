@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CircleCheck, Send, TriangleAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import type { UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -116,18 +116,18 @@ export function NotificacionEnviarPruebaModal({
       open={open}
       onClose={onClose}
       title={`Enviar prueba — ${templateName}`}
-      icon={Send}
+      icono="radicacion"
       size={requiresType ? "lg" : "sm"}
     >
       <div className="flex flex-col gap-3 text-sm" data-testid="notificaciones-enviar-prueba-modal">
         {phase === "mailbox-required" ? (
           <div
-            className="flex flex-col gap-2 rounded-xl border border-[#FF4E00]/30 bg-[#FF4E00]/10 p-3 text-xs text-[#9A3412] dark:text-[#FFB199]"
+            className="flex flex-col gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-xs text-destructive"
             role="alert"
             data-testid="notificaciones-enviar-prueba-sin-buzon"
           >
             <p className="inline-flex items-center gap-1.5 font-semibold">
-              <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
               Configura el buzón de pruebas primero
             </p>
             <p>No hay un buzón de pruebas configurado, así que no se envió ningún correo.</p>
@@ -137,7 +137,7 @@ export function NotificacionEnviarPruebaModal({
                 onClose();
                 onRequestConfigureMailbox();
               }}
-              className="mt-1 w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white"
+              className="mt-1 w-fit rounded-full bg-[image:var(--gradient-action)] px-3 py-1.5 text-[11px] font-semibold text-white"
             >
               Configurar buzón
             </button>
@@ -160,7 +160,7 @@ export function NotificacionEnviarPruebaModal({
               type="button"
               disabled={!typeId}
               onClick={() => runSend(typeId)}
-              className="w-fit rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-fit rounded-full bg-[image:var(--gradient-action)] px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="notificaciones-enviar-prueba-confirmar"
             >
               Enviar
@@ -176,12 +176,12 @@ export function NotificacionEnviarPruebaModal({
 
         {phase === "failure" && failure ? (
           <div
-            className="flex flex-col gap-1.5 rounded-xl border border-[#FF4E00]/30 bg-[#FF4E00]/10 p-3 text-xs text-[#9A3412] dark:text-[#FFB199]"
+            className="flex flex-col gap-1.5 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-xs text-destructive"
             role="alert"
             data-testid="notificaciones-enviar-prueba-error"
           >
             <p className="inline-flex items-center gap-1.5 font-semibold">
-              <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
               El envío no se completó
             </p>
             <p>{failure.productMessage}</p>
@@ -209,9 +209,9 @@ export function NotificacionEnviarPruebaModal({
           >
             <p className="inline-flex items-center gap-1.5 font-semibold">
               {outcome.kind === "sent" ? (
-                <CircleCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" />
               ) : (
-                <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
               )}
               {outcome.kind === "sent" ? "El transporte aceptó el correo" : "El transporte falló"}
             </p>
@@ -233,7 +233,7 @@ export function NotificacionEnviarPruebaModal({
                 }}
                 data-testid="notificaciones-enviar-prueba-desvio"
               >
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{outcome.recipientDivertedNotice}</span>
               </p>
             ) : null}

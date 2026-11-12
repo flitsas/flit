@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import Link from "next/link";
-import { FileCheck2, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   generateRuesDocument,
   previewRuesCompany,
@@ -162,7 +162,7 @@ export function RuesGeneracionForm() {
           className="flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-60"
           style={{ color: "var(--color-flit-brand)", borderColor: "var(--color-flit-brand)" }}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="buscar" className="h-3.5 w-3.5" />
           {revisando ? "Consultando…" : "Revisar antes de generar"}
         </button>
 
@@ -185,13 +185,13 @@ export function RuesGeneracionForm() {
       {/* Una avería del proveedor no dice nada sobre el NIT: se anuncia como alerta, no como
           «sin coincidencia». */}
       {averia && (
-        <p role="alert" className="text-[11px] font-semibold text-red-700">
+        <p role="alert" className="text-[11px] font-semibold text-destructive">
           {averia}
         </p>
       )}
 
       {preview && !preview.found && !averia && (
-        <p role="status" className="text-[11px] font-semibold text-amber-700">
+        <p role="status" className="text-[11px] font-semibold text-[var(--badge-warning-fg)]">
           El NIT consultado no tiene coincidencia en el RUES. Verifica el número antes de generar.
         </p>
       )}
@@ -215,7 +215,7 @@ export function RuesGeneracionForm() {
       {errores.length > 0 && (
         <ul role="alert" className="flex flex-col gap-1">
           {errores.map((issue) => (
-            <li key={`${issue.field}-${issue.message}`} className="text-[11px] text-red-700">
+            <li key={`${issue.field}-${issue.message}`} className="text-[11px] text-destructive">
               <span className="font-semibold">{issue.field}</span> — {issue.message}
             </li>
           ))}
@@ -223,14 +223,14 @@ export function RuesGeneracionForm() {
       )}
 
       {errorGeneral && (
-        <p role="alert" className="text-[11px] text-red-700">
+        <p role="alert" className="text-[11px] text-destructive">
           {errorGeneral}
         </p>
       )}
 
       {resultado && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
-          <FileCheck2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+          <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
           <p className="text-xs">
             Certificado generado. La descarga se hace desde el historial: la generación devuelve
             siempre JSON, nunca el PDF.

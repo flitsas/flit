@@ -1,8 +1,10 @@
 'use client';
 
 import { useRef, type ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
+import { DIALOGO_FRANJA, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL } from './dialogo-propio';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
 
 /**
  * Modal centrado del asistente, en la forma de la propuesta: overlay opaco de marca, tarjeta de
@@ -35,7 +37,7 @@ export function WizardModal({
   useWizardFocusTrap(cardRef, { active: true, onEscape: onClose });
 
   return (
-    <div className="fixed inset-0 z-[1150] grid place-items-center bg-[rgba(22,39,68,0.45)] p-6 backdrop-blur-[6px]">
+    <div className={`fixed inset-0 z-[1150] grid place-items-center p-6 ${MODAL_VELO_CLS}`}>
       {/* Captura del clic fuera. No es un control accesible a propósito: duplicaría el nombre del
           botón de cierre y el teclado ya sale por Escape o por la X. */}
       <div className="absolute inset-0" aria-hidden="true" onClick={onClose} />
@@ -45,23 +47,24 @@ export function WizardModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative max-h-[85vh] w-full ${
+        className={`${DIALOGO_PANEL} flex max-h-[85vh] w-full ${
           wide ? 'max-w-2xl' : 'max-w-md'
-        } overflow-y-auto rounded-2xl border bg-white p-6 outline-none focus:ring-0 dark:bg-[#162744]`}
-        style={{ boxShadow: '0 8px 40px -8px color-mix(in srgb, var(--color-flit-brand) 28%, transparent)' }}
+        } flex-col outline-none focus:ring-0`}
       >
+        {/* La X sigue antes del título en el orden de foco; se pinta sobre la franja (homologación #14507). */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-lg p-1 opacity-60 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          className="absolute right-4 top-4 z-[2] grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] sm:right-5 sm:top-5"
         >
-          <X className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-5 w-5" />
         </button>
-        <h3 className="pr-6 text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
-          {title}
-        </h3>
-        <div className="mt-3">{children}</div>
+        <div className={DIALOGO_FRANJA}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <h3 className={DIALOGO_FRANJA_TITULO}>{title}</h3>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       </div>
     </div>
   );

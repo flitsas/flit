@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * HU #12928 AC1 — aviso discreto de que quedan pocos mensajes con el asistente hoy. No interrumpe la
@@ -26,7 +26,7 @@ export function DrFlitUsageNotice({
         color: "var(--dr-flit-text-secondary)",
       }}
     >
-      <MessageCircle className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} aria-hidden="true" />
+      <Icono nombre="log-mensajes" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
       <span>
         {quedan} con el asistente hoy ({used} de {limit}). El menú de Gestión y Ayuda sigue disponible sin límite.
       </span>

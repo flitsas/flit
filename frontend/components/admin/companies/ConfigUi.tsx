@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, Check, ChevronDown, Info, Lock, MinusCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { ICONO_TONO, rutaKit } from "@flit/ui/iconos-mapas";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 
 // Piezas visuales compartidas por las pestañas de configuración de la compañía (Trámites, Configuración
@@ -10,10 +11,10 @@ import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 
 /** Superficie de contenedor (tarjeta blanca con borde y sombra de card). */
 export const CARD_SURFACE =
-  "rounded-[18px] border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14]";
+  "rounded-[18px] border border-border bg-card shadow-[var(--shadow-card)]";
 
 /** Texto de ayuda (gris del token). */
-export const HELP_TEXT = "text-xs text-[#59677D] dark:text-white/70";
+export const HELP_TEXT = "text-xs text-muted-foreground";
 
 /** Foco visible común. */
 export const FOCUS_RING =
@@ -21,35 +22,27 @@ export const FOCUS_RING =
 
 /** Input/select FLIT único: 48px de alto, radio 10px, label real arriba (lo pone el llamador). */
 export const FIELD_CLASS =
-  "h-12 w-full rounded-[10px] border bg-white px-3 text-xs text-flit-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white";
+  "h-12 w-full rounded-[10px] border bg-card px-3 text-xs text-flit-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand disabled:opacity-60";
 
 /** Etiqueta de campo (por debajo del título de bloque). */
-export const FIELD_LABEL = "mb-1.5 block text-xs font-semibold text-flit-primary dark:text-white";
+export const FIELD_LABEL = "mb-1.5 block text-xs font-semibold text-flit-primary";
 
 export type ChipTone = StatusTone;
 
 /** Chip de estado tintado con icono + texto (nunca solo color). */
+/** Disco de estado del kit según el tono (ICONO_TONO), para los chips que no tienen estado propio. */
+const TONO_KIT: Record<StatusTone, string> = { success: "ok", warning: "warn", danger: "danger", info: "info", neutral: "" };
+export const iconoDeTono = (tone: StatusTone) => rutaKit(ICONO_TONO[TONO_KIT[tone]]);
+
 export function StateChip({ text, tone }: { text: string; tone: ChipTone }) {
-  const Icon = tone === "success" ? CheckCircle2 : tone === "warning" || tone === "danger" ? AlertCircle : MinusCircle;
-  return (
-    <StatusBadge
-      tone={tone}
-      ariaLabel={`Estado: ${text}`}
-      label={
-        <span className="inline-flex items-center gap-1">
-          <Icon className="h-3.5 w-3.5" aria-hidden />
-          {text}
-        </span>
-      }
-    />
-  );
+  return <StatusBadge tone={tone} icono={iconoDeTono(tone)} ariaLabel={`Estado: ${text}`} label={text} />;
 }
 
 /** Pista corta con icono info (consecuencia o valor por defecto de una opción). */
 export function Hint({ children }: { children: ReactNode }) {
   return (
     <p className={`flex items-start gap-1.5 ${HELP_TEXT}`}>
-      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+      <Icono nombre="exclamacion" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span>{children}</span>
     </p>
   );
@@ -129,7 +122,7 @@ export function ConfigCard({
     >
       {title && (
         <header className="mb-4">
-          <h3 id={titleId} className="text-base font-semibold text-flit-primary dark:text-white">
+          <h3 id={titleId} className="text-base font-semibold text-flit-primary">
             {title}
           </h3>
           {description && <ClampedText text={description} className="mt-1" />}
@@ -158,10 +151,10 @@ export function SubBlock({
     <div
       role="group"
       aria-labelledby={id}
-      className={`space-y-3 ${separated ? "border-t border-[#DFE5ED] pt-4 dark:border-white/10" : ""}`}
+      className={`space-y-3 ${separated ? "border-t border-border pt-4" : ""}`}
     >
       <div>
-        <h4 id={id} className="text-sm font-semibold text-flit-primary dark:text-white">
+        <h4 id={id} className="text-sm font-semibold text-flit-primary">
           {title}
         </h4>
         {description && <ClampedText text={description} className="mt-0.5" />}
@@ -206,7 +199,7 @@ export function Accordion({
   const headerId = useId();
   const summaryId = useId();
   return (
-    <section id={id} aria-labelledby={headerId} className={`overflow-hidden ${flat ? "rounded-[14px] border border-[#DFE5ED] dark:border-white/10" : CARD_SURFACE}`}>
+    <section id={id} aria-labelledby={headerId} className={`overflow-hidden ${flat ? "rounded-[14px] border border-border" : CARD_SURFACE}`}>
       <div className="flex items-center gap-3 pr-4 transition hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_4%,transparent)]">
         <button
           type="button"
@@ -217,13 +210,9 @@ export function Accordion({
           onClick={onToggle}
           className="flex min-h-[56px] min-w-0 flex-1 items-center gap-3 px-5 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
         >
-          <ChevronDown
-            className="h-4 w-4 shrink-0 text-flit-primary transition-transform dark:text-white"
-            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
-            aria-hidden
-          />
+          <Icono nombre="abajo" className="h-4 w-4 shrink-0 text-flit-primary transition-transform" style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }} />
           <span className="min-w-0">
-            <span className={`block font-semibold text-flit-primary dark:text-white ${flat ? "text-sm" : "text-base"}`}>{title}</span>
+            <span className={`block font-semibold text-flit-primary ${flat ? "text-sm" : "text-base"}`}>{title}</span>
             {subtitle && <span className={`mt-0.5 block ${HELP_TEXT}`}>{subtitle}</span>}
           </span>
         </button>
@@ -240,7 +229,7 @@ export function Accordion({
           aria-labelledby={headerId}
           data-family={dataFamily}
           hidden={!open}
-          className={`border-t border-[#DFE5ED] px-5 py-4 dark:border-white/10 ${open ? bodyClassName : ""}`}
+          className={`border-t border-border px-5 py-4 ${open ? bodyClassName : ""}`}
         >
           {children}
         </div>
@@ -280,7 +269,7 @@ export function OptionCard({
       className={`flex min-h-[48px] items-start gap-3 rounded-[14px] border px-4 py-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-flit-brand has-[:focus-visible]:ring-offset-2 ${
         inactive ? "cursor-not-allowed opacity-60" : locked ? "cursor-not-allowed" : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_4%,transparent)]"
       }`}
-      style={checked ? { borderColor: "#8CC63F", background: "rgba(140,198,63,0.12)" } : { borderColor: "#DFE5ED", background: "#FFFFFF" }}
+      style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--badge-success-bg)" } : { borderColor: "var(--border)", background: "var(--card)" }}
     >
       <input
         type={type}
@@ -294,9 +283,9 @@ export function OptionCard({
       <span
         aria-hidden
         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center border-2 ${mark}`}
-        style={checked ? { borderColor: "#8CC63F", background: "#8CC63F", color: "#FFFFFF" } : { borderColor: "#59677D", background: "#FFFFFF" }}
+        style={checked ? { borderColor: "var(--badge-success-border)", background: "var(--flit-success-ink)", color: "var(--di-on-accent)" } : { borderColor: "var(--muted-foreground)", background: "var(--card)" }}
       >
-        {checked && <Check className="h-3 w-3" strokeWidth={3} />}
+        {checked && <Icono nombre="check" className="h-3 w-3" />}
       </span>
       <span className="min-w-0 flex-1">
         <span
@@ -309,7 +298,7 @@ export function OptionCard({
       </span>
       {locked && (
         <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-flit-primary">
-          <Lock className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="candado" className="h-3.5 w-3.5" />
           Obligatorio
         </span>
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { TopProducer } from "@/lib/api/types";
 
@@ -51,10 +51,10 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
   const noActivity = totals.submitted === 0;
 
   return (
-    <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border flex flex-col">
+    <section className="rounded-2xl p-5 bg-card border flex flex-col">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h2 className="text-sm font-bold flex items-center gap-2">
-          <Users className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /> Top 5 productividad
+          <Icono nombre="usuarios" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /> Top 5 productividad
         </h2>
         {selected.size > 0 && (
           <button
@@ -81,8 +81,8 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
           aria-label={selected.size === 0 ? "Indicadores de todos los usuarios" : "Indicadores de los usuarios seleccionados"}
         >
           <Indicator label="Enviados" value={totals.submitted} color="var(--color-flit-brand)" />
-          <Indicator label="Aprobados" value={totals.approved} color="#8CC63F" />
-          <Indicator label="Rechazados" value={totals.rejected} color="#FF4E00" />
+          <Indicator label="Aprobados" value={totals.approved} color="var(--flit-success-ink)" />
+          <Indicator label="Rechazados" value={totals.rejected} color="var(--destructive)" />
         </div>
 
         {noActivity ? (
@@ -100,7 +100,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
                     onClick={() => toggle(p.userId)}
                     aria-pressed={isSelected}
                     className="w-full text-left rounded-xl border p-3 outline-none transition-colors hover:border-flit-brand focus:border-flit-brand"
-                    style={{ borderColor: isSelected ? "var(--color-flit-brand)" : "#DFE5ED", background: isSelected ? "color-mix(in srgb, var(--color-flit-brand) 5.88%, transparent)" : undefined }}
+                    style={{ borderColor: isSelected ? "var(--color-flit-brand)" : "var(--border)", background: isSelected ? "color-mix(in srgb, var(--color-flit-brand) 5.88%, transparent)" : undefined }}
                   >
                     <p className="text-xs font-semibold truncate">{p.displayName}</p>
                     <div className="flex items-center gap-3 mt-1 text-[10px] opacity-80">

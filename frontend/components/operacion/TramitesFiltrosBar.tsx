@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ChevronDown, Search, X } from 'lucide-react';
-import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { controlCls } from './tramites-control-styles';
+import { Icono } from "@flit/ui/Icono";
+import { buttonClass } from '@flit/ui/Button';
+import { TRAMITES_INPUT_CLS, controlCls } from './tramites-control-styles';
 import {
   ConditionEditor,
   QueryFieldPicker,
@@ -38,10 +38,10 @@ export const PERIODOS = [
 ] as const;
 export type Periodo = (typeof PERIODOS)[number];
 
-export const INPUT_CLS =
-  'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-flit-primary outline-none transition focus:border-flit-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
+// HU #14476 — `.control` del prototipo, compartido con Validaciones (ver tramites-control-styles).
+export const INPUT_CLS = TRAMITES_INPUT_CLS;
 export const POPOVER_SURFACE_CLS =
-  'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
+  'rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--kit-sombra)]';
 
 
 /**
@@ -99,7 +99,7 @@ export function Field({
 }) {
   return (
     <label className={`flex flex-col gap-1 ${className}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide text-[#59677D]">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -198,7 +198,7 @@ export function PeriodoPopover({
         className={controlCls(activo)}
       >
         {activo ? periodo : 'Periodo'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -267,19 +267,18 @@ export function PeriodoPopover({
             </>
           ) : null}
 
-          <div className="mt-3 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-[color:var(--di-divider)] pt-3">
             <button
               type="button"
               onClick={handleLimpiar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-[#59677D] transition hover:bg-[#DFE5ED]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+              className={buttonClass({ variant: 'secondary', size: 'sm' })}
             >
               Limpiar
             </button>
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: WIZARD_CTA_GRADIENT }}
+              className={buttonClass({ variant: 'primary', size: 'sm' })}
             >
               Aplicar
             </button>
@@ -379,7 +378,7 @@ function FiltroEspecificoPopover({
         className={controlCls(count > 0)}
       >
         {count > 0 ? `Filtros (${count})` : 'Filtros'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -387,7 +386,7 @@ function FiltroEspecificoPopover({
           id={panelId}
           role="dialog"
           aria-label="Filtros del listado"
-          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-[9px] border border-border bg-card p-3 shadow-[var(--kit-sombra)]"
         >
           {fieldsError ? (
             fieldsError
@@ -412,11 +411,11 @@ function FiltroEspecificoPopover({
           ) : (
             <>
               {condiciones.length > 0 ? (
-                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-border pb-2">
                   {condiciones.map((c) => (
                     <span
                       key={c.fieldId}
-                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-flit-brand-ink"
                     >
                       <button
                         type="button"
@@ -454,20 +453,26 @@ function FiltroEspecificoPopover({
               del DOM en vez de ocultarse con clase, para que tampoco exista para un lector de
               pantalla ni sea alcanzable con el tabulador. */}
           {campoEditado && !fieldsError ? null : (
-          <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+          <div className="mt-2 flex items-center justify-end gap-2 border-t border-[color:var(--di-divider)] pt-3">
             <button
               type="button"
               onClick={handleEmpezarDeCero}
               disabled={empezarDeCeroDisabled}
-              className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+              // Acción de peligro de la propuesta (mismo patrón que BOTON_PELIGRO_CLS de comparendos):
+              // secundario con aro de alerta y texto de error, sin rojo sólido.
+              className={buttonClass({
+                variant: 'secondary',
+                size: 'sm',
+                className:
+                  'gap-1.5 border-[color:var(--di-alerta-punto)] text-[color:var(--di-danger)] hover:bg-[color:var(--di-danger-soft)]',
+              })}
             >
               Empezar de cero
             </button>
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              style={{ background: WIZARD_CTA_GRADIENT }}
+              className={buttonClass({ variant: 'primary', size: 'sm' })}
             >
               Aplicar
             </button>
@@ -575,10 +580,7 @@ export function TramitesFiltrosBar({
     <>
       {/* Búsqueda: ancho fijo w-64, icono marca — spec flit-tramites-chrome. */}
       <div className="relative w-64 shrink-0">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
         <input
           type="search"
           aria-label={searchAriaLabel}
@@ -684,7 +686,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {periodoActivo ? (
-        <span className="flex items-center gap-1.5 rounded-full bg-[#EEF5FF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]">
+        <span className="flex items-center gap-1.5 rounded-full bg-[var(--badge-info-bg)] px-2.5 py-1 text-xs font-semibold text-flit-brand-ink">
           {periodo}
           <button
             type="button"
@@ -692,14 +694,14 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
             aria-label="Quitar filtro de periodo"
             className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-3 w-3" />
           </button>
         </span>
       ) : null}
       {chips.map((chip) => (
         <span
           key={chip.key}
-          className="flex items-center gap-1.5 rounded-full border border-flit-brand px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
+          className="flex items-center gap-1.5 rounded-full border border-flit-brand px-2.5 py-1 text-xs font-semibold text-flit-brand-ink"
         >
           {chip.label}
           <button
@@ -708,7 +710,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
             aria-label={`Quitar filtro ${chip.label}`}
             className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-3 w-3" />
           </button>
         </span>
       ))}
@@ -716,7 +718,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
         <button
           type="button"
           onClick={onLimpiarTodo}
-          className="rounded-full px-2 py-1 text-xs font-semibold text-[#59677D] underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          className="rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground underline-offset-2 transition hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
         >
           Limpiar todo
         </button>

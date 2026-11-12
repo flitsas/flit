@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Mail } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   fetchMandateSimulationPreview,
   listMandateSimulatorSigners,
@@ -244,18 +244,18 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
 
   return (
     <section
-      className="space-y-3 rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60"
+      className="space-y-3 rounded-2xl border border-border bg-card/60 p-4"
       aria-labelledby="mandato-simulador-heading"
       data-testid="mandato-simulador"
     >
       <div>
         <h3
           id="mandato-simulador-heading"
-          className="text-xs font-semibold text-[#162244] dark:text-white"
+          className="text-xs font-semibold text-foreground"
         >
           Simulador de mandatos
         </h3>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
           Mira cómo queda el contrato que emitiría cada organismo según el tipo de persona y el
           trámite. El mandante y la placa se rellenan con datos de muestra; el tipo de trámite es el
           del catálogo publicado.
@@ -265,7 +265,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-xs text-[#FF4E00]"
+          className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
         >
           {error}
         </p>
@@ -273,7 +273,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">
+          <span className="text-xs font-semibold text-foreground">
             Organismo de tránsito
           </span>
           <select
@@ -281,7 +281,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             onChange={(e) => setOfficeId(e.target.value)}
             disabled={busy}
             data-testid="simulador-ot"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             <option value="">Selecciona un organismo…</option>
             {sortedOffices.map((o) => (
@@ -293,7 +293,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </label>
 
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">
+          <span className="text-xs font-semibold text-foreground">
             El mandante firma como
           </span>
           <select
@@ -301,7 +301,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             onChange={(e) => setPersonType(e.target.value as "natural" | "juridica")}
             disabled={busy}
             data-testid="simulador-persona"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             <option value="juridica">Persona jurídica (con representante legal)</option>
             <option value="natural">Persona natural</option>
@@ -309,7 +309,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </label>
 
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">
+          <span className="text-xs font-semibold text-foreground">
             Tipo de trámite padre (familia)
           </span>
           <select
@@ -317,7 +317,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             onChange={(e) => setFamily(e.target.value as ProcedureFamily | "")}
             disabled={busy || typesStatus === "loading"}
             data-testid="simulador-familia"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             <option value="">Selecciona una familia</option>
             {FAMILIAS.map((f) => (
@@ -329,13 +329,13 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </label>
 
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">Tipo de trámite</span>
+          <span className="text-xs font-semibold text-foreground">Tipo de trámite</span>
           <select
             value={procedureTypeCode}
             onChange={(e) => setProcedureTypeCode(e.target.value)}
             disabled={busy || !family || typesInFamily.length === 0}
             data-testid="simulador-tramite"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             <option value="">Selecciona un tipo</option>
             {typesInFamily.map((t) => (
@@ -345,25 +345,25 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             ))}
           </select>
           {typesStatus === "error" ? (
-            <span className="block text-xs text-[#FF4E00]">
+            <span className="block text-xs text-destructive">
               No se pudieron cargar los tipos de trámite publicados.
             </span>
           ) : null}
           {typesStatus === "ready" && family && typesInFamily.length === 0 ? (
-            <span className="block text-xs text-[#59677D] dark:text-white/65">
+            <span className="block text-xs text-muted-foreground">
               Esta familia no tiene tipos publicados.
             </span>
           ) : null}
         </label>
 
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">Prenda</span>
+          <span className="text-xs font-semibold text-foreground">Prenda</span>
           <select
             value={prenda}
             onChange={(e) => setPrenda(e.target.value as FurPrendaKind)}
             disabled={busy || inferredLocks.lockPrenda}
             data-testid="simulador-prenda"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             {PRENDA.map((p) => (
               <option key={p.value} value={p.value}>
@@ -374,54 +374,54 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </label>
 
         <fieldset
-          className="sm:col-span-2 flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10"
+          className="sm:col-span-2 flex flex-col gap-2 rounded-xl border border-border p-3"
           data-testid="simulador-transformaciones"
         >
-          <legend className="px-1 text-xs font-semibold text-[#162244] dark:text-white">
+          <legend className="px-1 text-xs font-semibold text-foreground">
             Transformaciones
           </legend>
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={cambioColor}
                 disabled={busy || inferredLocks.lockColor}
                 onChange={(e) => setCambioColor(e.target.checked)}
                 data-testid="simulador-cambio-color"
-                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-4 w-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-60"
               />
               Cambio de color
             </label>
-            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={cambioCombustible}
                 disabled={busy || inferredLocks.lockCombustible}
                 onChange={(e) => setCambioCombustible(e.target.checked)}
                 data-testid="simulador-cambio-combustible"
-                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-4 w-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-60"
               />
               Cambio de combustible
             </label>
-            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={cambioCarroceria}
                 disabled={busy || inferredLocks.lockCarroceria}
                 onChange={(e) => setCambioCarroceria(e.target.checked)}
                 data-testid="simulador-cambio-carroceria"
-                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-4 w-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-60"
               />
               Cambio de carrocería
             </label>
-            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={blindaje}
                 disabled={busy || inferredLocks.lockBlindaje}
                 onChange={(e) => setBlindaje(e.target.checked)}
                 data-testid="simulador-blindaje"
-                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-4 w-4 rounded border-input disabled:cursor-not-allowed disabled:opacity-60"
               />
               Blindaje
             </label>
@@ -429,11 +429,11 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </fieldset>
 
         <p className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">
+          <span className="text-xs font-semibold text-foreground">
             Tipo de mandatario
           </span>
           <span
-            className="block rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="block rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground"
             data-testid="simulador-tipo"
           >
             Persona natural
@@ -441,7 +441,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </p>
 
         <label className="block space-y-1.5 sm:col-span-2">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">
+          <span className="text-xs font-semibold text-foreground">
             Mandatario que firma
           </span>
           <select
@@ -449,7 +449,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             onChange={(e) => setSignerId(e.target.value)}
             disabled={busy || soloMandante || signers.length === 0}
             data-testid="simulador-mandatario"
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             <option value="">
               {soloMandante ? "No aplica para este tipo" : "Sin asignar (datos de muestra)"}
@@ -463,7 +463,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
           </select>
           {officeId && signersStatus === "ready" && signers.length === 0 ? (
             <span
-              className="block text-[11px] text-[#59677D] dark:text-white/65"
+              className="block text-[11px] text-muted-foreground"
               data-testid="simulador-sin-mandatarios"
             >
               Este organismo no tiene mandatarios habilitados. Puedes simular igual: el mandatario
@@ -471,7 +471,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             </span>
           ) : null}
           {signersStatus === "error" ? (
-            <span className="block text-[11px] text-[#FF4E00]">
+            <span className="block text-[11px] text-destructive">
               No se pudieron cargar los mandatarios de este organismo.
             </span>
           ) : null}
@@ -482,7 +482,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         {MOSTRAR_ENVIO_POR_CORREO ? (
           <>
             <label className="min-w-[14rem] flex-1 space-y-1.5">
-              <span className="text-xs font-semibold text-[#162244] dark:text-white">Enviar a</span>
+              <span className="text-xs font-semibold text-foreground">Enviar a</span>
               <input
                 type="email"
                 value={toEmail}
@@ -490,7 +490,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
                 disabled={busy}
                 placeholder="correo@empresa.com"
                 data-testid="simulador-correo"
-                className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] placeholder:text-[#59677D]/70 disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 disabled:opacity-50"
               />
             </label>
             <button
@@ -498,9 +498,9 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
               disabled={busy || !officeId || !procedureTypeCode}
               onClick={() => void handleSend()}
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+              style={{ background: "var(--gradient-action)" }}
             >
-              <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="correo" className="h-3.5 w-3.5" />
               {sending ? "Enviando…" : "Enviar por correo"}
             </button>
           </>
@@ -511,9 +511,9 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
           disabled={busy || !officeId || !procedureTypeCode}
           onClick={() => void handlePreview()}
           className="ml-auto inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "linear-gradient(90deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+          style={{ background: "var(--gradient-action)" }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="ojo" className="h-3.5 w-3.5" />
           {previewing ? "Generando…" : "Ver PDF"}
         </button>
       </div>

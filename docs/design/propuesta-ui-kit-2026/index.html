@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FLIT 2.0 UI Kit 2026</title>
+  <meta name="theme-color" content="#162744">
+  <link rel="icon" type="image/svg+xml" href="assets/kit/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+  <script>
+    // Tema antes de la primera pintura: guardado o el del sistema, siempre resuelto a light o dark.
+    (function () {
+      var t = null; try { t = localStorage.getItem("flit-tema"); } catch (e) {}
+      if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="propuesta.css">
+  <link rel="stylesheet" href="ui-kit-2026.css">
+</head>
+<body>
+  <a class="saltar" href="#contenido">Saltar al contenido</a>
+  <div class="fondo" aria-hidden="true"></div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-buscar" viewBox="62 72 886 906" fill="currentColor" stroke="none"><path fill="none" stroke="currentColor" d="M675 697L861 890" stroke-width="122" stroke-linecap="round"/><ellipse fill="none" stroke="currentColor" cx="443" cy="456" rx="305" ry="309" stroke-width="98"/></symbol>
+    <symbol id="i-cerrar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-ojo" viewBox="10 204 1004 616" fill="currentColor" stroke="none"><path fill="currentColor" fill-rule="evenodd" d="M44 500C163 356 319 232 512 232S861 356 980 500Q990 512 980 524C861 668 705 792 512 792S163 668 44 524Q34 512 44 500ZM712 512A200 200 0 1 0 312 512 200 200 0 1 0 712 512Z"/><circle fill="currentColor" cx="512" cy="512" r="90"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></symbol>
+    <symbol id="i-correo" viewBox="24 166 976 692" fill="currentColor" stroke="none"><path fill="currentColor" d="M144 194H880C920 194 953 219 965 253L550 570C525 589 495 589 470 570L59 255C71 220 104 194 144 194Z"/><path fill="currentColor" d="M52 300L363 540L66 789C57 775 52 758 52 738Z"/><path fill="currentColor" d="M972 299V738C972 760 965 780 952 796L656 540Z"/><path fill="currentColor" d="M95 817L395 565L443 602C483 633 536 635 578 603L624 568L921 821C908 827 894 830 880 830H144C126 830 109 825 95 817Z"/></symbol>
+    <symbol id="i-candado" viewBox="103 37 814 956" fill="currentColor" stroke="none"><path fill="currentColor" fill-rule="evenodd" d="M236 448V338C236 186 359 64 510 64S784 186 784 338V448C843 453 890 500 890 560V854C890 916 840 966 778 966H242C180 966 130 916 130 854V560C130 500 177 453 236 448ZM348 448H672V338C672 246 600 172 510 172S348 246 348 338V448ZM510 563C459 563 418 604 418 655C418 685 434 712 459 728L433 825C428 845 443 864 464 864H552C573 864 588 845 583 825L558 728C583 712 600 685 600 655C600 604 560 563 510 563Z"/></symbol>
+    <symbol id="i-arriba" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"/></symbol>
+  </svg>
+
+  <header class="barra" id="barra">
+    <a class="barra__marca" href="#inicio" aria-label="FLIT, ir al inicio">
+      <img class="logo logo--claro" src="assets/kit/logo-claro.svg" alt="FLIT">
+      <img class="logo logo--oscuro" src="assets/kit/logo-oscuro.svg" alt="FLIT">
+      <span class="barra__producto" id="producto-actual">Trámites</span>
+    </a>
+    <span class="ambiente" id="ambiente" hidden></span>
+    <div class="barra__acciones">
+      <button class="buscar" type="button" data-abrir="buscador" aria-label="Buscar en la plataforma">
+        <svg class="i"><use href="#i-buscar"/></svg><span>Buscar placa, trámite o módulo</span><kbd>Ctrl K</kbd>
+      </button>
+      <div class="menu-ancla menu-ancla--productos">
+        <button class="icono-btn" type="button" aria-expanded="false" aria-controls="productos-menu" aria-label="Productos de FLIT" data-tip="Productos de FLIT"><span class="kico" data-kico="rejilla" aria-hidden="true"></span></button>
+        <div class="menu-flotante menu-flotante--productos" id="productos-menu" hidden></div>
+      </div>
+      <div class="menu-ancla">
+        <button class="icono-btn" type="button" aria-expanded="false" aria-controls="avisos-menu" aria-label="Notificaciones, 3 sin revisar" data-tip="Notificaciones"><span class="kico" data-kico="campana" aria-hidden="true"></span><span class="punto" aria-hidden="true">3</span></button>
+        <div class="menu-flotante menu-avisos" id="avisos-menu" hidden>
+          <ul>
+            <li><a href="#tramites?vista=finalizado"><img src="assets/kit/aviso-ok.svg" alt="" width="22" height="22"><span><strong>Trámite finalizado</strong><small>ID TRM-2026-000409</small></span></a></li>
+            <li><a href="#tramites?vista=firma"><img src="assets/kit/estado-pendiente.svg" alt="" width="22" height="22"><span><strong>Tienes 5 trámites para firmar</strong><small>Envía el recordatorio</small></span></a></li>
+            <li><a href="#tramites?vista=rechazado"><img src="assets/kit/aviso-error.svg" alt="" width="22" height="22"><span><strong>Trámite rechazado</strong><small>Placa PLK 903</small></span></a></li>
+          </ul>
+        </div>
+      </div>
+      <button class="tema-kit" type="button" id="tema" aria-pressed="false" aria-label="Tema oscuro" data-tip="Preferencias de visualización"></button>
+      <div class="menu-ancla">
+        <button class="usuario" type="button" aria-expanded="false" aria-controls="usuario-menu" aria-label="Menú de Laura Gómez">
+          <span class="usuario__avatar" aria-hidden="true">LG</span>
+          <span class="usuario__texto"><strong>Laura Gómez</strong><small>Super Admin · FLIT S.A.S.</small></span>
+          <span class="usuario__puntos" data-kico="puntos" aria-hidden="true"></span>
+        </button>
+        <div class="menu-flotante menu-usuario" id="usuario-menu" hidden>
+          <div class="menu-usuario__cabeza">
+            <span class="menu-usuario__avatar" aria-hidden="true">LG</span>
+            <div><strong class="menu-usuario__nombre">Laura Gómez</strong><small class="menu-usuario__rol">Super Admin · FLIT S.A.S.</small></div>
+          </div>
+          <ul>
+            <li class="solo-movil"><a class="menu-usuario__entrada" href="#inicio"><span class="kico" data-kico="tramites" aria-hidden="true"></span><span><strong>Trámites</strong><small>Traspasos y matrículas</small></span></a></li>
+            <li class="solo-movil"><a class="menu-usuario__entrada" href="#comparendos"><span class="kico" data-kico="comparendos" aria-hidden="true"></span><span><strong>Comparendos</strong><small>Multas de tu flota</small></span></a></li>
+            <li class="solo-movil"><a class="menu-usuario__entrada" href="#diagnostico"><span class="kico" data-kico="consulta" aria-hidden="true"></span><span><strong>Diagnóstico</strong><small>Estado de cada vehículo</small></span></a></li>
+            <li><a class="menu-usuario__entrada" href="#perfil"><span class="kico" data-kico="persona" aria-hidden="true"></span><span><strong>Mi perfil</strong><small>Tus datos y preferencias</small></span></a></li>
+            <li><a class="menu-usuario__entrada" href="#ayuda"><span class="kico" data-kico="ayuda" aria-hidden="true"></span><span><strong>Ayuda</strong><small>Manual y preguntas frecuentes</small></span></a></li>
+            <li><button class="menu-usuario__entrada" type="button" data-hacer="form:contrasena"><span class="kico" data-kico="candado" aria-hidden="true"></span><span><strong>Cambiar contraseña</strong><small>Actualiza tu clave de acceso</small></span></button></li>
+            <li><a class="menu-usuario__entrada" href="#marca"><span class="kico" data-kico="destello" aria-hidden="true"></span><span><strong>Juego de marca</strong><small>Logos, colores e íconos</small></span></a></li>
+          </ul>
+          <div class="menu-usuario__pie"><a class="btn sm secondary" href="#ingreso" data-salir>Salir</a></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="contenido" tabindex="-1"></main>
+
+  <nav class="dock" id="dock" aria-label="Navegación principal"></nav>
+
+  <dialog class="modal" id="buscador" aria-labelledby="buscador-titulo">
+    <div class="modal__franja">
+      <span class="kico" data-kico="buscar" aria-hidden="true"></span>
+      <h2 id="buscador-titulo">Buscar en la plataforma</h2>
+      <button class="modal__cerrar" type="button" data-cerrar aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button>
+    </div>
+    <div class="modal__cuerpo">
+      <div class="control-icono">
+        <svg class="i"><use href="#i-buscar"/></svg>
+        <input class="control" id="buscador-q" type="search" role="combobox" aria-expanded="true" aria-autocomplete="list" placeholder="Escribe una placa, un trámite o un módulo" aria-label="Buscar" aria-controls="buscador-lista" autocomplete="off">
+      </div>
+      <div class="resultados" id="buscador-lista" role="listbox" aria-label="Resultados"></div>
+    </div>
+  </dialog>
+
+  <dialog class="modal" id="consulta" aria-labelledby="consulta-titulo">
+    <div class="modal__franja">
+      <span class="kico" data-kico="buscar" aria-hidden="true"></span>
+      <h2 id="consulta-titulo">Consultar vehículo</h2>
+      <button class="modal__cerrar" type="button" data-cerrar aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button>
+    </div>
+    <form class="modal__cuerpo" id="consulta-form" novalidate>
+      <p>Escribe la placa y la plataforma trae el estado del vehículo desde las fuentes oficiales.</p>
+      <div class="campo">
+        <label for="placa">Placa</label>
+        <input class="control placa-input" id="placa" name="placa" maxlength="6" placeholder="ABC123" autocomplete="off" aria-describedby="placa-ayuda placa-error">
+        <small id="placa-ayuda">Tres letras y tres números. Para motos, tres letras, dos números y una letra.</small>
+        <p class="error" id="placa-error" role="alert" hidden></p>
+      </div>
+      <button class="btn" type="submit" id="consulta-btn">Consultar</button>
+      <div id="consulta-resultado" role="status"></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="formulario" aria-labelledby="formulario-titulo">
+    <div class="modal__franja">
+      <span id="formulario-ilus"></span>
+      <h2 id="formulario-titulo">Formulario</h2>
+      <button class="modal__cerrar" type="button" data-cerrar aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button>
+    </div>
+    <form class="modal__cuerpo" id="formulario-cuerpo" novalidate></form>
+  </dialog>
+
+  <dialog class="modal" id="detalle" aria-labelledby="detalle-titulo">
+    <div class="modal__franja">
+      <span class="kico" data-kico="ruta" aria-hidden="true"></span>
+      <div class="modal__titulos"><small id="detalle-ante">Detalle</small><h2 id="detalle-titulo" tabindex="-1">Detalle</h2></div>
+      <button class="modal__cerrar" type="button" data-cerrar aria-label="Cerrar"><svg class="i"><use href="#i-cerrar"/></svg></button>
+    </div>
+    <div class="modal__cuerpo" id="detalle-cuerpo"></div>
+  </dialog>
+
+  <div class="aviso" id="aviso" role="status" hidden></div>
+
+  <script src="datos.js"></script>
+  <script src="assets/kit/kit-iconos.js"></script>
+  <script src="propuesta.js"></script>
+</body>
+</html>

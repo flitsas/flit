@@ -204,7 +204,8 @@ describe("OtDashboard — vista inicial del organismo", () => {
 
     await waitFor(() => expect(screen.getAllByText("Más de 7 días")).toHaveLength(2));
     const conAtraso = screen.getAllByText("Más de 7 días")[1].closest("[class*='rounded-xl']");
-    expect(conAtraso?.className).toContain("FF4E00");
+    // Rediseño UI kit (HU #14482): el resalte usa el tono de alerta del kit (`--badge-warning-*`).
+    expect(conAtraso?.className).toContain("--badge-warning-");
   });
 
   it("AC5 — sin pendientes lo dice, en vez de mostrar una fila de ceros", async () => {

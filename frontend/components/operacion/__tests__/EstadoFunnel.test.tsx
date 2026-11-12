@@ -91,17 +91,25 @@ describe('EstadoFunnel', () => {
       'Anulado: 0 trámites',
     ]);
     expect(screen.queryByLabelText(/^Preparado:/)).not.toBeInTheDocument();
-    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-4');
+    // UI Kit 2026: la franja es el embudo del kit (rejilla de columnas que se desliza en celular).
+    expect(screen.getByRole('group')).toHaveClass('grid', 'rounded-[26px]');
   });
 
-  it('Epic #12686 — una columna por tarjeta en pantalla ancha', () => {
+  it('UI Kit 2026 — cada tarjeta es un chip del embudo con aria-pressed y el disco de su estado', () => {
     render(
       <EstadoFunnel
         counts={counts}
+        selected="aprobado"
         estados={['borrador', 'preasignacion', 'asignado', 'entregado', 'aprobado', 'rechazado', 'revocado', 'anulado']}
       />,
     );
-    expect(screen.getByRole('group')).toHaveClass('xl:grid-cols-8');
+    const botones = screen.getAllByRole('button');
+    expect(botones).toHaveLength(8);
+    for (const b of botones) expect(b.className).toMatch(/rounded-\[9px\]/);
+    const disco = (re: RegExp) => screen.getByLabelText(re).querySelector('img') as HTMLImageElement;
+    expect(disco(/^Aprobado:/).getAttribute('src')).toBe('/assets/estados/aprobado.svg');
+    expect(disco(/^Anulado:/).getAttribute('src')).toBe('/assets/estados/anulado.svg');
+    expect(screen.getByLabelText(/^Aprobado:/)).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('Epic #12686 — «Rechazado desde preasignación» sin tarjeta propia resalta Rechazado', async () => {

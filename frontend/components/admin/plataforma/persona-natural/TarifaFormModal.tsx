@@ -5,7 +5,7 @@
 // campo. Una excepción por organismo se registra eligiendo el organismo sobre el mismo tipo (prevalece sobre el valor
 // general). Al versionar, el ámbito (tipo y organismo) queda fijo y solo se envían los conceptos que cambiaron.
 import { useMemo, useState } from "react";
-import { ReceiptText, Save } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { formatFechaCalendario } from "@/lib/format/date";
 import { Modal } from "@/components/atom/Modal";
@@ -28,6 +28,7 @@ import { TARIFAS_API_PLATAFORMA, type TarifasApi, type TarifasModo, type TipoTar
 import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
 import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export type TarifaFormMode =
   // `tipoTramiteId`: trámite que llega preseleccionado (p. ej. desde «Definir precio» en Medios de pago).
@@ -168,7 +169,7 @@ export function TarifaFormModal({
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-tarifa-form" variant="primary" icon={Save} loading={busy}>
+          <PnButton type="submit" form="pn-tarifa-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
             Guardar tarifa
           </PnButton>
         </div>
@@ -216,7 +217,7 @@ export function TarifaFormModal({
               defaultLabel="Todos los organismos (valor general)"
               disabled={versionando}
               placeholder="Buscar organismo…"
-              className="[&_input]:h-11 [&_input]:rounded-[10px] [&_input]:border-[#DFE5ED] [&_input]:text-sm [&_input]:focus:border-flit-brand [&_input]:focus:ring-2 [&_input]:focus:ring-inset [&_input]:focus:ring-flit-brand"
+              className="[&_input]:h-11 [&_input]:rounded-[10px] [&_input]:border-input [&_input]:text-sm [&_input]:focus:border-flit-brand [&_input]:focus:ring-2 [&_input]:focus:ring-inset [&_input]:focus:ring-flit-brand"
             />
           </div>
           )}
@@ -253,7 +254,7 @@ export function TarifaFormModal({
         </div>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Valores en pesos colombianos</legend>
+          <legend className="mb-1 text-sm font-semibold text-flit-primary">Valores en pesos colombianos</legend>
           <div className="grid items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             {CONCEPTOS_TARIFA.map((concepto) => {
               const actual = grupo?.porConcepto[concepto];

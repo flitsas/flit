@@ -1,13 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  Check,
-  Copy,
-  RefreshCw,
-  Search,
-  X,
-} from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { improntaObligatoriaEnChecklist } from './DocumentChecklist';
 import MatriculaResumen, { ResumenCard, type ResolverEdicion } from './MatriculaResumen';
@@ -21,6 +15,8 @@ import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
+import { DIALOGO_FRANJA, DIALOGO_FRANJA_CERRAR, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL } from './dialogo-propio';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
 import type {
   Actor,
   BiometricParte,
@@ -78,11 +74,11 @@ interface Props {
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
 const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
-  ok: { dot: '#8CC63F', text: 'var(--flit-success-ink)' },
-  warn: { dot: '#F9AC00', text: 'var(--badge-warning-fg)' },
-  fail: { dot: '#FF4E00', text: '#FF4E00' },
-  unknown: { dot: '#59677D', text: '#59677D' },
-  error: { dot: '#FF4E00', text: '#FF4E00' },
+  ok: { dot: 'var(--flit-success-ink)', text: 'var(--flit-success-ink)' },
+  warn: { dot: 'var(--badge-warning-fg)', text: 'var(--badge-warning-fg)' },
+  fail: { dot: 'var(--destructive)', text: 'var(--destructive)' },
+  unknown: { dot: 'var(--muted-foreground)', text: 'var(--muted-foreground)' },
+  error: { dot: 'var(--destructive)', text: 'var(--destructive)' },
 };
 
 /**
@@ -97,9 +93,9 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
         title="Consulta RNMC — Medidas correctivas"
         action={
           loading ? (
-            <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-70" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin opacity-70" />
           ) : (
-            <Search className="h-4 w-4 opacity-70" aria-hidden="true" />
+            <Icono nombre="buscar" className="h-4 w-4 opacity-70" />
           )
         }
       />
@@ -273,7 +269,7 @@ export function CopyLink({
         style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
         {copied ? 'Copiado' : 'Copiar'}
       </button>
     </div>
@@ -950,7 +946,7 @@ export function PlacaPreasignadaSection({
   // Registro diferido 2026-11-09 (HU 3) — placa que asignó el organismo en Preasignación
   // (`source: 'ot'`, o placa con source vacío de las asignadas antes de marcar el origen). Se ve en
   // el asistente en solo lectura (enlace directo a /tramites/{id}); desde el listado, un trámite ya
-  // asignado abre el detalle, donde `DetalleVehiculoSidebar` pinta el mismo aviso.
+  // asignado abre el detalle, donde `DetalleResumen` pinta el mismo aviso.
   const placaAsignadaPorOt = esPlacaAsignadaPorOt(placa, plateSource);
   // HU10 — moto y motocarro: el dígito es el primer número de la placa.
   const digitoPrimerNumero = grupoPlaca === 'MOTO' || grupoPlaca === 'MOTOCARRO';
@@ -1026,7 +1022,7 @@ export function PlacaPreasignadaSection({
           Desde ahora la placa la asigna el organismo de tránsito en Preasignación.
         </p>
         {error && (
-          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -1062,7 +1058,7 @@ export function PlacaPreasignadaSection({
         El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.
       </p>
       {error && (
-        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}
@@ -1189,8 +1185,8 @@ function OrganismoModal({
 
   return (
     <div
-      // B6 (guardián de diseño) — overlay único del sistema (antes `bg-black/40 backdrop-blur-sm`).
-      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] backdrop-blur-[6px] px-4"
+      // Homologación #14507 — velo, panel y franja del Modal, en su sitio (mismo foco y Escape).
+      className={`fixed inset-0 z-50 grid place-items-center px-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-label="Seleccionar organismo de tránsito"
@@ -1198,17 +1194,18 @@ function OrganismoModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
+        className={`${DIALOGO_PANEL} p-6 w-full max-w-lg flex flex-col max-h-[85vh] outline-none focus:ring-0`}
       >
-        <WizardCardHeader
-          title="Organismo de tránsito"
-          subtitle="Elige dónde se radicará el trámite."
-          action={
-            <button type="button" onClick={onClose} aria-label="Cerrar">
-              <X className="h-5 w-5" />
-            </button>
-          }
-        />
+        <div className={`${DIALOGO_FRANJA} -mx-6 -mt-6 mb-4 justify-between`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <div className="relative z-[1] min-w-0">
+            <h3 className={DIALOGO_FRANJA_TITULO}>Organismo de tránsito</h3>
+            <p className="mt-1 text-xs leading-snug opacity-85">Elige dónde se radicará el trámite.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className={DIALOGO_FRANJA_CERRAR}>
+            <Icono nombre="cerrar" className="h-5 w-5" />
+          </button>
+        </div>
 
         {runtSuggestion && (
           <button
@@ -1229,7 +1226,7 @@ function OrganismoModal({
         )}
 
         <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-50" aria-hidden="true" />
+          <Icono nombre="buscar" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-50" />
           <input
             ref={searchInputRef}
             type="text"
@@ -1242,7 +1239,7 @@ function OrganismoModal({
         </div>
 
         {error && (
-          <p className="text-xs font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium mb-2" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </p>
         )}
@@ -1369,7 +1366,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
       {error && (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
           role="alert"
           aria-live="polite"
         >
@@ -1440,7 +1437,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
         </div>
 
         {formError && (
-          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
             {formError}
           </p>
         )}
@@ -1557,7 +1554,7 @@ function ParticipantRow({
         )}
       </div>
       {error && (
-        <p className="text-xs font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium mt-1.5" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </p>
       )}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
-import { CalendarDays, ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { buttonClass } from "@flit/ui/Button";
 import {
   DayPicker,
   DayButton,
@@ -26,10 +27,10 @@ export interface DateRangePickerProps {
 }
 
 const FIELD_CLS =
-  "inline-flex h-10 w-full min-w-[220px] items-center gap-2 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-xs font-medium text-flit-primary outline-none transition hover:bg-[#F4F7FC] focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white dark:hover:bg-white/5";
+  "inline-flex h-10 w-full min-w-[220px] items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-xs font-medium text-flit-primary outline-none transition hover:bg-secondary focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/5";
 
 const POPOVER_CLS =
-  "absolute left-0 top-full z-40 mt-2 rounded-xl border border-[#DFE5ED] bg-white p-3 shadow-lg dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
+  "absolute left-0 top-full z-40 mt-2 rounded-xl border border-border bg-card p-3 shadow-[var(--kit-sombra)] dark:border-border dark:bg-card dark:text-foreground";
 
 /** ISO `YYYY-MM-DD` → `DD/MM/AAAA` para mostrar al usuario. */
 export function isoToDisplay(iso: string): string {
@@ -221,7 +222,7 @@ export function DateRangePicker({
         aria-label={`${label}: ${hasValue ? displayText : placeholder}`}
         aria-invalid={invalidMessage ? true : undefined}
         aria-describedby={invalidMessage ? errorId : undefined}
-        className={`${FIELD_CLS} ${hasValue ? "border-flit-brand text-[#3B4FD6] dark:text-[#8FA8FF]" : ""}`}
+        className={`${FIELD_CLS} ${hasValue ? "border-flit-brand text-flit-brand-ink dark:text-flit-brand-ink" : ""}`}
         onClick={toggleOpen}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -230,13 +231,13 @@ export function DateRangePicker({
           }
         }}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
+        <Icono nombre="calendario" className="h-4 w-4 shrink-0 opacity-70" />
         <span className="min-w-0 flex-1 truncate text-left">{displayText}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5 shrink-0 opacity-60" />
       </button>
 
       {invalidMessage && !open && (
-        <p id={errorId} role="alert" className="text-[11px] font-medium text-[#C2410C] dark:text-[#FF9B73]">
+        <p id={errorId} role="alert" className="text-[11px] font-medium text-[var(--badge-warning-fg)] dark:text-[var(--badge-warning-fg)]">
           {invalidMessage}
         </p>
       )}
@@ -258,31 +259,31 @@ export function DateRangePicker({
             defaultMonth={isoToDate(draft.from) ?? isoToDate(draft.to) ?? new Date()}
             components={{ DayButton: FlitDayButton }}
             classNames={{
-              root: "rdp-root text-flit-primary dark:text-white",
+              root: "rdp-root text-flit-primary dark:text-foreground",
               chevron: "fill-flit-brand",
               day_button:
                 "rounded-lg text-xs font-medium hover:bg-flit-brand/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand",
               selected: "bg-flit-brand text-white hover:bg-flit-brand hover:text-white",
               range_start: "rounded-l-lg bg-flit-brand text-white",
               range_end: "rounded-r-lg bg-flit-brand text-white",
-              range_middle: "bg-flit-brand/15 text-flit-primary dark:text-white",
+              range_middle: "bg-flit-brand/15 text-flit-primary dark:text-foreground",
               today: "font-bold text-flit-brand",
-              outside: "text-[#667085] opacity-50 dark:text-white/40",
+              outside: "text-muted-foreground opacity-50 dark:text-muted-foreground",
               disabled: "opacity-40",
             }}
           />
 
           {invalidMessage && (
-            <p role="alert" className="mt-2 text-[11px] font-medium text-[#C2410C] dark:text-[#FF9B73]">
+            <p role="alert" className="mt-2 text-[11px] font-medium text-[var(--badge-warning-fg)] dark:text-[var(--badge-warning-fg)]">
               {invalidMessage}
             </p>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3 dark:border-border">
             <button
               type="button"
               data-testid="date-range-clear"
-              className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#59677D] hover:bg-[#F4F7FC] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/5"
+              className={buttonClass({ variant: "ghost", size: "sm" })}
               onClick={handleClear}
             >
               Limpiar
@@ -290,7 +291,7 @@ export function DateRangePicker({
             <button
               type="button"
               data-testid="date-range-apply"
-              className="rounded-lg bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0B0F14]"
+              className={buttonClass({ size: "sm" })}
               onClick={handleApply}
             >
               Aplicar

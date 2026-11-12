@@ -1,12 +1,13 @@
 'use client';
 
-import { AlertTriangle, FileWarning, Layers } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { OcrStatusPanel, tipoLabel } from './DocumentChecklist';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type { BatchReviewItem, BatchReviewState } from '@/hooks/useProcedureBatchUpload';
 import type { OcrUiResult } from '@/hooks/useProcedureDocuments';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 interface Props {
   state: BatchReviewState;
@@ -106,7 +107,7 @@ function PieceRow({
   return (
     <li
       className="rounded-xl border p-3"
-      style={{ borderColor: marcada ? '#8CC63F' : 'var(--color-border)' }}
+      style={{ borderColor: marcada ? 'var(--flit-success-ink)' : 'var(--color-border)' }}
     >
       <label className="flex cursor-pointer items-start gap-2.5">
         <input
@@ -151,7 +152,7 @@ function PieceRow({
           className="mt-2 flex items-start gap-1.5 text-xs font-medium"
           style={{ color: 'var(--badge-warning-fg)' }}
         >
-          <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="mt-px h-3 w-3 shrink-0" />
           <span>
             Ya hay un documento en esta casilla ({conflicto.filename}). Si la marcas, lo reemplazas.
           </span>
@@ -163,7 +164,7 @@ function PieceRow({
           className="mt-2 flex items-start gap-1.5 text-xs font-medium"
           style={{ color: 'var(--badge-warning-fg)' }}
         >
-          <Layers className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+          <Icono nombre="tipos-tramite" className="mt-px h-3 w-3 shrink-0" />
           <span>
             La carga trae otro documento para esta misma casilla. Marca el que quieras conservar.
           </span>
@@ -204,11 +205,11 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
         action={
           !nada ? (
             <span
-              className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-              style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
+              {...etiquetaKit('info', { className: 'shrink-0' })}
               role="status"
               aria-live="polite"
             >
+              <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
               {aceptadas.length} seleccionado{aceptadas.length === 1 ? '' : 's'}
             </span>
           ) : undefined
@@ -235,7 +236,7 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
         <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
           {!nada && (
             <p className="flex items-center gap-1.5 text-xs font-semibold">
-              <FileWarning className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
+              <Icono nombre="documento" className="h-3.5 w-3.5 opacity-70" />
               Páginas que no corresponden a ningún requisito
             </p>
           )}
@@ -274,15 +275,15 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
       {errores.length > 0 && (
         <div
           className="mt-3 rounded-xl border p-3"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)' }}
           role="alert"
         >
-          <p className="text-xs font-semibold" style={{ color: '#FF4E00' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--destructive)' }}>
             Archivos que no pudimos procesar
           </p>
           <ul className="mt-1.5 space-y-1">
             {errores.map((e) => (
-              <li key={`${e.filename}-${e.motivo}`} className="text-xs" style={{ color: '#FF4E00' }}>
+              <li key={`${e.filename}-${e.motivo}`} className="text-xs" style={{ color: 'var(--destructive)' }}>
                 <span className="font-medium">{e.filename}</span> — {e.motivo}
               </li>
             ))}

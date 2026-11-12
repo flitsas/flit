@@ -2,13 +2,14 @@
 
 // HU #14217 — Diálogo «Enlace y QR»: la dirección pública del canal y el QR de esa misma dirección.
 import { useEffect, useRef, useState } from "react";
-import { Copy, Download, QrCode } from "lucide-react";
+import { QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Modal } from "@/components/atom/Modal";
 import { getPortalDominios, principalActivo } from "@/lib/api/admin-ot-portal-dominio";
 import { direccionConDominio, origenPublicoCanal } from "@/lib/plataforma/direccion-canal";
 import { PN_FIELD_ERROR_CLS, PN_INPUT_CLS } from "./pn-ui";
 import { PnButton } from "./pn-componentes";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export function EnlaceQrDialog({
   codigo,
@@ -98,7 +99,7 @@ export function EnlaceQrDialog({
         <div className="flex flex-wrap justify-end gap-2">
           <PnButton
             variant="secondary"
-            icon={Download}
+            icon={iconoComo("nube-bajar")}
             onClick={descargar}
             disabled={buscandoDominio}
           >
@@ -143,13 +144,13 @@ export function EnlaceQrDialog({
             ref={qrRef}
             role="img"
             aria-label={`Código QR de ${direccion}`}
-            className="shrink-0 rounded-xl border border-[#DFE5ED] bg-white p-2"
+            className="shrink-0 rounded-xl border border-border bg-white p-2"
           >
             <QRCodeSVG value={direccion} size={160} aria-hidden />
           </div>
           <PnButton
             variant="primary"
-            icon={Copy}
+            icon={iconoComo("copiar")}
             onClick={() => void copiar()}
             disabled={buscandoDominio}
           >

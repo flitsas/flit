@@ -59,5 +59,5 @@ export function OtPreciosSection({ transitOfficeId, ...puente }: OtPreciosSectio
     };
   }, [isSuperAdmin, transitOfficeId]);
 
-  return <TarifasTab api={api} modo={isSuperAdmin ? MODO_SUPERADMIN : MODO_OT_ADMIN} {...puente} />;
+  return <TarifasTab api={api} modo={isSuperAdmin ? MODO_SUPERADMIN : MODO_OT_ADMIN} tarjeta={false} {...puente} />;
 }

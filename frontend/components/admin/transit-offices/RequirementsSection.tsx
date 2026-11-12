@@ -1,5 +1,7 @@
 "use client";
 
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
+import { buttonClass } from "@flit/ui/Button";
 import { useCallback, useEffect, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -47,13 +49,9 @@ function ToggleRow({ id, label, description, checked, disabled, onChange, note }
         aria-describedby={note?.id}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-muted transition-colors disabled:opacity-50"
-        style={{ background: checked ? "var(--color-flit-brand)" : undefined }}
+        className={INTERRUPTOR_CLS}
       >
-        <span
-          className="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"
-          style={{ transform: checked ? "translateX(22px)" : "translateX(2px)" }}
-        />
+        <span className={INTERRUPTOR_PERILLA_CLS} />
       </button>
     </div>
   );
@@ -174,8 +172,7 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
               type="button"
               onClick={() => void save()}
               disabled={saving}
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "var(--color-flit-brand)" }}
+              className={buttonClass({ size: "sm" })}
             >
               {saving ? "Guardando…" : "Guardar requisitos"}
             </button>

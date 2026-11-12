@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Wallet } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -42,7 +42,7 @@ function ModalPago({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => vo
   };
 
   return (
-    <Modal
+    <Modal icono="pago"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -117,9 +117,9 @@ export function AccionesPago({ ctx }: { ctx: ContextoDetalle }) {
   const [abierto, setAbierto] = useState(false);
   if (ctx.detalle.pago || ctx.detalle.pagado || !tienePermiso(ctx.sesion, P.pagosRegistrar)) return null;
   return (
-    <div className="border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="border-t border-border pt-3">
       <button type="button" className={controlCls(false)} onClick={() => setAbierto(true)}>
-        <Wallet className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="pago" className="h-3.5 w-3.5" />
         Registrar pago
       </button>
       {abierto && <ModalPago ctx={ctx} onCerrar={() => setAbierto(false)} />}

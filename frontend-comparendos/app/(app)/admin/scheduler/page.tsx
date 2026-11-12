@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { History } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable } from "@flit/ui";
 import { HistorialAuditoria } from "@/components/HistorialAuditoria";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -61,7 +61,7 @@ function Scheduler() {
           descripcion="A qué hora (de Colombia) sale cada aviso automático al conductor y si está activo. Pausar un aviso no afecta los envíos manuales; el aviso 4 sale con el cambio de contraventor."
         />
         <button type="button" className={controlCls(false)} onClick={() => setHistorial(true)}>
-          <History className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reloj" className="h-3.5 w-3.5" />
           Historial de cambios
         </button>
       </div>

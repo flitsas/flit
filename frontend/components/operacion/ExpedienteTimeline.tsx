@@ -54,12 +54,12 @@ function ExpedienteTimelineList({ statusHistory }: { statusHistory: StatusHistor
   }
 
   return (
-    <ol className="relative space-y-3 border-l pl-4" style={{ borderColor: '#DFE5ED' }}>
+    <ol className="relative space-y-3 border-l pl-4" style={{ borderColor: 'var(--border)' }}>
       {statusHistory.map((e, i) => (
         <li key={`${e.toStatus}-${e.changedAt}-${i}`} className="relative">
           <span
             className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full"
-            style={{ background: i === statusHistory.length - 1 ? '#8CC63F' : 'var(--color-flit-brand)' }}
+            style={{ background: i === statusHistory.length - 1 ? 'var(--flit-success-ink)' : 'var(--color-flit-brand)' }}
             aria-hidden="true"
           />
           <p className="text-xs font-semibold">{hitoLabel(e)}</p>
@@ -74,7 +74,7 @@ function ExpedienteTimelineList({ statusHistory }: { statusHistory: StatusHistor
 export default function ExpedienteTimeline({ statusHistory: rawHistory }: Props) {
   const statusHistory = sortHistory(rawHistory);
   return (
-    <section aria-label="Línea de tiempo del expediente" className="rounded-2xl border bg-white p-4 dark:bg-[#162744]">
+    <section aria-label="Línea de tiempo del expediente" className="rounded-2xl border bg-card p-4">
       <div className="mb-3">
         <h4 className="text-sm font-bold">Expediente</h4>
         <p className="text-xs opacity-70">Trazabilidad cronológica del trámite.</p>
@@ -190,7 +190,7 @@ export function ModificacionesBitacora({
     <section
       aria-labelledby={tituloId}
       className={embebida ? undefined : 'mt-4 border-t pt-3'}
-      style={embebida ? undefined : { borderColor: '#DFE5ED' }}
+      style={embebida ? undefined : { borderColor: 'var(--border)' }}
     >
       <h4 id={tituloId} className="mb-2 text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
         Modificaciones
@@ -246,7 +246,7 @@ export function ModificacionesBitacora({
               onClick={loadMore}
               disabled={loading}
               className="mt-3 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-brand)' }}
+              style={{ borderColor: 'var(--border)', color: 'var(--color-flit-brand)' }}
             >
               {loading ? 'Cargando…' : 'Ver más'}
             </button>

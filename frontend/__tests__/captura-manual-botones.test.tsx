@@ -35,18 +35,14 @@ describe("botones azules de la captura manual (texto blanco, como Kyverum)", () 
     fireEvent.click(screen.getByRole("checkbox"));
   });
 
-  it("la barra de pasos replica a Kyverum: completado azul con texto blanco, activo blanco con borde azul, pendiente gris", () => {
+  it("la barra de pasos usa el avance del UI Kit 2026: hecho, actual y pendiente", () => {
     render(<StepBar state={{ current: 2, completed: [0, 1], finished: false }} />);
-    const circles = screen.getAllByRole("listitem").map((li) => li.querySelector("span.rounded-full"));
-    expect(circles[0]).toHaveClass("bg-flit-brand", "text-white");
-    expect(circles[1]).toHaveClass("bg-flit-brand", "text-white");
-    expect(circles[2]).toHaveClass("bg-white", "border-flit-brand", "text-flit-brand");
-    expect(circles[3]).toHaveClass("bg-flit-gray");
-    expect(circles[4]).toHaveClass("bg-flit-gray");
-    // Línea hacia el siguiente paso: azul solo tras un paso completado.
-    const lines = screen.getAllByTestId("step-line");
-    expect(lines).toHaveLength(4);
-    expect(lines.map((l) => l.className.includes("bg-flit-brand"))).toEqual([true, true, false, false]);
-    expect(screen.getByText("Anverso")).toHaveClass("font-bold", "text-flit-brand");
+    // UI Kit 2026 (S3): el color sale de `.kit-paso[data-estado]` y la línea entre pasos del `::before` del kit.
+    const pasos = screen.getAllByRole("listitem");
+    expect(pasos.map((li) => li.getAttribute("data-estado"))).toEqual(["hecho", "hecho", "actual", "pendiente", "pendiente"]);
+    for (const li of pasos) expect(li).toHaveClass("kit-paso");
+    expect(pasos[0].querySelector(".kit-paso__num")).not.toBeNull();
+    expect(screen.getAllByTestId("step-line")).toHaveLength(4);
+    expect(screen.getByText("Anverso")).toHaveClass("kit-paso__etiqueta");
   });
 });

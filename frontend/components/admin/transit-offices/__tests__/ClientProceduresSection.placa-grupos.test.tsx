@@ -161,7 +161,7 @@ describe("ClientProceduresSection — placa por grupo de clase (HU6)", () => {
       await user.type(input, invalida);
       const aviso = screen.getByText(AVISO[grupo]);
       expect(aviso).toHaveAttribute("role", "alert");
-      expect(aviso).toHaveStyle({ color: "#B45309" });
+      expect(aviso).toHaveStyle({ color: "var(--di-warning)" });
       expect(input).toHaveAttribute("aria-invalid", "true");
       expect(input.getAttribute("aria-describedby") ?? "").toContain(aviso.id);
       expect(screen.getByRole("button", { name: /^Asignar$/i })).toBeDisabled();

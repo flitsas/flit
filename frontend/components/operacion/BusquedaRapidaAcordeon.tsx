@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Epic #12686 — acordeón «Búsqueda rápida» debajo de la tira de estados. Presentacional: cada
@@ -64,7 +64,7 @@ export function BusquedaRapidaAcordeon({
   onSelect,
   storageKey,
   disabled = false,
-  darkBgClassName = 'dark:bg-[#162744]',
+  darkBgClassName = '',
 }: Props) {
   // En el servidor siempre abierto; en el navegador, lo que el usuario dejó. Así el HTML del
   // servidor y el primer render del cliente coinciden y no hay desajuste de hidratación.
@@ -78,20 +78,17 @@ export function BusquedaRapidaAcordeon({
   const alternar = () => guardarAbierto(storageKey, !abierto);
 
   return (
-    <section className={`rounded-2xl border border-[#DFE5ED] bg-white dark:border-white/10 ${darkBgClassName}`}>
+    <section className={`rounded-2xl border border-border bg-card ${darkBgClassName}`}>
       <h2 className="m-0">
         <button
           type="button"
           aria-expanded={abierto}
           aria-controls={panelId}
           onClick={alternar}
-          className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-flit-primary transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:text-white"
+          className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-foreground transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
         >
           Búsqueda rápida
-          <ChevronDown
-            className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? 'rotate-180' : ''}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="abajo" className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? 'rotate-180' : ''}`} />
         </button>
       </h2>
       <div id={panelId} hidden={!abierto} className="px-4 pb-3">
@@ -108,8 +105,8 @@ export function BusquedaRapidaAcordeon({
                 onClick={() => onSelect(activo ? '' : item.key)}
                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-60 ${
                   activo
-                    ? 'border-flit-brand bg-flit-brand/10 text-[#3A5FD9] dark:text-[#8FA9FF]'
-                    : 'border-[#DFE5ED] text-flit-primary hover:border-flit-brand dark:border-white/15 dark:text-white/80'
+                    ? 'border-flit-brand bg-flit-brand/10 text-flit-brand-ink'
+                    : 'border-border text-foreground hover:border-flit-brand'
                 }`}
               >
                 {item.label}

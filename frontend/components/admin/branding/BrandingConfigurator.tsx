@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Rocket, Save, Undo2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { refreshBrand } from "@/app/actions/brand";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { brandContrastPairs, isValidHexColor } from "@/lib/brand/contrast";
@@ -239,7 +239,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
 
   return (
     <section
-      className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
+      className="rounded-2xl border bg-card/60 p-4"
       aria-labelledby="branding-configurator-title"
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
@@ -259,7 +259,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
           className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
           style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden /> Previsualizar
+          <Icono nombre="ojo" className="h-3.5 w-3.5" /> Previsualizar
         </button>
       </div>
 
@@ -267,7 +267,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
         {isNew && (
           <div
             className="mb-3 rounded-xl border px-3 py-2 text-xs"
-            style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+            style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
             role="status"
           >
             Esta red aún no tiene identidad de marca configurada. Define los valores y guarda el
@@ -289,7 +289,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               maxLength={40}
               placeholder="Nombre visible en el acceso y en el correo"
               className="w-full max-w-md rounded-lg border px-3 py-2 text-sm"
-              style={{ borderColor: "#DFE5ED" }}
+              style={{ borderColor: "var(--border)" }}
             />
           </div>
 
@@ -308,7 +308,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
           </div>
 
           {branding && (
-            <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "#DFE5ED" }}>
+            <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "var(--border)" }}>
               {branding.publishedAt ? (
                 <p style={{ color: "var(--color-flit-primary)" }}>
                   Publicada el {formatDate(branding.publishedAt)}
@@ -318,7 +318,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
                 <p className="opacity-70">Aún no se ha publicado ninguna versión.</p>
               )}
               {branding.hasUnpublishedChanges && (
-                <p className="mt-1 font-semibold" style={{ color: "#F9AC00" }}>
+                <p className="mt-1 font-semibold" style={{ color: "var(--badge-warning-fg)" }}>
                   Hay cambios en el borrador sin publicar.
                 </p>
               )}
@@ -332,12 +332,12 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
           )}
 
           {formError && (
-            <p role="alert" className="text-xs" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="text-xs" style={{ color: "var(--destructive)" }}>
               {formError}
             </p>
           )}
           {successMessage && (
-            <p role="status" className="text-xs" style={{ color: "#8CC63F" }}>
+            <p role="status" className="text-xs" style={{ color: "var(--flit-success-ink)" }}>
               {successMessage}
             </p>
           )}
@@ -350,7 +350,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
             >
-              <Save className="h-3.5 w-3.5" aria-hidden /> {saving ? "Guardando…" : "Guardar borrador"}
+              <Icono nombre="nube-subir" className="h-3.5 w-3.5" /> {saving ? "Guardando…" : "Guardar borrador"}
             </button>
             <button
               type="button"
@@ -358,9 +358,9 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               disabled={!canPublish || saving || publishing}
               aria-disabled={!canPublish}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
-              <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
+              <Icono nombre="avance" className="h-3.5 w-3.5" /> Publicar
             </button>
 
             {source === "admin" && branding?.published && (
@@ -369,15 +369,15 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
                 onClick={() => setConfirmingRetire(true)}
                 disabled={retiring}
                 className="ml-auto inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+                style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
               >
-                <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar marca publicada
+                <Icono nombre="devolucion" className="h-3.5 w-3.5" /> Retirar marca publicada
               </button>
             )}
           </div>
 
           {confirmingRetire && (
-            <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "#FF4E00" }} role="alertdialog" aria-label="Confirmar retiro de marca">
+            <div className="rounded-xl border p-3 text-xs" style={{ borderColor: "var(--destructive)" }} role="alertdialog" aria-label="Confirmar retiro de marca">
               <p style={{ color: "var(--color-flit-primary)" }}>
                 ¿Retirar la marca publicada? La red volverá a mostrar la identidad FLIT hasta que
                 publiques de nuevo. El dato queda conservado en el historial.
@@ -396,7 +396,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
                   onClick={() => void handleRetire()}
                   disabled={retiring}
                   className="rounded-lg px-3 py-1.5 font-semibold text-white disabled:opacity-60"
-                  style={{ background: "#FF4E00" }}
+                  style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
                 >
                   {retiring ? "Retirando…" : "Retirar"}
                 </button>
