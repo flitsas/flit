@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  ActoresValidacionCell,
+  type CampoActor,
+} from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
+import { actoresDelGrupo } from "@/components/atom/modules/_reportes/consultas/identidad-validacion";
+import type { ActorValidacionDto } from "@/lib/api/company-queries";
 import { Pagination } from "@/components/atom/Pagination";
 import {
   CARDLIST_CELL,
@@ -23,7 +29,12 @@ import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/de
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
 import { statusLabel } from "../_reportes/categories";
 
-const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", "Persona", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
+const COLUMNAS_ROL = [
+  "Comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
+  "Vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor",
+] as const;
+
+const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", ...COLUMNAS_ROL, "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
 
 interface DetailedReportGridProps {
   data: DetailedReportPage | NetworkDetailedReportPage | null;
@@ -101,7 +112,26 @@ export function DetailedReportGrid({
                     <span className="block text-[11px] opacity-70">{row.channelTransitOfficeName}</span>
                   ) : null}
                 </td>
-                <td data-label="Persona" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.personFullName || row.personDocument || "—"}</td>
+                {/* Ocho columnas, cuatro por rol, alineadas por actor (46 px cada uno). El propietario va con los compradores. Sin `actores` (ausente, null o vacío): «—» en las ocho; la «persona» vieja era de cualquier rol y no se puede etiquetar como comprador. */}
+                {(() => {
+                  const compradores = actoresDelGrupo(row.actores, "comprador");
+                  const vendedores = actoresDelGrupo(row.actores, "vendedor");
+                  const celda = (label: string, actores: ActorValidacionDto[], campo: CampoActor) => (
+                    <td key={label} data-label={label} className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                      <ActoresValidacionCell actores={actores} campo={campo} />
+                    </td>
+                  );
+                  return [
+                    celda("Comprador", compradores, "persona"),
+                    celda("Validación comprador", compradores, "validacion"),
+                    celda("Intentos comprador", compradores, "intentos"),
+                    celda("Motivo rechazo comprador", compradores, "motivo"),
+                    celda("Vendedor", vendedores, "persona"),
+                    celda("Validación vendedor", vendedores, "validacion"),
+                    celda("Intentos vendedor", vendedores, "intentos"),
+                    celda("Motivo rechazo vendedor", vendedores, "motivo"),
+                  ];
+                })()}
                 <td data-label="Transformación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
                 <td data-label="Leasing" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.isLeasing ? "Sí" : "No"}</td>
                 <td data-label="Pago" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.paymentType || "—"}</td>

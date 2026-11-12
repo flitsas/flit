@@ -102,7 +102,9 @@ public sealed record CompanyQueryRowDto(
     DateTimeOffset? ActualizadoEn,
     double? DiasHastaEnvio,
     double? DiasEnOrganismo,
-    int Devoluciones);
+    int Devoluciones,
+    /// <summary>Validación de identidad por persona (compradores, vendedores, propietarios), una por línea.</summary>
+    IReadOnlyList<ActorValidacionDto> Actores);
 
 /// <summary>
 /// El resultado de una consulta de empresa.
@@ -118,4 +120,6 @@ public sealed record CompanyQueryResultDto(
     DateOnly Hasta,
     int TotalPeriodoAnterior,
     IReadOnlyList<CompanyQueryRowDto> Filas,
-    IReadOnlyList<QueryCoverageItemDto> Cobertura);
+    IReadOnlyList<QueryCoverageItemDto> Cobertura,
+    /// <summary>Máximo de actores por rol sobre TODO el filtro (no la página): ancho del Excel.</summary>
+    MaxActoresPorRolDto MaxActoresPorRol = default);

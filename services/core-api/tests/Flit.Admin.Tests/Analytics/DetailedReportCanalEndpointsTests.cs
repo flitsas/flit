@@ -117,7 +117,7 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
         var export = await client.GetAsync($"{NetworkProcedures}/export?{Range}&channel=pn_web&channelTransitOfficeId={Office}", TestContext.Current.CancellationToken);
 
         export.StatusCode.Should().Be(HttpStatusCode.OK);
-        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name != nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync)).ToList();
+        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name is not (nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync) or nameof(INetworkDetailedReportReadRepository.GetNetworkMaxActoresPorRolAsync))).ToList();
         calls.Should().HaveCount(2);
         var listFilter = (NetworkDetailedReportFilter)calls[0].GetArguments()[0]!;
         var exportFilter = (NetworkDetailedReportFilter)calls[1].GetArguments()[0]!;
@@ -126,9 +126,13 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
         exportFilter.Should().BeEquivalentTo(listFilter, "listado y exportación resuelven el mismo filtro");
 
         var hoja = ReadSheet(await export.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
-        hoja[0].TakeLast(2).Should().Equal("Canal", "OT del canal");
-        hoja[1][^2].Should().Be("Persona Natural Web");
-        hoja[1][^1].Should().Be("Organismo de prueba");
+        // Contrato v3: los grupos de identidad Comprador/Vendedor van DESPUÉS de «OT del canal», así que Canal se busca por
+        // posición y no contando desde el final de la fila.
+        var canal = hoja[0].IndexOf("Canal");
+        canal.Should().BeGreaterThan(0);
+        hoja[0].Skip(canal).Take(2).Should().Equal("Canal", "OT del canal");
+        hoja[1][canal].Should().Be("Persona Natural Web");
+        hoja[1][canal + 1].Should().Be("Organismo de prueba");
     }
 
     // ── #14319 AC9 — sin permiso nuevo ───────────────────────────────────────────────────────
@@ -205,7 +209,7 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
 
         export.StatusCode.Should().Be(HttpStatusCode.OK);
         export.Content.Headers.ContentType!.MediaType.Should().Be(ExcelContentType);
-        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name != nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync)).ToList();
+        var calls = _factory.Repo.ReceivedCalls().Where(c => c.GetMethodInfo().Name is not (nameof(INetworkDetailedReportReadRepository.ListAllTenantIdsAsync) or nameof(INetworkDetailedReportReadRepository.GetNetworkMaxActoresPorRolAsync))).ToList();
         calls.Should().HaveCount(2);
         ((NetworkDetailedReportFilter)calls[1].GetArguments()[0]!).Should().BeEquivalentTo((NetworkDetailedReportFilter)calls[0].GetArguments()[0]!);
 
