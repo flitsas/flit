@@ -97,11 +97,17 @@ export function IngresoLayout({
   return (
     <div className="grid min-h-screen w-full grid-cols-1 min-[961px]:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <div
-        className="relative flex flex-col gap-6 p-[clamp(28px,4.5vw,64px)] text-[color:var(--di-ingreso-texto)]"
+        className="relative flex flex-col gap-6 overflow-hidden p-[clamp(28px,4.5vw,64px)] text-[color:var(--di-ingreso-texto)]"
         style={{ background: "var(--di-ingreso-fondo)" }}
       >
-        <div className="self-start [&_img]:h-[52px] [&_img]:w-auto">{logo}</div>
-        <div>
+        {/* Aro decorativo de la derecha (`.ingreso__marca::after` de la propuesta): 640 px, solo borde, blanco al 35 %. */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-[320px] top-[18%] h-[640px] w-[640px] rounded-full border-[1.5px]"
+          style={{ borderColor: "color-mix(in srgb, var(--di-ingreso-texto) 35%, transparent)" }}
+        />
+        <div className="relative z-[1] self-start [&_img]:h-[52px] [&_img]:w-auto">{logo}</div>
+        <div className="relative z-[1]">
           {marca ?? (
             <>
               <p className={INGRESO_MARCA_ANTETITULO_CLS}>Plataforma de trámites de tránsito</p>
@@ -118,7 +124,7 @@ export function IngresoLayout({
         </div>
         {/* Escena del carro con las tarjetas flotantes. Las tarjetas se anclan al marco del tamaño de la imagen, no a la
             figura: la figura crece con el panel y, en monitores grandes, se irían a las esquinas lejos del carro. */}
-        <figure aria-hidden="true" className="relative m-0 hidden min-h-[260px] flex-1 place-items-center md:grid">
+        <figure aria-hidden="true" className="relative z-[1] m-0 hidden min-h-[260px] flex-1 place-items-center md:grid">
           <div className="relative w-[min(560px,100%)] 2xl:w-[min(680px,100%)]">
             {/* eslint-disable-next-line @next/next/no-img-element -- ilustración decorativa estática */}
             <img
@@ -147,7 +153,7 @@ export function IngresoLayout({
             ))}
           </div>
         </figure>
-        <ul aria-label="Productos de FLIT" className="m-0 mt-auto flex list-none flex-wrap gap-2.5 p-0">
+        <ul aria-label="Productos de FLIT" className="relative z-[1] m-0 mt-auto flex list-none flex-wrap gap-2.5 p-0">
           {PRODUCTOS.map(([nombre, clave]) => (
             <li
               key={clave}
@@ -158,7 +164,7 @@ export function IngresoLayout({
             </li>
           ))}
         </ul>
-        <div className="grid gap-1 text-xs text-[color:var(--di-ingreso-texto-2)]">
+        <div className="relative z-[1] grid gap-1 text-xs text-[color:var(--di-ingreso-texto-2)]">
           <p className="m-0">FLIT S.A.S. · Medellín, Colombia · Certificada ISO/IEC 27001:2022</p>
           {pie}
         </div>
