@@ -22,6 +22,7 @@ import { formatFechaHora } from "@/lib/format/date";
 import { proveedorLabel, QUERY_KIND_LABEL } from "./historial-columns";
 import { leerRespuestaRunt, type RuntRespuestaVista } from "./runt-respuesta";
 import { iconoComo } from "@flit/ui/iconoComo";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
 
 type Pestana = "veredicto" | "respuesta" | "json";
 
@@ -442,17 +443,18 @@ function SolicitudesTabla({ solicitudes }: { solicitudes: Solicitud[] }) {
   );
 }
 
-const ESTADO_SOLICITUD: Record<string, { bg: string; fg: string }> = {
-  AUTORIZADA: { bg: "var(--badge-success-bg)", fg: "var(--flit-success-ink)" },
-  APROBADA: { bg: "var(--badge-success-bg)", fg: "var(--flit-success-ink)" },
-  REGISTRADA: { bg: "var(--badge-danger-bg)", fg: "var(--destructive)" },
-  RECHAZADA: { bg: "var(--badge-danger-bg)", fg: "var(--destructive)" },
+const ESTADO_SOLICITUD: Record<string, StatusTone> = {
+  AUTORIZADA: "success",
+  APROBADA: "success",
+  REGISTRADA: "danger",
+  RECHAZADA: "danger",
 };
 
 function EstadoSolicitud({ estado }: { estado: string }) {
-  const tono = ESTADO_SOLICITUD[estado.toUpperCase()] ?? { bg: "var(--badge-neutral-bg)", fg: "var(--badge-neutral-fg)" };
+  const tono = ESTADO_SOLICITUD[estado.toUpperCase()] ?? "neutral";
   return (
-    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: tono.bg, color: tono.fg }}>
+    <span {...etiquetaKit(tono)}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {estado}
     </span>
   );

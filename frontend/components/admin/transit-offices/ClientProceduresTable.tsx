@@ -34,6 +34,7 @@ import {
   type OtProceduresSortOption,
   otColumnToSortBy,
 } from "@/lib/admin/ot-procedures-columns";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Íconos del kit como componente, fuera del render (estables). */
 const IconoArriba = iconoComo("arriba");
@@ -663,12 +664,14 @@ export function ClientProceduresTable({
                   {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
-                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-success-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-success)]">
+                        <span {...etiquetaKit("success", { className: "di-estado di-estado--check" })}>
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           SOAT
                         </span>
                       )}
                       {row.impuestoDepartamentalPagado && (
-                        <span className="di-estado di-estado--check rounded-full bg-[var(--di-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-action)]">
+                        <span {...etiquetaKit("info", { className: "di-estado di-estado--check" })}>
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           Impuesto
                         </span>
                       )}

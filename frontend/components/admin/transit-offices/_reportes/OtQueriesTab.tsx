@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/ot-queries";
 import { estadoMeta } from "./report-columns";
 import { defaultQueryColumns, QUERY_COLUMNS, QUERY_PRESETS } from "./query-columns";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 export interface OtQueriesTabProps {
   transitOfficeId: string;
@@ -64,13 +65,8 @@ export function OtQueriesTab({ transitOfficeId, onScheduleQuery }: OtQueriesTabP
       rootTestId="ot-queries-tab"
       renderCell={(columnId, fila) =>
         columnId === "estado" ? (
-          <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-            style={{
-              background: `color-mix(in srgb, ${estadoMeta(fila.estadoOt).color} 10%, transparent)`,
-              color: estadoMeta(fila.estadoOt).color,
-            }}
-          >
+          <span {...etiquetaKit({ c: estadoMeta(fila.estadoOt).color })}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {estadoMeta(fila.estadoOt).label}
           </span>
         ) : null
