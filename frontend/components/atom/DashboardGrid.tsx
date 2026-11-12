@@ -1,3 +1,4 @@
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useState } from "react";
 import { Eraser } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
@@ -88,7 +89,7 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
                     <div className="font-mono text-xs text-muted-foreground">{r.fecha}</div>
                     <div className="text-muted-foreground truncate">{r.ot}</div>
                     <div>
-                      <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap" style={{ background: c.bg, color: c.color, borderColor: c.border }}>{r.estado}</span>
+                      <span {...etiquetaKit({ c: c.border, ct: c.color })}>{r.estado}</span>
                     </div>
                     <div className="flex items-center justify-end gap-1">
                       <button className="p-1.5 rounded-lg hover:bg-secondary dark:hover:bg-[var(--di-accent-soft)]"><Icono nombre="ojo" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /></button>

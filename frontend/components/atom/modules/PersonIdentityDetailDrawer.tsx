@@ -1,5 +1,6 @@
 'use client';
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -369,8 +370,7 @@ export function PersonIdentityDetailDrawer({
                     </p>
                   )}
                   <span
-                    className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold"
-                    style={{ background: 'var(--di-info-soft)', color: 'var(--di-action)' }}
+                    {...etiquetaKit('info', { className: 'font-mono' })}
                   >
                     {latest.documentType} {latest.documentNumber}
                   </span>

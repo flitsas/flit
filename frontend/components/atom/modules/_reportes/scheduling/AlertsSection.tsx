@@ -1,5 +1,6 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
 import { BellPlus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
@@ -227,12 +228,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                         <td data-label="Último disparo" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{formatDateTime(r.lastTriggeredAt)}</td>
                         <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                           <span
-                            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                            style={
-                              r.isActive
-                                ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                                : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
-                            }
+                            {...etiquetaKit(r.isActive ? "success" : "neutral")}
                           >
                             {r.isActive ? "Activa" : "Inactiva"}
                           </span>

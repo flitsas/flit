@@ -15,6 +15,7 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { CalendarPlus, Lightbulb, type LucideIcon } from "lucide-react";
 import { Icono, type NombreIcono } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
@@ -452,7 +453,7 @@ function Item({
         {/* Decir que lo de pantalla ya no es lo guardado evita el malentendido clásico: creer que
             se está mirando la consulta de siempre cuando alguien tocó un filtro. */}
         {activo && modificada && (
-          <span className="mt-1 inline-block rounded-full bg-[var(--badge-warning-bg)] px-1.5 py-px text-[10px] font-semibold text-[var(--badge-warning-fg)]">
+          <span {...etiquetaKit("warning", { className: "mt-1" })}>
             modificada
           </span>
         )}

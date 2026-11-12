@@ -1,5 +1,6 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
@@ -648,7 +649,7 @@ function FilaTramite({
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
-            <span className="ml-1.5 rounded-full bg-[var(--badge-danger-bg)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-destructive">
+            <span {...etiquetaKit("danger", { className: "ml-1.5 font-mono" })}>
               {entry.intentos} intentos
             </span>
           )}
@@ -735,7 +736,7 @@ function Vistazo({
           {pasos(entry).map((p) => (
             <span
               key={p.label}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium"
+              {...etiquetaKit({ c: p.color, ct: "var(--di-text-primary)" })}
             >
               <p.Icon className="h-3.5 w-3.5" style={{ color: p.color }} aria-hidden="true" />
               {p.label}

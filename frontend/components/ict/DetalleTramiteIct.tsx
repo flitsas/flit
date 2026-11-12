@@ -3,6 +3,7 @@
 // Detalle de un trámite de la integración (HU #11819). Cuatro capas, de la más útil a la más
 // técnica: el recorrido responde «dónde se atascó», las consultas responden «por qué», los datos
 // responden «con qué llegó» y el log queda al fondo para cuando nada de lo anterior baste.
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { Icono } from "@flit/ui/Icono";
@@ -238,12 +239,7 @@ function Hito({ hito, ultimo }: { hito: HitoTrazabilidad; ultimo: boolean }) {
           </span>
           {hito.segundosDesdeAnterior !== null && (
             <span
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold tabular-nums"
-              style={
-                hito.esTramoMasLento
-                  ? { background: "var(--badge-danger-bg)", color: "var(--destructive)" }
-                  : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
-              }
+              {...etiquetaKit(hito.esTramoMasLento ? "danger" : "neutral", { className: "font-mono tabular-nums" })}
               // El tramo lento no se distingue solo por color: se nombra.
               title={hito.esTramoMasLento ? "Tramo más lento del recorrido" : undefined}
             >
@@ -604,14 +600,7 @@ function PanelLog({ numero }: { numero: number }) {
                       )}
                     </td>
                     <td className={TD_CLS} style={TD_STYLE}>
-                      <span
-                        className="rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold"
-                        style={
-                          e.codigo >= 400
-                            ? { background: "var(--badge-danger-bg)", color: "var(--destructive)" }
-                            : { background: "var(--badge-success-bg)", color: "var(--flit-success-ink)" }
-                        }
-                      >
+                      <span {...etiquetaKit(e.codigo >= 400 ? "danger" : "success", { className: "font-mono" })}>
                         {e.codigo}
                       </span>
                     </td>

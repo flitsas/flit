@@ -1,5 +1,6 @@
 'use client';
 
+import { etiquetaKit } from '@flit/ui/StatusBadge';
 import {
   useCallback,
   useEffect,
@@ -175,17 +176,18 @@ function maskDoc(tipoDoc: string, documento: string): string {
  * (verde holgado, ámbar por vencer, rojo vencida) + etiqueta. La vigencia es de 30 días desde la
  * aprobación; el backend ya calcula los días (0 = vencida). Null cuando la validación no está aprobada.
  */
-function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string } | null {
+function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string; tono: 'danger' | 'warning' | 'success' } | null {
   if (dias == null) return null;
-  if (dias <= 0) return { label: 'Vencida', color: 'var(--badge-danger-fg)', bg: 'var(--badge-danger-bg)' };
+  if (dias <= 0) return { label: 'Vencida', color: 'var(--badge-danger-fg)', bg: 'var(--badge-danger-bg)', tono: 'danger' };
   if (dias <= 7) {
     return {
       label: `Por vencer (≤${dias} día${dias === 1 ? '' : 's'})`,
       color: 'var(--badge-warning-fg)',
       bg: 'var(--badge-warning-bg)',
+      tono: 'warning',
     };
   }
-  return { label: 'Vigente', color: 'var(--badge-success-fg)', bg: 'var(--badge-success-bg)' };
+  return { label: 'Vigente', color: 'var(--badge-success-fg)', bg: 'var(--badge-success-bg)', tono: 'success' };
 }
 
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
@@ -1591,8 +1593,7 @@ function LiveIndicator({ at }: { at: Date | null }) {
     : null;
   return (
     <span
-      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold shrink-0"
-      style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
+      {...etiquetaKit('success', { className: 'shrink-0' })}
       title={time ? `La lista se actualiza automáticamente · ${time}` : 'La lista se actualiza automáticamente'}
     >
       <span className="relative flex h-2 w-2" aria-hidden="true">
@@ -1858,8 +1859,7 @@ function StuckEventsBanner({
                     </span>
                     <span className="flex items-center gap-2">
                       <span
-                        className="rounded-full px-2.5 py-1 text-xs font-semibold"
-                        style={{ background: 'var(--badge-pending-bg)', color: 'var(--badge-pending-fg)' }}
+                        {...etiquetaKit({ c: 'var(--badge-pending-border)', ct: 'var(--badge-pending-fg)' })}
                       >
                         {group.events.length} evento{group.events.length === 1 ? '' : 's'} pendiente
                         {group.events.length === 1 ? '' : 's'}
@@ -1963,8 +1963,7 @@ function StuckRow({
     >
       <span className="min-w-0 truncate">
         <span
-          className="mr-1.5 inline-block rounded px-1.5 py-px text-[10px] font-semibold align-middle"
-          style={{ background: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' }}
+          {...etiquetaKit('warning', { className: 'mr-1.5 align-middle' })}
         >
           {kindLabel}
         </span>
@@ -2531,8 +2530,7 @@ function ValidacionRow({
           </span>
         ) : (
           <span
-            className="inline-block max-w-full rounded-full px-2 py-0.5 text-center text-[10px] font-semibold leading-tight"
-            style={{ background: 'var(--badge-info-bg)', color: 'var(--badge-info-fg)' }}
+            {...etiquetaKit('info', { className: 'max-w-full' })}
           >
             {esMandatario ? 'Mandatario' : 'Prevalidación'}
           </span>
@@ -2592,8 +2590,7 @@ function ValidacionRow({
         {vigencia ? (
           <span
             title={r.validUntil ? formatFechaCorta(r.validUntil) : undefined}
-            className="font-medium"
-            style={{ color: vigencia.color }}
+            {...etiquetaKit(vigencia.tono)}
           >
             {vigencia.label}
           </span>

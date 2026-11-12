@@ -3,6 +3,7 @@
 // Panel "Ahora mismo" (Reportes 2.0, HU-C · pestaña Resumen): estado del tenant HOY
 // (hora Bogotá) vía GET /live-overview con auto-refresh configurable, botón de pausa
 // e indicador "actualizado hace Xs". Los chips por estado hacen drill-down.
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 import { Radio } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
@@ -106,10 +107,10 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
                       type="button"
                       onClick={onDrillDown ? () => onDrillDown(s.status) : undefined}
                       disabled={!onDrillDown}
-                      className="flex items-center gap-1 text-[10px] rounded-full border px-2 py-0.5 hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)] disabled:cursor-default"
+                      {...etiquetaKit({ c: statusColor(s.status, i) }, { className: "hover:brightness-95 disabled:cursor-default" })}
                       aria-label={`Ver trámites en estado ${statusLabel(s.status)}`}
                     >
-                      <span className="h-2 w-2 rounded-full" style={{ background: statusColor(s.status, i) }} />
+                      <span className={ETIQUETA_PUNTO_CLS} />
                       {statusLabel(s.status)} <b>{formatInt(s.count)}</b>
                     </button>
                   ))}

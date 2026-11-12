@@ -3,6 +3,7 @@
 // Trazabilidad ICT (Feature #11814). Módulo NUEVO: no sustituye a «Log ICT», que se queda como la
 // capa técnica de bajo nivel, ni a «Reportes ICT», que sigue siendo la vista agregada por compañía.
 // Lo que aporta es el nivel que faltaba: el trámite.
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
@@ -635,15 +636,8 @@ function FilaTramite({
         <td className={tdCls}>{tramite.compania ?? "—"}</td>
         <td className={tdCls}>{tramite.radicador || "—"}</td>
         <td className={tdCls}>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-            style={estilo ? { background: estilo.bg, color: estilo.color } : undefined}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: estilo?.accent }}
-              aria-hidden="true"
-            />
+          <span {...etiquetaKit(estilo ? { c: estilo.border, ct: estilo.color } : "neutral")}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {estadoIctLabel(tramite.estado)}
           </span>
         </td>

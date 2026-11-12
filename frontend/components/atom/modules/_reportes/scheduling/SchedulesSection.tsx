@@ -1,5 +1,6 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
@@ -281,12 +282,7 @@ export function SchedulesSection({
                     <td data-label="Último envío" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{formatDateTime(s.lastSentAt)}</td>
                     <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                       <span
-                        className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                        style={
-                          s.isActive
-                            ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                            : { background: "var(--badge-neutral-bg)", color: "var(--badge-neutral-fg)" }
-                        }
+                        {...etiquetaKit(s.isActive ? "success" : "neutral")}
                       >
                         {s.isActive ? "Activo" : "Inactivo"}
                       </span>
