@@ -3426,17 +3426,14 @@ function ConsultaStep({
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
   // CF-02 — snapshot de la consulta desacoplada (sin instancia que lo persista todavía).
   const [previewSnapshot, setPreviewSnapshot] = useState<PreflightSnapshot | null>(null);
-  // HU #10478 — proveedor de consulta por placa resuelto para el tenant. Con Kyverum RUNT NO se pide
-  // el tipo de documento del propietario (lo resuelve el RUNT y lo devuelve); con Verifik sí se necesita.
-  // null = aún sin resolver ⇒ se muestra el campo (default seguro para no ocultarlo con Verifik).
+  // HU #10478 — proveedor de consulta por placa resuelto para el tenant.
+  // null = aún sin resolver. El selector de tipo SIEMPRE se muestra (hotfix UI); lo que cambia es
+  // el payload de consulta con Kyverum (ver `resolveOwnerDocTypesForConsulta`).
   const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
-  // HU #10478 (novedad maquinaria/remolques) — con Kyverum como primario el tipo de documento del
-  // propietario se oculta (Kyverum lo resuelve por placa). Pero maquinaria y remolques NO están en el RUNT
-  // de Kyverum: el backend cae a Verifik, que SÍ exige el tipo real del dueño para hallar el vehículo. Si la
-  // consulta devuelve "vehículo no encontrado", este flag revela el selector para corregir el tipo (p. ej. NIT).
+  // HU #10478 (novedad maquinaria/remolques) — maquinaria/remolques NO están en el RUNT de Kyverum:
+  // el backend cae a Verifik, que SÍ exige el tipo real del dueño. Si la consulta falla con
+  // "vehículo no encontrado", este flag sale del modo legacy (consulta con CC) y usa el tipo de UI.
   const [ownerDocTypeSuggested, setOwnerDocTypeSuggested] = useState(false);
-  const hideOwnerDocType =
-    !isVin && platePrimaryProvider === 'kyverum_runt' && !ownerDocTypeSuggested;
 
   // HU #11199 — la secretaría se elige aquí SOLO en los trámites que matriculan el vehículo y SOLO
   // mientras el trámite no existe (AC5 + convivencia D8): los borradores abiertos antes del cambio
@@ -3746,10 +3743,9 @@ function ConsultaStep({
     setOwnerDocNumber(tenantNitDigits);
   }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
 
-  // HU #10478 (novedad maquinaria/remolques) — revela el selector de tipo de documento del propietario
-  // cuando una consulta por placa (Kyverum primario) devuelve "vehículo no encontrado" (check 'vehiculo' en
-  // fail). Probablemente es maquinaria/remolque, fuera del RUNT de Kyverum; el fallback a Verifik solo lo
-  // halla con el tipo correcto del dueño (p. ej. NIT). Sticky: una vez revelado, permanece visible.
+  // HU #10478 (novedad maquinaria/remolques) — sale del payload legacy (CC) cuando una consulta por
+  // placa (Kyverum primario) devuelve "vehículo no encontrado". Verifik necesita el tipo real (p. ej. NIT).
+  // Sticky: una vez activado, permanece.
   useEffect(() => {
     if (isVin || platePrimaryProvider !== 'kyverum_runt' || ownerDocTypeSuggested) return;
     const pf = deferred ? previewSnapshot : preflight;
@@ -3762,7 +3758,31 @@ function ConsultaStep({
     if (noEncontrado) setOwnerDocTypeSuggested(true);
   }, [isVin, platePrimaryProvider, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
 
-  const buildItems = (): FieldValueInput[] | null => {
+  /**
+   * Hotfix tipo-documento-visible: el selector siempre muestra `tipoUi` (default CC).
+   * Con Kyverum placa (sin sugerencia de maquinaria) el campo estaba oculto y el consult
+   * mandaba CC (default). Ese payload se conserva cuando el gestor elige otro tipo en UI —
+   * el tipo de UI viaja a creación/Actores/RUES vía pendingPreview o patch post-consulta.
+   * Excepción: política "solo vehículos propios" ya fijaba NIT en estado aunque el campo
+   * estuviera oculto; ahí `tipoConsulta` sigue siendo NIT (fallback Verifik).
+   */
+  const resolveOwnerDocTypesForConsulta = (): {
+    tipoUi: ActorDocumentType;
+    tipoConsulta: ActorDocumentType;
+  } => {
+    const tipoUi = ownerDocType;
+    const kyverumPlateLegacy =
+      !isVin &&
+      platePrimaryProvider === 'kyverum_runt' &&
+      !ownerDocTypeSuggested &&
+      !ownerDocLocked;
+    return {
+      tipoUi,
+      tipoConsulta: kyverumPlateLegacy ? 'CC' : tipoUi,
+    };
+  };
+
+  const buildItems = (tipoConsulta: ActorDocumentType = ownerDocType): FieldValueInput[] | null => {
     if (isVin) {
       const value = vin.trim();
       if (!value) return null;
@@ -3771,18 +3791,14 @@ function ConsultaStep({
     const plateValue = plate.trim();
     const docNumber = ownerDocNumber.trim();
     if (!plateValue || !docNumber) return null;
-    // owner_document_type SIEMPRE viaja en el payload aunque el campo esté oculto (Kyverum): Kyverum
-    // lo ignora (resuelve el tipo por la placa), pero el FALLBACK a Verifik SÍ lo exige para consultar
-    // por placa (HU #10478). Por defecto 'CC'; tras un primer éxito de Kyverum, el preflight lo hidrata
-    // al tipo real (tipoDocPropietario), así el fallback posterior queda correcto. Ocultarlo de la UI
-    // no debe vaciar el dato o el fallback devolvería "requiere documento" (unknown) y enmascararía el
-    // fallo como pre-vuelo verde.
+    // owner_document_type SIEMPRE viaja en el payload de consulta (HU #10478 / fallback Verifik).
+    // Con Kyverum placa legacy `tipoConsulta` es CC; el tipo real de UI se persiste aparte tras la consulta.
     return [
       { formFieldId: null, fieldKey: 'plate', valueText: plateValue, valueJson: null },
       {
         formFieldId: null,
         fieldKey: 'owner_document_type',
-        valueText: ownerDocType,
+        valueText: tipoConsulta,
         valueJson: null,
       },
       {
@@ -3796,7 +3812,8 @@ function ConsultaStep({
 
   const handleRun = async () => {
     if (!instanceId && !deferred) return;
-    const items = buildItems();
+    const { tipoUi, tipoConsulta } = resolveOwnerDocTypesForConsulta();
+    const items = buildItems(tipoConsulta);
     if (!items) {
       setErrorTone('warning');
       setError(
@@ -3819,7 +3836,7 @@ function ConsultaStep({
     // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
     // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
     if (!isVin && onlyOwnVehicles &&
-        !isTenantOwnDocument(ownerDocType, ownerDocNumber.trim(), tenantNitDigits)) {
+        !isTenantOwnDocument(tipoUi, ownerDocNumber.trim(), tenantNitDigits)) {
       setErrorTone('error');
       setError(OWNER_NOT_TENANT_MESSAGE);
       return;
@@ -3828,7 +3845,7 @@ function ConsultaStep({
     // bloqueo de negocio — se avisa en warning (ámbar), el gestor lo corrige y reintenta.
     const formatError = isVin
       ? validateVin(vin.trim())
-      : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), ownerDocType));
+      : (validatePlate(plate.trim()) ?? validateDocNumber(ownerDocNumber.trim(), tipoUi));
     if (formatError) {
       setErrorTone('warning');
       setError(formatError);
@@ -3849,7 +3866,8 @@ function ConsultaStep({
           procedureTypeCode: tipoCodigo || null,
           vin: isVin ? vin.trim() : null,
           plate: isVin ? null : plate.trim(),
-          ownerDocumentType: isVin ? null : ownerDocType,
+          // Consulta: payload legacy con Kyverum (CC). Persistencia/Actores: tipoUi en pending.
+          ownerDocumentType: isVin ? null : tipoConsulta,
           ownerDocumentNumber: isVin ? null : ownerDocNumber.trim(),
           // `|| null`, no a secas: el organismo se elige DESPUÉS de consultar, así que aquí el
           // estado suele ser cadena vacía. Mandarla tal cual rompía la consulta antes de llegar al
@@ -3876,11 +3894,12 @@ function ConsultaStep({
         const previewChecks = result.preflight?.checks ?? [];
         // Se guarda la consulta y se emite en un efecto: el organismo se elige DESPUÉS de consultar,
         // y "Continuar y guardar" —que es lo que crea el trámite— no puede habilitarse sin él.
+        // tipoUi (no tipoConsulta): CreateFromConsulta sincroniza vendedor/RUES con el tipo elegido.
         setPendingPreview({
           previewToken: result.previewToken,
           vin: isVin ? vin.trim() : undefined,
           plate: isVin ? undefined : plate.trim(),
-          ownerDocumentType: isVin ? undefined : ownerDocType,
+          ownerDocumentType: isVin ? undefined : tipoUi,
           ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
           hardBlocked:
             previewChecks.some((c) => c.status === 'error') ||
@@ -3899,6 +3918,18 @@ function ConsultaStep({
       await tramitesClient.patchFieldValues(instanceId, items);
       await onRunPreflight();
       await loadInstance();
+      // Tras consultar con payload legacy (CC), persiste el tipo de UI para Actores/RUES.
+      if (!isVin && tipoUi !== tipoConsulta) {
+        await tramitesClient.patchFieldValues(instanceId, [
+          {
+            formFieldId: null,
+            fieldKey: 'owner_document_type',
+            valueText: tipoUi,
+            valueJson: null,
+          },
+        ]);
+        await loadInstance();
+      }
     } catch (err) {
       // CF-02 — una consulta fallida (o bloqueada) invalida la anterior: sin consulta válida no se
       // puede crear el trámite, así que "Continuar" vuelve a deshabilitarse.
@@ -4599,19 +4630,11 @@ function ConsultaStep({
           {!readOnly && consultButton}
         </div>
         ) : (
-          /* Traspaso — prototipo Lovable: Placa | Nº documento | Consultar RUNT. El tipo de documento
-             del propietario se oculta con Kyverum (`hideOwnerDocType`) y solo aparece cuando hace
-             falta corregirlo (maquinaria/remolque, HU #10478).
-
-             La rejilla es de DOCE columnas, no de tres, porque el número de campos cambia. Con tres,
-             el selector tenía que declararse `col-span-3` para no descuadrar la fila —es decir, se
-             llevaba una fila entera para él solo, encogido a `max-w-xs`— y empujaba el número y el
-             botón a una tercera. El resultado eran tres filas desparejas con un control huérfano en
-             medio. Con doce, cada campo declara su porción y los dos escenarios caben en UNA fila:
-                sin selector →      4 + 5 + 3 = 12
-                con selector →  3 + 2 + 4 + 3 = 12 */
+          /* Traspaso — Placa | Tipo doc | Nº documento | Consultar RUNT.
+             Hotfix: el tipo de documento del propietario SIEMPRE es visible (también con Kyverum).
+             Rejilla de 12: 3 + 2 + 4 + 3 = 12. */
           <div className="mt-4 grid grid-cols-1 items-end gap-4 lg:grid-cols-12">
-            <div className={`min-w-0 ${hideOwnerDocType ? 'lg:col-span-4' : 'lg:col-span-3'}`}>
+            <div className="min-w-0 lg:col-span-3">
               <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
                 Placa del vehículo
               </label>
@@ -4628,35 +4651,30 @@ function ConsultaStep({
                 placeholder="Ej. XYR010"
               />
             </div>
-            {!hideOwnerDocType && (
-              // Dos de doce: lo justo para «CC»/«NIT» y su flecha. Antes se declaraba a fila
-              // completa y luego se recortaba con `max-w-xs`, que es lo que dejaba el hueco a su
-              // derecha y lo hacía leer como un campo suelto.
-              <div className="min-w-0 lg:col-span-2">
-                <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
-                  Tipo documento propietario
-                </label>
-                <select
-                  id="consulta-owner-doc-type"
-                  value={ownerDocType}
-                  onChange={(e) => {
-                    const next = e.target.value as ActorDocumentType;
-                    setOwnerDocType(next);
-                    setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
-                    invalidatePreview();
-                  }}
-                  disabled={readOnly || ownerDocLocked}
-                  className={`mt-1 ${WIZARD_SELECT} disabled:opacity-60`}
-                >
-                  {DOC_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className={`min-w-0 ${hideOwnerDocType ? 'lg:col-span-5' : 'lg:col-span-4'}`}>
+            <div className="min-w-0 lg:col-span-2">
+              <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
+                Tipo documento propietario
+              </label>
+              <select
+                id="consulta-owner-doc-type"
+                value={ownerDocType}
+                onChange={(e) => {
+                  const next = e.target.value as ActorDocumentType;
+                  setOwnerDocType(next);
+                  setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                  invalidatePreview();
+                }}
+                disabled={readOnly || ownerDocLocked}
+                className={`mt-1 ${WIZARD_SELECT} disabled:opacity-60`}
+              >
+                {DOC_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0 lg:col-span-4">
               <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
                 Número documento del propietario
               </label>
@@ -4683,12 +4701,8 @@ function ConsultaStep({
           </div>
         )}
 
-        {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna,
-            donde descuadraban la altura de su campo. */}
-        {/* La tercera condición era `deferred && modalidad === 'traspaso'`, que no habilitaba
-            ninguna nota: dentro solo hay dos y ambas tienen su propia condición. Abría un contenedor
-            vacío con margen. */}
-        {(ownerDocLocked || (!hideOwnerDocType && ownerDocTypeSuggested)) && (
+        {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna. */}
+        {(ownerDocLocked || ownerDocTypeSuggested) && (
           <div className="mt-3 space-y-1.5">
             {ownerDocLocked && (
               <p id="consulta-owner-doc-locked" className="text-xs leading-tight opacity-70">
@@ -4696,7 +4710,7 @@ function ConsultaStep({
                 NIT y no se puede editar durante el trámite.
               </p>
             )}
-            {!hideOwnerDocType && ownerDocTypeSuggested && (
+            {ownerDocTypeSuggested && (
               <p className="text-xs leading-tight opacity-70">
                 No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
                 documento del propietario (p. ej. NIT) y vuelve a consultar.
