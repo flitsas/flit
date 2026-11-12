@@ -386,7 +386,7 @@ function FiltroEspecificoPopover({
           id={panelId}
           role="dialog"
           aria-label="Filtros del listado"
-          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-border bg-card p-3 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-[9px] border border-border bg-card p-3 shadow-[var(--kit-sombra)]"
         >
           {fieldsError ? (
             fieldsError

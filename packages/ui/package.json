@@ -40,7 +40,8 @@
     "./Interruptor": "./src/Interruptor.tsx",
     "./Miga": "./src/Miga.tsx",
     "./PasosHorizontal": "./src/PasosHorizontal.tsx",
-    "./Pestanas": "./src/Pestanas.tsx"
+    "./Pestanas": "./src/Pestanas.tsx",
+    "./iconoComo": "./src/iconoComo.tsx"
   },
   "scripts": {
     "test": "vitest run"

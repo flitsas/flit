@@ -181,7 +181,7 @@ export function ActionsMenu({
         aria-label={ariaLabel}
         onKeyDown={onMenuKeyDown}
         style={{ top: coords.top, left: coords.left, minWidth: coords.minWidth }}
-        className="fixed z-[200] rounded-xl border bg-card p-1 shadow-lg dark:bg-card"
+        className="fixed z-[200] rounded-[9px] border bg-card p-1 shadow-[var(--kit-sombra)] dark:bg-card"
       >
         {items.map((item, i) => {
           const Icon = item.icon;

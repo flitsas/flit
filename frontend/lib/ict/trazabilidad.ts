@@ -3,16 +3,9 @@
 // Vive aparte del componente porque lo consumen la bandeja, el detalle y la exportación: si cada
 // pantalla tradujera los estados por su cuenta, el XLSX que se reenvía por correo podría decir algo
 // distinto de lo que el analista tenía en la pantalla.
-import {
-  Ban,
-  BadgeCheck,
-  CircleDashed,
-  FileCheck2,
-  RefreshCw,
-  Search,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import type { ComponentType } from "react";
+import { Ban, CircleDashed } from "lucide-react";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { ESTADO_CHIP_STYLES, type EstadoChipStyle } from "@/lib/tramites/estados";
 
 /** Los siete estados de `IctEstado`, en el orden en que ocurren. */
@@ -43,7 +36,7 @@ export function esEstadoIct(value: string | null | undefined): value is EstadoIc
  * Los iconos son de `lucide`. Nada de glifos sueltos (○ ✓ ✕): el navegador los pinta como emoji y
  * desentonan con el resto de la consola.
  */
-export const ESTADO_ICT: Record<EstadoIct, { label: string; style: EstadoChipStyle; Icon: LucideIcon }> = {
+export const ESTADO_ICT: Record<EstadoIct, { label: string; style: EstadoChipStyle; Icon: ComponentType<IconoComoProps> }> = {
   recibido: {
     label: "Recibido",
     style: ESTADO_CHIP_STYLES.borrador,
@@ -52,27 +45,27 @@ export const ESTADO_ICT: Record<EstadoIct, { label: string; style: EstadoChipSty
   en_validacion_negocio: {
     label: "Validando negocio",
     style: ESTADO_CHIP_STYLES.preparado,
-    Icon: RefreshCw,
+    Icon: iconoComo("reintento"),
   },
   en_validacion_externa: {
     label: "Consultando fuentes",
     style: ESTADO_CHIP_STYLES.subsanacion,
-    Icon: Search,
+    Icon: iconoComo("buscar"),
   },
   procesado: {
     label: "Procesado",
     style: ESTADO_CHIP_STYLES.entregado,
-    Icon: FileCheck2,
+    Icon: iconoComo("documento"),
   },
   borrador_creado: {
     label: "Borrador creado",
     style: ESTADO_CHIP_STYLES.aprobado,
-    Icon: BadgeCheck,
+    Icon: iconoComo("check"),
   },
   con_novedades: {
     label: "Con novedades",
     style: ESTADO_CHIP_STYLES.rechazado,
-    Icon: TriangleAlert,
+    Icon: iconoComo("alerta"),
   },
   anulado: {
     label: "Anulado",
