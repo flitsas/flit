@@ -1,6 +1,6 @@
 "use client";
 
-import { XCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ErrorMigracion } from "@/lib/migracion/client";
 
 /**
@@ -33,10 +33,10 @@ export function AvisoError({ error }: { error: Error }) {
   const detalle = escueto ? "" : error.message;
 
   return (
-    <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-sm">
-      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
+    <div className="flex items-start gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-sm">
+      <Icono nombre="cerrar" className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
       <div className="min-w-0">
-        <p className="font-semibold text-red-600 dark:text-red-400">{titulo(codigo)}</p>
+        <p className="font-semibold text-destructive">{titulo(codigo)}</p>
         {/* Sin detalle no se pinta el hueco: hay errores en los que el titular ya lo dice todo. */}
         {detalle && <p className="mt-0.5 opacity-90">{detalle}</p>}
         {sugerencia(codigo) && <p className="mt-1.5 text-xs opacity-70">{sugerencia(codigo)}</p>}

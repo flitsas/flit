@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { AlertTriangle, Info, ShieldAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   generateTransferenciaDocument,
   prefillPersonaJuridica,
@@ -201,7 +201,7 @@ function CampoBase({
           key={`${issue.code}-${issue.field}`}
           id={`${id}-error`}
           role="alert"
-          className="mt-1 text-[11px] text-red-700"
+          className="mt-1 text-[11px] text-destructive"
         >
           <span className="font-semibold">{issue.code}</span> — {issue.message}
         </p>
@@ -421,9 +421,9 @@ export function TransferenciaFormPanel() {
         role="note"
         aria-labelledby="transferencia-aviso-titulo"
         data-testid="transferencia-aviso-normativo"
-        className="flex gap-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[11px] text-amber-900"
+        className="flex gap-2 rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-3 text-[11px] text-[var(--badge-warning-fg)]"
       >
-        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
         <div>
           <p id="transferencia-aviso-titulo" className="font-semibold">
             FLIT no garantiza la suficiencia jurídica del documento ni su aprobación por el organismo
@@ -440,7 +440,7 @@ export function TransferenciaFormPanel() {
       </aside>
 
       {errorGeneral ? (
-        <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-800">
+        <p role="alert" className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive">
           {errorGeneral}
         </p>
       ) : null}
@@ -449,10 +449,10 @@ export function TransferenciaFormPanel() {
         <div
           role="alert"
           data-testid="transferencia-errores"
-          className="rounded-2xl border border-red-300 bg-red-50 p-3 text-[11px] text-red-800"
+          className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           <p className="flex items-center gap-1.5 font-semibold">
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="alerta" className="h-3.5 w-3.5" />
             No se generó el documento: hay validaciones normativas sin cumplir
           </p>
           <ul className="mt-1 list-disc pl-5">
@@ -468,13 +468,13 @@ export function TransferenciaFormPanel() {
       {resultado ? (
         <div
           data-testid="transferencia-resultado"
-          className="rounded-2xl border border-emerald-300 bg-emerald-50 p-3 text-[11px] text-emerald-900"
+          className="rounded-2xl border border-[var(--badge-success-border)] bg-[var(--badge-success-bg)] p-3 text-[11px] text-[var(--flit-success-ink)]"
         >
           <p className="font-semibold">Documento generado. Descárgalo desde el historial.</p>
           {resultado.advisories.length > 0 ? (
             <div className="mt-2" data-testid="transferencia-advisories">
               <p className="flex items-center gap-1.5 font-semibold">
-                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
                 Prevalidaciones pendientes de verificación por el organismo de tránsito (avisos, no
                 errores)
               </p>
@@ -583,7 +583,7 @@ export function TransferenciaFormPanel() {
                   key={issue.code}
                   id="tf-leasing-financiera-error"
                   role="alert"
-                  className="mt-1 text-[11px] text-red-700"
+                  className="mt-1 text-[11px] text-destructive"
                 >
                   <span className="font-semibold">{issue.code}</span> — {issue.message}
                 </p>
@@ -843,7 +843,7 @@ export function TransferenciaFormPanel() {
           ) : null}
 
           {errorDe("gravamen.tieneLevantamientoOAutorizacion").map((issue) => (
-            <p key={issue.code} id="tf-levantamiento-error" role="alert" className="text-[11px] text-red-700">
+            <p key={issue.code} id="tf-levantamiento-error" role="alert" className="text-[11px] text-destructive">
               <span className="font-semibold">{issue.code}</span> — {issue.message}
             </p>
           ))}

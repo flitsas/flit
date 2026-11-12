@@ -149,9 +149,10 @@ export function ResumenTab({
             <NetworkScopeBadge scope={networkScope} hijos={networkChildren} testId="resumen-red-badge" />
           )}
           {/* KPIs grandes con variación y tooltip "cómo se calcula" */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4">
             <KpiCard
               label={COPY.E03}
+              icono="tramites"
               value={formatInt(totals.total)}
               tooltip="Suma de trámites de todas las categorías creados en el rango de fechas."
               variation={variation("total")}
@@ -185,7 +186,7 @@ export function ResumenTab({
       </UiStateBoundary>
 
       {/* Tendencia mensual */}
-      <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="tendencia-title">
+      <section className="rounded-2xl p-5 bg-card border" aria-labelledby="tendencia-title">
         <h2
           id="tendencia-title"
           className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2"
@@ -206,11 +207,11 @@ export function ResumenTab({
           <div className="h-64" data-testid="tendencia-mensual-chart">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendRows} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
                 <Tooltip
-                  contentStyle={{ background: "rgba(22,39,68,0.95)", border: "none", borderRadius: 10, color: "#fff", fontSize: 11 }}
+                  contentStyle={{ background: "var(--primary)", border: "none", borderRadius: 10, color: "var(--primary-foreground)", fontSize: 11 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {visibleCategories.map((cat) => (

@@ -4,7 +4,8 @@
 // anterior al instante), bloquear, desbloquear y desactivar. Toda acción pide confirmación con un mensaje claro; si
 // la API la rechaza (409), el motivo se muestra aquí mismo y el diálogo no se cierra.
 import { useState } from "react";
-import { KeyRound, LockKeyhole, LockOpen, Power, type LucideIcon } from "lucide-react";
+import { type NombreIcono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
@@ -15,7 +16,7 @@ export type ExternalIntegrationAction = "rotate" | "block" | "unblock" | "deacti
 
 interface Copy {
   title: string;
-  icon: LucideIcon;
+  icono: NombreIcono;
   body: string;
   warning?: string;
   confirm: string;
@@ -30,7 +31,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     case "rotate":
       return {
         title: "Generar una clave nueva",
-        icon: KeyRound,
+        icono: "rol",
         body: `Se genera una clave secreta nueva para ${name} y se muestra una sola vez. Entrégala al servicio del portal por un canal seguro.`,
         confirm: "Generar clave nueva",
         danger: false,
@@ -38,7 +39,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     case "block":
       return {
         title: "Bloquear conexión",
-        icon: LockKeyhole,
+        icono: "candado",
         body: `${name} no podrá obtener accesos nuevos hasta que la desbloquees.`,
         warning: PASES_VIGENTES,
         confirm: "Bloquear",
@@ -47,7 +48,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     case "unblock":
       return {
         title: "Desbloquear conexión",
-        icon: LockOpen,
+        icono: "candado-abierto",
         body: `${name} podrá volver a pedir accesos de inmediato con su clave vigente.`,
         confirm: "Desbloquear",
         danger: false,
@@ -56,7 +57,7 @@ function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegra
     default:
       return {
         title: "Desactivar conexión",
-        icon: Power,
+        icono: "encendido",
         body: `${name} se desactiva de forma definitiva: no podrá obtener accesos y no se puede volver a activar. Para reconectar el portal tendrás que crear una conexión nueva.`,
         warning: PASES_VIGENTES,
         confirm: "Desactivar",
@@ -101,8 +102,8 @@ export function ExternalIntegrationActionDialog({
       onClose={onClose}
       busy={busy}
       title={copy.title}
-      icon={copy.icon}
-      iconBg={copy.danger ? "#FF4E00" : "var(--color-flit-brand)"}
+      icono={copy.icono}
+      iconBg={copy.danger ? "var(--destructive)" : "var(--color-flit-brand)"}
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
@@ -111,7 +112,7 @@ export function ExternalIntegrationActionDialog({
           </PnButton>
           <PnButton
             variant={copy.danger ? "danger" : "primary"}
-            icon={copy.icon}
+            icon={iconoComo(copy.icono)}
             loading={busy}
             onClick={() => void handleConfirm()}
           >
@@ -120,19 +121,19 @@ export function ExternalIntegrationActionDialog({
         </div>
       }
     >
-      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-white">
+      <div className="flex flex-col gap-3 text-sm text-flit-primary">
         <p>{copy.body}</p>
         {action === "rotate" && (
-          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] p-3 focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 dark:border-white/15">
+          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-border p-3 focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2">
             <input
               type="checkbox"
               checked={revocarAnterior}
               onChange={(e) => setRevocarAnterior(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#FF4E00] focus-visible:outline-none"
+              className="mt-0.5 h-4 w-4 accent-destructive focus-visible:outline-none"
             />
             <span>
               <span className="font-semibold">Dejar sin efecto la clave anterior ahora mismo</span>
-              <span className="block text-xs text-[#59677D] dark:text-white/70">
+              <span className="block text-xs text-muted-foreground">
                 Márcalo si la clave se filtró. Si no lo marcas, la anterior sigue valiendo 24 horas para que el portal alcance a cambiarla.
               </span>
             </span>

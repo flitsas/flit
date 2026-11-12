@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download, RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -56,12 +56,12 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
   };
 
   return (
-    <Modal open onClose={onCerrar} size="2xl" title={m?.asunto ?? "Mensaje"} description={m ? `${TIPO_COMUNICACION[m.tipo] ?? m.tipo} · ${formatoFechaHora(m.creadoEn)}` : undefined}>
+    <Modal icono="correo" open onClose={onCerrar} size="2xl" title={m?.asunto ?? "Mensaje"} description={m ? `${TIPO_COMUNICACION[m.tipo] ?? m.tipo} · ${formatoFechaHora(m.creadoEn)}` : undefined}>
       {detalle.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
       {detalle.estado === "error" && <InlineAlert tone="error">{detalle.error}</InlineAlert>}
       {m && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-          <iframe title="Cuerpo del correo" sandbox="" srcDoc={m.html ?? "<p>El cuerpo de este correo no está disponible.</p>"} className="h-[520px] w-full rounded-xl border border-[#DFE5ED] bg-white" />
+          <iframe title="Cuerpo del correo" sandbox="" srcDoc={m.html ?? "<p>El cuerpo de este correo no está disponible.</p>"} className="h-[520px] w-full rounded-xl border border-border bg-card" />
           <aside className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
               <Chip e={estadoComunicacion(m.estado)} title={m.motivoFallo ?? undefined} />
@@ -89,7 +89,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
                 <h3 className="text-xs font-semibold">Adjuntos</h3>
                 {m.adjuntos.map((a) => (
                   <button key={a.archivoId} type="button" className={`${controlCls(false)} justify-start`} onClick={() => void apiDownload(`/archivos/${a.archivoId}`, a.nombre).catch((e: unknown) => setError(e instanceof Error ? e.message : "No se pudo descargar."))}>
-                    <Download className="h-3.5 w-3.5" aria-hidden />
+                    <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                     {a.nombre}
                   </button>
                 ))}
@@ -108,7 +108,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
             </div>
             {puedeReintentar && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="reintento" className="h-3.5 w-3.5" />
                 Reintentar envío
               </button>
             )}

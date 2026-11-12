@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ResolvedMatrixTable } from "@/components/admin/documents/panels/ResolvedMatrixTable";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
@@ -77,9 +77,9 @@ export function MatrixPreviewTab({ procedureTypeId }: { procedureTypeId: string 
             type="button"
             onClick={resolve}
             className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
-            <Eye className="h-3.5 w-3.5" /> Ver matriz resuelta
+            <Icono nombre="ojo" className="h-3.5 w-3.5" /> Ver matriz resuelta
           </button>
         </div>
       </div>

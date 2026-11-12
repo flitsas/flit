@@ -13,7 +13,7 @@ export default async function PortalPage({
 }) {
   const { token } = await params;
   return (
-    <main className="min-h-full grid place-items-center px-4 py-10 bg-[#F5F7FA] dark:bg-[#0B0F14]">
+    <main className="min-h-full grid place-items-center px-4 py-10 bg-flit-bg dark:bg-background">
       <PortalParticipant token={token} />
     </main>
   );

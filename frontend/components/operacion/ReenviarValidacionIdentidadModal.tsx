@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import { Copy, Send } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import {
@@ -32,11 +32,11 @@ import type {
  * Tras reenviar NO se cierra: muestra el resultado por persona y el enlace nuevo con «Copiar enlace».
  */
 
-const FIELD_LABEL_CLS = 'block text-xs font-semibold text-flit-primary dark:text-white';
+const FIELD_LABEL_CLS = 'block text-xs font-semibold text-foreground';
 // `ring-inset`: un ring hacia afuera se recorta contra el `overflow-y-auto` del Modal.
 const FIELD_CLS =
-  'w-full rounded-xl border px-3 py-2 text-sm text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent dark:text-white';
-const FIELD_BORDER = { borderColor: '#DFE5ED' };
+  'w-full rounded-xl border px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:bg-transparent';
+const FIELD_BORDER = { borderColor: 'var(--border)' };
 const LINK_BTN_CLS =
   'inline-flex items-center gap-1 rounded-lg text-xs font-semibold text-flit-brand underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2';
 
@@ -67,8 +67,8 @@ const MSG_REENVIADA = 'Validación de identidad reenviada.';
 const MSG_MANUAL = 'En validación manual: el enlace se regenera desde la revisión manual.';
 const MSG_INICIAL_AUSENTE =
   'La validación que elegiste ya no está pendiente de firma. Marca a quién reenviar de la lista.';
-const GREEN = '#8CC63F';
-const RED = '#FF4E00';
+const GREEN = 'var(--flit-success-ink)';
+const RED = 'var(--destructive)';
 
 /**
  * Mismo patrón de validación de formato de correo que `PrevalidacionForm.tsx` (`validEmail`): un
@@ -134,7 +134,7 @@ function SecondaryButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl border py-2.5 text-sm font-medium text-flit-primary transition hover:bg-[#162744]/[0.04] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:text-white ${className}`}
+      className={`rounded-xl border py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={FIELD_BORDER}
     >
       {children}
@@ -176,7 +176,7 @@ function CopiarEnlace({
       </a>
       <div className="flex items-center gap-3">
       <button type="button" onClick={() => onCopiar(url)} className={LINK_BTN_CLS}>
-        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="copiar" className="h-3.5 w-3.5" />
         Copiar enlace
       </button>
       <span role="status" aria-live="polite" className="text-xs font-medium">
@@ -352,7 +352,7 @@ export function ReenviarValidacionIdentidadModal({
       onClose={cerrar}
       title="Reenviar validación de identidad"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={Send}
+      icono="radicacion"
       description={`Trámite ${referenceNumber}`}
       size="sm"
       busy={busy}
@@ -375,7 +375,7 @@ export function ReenviarValidacionIdentidadModal({
         {mostrarLista ? (
           <div className="space-y-3">
             {inicialAusente ? (
-              <p role="status" className="text-xs font-medium text-flit-primary/80 dark:text-white/80">
+              <p role="status" className="text-xs font-medium text-muted-foreground">
                 {MSG_INICIAL_AUSENTE}
               </p>
             ) : null}
@@ -404,15 +404,15 @@ export function ReenviarValidacionIdentidadModal({
                       />
                       <label
                         htmlFor={`admin-reenviar-persona-${id}`}
-                        className="text-sm font-semibold text-flit-primary dark:text-white"
+                        className="text-sm font-semibold text-foreground"
                       >
                         {etiqueta}
                       </label>
                     </div>
                     {p.esFlujoManual ? (
-                      <p className="text-xs text-flit-primary/70 dark:text-white/70">{MSG_MANUAL}</p>
+                      <p className="text-xs text-muted-foreground">{MSG_MANUAL}</p>
                     ) : (
-                      <p className="text-xs text-flit-primary/60 dark:text-white/60">
+                      <p className="text-xs text-muted-foreground">
                         Correo registrado: <span className="font-medium">{p.email ?? '—'}</span>
                       </p>
                     )}
@@ -477,7 +477,7 @@ export function ReenviarValidacionIdentidadModal({
         {mostrarResultado ? (
           <div className="space-y-3" aria-live="polite">
             {fallidos.length > 0 ? (
-              <p className="text-xs font-medium text-flit-primary dark:text-white">
+              <p className="text-xs font-medium text-foreground">
                 {exitosos.length > 0
                   ? `Salió para: ${exitosos.map((r) => nombreDe(r.validationId)).join(', ')}. No salió para: ${fallidos.map((r) => nombreDe(r.validationId)).join(', ')}.`
                   : `No salió para: ${fallidos.map((r) => nombreDe(r.validationId)).join(', ')}.`}
@@ -494,20 +494,20 @@ export function ReenviarValidacionIdentidadModal({
                     className="space-y-1 rounded-xl border p-3"
                     style={FIELD_BORDER}
                   >
-                    <p className="text-sm font-semibold text-flit-primary dark:text-white">{etiqueta}</p>
+                    <p className="text-sm font-semibold text-foreground">{etiqueta}</p>
                     {!r.ok ? (
                       <p className="text-xs font-medium" style={{ color: RED }}>
                         {r.mensaje || 'No se pudo reenviar la validación de identidad.'}
                       </p>
                     ) : r.queued ? (
-                      <p className="text-xs font-medium text-flit-primary dark:text-white">{MSG_EN_COLA}</p>
+                      <p className="text-xs font-medium text-foreground">{MSG_EN_COLA}</p>
                     ) : (
                       <>
-                        <p className="text-xs font-medium text-flit-primary dark:text-white">
+                        <p className="text-xs font-medium text-foreground">
                           {MSG_REENVIADA}
                         </p>
                         {r.email ? (
-                          <p className="text-xs text-flit-primary/60 dark:text-white/60">
+                          <p className="text-xs text-muted-foreground">
                             Enviado a: <span className="font-medium">{r.email}</span>
                           </p>
                         ) : null}

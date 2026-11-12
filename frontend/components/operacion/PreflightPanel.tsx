@@ -15,6 +15,7 @@ import type {
 import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 interface Props {
 
   snapshot: PreflightSnapshot | null;
@@ -135,9 +136,9 @@ function DiagnosticOkPill({ label, ariaLabel }: { label: string; ariaLabel: stri
     <span
       role="status"
       aria-label={ariaLabel}
-      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
-      style={{ background: '#8CC63F' }}
+      {...etiquetaKit('success', { className: 'shrink-0' })}
     >
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {label}
     </span>
   );
@@ -284,7 +285,7 @@ export function FineDetailList({ details }: { details: FineDetail[] }) {
           <li
             key={d.numero ?? `comparendo-${i}`}
             className="rounded-lg px-2.5 py-1.5"
-            style={{ background: 'rgba(249,172,0,0.10)', border: '1px solid rgba(249,172,0,0.25)' }}
+            style={{ background: 'var(--badge-warning-bg)', border: '1px solid var(--badge-warning-border)' }}
           >
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
               <span className="text-xs font-semibold">
@@ -355,7 +356,7 @@ export function PreflightPanel({
   const sello = selloDeConsulta(checks, snapshot?.queriedAt ?? snapshot?.createdAt);
 
   return (
-    <div className={bare ? '' : 'mt-4 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
+    <div className={bare ? '' : 'mt-4 rounded-2xl border bg-card p-4'}>
       {/* Embebido en un acordeón la cabecera sobra: el título y el semáforo global ya viven en la
           suya. El botón tampoco se pierde — los callers que embeben pasan `showRunButton={false}`
           porque el disparo de la consulta está arriba, junto al identificador del vehículo. */}
@@ -472,8 +473,8 @@ export function PreflightPanel({
             return (
               <li
                 key={c.key}
-                className="flex flex-col gap-2 rounded-xl border bg-white p-4 shadow-sm dark:bg-[#162744]"
-                style={{ borderColor: '#E2E8F0' }}
+                className="flex flex-col gap-2 rounded-xl border bg-card p-4"
+                style={{ borderColor: 'var(--border)' }}
               >
                 {/* `flex-wrap`: la pastilla no encoge ni parte (`whitespace-nowrap` + `shrink-0`),
                     así que cuando no cabe junto al título tiene que poder bajar a su propia línea.
@@ -563,10 +564,10 @@ export function PreflightPanel({
       {hasProviderError && (
         <div
           className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
-          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          style={{ background: 'var(--badge-warning-bg)', border: '1px solid var(--badge-warning-border)' }}
           role="alert"
         >
-          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+          <span className="text-xs font-medium" style={{ color: 'var(--badge-warning-fg)' }}>
             No fue posible verificar la información en este momento. Vuelve a
             ejecutar la consulta antes de continuar; no es posible avanzar sin
             estos datos.
@@ -579,7 +580,7 @@ export function PreflightPanel({
       {overall === 'yellow' && warnChecks.length > 0 && (
         <div
           className="mt-3 rounded-xl p-3"
-          style={{ background: 'rgba(249,172,0,0.08)', border: '1px solid rgba(249,172,0,0.30)' }}
+          style={{ background: 'var(--badge-warning-bg)', border: '1px solid var(--badge-warning-border)' }}
           role="status"
           aria-live="polite"
         >
@@ -610,10 +611,10 @@ export function PreflightPanel({
       {vehiculoNoEncontrado && !hasProviderError && (
         <div
           className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
-          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          style={{ background: 'var(--badge-warning-bg)', border: '1px solid var(--badge-warning-border)' }}
           role="alert"
         >
-          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+          <span className="text-xs font-medium" style={{ color: 'var(--badge-warning-fg)' }}>
             El vehículo no se encontró en el RUNT. Verifica el identificador y el
             documento del propietario, y vuelve a consultar; no es posible
             avanzar sin un vehículo verificado.
@@ -624,16 +625,16 @@ export function PreflightPanel({
       {overall === 'red' && !hasProviderError && !vehiculoNoEncontrado && (
         <label
           className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
-          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          style={{ background: 'var(--badge-warning-bg)', border: '1px solid var(--badge-warning-border)' }}
         >
           <input
             type="checkbox"
             checked={riesgoAceptado}
             onChange={(e) => onToggleRiesgo(e.target.checked)}
             disabled={readOnly || saving}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#FF4E00] disabled:opacity-60"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--badge-warning-fg)] disabled:opacity-60"
           />
-          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+          <span className="text-xs font-medium" style={{ color: 'var(--badge-warning-fg)' }}>
             Asumo el riesgo de rechazo en el organismo de tránsito y deseo
             continuar con el trámite.
           </span>

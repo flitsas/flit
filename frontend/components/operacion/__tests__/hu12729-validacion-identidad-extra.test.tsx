@@ -59,7 +59,8 @@ describe('HU #12729 — AC3 trazabilidad a ancho completo', () => {
 
 describe('HU #12729 — AC4 botones azules corporativos (sin degradado en tarjetas)', () => {
   it('happy: tokens WIZARD_BTN_BRAND usan azul sólido y font-semibold', () => {
-    expect(WIZARD_BTN_SOLID).toBe('var(--color-flit-brand)');
+    // UI Kit 2026 (propuesta-2): el relleno azul AA de los botones (#1D53FF), no el #557EFF de íconos.
+    expect(WIZARD_BTN_SOLID).toBe('var(--kit-azul-relleno)');
     expect(WIZARD_BTN_BRAND).toMatch(/font-semibold/);
     expect(WIZARD_BTN_BRAND).toMatch(/text-white/);
     expect(WIZARD_BTN_BRAND).not.toMatch(/gradient/i);
@@ -77,7 +78,8 @@ describe('HU #12729 — AC4 botones azules corporativos (sin degradado en tarjet
   it('edge: CTA del wizard (FirmaFurStep) conserva el degradado', () => {
     const firma = read('operacion/FirmaFurStep.tsx');
     expect(firma).toMatch(/WIZARD_CTA_GRADIENT/);
-    expect(WIZARD_CTA_GRADIENT).toMatch(/linear-gradient/);
+    // Rediseño UI kit (HU #14482): el degradado es el token `--gradient-action` del kit.
+    expect(WIZARD_CTA_GRADIENT).toBe('var(--gradient-action)');
   });
 });
 
@@ -89,6 +91,6 @@ describe('HU #12729 — AC5 contraste / foco teclado (contrato de clases)', () =
 
   it('happy: outline usa borde/texto de marca vía style o WIZARD_BTN_SOLID en BiometricStep', () => {
     const src = read('operacion/BiometricStep.tsx');
-    expect(src).toMatch(/WIZARD_BTN_SOLID|var\(--color-flit-brand\)/);
+    expect(src).toMatch(/WIZARD_BTN_SOLID|var\(--kit-azul-relleno\)/);
   });
 });

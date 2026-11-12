@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY, DETALLE_BORDER } from './detalle-visual';
@@ -42,7 +42,7 @@ export function DetalleHistorialAuditoria({
         className="mb-3 flex items-center gap-2 text-sm font-semibold"
         style={{ color: DETALLE_NAVY }}
       >
-        <Clock className="h-4 w-4" aria-hidden="true" />
+        <Icono nombre="reloj" className="h-4 w-4" />
         Historial de auditoría
       </h4>
       {sorted.length === 0 ? (

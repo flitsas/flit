@@ -1,17 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  Building2,
-  CheckCircle2,
-  Loader2,
-  MailCheck,
-  Pencil,
-  Trash2,
-  Vault,
-  type LucideIcon,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -27,7 +18,14 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
@@ -324,11 +322,11 @@ export function LegalRepresentativesTab({
           </p>
           <div className="flex shrink-0 gap-2">
             <a href={IDENTITY_MODULE_HREF} className={rlPrimaryCtaClass} style={rlPrimaryCtaStyle}>
-              <MailCheck className="h-3.5 w-3.5" />
+              <Icono nombre="correo" className="h-3.5 w-3.5" />
               Ir al módulo Identidad
             </a>
             <SignatureAction
-              icon={Vault}
+              icon={iconoComo("candado")}
               label="Asociar firma"
               onClick={() => openEdit(pendingItem)}
             />
@@ -369,7 +367,7 @@ export function LegalRepresentativesTab({
               </p>
               {totalReported > items.length && (
                 <p
-                  className="text-xs font-semibold text-[#B45309]"
+                  className="text-xs font-semibold text-[var(--badge-warning-fg)]"
                   role="status"
                   data-testid="representantes-truncado"
                 >
@@ -380,14 +378,14 @@ export function LegalRepresentativesTab({
             </div>
 
             {
-              <>
+              <div className={TABLA_TARJETA_CLS}>
                 <div className="overflow-x-auto">
                   <table
-                    className="min-w-[820px] text-xs"
+                    className={`min-w-[820px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
                     style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
                   >
                     <caption className="sr-only">Representantes legales de la compañía</caption>
-                    <thead>
+                    <thead className={TABLA_MOVIL_THEAD_CLS}>
                       <tr>
                         <th
                           scope="col"
@@ -434,7 +432,7 @@ export function LegalRepresentativesTab({
                         </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className={TABLA_MOVIL_TBODY_CLS}>
                       {filtered.length === 0 ? (
                         <FilaVaciaFiltros
                           columnas={5}
@@ -451,22 +449,25 @@ export function LegalRepresentativesTab({
                         return (
                           <tr
                             key={item.id}
-                            className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                            className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
                           >
                             <td
-                              className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
+                              data-label="Representante"
+                              className={`rounded-l-xl border-y border-l px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
                               style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
                             >
                               {fullName(item)}
                             </td>
                             <td
-                              className="border-y px-4 py-3 font-mono"
+                              data-label="Documento"
+                              className={`border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`}
                               style={{ borderColor: RL_COLOR.border }}
                             >
                               {item.documentType} {formatDocumentNumber(item.documentNumber)}
                             </td>
                             <td
-                              className="border-y px-4 py-3"
+                              data-label="Trámites"
+                              className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`}
                               style={{ borderColor: RL_COLOR.border }}
                             >
                               <div className="flex flex-wrap gap-1">
@@ -480,7 +481,8 @@ export function LegalRepresentativesTab({
                               </div>
                             </td>
                             <td
-                              className="border-y px-4 py-3"
+                              data-label="Firma / Identidad"
+                              className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`}
                               style={{ borderColor: RL_COLOR.border }}
                             >
                               <StatusBadge
@@ -489,9 +491,9 @@ export function LegalRepresentativesTab({
                                 label={
                                   <span className="inline-flex items-center gap-1">
                                     {item.hasSignatureOrIdentity ? (
-                                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" />
                                     ) : (
-                                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                      <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                                     )}
                                     {st.label}
                                   </span>
@@ -499,24 +501,25 @@ export function LegalRepresentativesTab({
                               />
                             </td>
                             <td
-                              className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                              data-label="Acciones"
+                              className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`}
                               style={{ borderColor: RL_COLOR.border }}
                             >
                               <RowActions
                                 actions={[
                                   {
-                                    icon: Pencil,
+                                    icon: iconoComo("lapiz"),
                                     label: `Editar persona y firma de ${fullName(item)}`,
                                     onClick: () => openEdit(item),
                                     tone: "primary",
                                   },
                                   {
-                                    icon: Building2,
+                                    icon: iconoComo("empresas"),
                                     label: `Asociar empresas de ${fullName(item)}`,
                                     onClick: () => openCompanies(item),
                                   },
                                   {
-                                    icon: Trash2,
+                                    icon: iconoComo("papelera"),
                                     label: `Eliminar ${fullName(item)}`,
                                     onClick: () => setToDelete(item),
                                     tone: "danger",
@@ -541,7 +544,7 @@ export function LegalRepresentativesTab({
                     noun="representantes"
                   />
                 ) : null}
-              </>
+              </div>
             }
           </div>
         </UiStateBoundary>
@@ -568,7 +571,7 @@ export function LegalRepresentativesTab({
           onClose={() => setToDelete(null)}
           busy={deleting}
           size="sm"
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg={RL_COLOR.danger}
           title="Eliminar representante"
         >
@@ -594,7 +597,7 @@ export function LegalRepresentativesTab({
               className={`flex-1 ${rlDangerCtaClass}`}
               style={rlDangerCtaStyle}
             >
-              {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {deleting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
               Eliminar
             </button>
           </div>
@@ -610,7 +613,7 @@ function SignatureAction({
   busy = false,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   busy?: boolean;
   onClick: () => void;
@@ -623,7 +626,7 @@ function SignatureAction({
       className={rlPrimaryCtaClass}
       style={rlPrimaryCtaStyle}
     >
-      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+      {busy ? <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
       {label}
     </button>
   );

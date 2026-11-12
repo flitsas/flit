@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { useParametrizationWizard } from '@/hooks/useParametrizationWizard';
 import { Step1Identidad } from './wizard/Step1Identidad';
 import { Step2Tipologia } from './wizard/Step2Tipologia';
@@ -112,7 +112,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
 
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
         <aside
-          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border shrink-0 md:h-fit"
+          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-card border shrink-0 md:h-fit"
           aria-label="Pasos del asistente"
         >
           <p className="text-[10px] font-semibold uppercase opacity-60 mb-3">
@@ -127,12 +127,12 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                   <span
                     className="h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0"
                     style={{
-                      background: isDone ? 'var(--color-flit-tech)' : isActive ? 'var(--color-flit-brand)' : '#DFE5ED',
-                      color: isDone || isActive ? '#fff' : '#162744',
+                      background: isDone ? 'var(--color-flit-tech)' : isActive ? 'var(--color-flit-brand)' : 'var(--border)',
+                      color: isDone || isActive ? 'var(--di-on-accent)' : 'var(--color-flit-primary)',
                     }}
                     aria-current={isActive ? 'step' : undefined}
                   >
-                    {isDone ? <Check className="h-4 w-4" aria-hidden="true" /> : i + 1}
+                    {isDone ? <Icono nombre="check" className="h-4 w-4" /> : i + 1}
                   </span>
                   <span className={`text-xs ${isActive ? 'font-bold' : 'opacity-70'}`}>
                     {s}
@@ -144,13 +144,13 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
         </aside>
 
         <section
-          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border overflow-y-auto"
+          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-card border overflow-y-auto"
           aria-label={`Paso ${step + 1}: ${WIZARD_STEPS[step]}`}
         >
           {error && (
             <div
               className="mb-4 rounded-xl p-3 border text-xs"
-              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+              style={{ borderColor: 'var(--destructive)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
               role="alert"
               aria-live="polite"
             >
@@ -207,10 +207,10 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
               onClick={handleBack}
               disabled={step === 0 || loading}
               className="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-medium border disabled:opacity-30"
-              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
+              style={{ borderColor: 'var(--color-flit-primary)', color: 'var(--color-flit-primary)' }}
               aria-label="Ir al paso anterior"
             >
-              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="izquierda" className="h-3 w-3" />
               Anterior
             </button>
 
@@ -219,7 +219,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 onClick={handleFinish}
                 disabled={loading}
                 className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+                style={{ background: 'var(--gradient-action)' }}
                 aria-label="Guardar borrador y volver al listado"
               >
                 Guardar borrador
@@ -229,11 +229,11 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 onClick={() => setStep(step + 1)}
                 disabled={loading}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold disabled:opacity-50"
-                style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
+                style={{ background: 'var(--color-flit-brand)', color: 'var(--di-on-accent)' }}
                 aria-label="Continuar al siguiente paso"
               >
                 Continuar
-                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="derecha" className="h-3 w-3" />
               </button>
             ) : (
               <button
@@ -244,7 +244,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 aria-label="Continuar al siguiente paso"
               >
                 {loading ? 'Guardando…' : 'Continuar'}
-                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="derecha" className="h-3 w-3" />
               </button>
             )}
           </div>

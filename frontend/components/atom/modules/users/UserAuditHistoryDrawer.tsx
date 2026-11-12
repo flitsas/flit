@@ -1,8 +1,9 @@
 "use client";
 
 import { Modal } from "@/components/atom/Modal";
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_DESCRIPCION_CLS, MODAL_TITULO_CLS } from "@flit/ui/Modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { History, Loader2, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { fetchAdminAuditLog } from "@/lib/api/audit";
 import type { AdminAuditLogEntry, AdminAuditModule } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/types";
@@ -187,24 +188,24 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
       size="lg"
       zClassName="z-50"
       header={({ titleId }) => (
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="mb-1 flex items-center gap-2" style={{ color: "var(--color-flit-brand)" }}>
-              <History className="h-4 w-4 shrink-0" aria-hidden />
+        <div className={`${MODAL_CABECERA_CLS} -mx-4 -mt-4 sm:-mx-6 sm:-mt-6`}>
+          <div className="min-w-0 max-w-full">
+            <div className="mb-1 flex flex-col items-center gap-2" style={{ color: "var(--di-text-tertiary)" }}>
+              <Icono nombre="reloj" disco size={52} />
               <span className="text-[10px] font-semibold uppercase tracking-wider">Auditoría</span>
             </div>
-            <h2 id={titleId} className="truncate text-sm font-bold">
+            <h2 id={titleId} className={`${MODAL_TITULO_CLS} truncate`}>
               Historial de {userLabel}
             </h2>
-            <p className="mt-0.5 text-[11px] opacity-60">Quién cambió qué y cuándo (máx. 50 eventos).</p>
+            <p className={MODAL_DESCRIPCION_CLS}>Quién cambió qué y cuándo (máx. 50 eventos).</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded-lg p-1.5 transition hover:bg-black/5"
+            className={MODAL_CERRAR_CLS}
           >
-            <X className="h-4 w-4" />
+            <Icono nombre="cerrar" className="h-4 w-4" />
           </button>
         </div>
       )}
@@ -212,19 +213,19 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
         <div>
           {loading && (
             <div role="status" className="flex flex-col items-center gap-2 py-16 text-sm opacity-60">
-              <Loader2 className="h-5 w-5 animate-spin" style={{ color: "var(--color-flit-brand)" }} />
+              <Icono nombre="girador" className="h-5 w-5 animate-spin" style={{ color: "var(--color-flit-brand)" }} />
               Cargando historial…
             </div>
           )}
 
           {!loading && error && (
-            <div role="alert" className="space-y-3 py-10 text-center text-sm" style={{ color: "#FF4E00" }}>
+            <div role="alert" className="space-y-3 py-10 text-center text-sm" style={{ color: "var(--destructive)" }}>
               <p>{error}</p>
               <button
                 type="button"
                 onClick={() => void load()}
                 className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+                style={{ background: "var(--gradient-action)" }}
               >
                 Reintentar
               </button>
@@ -245,7 +246,7 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
                   <li
                     key={entry.id}
                     className="rounded-xl border px-3 py-2.5 text-xs"
-                    style={{ borderColor: failed ? "rgba(255,78,0,0.35)" : "#DFE5ED" }}
+                    style={{ borderColor: failed ? "var(--badge-danger-border)" : "var(--border)" }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold">{operationLabel(entry)}</p>
@@ -279,7 +280,7 @@ export function UserAuditHistoryDrawer({ userId, userLabel, onClose }: UserAudit
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] opacity-60">
                       <span>{entry.module ? (MODULE_LABEL[entry.module] ?? entry.module) : "—"}</span>
                       {failed && (
-                        <span style={{ color: "#FF4E00" }}>
+                        <span style={{ color: "var(--destructive)" }}>
                           No se completó{entry.errorCode ? ` (${entry.errorCode})` : ""}
                         </span>
                       )}

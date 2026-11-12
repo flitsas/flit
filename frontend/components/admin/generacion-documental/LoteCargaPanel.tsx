@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Download, FileSpreadsheet, Upload } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import {
   createStandaloneBatch,
@@ -157,11 +157,7 @@ export function LoteCargaPanel() {
   return (
     <section aria-labelledby="gd-lotes-title" className="flex flex-1 flex-col gap-4">
       <header className="flex items-start gap-2">
-        <FileSpreadsheet
-          className="mt-0.5 h-4 w-4 shrink-0"
-          style={{ color: "var(--color-flit-brand)" }}
-          aria-hidden="true"
-        />
+        <Icono nombre="reporte-detallado" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
         <div>
           <h2 id="gd-lotes-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Carga masiva
@@ -191,7 +187,7 @@ export function LoteCargaPanel() {
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ background: "var(--color-flit-brand)" }}
         >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
           {descargando ? "Preparando la plantilla…" : "Descargar plantilla (.xlsx)"}
         </button>
       </div>
@@ -245,7 +241,7 @@ export function LoteCargaPanel() {
 
         {/* El error no se comunica solo por color (CF-22): es texto, y `alert` lo anuncia. */}
         {error && (
-          <p role="alert" data-testid="lote-error" className="mt-3 text-xs" style={{ color: "#B42318" }}>
+          <p role="alert" data-testid="lote-error" className="mt-3 text-xs" style={{ color: "var(--destructive)" }}>
             {error}
           </p>
         )}
@@ -258,7 +254,7 @@ export function LoteCargaPanel() {
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ background: "var(--color-flit-brand)" }}
         >
-          <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           {subiendo ? "Cargando el lote…" : "Cargar y procesar"}
         </button>
 

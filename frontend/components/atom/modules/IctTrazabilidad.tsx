@@ -3,8 +3,10 @@
 // Trazabilidad ICT (Feature #11814). Módulo NUEVO: no sustituye a «Log ICT», que se queda como la
 // capa técnica de bajo nivel, ni a «Reportes ICT», que sigue siendo la vista agregada por compañía.
 // Lo que aporta es el nivel que faltaba: el trámite.
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from "./ModuleTitle";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -14,9 +16,9 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
   TipoTramiteSelect,
   agruparPorFamilia,
@@ -46,6 +48,8 @@ import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/cons
 import { DetalleTramiteIct } from "@/components/ict/DetalleTramiteIct";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 const TAMANO_PAGINA = TAMANO_DE_PAGINA_POR_DEFECTO;
 
@@ -68,11 +72,10 @@ const COLUMNAS = [
 
 const tdCls = "border-y px-4 py-3 align-middle";
 
-const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+// HU #14484 — el `.control` del prototipo y los botones `.btn sm`, los mismos de la barra de Trámites.
+const inputCls = TRAMITES_INPUT_CLS;
 
-const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
+const ghostCls = buttonClass({ variant: "secondary", size: "sm" });
 
 interface Filtros {
   desde: string;
@@ -298,19 +301,20 @@ export function IctTrazabilidad() {
         : "ready";
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Trazabilidad ICT"
         subtitle="Qué pasó con cada trámite que entró por la integración con terceros. Busca por número, placa o VIN y abre su recorrido completo."
       />
 
-      {/* Tira de contadores por estado, con la presentación de los KPIs de Trámites
+      {/* HU #14476 — chips de conteo del prototipo «Diseño Inteligente» («12 Recibidos»), solo con clases: el icono y la
+          barrita quedan ocultos y el conteo pasa delante. Antes: tira de contadores por estado, con la presentación de los KPIs de Trámites
           (`EstadoFunnel`): tarjeta única dividida en columnas, icono en pastilla del tono del
           estado, etiqueta y conteo. Los siete estados tienen color propio. */}
       <div
         role="group"
         aria-label="Contadores por estado"
-        className="grid shrink-0 grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+        className={`${CHIPS_FILTRO_FILA_CLS} shrink-0`}
       >
         {ESTADOS_ICT.map((estado) => {
           const meta = ESTADO_ICT[estado];
@@ -324,28 +328,27 @@ export function IctTrazabilidad() {
               aria-label={`${meta.label}: ${conteo} trámite${conteo === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
-              style={activo ? { background: meta.style.bg } : undefined}
+              className={`${CHIP_FILTRO_CLS} group`}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
               <span
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                className="hidden"
                 style={{ background: meta.style.bg }}
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
+              <span className="order-2 max-w-full truncate text-[0.8125rem]">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
+                className="order-1 text-base font-bold leading-none tabular-nums text-[color:var(--di-text-primary)] group-aria-pressed:text-[color:var(--di-action)]"
                 aria-hidden="true"
               >
                 {conteo}
               </span>
               {/* El filtro activo no depende solo del fondo. */}
               <span
-                className="h-0.5 w-6 rounded-full"
+                className="hidden"
                 style={{ background: activo ? meta.style.color : "transparent" }}
                 aria-hidden="true"
               />
@@ -359,7 +362,7 @@ export function IctTrazabilidad() {
           e.preventDefault();
           aplicar(filtros);
         }}
-        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
+        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-border bg-card p-3"
         role="search"
         aria-label="Filtros de la trazabilidad ICT"
       >
@@ -458,14 +461,13 @@ export function IctTrazabilidad() {
         )}
         {(hayFiltros || cargando) && (
           <button type="button" onClick={limpiar} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         )}
         <button
           type="submit"
           disabled={cargando}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ background: WIZARD_CTA_GRADIENT }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Buscar
         </button>
@@ -476,7 +478,7 @@ export function IctTrazabilidad() {
         // que quien navega con lector necesita que se le anuncie.
         <p
           role="status"
-          className="shrink-0 text-xs text-flit-primary/70 dark:text-white/70"
+          className="shrink-0 text-xs text-flit-primary/70 dark:text-muted-foreground"
         >
           {avisoExport}
         </p>
@@ -491,7 +493,7 @@ export function IctTrazabilidad() {
         emptyMessage="Ningún trámite de la integración coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {items && items.length > 0 && (
-          <>
+          <div className={TABLA_TARJETA_CLS}>
             {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada. */}
             <div className="overflow-x-auto">
@@ -547,7 +549,7 @@ export function IctTrazabilidad() {
               noun="trámites"
               ariaLabel="Paginación de la trazabilidad ICT"
             />
-          </>
+          </div>
         )}
       </UiStateBoundary>
     </div>
@@ -600,8 +602,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white ${TABLA_ROW_HOVER_CLS} ${
-          abierta ? "border-flit-brand/40" : "border-[#DFE5ED] dark:border-white/10"
+        className={`cursor-pointer bg-card text-flit-primary ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "border-flit-brand/40" : "border-border"
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -616,10 +618,7 @@ function FilaTramite({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{tramite.numero}</span>
@@ -637,15 +636,8 @@ function FilaTramite({
         <td className={tdCls}>{tramite.compania ?? "—"}</td>
         <td className={tdCls}>{tramite.radicador || "—"}</td>
         <td className={tdCls}>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-            style={estilo ? { background: estilo.bg, color: estilo.color } : undefined}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: estilo?.accent }}
-              aria-hidden="true"
-            />
+          <span {...etiquetaKit(estilo ? { c: estilo.border, ct: estilo.color } : "neutral")}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {estadoIctLabel(tramite.estado)}
           </span>
         </td>
@@ -655,7 +647,7 @@ function FilaTramite({
           ) : (
             <span className="flex flex-col gap-0.5">
               {señales.map((s) => (
-                <span key={s} className="text-[10px] font-semibold text-[#C2410C]">
+                <span key={s} className="text-[10px] font-semibold text-destructive">
                   {s}
                 </span>
               ))}
@@ -664,7 +656,7 @@ function FilaTramite({
         </td>
         <td className={`${tdCls} rounded-r-xl border-r`}>
           <span
-            className={`font-mono tabular-nums ${alta ? "font-semibold text-[#C2410C]" : "opacity-70"}`}
+            className={`font-mono tabular-nums ${alta ? "font-semibold text-[var(--badge-pending-fg)]" : "opacity-70"}`}
           >
             {formatearEspera(tramite.minutosEsperando)}
           </span>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCheck, Download, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -138,8 +138,8 @@ function Detalle({ id }: { id: string }) {
 
   return (
     <section className="flex flex-col gap-6">
-      <Link href="/ocr" className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline">
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+      <Link href="/ocr" className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Paquetes OCR
       </Link>
       <Encabezado
@@ -155,34 +155,34 @@ function Detalle({ id }: { id: string }) {
         acciones={
           <>
             <button type="button" className={controlCls(false)} onClick={carga.recargar}>
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="reintento" className="h-3.5 w-3.5" />
               Actualizar
             </button>
             <button type="button" className={controlCls(false)} disabled={ocupado} onClick={exportar}>
-              <Download className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
               Exportar
             </button>
             {opera && !cerrado && reprocesables > 0 && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setReprocesando(true)}>
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="reintento" className="h-3.5 w-3.5" />
                 Reprocesar incompletos
               </button>
             )}
             {opera && p.estado === "Pendiente" && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={iniciar}>
-                <Play className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="avance" className="h-3.5 w-3.5" />
                 Iniciar procesamiento
               </button>
             )}
             {opera && !cerrado && p.cantidadFallidos > 0 && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setDescartando(true)}>
-                <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="papelera" className="h-3.5 w-3.5" />
                 Descartar fallidos
               </button>
             )}
             {opera && !cerrado && lote.registrables > 0 && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={registrarCompletos}>
-                <CheckCheck className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="doble-check" className="h-3.5 w-3.5" />
                 {ocupado ? "Registrando…" : lote.registrables === 1 ? "Registrar el completo" : `Registrar los ${lote.registrables} completos`}
               </button>
             )}
@@ -192,11 +192,11 @@ function Detalle({ id }: { id: string }) {
 
       <div className="flex flex-wrap gap-2">
         <Contador etiqueta="Documentos" valor={p.cantidadDocumentos} />
-        <Contador etiqueta="En cola" valor={p.cantidadPendientes} clase="text-[#3B4FD6]" />
-        <Contador etiqueta="Completos" valor={p.cantidadCompletos} clase="text-[#1E7B3C]" />
-        <Contador etiqueta="Incompletos" valor={p.cantidadIncompletos} clase="text-[#B45309]" />
-        <Contador etiqueta="Fallidos" valor={p.cantidadFallidos} clase="text-[#B42318]" />
-        <Contador etiqueta="Duplicados" valor={p.cantidadDuplicados} clase="text-[#6D28D9]" />
+        <Contador etiqueta="En cola" valor={p.cantidadPendientes} clase="text-flit-brand-ink" />
+        <Contador etiqueta="Completos" valor={p.cantidadCompletos} clase="text-[var(--flit-success-ink)]" />
+        <Contador etiqueta="Incompletos" valor={p.cantidadIncompletos} clase="text-[var(--badge-warning-fg)]" />
+        <Contador etiqueta="Fallidos" valor={p.cantidadFallidos} clase="text-destructive" />
+        <Contador etiqueta="Duplicados" valor={p.cantidadDuplicados} clase="text-[var(--badge-purple-fg)]" />
         <Contador etiqueta="Registrados" valor={p.cantidadRegistrados} />
         <Contador etiqueta="Descartados" valor={p.cantidadDescartados} />
       </div>
@@ -261,8 +261,8 @@ function Detalle({ id }: { id: string }) {
                 <span className="flex flex-col">
                   {d.numeroComparendoExtraido ?? "—"}
                   {d.avisoNumero && d.numeroPorConfirmar !== false && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#B45309]" title={d.avisoNumero}>
-                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--badge-warning-fg)]" title={d.avisoNumero}>
+                      <Icono nombre="alerta" className="h-3 w-3" />
                       Verificar número
                     </span>
                   )}
@@ -275,7 +275,7 @@ function Detalle({ id }: { id: string }) {
               render: (d) => {
                 const texto = motivoDocumento(d);
                 if (!texto) return "—";
-                const tono = d.estado === "Fallido" ? "text-[#B42318]" : d.estado === "Duplicado" ? "text-[#6D28D9]" : d.estado === "Descartado" ? "opacity-60" : "text-[#B45309]";
+                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "opacity-60" : "text-[var(--badge-warning-fg)]";
                 return (
                   <span className={tono} title={d.estado === "Fallido" && d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>
                     {texto}
@@ -292,7 +292,7 @@ function Detalle({ id }: { id: string }) {
                 d.comparendoId ? (
                   <button
                     type="button"
-                    className="text-xs font-semibold text-[#3B4FD6] hover:underline"
+                    className="text-xs font-semibold text-flit-brand-ink hover:underline"
                     onClick={(e) => {
                       e.stopPropagation();
                       setVerComparendo(d.comparendoId);
@@ -301,7 +301,7 @@ function Detalle({ id }: { id: string }) {
                     Ver comparendo
                   </button>
                 ) : (
-                  <span className="text-xs font-semibold text-[#3B4FD6]">{opera && ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado) ? "Revisar" : "Ver"}</span>
+                  <span className="text-xs font-semibold text-flit-brand-ink">{opera && ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado) ? "Revisar" : "Ver"}</span>
                 ),
             },
           ]}
@@ -312,7 +312,7 @@ function Detalle({ id }: { id: string }) {
       <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} />
 
       {reprocesando && (
-        <Modal
+        <Modal icono="reintento"
           open
           onClose={() => setReprocesando(false)}
           busy={ocupado}
@@ -334,7 +334,7 @@ function Detalle({ id }: { id: string }) {
       )}
 
       {descartando && (
-        <Modal
+        <Modal icono="papelera"
           open
           onClose={() => setDescartando(false)}
           busy={ocupado}

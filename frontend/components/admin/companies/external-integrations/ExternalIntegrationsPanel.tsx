@@ -6,7 +6,7 @@
 // desactivar. Mismo modelo de tabla que Trámites: DataTable + RowActions + paginación numerada + filtros por
 // columna. El secreto vive solo en memoria mientras se muestra su modal.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, KeyRound, LockKeyhole, LockOpen, PlugZap, Power } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -145,11 +145,11 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     const estado = externalIntegrationStatus(integration);
     const name = integration.clientId;
     if (estado === "inactive") {
-      return [{ icon: Ban, label: `${name} está desactivada`, onClick: () => {}, disabled: true }];
+      return [{ icon: iconoComo("distinto"), label: `${name} está desactivada`, onClick: () => {}, disabled: true }];
     }
     const actions: RowAction[] = [
       {
-        icon: KeyRound,
+        icon: iconoComo("rol"),
         label: `Generar clave nueva para ${name}`,
         tone: "primary",
         disabled: estado === "blocked",
@@ -160,20 +160,20 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     actions.push(
       estado === "blocked"
         ? {
-            icon: LockOpen,
+            icon: iconoComo("candado-abierto"),
             label: `Desbloquear ${name}`,
             tone: "primary",
             onClick: () => setPending({ action: "unblock", integration }),
           }
         : {
-            icon: LockKeyhole,
+            icon: iconoComo("candado"),
             label: `Bloquear ${name}`,
             tone: "danger",
             onClick: () => setPending({ action: "block", integration }),
           },
     );
     actions.push({
-      icon: Power,
+      icon: iconoComo("encendido"),
       label: `Desactivar ${name}`,
       tone: "danger",
       onClick: () => setPending({ action: "deactivate", integration }),
@@ -192,7 +192,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
       render: (i) => (
         <>
           <span className="block font-mono text-sm font-semibold">{i.clientId}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">{i.displayName}</span>
+          <span className="block text-xs text-muted-foreground">{i.displayName}</span>
         </>
       ),
     },
@@ -204,7 +204,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     {
       key: "finalidad",
       header: "Finalidad",
-      cellClassName: "max-w-[280px] text-xs text-[#59677D] dark:text-white/78",
+      cellClassName: "max-w-[280px] text-xs text-muted-foreground",
       render: (i) => i.purpose,
     },
     {
@@ -259,19 +259,19 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex max-w-3xl flex-col gap-1">
-          <p className="text-sm text-[#59677D] dark:text-white/78">
+          <p className="text-sm text-muted-foreground">
             Aquí conectas el portal público de Persona Natural con esta compañía. La conexión solo puede consultar
             información, no modificarla. Al crearla o cambiar su clave, la clave secreta se muestra una sola vez.
           </p>
           {hasActive && (
-            <p className="text-xs text-[#59677D] dark:text-white/70">
+            <p className="text-xs text-muted-foreground">
               Esta compañía ya tiene una conexión activa. Para crear otra, desactiva primero la actual.
             </p>
           )}
         </div>
         <CreateButton
           label="Crear conexión"
-          icon={PlugZap}
+          icon={iconoComo("integraciones")}
           onClick={() => setCreating(true)}
           disabled={hasActive}
         />

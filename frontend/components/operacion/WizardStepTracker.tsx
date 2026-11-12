@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Check, Lock } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { WizardStep, WizardStepStatus } from '@/lib/api/types/procedure-runtime';
 import { reasonCopy, reasonsSummary, stepLabelCopy } from './wizard-copy';
 import { canNavigateToStep } from './wizard-navigation';
@@ -30,54 +30,26 @@ export function StepMarker({
   /** Modo condensado: el mismo marcador, un punto más pequeño. */
   compacto?: boolean;
 }) {
-  const tamano = compacto ? 'h-6 w-6' : 'h-8 w-8';
-  if (status === 'complete') {
+  // Marcador `.paso__num` de la propuesta (styles/tramites-propuesta.css): hecho en turquesa con
+  // check, el paso en curso relleno en azul de acción con halo, lo pendiente en cielo con aro gris
+  // y lo bloqueado con aro punteado y candado.
+  const base = `di-paso__num ${compacto ? 'h-6 w-6' : 'h-8 w-8'}`;
+  if (status === 'complete' && !active) {
     return (
-      <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full text-xs font-bold`}
-        style={{ background: '#8CC63F', color: '#fff' }}
-        aria-hidden="true"
-      >
-        <Check className={compacto ? 'h-3 w-3' : 'h-4 w-4'} strokeWidth={2.5} />
+      <span className={`${base} di-paso__num--hecho`} aria-hidden="true">
+        <Icono nombre="check" className={compacto ? 'h-3 w-3' : 'h-4 w-4'} />
       </span>
     );
   }
-  // Pendiente y bloqueado comparten la forma de la propuesta: círculo blanco con borde. El candado
-  // distingue el bloqueado sin recurrir a un relleno gris que rompe la línea de círculos.
-  if (status === 'locked') {
+  if (status === 'locked' && !active) {
     return (
-      <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
-        style={{ border: '2px solid #DFE5ED', color: '#59677D' }}
-        aria-hidden="true"
-      >
-        <Lock className={compacto ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
-      </span>
-    );
-  }
-  // Activo: círculo blanco con borde y número en azul, más un halo. El relleno azul sólido competía
-  // con el verde de los completos y hacía que el paso en curso pareciera otro estado terminado.
-  if (active) {
-    return (
-      <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
-        style={{
-          border: '2px solid var(--color-flit-brand)',
-          color: 'var(--color-flit-brand)',
-          boxShadow: '0 0 0 4px color-mix(in srgb, var(--color-flit-brand) 15%, transparent)',
-        }}
-        aria-hidden="true"
-      >
-        {index + 1}
+      <span className={`${base} di-paso__num--bloqueado`} aria-hidden="true">
+        <Icono nombre="candado" className={compacto ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
       </span>
     );
   }
   return (
-    <span
-      className={`grid ${tamano} shrink-0 place-items-center rounded-full border-2 bg-white text-xs font-bold dark:bg-[#162744]`}
-      style={{ borderColor: '#C5CDD8', color: '#59677D' }}
-      aria-hidden="true"
-    >
+    <span className={`${base} ${active ? 'di-paso__num--actual' : ''}`} aria-hidden="true">
       {index + 1}
     </span>
   );
@@ -109,9 +81,8 @@ export type WizardStepTrackerProps = {
 };
 
 /**
- * Asistente de seguimiento horizontal (patrón TimelineProcess / wizard FLIT).
- * Va dentro del chrome sticky del wizard (título + pasos). Etiquetas siempre
- * visibles; verde = completo, azul = paso activo. Sin card blanca contenedora.
+ * Asistente de seguimiento horizontal con el avance del UI Kit 2026 (`.kit-pasos`).
+ * Va dentro del chrome sticky del wizard (título + pasos). Verde = completo, azul = paso activo.
  */
 export function WizardStepTracker({
   steps,
@@ -130,38 +101,30 @@ export function WizardStepTracker({
   if (displaySteps.length === 0) return null;
 
   return (
-    <nav aria-label="Asistente de seguimiento" className={compacto ? 'w-full' : 'w-full py-1'}>
-      <ol className="flex w-full min-w-0 items-start gap-0">
+    // UI Kit 2026: avance horizontal del asistente (`.kit-pasos` / `.kit-paso`, como PasosHorizontal) a cualquier
+    // ancho, dentro de la tarjeta de la propuesta (`nav.card`). La línea entre pasos la dibuja
+    // `.kit-paso + .kit-paso::before` según `data-estado`: azul hasta el paso en curso (recorrido, no completitud).
+    <nav
+      aria-label="Asistente de seguimiento"
+      className="w-full rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)]"
+    >
+      <ol className={`kit-pasos w-full min-w-0 items-start ${compacto ? 'pt-2.5' : ''}`}>
         {displaySteps.map((s, i) => {
           const isActive = i === displayActive;
           const clickable = s.sourceIndexes.some((idx) => canNavigateToStep(steps, idx, viewOnly));
-          // Las líneas marcan RECORRIDO, no completitud: en la propuesta van en azul hasta el paso
-          // en curso. Coloreadas por `status === 'complete'` un paso saltado dejaba el hilo gris en
-          // medio del recorrido y parecía que el asistente se había roto.
-          const prevComplete = i <= displayActive;
-          const lineAfterGreen = i < displayActive;
+          // Las líneas marcan RECORRIDO, no completitud: van en azul hasta el paso en curso. Coloreadas por
+          // `status === 'complete'` un paso saltado dejaba el hilo gris en medio del recorrido.
+          const estadoVisual = isActive ? 'actual' : i < displayActive ? 'hecho' : 'pendiente';
           // Nombre en la nomenclatura del diseño; cae al del servidor si la clave no está mapeada.
           const label = stepLabelCopy(s.key, s.label);
           return (
             <li
               key={s.key}
-              className="relative flex min-w-0 flex-1 flex-col items-center"
+              // Condensado: círculo de 24 px, así que la línea baja a su centro (12 px).
+              className={`kit-paso min-w-0 ${compacto ? 'before:!top-[11px]' : ''}`}
+              data-estado={estadoVisual}
               aria-current={isActive ? 'step' : undefined}
             >
-              {i > 0 && (
-                <span
-                  className={`pointer-events-none absolute left-0 right-1/2 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: prevComplete ? 'var(--color-flit-brand)' : '#DFE5ED' }}
-                  aria-hidden="true"
-                />
-              )}
-              {i < displaySteps.length - 1 && (
-                <span
-                  className={`pointer-events-none absolute left-1/2 right-0 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: lineAfterGreen ? 'var(--color-flit-brand)' : '#DFE5ED' }}
-                  aria-hidden="true"
-                />
-              )}
               <button
                 type="button"
                 onClick={() => onGoToStep(sourceIndexForDisplayClick(s))}
@@ -169,7 +132,7 @@ export function WizardStepTracker({
                 // El foco estaba roto: la clase venía escrita como
                 // `focus-visible:ring-flit-brand/focus-visible:ring-offset-2` (sin separar), que
                 // Tailwind no reconoce — el paso activo no mostraba anillo alguno al tabular.
-                className={`relative z-10 flex w-full flex-col items-center rounded-lg px-1 text-center outline-none disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 ${compacto ? 'gap-1' : 'gap-2'}`}
+                className={`kit-paso__boton relative z-10 rounded-[9px] px-1 outline-none disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)] ${compacto ? 'gap-1' : 'gap-1.5'}`}
                 aria-label={`Paso ${i + 1}: ${label} (${s.status})`}
               >
                 <StepMarker status={s.status} index={i} active={isActive} compacto={compacto} />
@@ -179,16 +142,9 @@ export function WizardStepTracker({
                       accesible del botón los conserva enteros. Los círculos siguen contando la
                       historia a la vista: cuántos pasos hay, cuáles van y en cuál estás. */}
                   <span
-                    className={`block truncate text-xs leading-snug ${
-                      isActive ? 'font-bold' : 'font-medium'
-                    } ${compacto && !isActive ? 'sr-only' : ''}`}
-                    style={
-                      isActive
-                        ? { color: 'var(--color-flit-brand)' }
-                        : s.status === 'complete'
-                          ? { color: '#59677D' }
-                          : { color: '#59677D' }
-                    }
+                    className={`kit-paso__etiqueta block truncate leading-snug ${
+                      compacto && !isActive ? 'sr-only' : ''
+                    }`}
                     title={label}
                   >
                     {label}
@@ -200,7 +156,7 @@ export function WizardStepTracker({
                   {!compacto && isActive && s.status === 'incomplete' && s.reasons.length > 0 && (
                     <span
                       className="mt-1 block truncate text-xs"
-                      style={{ color: 'var(--badge-warning-fg)' }}
+                      style={{ color: 'var(--di-text-tertiary)' }}
                       // El detalle completo queda al alcance sin ocupar la línea de tiempo.
                       title={s.reasons.map(reasonCopy).join(' · ')}
                     >

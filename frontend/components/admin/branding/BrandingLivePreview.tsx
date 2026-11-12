@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, type CSSProperties } from "react";
-import { FileText, Home, Settings } from "lucide-react";
+import { Home } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { isValidHexColor } from "@/lib/brand/contrast";
 import { deriveBrandSurfaces } from "@/lib/brand/derive-tokens";
 import type { BrandColors } from "@/lib/api/branding";
@@ -16,6 +17,9 @@ export interface BrandingLivePreviewProps {
  * Así se verá la plataforma con estos colores, mientras se eligen: encabezado, menú, botones,
  * enlace y chip pintados con los MISMOS tokens que usa la aplicación (`--color-flit-*`,
  * `--nav-activo`), redefinidos solo dentro de este recuadro.
+ *
+ * Homologación (HU #14510): el marco (borde, pie y aviso) va con los tokens del tema; el interior es la plataforma del
+ * organismo en claro, así que sus superficies blancas y grises fijas son parte del dato, igual que sus colores.
  */
 export function BrandingLivePreview({ colors, platformName, logoUrl }: BrandingLivePreviewProps) {
   const scope = useMemo<CSSProperties | null>(() => {
@@ -45,7 +49,7 @@ export function BrandingLivePreview({ colors, platformName, logoUrl }: BrandingL
 
   if (!scope) {
     return (
-      <div className="rounded-2xl border p-4 text-xs opacity-70" style={{ borderColor: "#DFE5ED" }}>
+      <div className="rounded-2xl border border-border bg-card p-4 text-xs text-muted-foreground">
         Elige colores válidos para ver cómo quedará tu plataforma.
       </div>
     );
@@ -53,8 +57,8 @@ export function BrandingLivePreview({ colors, platformName, logoUrl }: BrandingL
 
   return (
     <figure
-      className="overflow-hidden rounded-2xl border shadow-sm"
-      style={{ ...scope, borderColor: "#DFE5ED" }}
+      className="overflow-hidden rounded-2xl border border-border shadow-[var(--shadow-card)]"
+      style={scope}
       aria-label="Vista previa de la plataforma con tus colores"
       data-testid="branding-live-preview"
     >
@@ -83,7 +87,7 @@ export function BrandingLivePreview({ colors, platformName, logoUrl }: BrandingL
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span
               className="rounded-xl px-3 py-1.5 text-[11px] font-semibold"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))", color: "var(--preview-on)" }}
+              style={{ background: "linear-gradient(90deg,var(--brand-ink) 0%,var(--brand-accent) 100%)", color: "var(--preview-on)" }}
             >
               Crear trámite
             </span>
@@ -104,14 +108,14 @@ export function BrandingLivePreview({ colors, platformName, logoUrl }: BrandingL
             <Home className="h-3 w-3" aria-hidden /> Inicio
           </span>
           <span className="flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-medium text-[#59677d]">
-            <FileText className="h-3 w-3" aria-hidden /> Trámites
+            <Icono nombre="documento" className="h-3 w-3" /> Trámites
           </span>
           <span className="flex items-center gap-1 rounded-full bg-[var(--nav-app-bg)] px-3 py-1 text-[10px] font-medium text-[#59677d]">
-            <Settings className="h-3 w-3" aria-hidden /> Ajustes
+            <Icono nombre="ajustes" className="h-3 w-3" /> Ajustes
           </span>
         </div>
       </div>
-      <figcaption className="border-t bg-white px-3 py-1.5 text-[10px] opacity-60" style={{ borderColor: "#DFE5ED" }}>
+      <figcaption className="border-t border-border bg-card px-3 py-1.5 text-[10px] text-muted-foreground">
         Así se verá en toda la plataforma: menú, botones, enlaces y títulos.
       </figcaption>
     </figure>

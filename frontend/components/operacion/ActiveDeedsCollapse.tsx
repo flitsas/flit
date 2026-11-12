@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { WizardAccordion } from './WizardAccordion';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -91,7 +91,7 @@ export function ActiveDeedsList({ loading, deeds, error }: ActiveDeedsState) {
             </p>
           )}
           {error && (
-            <p className="text-xs" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
+            <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert" aria-live="polite">
               {error}
             </p>
           )}
@@ -108,7 +108,7 @@ export function ActiveDeedsList({ loading, deeds, error }: ActiveDeedsState) {
                   // (escritura × compañía), de modo que una misma compañía (NIT) puede aparecer en
                   // varias filas —una por escritura vigente— (Feature #10929).
                   key={deed.id}
-                  className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3.5 dark:bg-[#162744]"
+                  className="flex items-start justify-between gap-3 rounded-2xl border bg-card px-4 py-3.5"
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
@@ -157,7 +157,7 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
   return (
     <WizardAccordion
       title="Escrituras vigentes de la compañía"
-      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />}
+      icon={<Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />}
       open={open}
       onOpenChange={setOpen}
     >

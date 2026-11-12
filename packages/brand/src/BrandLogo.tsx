@@ -16,7 +16,11 @@ const FLIT_ASSETS = {
   dark: "/assets/logo-flit-dark.svg",
 } as const;
 
-export type BrandLogoVariant = keyof typeof FLIT_ASSETS;
+/**
+ * `white`/`dark` fijan el logo; `auto` (UI kit «Diseño Inteligente», HU #14478) pinta el de tinta en tema claro y el
+ * blanco en oscuro. Con un logo de Marca Blanca siempre es uno solo.
+ */
+export type BrandLogoVariant = keyof typeof FLIT_ASSETS | "auto";
 
 export function BrandLogo({
   brand,
@@ -34,8 +38,17 @@ export function BrandLogo({
 }) {
   const contextBrand = useBrand();
   const active = brand ?? contextBrand;
-  const src = active.logoUrl ?? FLIT_ASSETS[variant];
   const label = alt ?? active.platformName;
 
-  return <img src={src} alt={label} className={className} />;
+  if (active.logoUrl) return <img src={active.logoUrl} alt={label} className={className} />;
+  if (variant !== "auto") return <img src={FLIT_ASSETS[variant]} alt={label} className={className} />;
+
+  // Las dos imágenes alternan con la clase `dark`; la oculta queda en display:none y no entra al árbol de accesibilidad.
+  const cls = className ?? "";
+  return (
+    <>
+      <img src={FLIT_ASSETS.dark} alt={label} className={`${cls} dark:hidden!`} />
+      <img src={FLIT_ASSETS.white} alt={label} className={`${cls} hidden! dark:block!`} />
+    </>
+  );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Columns3 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { controlCls } from "@/components/ui/estilos";
 
 export interface OpcionColumna {
@@ -67,7 +67,7 @@ export function SelectorColumnas({
         onClick={() => setAbierto((a) => !a)}
         className={controlCls(false)}
       >
-        <Columns3 className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="rejilla" className="h-3.5 w-3.5" />
         Columnas
       </button>
       {abierto && (
@@ -76,11 +76,17 @@ export function SelectorColumnas({
           id={id}
           role="dialog"
           aria-label="Elegir columnas visibles"
-          className="absolute left-0 top-full z-30 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border border-[#DFE5ED] bg-white shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-30 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-foreground shadow-[var(--shadow-modal)]"
         >
-          <div className="flex shrink-0 items-baseline justify-between gap-2 border-b border-[#DFE5ED] px-4 py-2.5 dark:border-white/10">
-            <span className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Columnas</span>
-            <span className="text-[11px] tabular-nums opacity-50">
+          {/* Cabecera blanca del Modal del UI Kit 2026, repintada en su sitio: título en el color de título y línea inferior. */}
+          <div className="relative flex shrink-0 items-baseline justify-between gap-2 overflow-clip border-b border-[color:var(--di-border)] bg-card px-5 py-3.5 text-[color:var(--di-heading)]">
+            <span
+              aria-hidden="true"
+              className="hidden"
+            />
+            <span className="relative z-[1] text-sm font-semibold">Columnas</span>
+            {/* Contador en la pastilla del kit (disco --kit-hover, texto azul AA). */}
+            <span className="relative z-[1] rounded-full bg-[color:var(--kit-hover)] px-2 py-0.5 text-[11px] tabular-nums text-[color:var(--kit-azul-texto)]">
               {visibles.length} de {columnas.length}
             </span>
           </div>
@@ -91,7 +97,7 @@ export function SelectorColumnas({
               return (
                 <label
                   key={c.clave}
-                  className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition hover:bg-flit-brand/10 ${unica ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition hover:bg-secondary ${unica ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                 >
                   <input type="checkbox" checked={marcada} disabled={unica} onChange={() => alternar(c.clave)} className="h-3.5 w-3.5 shrink-0 accent-flit-brand" />
                   <span className="min-w-0 flex-1 truncate">{c.texto}</span>
@@ -99,7 +105,7 @@ export function SelectorColumnas({
               );
             })}
           </div>
-          <p className="shrink-0 border-t border-[#DFE5ED] px-4 py-2 text-[10px] opacity-60 dark:border-white/10">Debes mantener al menos una columna visible.</p>
+          <p className="shrink-0 border-t border-[color:var(--di-divider)] px-5 py-2.5 text-[11px] text-muted-foreground">Debes mantener al menos una columna visible.</p>
         </div>
       )}
     </div>

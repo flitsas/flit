@@ -4,7 +4,7 @@
 // de persona, con el mismo proceso de borrador, vista previa, publicar y retirar que el portal de cada organismo. La
 // sección es la misma (`PortalPnDesignSection`) con la API de la web y sus textos inyectados. No lleva banner: los de la
 // web se administran en Contenido, y aquí un acceso lleva a ellos.
-import { ArrowRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   deleteMarcaWebLogo,
   fetchMarcaWebImage,
@@ -75,7 +75,7 @@ export function DisenoWebTab({ onIrABanners }: { onIrABanners: () => void }) {
       accesoBanner={
         <div
           className="flex flex-col gap-2 rounded-xl border px-3 py-3"
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
         >
           <p className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Banners de la web
@@ -86,10 +86,10 @@ export function DisenoWebTab({ onIrABanners }: { onIrABanners: () => void }) {
           <button
             type="button"
             onClick={onIrABanners}
-            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold"
-            style={{ borderColor: "#162744", color: "#162744" }}
+            className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold"
+            style={{ borderColor: "var(--color-flit-primary)", color: "var(--color-flit-primary)" }}
           >
-            Ir a los banners de Contenido <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            Ir a los banners de Contenido <Icono nombre="derecha" className="h-3.5 w-3.5" />
           </button>
         </div>
       }

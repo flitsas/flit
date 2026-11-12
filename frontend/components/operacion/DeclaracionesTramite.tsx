@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { isRuesPreviewUnavailable, tramitesClient } from '@/lib/api/tramites-client';
 import { shortRuesRazonSocial } from '@/lib/tramites/rues-razon-social';
 import type {
@@ -257,7 +257,7 @@ export function DeclaracionesTramite({
           <select> simple es más accesible y más rápido de operar que un combobox con buscador
           (SearchableSelect), pensado para catálogos largos. */}
       {esMatricula && (
-        <div className={noCardWrapper ? 'space-y-3' : 'rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-3'}>
+        <div className={noCardWrapper ? 'space-y-3' : 'rounded-2xl border bg-card p-4 space-y-3'}>
           {!noCardWrapper && (
             <WizardCardHeader
               title="Tipo de servicio del vehículo"
@@ -270,7 +270,7 @@ export function DeclaracionesTramite({
               Cargando tipos de servicio…
             </p>
           ) : tiposServicioError ? (
-            <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+            <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
               {tiposServicioError}
             </p>
           ) : (
@@ -333,7 +333,7 @@ export function DeclaracionesTramite({
                           style={{ background: WIZARD_BTN_SOLID }}
                           aria-label="Buscar empresa en RUES"
                         >
-                          <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                          <Icono nombre="buscar" className="h-3.5 w-3.5" />
                           {ruesLoading ? 'Consultando…' : 'Buscar'}
                         </button>
                       )}
@@ -342,7 +342,7 @@ export function DeclaracionesTramite({
                       <p
                         id="tramite-rues-error"
                         className="mt-1.5 text-xs font-medium leading-tight"
-                        style={{ color: '#FF4E00' }}
+                        style={{ color: 'var(--destructive)' }}
                         role="alert"
                         aria-live="polite"
                       >
@@ -356,7 +356,7 @@ export function DeclaracionesTramite({
                       sobre amber-500/10 (patrón de OtNowTab/OtReviewersTab), AA en ambos modos. */}
                   {empresaVinculadoraRazonSocial === null && (
                     <p
-                      className="w-full rounded-xl border border-[#F9AC00] bg-[rgba(249,172,0,0.08)] px-3 py-2 text-xs leading-relaxed text-[#8a6000] dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+                      className="w-full rounded-xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-3 py-2 text-xs leading-relaxed text-[var(--badge-warning-fg)]"
                       role="note"
                     >
                       {AVISO_EMPRESA_VINCULADORA}
@@ -376,7 +376,7 @@ export function DeclaracionesTramite({
                       </label>
                       <output
                         id="tramite-empresa-vinculadora-razon-social"
-                        className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#EEF5FF] px-3 py-2 text-xs leading-relaxed dark:bg-[#162744] ${
+                        className={`block w-full whitespace-pre-line break-words rounded-xl border bg-secondary px-3 py-2 text-xs leading-relaxed ${
                           empresaVinculadoraRazonSocial ? '' : 'opacity-70'
                         }`}
                       >
@@ -392,11 +392,11 @@ export function DeclaracionesTramite({
           {ruesUnavailable && (
             <div
               className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
-              style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+              style={{ background: 'var(--badge-warning-bg)', border: '1px solid var(--badge-warning-border)' }}
               role="alert"
               aria-live="assertive"
             >
-              <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+              <span className="text-xs font-medium" style={{ color: 'var(--badge-warning-fg)' }}>
                 {RUES_NO_DISPONIBLE}
               </span>
               <button
@@ -412,7 +412,7 @@ export function DeclaracionesTramite({
           )}
 
           {saveError && (
-            <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
+            <p className="text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
               {saveError}
             </p>
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, FileText, Scale } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DrFlitHelpResult } from "./dr-flit-types";
 
 export function DrFlitHelpResults({
@@ -32,9 +32,9 @@ export function DrFlitHelpResults({
               aria-hidden="true"
             >
               {item.primarySource ? (
-                <Scale className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
+                <Icono nombre="mazo" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
               ) : (
-                <BookOpen className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
+                <Icono nombre="ayuda" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
               )}
             </span>
             <span className="min-w-0 flex-1">
@@ -75,7 +75,7 @@ export function DrFlitHelpResults({
                 color: "var(--dr-flit-brand-title)",
               }}
             >
-              <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="documento" className="h-3.5 w-3.5" />
               {item.sourceLabel ?? "Abrir la fuente"}
             </button>
           ) : null}

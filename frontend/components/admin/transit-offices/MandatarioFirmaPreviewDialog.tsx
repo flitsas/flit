@@ -1,7 +1,7 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useEffect, useState } from "react";
-import { FileSignature } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { fetchMandateSignerSignatureImage } from "@/lib/api/admin-mandate-signers";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
@@ -29,7 +29,7 @@ export function MandatarioFirmaPreviewDialog({
     <Modal
       open
       onClose={onClose}
-      icon={FileSignature}
+      icono="firma"
       title={`Firma de ${signer.fullName}`}
       description="Cómo se verá en el contrato de mandato"
       size="md"
@@ -57,14 +57,14 @@ export function MandatarioFirmaPreviewDialog({
         ) : null}
       </div>
 
-      <p className="mt-4 text-xs leading-relaxed text-[#59677D] dark:text-white/65" data-testid="ot-mandatos-firma-preview-body">
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground" data-testid="ot-mandatos-firma-preview-body">
         {textoPreview(tipo)}
       </p>
       <div className="mt-5 flex justify-end">
         <button
           type="button"
           onClick={onClose}
-          className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white bg-flit-brand"
+          className={buttonClass()}
         >
           Cerrar
         </button>
@@ -129,14 +129,14 @@ function MandatarioFirmaPreviewImage({
   }, [officeId, signerId]);
 
   if (imageStatus === "loading") {
-    return <p className="text-xs text-[#59677D] dark:text-white/65">Cargando imagen de la firma…</p>;
+    return <p className="text-xs text-muted-foreground">Cargando imagen de la firma…</p>;
   }
   if (imageStatus === "error") {
-    return <p className="text-xs text-[#C81E1E]">{imageError}</p>;
+    return <p className="text-xs text-destructive">{imageError}</p>;
   }
   if (imageStatus === "empty") {
     return (
-      <p className="text-xs text-[#59677D] dark:text-white/65">No hay imagen custodiada para este mandatario.</p>
+      <p className="text-xs text-muted-foreground">No hay imagen custodiada para este mandatario.</p>
     );
   }
   if (imageStatus === "ready" && imageUrl) {
@@ -146,7 +146,7 @@ function MandatarioFirmaPreviewImage({
       <img
         src={imageUrl}
         alt={`Firma de ${signerName}`}
-        className="max-h-40 w-auto max-w-full rounded-lg border border-[#DFE5ED] bg-white p-3 dark:border-white/10"
+        className="max-h-40 w-auto max-w-full rounded-lg border border-border bg-white p-3"
       />
     );
   }
@@ -156,8 +156,8 @@ function MandatarioFirmaPreviewImage({
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="font-semibold text-[#59677D] dark:text-white/55">{label}</dt>
-      <dd className="mt-0.5 text-[#162244] dark:text-white">{value}</dd>
+      <dt className="font-semibold text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-foreground">{value}</dd>
     </div>
   );
 }

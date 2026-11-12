@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList, FileSpreadsheet } from "lucide-react";
+import { ShieldOff } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -28,6 +30,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
@@ -47,14 +50,14 @@ import { formatFechaHora } from "@/lib/format/date";
 
 // suspender/desactivar pero NO eliminar; el botón Eliminar y la pestaña Eliminados son SuperAdmin-only.
 const ALL_TABS = [
-  { id: "usuarios", label: "Usuarios", icon: Users },
-  { id: "roles", label: "Roles y permisos", icon: Shield },
-  { id: "clientes-ict", label: "Clientes ICT", icon: KeyRound },
+  { id: "usuarios", label: "Usuarios", icon: iconoComo("usuarios") },
+  { id: "roles", label: "Roles y permisos", icon: iconoComo("escudo") },
+  { id: "clientes-ict", label: "Clientes ICT", icon: iconoComo("rol") },
   // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
-  { id: "clientes-integracion", label: "Clientes de integración", icon: PlugZap },
+  { id: "clientes-integracion", label: "Clientes de integración", icon: iconoComo("integraciones") },
   // HU #13654 (Feature #13103): auditoría de permisos individuales, solo Super Admin en el Panel SA.
-  { id: "auditoria-permisos", label: "Auditoría de permisos", icon: ClipboardList },
-  { id: "eliminados", label: "Eliminados", icon: Trash2 },
+  { id: "auditoria-permisos", label: "Auditoría de permisos", icon: iconoComo("portapapeles") },
+  { id: "eliminados", label: "Eliminados", icon: iconoComo("papelera") },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]["id"];
@@ -248,7 +251,7 @@ export function Usuarios() {
 
     if (!isInvitationRow(u) && isSuperAdmin) {
       actions.push({
-        icon: History,
+        icon: iconoComo("reloj"),
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
@@ -259,7 +262,7 @@ export function Usuarios() {
     // abren para ver el aviso deshabilitado (AC5), las canceladas no tienen cuenta ni invitación vigente.
     if (canConfigurePermissions && u.status !== "cancelled") {
       actions.push({
-        icon: ShieldCheck,
+        icon: iconoComo("escudo"),
         label: `Permisos por módulo de ${u.fullName}`,
         tone: "primary",
         onClick: () => setPermissionsTarget(u),
@@ -271,7 +274,7 @@ export function Usuarios() {
     // — el `id` de esas filas es un invitationId, no hay cuenta real que editar.
     if (!isInvitationRow(u)) {
       actions.push({
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         label: `Editar usuario ${u.fullName}`,
         tone: "primary",
         onClick: () => setEditTarget(u),
@@ -281,7 +284,7 @@ export function Usuarios() {
     // Restablecer contraseña: SuperAdmin o AdminCompany (HU-B auth-parity; el API acota al tenant).
     if (!isInvitationRow(u) && canResetPassword) {
       actions.push({
-        icon: KeyRound,
+        icon: iconoComo("rol"),
         label: `Restablecer contraseña de ${u.fullName}`,
         onClick: () => setResetPasswordTarget(u),
       });
@@ -298,13 +301,13 @@ export function Usuarios() {
         });
       } else {
         actions.push({
-          icon: Clock,
+          icon: iconoComo("reloj"),
           label: `Suspender temporalmente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
         });
         actions.push({
-          icon: Ban,
+          icon: iconoComo("distinto"),
           label: `Desactivar indefinidamente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
@@ -317,7 +320,7 @@ export function Usuarios() {
     // Restaurar sigue siendo exclusivo de SuperAdmin (pestaña "Eliminados").
     if (!isInvitationRow(u) && isSuperAdmin && u.id !== currentUserId) {
       actions.push({
-        icon: Trash2,
+        icon: iconoComo("papelera"),
         label: `Eliminar usuario ${u.fullName}`,
         tone: "danger",
         onClick: () => setDeleteTarget(u),
@@ -328,7 +331,7 @@ export function Usuarios() {
     // tiene nada que cancelar — su acción es "Reactivar", ver extraActionsFor de UsersTable).
     if (u.status === "pending") {
       actions.push({
-        icon: MailX,
+        icon: iconoComo("correo"),
         label: `Cancelar invitación a ${u.fullName}`,
         tone: "danger",
         onClick: () => setCancelTarget(u),
@@ -370,7 +373,7 @@ export function Usuarios() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
@@ -385,12 +388,12 @@ export function Usuarios() {
               <button
                 type="button"
                 onClick={() => setBulkOpen(true)}
-                className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl border border-[#DFE5ED] bg-white text-sm font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
+                className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl border border-[color:var(--di-border)] bg-card text-sm font-semibold text-flit-primary transition hover:bg-[var(--kit-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-foreground"
               >
-                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="reporte-detallado" className="h-4 w-4" />
                 Importar Excel
               </button>
-              <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
+              <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "var(--gradient-action)" }}>
                 Invitar usuario
               </button>
             </div>
@@ -398,7 +401,7 @@ export function Usuarios() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
+      <div className="flex flex-wrap items-center gap-1 border-b border-border shrink-0">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -486,7 +489,7 @@ export function Usuarios() {
         <div className="flex flex-col gap-3">
           {deletedLoading && <CarLoaderModal label="Cargando usuarios eliminados…" />}
           {!deletedLoading && deletedError && (
-            <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+            <div role="alert" className="py-12 text-center text-sm" style={{ color: "var(--destructive)" }}>{deletedError}</div>
           )}
           {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
             <div className="py-12 text-center text-sm opacity-60">
@@ -495,7 +498,7 @@ export function Usuarios() {
           )}
           {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
             <>
-              <div className="overflow-x-auto">
+              <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
                 <table
                   aria-label="Usuarios eliminados"
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
@@ -521,23 +524,23 @@ export function Usuarios() {
                         // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
                         // key cuando el JOIN produce N filas por usuario con N roles.
                         key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                        className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                       >
-                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <p className="font-semibold">{u.fullName}</p>
                           <p className="text-[10px] opacity-60">{u.email}</p>
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <span className="block truncate opacity-70">{u.tenantName ?? "—"}</span>
                         </td>
-                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <span className="opacity-70">{formatDateTime(u.deletedAt)}</span>
                         </td>
-                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "var(--border)" }}>
                           <RowActions
                             actions={[
                               {
-                                icon: RotateCcw,
+                                icon: iconoComo("reintento"),
                                 label: `Restaurar usuario ${u.fullName}`,
                                 tone: "primary",
                                 onClick: () => setRestoreTarget(u),
@@ -571,7 +574,7 @@ export function Usuarios() {
         // no se duplica aquí. El SuperAdmin solo recibe un atajo directo al módulo RBAC.
         <div className="flex flex-col items-center gap-3 py-14 text-center">
           <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)" }}>
-            <Shield className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+            <Icono nombre="escudo" className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} />
           </div>
           <div>
             <p className="text-sm font-semibold">La gestión de roles del sistema vive en el módulo RBAC</p>
@@ -582,10 +585,10 @@ export function Usuarios() {
           <Link
             href="/?m=rbac"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             Ir a Roles y permisos (RBAC)
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="derecha" className="h-3.5 w-3.5" />
           </Link>
         </div>
       )}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import { Eye, ImageIcon, Mail } from "lucide-react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { ImageIcon } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { BrandColors, BrandingSource } from "@/lib/api/branding";
@@ -75,8 +77,8 @@ export function BrandingPreview({
   }, [open]);
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" icon={Eye} title="Previsualización de la marca">
-      <div className="flex gap-2 border-b pb-2" style={{ borderColor: "#DFE5ED" }} role="tablist" aria-label="Superficies de previsualización">
+    <Modal open={open} onClose={onClose} size="lg" icono="ojo" title="Previsualización de la marca">
+      <div className={PESTANAS_LISTA_CLS} role="tablist" aria-label="Superficies de previsualización">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -84,12 +86,7 @@ export function BrandingPreview({
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-            style={
-              tab === t.id
-                ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
-                : { background: "transparent", color: "var(--color-flit-primary)" }
-            }
+            className={pestanaClass(tab === t.id)}
           >
             {t.label}
           </button>
@@ -225,7 +222,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
       {source === "company" && (
         <div
           className="inline-flex w-fit gap-1 rounded-full border p-0.5"
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
           role="group"
           aria-label="Fuente de la muestra de correo"
         >
@@ -238,8 +235,8 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={
                 emailSource === value
-                  ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
-                  : { background: "transparent", color: "var(--color-flit-primary)" }
+                  ? { background: "var(--di-accent)", color: "var(--di-on-accent)" }
+                  : { background: "transparent", color: "var(--di-text-secondary)" }
               }
             >
               {value === "draft" ? "Borrador" : "Publicada"}
@@ -265,14 +262,14 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
             </p>
             {theme && (
               <p className="flex items-center gap-1.5 text-[11px] opacity-70" data-testid="branding-preview-email-theme">
-                <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="correo" className="h-3.5 w-3.5 shrink-0" />
                 {theme.platformName}
                 {theme.version !== undefined ? ` · v${theme.version}` : ""}
                 {theme.senderName ? ` · ${theme.senderName}` : ""}
               </p>
             )}
             {theme?.kind === "draft-partial" && (
-              <p role="status" className="text-[11px] font-semibold" style={{ color: "#F9AC00" }}>
+              <p role="status" className="text-[11px] font-semibold" style={{ color: "var(--badge-warning-fg)" }}>
                 Borrador incompleto: se completa con la identidad de FLIT.
               </p>
             )}
@@ -284,7 +281,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               srcDoc={sample.html}
               sandbox=""
               className="h-[420px] w-full rounded-xl border"
-              style={{ borderColor: "#DFE5ED" }}
+              style={{ borderColor: "var(--border)" }}
               data-testid="branding-preview-email-iframe"
             />
           </div>

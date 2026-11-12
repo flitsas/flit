@@ -187,11 +187,11 @@ function OperationalPanel({
       {cola.enEsperaDelCliente > 0 && (
         // El desglose no suma el total a propósito: se decidió no mostrar las esperas del cliente
         // pero sí dejarlas dentro del conteo. Decirlo evita que el número parezca un error.
-        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+        <p className="text-[11px] text-[color:var(--di-warning)]">
           El desglose suma {explicados} y hay {movimiento.pendientesTotal} pendientes: los{" "}
           <button
             type="button"
-            className="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200"
+            className="underline underline-offset-2 hover:opacity-80"
             onClick={() =>
               onOpenDrilldown(OT_DRILLDOWN_BUCKETS.enEsperaDelCliente, "En espera del cliente")
             }
@@ -229,7 +229,7 @@ function OperationalPanel({
       {antiguedad.prioritariosEstancados > 0 && (
         <button
           type="button"
-          className="rounded-xl bg-amber-50 px-4 py-3 text-left text-xs text-amber-800 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+          className="rounded-xl bg-[var(--di-warning-soft)] text-[color:var(--di-warning)] px-4 py-3 text-left text-xs hover:brightness-95 dark:hover:brightness-110"
           data-testid="ot-reports-prioritarios"
           onClick={() =>
             onOpenDrilldown(OT_DRILLDOWN_BUCKETS.prioritariosEstancados, "Prioritarios estancados")

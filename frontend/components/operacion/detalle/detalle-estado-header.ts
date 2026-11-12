@@ -1,11 +1,5 @@
-import {
-  AlertTriangle,
-  Ban,
-  Check,
-  Clock,
-  FileText,
-  type LucideIcon,
-} from 'lucide-react';
+import type { ComponentType } from "react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 
@@ -14,7 +8,7 @@ export interface DetalleEstadoHeader {
   label: string;
   /** Tono del estado — mismo `accent` que fila/filtros (`estadoChipStyle`). */
   color: string;
-  Icon: LucideIcon;
+  Icon: ComponentType<{ className?: string }>;
   /** Banner contextual opcional bajo el header. */
   alert: string | null;
   pendiente: boolean;
@@ -31,7 +25,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Check,
+        Icon: iconoComo("check"),
         alert: null,
         pendiente: false,
       };
@@ -39,7 +33,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Ban,
+        Icon: iconoComo("distinto"),
         alert: 'Trámite anulado. Requiere radicación nueva si aplica.',
         pendiente: false,
       };
@@ -48,7 +42,7 @@ export function detalleEstadoHeader(
         // ADR-0059 — «Rechazado preasignación» cuando el OT rechazó desde la cola de placa.
         label: estadoLabelConOrigen(estado, rejectedFrom),
         color,
-        Icon: Ban,
+        Icon: iconoComo("distinto"),
         alert:
           rejectedFrom === 'preasignacion'
             ? 'Trámite rechazado por el Organismo de Tránsito antes de asignar placa. Al subsanarlo y radicarlo de nuevo vuelve a la cola de placa.'
@@ -63,7 +57,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Ban,
+        Icon: iconoComo("distinto"),
         alert: 'Aprobación revocada por el Organismo de Tránsito. La placa quedó liberada.',
         pendiente: false,
       };
@@ -72,7 +66,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Clock,
+        Icon: iconoComo("reloj"),
         alert: 'Radicado sin placa: el Organismo de Tránsito debe asignarla.',
         pendiente: true,
       };
@@ -80,7 +74,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Check,
+        Icon: iconoComo("check"),
         alert: 'Placa asignada por el Organismo de Tránsito. Gestiona el SOAT y los impuestos y envía el trámite al OT.',
         pendiente: true,
       };
@@ -88,7 +82,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: FileText,
+        Icon: iconoComo("documento"),
         alert: 'Trámite en borrador: faltan pasos por completar.',
         pendiente: false,
       };
@@ -96,7 +90,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Check,
+        Icon: iconoComo("check"),
         alert: null,
         pendiente: false,
       };
@@ -104,7 +98,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: Clock,
+        Icon: iconoComo("reloj"),
         alert: null,
         pendiente: false,
       };
@@ -112,7 +106,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: AlertTriangle,
+        Icon: iconoComo("alerta"),
         alert: 'Trámite en subsanación activa.',
         pendiente: true,
       };
@@ -120,7 +114,7 @@ export function detalleEstadoHeader(
       return {
         label: estadoLabel(estado),
         color,
-        Icon: AlertTriangle,
+        Icon: iconoComo("alerta"),
         alert: 'Trámite pendiente por aprobación del Organismo de Tránsito.',
         pendiente: true,
       };

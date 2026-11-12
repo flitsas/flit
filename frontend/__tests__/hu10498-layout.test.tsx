@@ -24,7 +24,8 @@ describe("HU #10498 — AC1: scroll encuadrado en el Shell", () => {
         <div>contenido largo</div>
       </Shell>,
     );
-    const wrapper = screen.getByText("contenido largo").parentElement!;
+    // Rediseño (Epic #14471): el contenedor con scroll se ubica por `data-shell-scroll`; cada página pone su ancho.
+    const wrapper = screen.getByText("contenido largo").closest("[data-shell-scroll]")!;
     expect(wrapper.className).toContain("overflow-y-auto");
     // El padding inferior libera el dock flotante (nada oculto tras él).
     expect(wrapper.className).toMatch(/pb-\d/);
@@ -65,7 +66,8 @@ describe("HU #10498 — AC2: wizard con scroll en main y tracker de seguimiento"
     expect(wizard).toMatch(/sticky top-0/);
     expect(tracker).toMatch(/aria-label="Asistente de seguimiento"/);
     expect(tracker).not.toMatch(/sticky top/);
-    expect(tracker).toMatch(/ol className="flex w-full min-w-0 items-start/);
+    // UI Kit 2026: el avance horizontal del kit (`.kit-pasos`) en vez de la lista flex propia.
+    expect(tracker).toMatch(/ol className=\{`kit-pasos w-full min-w-0 items-start/);
     // Etiquetas siempre visibles (sin colapso hover).
     expect(tracker).not.toMatch(/grid-rows-\[0fr\]/);
     expect(tracker).not.toMatch(/group\/tracker/);

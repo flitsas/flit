@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  ActoresValidacionCell,
+  type CampoActor,
+} from "@/components/atom/modules/_reportes/consultas/ActoresValidacionCell";
+import { actoresDelGrupo } from "@/components/atom/modules/_reportes/consultas/identidad-validacion";
+import type { ActorValidacionDto } from "@/lib/api/company-queries";
 import { Pagination } from "@/components/atom/Pagination";
 import {
   CARDLIST_CELL,
@@ -9,12 +15,26 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+  TABLA_TARJETA_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/detailed-report";
 import { canalLabel } from "@/lib/tramites/tramites-row-labels";
 import { statusLabel } from "../_reportes/categories";
 
-const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", "Persona", "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
+const COLUMNAS_ROL = [
+  "Comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
+  "Vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor",
+] as const;
+
+const COLUMNAS = ["Referencia", "Tipo", "Estado", "Canal", ...COLUMNAS_ROL, "Transformación", "Leasing", "Pago", "Traspaso", "Radicador"];
 
 interface DetailedReportGridProps {
   data: DetailedReportPage | NetworkDetailedReportPage | null;
@@ -66,38 +86,57 @@ export function DetailedReportGrid({
       skeletonRows={6}
     >
       {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
-      <div className={CARDLIST_SCROLL}>
-        <table className={`min-w-full ${CARDLIST_TABLE}`} aria-label="Reporte detallado de trámites">
-          <thead>
+      <div className={`${CARDLIST_SCROLL} ${TABLA_TARJETA_CLS}`}>
+        <table className={`min-w-full ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Reporte detallado de trámites">
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr className={CARDLIST_HEAD_ROW}>
               {columnas.map((h) => (
                 <th key={h} scope="col" className={CARDLIST_TH}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {data?.items.map((row) => (
-              <tr key={row.id} className={CARDLIST_ROW}>
+              <tr key={row.id} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
                 {columnaCompania && (
-                  <td className={`${CARDLIST_CELL} font-medium`} data-testid="detallado-fila-cliente">
+                  <td data-label={columnaCompania} className={`${CARDLIST_CELL} font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-testid="detallado-fila-cliente">
                     {"tenantName" in row && row.tenantName ? row.tenantName : "—"}
                   </td>
                 )}
-                <td className={CARDLIST_CELL}>{row.referenceNumber}</td>
-                <td className={CARDLIST_CELL}>{row.procedureTypeName}</td>
-                <td className={CARDLIST_CELL}>{statusLabel(row.status) ?? row.status}</td>
-                <td className={CARDLIST_CELL} data-testid="detallado-fila-canal">
+                <td data-label="Referencia" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS} ${columnaCompania ? "" : TABLA_MOVIL_CELL_TITULO_CLS}`}>{row.referenceNumber}</td>
+                <td data-label="Tipo" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.procedureTypeName}</td>
+                <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{statusLabel(row.status) ?? row.status}</td>
+                <td data-label="Canal" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`} data-testid="detallado-fila-canal">
                   {canalLabel(row.channel)}
                   {row.channel === "pn_punto" && row.channelTransitOfficeName ? (
                     <span className="block text-[11px] opacity-70">{row.channelTransitOfficeName}</span>
                   ) : null}
                 </td>
-                <td className={CARDLIST_CELL}>{row.personFullName || row.personDocument || "—"}</td>
-                <td className={CARDLIST_CELL}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
-                <td className={CARDLIST_CELL}>{row.isLeasing ? "Sí" : "No"}</td>
-                <td className={CARDLIST_CELL}>{row.paymentType || "—"}</td>
-                <td className={CARDLIST_CELL}>{row.transferType}</td>
-                <td className={CARDLIST_CELL}>{row.createdByDisplayName}</td>
+                {/* Ocho columnas, cuatro por rol, alineadas por actor (46 px cada uno). El propietario va con los compradores. Sin `actores` (ausente, null o vacío): «—» en las ocho; la «persona» vieja era de cualquier rol y no se puede etiquetar como comprador. */}
+                {(() => {
+                  const compradores = actoresDelGrupo(row.actores, "comprador");
+                  const vendedores = actoresDelGrupo(row.actores, "vendedor");
+                  const celda = (label: string, actores: ActorValidacionDto[], campo: CampoActor) => (
+                    <td key={label} data-label={label} className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
+                      <ActoresValidacionCell actores={actores} campo={campo} />
+                    </td>
+                  );
+                  return [
+                    celda("Comprador", compradores, "persona"),
+                    celda("Validación comprador", compradores, "validacion"),
+                    celda("Intentos comprador", compradores, "intentos"),
+                    celda("Motivo rechazo comprador", compradores, "motivo"),
+                    celda("Vendedor", vendedores, "persona"),
+                    celda("Validación vendedor", vendedores, "validacion"),
+                    celda("Intentos vendedor", vendedores, "intentos"),
+                    celda("Motivo rechazo vendedor", vendedores, "motivo"),
+                  ];
+                })()}
+                <td data-label="Transformación" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
+                <td data-label="Leasing" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.isLeasing ? "Sí" : "No"}</td>
+                <td data-label="Pago" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.paymentType || "—"}</td>
+                <td data-label="Traspaso" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.transferType}</td>
+                <td data-label="Radicador" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{row.createdByDisplayName}</td>
               </tr>
             ))}
           </tbody>

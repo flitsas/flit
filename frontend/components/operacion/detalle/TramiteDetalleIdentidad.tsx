@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -164,12 +164,12 @@ function FilaValidacion({
   return (
     <li className="space-y-2">
       <div
-        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+        className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-medium text-flit-primary dark:text-white">{fila.label}</span>
+          <span className="block text-xs font-medium text-foreground">{fila.label}</span>
           {fila.timestamp ? (
-            <span className="block text-xs text-flit-primary/70 dark:text-white/70">
+            <span className="block text-xs text-muted-foreground">
               {formatFechaHora(fila.timestamp)}
             </span>
           ) : null}
@@ -178,7 +178,7 @@ function FilaValidacion({
           <StatusBadge tone={fila.tone} label={fila.statusText} />
           {fila.certificado === 'en_preparacion' && !sinDescarga ? (
             <span
-              className="text-xs text-flit-primary/70 dark:text-white/70"
+              className="text-xs text-muted-foreground"
               role="status"
               aria-live="polite"
             >
@@ -192,10 +192,10 @@ function FilaValidacion({
               disabled={descargando}
               aria-label={`Descargar certificado de ${fila.label}`}
               title="Descargar certificado"
-              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-40 border-[#DFE5ED] dark:border-white/10"
+              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-40 border-border"
               style={{ color: AZUL }}
             >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
             </button>
           ) : null}
         </span>
@@ -331,7 +331,7 @@ export function TramiteDetalleIdentidad({ instanceId, tenantId, item }: SeccionD
         ))}
       </ul>
       {descargaError ? (
-        <p className="mt-2 text-xs" style={{ color: '#C2410C' }} role="alert">
+        <p className="mt-2 text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {descargaError}
         </p>
       ) : null}

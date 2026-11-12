@@ -3,7 +3,6 @@
 // HU #14076 AC1 — Alta y edición de una pregunta frecuente (texto plano, sin HTML). Modal normal; si falla conserva
 // lo escrito y muestra el motivo. La pregunta nueva va al final de la lista.
 import { useState } from "react";
-import { HelpCircle, Save } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PREGUNTA_MAX, RESPUESTA_MAX, type FaqPn, type GuardarFaq } from "@/lib/api/admin-pn-contenido";
@@ -11,6 +10,7 @@ import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_L
 import { PnButton } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarTextoPlano } from "./contenidoReglas";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface PreguntaFormModalProps {
   /** Sin `faq`: alta. */
@@ -51,14 +51,14 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
       busy={busy}
       title={faq ? "Editar pregunta frecuente" : "Nueva pregunta frecuente"}
       description="Escribe en texto simple, sin formato ni código. El ciudadano lo verá cuando publiques el contenido."
-      icon={HelpCircle}
+      icono="ayuda"
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-faq-form" variant="primary" icon={Save} loading={busy}>
+          <PnButton type="submit" form="pn-faq-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
             Guardar pregunta
           </PnButton>
         </div>
@@ -91,13 +91,13 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
           {errores.respuesta && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.respuesta}</span>}
         </label>
         {(pregunta.trim() || respuesta.trim()) && (
-          <div className="rounded-xl border border-[#DFE5ED] bg-[#F4F8FF] p-3 dark:border-white/10 dark:bg-white/5" aria-label="Así se verá en el portal" role="group">
-            <p className="mb-1 text-xs font-semibold text-[#59677D] dark:text-white/70">Así se verá en el portal</p>
-            <p className="text-sm font-semibold text-flit-primary dark:text-white">{pregunta.trim() || "Tu pregunta"}</p>
-            <p className="mt-1 whitespace-pre-line text-sm text-[#59677D] dark:text-white/78">{respuesta.trim() || "Tu respuesta"}</p>
+          <div className="rounded-xl border border-border bg-secondary p-3" aria-label="Así se verá en el portal" role="group">
+            <p className="mb-1 text-xs font-semibold text-muted-foreground">Así se verá en el portal</p>
+            <p className="text-sm font-semibold text-flit-primary">{pregunta.trim() || "Tu pregunta"}</p>
+            <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{respuesta.trim() || "Tu respuesta"}</p>
           </div>
         )}
-        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary">
           <input
             type="checkbox"
             checked={activa}

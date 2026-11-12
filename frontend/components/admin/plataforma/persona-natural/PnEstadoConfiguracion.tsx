@@ -5,7 +5,8 @@
 // resume en lenguaje de negocio lo que ve hoy el ciudadano. Los números salen de las mismas listas que usan las
 // pestañas (tipos y organismos); no se inventa ningún dato.
 import { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Check, Eye } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { fetchOrganismosPn, fetchTiposPn, type OrganismoPn, type TipoPn } from "@/lib/api/admin-pn-config";
 import { PnButton } from "./pn-componentes";
@@ -139,14 +140,14 @@ export function PnEstadoConfiguracion({
     return (
       <section
         aria-labelledby="pn-estado-titulo"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#DFE5ED] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#162744]"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-border bg-card px-4 py-3"
       >
         <h2 id="pn-estado-titulo" className="sr-only">
           Estado de la configuración
         </h2>
-        <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
-          <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#8CC63F] text-white">
-            <Check className="h-4 w-4" />
+        <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary">
+          <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--flit-success-ink)] text-white">
+            <Icono nombre="check" className="h-4 w-4" />
           </span>
           <span>Configuración completa. {frasePortal(resumen, pasos)}</span>
         </p>
@@ -160,14 +161,14 @@ export function PnEstadoConfiguracion({
   return (
     <section
       aria-labelledby="pn-estado-titulo"
-      className="flex flex-col gap-4 rounded-[18px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
+      className="flex flex-col gap-4 rounded-[18px] border border-border bg-card p-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-        <h2 id="pn-estado-titulo" className="text-base font-bold text-flit-primary dark:text-white">
+        <h2 id="pn-estado-titulo" className="text-base font-bold text-flit-primary">
           Estado de la configuración
         </h2>
-        <p className="text-sm text-[#59677D] dark:text-white/78">
+        <p className="text-sm text-muted-foreground">
           Para que el portal ofrezca un trámite al ciudadano necesitas tres cosas. Cada paso te lleva a donde se resuelve.
         </p>
         </div>
@@ -192,7 +193,7 @@ export function PnEstadoConfiguracion({
       )}
 
       {!resumen && !error && (
-        <p role="status" className="text-sm text-[#59677D] dark:text-white/78">
+        <p role="status" className="text-sm text-muted-foreground">
           Consultando el estado de la configuración…
         </p>
       )}
@@ -203,28 +204,28 @@ export function PnEstadoConfiguracion({
             {pasos.map((p, i) => (
               <li
                 key={p.id}
-                className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15"
+                className="flex flex-col gap-2 rounded-xl border border-border p-3"
               >
                 <div className="flex items-center gap-2">
                   <span
                     aria-hidden="true"
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                      p.hecho ? "bg-[#8CC63F] text-white" : "border-2 border-[#DFE5ED] text-[#59677D]"
+                      p.hecho ? "bg-[var(--flit-success-ink)] text-white" : "border-2 border-border text-muted-foreground"
                     }`}
                   >
-                    {p.hecho ? <Check className="h-4 w-4" /> : i + 1}
+                    {p.hecho ? <Icono nombre="check" className="h-4 w-4" /> : i + 1}
                   </span>
-                  <span className="text-sm font-bold text-flit-primary dark:text-white">
+                  <span className="text-sm font-bold text-flit-primary">
                     <span className="sr-only">Paso {i + 1}: </span>
                     {p.titulo}
                   </span>
-                  <span className={`ml-auto text-xs font-semibold ${p.hecho ? "text-[#4F7A12]" : "text-[#B45309]"}`}>
+                  <span className={`ml-auto text-xs font-semibold ${p.hecho ? "text-[var(--flit-success-ink)]" : "text-[var(--badge-warning-fg)]"}`}>
                     {p.hecho ? "Hecho" : "Pendiente"}
                   </span>
                 </div>
-                <p className="text-sm text-[#59677D] dark:text-white/78">{p.detalle}</p>
+                <p className="text-sm text-muted-foreground">{p.detalle}</p>
                 <div className="mt-auto">
-                  <PnButton variant={p.hecho ? "secondary" : "primary"} icon={ArrowRight} onClick={() => onIr(p.id)}>
+                  <PnButton variant={p.hecho ? "secondary" : "primary"} icon={iconoComo("derecha")} onClick={() => onIr(p.id)}>
                     {p.boton}
                   </PnButton>
                 </div>
@@ -232,9 +233,9 @@ export function PnEstadoConfiguracion({
             ))}
           </ol>
 
-          <div className="flex flex-col gap-2 rounded-xl bg-[#EEF5FF] p-3 dark:bg-white/5">
-            <p className="flex items-start gap-2 text-sm font-semibold text-flit-primary dark:text-white">
-              <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <div className="flex flex-col gap-2 rounded-xl bg-secondary p-3">
+            <p className="flex items-start gap-2 text-sm font-semibold text-flit-primary">
+              <Icono nombre="ojo" className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{frasePortal(resumen, pasos)}</span>
             </p>
             {resumen.organismosSinTarifa > 0 && (

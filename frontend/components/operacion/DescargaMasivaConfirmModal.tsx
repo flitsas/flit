@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Download, FileArchive } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type { ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
@@ -123,7 +123,7 @@ type Fase =
   | { tipo: 'lote_activo'; loteId: string | null; lote: LoteConsolidados | null };
 
 const BTN_SECUNDARIO =
-  'rounded-full border border-flit-gray px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-flit-primary/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white';
+  'rounded-full border border-flit-gray px-4 py-1.5 text-xs font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand';
 const BTN_PRIMARIO =
   'inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -235,7 +235,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
       onClose={onClose}
       busy={creando}
       title="Descargar consolidados en ZIP"
-      icon={FileArchive}
+      icono="archivo"
       iconBg="var(--color-flit-brand)"
       size="sm"
       footer={
@@ -251,7 +251,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
               className={BTN_PRIMARIO}
               style={{ background: WIZARD_CTA_GRADIENT }}
             >
-              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
               {creando ? 'Creando la descarga…' : 'Confirmar descarga'}
             </button>
           )}
@@ -262,7 +262,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
         ref={anclaRef}
         data-testid="descarga-masiva-cuerpo"
         aria-busy={creando}
-        className="flex flex-col gap-3 text-sm text-flit-primary/80 dark:text-white/80"
+        className="flex flex-col gap-3 text-sm text-muted-foreground"
       >
         {vacio ? (
           <p>No hay trámites seleccionados. Marca al menos uno en el listado para descargarlo.</p>
@@ -270,7 +270,7 @@ export function DescargaMasivaConfirmModal<TFiltro>({
           <>
             {selectorTipo ? (
               <div role="radiogroup" aria-labelledby={`${idSelector}-etiqueta`} className="flex flex-col gap-2">
-                <span id={`${idSelector}-etiqueta`} className="text-xs font-semibold text-flit-primary dark:text-white">
+                <span id={`${idSelector}-etiqueta`} className="text-xs font-semibold text-foreground">
                   Tipo de documento
                 </span>
                 <div className="flex flex-wrap gap-2">
@@ -279,8 +279,8 @@ export function DescargaMasivaConfirmModal<TFiltro>({
                     return (
                       <label
                         key={valor}
-                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-flit-primary dark:text-white ${
-                          marcado ? 'border-flit-brand bg-flit-brand/[0.06]' : 'border-flit-gray dark:border-white/20'
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold text-foreground ${
+                          marcado ? 'border-flit-brand bg-flit-brand/[0.06]' : 'border-border'
                         }`}
                       >
                         <input
@@ -301,11 +301,11 @@ export function DescargaMasivaConfirmModal<TFiltro>({
             ) : null}
             <p>{textoConfirmacion}</p>
             {etiquetaAlcance ? (
-              <p className="text-xs text-flit-primary dark:text-white">
+              <p className="text-xs text-foreground">
                 Alcance: <span className="font-semibold">{etiquetaAlcance}</span>
               </p>
             ) : null}
-            <p className="text-xs font-semibold text-flit-primary dark:text-white">
+            <p className="text-xs font-semibold text-foreground">
               {textoTramites(contador)}
             </p>
           </>
@@ -387,7 +387,7 @@ export function BotonDescargaMasivaZip<TFiltro>({
   if (contador < 1 && !abierto) return null;
   if (noDisponible && !abierto) {
     return (
-      <span data-testid="descarga-red-no-disponible" className="text-flit-primary/70 dark:text-white/70">
+      <span data-testid="descarga-red-no-disponible" className="text-muted-foreground">
         {noDisponible}
       </span>
     );
@@ -400,7 +400,7 @@ export function BotonDescargaMasivaZip<TFiltro>({
         onClick={() => setAbierto(true)}
         className="inline-flex items-center gap-1 rounded-lg border border-flit-brand/40 px-2.5 py-1 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
       >
-        <Download className="h-3.5 w-3.5" aria-hidden="true" /> Descargar ZIP
+        <Icono nombre="nube-bajar" className="h-3.5 w-3.5" /> Descargar ZIP
       </button>
       <DescargaMasivaConfirmModal
         open={abierto}

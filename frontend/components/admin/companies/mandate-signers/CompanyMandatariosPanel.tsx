@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -15,7 +16,14 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import {
   createCompanyMandateSigner,
@@ -329,7 +337,7 @@ export function CompanyMandatariosPanel({
       {sinOrganismos && (
         <p
           className="rounded-xl border px-3 py-2 text-xs"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="status"
         >
           Esta compañía todavía no tiene organismos de tránsito habilitados. Habilítalos en la
@@ -347,7 +355,7 @@ export function CompanyMandatariosPanel({
               style={rlOutlinedActionStyle}
               onClick={() => setFormatosOpen(true)}
             >
-              <FileText className="h-4 w-4" aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4" />
               Formatos de contrato
             </button>
           ) : (
@@ -395,7 +403,7 @@ export function CompanyMandatariosPanel({
               className="max-w-md flex-1"
             />
             <p
-              className="text-xs text-[#59677D] dark:text-white/70"
+              className="text-xs text-muted-foreground"
               data-testid="mandatarios-resumen"
             >
               {signers.length} {signers.length === 1 ? "mandatario" : "mandatarios"}
@@ -404,14 +412,14 @@ export function CompanyMandatariosPanel({
           </div>
 
           {
-            <>
+            <div className={TABLA_TARJETA_CLS}>
               <div className="overflow-x-auto">
                 <table
-                  className="text-xs"
+                  className={`text-xs ${TABLA_MOVIL_TABLE_CLS}`}
                   style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
                 >
                   <caption className="sr-only">Mandatarios de la compañía</caption>
-                  <thead>
+                  <thead className={TABLA_MOVIL_THEAD_CLS}>
                     <tr>
                       <th
                         scope="col"
@@ -476,7 +484,7 @@ export function CompanyMandatariosPanel({
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className={TABLA_MOVIL_TBODY_CLS}>
                     {filtrados.length === 0 ? (
                       <FilaVaciaFiltros
                         columnas={7}
@@ -494,34 +502,38 @@ export function CompanyMandatariosPanel({
                       return (
                         <tr
                           key={signer.id}
-                          className={`${candado ? "bg-[#EEF1F5] dark:bg-white/5" : "bg-white dark:bg-[#0B0F14]"} ${TABLA_ROW_HOVER_CLS}`}
+                          className={`${candado ? "bg-secondary" : "bg-card"} ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
                           data-candado={candado ? "true" : undefined}
                         >
                           <td
-                            className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            data-label="Mandatario"
+                            className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             <span className="font-semibold">{signer.fullName}</span>
                             {candado && <MandatarioCandado />}
                           </td>
                           <td
-                            className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            data-label="Documento"
+                            className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             {formatDocumentWithType(signer.documentType, signer.documentNumber)}
                           </td>
                           <td
-                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            data-label="Modelo"
+                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             {etiquetaModelo(signer)}
                           </td>
-                          <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <td data-label="Vigencia" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                             <MandatarioVigenciaBadge signer={signer} />
                           </td>
                           <td
-                            className="border-y px-4 py-3"
-                            style={{ borderColor: "#DFE5ED" }}
+                            data-label="Validación"
+                            className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
                             data-testid="mandatario-validacion-celda"
                           >
                             {requiereValidacionPropia(signer) ? (
@@ -535,8 +547,9 @@ export function CompanyMandatariosPanel({
                             )}
                           </td>
                           <td
-                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}
-                            style={{ borderColor: "#DFE5ED" }}
+                            data-label="Organismos"
+                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             <MandatarioOrganismos
                               signerName={signer.fullName}
@@ -547,8 +560,9 @@ export function CompanyMandatariosPanel({
                             />
                           </td>
                           <td
-                            className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                            style={{ borderColor: "#DFE5ED" }}
+                            data-label="Acciones"
+                            className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
                           >
                             <RowActions
                               actions={
@@ -556,7 +570,7 @@ export function CompanyMandatariosPanel({
                                   ? []
                                   : [
                                       {
-                                        icon: Pencil,
+                                        icon: iconoComo("lapiz"),
                                         label: `Editar mandatario ${signer.fullName}`,
                                         onClick: () => {
                                           setEditing(signer);
@@ -567,7 +581,7 @@ export function CompanyMandatariosPanel({
                                       ...(puedeReenviarValidacion(signer)
                                         ? [
                                             {
-                                              icon: Send,
+                                              icon: iconoComo("radicacion"),
                                               label: `Reenviar validación a ${signer.fullName}`,
                                               onClick: () => void handleReenviarFila(signer),
                                               disabled: busyId === signer.id,
@@ -576,7 +590,7 @@ export function CompanyMandatariosPanel({
                                         : []),
                                       signer.isActive
                                         ? {
-                                            icon: UserX,
+                                            icon: iconoComo("persona"),
                                             label: `Desactivar mandatario ${signer.fullName}`,
                                             onClick: () =>
                                               setBaja({ signer, accion: "desactivar" }),
@@ -584,7 +598,7 @@ export function CompanyMandatariosPanel({
                                             disabled: busyId === signer.id,
                                           }
                                         : {
-                                            icon: RotateCcw,
+                                            icon: iconoComo("reintento"),
                                             label: `Reactivar mandatario ${signer.fullName}`,
                                             onClick: () => void handleReactivar(signer),
                                             disabled: busyId === signer.id,
@@ -592,7 +606,7 @@ export function CompanyMandatariosPanel({
                                       ...(puedeEliminarMandatario(signer)
                                         ? [
                                             {
-                                              icon: Trash2,
+                                              icon: iconoComo("papelera"),
                                               label: `Eliminar mandatario ${signer.fullName}`,
                                               onClick: () =>
                                                 setBaja({ signer, accion: "eliminar" }),
@@ -622,7 +636,7 @@ export function CompanyMandatariosPanel({
                   noun="mandatarios"
                 />
               ) : null}
-            </>
+            </div>
           }
         </UiStateBoundary>
       )}

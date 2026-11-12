@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import {
   latestRejectionReason,
@@ -88,12 +88,12 @@ export function SubsanacionPanel({
     return (
       <div
         className="rounded-xl p-3 text-xs border shrink-0 flex items-center gap-2"
-        style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
+        style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
         role="status"
         aria-live="polite"
         aria-busy="true"
       >
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
+        <Icono nombre="girador" className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--badge-warning-fg)' }} />
         <span>Cargando el detalle de la subsanación…</span>
       </div>
     );
@@ -103,11 +103,11 @@ export function SubsanacionPanel({
     return (
       <div
         className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-        style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+        style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
         role="alert"
         aria-live="polite"
       >
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
         <span>No se pudo cargar el detalle de la subsanación: {error}</span>
       </div>
     );
@@ -116,13 +116,13 @@ export function SubsanacionPanel({
   return (
     <section
       className="rounded-2xl p-4 border shrink-0 flex flex-col gap-3"
-      style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
+      style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
       aria-labelledby="subsanacion-heading"
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--badge-warning-fg)' }} />
         <div className="min-w-0">
-          <h3 id="subsanacion-heading" className="text-sm font-bold" style={{ color: '#B45309' }}>
+          <h3 id="subsanacion-heading" className="text-sm font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
             Trámite en subsanación
           </h3>
           <p className="mt-1 text-xs" style={{ color: 'var(--color-flit-primary)' }}>
@@ -150,7 +150,7 @@ export function SubsanacionPanel({
               return (
                 <li
                   key={i}
-                  className="flex items-start gap-2 rounded-lg border bg-white dark:bg-[#162744] p-2"
+                  className="flex items-start gap-2 rounded-lg border bg-card p-2"
                 >
                   <input
                     id={inputId}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type RefObject } from "react";
+import { useId, type RefObject } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DockEntry, DockGroup } from "../nav";
+import { DockGlyph } from "./DockGlyph";
 import { useDisclosureNav } from "./useDisclosureNav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { useEdgeClamp } from "./useEdgeClamp";
@@ -12,6 +13,8 @@ import { useDockHomeMark } from "./DockHomeMark";
 // Dock inferior flotante de la suite (GUIA-DOCK-INFERIOR-FLOTANTE.md), portado del de Trámites sin su catálogo:
 // recibe los grupos ya filtrados (buildDock) y no sabe de ningún producto. Escritorio (lg+); en pantallas pequeñas
 // la navegación va en DockMobile (lanzador + hoja), con los mismos grupos.
+// Aspecto: el `.dock` del prototipo «Diseño Inteligente» (rama `propuesta`, HU #14479): píldoras con ilustración y
+// submenú con franja tinta, entradas ilustradas con su descripción y, si el grupo trae secciones, dos columnas.
 
 type Props = {
   groups: DockGroup[];
@@ -25,20 +28,11 @@ type Props = {
 
 export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scrollRef }: Props) {
   const { openSection, toggle, close, navRef, triggerId, panelId } = useDisclosureNav("flit-suite-dock");
-  // Guía §8: al bajar, píldoras grandes solo con icono; al subir o cerca del inicio, con etiqueta.
+  // Guía §8: al bajar, solo la ilustración (como el dock del prototipo en tableta); al subir o cerca del inicio, con
+  // el nombre.
   const atBottom = useDockScrollCondense(scrollRef);
   const showLabels = !atBottom || !!openSection;
-  const large = atBottom && !openSection;
   const home = useDockHomeMark(homeIconSrc);
-  // Logo con texto de una Marca Blanca: pastilla a la altura del dock con un ancho máximo.
-  const homeSize =
-    home.shape === "pill"
-      ? large
-        ? "h-14 w-auto max-w-[150px] px-3.5"
-        : "h-11 w-auto max-w-[120px] px-3"
-      : large
-        ? "h-14 w-14"
-        : "h-11 w-11";
 
   const left = groups.filter((g) => g.side === "left");
   const right = groups.filter((g) => g.side === "right");
@@ -49,7 +43,6 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
       key={g.id}
       group={g}
       showLabels={showLabels}
-      large={large}
       open={openSection === g.id}
       onToggle={() => toggle(g.id)}
       onNavigate={close}
@@ -59,23 +52,16 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   );
 
   return (
-    <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-4 pb-5 lg:flex`}>
-      <nav
-        ref={navRef}
-        aria-label="Navegación principal"
-        className={`dock-capsula pointer-events-auto relative inline-flex max-w-full flex-wrap items-center justify-center gap-0.5 transition-[padding] duration-200 ease-out motion-reduce:transition-none ${
-          large ? "p-1.5" : "p-1"
-        }`}
-      >
+    <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-2 pb-[18px] lg:flex`}>
+      <nav ref={navRef} aria-label="Navegación principal" className="dock-capsula pointer-events-auto relative inline-flex max-w-full items-center">
         {Array.from({ length: sideLen - left.length }).map((_, i) => (
-          <DockSpacer key={`lp-${i}`} large={large} showLabels={showLabels} />
+          <DockSpacer key={`lp-${i}`} showLabels={showLabels} />
         ))}
         {left.map(pill)}
         <Link
           href={homeHref}
           onClick={close}
-          className={`mx-2 shrink-0 overflow-hidden rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${homeSize} ${home.shape === "pill" ? "bg-white" : ""}`}
-          style={{ boxShadow: "var(--nav-sombra-activo)" }}
+          className={`dock-fab ${home.shape === "pill" ? "dock-fab--pastilla" : ""}`}
           aria-label={homeLabel}
           aria-current={homeActive ? "page" : undefined}
         >
@@ -83,22 +69,45 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
         </Link>
         {right.map(pill)}
         {Array.from({ length: sideLen - right.length }).map((_, i) => (
-          <DockSpacer key={`rp-${i}`} large={large} showLabels={showLabels} />
+          <DockSpacer key={`rp-${i}`} showLabels={showLabels} />
         ))}
       </nav>
     </div>
   );
 }
 
-function DockSpacer({ large, showLabels }: { large: boolean; showLabels: boolean }) {
-  const w = showLabels ? (large ? "w-28" : "w-24") : large ? "w-11" : "w-9";
-  return <span aria-hidden="true" className={`shrink-0 ${large ? "h-11" : "h-9"} ${w}`} />;
+function DockSpacer({ showLabels }: { showLabels: boolean }) {
+  return <span aria-hidden="true" className={`h-11 shrink-0 ${showLabels ? "w-28" : "w-[52px]"}`} />;
+}
+
+/** Hojas de la entrada: ella misma o, si es contenedor, sus hijos. */
+function leaves(entries: DockEntry[]): DockEntry[] {
+  return entries.flatMap((it) => (it.children?.length ? it.children : [it]));
+}
+
+type Block = { key: string; title?: string; icon?: DockEntry["icon"]; ilustracion?: string; items: DockEntry[] };
+
+/**
+ * Bloques del submenú en el orden del catálogo: las entradas sueltas seguidas van juntas en un bloque sin nombre; cada
+ * contenedor (Plataforma, ICT…) es una sección con su nombre, como `.dock__seccion` del prototipo.
+ */
+function blocks(entries: DockEntry[]): Block[] {
+  const out: Block[] = [];
+  for (const it of entries) {
+    if (it.children?.length) {
+      out.push({ key: it.key, title: it.label, icon: it.icon, ilustracion: it.ilustracion, items: it.children });
+      continue;
+    }
+    const last = out[out.length - 1];
+    if (last && !last.title) last.items.push(it);
+    else out.push({ key: `suelta-${it.key}`, items: [it] });
+  }
+  return out;
 }
 
 function DockGroupPill({
   group,
   showLabels,
-  large,
   open,
   onToggle,
   onNavigate,
@@ -107,26 +116,27 @@ function DockGroupPill({
 }: {
   group: DockGroup;
   showLabels: boolean;
-  large: boolean;
   open: boolean;
   onToggle: () => void;
   onNavigate: () => void;
   triggerId: string;
   panelId: string;
 }) {
-  const { ref: panelRef, shift } = useEdgeClamp<HTMLDivElement>(open ? group.id : null);
   // Guía §5.3: una sola opción sin submenú → enlace directo, sin panel.
   const sole = group.items.length === 1 && !group.items[0].children?.length ? group.items[0] : null;
   // Una sola entrada con submenú: la píldora lleva su nombre (Administradores → solo «Plataforma» → «Plataforma»).
   const only = group.items.length === 1 ? group.items[0] : null;
-  const pillActive = sole ? sole.active : group.active;
-  const Icon = only?.icon ?? group.icon;
+  const glyph = only ? { icon: only.icon, ilustracion: only.ilustracion ?? group.ilustracion } : group;
   const pillLabel = only ? only.label : group.label;
-  const iconClass = large ? "h-[18px] w-[18px] shrink-0" : "h-4 w-4 shrink-0";
+  const parts = blocks(group.items);
+  // Dos o más secciones con nombre: el panel ancho en dos columnas (`.dock__menu--ancho`).
+  const wide = parts.filter((b) => b.title).length >= 2;
+  const { ref: panelRef, shift } = useEdgeClamp<HTMLDivElement>(open && !wide ? group.id : null);
+  const count = leaves(group.items).length;
 
-  const base = `dock-pill relative flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full transition-all duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2 ${
-    large ? "h-11" : "h-9"
-  } ${showLabels ? "px-3" : "w-11 px-0"} ${pillActive || open ? "font-semibold" : "font-medium"}`;
+  const pillClass = `dock-pill ${showLabels ? "" : "dock-pill--compacta"}`;
+  const label = <span className={showLabels ? "truncate" : "sr-only"}>{pillLabel}</span>;
+  const art = <DockGlyph icon={glyph.icon} ilustracion={glyph.ilustracion} className="dock-pill__glifo" />;
 
   if (sole) {
     return (
@@ -134,38 +144,34 @@ function DockGroupPill({
         id={triggerId}
         href={sole.href}
         onClick={onNavigate}
-        className={base}
+        className={pillClass}
         aria-label={pillLabel}
         title={!showLabels ? pillLabel : undefined}
         aria-current={sole.active ? "page" : undefined}
       >
-        <Icon className={iconClass} strokeWidth={pillActive ? 2.4 : 1.8} aria-hidden="true" />
-        <span className={showLabels ? "truncate text-sm" : "sr-only"}>{pillLabel}</span>
+        {art}
+        {label}
       </Link>
     );
   }
 
   return (
-    <div className="relative">
+    // El panel ancho se centra sobre todo el dock (su contenedor posicionado es el <nav>), no sobre la píldora.
+    <div className={wide ? "static" : "relative"}>
       <button
         id={triggerId}
         type="button"
         onClick={onToggle}
-        className={base}
+        className={pillClass}
         aria-label={pillLabel}
         title={!showLabels ? pillLabel : undefined}
         aria-expanded={open}
         aria-controls={panelId}
         data-ancestor-active={group.active ? "true" : undefined}
       >
-        <Icon className={iconClass} strokeWidth={pillActive ? 2.4 : 1.8} aria-hidden="true" />
-        <span className={showLabels ? "truncate text-sm" : "sr-only"}>{pillLabel}</span>
-        {showLabels && (
-          <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none ${open ? "rotate-0" : "rotate-180"}`}
-            aria-hidden="true"
-          />
-        )}
+        {art}
+        {label}
+        {showLabels && <Icono nombre="arriba" className="dock-flecha" />}
       </button>
 
       {open && (
@@ -174,79 +180,78 @@ function DockGroupPill({
           id={panelId}
           role="region"
           aria-label={group.label}
-          className="panel-up absolute bottom-full left-0 z-30 mb-2.5 max-h-[min(70vh,32rem)] min-w-[16rem] overflow-y-auto rounded-[var(--nav-radio-panel)] border border-[var(--nav-borde)] p-2"
-          style={{ background: "var(--nav-panel-bg)", boxShadow: "var(--nav-sombra-panel)", left: shift ? `${shift}px` : undefined }}
+          className={`dock-menu panel-up ${wide ? "dock-menu--ancho" : ""}`}
+          style={shift ? { marginLeft: `${shift}px` } : undefined}
         >
-          <ul className="flex flex-col gap-0.5">
-            {group.items.map((it) => (
-              <DockPanelItem key={it.key} item={it} onNavigate={onNavigate} />
+          {/* Franja tinta del prototipo: ilustración, nombre del grupo y cuántos módulos tiene. Decorativa: la región ya
+              se anuncia con ese nombre. */}
+          <div aria-hidden="true" className="dock-menu__cabeza">
+            <DockGlyph icon={group.icon} ilustracion={group.ilustracion} className="dock-menu__cabeza-glifo" />
+            <span className="dock-menu__cabeza-texto">
+              <strong>{group.label}</strong>
+              <small>
+                {count} {count === 1 ? "módulo" : "módulos"}
+              </small>
+            </span>
+          </div>
+          <div className={wide ? "dock-menu__secciones" : "dock-menu__lista"}>
+            {parts.map((b) => (
+              <DockBlock key={b.key} block={b} panelId={panelId} onNavigate={onNavigate} />
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-const itemClass = (active: boolean) =>
-  `dock-panel-item group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors ${
-    active ? "text-white" : "text-[var(--nav-texto)] hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)]"
-  }`;
-
-function DockLink({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
-  const ItemIcon = item.icon;
+function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: string; onNavigate: () => void }) {
+  const list = (
+    <ul className="dock-menu__entradas">
+      {block.items.map((it) => (
+        <li key={it.key}>
+          <DockEntryLink item={it} onNavigate={onNavigate} />
+        </li>
+      ))}
+    </ul>
+  );
+  if (!block.title) return list;
+  const titleId = `${panelId}-seccion-${block.key}`;
   return (
-    <Link href={item.href} onClick={onNavigate} className={itemClass(item.active)} aria-current={item.active ? "page" : undefined}>
-      <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-      <span className="truncate">{item.label}</span>
-      <span
-        aria-hidden="true"
-        className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--color-flit-brand)] group-aria-[current=page]:bg-white"
-      />
-    </Link>
+    <div role="group" aria-labelledby={titleId} className="dock-menu__seccion">
+      <p id={titleId} className="dock-menu__seccion-titulo">
+        {block.icon && (
+          <DockGlyph icon={block.icon} ilustracion={block.ilustracion} className="dock-menu__seccion-glifo" />
+        )}
+        {block.title}
+      </p>
+      {list}
+    </div>
   );
 }
 
-function DockPanelItem({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
-  const kids = item.children;
-  const [nestedOpen, setNestedOpen] = useState(() => Boolean(kids?.some((c) => c.active) || item.active));
-  if (!kids?.length) {
-    return (
-      <li>
-        <DockLink item={item} onNavigate={onNavigate} />
-      </li>
-    );
-  }
-
-  const ItemIcon = item.icon;
-  const nestedId = `flit-suite-dock-nested-${item.key}`;
+/**
+ * Entrada del submenú (también la usa la hoja móvil): ícono del kit, nombre y, si el catálogo la trae, la descripción
+ * corta (UI Kit 2026, `.dock__menu` de la propuesta-2). El nombre accesible es solo el nombre; la descripción se anuncia como descripción.
+ */
+export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
+  const uid = useId();
+  const descId = item.descripcion ? `${uid}-desc` : undefined;
   return (
-    <li>
-      <button
-        type="button"
-        onClick={() => setNestedOpen((v) => !v)}
-        className={`group flex w-full items-center gap-2.5 rounded-full px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] ${
-          item.active || kids.some((c) => c.active) ? "font-semibold text-[var(--nav-texto-fuerte)]" : "text-[var(--nav-texto)]"
-        }`}
-        aria-expanded={nestedOpen}
-        aria-controls={nestedId}
-      >
-        <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">{item.label}</span>
-        <ChevronRight
-          className={`ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none ${nestedOpen ? "rotate-90" : ""}`}
-          aria-hidden="true"
-        />
-      </button>
-      {nestedOpen && (
-        <ul id={nestedId} className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-[var(--nav-borde)] pl-2">
-          {kids.map((child) => (
-            <li key={child.key}>
-              <DockLink item={child} onNavigate={onNavigate} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className="dock-entrada"
+      aria-label={item.label}
+      aria-describedby={descId}
+      aria-current={item.active ? "page" : undefined}
+    >
+      {/* Como la propuesta (`.dock__entrada`): el ícono del kit de la entrada en 32 px, en tinta; azul si está activa. */}
+      <DockGlyph icon={item.icon} ilustracion={item.ilustracion} className="dock-entrada__glifo" />
+      <span className="dock-entrada__texto">
+        <strong>{item.label}</strong>
+        {item.descripcion && <small id={descId}>{item.descripcion}</small>}
+      </span>
+    </Link>
   );
 }

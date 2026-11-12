@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { download } from "@/components/consultas/export";
 import { useWizardFocusTrap } from "@/components/operacion/use-wizard-focus-trap";
@@ -23,8 +23,9 @@ import {
   isBulkInviteOutcomeUncertain,
   validateBulkInviteFile,
 } from "@/lib/users/bulkInviteErrors";
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_DESCRIPCION_CLS, MODAL_PANEL_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 
-const PRIMARY_GRADIENT = "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))";
+const PRIMARY_FILL = "var(--kit-azul-relleno)";
 const MAX_MB = BULK_INVITE_MAX_FILE_BYTES / (1024 * 1024);
 
 /**
@@ -203,7 +204,7 @@ export function BulkInviteModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-slate-900/50 px-4 py-6 backdrop-blur-md"
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden px-4 py-6 ${MODAL_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) requestClose();
       }}
@@ -217,22 +218,18 @@ export function BulkInviteModal({
         aria-busy={busy}
         tabIndex={-1}
         data-testid="bulk-invite-modal"
-        className="flex max-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-2xl flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-flit-primary shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 max-w-2xl flex-col p-4 sm:p-6 ${MODAL_PANEL_CLS}`}
       >
-        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-              style={{ background: "var(--color-flit-brand)" }}
-              aria-hidden="true"
-            >
-              <FileSpreadsheet className="h-4.5 w-4.5 text-white" />
+        <div className={`${MODAL_CABECERA_CLS} -mx-4 -mt-4 mb-4 sm:-mx-6 sm:-mt-6`}>
+          <div className="flex min-w-0 flex-col items-center gap-2">
+            <span className="contents" aria-hidden="true">
+              <Icono nombre="reporte-detallado" disco size={52} />
             </span>
             <div className="min-w-0">
-              <h2 id={titleId} className="text-base font-bold text-flit-primary dark:text-white">
+              <h2 id={titleId} className={MODAL_TITULO_CLS}>
                 Importar usuarios desde Excel
               </h2>
-              <p id={descId} className="mt-0.5 text-xs opacity-70">
+              <p id={descId} className={MODAL_DESCRIPCION_CLS}>
                 Invita hasta {BULK_INVITE_MAX_ROWS} usuarios por archivo. Cada fila lleva nombre, correo y un rol.
               </p>
             </div>
@@ -242,9 +239,9 @@ export function BulkInviteModal({
             aria-label="Cerrar"
             onClick={requestClose}
             disabled={busy}
-            className="shrink-0 rounded-lg text-slate-400 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-white"
+            className={`${MODAL_CERRAR_CLS} disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </div>
 
@@ -259,7 +256,7 @@ export function BulkInviteModal({
               {contextSlot?.({ disabled: busy })}
               {contextSummary && (
                 <p
-                  className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs dark:border-white/15"
+                  className="rounded-xl border border-[color:var(--di-border)] px-3 py-2 text-xs"
                   data-testid="bulk-invite-context"
                 >
                   <span className="text-[10px] font-semibold uppercase opacity-60">Destino</span>
@@ -285,7 +282,7 @@ export function BulkInviteModal({
               className={`${controlCls(false)} self-start`}
               data-testid="bulk-invite-template"
             >
-              <Download className={`h-3.5 w-3.5 ${templateBusy ? "animate-pulse" : ""}`} aria-hidden="true" />
+              <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${templateBusy ? "animate-pulse" : ""}`} />
               {templateBusy ? "Descargando…" : "Descargar plantilla"}
             </button>
             {!ready && (
@@ -301,7 +298,7 @@ export function BulkInviteModal({
           </section>
 
           {/* Paso 2 — archivo */}
-          <section className="flex flex-col gap-2 border-t border-[#DFE5ED] pt-5 dark:border-white/10">
+          <section className="flex flex-col gap-2 border-t border-[color:var(--di-border)] pt-5">
             <h3 className="text-sm font-semibold">2. Sube el archivo diligenciado</h3>
             <label htmlFor={fileInputId} className="text-xs font-semibold">
               Archivo Excel (.xlsx)
@@ -316,7 +313,7 @@ export function BulkInviteModal({
               aria-describedby={error && phase !== "uncertain" ? `${fileHelpId} bulk-invite-error` : fileHelpId}
               aria-invalid={error && phase !== "uncertain" ? true : undefined}
               data-testid="bulk-invite-file"
-              className="block w-full text-xs file:mr-3 file:rounded-xl file:border file:border-[#DFE5ED] file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#1E293B] hover:file:bg-[#EFF6FF] disabled:opacity-50 dark:file:border-white/15 dark:file:bg-[#0B0F14] dark:file:text-white"
+              className="block w-full text-xs file:mr-3 file:rounded-xl file:border file:border-[color:var(--di-border)] file:bg-card file:px-3 file:py-2 file:text-xs file:font-semibold file:text-flit-primary hover:file:bg-[var(--kit-hover)] disabled:opacity-50 dark:file:text-foreground"
             />
             <p id={fileHelpId} className="text-[11px] opacity-70">
               Máximo {BULK_INVITE_MAX_ROWS} filas y {MAX_MB} MB.
@@ -338,10 +335,10 @@ export function BulkInviteModal({
           {/* Estado: cargando */}
           {busy && (
             <div
-              className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] p-3 text-xs dark:border-white/15"
+              className="flex items-center gap-2 rounded-xl border border-[color:var(--di-border)] p-3 text-xs"
               data-testid="bulk-invite-loading"
             >
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+              <Icono nombre="girador" className="h-4 w-4 shrink-0 animate-spin" style={{ color: "var(--color-flit-brand)" }} />
               <span>
                 {phase === "validating"
                   ? "Validando el archivo…"
@@ -359,7 +356,7 @@ export function BulkInviteModal({
 
           {/* Estado: lleno — resumen del dryRun */}
           {phase === "preview" && report && (
-            <section className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-5 dark:border-white/10" data-testid="bulk-invite-preview">
+            <section className="flex flex-col gap-3 border-t border-[color:var(--di-border)] pt-5" data-testid="bulk-invite-preview">
               <h3 className="text-sm font-semibold">3. Revisa el resumen y confirma</h3>
               <Counts
                 items={[
@@ -384,7 +381,7 @@ export function BulkInviteModal({
 
           {/* Estado: lleno — resultado del commit */}
           {phase === "result" && report && (
-            <section className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-5 dark:border-white/10" data-testid="bulk-invite-result">
+            <section className="flex flex-col gap-3 border-t border-[color:var(--di-border)] pt-5" data-testid="bulk-invite-result">
               <InlineAlert
                 tone={report.created > 0 && report.rejected + report.notProcessed === 0 ? "success" : "warning"}
                 title={report.created > 0 ? "Invitaciones enviadas" : "No se creó ninguna invitación"}
@@ -410,7 +407,7 @@ export function BulkInviteModal({
                   className={`${controlCls(false)} self-start`}
                   data-testid="bulk-invite-errors-csv"
                 >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                   Descargar CSV de errores
                 </button>
               )}
@@ -418,7 +415,7 @@ export function BulkInviteModal({
           )}
         </div>
 
-        <div className="mt-4 flex shrink-0 flex-wrap justify-end gap-2 border-t border-[#DFE5ED] pt-4 dark:border-white/10">
+        <div className="mt-4 flex shrink-0 flex-wrap justify-end gap-2 border-t border-[color:var(--di-border)] pt-4">
           {phase === "result" || phase === "uncertain" ? (
             <button type="button" onClick={onClose} className={controlCls(false)}>
               Cerrar
@@ -439,9 +436,9 @@ export function BulkInviteModal({
                     disabled={busy || !report || report.valid === 0}
                     data-testid="bulk-invite-confirm"
                     className="inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-                    style={{ background: PRIMARY_GRADIENT }}
+                    style={{ background: PRIMARY_FILL }}
                   >
-                    <CheckCircle2 className={`h-3.5 w-3.5 ${phase === "committing" ? "animate-pulse" : ""}`} aria-hidden="true" />
+                    <Icono nombre="check" className={`h-3.5 w-3.5 ${phase === "committing" ? "animate-pulse" : ""}`} />
                     {phase === "committing"
                       ? "Invitando…"
                       : `Confirmar e invitar${report && report.valid > 0 ? ` (${report.valid})` : ""}`}
@@ -454,9 +451,9 @@ export function BulkInviteModal({
                   disabled={!ready || !file || busy}
                   data-testid="bulk-invite-validate"
                   className="inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-                  style={{ background: PRIMARY_GRADIENT }}
+                  style={{ background: PRIMARY_FILL }}
                 >
-                  <Upload className={`h-3.5 w-3.5 ${phase === "validating" ? "animate-pulse" : ""}`} aria-hidden="true" />
+                  <Icono nombre="nube-subir" className={`h-3.5 w-3.5 ${phase === "validating" ? "animate-pulse" : ""}`} />
                   {phase === "validating" ? "Validando…" : "Validar archivo"}
                 </button>
               )}
@@ -501,7 +498,7 @@ function Counts({ items }: { items: { label: string; value: number; tone?: Count
   return (
     <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {items.map((item) => (
-        <div key={item.label} className="rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/15">
+        <div key={item.label} className="rounded-xl border border-[color:var(--di-border)] px-3 py-2">
           <dt className="text-[10px] font-semibold uppercase opacity-60">{item.label}</dt>
           <dd
             className="mt-0.5 text-lg font-bold"
@@ -520,14 +517,14 @@ function ErrorList({ rows }: { rows: ReturnType<typeof bulkInviteErrorRows> }) {
   return (
     <div className="flex flex-col gap-1.5" data-testid="bulk-invite-error-list">
       <p className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--badge-danger-fg)" }}>
-        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="alerta" className="h-3.5 w-3.5" />
         Filas con error ({rows.length})
       </p>
       {/* Región con scroll accesible por teclado (tabIndex + nombre). */}
       <ol
         tabIndex={0}
         aria-label="Filas con error"
-        className="max-h-56 divide-y divide-[#DFE5ED] overflow-y-auto rounded-xl border border-[#DFE5ED] text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:divide-white/10 dark:border-white/15"
+        className="max-h-56 divide-y divide-[color:var(--di-border)] overflow-y-auto rounded-xl border border-[color:var(--di-border)] text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
       >
         {rows.map((row) => (
           <li key={`${row.rowNumber}-${row.email ?? ""}`} className="flex flex-col gap-0.5 px-3 py-2">

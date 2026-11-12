@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { FileWarning } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Timeline, type SeccionDetalle } from "@/components/detalle/Timeline";
@@ -31,6 +31,7 @@ import { formatoFecha, formatoFechaHora, formatoPesos } from "@/lib/format/date"
 import { tienePermiso } from "@/lib/sesion";
 import type { CambioCampo, DetalleComparendo as Detalle } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 const ORIGEN_CONTRAVENTOR: Record<string, string> = { Api: "Automático", Manual: "Manual", MigracionV1: "Migrado de V1" };
 
@@ -39,7 +40,7 @@ function Archivo({ id, nombre }: { id: string; nombre: string }) {
   return (
     <button
       type="button"
-      className="text-xs font-semibold text-[#3B4FD6] hover:underline"
+      className="text-xs font-semibold text-flit-brand-ink hover:underline"
       onClick={() => apiDownload(`/archivos/${id}`, nombre).catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"))}
     >
       {nombre}
@@ -54,9 +55,9 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-2" role="tablist">
+      <div className={PESTANAS_LISTA_CLS} role="tablist">
         {(["datos", "fuentes", "cambios"] as const).map((p) => (
-          <button key={p} type="button" role="tab" aria-selected={pestana === p} className={controlCls(pestana === p)} onClick={() => setPestana(p)}>
+          <button key={p} type="button" role="tab" aria-selected={pestana === p} className={pestanaClass(pestana === p)} onClick={() => setPestana(p)}>
             {p === "datos" ? "Datos" : p === "fuentes" ? "Fuentes" : "Historial de cambios"}
           </button>
         ))}
@@ -89,7 +90,7 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
               d.evidencia.archivoEvidenciaId ? (
                 <Archivo id={d.evidencia.archivoEvidenciaId} nombre="Documento original" />
               ) : d.evidencia.fotoEvidenciaUrl ? (
-                <a href={d.evidencia.fotoEvidenciaUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#3B4FD6] hover:underline">
+                <a href={d.evidencia.fotoEvidenciaUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-flit-brand-ink hover:underline">
                   Foto de la fuente
                 </a>
               ) : null,
@@ -101,27 +102,27 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
       {pestana === "fuentes" && (
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left text-[11px] opacity-60">
-              <th className="py-1">Canal</th>
-              <th>Municipio</th>
-              <th>Estado</th>
-              <th>Primera vez</th>
-              <th>Última vez visto</th>
+            <tr className="text-left text-[11px]">
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Canal</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Municipio</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Estado</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Primera vez</th>
+              <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Última vez visto</th>
             </tr>
           </thead>
           <tbody>
             {d.fuentes.map((f, i) => (
-              <tr key={i} className="border-t border-[#EEF1F6] dark:border-white/5">
-                <td className="py-1.5">{canal(f.canal).texto}</td>
-                <td>{f.municipioCodigo ?? "—"}</td>
-                <td>{f.presente ? <StatusBadge label="Presente" tone="success" /> : <StatusBadge label={`Ausente desde ${formatoFecha(f.ausenteDesde)}`} tone="neutral" />}</td>
-                <td>{formatoFechaHora(f.primeraVezEn)}</td>
-                <td>{formatoFechaHora(f.ultimaVezVistaEn)}</td>
+              <tr key={i} className="border-t border-border">
+                <td className="px-2 py-1.5">{canal(f.canal).texto}</td>
+                <td className="px-2">{f.municipioCodigo ?? "—"}</td>
+                <td className="px-2">{f.presente ? <StatusBadge label="Presente" tone="success" /> : <StatusBadge label={`Ausente desde ${formatoFecha(f.ausenteDesde)}`} tone="neutral" />}</td>
+                <td className="px-2">{formatoFechaHora(f.primeraVezEn)}</td>
+                <td className="px-2">{formatoFechaHora(f.ultimaVezVistaEn)}</td>
               </tr>
             ))}
             {d.fuentes.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-2 opacity-60">
+                <td colSpan={5} className="px-2 py-2 opacity-60">
                   Solo existe por carga OCR.
                 </td>
               </tr>
@@ -138,22 +139,22 @@ function VehiculoYCompania({ d }: { d: Detalle }) {
           {(cambios.datos ?? []).length > 0 && (
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[11px] opacity-60">
-                  <th className="py-1">Fecha</th>
-                  <th>Fuente</th>
-                  <th>Campo</th>
-                  <th>Antes</th>
-                  <th>Ahora</th>
+                <tr className="text-left text-[11px]">
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Fecha</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Fuente</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Campo</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Antes</th>
+                  <th className="bg-[color:var(--table-header-bg)] px-2 py-1 font-semibold text-[color:var(--table-header-fg)]">Ahora</th>
                 </tr>
               </thead>
               <tbody>
                 {(cambios.datos ?? []).map((c, i) => (
-                  <tr key={i} className="border-t border-[#EEF1F6] dark:border-white/5">
-                    <td className="py-1.5 whitespace-nowrap">{formatoFechaHora(c.registradoEn)}</td>
-                    <td>{canal(c.canal).texto}</td>
-                    <td>{c.campo.replaceAll("_", " ")}</td>
-                    <td className="opacity-70">{c.valorAnterior ?? "—"}</td>
-                    <td>
+                  <tr key={i} className="border-t border-border">
+                    <td className="px-2 py-1.5 whitespace-nowrap">{formatoFechaHora(c.registradoEn)}</td>
+                    <td className="px-2">{canal(c.canal).texto}</td>
+                    <td className="px-2">{c.campo.replaceAll("_", " ")}</td>
+                    <td className="px-2 opacity-70">{c.valorAnterior ?? "—"}</td>
+                    <td className="px-2">
                       {c.valorNuevo ?? "—"}
                       {!c.aplicadoAMaestro && <span className="ml-1 text-[10px] opacity-60">(no es la fuente principal)</span>}
                     </td>
@@ -204,7 +205,7 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
       {sesion?.usuario.esSuperAdmin && (d.estadoConsultaContraventor === "Error" || d.estadoConsultaContraventor === "Agotada") && d.errorConsultaContraventor && (
         <details className="text-xs">
           <summary className="cursor-pointer opacity-70">Qué respondió la consulta (solo FLIT)</summary>
-          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[#F4F7FC] p-2 dark:bg-white/5">{d.errorConsultaContraventor}</pre>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-secondary p-2">{d.errorConsultaContraventor}</pre>
         </details>
       )}
       {k ? (
@@ -279,12 +280,12 @@ function CambioContraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
         Estado: <Chip e={cambioContraventor(d.estadoCambioContraventor)} />
       </div>
       {d.solicitudesCambio.map((s) => (
-        <div key={s.id} className="flex flex-wrap items-center gap-2 border-t border-[#EEF1F6] pt-2 text-xs dark:border-white/5">
+        <div key={s.id} className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-xs">
           <span className="font-semibold">Intento {s.numeroIntento}</span>
           <Chip e={estadoSolicitud(s.estado)} />
           <span className="opacity-70">Solicitado {formatoFechaHora(s.solicitadoEn)}</span>
           {s.fechaRespuestaOt && <span className="opacity-70">Respuesta del OT {formatoFecha(s.fechaRespuestaOt)}</span>}
-          {s.causalRechazo && <span className="w-full text-[#B42318]">Causal: {s.causalRechazo}</span>}
+          {s.causalRechazo && <span className="w-full text-destructive">Causal: {s.causalRechazo}</span>}
           <Archivo id={s.formatoArchivoId} nombre="Formato enviado" />
           {s.soporteRespuestaArchivoId && <Archivo id={s.soporteRespuestaArchivoId} nombre="Soporte de la respuesta" />}
         </div>
@@ -311,7 +312,7 @@ function ResolucionDp({ d, extra }: { d: Detalle; extra?: ReactNode }) {
         ]}
       />
       {dp.respuesta && (
-        <div className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10">
+        <div className="rounded-xl border border-border p-3">
           <h4 className="mb-2 text-xs font-semibold">Respuesta del organismo</h4>
           <Datos
             filas={[
@@ -376,10 +377,10 @@ function Inactivar({ d, onHecho }: { d: Detalle; onHecho: () => void }) {
   return (
     <>
       <button type="button" className={controlCls(false)} onClick={() => setPaso(1)}>
-        <FileWarning className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="documento" className="h-3.5 w-3.5" />
         Inactivar
       </button>
-      <Modal
+      <Modal icono="alerta"
         open={paso > 0}
         onClose={() => setPaso(0)}
         busy={enviando}
@@ -469,12 +470,12 @@ export function DetalleComparendo({
   };
 
   return (
-    <Modal open={id !== null} onClose={onCerrar} title={d ? `Comparendo ${d.numero}` : "Comparendo"} size="2xl">
+    <Modal icono="comparendos" open={id !== null} onClose={onCerrar} title={d ? `Comparendo ${d.numero}` : "Comparendo"} size="2xl">
       {carga.estado === "loading" && <p className="text-sm opacity-60">Cargando comparendo…</p>}
       {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
       {d && ctx && (
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-2xl bg-[#F4F7FC] p-4 dark:bg-white/5">
+          <div className="flex flex-col gap-3 rounded-2xl bg-secondary p-4">
             <div className="flex flex-wrap items-center gap-2">
               {/* B6-1: los dos chips pueden decir «Sin procesar»; cada uno con su rótulo. */}
               <span className="inline-flex items-center gap-1 text-[11px]">
@@ -528,7 +529,7 @@ export function DetalleComparendo({
           </Acordeon>
           <Acordeon titulo="Contraventor" id="detalle-contraventor" abierto={secciones.includes("contraventor")} onAlternar={alternar("contraventor")}>
             <Contraventor d={d} extra={!soloLectura ? extensiones.contraventor?.(ctx) : null} />
-            <div className="mt-4 border-t border-[#EEF1F6] pt-3 dark:border-white/5">
+            <div className="mt-4 border-t border-border pt-3">
               <h4 className="mb-2 text-xs font-semibold">Cambio de contraventor</h4>
               <CambioContraventor d={d} extra={!soloLectura ? extensiones.cambioContraventor?.(ctx) : null} />
             </div>

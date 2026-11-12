@@ -54,8 +54,8 @@ export function PortalPnPreview({
     return (
       <div
         role="status"
-        className="rounded-2xl border p-4 text-xs opacity-70"
-        style={{ borderColor: "#DFE5ED" }}
+        className="rounded-2xl border bg-card p-4 text-xs opacity-70"
+        style={{ borderColor: "var(--border)" }}
       >
         Elige colores válidos para ver cómo quedará el portal.
       </div>
@@ -64,20 +64,20 @@ export function PortalPnPreview({
 
   return (
     <figure
-      className="overflow-hidden rounded-2xl border bg-white shadow-sm"
-      style={{ ...scope, borderColor: "#DFE5ED" }}
+      className="overflow-hidden rounded-2xl border bg-card shadow-[var(--shadow-card)]"
+      style={{ ...scope, borderColor: "var(--border)" }}
       aria-label={textos.ariaLabel}
       data-testid="portal-pn-preview"
     >
       <div
         className="flex items-center gap-2 border-b px-3 py-2"
-        style={{ borderColor: "#DFE5ED" }}
+        style={{ borderColor: "var(--border)" }}
       >
         {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element -- imagen del borrador (URL de objeto)
           <img src={logoSrc} alt={textos.logoAlt} className="h-6 max-w-[96px] object-contain" />
         ) : (
-          <span className="rounded-md bg-[#EEF5FF] px-1.5 py-0.5 text-xs font-bold text-[#162744]">
+          <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-bold text-foreground">
             FLIT
           </span>
         )}
@@ -90,11 +90,11 @@ export function PortalPnPreview({
         </span>
       </div>
 
-      <div className="space-y-3 bg-[#EEF5FF] p-3">
+      <div className="space-y-3 bg-secondary p-3">
         {bannerCount === undefined ? null : bannerCount === 0 ? (
           <p
             className="rounded-xl border border-dashed px-3 py-2 text-center text-xs opacity-70"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
           >
             {textos.sinBanner ?? ""}
           </p>
@@ -105,8 +105,8 @@ export function PortalPnPreview({
               <img
                 src={bannerSrc}
                 alt="Primer banner del portal"
-                className="aspect-[22/5] w-full rounded-xl border bg-white object-cover"
-                style={{ borderColor: "#DFE5ED" }}
+                className="aspect-[22/5] w-full rounded-xl border bg-card object-cover"
+                style={{ borderColor: "var(--border)" }}
               />
             )}
             <p className="mt-1 text-center text-xs opacity-70">Banners: {bannerCount}</p>
@@ -146,7 +146,7 @@ export function PortalPnPreview({
         {carouselCount === undefined ? null : carouselCount === 0 ? (
           <p
             className="rounded-xl border border-dashed px-3 py-2 text-center text-xs opacity-70"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
           >
             Sin carrusel: el portal muestra los servicios de siempre.
           </p>
@@ -157,8 +157,8 @@ export function PortalPnPreview({
               <img
                 src={carouselSrc}
                 alt="Primera imagen del carrusel"
-                className="aspect-[3/2] w-full rounded-xl border bg-white object-cover"
-                style={{ borderColor: "#DFE5ED" }}
+                className="aspect-[3/2] w-full rounded-xl border bg-card object-cover"
+                style={{ borderColor: "var(--border)" }}
               />
             )}
             <p className="mt-1 text-center text-xs opacity-70">
@@ -169,7 +169,7 @@ export function PortalPnPreview({
       </div>
       <figcaption
         className="border-t px-3 py-1.5 text-xs opacity-70"
-        style={{ borderColor: "#DFE5ED" }}
+        style={{ borderColor: "var(--border)" }}
       >
         {textoSegunImagenes(textos.pie, {
           tieneLogo: tieneLogo ?? Boolean(logoSrc),

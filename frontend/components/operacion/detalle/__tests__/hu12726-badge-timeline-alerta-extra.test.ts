@@ -1,5 +1,5 @@
 // Uso de ejemplo:
- // detalleEstadoHeader('entregado').color === estadoChipStyle('entregado').accent (#00A99D)
+ // detalleEstadoHeader('entregado').color === estadoChipStyle('entregado').accent (#14C4A6, disco del UI Kit 2026)
  // INLINE_ALERT_TONES.pending.background === 'var(--badge-pending-bg)'
 import { describe, expect, it } from 'vitest';
 import { ESTADOS_TRAMITE, estadoChipStyle } from '@/lib/tramites/estados';
@@ -8,10 +8,10 @@ import { DETALLE_GOLD } from '../detalle-visual';
 import { detalleEstadoHeader } from '../detalle-estado-header';
 
 describe('HU #12726 — AC1 cabecera = catálogo de estados', () => {
-  it('happy: entregado usa accent teal del catálogo (#00A99D)', () => {
+  it('happy: entregado usa accent teal del catálogo (#14C4A6, disco del UI Kit 2026)', () => {
     const hdr = detalleEstadoHeader('entregado');
     expect(hdr.color).toBe(estadoChipStyle('entregado').accent);
-    expect(hdr.color).toBe('#00A99D');
+    expect(hdr.color).toBe('#14C4A6');
   });
 
   it('contrato: cada estado del catálogo usa exactamente accent de estadoChipStyle', () => {
@@ -20,8 +20,8 @@ describe('HU #12726 — AC1 cabecera = catálogo de estados', () => {
     }
   });
 
-  it('edge: el dorado DETALLE_GOLD (#F9AC00) no es el color de cabecera de ningún estado del catálogo', () => {
-    expect(DETALLE_GOLD).toBe('#F9AC00');
+  it('edge: el tono pendiente DETALLE_GOLD (var(--di-warning)) no es el color de cabecera de ningún estado del catálogo', () => {
+    expect(DETALLE_GOLD).toBe('var(--di-warning)');
     for (const estado of ESTADOS_TRAMITE) {
       expect(detalleEstadoHeader(estado).color).not.toBe(DETALLE_GOLD);
     }
@@ -92,7 +92,7 @@ describe('HU #12726 — AC3 contrato initialPanel timeline', () => {
 
 describe('HU #12726 — AC5 no regresión catálogo / tonos', () => {
   it('contrato: hex de entregado en catálogo permanece #00A99D (estados.ts inmutable en esta HU)', () => {
-    expect(estadoChipStyle('entregado').accent).toBe('#00A99D');
+    expect(estadoChipStyle('entregado').accent).toBe('#14C4A6');
   });
 
   it('happy: tonos base InlineAlert distintos de pending', () => {
@@ -102,7 +102,7 @@ describe('HU #12726 — AC5 no regresión catálogo / tonos', () => {
   });
 
   it('edge: DETALLE_GOLD sigue existiendo como token visual pero no pinta cabecera de estados', () => {
-    expect(DETALLE_GOLD).toBe('#F9AC00');
+    expect(DETALLE_GOLD).toBe('var(--di-warning)');
     expect(detalleEstadoHeader('borrador').color).not.toBe(DETALLE_GOLD);
   });
 });

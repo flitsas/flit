@@ -51,8 +51,9 @@ const EXPECTED_TOKEN_DEFAULT_HEX: Record<string, string> = {
   "--color-flit-brand": "#557eff",
   "--color-flit-tech": "#00dbd5",
   "--color-flit-alert": "#ff4e00",
-  "--color-flit-bg": "#eef5ff",
-  "--color-flit-gray": "#dfe5ed",
+  // UI Kit 2026 (propuesta-2): fondo #E6F0FF y línea #A9C9FC.
+  "--color-flit-bg": "#e6f0ff",
+  "--color-flit-gray": "#a9c9fc",
 };
 
 // Los 6 hex de marca crudos — si alguno reaparece literal en la salida renderizada de una
@@ -70,7 +71,9 @@ describe("HU #12420 AC3 — paridad de tokens en globals.css (sin cambio visual 
     "%s sigue resolviendo al hex FLIT %s por defecto (sin marca publicada)",
     (token, hex) => {
       const declarationRegex = new RegExp(
-        `${token.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}:\\s*(?:var\\([^,]+,\\s*${hex}\\)|${hex})`,
+        // HU #14478: --color-flit-primary anida un respaldo por tema (var(--brand-primary, var(--flit-primary-tema, HEX)));
+        // en claro y sin marca de socio sigue resolviendo al mismo hex.
+        `${token.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}:\\s*(?:var\\([^,]+,\\s*(?:var\\([^,]+,\\s*)?${hex}\\)\\)?|${hex})`,
         "i",
       );
       expect(GLOBALS_CSS).toMatch(declarationRegex);
@@ -143,9 +146,9 @@ describe("HU #12420 AC3 — Shell sin hex de marca literal, claro y oscuro", () 
     try {
       const { container } = renderShell();
       expectHtmlHasNoLiteralBrandHex(container, "Shell (oscuro)");
-      // AC2 — el neutro de dark mode (#05060A → fondo del shell, HU #12420 no lo toca) sigue
-      // presente. Desde B-13 lo pone la barra de la suite con la variante `dark:` de Tailwind.
-      expect(container.innerHTML).toContain("dark:bg-[#05060A]");
+      // AC2 — el fondo del shell sale de un token: desde el rediseño (Epic #14471) es la superficie de la propuesta,
+      // que en oscuro cambia sola, en lugar del neutro fijo `dark:bg-[#05060A]`.
+      expect(container.innerHTML).toContain("bg-[var(--di-surface)]");
     } finally {
       window.localStorage.removeItem("flit-theme");
       document.documentElement.classList.remove("dark");

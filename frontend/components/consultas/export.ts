@@ -1,3 +1,5 @@
+import type { MaxActoresPorRol } from "@/lib/api/company-queries";
+
 /**
  * El nombre del archivo lleva el nombre de la consulta cuando lo tiene. Media docena de
  * `consulta-2026-07-01-a-2026-07-31.xlsx` en Descargas son indistinguibles entre sí.
@@ -63,7 +65,15 @@ export async function exportarPorLotes<T>(opciones: {
   pageSize: number;
   batchSize?: number;
   traerPagina: (page: number, pageSize: number) => Promise<readonly T[]>;
-  volcar: (lote: T[], parte: { numero: number; total: number }) => void;
+  /**
+   * Ancho de las columnas por actor, calculado sobre TODO el filtro. Se entrega igual a cada parte:
+   * si cada archivo calculara el suyo, las partes de un mismo export saldrían con columnas distintas.
+   */
+  maxActoresPorRol?: MaxActoresPorRol;
+  volcar: (
+    lote: T[],
+    parte: { numero: number; total: number; maxActoresPorRol?: MaxActoresPorRol },
+  ) => void;
 }): Promise<{ exportadas: number; archivos: number }> {
   const { total, pageSize, traerPagina, volcar } = opciones;
   const batchSize = opciones.batchSize ?? EXPORT_BATCH_SIZE;
@@ -76,7 +86,11 @@ export async function exportarPorLotes<T>(opciones: {
 
   const volcarLote = () => {
     if (lote.length === 0) return;
-    volcar(lote, { numero: numeroArchivo, total: totalArchivos });
+    volcar(lote, {
+      numero: numeroArchivo,
+      total: totalArchivos,
+      maxActoresPorRol: opciones.maxActoresPorRol,
+    });
     exportadas += lote.length;
     numeroArchivo += 1;
     lote = [];

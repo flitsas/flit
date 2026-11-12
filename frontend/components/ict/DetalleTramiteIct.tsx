@@ -3,9 +3,12 @@
 // Detalle de un trámite de la integración (HU #11819). Cuatro capas, de la más útil a la más
 // técnica: el recorrido responde «dónde se atascó», las consultas responden «por qué», los datos
 // responden «con qué llegó» y el log queda al fondo para cuando nada de lo anterior baste.
-import { useCallback, useEffect, useState } from "react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { Ban, Check, CircleDashed, Eye, EyeOff, Hourglass, X, type LucideIcon } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchConsultasFuenteIct,
@@ -56,23 +59,23 @@ const PESTANAS: { id: Pestana; label: string }[] = [
  * Iconos de `lucide` y nunca glifos sueltos (✓ ✕ ○): el navegador los pinta como emoji y
  * desentonan con el resto de la aplicación.
  */
-const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: LucideIcon }> = {
-  ok: { fg: "#15803D", bg: "rgba(34,197,94,0.14)", Icon: Check },
-  error: { fg: "#991B1B", bg: "rgba(153,27,27,0.14)", Icon: X },
-  espera: { fg: "#C2410C", bg: "rgba(255,78,0,0.14)", Icon: Hourglass },
-  anulado: { fg: "#6B21A8", bg: "rgba(107,33,168,0.14)", Icon: Ban },
-  pendiente: { fg: "#64748B", bg: "rgba(148,163,184,0.16)", Icon: CircleDashed },
+const TONO_RESULTADO: Record<string, { fg: string; bg: string; Icon: ComponentType<IconoComoProps> }> = {
+  ok: { fg: "var(--flit-success-ink)", bg: "var(--badge-success-bg)", Icon: iconoComo("check") },
+  error: { fg: "var(--destructive)", bg: "var(--badge-danger-bg)", Icon: iconoComo("cerrar") },
+  espera: { fg: "var(--badge-pending-fg)", bg: "var(--badge-pending-bg)", Icon: iconoComo("espera") },
+  anulado: { fg: "var(--badge-purple-fg)", bg: "var(--badge-purple-bg)", Icon: iconoComo("distinto") },
+  pendiente: { fg: "var(--muted-foreground)", bg: "var(--badge-neutral-bg)", Icon: iconoComo("espera") },
 };
 
 export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; esAdmin: boolean }) {
   const [pestana, setPestana] = useState<Pestana>("recorrido");
 
   return (
-    <div className="mx-1 rounded-2xl border border-flit-brand/30 bg-white dark:border-white/10 dark:bg-[#0B0F14]">
+    <div className="mx-1 rounded-2xl border border-flit-brand/30 bg-card dark:border-border">
       <div
         role="tablist"
         aria-label={`Detalle del trámite ${tramite.numero}`}
-        className="flex gap-1 overflow-x-auto border-b border-[#DFE5ED] px-3 dark:border-white/10"
+        className={`${PESTANAS_LISTA_CLS} px-3`}
       >
         {PESTANAS.map((p) => {
           const activa = pestana === p.id;
@@ -84,14 +87,12 @@ export function DetalleTramiteIct({ tramite, esAdmin }: { tramite: TramiteIct; e
               aria-selected={activa}
               onClick={() => setPestana(p.id)}
               // Mismo patrón que TramitesListToolbar: color más subrayado absoluto, no pastilla.
-              className={`relative whitespace-nowrap px-3 py-2.5 text-xs font-semibold transition ${
-                activa ? "text-flit-brand" : "opacity-60 hover:opacity-100"
-              }`}
+              className={pestanaClass(activa)}
             >
               {p.label}
               {activa && (
                 <span
-                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-t bg-flit-brand"
+                  className="hidden"
                   aria-hidden="true"
                 />
               )}
@@ -180,7 +181,7 @@ function PanelRecorrido({
             ))}
           </ol>
 
-          <div className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-[#DFE5ED] bg-[#F4F7FC] px-4 py-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <div className="flex flex-wrap gap-x-8 gap-y-2 rounded-xl border border-border bg-secondary px-4 py-3">
             <Tiempo label="Tiempo total" segundos={dato.tiempos.segundosTotal} />
             <Tiempo label="Hasta activar" segundos={dato.tiempos.segundosHastaActivar} />
             <Tiempo label="Hasta crear el borrador" segundos={dato.tiempos.segundosHastaCrearBorrador} />
@@ -227,7 +228,7 @@ function Hito({ hito, ultimo }: { hito: HitoTrazabilidad; ultimo: boolean }) {
         >
           <Icon className="h-3.5 w-3.5" style={{ color: tono.fg }} />
         </span>
-        {!ultimo && <span className="w-px flex-1 bg-[#C9D6EA] dark:bg-white/15" aria-hidden="true" />}
+        {!ultimo && <span className="w-px flex-1 bg-[var(--border-strong)]" aria-hidden="true" />}
       </div>
 
       <div className={ultimo ? "pb-0" : "pb-5"}>
@@ -238,12 +239,7 @@ function Hito({ hito, ultimo }: { hito: HitoTrazabilidad; ultimo: boolean }) {
           </span>
           {hito.segundosDesdeAnterior !== null && (
             <span
-              className="rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold tabular-nums"
-              style={
-                hito.esTramoMasLento
-                  ? { background: "rgba(255,78,0,0.14)", color: "#C2410C" }
-                  : { background: "rgba(100,116,139,0.12)", color: "#475569" }
-              }
+              {...etiquetaKit(hito.esTramoMasLento ? "danger" : "neutral", { className: "font-mono tabular-nums" })}
               // El tramo lento no se distingue solo por color: se nombra.
               title={hito.esTramoMasLento ? "Tramo más lento del recorrido" : undefined}
             >
@@ -255,7 +251,7 @@ function Hito({ hito, ultimo }: { hito: HitoTrazabilidad; ultimo: boolean }) {
         {hito.mensaje && (
           <p
             className="mt-1.5 rounded-lg px-3 py-2 text-[11px] font-medium"
-            style={{ background: "rgba(153,27,27,0.10)", color: "#991B1B" }}
+            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
           >
             {hito.mensaje}
           </p>
@@ -320,7 +316,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
           {bloqueante && (
             <p
               className="rounded-lg px-3 py-2 text-[11px] font-medium"
-              style={{ background: "rgba(153,27,27,0.10)", color: "#991B1B" }}
+              style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
             >
               La consulta de {bloqueante.tipoConsultaEtiqueta.toLowerCase()} del{" "}
               {bloqueante.nivelActorEtiqueta.toLowerCase()} lleva {bloqueante.intentos}{" "}
@@ -350,8 +346,8 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
                 {pg.paginar(dato).map((c) => (
                   <tr
                     key={c.id}
-                    className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
-                    style={c.bloquea ? { background: "rgba(153,27,27,0.06)" } : undefined}
+                    className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
+                    style={c.bloquea ? { background: "var(--badge-danger-bg)" } : undefined}
                   >
                     <td className={`${TD_CLS} rounded-l-xl border-l`} style={TD_STYLE}>{c.nivelActorEtiqueta}</td>
                     <td className={TD_CLS} style={TD_STYLE}>{c.tipoConsultaEtiqueta}</td>
@@ -369,7 +365,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
                           className="justify-start"
                           actions={[
                             {
-                              icon: abierta === c.id ? EyeOff : Eye,
+                              icon: abierta === c.id ? iconoComo("ojo-tachado") : iconoComo("ojo"),
                               label: `${abierta === c.id ? "Ocultar" : "Ver"} respuesta de ${c.tipoConsultaEtiqueta}`,
                               tone: "primary",
                               onClick: () => setAbierta(abierta === c.id ? null : c.id),
@@ -395,7 +391,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
           />
 
           {abierta && (
-            <pre className="max-h-64 overflow-auto rounded-lg border border-[#DFE5ED] bg-[#F4F7FC] p-3 font-mono text-[11px] leading-relaxed dark:border-white/10 dark:bg-white/[0.03]">
+            <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-secondary p-3 font-mono text-[11px] leading-relaxed">
               {formatearJson(dato.find((c) => c.id === abierta)?.respuesta)}
             </pre>
           )}
@@ -410,7 +406,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
 
 function SiNo({ valor }: { valor: boolean }) {
   return (
-    <span className="font-semibold" style={{ color: valor ? "#15803D" : "#991B1B" }}>
+    <span className="font-semibold" style={{ color: valor ? "var(--flit-success-ink)" : "var(--destructive)" }}>
       {valor ? "Sí" : "No"}
     </span>
   );
@@ -479,7 +475,7 @@ function PanelDatos({ numero }: { numero: number }) {
             {secciones.map((s) => (
               <section
                 key={s.titulo}
-                className="flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10"
+                className="flex flex-col gap-2 rounded-xl border border-border p-3"
               >
                 <h4 className="text-[10px] font-bold uppercase tracking-wider text-flit-brand">
                   {s.titulo}
@@ -492,7 +488,7 @@ function PanelDatos({ numero }: { numero: number }) {
                   s.datos.map((d) => (
                     <div
                       key={d.etiqueta}
-                      className="flex justify-between gap-3 border-b border-[#DFE5ED] pb-1.5 text-[11px] last:border-b-0 last:pb-0 dark:border-white/10"
+                      className="flex justify-between gap-3 border-b border-border pb-1.5 text-[11px] last:border-b-0 last:pb-0"
                     >
                       <span className="shrink-0 opacity-55">{d.etiqueta}</span>
                       <span
@@ -516,9 +512,9 @@ function PanelDatos({ numero }: { numero: number }) {
               className="inline-flex items-center gap-1.5 rounded-lg bg-flit-brand/10 px-3 py-1.5 text-[11px] font-semibold text-flit-brand hover:bg-flit-brand/20 disabled:opacity-50"
             >
               {revelado ? (
-                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo-tachado" className="h-3.5 w-3.5" />
               ) : (
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
               )}
               {revelando
                 ? "Revelando…"
@@ -535,7 +531,7 @@ function PanelDatos({ numero }: { numero: number }) {
           {errorRevelado && (
             <p
               className="rounded-lg px-3 py-2 text-[11px] font-medium"
-              style={{ background: "rgba(153,27,27,0.10)", color: "#991B1B" }}
+              style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
             >
               {errorRevelado}
             </p>
@@ -562,7 +558,7 @@ function PanelLog({ numero }: { numero: number }) {
     >
       {dato && dato.length > 0 && (
         <div className="flex flex-col gap-3">
-          <p className="rounded-lg bg-flit-brand/[0.08] px-3 py-2 text-[11px] text-[#1D4ED8] dark:text-[#9DB8FF]">
+          <p className="rounded-lg bg-flit-brand/[0.08] px-3 py-2 text-[11px] text-flit-brand-ink">
             Solo las peticiones que tocan a este trámite. El log completo de la plataforma sigue en
             el módulo Log ICT.
           </p>
@@ -584,7 +580,7 @@ function PanelLog({ numero }: { numero: number }) {
               </thead>
               <tbody>
                 {pg.paginar(dato).map((e) => (
-                  <tr key={e.id} className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <tr key={e.id} className={`bg-card align-top ${TABLA_ROW_HOVER_CLS}`}>
                     <td className={`${TD_CLS} rounded-l-xl border-l font-mono tabular-nums`} style={TD_STYLE}>
                       {formatFechaHora(new Date(e.ocurrido))}
                     </td>
@@ -604,14 +600,7 @@ function PanelLog({ numero }: { numero: number }) {
                       )}
                     </td>
                     <td className={TD_CLS} style={TD_STYLE}>
-                      <span
-                        className="rounded-md px-2 py-0.5 font-mono text-[11px] font-semibold"
-                        style={
-                          e.codigo >= 400
-                            ? { background: "rgba(153,27,27,0.14)", color: "#991B1B" }
-                            : { background: "rgba(34,197,94,0.14)", color: "#15803D" }
-                        }
-                      >
+                      <span {...etiquetaKit(e.codigo >= 400 ? "danger" : "success", { className: "font-mono" })}>
                         {e.codigo}
                       </span>
                     </td>

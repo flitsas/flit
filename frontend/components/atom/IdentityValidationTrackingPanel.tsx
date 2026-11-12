@@ -1,11 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { DataTable, type DataTableColumn } from '@/components/atom/DataTable';
 import { Pagination } from '@/components/atom/Pagination';
 import { usePaginacion } from '@/components/atom/usePaginacion';
@@ -280,14 +279,11 @@ export function IdentityValidationTrackingPanel({
         type="button"
         onClick={toggle}
         className="flex items-center gap-1.5 text-xs font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ outlineColor: FLIT.brand.blue }}
+        style={{ outlineColor: 'var(--di-action)' }}
         aria-expanded={open}
         aria-label="Ver tracking de la validación"
       >
-        <ChevronRight
-          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
+        <Icono nombre="derecha" className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} />
         Ver tracking
       </button>
       )}
@@ -300,7 +296,7 @@ export function IdentityValidationTrackingPanel({
             </p>
           )}
           {error && (
-            <p className="text-xs" style={{ color: FLIT.state.danger }} role="alert" aria-live="polite">
+            <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert" aria-live="polite">
               {error}
             </p>
           )}
@@ -311,7 +307,7 @@ export function IdentityValidationTrackingPanel({
           {referenced && (
             <p
               className="rounded-lg px-2.5 py-1.5 text-xs"
-              style={{ background: FLIT.blueAlpha(0.1), color: FLIT.brand.blue }}
+              style={{ background: 'var(--di-info-soft)', color: 'var(--di-action)' }}
               role="status"
             >
               Validación reutilizada de otro trámite del mismo cliente (identidad ya verificada). El
@@ -324,7 +320,7 @@ export function IdentityValidationTrackingPanel({
           {events && events.length > 0 && compacto && (
             <ul className="space-y-2" aria-label="Bitácora de la validación">
               {filasVisibles.map(({ e, i }) => (
-                <li key={i} className="rounded-xl border bg-white px-3 py-2.5 text-xs dark:bg-[#0B0F14]" style={{ borderColor: '#DFE5ED' }}>
+                <li key={i} className="rounded-xl border bg-card px-3 py-2.5 text-xs dark:bg-card" style={{ borderColor: 'var(--border)' }}>
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                     <span className="font-semibold">{auditStageLabel(e.stage, true)}</span>
                     <StatusBadge
@@ -350,6 +346,7 @@ export function IdentityValidationTrackingPanel({
               getRowKey={({ i }) => String(i)}
               minWidth={520}
               ariaLabel="Bitácora de la validación"
+              tarjeta={false}
               pagination={{
                 page: pg.page,
                 pageSize: pg.pageSize,
@@ -365,10 +362,10 @@ export function IdentityValidationTrackingPanel({
               onClick={() => void loadAudit()}
               disabled={loading}
               className="flex items-center gap-1 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ color: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              style={{ color: 'var(--di-action)', outlineColor: 'var(--di-action)' }}
               aria-label="Refrescar bitácora"
             >
-              <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+              <Icono nombre="reintento" className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} />
               Refrescar
             </button>
           )}

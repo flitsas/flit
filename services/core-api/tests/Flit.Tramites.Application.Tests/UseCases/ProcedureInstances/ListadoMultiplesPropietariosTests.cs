@@ -48,8 +48,8 @@ public sealed class ListadoMultiplesPropietariosTests
             instance, new HashSet<string>(), actoresAprobados: aprobados);
 
         fila.VendedoresActores.Should().Equal(
-            new ActorListadoDto("Ana Uno", FirmaParteEstados.Firmado),
-            new ActorListadoDto("Luis Dos", FirmaParteEstados.Pendiente));
+            new ActorListadoDto("Ana Uno", FirmaParteEstados.Firmado, Ordinal: 1, NumeroDocumento: "1018"),
+            new ActorListadoDto("Luis Dos", FirmaParteEstados.Pendiente, Ordinal: 2, NumeroDocumento: "1028"));
         fila.FirmaVendedorEstado.Should().Be(FirmaParteEstados.Pendiente);
     }
 

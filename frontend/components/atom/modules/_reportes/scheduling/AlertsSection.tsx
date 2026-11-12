@@ -1,7 +1,10 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
+import { BellPlus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -13,6 +16,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { CompanyNotice } from "../CompanyNotice";
 import { cn } from "@/lib/utils";
@@ -128,7 +139,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
       "rounded-lg px-3 py-1.5 text-xs font-semibold",
       active
         ? "text-white"
-        : "text-flit-primary dark:text-slate-200 border border-slate-200 dark:border-slate-700",
+        : "text-flit-primary border border-border",
     );
 
   return (
@@ -149,7 +160,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
             className={cn(subTabClass(subView === "history"), "flex items-center gap-1")}
             style={subView === "history" ? { background: "var(--color-flit-brand)" } : undefined}
           >
-            <History className="h-3.5 w-3.5" aria-hidden="true" /> Historial de disparos
+            <Icono nombre="reloj" className="h-3.5 w-3.5" /> Historial de disparos
           </button>
         </div>
         {subView === "rules" && !formOpen && !needsCompany && (
@@ -189,8 +200,8 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
             >
               {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
               <div className={CARDLIST_SCROLL}>
-                <table className={CARDLIST_TABLE} aria-label="Reglas de alerta">
-                  <thead>
+                <table className={`${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Reglas de alerta">
+                  <thead className={TABLA_MOVIL_THEAD_CLS}>
                     <tr className={CARDLIST_HEAD_ROW}>
                       <th scope="col" className={CARDLIST_TH}>Nombre</th>
                       <th scope="col" className={CARDLIST_TH}>Métrica</th>
@@ -202,36 +213,31 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                       <th scope="col" className={`${CARDLIST_TH} text-right`}>Acciones</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className={TABLA_MOVIL_TBODY_CLS}>
                     {pg.paginar(items).map((r) => (
-                      <tr key={r.id} data-testid="alert-rule-row" className={CARDLIST_ROW}>
-                        <td className={`${CARDLIST_CELL} font-medium`}>{r.name}</td>
-                        <td className={CARDLIST_CELL}>{METRIC_LABELS[r.metric]}</td>
-                        <td className={`${CARDLIST_CELL} whitespace-nowrap`}>
+                      <tr key={r.id} data-testid="alert-rule-row" className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                        <td data-label="Nombre" className={`${CARDLIST_CELL} font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>{r.name}</td>
+                        <td data-label="Métrica" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{METRIC_LABELS[r.metric]}</td>
+                        <td data-label="Condición" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>
                           {OPERATOR_LABELS[r.operator]} {r.threshold}
                         </td>
-                        <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{r.windowMinutes} min</td>
-                        <td className={`${CARDLIST_CELL} whitespace-nowrap`} data-testid="alert-cooldown-cell">
+                        <td data-label="Ventana" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{r.windowMinutes} min</td>
+                        <td data-label="Cooldown" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`} data-testid="alert-cooldown-cell">
                           {r.cooldownMinutes} min
                         </td>
-                        <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{formatDateTime(r.lastTriggeredAt)}</td>
-                        <td className={CARDLIST_CELL}>
+                        <td data-label="Último disparo" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{formatDateTime(r.lastTriggeredAt)}</td>
+                        <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                           <span
-                            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                            style={
-                              r.isActive
-                                ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                                : { background: "#6b7a941A", color: "#6b7a94" }
-                            }
+                            {...etiquetaKit(r.isActive ? "success" : "neutral")}
                           >
                             {r.isActive ? "Activa" : "Inactiva"}
                           </span>
                         </td>
-                        <td className={CARDLIST_CELL}>
+                        <td data-label="Acciones" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                           <RowActions
                             actions={[
-                              { icon: Pencil, label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
-                              { icon: Trash2, label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
+                              { icon: iconoComo("lapiz"), label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
+                              { icon: iconoComo("papelera"), label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
                             ]}
                           />
                         </td>
@@ -257,19 +263,19 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
               role="alertdialog"
               aria-label="Confirmar eliminación"
               data-testid="alert-delete-confirm"
-              className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 space-y-2"
+              className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-4 space-y-2"
             >
-              <p className="text-sm text-flit-primary dark:text-slate-100">
+              <p className="text-sm text-flit-primary">
                 ¿Eliminar la alerta <strong>{confirmDelete.name}</strong>? Su historial de disparos se conserva.
               </p>
               {actionError && (
-                <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">{actionError}</p>
+                <p role="alert" className="text-xs font-medium text-destructive">{actionError}</p>
               )}
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white"
+                  className="rounded-xl bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground"
                 >
                   Eliminar
                 </button>
@@ -279,7 +285,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                     setConfirmDelete(null);
                     setActionError(null);
                   }}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
+                  className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-flit-primary"
                 >
                   Cancelar
                 </button>

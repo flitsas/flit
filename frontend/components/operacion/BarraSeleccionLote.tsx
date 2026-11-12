@@ -81,7 +81,7 @@ export function BarraSeleccionLote({
       >
         {permiteSeleccionarTodos ? (
           <label
-            className={`inline-flex items-center gap-2 font-semibold text-flit-primary dark:text-white ${
+            className={`inline-flex items-center gap-2 font-semibold text-foreground ${
               lleno ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
             }`}
           >
@@ -104,7 +104,7 @@ export function BarraSeleccionLote({
           aria-live="polite"
           aria-atomic="true"
           data-testid="contador-seleccion-lote"
-          className="font-semibold text-flit-primary dark:text-white"
+          className="font-semibold text-foreground"
         >
           {lleno ? textoContadorLote(contador, todosDelFiltro) : ''}
         </span>
@@ -115,7 +115,7 @@ export function BarraSeleccionLote({
             <button
               type="button"
               onClick={onLimpiar}
-              className="ml-auto rounded-lg px-2 py-1 font-semibold text-flit-primary/70 transition hover:text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white/70 dark:hover:text-white"
+              className="ml-auto rounded-lg px-2 py-1 font-semibold text-muted-foreground transition hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             >
               Limpiar selección
             </button>

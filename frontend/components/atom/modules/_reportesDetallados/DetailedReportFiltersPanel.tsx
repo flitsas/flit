@@ -14,6 +14,8 @@ import {
 } from "@/components/consultas/tipo-tramite";
 import { CANAL_LABEL, CANALES_ORDENADOS } from "@/lib/tramites/tramites-row-labels";
 import { familyToCategory, PROCEDURE_STATUSES, type DetailedReportFiltersState, type TriState } from "./filters";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 /** Épica #14296 — valor interno de la opción «Todas las compañías» del selector (nunca viaja a la API). */
 export const TODAS_LAS_COMPANIAS = "__todas__";
@@ -27,8 +29,8 @@ const CATEGORIA_A_FAMILIA: Record<string, ProcedureFamily> = {
   otros: "OTROS",
 };
 
-const inputClass =
-  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand dark:bg-[#0B0F14] dark:text-white";
+// HU #14484 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const inputClass = `${TRAMITES_INPUT_CLS} font-medium`;
 
 interface DetailedReportFiltersPanelProps {
   filters: DetailedReportFiltersState;
@@ -103,7 +105,7 @@ export function DetailedReportFiltersPanel({
   }
 
   return (
-    <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"}`}>
+    <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-card"}`}>
       <div className="flex flex-wrap items-end gap-3">
         <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
         {networkScopeSelector}
@@ -203,8 +205,7 @@ export function DetailedReportFiltersPanel({
           type="button"
           onClick={onSearch}
           disabled={!canSearch}
-          className="h-10 rounded-[10px] px-4 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "var(--color-flit-brand)" }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Buscar
         </button>

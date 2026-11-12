@@ -54,18 +54,18 @@ export function CoverageNotice({
 
   return (
     <div
-      className="rounded-2xl border border-[#E5A50A]/40 bg-[#FFF8E6] p-3 text-xs dark:border-[#E5A50A]/30 dark:bg-[#E5A50A]/10"
+      className="rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] p-3 text-xs"
       data-testid={`${testIdPrefix}-cobertura`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-semibold text-[#8A6100] dark:text-[#F2C14E]">
+        <p className="font-semibold text-[var(--badge-warning-fg)]">
           {plural(faltantes.length, "valor que pediste no salió", "valores que pediste no salieron")} en
           el resultado
         </p>
         <button
           type="button"
           onClick={() => setAbierto((v) => !v)}
-          className="text-[11px] font-semibold text-[#8A6100] underline dark:text-[#F2C14E]"
+          className="text-[11px] font-semibold text-[var(--badge-warning-fg)] underline"
           data-testid={`${testIdPrefix}-cobertura-detalle`}
         >
           {abierto ? "Ocultar el detalle" : "Ver por qué"}
@@ -74,7 +74,7 @@ export function CoverageNotice({
 
       {/* El resumen distingue las dos causas antes de abrir nada, porque son dos acciones
           distintas: una se arregla aflojando un filtro y la otra no se arregla. */}
-      <p className="mt-1 text-[#8A6100]/90 dark:text-[#F2C14E]/80">
+      <p className="mt-1 text-[var(--badge-warning-fg)]/90">
         {excluidos.length > 0 && (
           <>
             {excluidos.length} {excluidos.length === 1 ? "existe" : "existen"} pero{" "}
@@ -93,10 +93,10 @@ export function CoverageNotice({
         <ul className="mt-2 space-y-1" data-testid={`${testIdPrefix}-cobertura-lista`}>
           {faltantes.map((item) => (
             <li key={`${item.campo}-${item.valor}`} className="flex flex-wrap gap-x-2">
-              <span className="font-mono font-semibold text-[#8A6100] dark:text-[#F2C14E]">
+              <span className="font-mono font-semibold text-[var(--badge-warning-fg)]">
                 {campoLabel(item.campo, fields)} {item.valor}
               </span>
-              <span className="text-[#6B7280] dark:text-white/60">{item.motivo}</span>
+              <span className="text-muted-foreground">{item.motivo}</span>
             </li>
           ))}
         </ul>

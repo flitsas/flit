@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { STEPS, progressText, statusOf, type StepsState } from "@/lib/captura-manual/steps";
 
 /**
@@ -7,41 +7,38 @@ import { STEPS, progressText, statusOf, type StepsState } from "@/lib/captura-ma
  * siguiente), activo = círculo blanco con borde y anillo azules y número azul, pendiente = gris claro.
  * El progreso se anuncia con aria-live: «Paso N de 5».
  */
+/** Estado de la captura → `data-estado` de `.kit-paso` (Manual UI Kit 2026, avance horizontal). */
+const ESTADO_KIT = { done: "hecho", active: "actual", pending: "pendiente" } as const;
+
 export function StepBar({ state }: { state: StepsState }) {
   return (
     <nav aria-label="Progreso de la verificación" className="w-full">
       <p className="sr-only" role="status" aria-live="polite">
         {progressText(state)}
       </p>
-      <ol className="flex w-full items-start">
+      <ol className="kit-pasos w-full items-start px-0">
         {STEPS.map((step, i) => {
           const status = statusOf(state, i);
           return (
             <li
               key={step.id}
-              className="relative flex min-w-0 flex-1 flex-col items-center gap-1"
+              className="kit-paso flex min-w-0 flex-col items-center gap-1.5"
+              data-estado={ESTADO_KIT[status]}
               aria-current={status === "active" ? "step" : undefined}
             >
               {i < STEPS.length - 1 ? (
                 <span
                   aria-hidden="true"
                   data-testid="step-line"
-                  className={"absolute left-1/2 top-4 h-0.5 w-full -translate-y-1/2 " + (status === "done" ? "bg-flit-brand" : "bg-flit-gray")}
+                  className="hidden"
                 />
               ) : null}
               <span
-                className={
-                  "relative z-10 flex size-8 items-center justify-center rounded-full text-sm font-semibold " +
-                  (status === "done"
-                    ? "bg-flit-brand text-white"
-                    : status === "active"
-                      ? "border-2 border-flit-brand bg-white text-flit-brand ring-4 ring-flit-brand/20"
-                      : "bg-flit-gray text-muted-foreground")
-                }
+                className="kit-paso__num relative z-10"
               >
                 {status === "done" ? (
                   <>
-                    <Check aria-hidden="true" className="size-4" />
+                    <Icono nombre="check" className="size-4" />
                     <span className="sr-only">completado, </span>
                   </>
                 ) : (
@@ -49,10 +46,7 @@ export function StepBar({ state }: { state: StepsState }) {
                 )}
               </span>
               <span
-                className={
-                  "max-w-full truncate text-xs " +
-                  (status === "active" ? "font-bold text-flit-brand" : "text-muted-foreground")
-                }
+                className="kit-paso__etiqueta max-w-full truncate text-xs"
               >
                 <span className="sr-only">{status === "pending" ? `${i + 1}, ` : ""}</span>
                 {step.label}

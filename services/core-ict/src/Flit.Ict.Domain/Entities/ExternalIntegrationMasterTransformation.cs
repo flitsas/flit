@@ -12,8 +12,8 @@ public sealed class ExternalIntegrationMasterTransformation
     public Guid TenantId { get; set; }
 
     /// <summary>
-    /// Código de la transformación según el catálogo ICT Tipo Trámite (Bug #13445): 5=blindaje,
-    /// 6=cambio de carrocería, 7=cambio de color, 9=conversión de combustible.
+    /// Código de la transformación según el catálogo B «Tipo de transformación ICT»: 5=cambio de color,
+    /// 9=conversión de combustible (transformación), 17=cambio de carrocería. El blindaje no va aquí.
     /// </summary>
     public int IdTransformationType { get; set; }
 

@@ -2,7 +2,8 @@
 
 import { useEffect, useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { OT_OVERLAY_STYLE, OT_SHEET_CLASS } from "./ot-detalle-visual";
+import { OT_SHEET_CLASS } from "./ot-detalle-visual";
+import { DIALOGO_VELO_CLS } from "@/components/admin/dialogo-propio";
 
 /**
  * Armazón del modal de detalle del trámite del ORGANISMO DE TRÁNSITO (HU #12060).
@@ -54,8 +55,7 @@ export function OtDetalleShell({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
-      style={OT_OVERLAY_STYLE}
+      className={`fixed inset-0 z-[1100] flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

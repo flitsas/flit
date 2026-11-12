@@ -7,16 +7,17 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 /// <summary>
 /// Bug #13445 — traduce las transformaciones y la prenda del pre-trámite ICT a los <c>field_values</c>
 /// que core-api persiste en el borrador (contrato de carriles, sin cambio de .proto).
-/// <para><b>Transformaciones (D6):</b> las banderas se leen SOLO de
-/// <see cref="ExternalIntegrationMaster.Transformations"/>, cuyos códigos son del catálogo ICT
-/// <b>Tipo Trámite</b> (no RUNT): 5 blindaje, 6 cambio de carrocería, 7 cambio de color, 9 conversión de
-/// combustible. 8 (cambio de locatario), 10/11 (duplicados) y cualquier otro código no son
-/// transformaciones y no producen nada.</para>
-/// <para><b>Valores (D7/D8/D9):</b> <c>blindaje_nivel</c> y <c>vehicle_fuel</c> se envían siempre que la
+/// <para><b>Transformaciones:</b> las banderas se leen SOLO de
+/// <see cref="ExternalIntegrationMaster.Transformations"/>, cuyos códigos son del catálogo B «Tipo de
+/// transformación ICT» (confirmado por FLIT 1): 5 cambio de color, 9 conversión de combustible
+/// (transformación), 17 cambio de carrocería. El blindaje NO sale de esta lista (6 y 7 eran del catálogo A
+/// de tipo de trámite y ya no se aceptan); cualquier otro código no es
+/// transformación y no produce nada.</para>
+/// <para><b>Valores (D7/D8/D9):</b> <c>blindaje_nivel</c> (solo si el trámite principal es BLINDAJE, 5) y <c>vehicle_fuel</c> se envían siempre que la
 /// columna del master traiga un id con equivalencia exacta, venga o no la transformación (cubre el
-/// trámite principal 5/9 sin <c>more_transaction</c>). Sin equivalencia exacta no se envía valor y el
+/// trámite principal 9 sin <c>more_transaction</c>). Sin equivalencia exacta no se envía valor y el
 /// gestor lo elige en el wizard.</para>
-/// <para><b>Color y carrocería (Bug #13590):</b> la <c>description</c> de la transformación 7 / 6 es el
+/// <para><b>Color y carrocería (Bug #13590):</b> la <c>description</c> de la transformación 5 / 17 es el
 /// valor nuevo que eligió el gestor ICT y viaja tal cual (solo Trim, sin normalizar) como
 /// <c>vehicle_color</c> / <c>vehicle_body_type</c> junto a su bandera; si el código se repite, gana la
 /// primera no vacía. Sin descripción solo va la bandera. core-api no lo pisa con el RUNT porque la bandera
@@ -31,10 +32,18 @@ namespace Flit.Ict.Infrastructure.ExternalClients;
 /// </summary>
 internal static class IctDraftFieldValuesMapper
 {
-    internal const int TransformacionBlindaje = 5;
-    internal const int TransformacionCarroceria = 6;
-    internal const int TransformacionColor = 7;
+    /// <summary>Trámite principal BLINDAJE (catálogo A de tipo de trámite): único que emite blindaje.</summary>
+    internal const int TramiteBlindaje = 5;
+
+    /// <summary>Tipo de trámite principal de matrícula inicial / leasing (el tipo de servicio solo aplica ahí).</summary>
+    internal const int TramiteMatriculaInicial = 1;
+    internal const int TramiteMatriculaLeasing = 2;
+
+
+    // Catálogo B «Tipo de transformación ICT» (more_transaction_transaction_type[].transactionType).
+    internal const int TransformacionColor = 5;
     internal const int TransformacionCombustible = 9;
+    internal const int TransformacionCarroceria = 17;
 
     private const string True = "true";
 
@@ -87,16 +96,52 @@ internal static class IctDraftFieldValuesMapper
 
         var values = new List<FieldValue>();
         AddTransformations(values, master);
+        AddServicio(values, master);
         AddPrenda(values, master);
         return values;
     }
+
+    /// <summary>
+    /// <c>vehicle_service</c> con el código del catálogo de core-api (<c>catalogs.vehicle_service_types</c>).
+    /// Solo matrícula (1 inicial, 2 leasing); en traspaso lo hidrata el RUNT y no se emite nada. Sin valor
+    /// declarado se envía PARTICULAR de forma explícita.
+    /// </summary>
+    private static void AddServicio(List<FieldValue> values, ExternalIntegrationMaster master)
+    {
+        if (master.TransactionType is not (TramiteMatriculaInicial or TramiteMatriculaLeasing))
+        {
+            return;
+        }
+
+        var codigo = master.VehicleServiceType is { } tipo && ServicioCore.TryGetValue(tipo, out var s)
+            ? s
+            : ServicioPorDefecto;
+        Add(values, "vehicle_service", codigo);
+    }
+
+    /// <summary>Servicio por defecto cuando el contrato no lo trae (o trae un valor fuera del catálogo).</summary>
+    internal const string ServicioPorDefecto = "PARTICULAR";
+
+    /// <summary>Contrato ICT <c>vehicle_service_type</c> (1-6) → código <c>VehicleServiceTypeCode</c> de core-api.</summary>
+    private static readonly Dictionary<short, string> ServicioCore = new()
+    {
+        [1] = "PARTICULAR",
+        [2] = "PUBLICO",
+        [3] = "DIPLOMATICO",
+        [4] = "OFICIAL",
+        [5] = "ESPECIAL",
+        [6] = "OTROS",
+    };
 
     private static void AddTransformations(List<FieldValue> values, ExternalIntegrationMaster master)
     {
         var codigos = master.Transformations.Select(t => t.IdTransformationType).ToHashSet();
 
         // El valor declara la transformación: con valor exacto la bandera va aunque no venga el código.
-        var nivelWeb = master.ArmorLevelNumberId is { } nivel && NivelBlindaje.TryGetValue(nivel, out var n)
+        // El blindaje solo aplica cuando el trámite principal ES blindaje (5): no sale de la lista de
+        // transformaciones ni de armor_level_number_id en otros tipos de trámite.
+        var nivelWeb = master.TransactionType == TramiteBlindaje
+            && master.ArmorLevelNumberId is { } nivel && NivelBlindaje.TryGetValue(nivel, out var n)
             ? n
             : null;
         var combustibleWeb = master.NewVehicleFuelType is { } combustible
@@ -104,7 +149,7 @@ internal static class IctDraftFieldValuesMapper
             ? c
             : null;
 
-        if (codigos.Contains(TransformacionBlindaje) || nivelWeb is not null)
+        if (nivelWeb is not null)
         {
             Add(values, "blindaje", True);
         }

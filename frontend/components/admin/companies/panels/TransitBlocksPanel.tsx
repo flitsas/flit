@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Search } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { RowActions } from "@/components/atom/RowActions";
@@ -206,7 +207,7 @@ export function TransitBlocksPanel({
           <RowActions
             actions={[
               {
-                icon: Ban,
+                icon: iconoComo("distinto"),
                 label: `${blocked ? "Desbloquear" : "Bloquear"} ${office.name}`,
                 onClick: () => requestToggle(office),
                 tone: blocked ? "primary" : "danger",
@@ -223,7 +224,7 @@ export function TransitBlocksPanel({
     <>
       <section aria-label="Bloqueos de organismos de tránsito" className="space-y-3">
         <div className="flex items-start gap-2">
-          <Ban className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+          <Icono nombre="distinto" className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
           <div>
             <h4 className="text-sm font-semibold">Organismos bloqueados (Marca Blanca)</h4>
             <p className="mt-0.5 text-xs opacity-60">
@@ -243,8 +244,8 @@ export function TransitBlocksPanel({
             errorMessage="No se pudieron cargar los bloqueos de organismos."
             skeletonRows={3}
           >
-            <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
-              <Search className="h-4 w-4 opacity-60" aria-hidden />
+            <div className="flex max-w-md items-center gap-2 rounded-xl border bg-card p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand">
+              <Icono nombre="buscar" className="h-4 w-4 opacity-60" />
               <label htmlFor="ot-blocks-search" className="sr-only">
                 Buscar organismo de tránsito
               </label>
@@ -262,6 +263,7 @@ export function TransitBlocksPanel({
 
             {(
               <DataTable
+                tarjeta={false}
                 emptyContent={
                   filtros.hayFiltros ? (
                     <TablaFiltrosVacio

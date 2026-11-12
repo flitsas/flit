@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -13,9 +13,9 @@ import { nombreMes } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
 
 const COLOR: Record<ReturnType<typeof tipoDia>, string> = {
-  habil: "bg-white text-flit-primary hover:border-flit-brand dark:bg-transparent dark:text-white",
-  finDeSemana: "bg-[#F1F4F9] text-[#8A97AB] dark:bg-white/5 dark:text-slate-500",
-  festivo: "bg-[#FFE8DC] font-semibold text-[#B03A00] hover:border-[#FF4E00] dark:bg-[#FF4E00]/20 dark:text-[#FFB38F]",
+  habil: "bg-card text-flit-primary hover:border-flit-brand dark:bg-transparent",
+  finDeSemana: "bg-secondary text-muted-foreground",
+  festivo: "bg-[var(--badge-warning-bg)] font-semibold text-[var(--badge-warning-fg)] hover:border-flit-alert dark:bg-flit-alert/20",
 };
 
 /** Confirmación de un cambio: muestra cuántos comparendos se recalcularán antes de guardar y cuántos se recalcularon después. */
@@ -46,7 +46,7 @@ function CambiarDia({ dia, onCerrar, onGuardado }: { dia: DiaCalendario; onCerra
   };
 
   return (
-    <Modal
+    <Modal icono="calendario"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -105,8 +105,8 @@ function Mes({ datos, mes, onElegir }: { datos: AnioCalendario; mes: number; onE
   const semanas = semanasDelMes(datos.dias, datos.anio, mes);
   return (
     <div className="flex flex-col gap-1">
-      <h3 className="text-xs font-semibold capitalize text-flit-primary dark:text-white">{nombreMes(mes)}</h3>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-[#8A97AB]">
+      <h3 className="text-xs font-semibold capitalize text-flit-primary">{nombreMes(mes)}</h3>
+      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-muted-foreground">
         {DIAS_SEMANA.map((d) => (
           <span key={d}>{d}</span>
         ))}
@@ -151,11 +151,11 @@ function Calendario() {
         acciones={
           <div className="flex items-center gap-2">
             <button type="button" className={controlCls(false)} onClick={() => setAnio(anio - 1)} aria-label="Año anterior">
-              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="izquierda" className="h-3.5 w-3.5" />
             </button>
             <span className="w-12 text-center text-sm font-semibold">{anio}</span>
             <button type="button" className={controlCls(false)} onClick={() => setAnio(anio + 1)} aria-label="Año siguiente">
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="derecha" className="h-3.5 w-3.5" />
             </button>
           </div>
         }
@@ -168,15 +168,15 @@ function Calendario() {
       )}
       {d && datos.estado === "ready" && (
         <>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-[#5B6B82] dark:text-slate-300">
+          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
             <span>
               <b>{d.habiles}</b> días hábiles · <b>{d.festivos}</b> festivos
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-3 w-3 rounded-sm bg-[#FFE8DC]" aria-hidden /> Festivo
+              <span className="h-3 w-3 rounded-sm bg-[var(--badge-warning-bg)]" aria-hidden /> Festivo
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-3 w-3 rounded-sm bg-[#F1F4F9]" aria-hidden /> Fin de semana
+              <span className="h-3 w-3 rounded-sm bg-secondary" aria-hidden /> Fin de semana
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-flit-brand" aria-hidden /> Cambio manual

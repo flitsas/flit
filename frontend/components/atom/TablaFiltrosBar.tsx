@@ -77,7 +77,7 @@
  */
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Search, SearchX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   INPUT_CLS,
   PeriodoPopover,
@@ -162,7 +162,7 @@ function PeriodoBarra({ filtros, columnaId }: { filtros: TablaFiltrosEstado; col
         onAplicar={aplicar}
       />
       {error ? (
-        <p role="alert" className="text-xs font-semibold text-[#C2410C]">
+        <p role="alert" className="text-xs font-semibold text-[var(--badge-warning-fg)]">
           {error}
         </p>
       ) : null}
@@ -205,7 +205,7 @@ function FiltroPopover({
         className={controlCls(visibles.length > 0)}
       >
         {visibles.length > 0 ? `+ Filtro (${visibles.length})` : "+ Filtro"}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -243,7 +243,7 @@ function FiltroPopover({
               {visibles.length > 0 ? (
                 <ul
                   aria-label="Filtros agregados"
-                  className="mb-2 flex flex-wrap gap-1.5 border-b border-[#DFE5ED] pb-2 dark:border-white/10"
+                  className="mb-2 flex flex-wrap gap-1.5 border-b border-border pb-2 dark:border-border"
                 >
                   {visibles.map((c) => {
                     const col = columnas.find((x) => x.id === c.columnaId);
@@ -251,7 +251,7 @@ function FiltroPopover({
                     return (
                       <li
                         key={c.columnaId}
-                        className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                        className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-flit-brand-ink dark:text-flit-brand-ink"
                       >
                         <button
                           type="button"
@@ -281,21 +281,21 @@ function FiltroPopover({
                       <button
                         type="button"
                         onClick={() => setEditando(c.id)}
-                        className={`flex min-h-9 w-full items-center rounded-lg px-2 text-left text-xs font-semibold text-flit-primary hover:bg-[#EFF6FF] dark:text-white dark:hover:bg-white/5 ${BTN_FOCO}`}
+                        className={`flex min-h-9 w-full items-center rounded-lg px-2 text-left text-xs font-semibold text-flit-primary hover:bg-secondary dark:text-foreground dark:hover:bg-white/5 ${BTN_FOCO}`}
                       >
                         {c.label}
                       </button>
                     </li>
                   ))}
               </ul>
-              <div className="mt-2 flex items-center justify-end border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+              <div className="mt-2 flex items-center justify-end border-t border-border pt-3 dark:border-border">
                 <button
                   type="button"
                   onClick={() => {
                     filtros.limpiar();
                     close();
                   }}
-                  className={`min-h-9 rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 ${BTN_FOCO}`}
+                  className={`min-h-9 rounded-xl border border-flit-alert px-3 py-2 text-xs font-semibold text-[var(--badge-warning-fg)] transition hover:bg-[var(--badge-danger-bg)] ${BTN_FOCO}`}
                 >
                   Empezar de cero
                 </button>
@@ -334,10 +334,7 @@ export function TablaFiltrosBar({
     <div className="flex flex-wrap items-center gap-2">
       {buscador ? (
         <div className="relative w-64 shrink-0">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
-            aria-hidden="true"
-          />
+          <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
           <input
             type="search"
             aria-label={buscador.ariaLabel ?? buscador.placeholder}
@@ -369,12 +366,12 @@ export function TablaFiltrosVacio({
 }) {
   return (
     <div role="status" className="flex flex-col items-center gap-3 px-4 py-10 text-center">
-      <SearchX className="h-8 w-8 text-[#59677D]" aria-hidden="true" />
-      <p className="text-sm font-semibold text-flit-primary dark:text-white">{mensaje}</p>
+      <Icono nombre="buscar" className="h-8 w-8 text-muted-foreground" />
+      <p className="text-sm font-semibold text-flit-primary dark:text-foreground">{mensaje}</p>
       <button
         type="button"
         onClick={onLimpiar}
-        className={`min-h-9 rounded-xl border border-flit-brand px-3 py-2 text-xs font-semibold text-[#3B4FD6] transition hover:bg-[#EFF6FF] ${BTN_FOCO}`}
+        className={`min-h-9 rounded-xl border border-flit-brand px-3 py-2 text-xs font-semibold text-flit-brand-ink transition hover:bg-secondary ${BTN_FOCO}`}
       >
         Limpiar filtros
       </button>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { MandatarioGeneralCard } from "@/components/admin/transit-offices/MandatarioGeneralCard";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { CompanyMandatarioForm } from "@/components/admin/companies/mandate-signers/CompanyMandatarioForm";
@@ -84,17 +85,17 @@ export function OtFormatoContratoChip({ formato }: { formato: OtFormatoVista | n
   return (
     <div className="flex flex-col items-start gap-1 md:items-end">
       <p
-        className="inline-flex items-center gap-2 rounded-full border border-[#D6E2FF] bg-[#EFF4FF] px-3 py-1.5 text-xs text-[#59677D] dark:border-white/15 dark:bg-white/5 dark:text-white/70"
+        className="inline-flex items-center gap-2 rounded-full border border-[var(--badge-info-border)] bg-[var(--badge-info-bg)] px-3 py-1.5 text-xs text-muted-foreground"
         data-testid="ot-formato-contrato"
       >
-        <FileText className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden />
+        <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0 text-flit-brand" />
         <span>
           Formato de contrato:{" "}
-          <span className="font-semibold text-[#162244] dark:text-white">{formato.nombre}</span>
+          <span className="font-semibold text-foreground">{formato.nombre}</span>
         </span>
       </p>
       {formato.fallo ? (
-        <span className="text-[11px] text-[#59677D] dark:text-white/60">
+        <span className="text-[11px] text-muted-foreground">
           No se pudo cargar el nombre del catálogo
         </span>
       ) : null}
@@ -305,7 +306,7 @@ export function OtMandatosSection({
           ...(canRegisterSigner && puedeEditarMandatario(row)
             ? [
                 {
-                  icon: Pencil,
+                  icon: iconoComo("lapiz"),
                   label: `Editar mandatario ${row.fullName}`,
                   tone: "primary" as const,
                   onClick: () => setEditingSigner(row),
@@ -316,14 +317,14 @@ export function OtMandatosSection({
             ? [
                 row.isActive
                   ? {
-                      icon: UserX,
+                      icon: iconoComo("persona"),
                       label: `Desactivar mandatario ${row.fullName}`,
                       tone: "danger" as const,
                       disabled: busySignerId === row.id,
                       onClick: () => setBaja({ signer: row, accion: "desactivar" }),
                     }
                   : {
-                      icon: RotateCcw,
+                      icon: iconoComo("reintento"),
                       label: `Reactivar mandatario ${row.fullName}`,
                       disabled: busySignerId === row.id,
                       onClick: () => void reactivar(row),
@@ -333,7 +334,7 @@ export function OtMandatosSection({
           ...(canRegisterSigner && puedeEditarMandatario(row) && puedeReenviarValidacion(row)
             ? [
                 {
-                  icon: Send,
+                  icon: iconoComo("radicacion"),
                   label: `Reenviar validación a ${row.fullName}`,
                   disabled: busySignerId === row.id,
                   onClick: () => void reenviarDesdeFila(row),
@@ -343,7 +344,7 @@ export function OtMandatosSection({
           ...(canRegisterSigner && puedeEliminarMandatario(row)
             ? [
                 {
-                  icon: Trash2,
+                  icon: iconoComo("papelera"),
                   label: `Eliminar mandatario ${row.fullName}`,
                   tone: "danger" as const,
                   disabled: busySignerId === row.id,
@@ -354,7 +355,7 @@ export function OtMandatosSection({
           ...(modeloDe(row) === "natural"
             ? [
                 {
-                  icon: Eye,
+                  icon: iconoComo("ojo"),
                   label: `Ver firma de ${row.fullName}`,
                   tone: "primary" as const,
                   onClick: () => setPreviewSigner(row),
@@ -469,8 +470,8 @@ export function OtMandatosSection({
       />
       <div className="flex flex-col gap-3" data-testid="ot-mandatos-signers-card">
         <div>
-          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">Otros mandatarios del organismo</h3>
-          <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
+          <h3 className="text-sm font-semibold text-foreground">Otros mandatarios del organismo</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             Las demás personas registradas en este organismo, se usen o no por empresa.
           </p>
         </div>

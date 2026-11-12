@@ -35,7 +35,7 @@ export interface DetailedReportFiltersState {
  */
 export function defaultDetailedFilters(reference: Date = new Date()): DetailedReportFiltersState {
   const from = new Date(reference);
-  from.setDate(from.getDate() - 30);
+  from.setDate(from.getDate() - 29); // 30 días contando hoy = preset «Últimos 30 días» de RangoFechas
   return {
     range: { from: toIsoDate(from), to: toIsoDate(reference) },
     hasTransformation: "",

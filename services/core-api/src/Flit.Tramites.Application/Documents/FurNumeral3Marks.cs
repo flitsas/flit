@@ -11,7 +11,7 @@ namespace Flit.Tramites.Application.Documents;
 public static class FurNumeral3Marks
 {
     /// <summary>Ids <c>requested_process_N</c> que el mapper puede emitir (sin 6 ni 14).</summary>
-    public static readonly int[] Emittable = [1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18];
+    public static readonly int[] Emittable = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18];
 
     public static IReadOnlySet<int> Resolve(FurDocumentData data) =>
         Resolve(data.TipologiaCodigo, data.Modalidad, data.PrendaMarking, data.Transformaciones);
@@ -61,8 +61,13 @@ public static class FurNumeral3Marks
                 marks.Add(5);
             if (!IsCarroceriaBase(code) && transformaciones.Carroceria)
                 marks.Add(17);
+            // Conversión de combustible = 9 «Transformación» + 18 «Otros» (ejemplar oficial
+            // Fur_OtroTramite_CambioCombus.pdf). Un Set evita duplicar si el tipo base ya las puso.
             if (!IsCombustibleBase(code) && transformaciones.Combustible)
+            {
+                marks.Add(9);
                 marks.Add(18);
+            }
         }
 
         return marks;
@@ -106,7 +111,11 @@ public static class FurNumeral3Marks
             return [15];
         if (code is "CAMBIO_CARROCERIA")
             return [17];
-        if (code is "CONVERSION_COMBUSTIBLE" or "CAMBIO_LOCATARIO" or "CAMBIO_ACREEDOR")
+        // La conversión de combustible marca 9 «Transformación» + 18 «Otros» (nuevo tipo de
+        // combustible en el numeral 23), según el ejemplar oficial del organismo.
+        if (code is "CONVERSION_COMBUSTIBLE")
+            return [9, 18];
+        if (code is "CAMBIO_LOCATARIO" or "CAMBIO_ACREEDOR")
             return [18];
         if (code is "BLINDAJE")
             return [];

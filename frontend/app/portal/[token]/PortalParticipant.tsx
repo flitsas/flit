@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, FileText } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { portalPublicClient } from '@/lib/api/tramites-client';
 import type {
   PortalDocumentoStatus,
@@ -18,7 +18,7 @@ type LoadState =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; view: PortalView };
 
-const CARD = 'w-full max-w-md rounded-3xl p-7 bg-white dark:bg-[#0B0F14] border';
+const CARD = 'w-full max-w-md rounded-3xl p-7 bg-card text-card-foreground border border-border shadow-[var(--shadow-card)]';
 
 /**
  * Portal público del participante por magic-link (Slice 7B). Lee la vista por
@@ -58,7 +58,7 @@ export function PortalParticipant({ token }: Props) {
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
           style={{ background: 'color-mix(in srgb, var(--color-flit-tech) 15%, transparent)' }}
         >
-          <Check className="h-7 w-7" style={{ color: 'var(--color-flit-tech)' }} />
+          <Icono nombre="check" className="h-7 w-7" style={{ color: 'var(--color-flit-tech)' }} />
         </div>
         <h1 className="text-lg font-bold text-center">¡Listo!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
@@ -80,7 +80,7 @@ export function PortalParticipant({ token }: Props) {
     return (
       <div className={CARD} role="alert">
         <h1 className="text-lg font-bold mb-2">Portal del participante</h1>
-        <p className="text-sm" style={{ color: '#FF4E00' }}>
+        <p className="text-sm" style={{ color: "var(--destructive)" }}>
           {load.message}
         </p>
       </div>
@@ -188,7 +188,7 @@ function ConsentGate({
       </label>
 
       {error && (
-        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-[11px] font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}
@@ -197,8 +197,8 @@ function ConsentGate({
         type="button"
         onClick={() => void handleAccept()}
         disabled={!accepted || submitting}
-        className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+        className="w-full py-2.5 rounded-xl text-sm font-semibold text-primary-foreground disabled:opacity-50"
+        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
         {submitting ? 'Registrando…' : 'Aceptar y continuar'}
       </button>
@@ -285,12 +285,12 @@ function DocumentosTask({
           <li
             key={d.tipo}
             className="rounded-xl border p-3"
-            style={{ borderColor: d.subido ? '#8CC63F' : '#DFE5ED' }}
+            style={{ borderColor: d.subido ? "var(--badge-success-border)" : "var(--border)" }}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 min-w-0">
                 {d.subido && (
-                  <span style={{ color: '#8CC63F' }} aria-hidden="true">
+                  <span style={{ color: "var(--flit-success-ink)" }} aria-hidden="true">
                     ✓
                   </span>
                 )}
@@ -298,7 +298,7 @@ function DocumentosTask({
                 {d.obligatorio && (
                   <span
                     className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase shrink-0"
-                    style={{ background: 'rgba(255,78,0,0.10)', color: '#FF4E00' }}
+                    style={{ background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
                   >
                     Obligatorio
                   </span>
@@ -326,7 +326,7 @@ function DocumentosTask({
         ))}
       </ul>
       {error && (
-        <p className="text-[11px] font-medium mt-2" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-[11px] font-medium mt-2" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}
@@ -352,8 +352,8 @@ function BiometricaTask({
           pronto.
         </p>
       ) : !pendiente ? (
-        <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: '#5B8A1F' }}>
-          <Check className="h-3.5 w-3.5" /> Identidad verificada
+        <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: "var(--flit-success-ink)" }}>
+          <Icono nombre="check" className="h-3.5 w-3.5" /> Identidad verificada
         </p>
       ) : (
         <p className="text-[11px] opacity-70">
@@ -409,8 +409,8 @@ function FirmaTask({ token, onRefresh }: { token: string; onRefresh: () => void 
     <section aria-label="Firma de la compraventa">
       <h2 className="text-sm font-bold mb-1">Firma de la compraventa</h2>
       {firma?.firmada ? (
-        <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: '#5B8A1F' }}>
-          <Check className="h-3.5 w-3.5" /> Firmaste la compraventa
+        <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: "var(--flit-success-ink)" }}>
+          <Icono nombre="check" className="h-3.5 w-3.5" /> Firmaste la compraventa
         </p>
       ) : firma && firma.signatureId === null ? (
         <p className="text-[11px] opacity-70">
@@ -443,7 +443,7 @@ function FirmaTask({ token, onRefresh }: { token: string; onRefresh: () => void 
         </div>
       )}
       {error && (
-        <p className="text-[11px] font-medium mt-2" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-[11px] font-medium mt-2" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}
@@ -480,14 +480,14 @@ function FinalizarTask({
         type="button"
         onClick={() => void handleFinalizar()}
         disabled={busy}
-        className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-2"
-        style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+        className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold text-primary-foreground disabled:opacity-50 flex items-center justify-center gap-2"
+        style={{ background: "var(--gradient-action)", boxShadow: "var(--shadow-button)" }}
       >
-        <FileText className="h-4 w-4" aria-hidden="true" />
+        <Icono nombre="documento" className="h-4 w-4" />
         {busy ? 'Finalizando…' : 'Finalizar mi parte'}
       </button>
       {error && (
-        <p className="text-[11px] font-medium mt-2" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-[11px] font-medium mt-2" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}

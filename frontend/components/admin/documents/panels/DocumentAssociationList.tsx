@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ProcedureDocumentRequirement } from "@/lib/api/types-documents";
 import { catalogDocumentTitle } from "@/lib/tramites/document-labels";
 import { DocumentCatalogCaption } from "@/components/shared/DocumentCatalogCaption";
@@ -30,14 +30,14 @@ export function DocumentAssociationList({
         return (
         <li
           key={item.id}
-          className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+          className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5"
         >
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"
             style={{ background: "var(--color-flit-brand)" }}
             aria-hidden="true"
           >
-            <FileText className="h-3.5 w-3.5" />
+            <Icono nombre="documento" className="h-3.5 w-3.5" />
           </span>
 
           <div className="min-w-0 flex-1">
@@ -66,9 +66,9 @@ export function DocumentAssociationList({
             disabled={busy}
             aria-label={`Remover ${label}`}
             className="rounded-lg border p-1 disabled:opacity-40"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Icono nombre="papelera" className="h-3.5 w-3.5" />
           </button>
         </li>
         );

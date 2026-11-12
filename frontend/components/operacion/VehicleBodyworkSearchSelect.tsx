@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 
 export type VehicleBodyworkOption = {
@@ -127,26 +127,23 @@ export function VehicleBodyworkSearchSelect({
         aria-label={label}
         onClick={toggleOpen}
         aria-invalid={invalid || undefined}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
-        style={invalid ? { borderColor: '#FF4E00', borderWidth: 2 } : undefined}
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60"
+        style={invalid ? { borderColor: 'var(--destructive)', borderWidth: 2 } : undefined}
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+        <Icono nombre="abajo" className="h-3.5 w-3.5 shrink-0 opacity-50" />
       </button>
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#162744]"
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-card p-2 shadow-[var(--kit-sombra)]"
           role="listbox"
           aria-label={label}
         >
           <div className="relative mb-2">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-              aria-hidden
-            />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40" />
             <input
               ref={inputRef}
               type="search"
@@ -162,7 +159,7 @@ export function VehicleBodyworkSearchSelect({
             {loading && options.length === 0 ? (
               <li className="px-2 py-2 text-xs opacity-55">Buscando…</li>
             ) : error ? (
-              <li className="px-2 py-2 text-xs" style={{ color: '#FF4E00' }} role="alert">
+              <li className="px-2 py-2 text-xs" style={{ color: 'var(--destructive)' }} role="alert">
                 {error}
               </li>
             ) : options.length === 0 ? (

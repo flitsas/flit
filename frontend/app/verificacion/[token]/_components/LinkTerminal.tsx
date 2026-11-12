@@ -1,4 +1,4 @@
-import { AlertCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { LinkTerminalKind } from "@/lib/captura-manual/types";
 
 const COPY: Record<LinkTerminalKind, { title: string; body: string }> = {
@@ -25,7 +25,7 @@ export function LinkTerminal({ kind }: { kind: LinkTerminalKind }) {
   const { title, body } = COPY[kind];
   return (
     <div role="alert" className="flex flex-col items-center gap-3 py-6 text-center" data-testid={`terminal-${kind}`}>
-      <AlertCircle aria-hidden="true" className="size-10 text-flit-alert" />
+      <Icono nombre="alerta" className="size-10 text-flit-alert" />
       <h1 className="text-xl font-bold text-flit-primary">{title}</h1>
       <p className="text-base text-muted-foreground">{body}</p>
     </div>

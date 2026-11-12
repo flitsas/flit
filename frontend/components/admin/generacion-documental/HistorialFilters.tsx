@@ -5,6 +5,8 @@ import {
   STANDALONE_DOCUMENT_STATUS_OPTIONS,
   type StandaloneDocumentStatusFilter,
 } from "./status-labels";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 /** Estado de los filtros del historial. Cadena vacía = «sin filtro», nunca `undefined`. */
 export interface HistorialFiltersValue {
@@ -78,8 +80,8 @@ export interface HistorialFiltersProps {
   disabled?: boolean;
 }
 
-const FIELD_CLASS =
-  "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const FIELD_CLASS = `${TRAMITES_INPUT_CLS} w-full`;
 
 /**
  * Filtros del historial (CF-18, HU-03).
@@ -254,7 +256,7 @@ export function HistorialFilters({
           <button
             type="button"
             onClick={() => onChange(HISTORIAL_FILTERS_EMPTY)}
-            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             Limpiar filtros
           </button>

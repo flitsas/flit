@@ -1,6 +1,6 @@
 "use client";
 
-import { History } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /** HU-C — atajo al módulo «Historial por placa» (HU #12194) con la placa ya consultada. */
 export function DrFlitHistorialPlacaLink({
@@ -26,7 +26,7 @@ export function DrFlitHistorialPlacaLink({
         style={{ background: "var(--dr-flit-icon-tint)" }}
         aria-hidden="true"
       >
-        <History className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
+        <Icono nombre="reloj" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
       </span>
       <span className="min-w-0 flex-1">
         <span
