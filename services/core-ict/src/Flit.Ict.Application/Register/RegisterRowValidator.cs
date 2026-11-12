@@ -126,6 +126,13 @@ public sealed class RegisterRowValidator : AbstractValidator<RegisterRowInput>
             .When(r => r.TransactionType == 9)
             .WithMessage("new_vehicle_fuel_type es obligatorio (1 a 12) en cambio de combustible");
 
+        // Tipo de servicio (opcional, solo matrícula): 1 Particular .. 6 Otros. Público (2) sin empresa
+        // vinculadora NO es novedad: lo completa el gestor en el wizard.
+        RuleFor(r => r.VehicleServiceType!.Value).InclusiveBetween((short)1, (short)6)
+            .When(r => r.VehicleServiceType is not null)
+            .WithName("vehicle_service_type")
+            .WithMessage("vehicle_service_type debe estar entre 1 y 6 (1 Particular, 2 Público, 3 Diplomático, 4 Oficial, 5 Especial, 6 Otros)");
+
         // ===== Compañía relacionada / limitaciones (opcionales; longitud si vienen) =====
         RuleFor(r => r.RelatedCompanyDocument).MaximumLength(12)
             .When(r => !string.IsNullOrEmpty(r.RelatedCompanyDocument));
