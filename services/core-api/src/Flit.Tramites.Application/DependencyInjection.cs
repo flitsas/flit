@@ -271,6 +271,8 @@ public static class DependencyInjection
         // sin depender de que alguien genere el consolidado.
         services.AddScoped<FirmarImprontaManualSiListaHandler>();
         services.AddScoped<BackfillFirmaImprontaManualHandler>();
+        // Copia de la firma de baúl de cada parte al radicar (el trámite radicado ya no lee el baúl en vivo).
+        services.AddScoped<FirmaBaulCopiaCapturer>();
         // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
         services.AddScoped<LimpiarConsolidadoHandler>();
         services.AddScoped<CargarConsolidadoExternoHandler>();

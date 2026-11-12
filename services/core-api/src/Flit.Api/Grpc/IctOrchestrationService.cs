@@ -38,10 +38,43 @@ public sealed class IctOrchestrationService(
     EnsureIdentityAndNotifyHandler identityNotifier,
     RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
+    IOtOperabilityGate otOperabilityGate,
     FlitDbContext db,
     IConfiguration configuration,
     ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
 {
+    /// <summary>
+    /// ErrorCode de <see cref="DraftReply"/> cuando el nombre de organismo del RUNT corresponde a un OT del
+    /// catálogo que no está activo, no tiene grant habilitado para el tenant o no está operativo.
+    /// </summary>
+    internal const string ErrorOtRuntNoHabilitado = "ot_runt_no_habilitado";
+
+    /// <summary>
+    /// Resuelve el OT por el nombre RUNT. Devuelve <c>(office, false)</c> si hay un OT habilitado Y operativo;
+    /// <c>(null, true)</c> si el nombre SÍ es un OT del catálogo pero no está habilitado/operativo (error);
+    /// <c>(null, false)</c> si el nombre no casa con ningún OT (el gestor lo asigna, comportamiento previo).
+    /// </summary>
+    internal static async Task<(ResolvedTransitOffice? Office, bool NoHabilitado)> ResolverOtPorNombreRuntAsync(
+        ITransitOfficeResolver resolver,
+        IOtOperabilityGate operabilityGate,
+        Guid tenantId,
+        string runtName,
+        CancellationToken cancellationToken)
+    {
+        var name = runtName.Trim();
+        var enabled = await resolver.ResolveEnabledByNameAsync(tenantId, name, cancellationToken);
+        if (enabled is not null)
+        {
+            return await operabilityGate.IsOperableAsync(enabled.Id, cancellationToken)
+                ? (enabled, false)
+                : (null, true);
+        }
+
+        return await resolver.ExistsInCatalogByNameAsync(name, cancellationToken)
+            ? (null, true)
+            : (null, false);
+    }
+
     /// <summary>Bug #13304 — vigencia por defecto de la consulta RUNT de la validación ICT.</summary>
     internal const int DefaultVehicleConsultationMaxAgeHours = 24;
 
@@ -115,8 +148,10 @@ public sealed class IctOrchestrationService(
         // Organismo de tránsito del borrador. Preferencia: un transit_office_id explícito; si no vino
         // (caso ICT: el cliente NO lo manda) pero sí el NOMBRE del organismo del RUNT (traspaso), se
         // resuelve al OT HABILITADO del tenant por nombre — el mismo resolver (grants + catálogo) que usa
-        // el preflight de traspaso. Si el nombre RUNT no casa con un OT habilitado, queda null y el gestor
-        // asigna el OT: no se inventa uno. Paridad con v1, donde el traspaso derivaba la secretaría del RUNT.
+        // el preflight de traspaso. Si el nombre RUNT no casa con NINGÚN OT del catálogo, queda null y el
+        // gestor asigna el OT: no se inventa uno. Si SÍ es un OT del catálogo pero no está activo, no tiene
+        // grant habilitado para el tenant o no está operativo (OtOperabilityGate) → ot_runt_no_habilitado
+        // y no se crea el borrador. Paridad con v1, donde el traspaso derivaba la secretaría del RUNT.
         Guid? officeFromIct = Guid.TryParse(request.TransitOfficeId, out var office) && office != Guid.Empty
             ? office
             : null;
@@ -124,8 +159,18 @@ public sealed class IctOrchestrationService(
         ResolvedTransitOffice? officeByRuntName = null;
         if (transitOfficeId is null && !string.IsNullOrWhiteSpace(request.TransitOfficeName))
         {
-            officeByRuntName = await transitOfficeResolver.ResolveEnabledByNameAsync(
-                tenantId, request.TransitOfficeName.Trim(), context.CancellationToken);
+            var (resolved, noHabilitado) = await ResolverOtPorNombreRuntAsync(
+                transitOfficeResolver, otOperabilityGate, tenantId,
+                request.TransitOfficeName, context.CancellationToken);
+            if (noHabilitado)
+            {
+                // El nombre RUNT SÍ es un OT del catálogo pero no está activo / habilitado para el tenant /
+                // operativo: no se crea el borrador (core-ict lo mapea a novedad).
+                IctOrchestrationLog.OtRuntNoHabilitado(logger, tenantId);
+                return new DraftReply { ErrorCode = ErrorOtRuntNoHabilitado };
+            }
+
+            officeByRuntName = resolved;
             transitOfficeId = officeByRuntName?.Id;
         }
 
@@ -536,6 +581,47 @@ public sealed class IctOrchestrationService(
             RefrescarRastreo();
             AppendWarning(reply, "preflight_warning:exception");
         }
+
+        // El preflight hidrata vehicle_service desde el RUNT y pisa lo que mandó ICT. En matrícula el tipo
+        // de servicio que declara el cliente (o el PARTICULAR explícito de core-ict) es el que vale: se
+        // re-aplica DESPUÉS del preflight, incluso si éste falló (el borrador ya existe). Mismo criterio
+        // que CreateFromConsultaCommand (escribe el servicio tras el preflight).
+        var servicio = ServicioMatriculaIct(request);
+        if (servicio is not null)
+        {
+            RefrescarRastreo();
+            try
+            {
+                var (_, servicioError) = await patchHandler.HandleAsync(
+                    instanceId,
+                    tenantId,
+                    new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                        [new FieldValueInput(null, "vehicle_service", servicio, null)]),
+                    ct);
+                if (servicioError is not null)
+                {
+                    AppendWarning(reply, "seed_warning:" + servicioError);
+                }
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                RefrescarRastreo();
+                AppendWarning(reply, "seed_warning:vehicle_service_exception");
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>vehicle_service</c> que ICT declara para una MATRÍCULA (código del catálogo: PUBLICO, PARTICULAR…),
+    /// o <c>null</c> si el trámite no es de matrícula (traspaso y demás: lo hidrata el RUNT) o ICT no lo mandó.
+    /// </summary>
+    internal static string? ServicioMatriculaIct(CreateDraftFromIctRequest request)
+    {
+        var tipo = request.ProcedureTypeCode ?? string.Empty;
+        var esMatricula = tipo.Contains("MATRICULA", StringComparison.OrdinalIgnoreCase)
+                          && !tipo.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase)
+                          && !tipo.Contains("CANCELACION", StringComparison.OrdinalIgnoreCase);
+        return esMatricula ? FieldValueOf(request, "vehicle_service")?.Trim() : null;
     }
 
     /// <summary>
@@ -1366,6 +1452,9 @@ internal static partial class IctOrchestrationLog
 {
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: identidad sin asegurar ({Code}). Instancia {InstanceId}, parte {Parte}.")]
     public static partial void IdentityWarning(ILogger logger, string code, Guid instanceId, string parte);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: borrador rechazado, el organismo del RUNT no está habilitado (tenant {TenantId}).")]
+    public static partial void OtRuntNoHabilitado(ILogger logger, Guid tenantId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: no se pudo consultar el directorio de representantes legales ({ExceptionType}).")]
     public static partial void DirectoryWarning(ILogger logger, string exceptionType);

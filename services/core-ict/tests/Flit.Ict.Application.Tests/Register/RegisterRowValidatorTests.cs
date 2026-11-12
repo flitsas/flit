@@ -50,6 +50,49 @@ public sealed class RegisterRowValidatorTests
     [Fact] public void Matricula_inicial_valida_pasa() => Validator.Validate(MatriculaInicial()).IsValid.Should().BeTrue();
     [Fact] public void Matricula_leasing_valida_pasa() => Validator.Validate(MatriculaLeasing()).IsValid.Should().BeTrue();
 
+    // ===== Tipo de servicio (opcional, solo matrícula) =====
+    [Theory]
+    [InlineData((short)1)]
+    [InlineData((short)2)]
+    [InlineData((short)3)]
+    [InlineData((short)4)]
+    [InlineData((short)5)]
+    [InlineData((short)6)]
+    public void Vehicle_service_type_dentro_de_rango_pasa(short servicio)
+    {
+        var row = MatriculaInicial() with { VehicleServiceType = servicio };
+        Validator.Validate(row).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Vehicle_service_type_ausente_pasa()
+    {
+        var row = MatriculaInicial() with { VehicleServiceType = null };
+        Validator.Validate(row).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((short)0)]
+    [InlineData((short)7)]
+    [InlineData((short)-1)]
+    public void Vehicle_service_type_fuera_de_rango_es_error(short servicio)
+    {
+        var row = MatriculaInicial() with { VehicleServiceType = servicio };
+        var result = Validator.Validate(row);
+        result.IsValid.Should().BeFalse();
+        ErrorOn(row, "vehicle_service_type").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Servicio_publico_sin_empresa_vinculadora_no_es_novedad()
+    {
+        var row = MatriculaInicial() with
+        {
+            VehicleServiceType = 2, RelatedCompanyDocument = null, RelatedCompanyName = null,
+        };
+        Validator.Validate(row).IsValid.Should().BeTrue();
+    }
+
     [Fact]
     public void Matricula_placa_vacia_con_assignment_type_2_pasa()
     {

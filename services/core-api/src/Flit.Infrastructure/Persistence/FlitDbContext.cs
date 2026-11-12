@@ -283,6 +283,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — marcas de firma a posteriori (HU #11196): el lote que se firma cuando el representante valida
     public DbSet<DeferredSignatureMark> DeferredSignatureMarks => Set<DeferredSignatureMark>();
 
+    // Trámites — copia de la firma de baúl tomada al radicar (DDL 195)
+    public DbSet<ProcedureInstanceFirmaBaulCopia> ProcedureInstanceFirmaBaulCopias => Set<ProcedureInstanceFirmaBaulCopia>();
+
     // Trámites — auditoría de impronta manual firmada (HU #12116, paridad vehicle_signature_imprints)
     public DbSet<VehicleSignatureImprint> VehicleSignatureImprints => Set<VehicleSignatureImprint>();
 

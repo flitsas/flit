@@ -1206,6 +1206,111 @@ public sealed class FurHandlerTests
         (data.SellosIdentidad ?? new Dictionary<string, string>()).Should().NotContainKey(rol);
     }
 
+    // ── Copia de la firma de baúl al radicar: el FUR posterior no vuelve a consultar el baúl ─────────
+
+    private static ProcedureInstanceFirmaBaulCopia CopiaDe(Guid id, Guid tenant, string slot, string path, string documento = "52082029") => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = tenant,
+        ProcedureInstanceId = id,
+        SlotKey = slot,
+        PartyRole = slot,
+        DocumentType = "CC",
+        DocumentNumber = documento,
+        SignatureVaultId = Guid.NewGuid(),
+        FullName = "REPRESENTANTE DEMO",
+        SignatureHash = "hash",
+        VigenciaDesde = new DateOnly(2026, 1, 1),
+        VigenciaHasta = new DateOnly(2026, 6, 30), // ya vencida hoy: la copia conserva la vigencia que tenía al radicar
+        CapturedAt = DateTimeOffset.UtcNow.AddDays(-10),
+        StoragePath = path,
+        StorageSha256 = "sha",
+    };
+
+    private async Task<FurDocumentData> FurPosteriorAlRadicarAsync(bool conCopia, ISignatureVaultPolicy vivo)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Status = TramiteEstado.Entregado;
+
+        foreach (var parte in new[] { "comprador", "vendedor" })
+        {
+            var actor = ActorJuridicoCon(null, parte);
+            actor.TenantId = tenant;
+            actor.ProcedureInstanceId = id;
+            // Representantes distintos: cada parte resuelve SU copia por el documento de su representante.
+            if (parte == "vendedor")
+                actor.Metadata = actor.Metadata.Replace("52082029", "52082030", StringComparison.Ordinal);
+            instance.Actors.Add(actor);
+        }
+
+        if (conCopia)
+        {
+            instance.FirmaBaulCopiadaAt = DateTimeOffset.UtcNow.AddDays(-10);
+            _storage.Blobs["copia/comprador"] = [1, 2, 3, 4];
+            _storage.Blobs["copia/vendedor"] = [5, 6, 7, 8];
+            _repo.ListFirmaBaulCopiasAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(
+                new List<ProcedureInstanceFirmaBaulCopia>
+                {
+                    CopiaDe(id, tenant, "comprador", "copia/comprador"),
+                    CopiaDe(id, tenant, "vendedor", "copia/vendedor", "52082030"),
+                });
+        }
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance,
+            vaultPolicy: vivo);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+        error.Should().BeNull();
+        return capturing.Captured!;
+    }
+
+    [Fact]
+    public async Task FurPosteriorALaRadicacion_ConservaLaFirmaDelBaul_AunqueElBaulYaNoLaResuelva()
+    {
+        // El baúl en vivo ya no devuelve nada (vencido / desactivado), pero el trámite tiene su copia.
+        var data = await FurPosteriorAlRadicarAsync(conCopia: true, vivo: NullSignatureVaultPolicy.Instance);
+
+        data.FirmaImagenes.Should().NotBeNull();
+        data.FirmaImagenes!.Should().ContainKey("comprador").And.ContainKey("vendedor");
+        // La imagen es la de la COPIA del trámite, no la del baúl.
+        data.FirmaImagenes!["comprador"].Should().Equal(new byte[] { 1, 2, 3, 4 });
+        data.FirmaImagenes!["vendedor"].Should().Equal(new byte[] { 5, 6, 7, 8 });
+        data.FirmaBaulMetadatos!.Should().ContainKey("comprador");
+    }
+
+    [Fact]
+    public async Task FurPosteriorALaRadicacion_NoAdoptaUnBaulNuevo_SiElTramiteYaTieneCopia()
+    {
+        // Radicado con copia vacía de una parte: aunque hoy aparezca una firma vigente en el baúl, el FUR
+        // sigue el contrato «usa la copia y nunca el baúl en vivo».
+        var data = await FurPosteriorAlRadicarAsync(conCopia: true, vivo: new VaultConFirma());
+
+        data.FirmaBaulMetadatos!["comprador"].Should().NotBeNull();
+        data.FirmaBaulMetadatos["comprador"].VigenciaHasta.Should().Be(new DateOnly(2026, 6, 30),
+            "la vigencia estampada es la de la copia, no la del baúl en vivo");
+    }
+
+    [Fact]
+    public async Task FurDeBorrador_SigueLeyendoElBaulEnVivo()
+    {
+        var data = await FurPosteriorAlRadicarAsync(conCopia: false, vivo: new VaultConFirma());
+
+        // VaultConFirma apunta a una ruta que no existe en el storage: sin copia no hay imagen, pero se
+        // consultó el baúl en vivo (no se leyó ninguna copia).
+        await _repo.DidNotReceive().ListFirmaBaulCopiasAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        (data.FirmaImagenes ?? new Dictionary<string, byte[]>()).Should().NotContainKey("comprador");
+    }
+
     private static ProcedureInstanceActor ActorJuridicoVendedor(ProcedureInstance instance) =>
         new()
         {

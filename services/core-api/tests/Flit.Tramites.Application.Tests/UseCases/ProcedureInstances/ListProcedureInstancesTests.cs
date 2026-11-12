@@ -653,7 +653,7 @@ public sealed class ListProcedureInstancesTests
     }
 
     [Fact]
-    public async Task Firmado_FirmaDelBaulVencida_EsRechazado()
+    public async Task Firmado_FirmaDelBaulVencida_YaNoEsRechazado_EsPendiente()
     {
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
@@ -669,7 +669,9 @@ public sealed class ListProcedureInstancesTests
 
         var result = await _sut.HandleAsync(tenant, ct);
 
-        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Rechazado);
+        // Un baúl vencido/inactivo no es un rechazo de nadie: sin VID propia rechazada queda «pendiente» (el front
+        // lo pinta «Sin firma»). «Rechazado» es solo de una VID propia rechazada/expirada del sujeto actual.
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Pendiente);
     }
 
     [Theory]

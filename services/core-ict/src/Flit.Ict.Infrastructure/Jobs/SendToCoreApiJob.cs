@@ -357,7 +357,8 @@ public sealed class SendToCoreApiJob(
             return;
         }
 
-        var message = result.ErrorCode ?? "error al crear el borrador";
+        var message = MaterializacionNovedades.MensajeError(result.ErrorCode)
+            ?? result.ErrorCode ?? "error al crear el borrador";
         AplicarNovedad(master, message);
         await VehicleSnapshotPurge.DespuesDeAsync(
             c => persistirNovedad(message, c), purgar, master.Id, VehicleSnapshotPurge.CaminoNovedadEnvio, logger, ct);
