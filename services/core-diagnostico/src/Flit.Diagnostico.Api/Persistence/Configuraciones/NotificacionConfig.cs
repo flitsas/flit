@@ -8,12 +8,13 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// <summary>
 /// <c>diagnostico.notificaciones</c> (HU #14563 B8, schema §3.2, ADR-0086): clase (a) de ADR-0072 con <c>xmin</c>, filtro por empresa
 /// y cinco excepciones escritas en ADR-0086 (purga a 90 días, CASCADE hacia la cabecera, <c>referencia_id</c> sin FK, índice de
-/// retención sin <c>tenant_id</c> al frente y purga entre empresas). El CHECK de <c>datos</c> impide guardar texto libre.
+/// retención sin <c>tenant_id</c> al frente y purga entre empresas). El CHECK de <c>datos</c> impide guardar texto libre: objeto plano
+/// de hasta 512 bytes, claves <c>^[a-z_]{1,32}$</c>, textos <c>^[A-Z0-9_]{1,32}$</c> y números de 0 a 100000 (hallazgo L1 de seguridad).
 /// </summary>
 internal sealed class NotificacionConfig : IEntityTypeConfiguration<Notificacion>
 {
     internal const string CheckDatos =
-        "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")))') AND octet_length(datos::text) <= 512";
+        "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")) || (@.type() == \"number\" && (@ < 0 || @ > 100000)))') AND NOT jsonb_path_exists(datos, 'strict $.keyvalue() ? (!(@.key like_regex \"^[a-z_]{1,32}$\"))') AND octet_length(datos::text) <= 512";
 
     public void Configure(EntityTypeBuilder<Notificacion> builder)
     {

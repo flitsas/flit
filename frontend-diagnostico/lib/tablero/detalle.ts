@@ -300,9 +300,12 @@ export const esFuente = (valor: string): valor is Fuente => FUENTES.some((f) => 
 /** Página del detalle en pestaña nueva (HU #14087): misma forma que la ruta de la API, bajo /diagnosticos. */
 export const rutaPaginaDetalle = (loteId: string, vehiculoId: string, fuente: Fuente) => rutaDetalleCelda(loteId, vehiculoId, fuente);
 
-/** GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}. */
+/**
+ * GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}. HU #14562 (seguridad M2, D19): la respuesta completa de la
+ * fuente puede traer datos personales, así que no se guarda en la caché del navegador (`cache: "no-store"`).
+ */
 export const obtenerDetalleCelda: CargadorDetalle = (loteId, vehiculoId, fuente, signal) =>
-  apiFetch<DetalleCelda>(rutaDetalleCelda(loteId, vehiculoId, fuente), { method: "GET", signal });
+  apiFetch<DetalleCelda>(rutaDetalleCelda(loteId, vehiculoId, fuente), { method: "GET", signal, cache: "no-store" });
 
 /** 404 → no disponible (otra compañía, otro lote o fuente sin celda); 403 → sin permiso; el resto, el mensaje de la API. */
 export function traducirErrorDetalle(error: unknown): ErrorDetalle {

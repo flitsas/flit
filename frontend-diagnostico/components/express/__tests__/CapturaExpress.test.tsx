@@ -21,7 +21,7 @@ function montar() {
 
 const campo = () => screen.getByRole("textbox", { name: "Placa o VIN" });
 const escribir = (valor: string) => fireEvent.change(campo(), { target: { value: valor } });
-const diagnosticar = () => fireEvent.click(screen.getByRole("button", { name: "Diagnosticar" }));
+const diagnosticar = () => fireEvent.click(screen.getByRole("button", { name: "Diagnosticar en línea" }));
 
 describe("CapturaExpress — normalización en pantalla (AC6)", () => {
   it("«tst 123» se muestra como TST123", () => {

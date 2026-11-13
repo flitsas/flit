@@ -16,8 +16,8 @@ export function tituloIniciado(vehiculos: number): string {
 
 /**
  * Resultado de Nuevo diagnóstico (HU #14562, AC18/AC19), común a Express y Masivo: «Ver tablero», «Volver» al inicio y la
- * redirección de 5 s al tablero que «Quedarme aquí» detiene (WCAG 2.2.1). La cuenta y su cancelación las anuncia
- * PantallaResultado en su región polite sin mover el foco.
+ * redirección de 5 s al tablero que «Quedarme aquí» o cualquier interacción detienen (WCAG 2.2.1, AC18). PantallaResultado
+ * lleva el foco al título al aparecer y anuncia la cuenta y su cancelación en su región polite (auditoría M1).
  */
 export function ResultadoCreacion({ diagnosticoId, vehiculos }: ResultadoCreacionProps) {
   const router = useRouter();

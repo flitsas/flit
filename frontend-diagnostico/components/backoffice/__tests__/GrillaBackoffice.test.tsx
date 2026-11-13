@@ -6,6 +6,7 @@ import PaginaConsultaBackoffice from "@/app/(app)/backoffice/diagnosticos/[id]/v
 import { sesion } from "@/__tests__/configuracion/datos";
 import type { GrillaBackoffice as TGrilla } from "@/lib/backoffice/api";
 import type { Grilla } from "@/lib/tablero/api";
+import { TABLA_MOVIL_TABLE_CLS } from "@flit/ui/table-styles";
 import { EMPRESA_A, LOTE, celdaBo, grillaBo, llamadas, respuestaLlenado, simularApi, vehiculoBo } from "@/lib/backoffice/__tests__/datos";
 
 // Uso de ejemplo: <GrillaBackoffice diagnosticoId={id} empresa={empresa} /> en /backoffice/diagnosticos/{id}?empresa= pide
@@ -253,5 +254,20 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
     montar();
     await tabla();
     expect(screen.queryByRole("button", { name: /^Auditoría del dictamen/ })).toBeNull();
+  });
+});
+
+// HU #14562 AC56 (auditoría B2/M6): la grilla del backoffice es la misma GrillaSemaforos, así que pasa a tarjetas bajo 900 px
+// y no deja columnas fijas allí.
+describe("GrillaBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+  it("la tabla lleva las recetas TABLA_MOVIL_* y la placa no queda fija bajo 900 px", async () => {
+    montar();
+    const t = await tabla();
+    const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(t)).toContain(c);
+    for (const placa of within(t).getAllByRole("rowheader")) {
+      expect(clases(placa)).not.toContain("sticky");
+      expect(placa).toHaveAttribute("data-label", "Placa o VIN");
+    }
   });
 });

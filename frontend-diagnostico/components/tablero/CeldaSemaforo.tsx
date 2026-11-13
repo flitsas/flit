@@ -3,6 +3,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { TABLA_MOVIL_CELL_CLS } from "@flit/ui/table-styles";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
@@ -91,7 +92,7 @@ function detalle(celda: CeldaGrilla): string | null {
 /** Celda reprocesable: en ERROR y sin depender de un RUNT en error (esa la libera el reproceso del RUNT). */
 export const esReprocesable = (celda: CeldaGrilla) => celda.estado === "ERROR" && celda.tipo_error !== BLOQUEADA_POR_RUNT;
 
-/** Texto visible del estado de una celda («Ejecutado (OK)», «Novedad», «Sin solicitar»…). */
+/** Texto visible del estado de una celda («Ejecutado», «Novedad», «Sin solicitar»…). */
 export const textoEstadoCelda = (estado: EstadoVisible) => vistaDe(estado, false).texto;
 
 /** Motivo corto de una N/A («Servicio público»…), el que va bajo el chip «Novedad». Desconocido: «Novedad sin clasificar». */
@@ -143,7 +144,10 @@ export interface CeldaSemaforoProps extends Pick<BotonReprocesarProps, "onReproc
   accion?: ReactNode;
 }
 
-const TD_CLS = "px-3 py-2.5 align-top";
+/** Celda de la grilla; por debajo de 900 px, renglón de la tarjeta del vehículo con el nombre de la fuente (HU #14562 AC56). */
+const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
+/** Contenido de la celda: arriba a la izquierda en la tabla, a la derecha en la tarjeta. */
+const CONTENIDO_CLS = "flex flex-col items-start gap-1 max-[900px]:items-end";
 
 /** Aviso para lectores de pantalla del enlace al detalle (HU #14087): va en el nombre accesible y como texto sr-only. */
 const NUEVA_PESTANA = "(se abre en una pestaña nueva)";
@@ -168,8 +172,8 @@ export function CeldaSemaforo({
 }: CeldaSemaforoProps) {
   if (!solicitada)
     return (
-      <td data-fuente={fuente} data-estado="NA" data-motivo={SIN_SOLICITAR} className={TD_CLS}>
-        <div className="flex flex-col items-start gap-1">
+      <td data-fuente={fuente} data-label={nombreFuente} data-estado="NA" data-motivo={SIN_SOLICITAR} className={TD_CLS}>
+        <div className={CONTENIDO_CLS}>
           <ChipEstadoCelda estado={SIN_SOLICITAR} />
           <span className="text-xs text-muted-foreground">{MOTIVO_SIN_SOLICITAR}</span>
         </div>
@@ -177,7 +181,7 @@ export function CeldaSemaforo({
     );
   if (!celda)
     return (
-      <td data-fuente={fuente} data-estado="SIN_CELDA" className={TD_CLS}>
+      <td data-fuente={fuente} data-label={nombreFuente} data-estado="SIN_CELDA" className={TD_CLS}>
         <ChipEstadoCelda estado="PENDIENTE" />
       </td>
     );
@@ -186,15 +190,15 @@ export function CeldaSemaforo({
   const conDeuda = fuente === "IMPUESTO_DEPARTAMENTAL" && celda.estado === "COMPLETADO" && celda.tiene_deuda === true;
   const texto = vistaDe(celda.estado, conDeuda).texto;
   return (
-    <td data-fuente={fuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
-      <div className="flex flex-col items-start gap-1">
+    <td data-fuente={fuente} data-label={nombreFuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
+      <div className={CONTENIDO_CLS}>
         {hrefDetalle ? (
           <a
             href={hrefDetalle}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition hover:opacity-90 ${FOCO_CLS}`}
+            className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition duration-[var(--dx-motion-rapido)] hover:opacity-90 motion-reduce:transition-none ${FOCO_CLS}`}
           >
             <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
             <span className="sr-only">{NUEVA_PESTANA}</span>

@@ -57,8 +57,8 @@ export interface CreacionExpressProps {
 
 /**
  * Express en la pantalla única (HU #14085; reglas de la HU #13755): a la izquierda la placa o el VIN y el locatario, a la
- * derecha los parámetros con el nombre autogenerado, que sigue a la placa mientras el usuario no lo edite. «Continuar»
- * valida la placa con la regla de Trámites y el rechazo por longitud, los parámetros y el tipo de documento; con
+ * derecha los parámetros con el nombre autogenerado, que sigue a la placa mientras el usuario no lo edite. El botón principal
+ * («Continuar» con estimado antes de lanzar, «Iniciar diagnóstico» sin él) valida la placa con la regla de Trámites y el rechazo por longitud, los parámetros y el tipo de documento; con
  * estimado_consultas = ANTES_DE_LANZAR pide POST /express/estimado y lo muestra en Parámetros antes de lanzar; lanza con
  * POST /express y con el 201 navega al tablero. Los 422 se pintan en su campo y el resto de rechazos en un aviso, sin
  * perder lo digitado.
@@ -75,6 +75,9 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
   const [enfocar, setEnfocar] = useState(0);
   const ocupado = fase.tipo === "enviando" || fase.tipo === "confirmar";
   const nombre = borrador.nombreManual ?? nombreAutogenerado(borrador.placa);
+  // HU #14562 (auditoría §4.3, AC16): con el estimado antes de lanzar, el botón lleva al paso del estimado («Continuar»); sin
+  // él, lanza directo y dice lo que hace («Iniciar diagnóstico»).
+  const conEstimado = configuracion.operacion.estimado_consultas === "ANTES_DE_LANZAR";
 
   useEffect(() => onOcupado(ocupado), [ocupado, onOcupado]);
 
@@ -148,7 +151,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
       return;
     }
     const entrada = entradaExpress(p.cabecera(nombre), borrador.placa, { tipo: borrador.tipoDocumento, documento: borrador.documento });
-    if (configuracion.operacion.estimado_consultas === "ANTES_DE_LANZAR") estimar(entrada);
+    if (conEstimado) estimar(entrada);
     else lanzar(entrada);
   }
 
@@ -210,7 +213,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                   Cancelar
                 </Link>
                 <Button type="submit" size="sm" cargando={fase.tipo === "enviando"} disabled={ocupado} className="gap-1.5 text-sm">
-                  Continuar
+                  {conEstimado ? "Continuar" : "Iniciar diagnóstico"}
                   <Icono nombre="derecha" className="h-4 w-4" />
                 </Button>
               </div>

@@ -21,11 +21,8 @@ export interface NivelContrato {
   fuentes_habilitadas: Fuente[];
   limite_vehiculos_lote: number;
   actualizado_en: string | null;
-  /**
-   * HU #14562 AC42: interruptor de emergencia de la redacción con IA (R-2), solo para leerlo. Opcional: un API anterior no
-   * lo manda y entonces la pantalla no muestra la fila.
-   */
-  redaccion_ia_suspendida?: boolean;
+  // HU #14562 AC42, decisión b: la compañía no ve `redaccion_ia_suspendida` (R-2). El interruptor vive solo en el contrato
+  // del backoffice (ContratoBackoffice).
 }
 
 export interface NivelOperacion {

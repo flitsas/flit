@@ -2685,7 +2685,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         {
                             t.HasComment("Avisos de la campana de Diagnóstico por usuario (clase (a) de ADR-0072 con excepción de retención de ADR-0086): sin texto, documentos ni PII; el mensaje se arma al leer. Purga física a los 90 días.");
 
-                            t.HasCheckConstraint("ck_notificaciones_datos", "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")))') AND octet_length(datos::text) <= 512");
+                            t.HasCheckConstraint("ck_notificaciones_datos", "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")) || (@.type() == \"number\" && (@ < 0 || @ > 100000)))') AND NOT jsonb_path_exists(datos, 'strict $.keyvalue() ? (!(@.key like_regex \"^[a-z_]{1,32}$\"))') AND octet_length(datos::text) <= 512");
 
                             t.HasCheckConstraint("ck_notificaciones_leida", "leida_en IS NULL OR leida_en >= creada_en");
 

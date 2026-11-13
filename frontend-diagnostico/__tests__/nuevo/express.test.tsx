@@ -39,7 +39,9 @@ const placa = async () => {
 const documento = () => screen.getByRole("textbox", { name: /número de documento del locatario/i });
 const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de documento del locatario/i });
 const iniciado = () => screen.findByRole("heading", { name: "Diagnóstico iniciado con 1 vehículo" });
-const continuar = async () => fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+/** HU #14562: «Continuar» cuando la operación muestra el estimado antes de lanzar; si no, «Iniciar diagnóstico». */
+const PRINCIPAL = /^(Continuar|Iniciar diagnóstico)$/;
+const continuar = async () => fireEvent.click(await screen.findByRole("button", { name: PRINCIPAL }));
 
 describe("Express — placa y nombre autogenerado (AC2)", () => {
   it("con ?placa= precarga la placa normalizada y el nombre «Express TST123»", async () => {
@@ -289,7 +291,7 @@ describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () =>
     await nombre();
     expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
     await continuar();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Continuar" })).toHaveAttribute("aria-busy", "true"));
+    await waitFor(() => expect(screen.getByRole("button", { name: PRINCIPAL })).toHaveAttribute("aria-busy", "true"));
     soltar(creadoOk());
     expect(await iniciado()).toBeInTheDocument();
   });
@@ -329,10 +331,28 @@ describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () =>
     fireEvent.change(await nombre(), { target: { value: "Flota de prueba" } });
     await continuar();
     expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
-    const boton = screen.getByRole("button", { name: "Continuar" });
+    const boton = screen.getByRole("button", { name: PRINCIPAL });
     expect(boton).not.toHaveAttribute("aria-busy");
     expect(boton).toBeEnabled();
     expect(screen.getByRole("textbox", { name: "Nombre del diagnóstico" })).toHaveValue("Flota de prueba");
     expect(screen.getByRole("textbox", { name: "Placa o VIN" })).toHaveValue("TST123");
+  });
+});
+
+// HU #14562 (auditoría §4.3, AC16): el botón principal del Express dice lo que hace. Sin estimado lanza directo: «Iniciar
+// diagnóstico»; con estimado ANTES_DE_LANZAR lleva al paso del estimado: «Continuar».
+describe("Express — HU #14562 rótulo del botón principal", () => {
+  it("sin estimado (NO_MOSTRAR) el botón dice «Iniciar diagnóstico»", async () => {
+    montar({ query: "modo=express&placa=TST123", estimado: "NO_MOSTRAR" });
+    await nombre();
+    expect(screen.getByRole("button", { name: "Iniciar diagnóstico" })).toHaveAttribute("type", "submit");
+    expect(screen.queryByRole("button", { name: "Continuar" })).toBeNull();
+  });
+
+  it("con estimado ANTES_DE_LANZAR el botón sigue diciendo «Continuar»", async () => {
+    montar({ query: "modo=express&placa=TST123", estimado: "ANTES_DE_LANZAR" });
+    await nombre();
+    expect(screen.getByRole("button", { name: "Continuar" })).toHaveAttribute("type", "submit");
+    expect(screen.queryByRole("button", { name: "Iniciar diagnóstico" })).toBeNull();
   });
 });

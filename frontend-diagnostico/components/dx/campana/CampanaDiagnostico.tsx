@@ -148,10 +148,12 @@ export function CampanaDiagnostico() {
         className={`relative inline-flex size-10 items-center justify-center rounded-full text-[color:var(--di-text-primary)] hover:bg-[color:var(--di-accent-soft)] ${FOCO}`}
       >
         <IconoDxCampana />
+        {/* HU #14562 (auditoría M5, 1.4.3): --kit-rojo vale lo mismo en claro y oscuro; blanco encima da 6,4:1. Con --di-danger
+            el oscuro (#ff6b6b) quedaba en 2,8:1. */}
         {n.noLeidas > 0 && (
           <span
             aria-hidden="true"
-            className="absolute -right-0.5 -top-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-[color:var(--di-danger)] px-1 text-[11px] font-semibold tabular-nums text-white"
+            className="absolute -right-0.5 -top-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-[color:var(--kit-rojo)] px-1 text-[11px] font-semibold tabular-nums text-white"
           >
             {n.noLeidas > 99 ? "99+" : n.noLeidas}
           </span>

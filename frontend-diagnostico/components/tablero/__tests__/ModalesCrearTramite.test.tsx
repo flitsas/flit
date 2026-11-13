@@ -196,3 +196,46 @@ describe("HU #14562 AC37 — lote IA con veredicto Viable: «Crear traspaso» ab
     expect(within(tabla()).getByRole("link", { name: /ver trámite #59 de la placa TST001/i })).toHaveAttribute("href", URL_TRAMITE);
   });
 });
+
+// HU #14562 F-05 (auditoría §4.4): desde el panel del dictamen de un vehículo VIABLE y elegible, «Crear trámite» cierra el
+// panel y abre el mismo modal de la fila (AC37), sin apilar un modal sobre el panel. Sin elegibilidad no hay atajo.
+describe("HU #14562 F-05 — «Crear trámite» desde el pie del panel del dictamen", () => {
+  const RUTA_DICTAMEN = `GET /diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen`;
+  const VIABLE = { version: 1, veredicto: "VIABLE", estado_redaccion: "LISTA", alertamientos: [], catalogo_version: 1, creado_en: "2026-11-12T15:00:00Z" };
+  const abrirPanel = async () => {
+    fireEvent.click(within(tabla()).getByRole("button", { name: "Ver dictamen de TST001" }));
+    await avanzar();
+    return screen.getByRole("dialog", { name: "Dictamen · TST001" });
+  };
+
+  it("lote IA: cierra el panel y abre «¿Crear el traspaso de TST001?», que crea el borrador", async () => {
+    pestanaFalsa();
+    const api = await montar({ [GRILLA]: () => Response.json(loteIa()), [RUTA_DICTAMEN]: () => Response.json(VIABLE), [CREAR]: creado() });
+    const panel = await abrirPanel();
+    fireEvent.click(within(panel).getByRole("button", { name: "Crear trámite" }));
+    await avanzar();
+    expect(screen.queryByRole("dialog", { name: "Dictamen · TST001" })).toBeNull();
+    const modal = screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" });
+    fireEvent.click(within(modal).getByRole("button", { name: "Crear traspaso" }));
+    await avanzar();
+    expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(1);
+  });
+
+  it("lote Simple: abre «Crear trámite para TST001», que pide el tipo", async () => {
+    await montar({ [GRILLA]: () => Response.json(loteSimple()), [RUTA_DICTAMEN]: () => Response.json(VIABLE), "GET /tipos-tramite": () => Response.json(TIPOS) });
+    const panel = await abrirPanel();
+    fireEvent.click(within(panel).getByRole("button", { name: "Crear trámite" }));
+    await avanzar();
+    expect(screen.queryByRole("dialog", { name: "Dictamen · TST001" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Crear trámite para TST001" })).toBeInTheDocument();
+  });
+
+  it("vehículo no elegible (ya con trámite): el panel no ofrece el atajo", async () => {
+    const g = loteIa();
+    g.vehiculos = [{ ...g.vehiculos[0], elegible_tramite: false, motivo_no_elegible: "YA_TIENE_TRAMITE", tramite: { id: "tramite-41", numero: "41" } }];
+    await montar({ [GRILLA]: () => Response.json(g), [RUTA_DICTAMEN]: () => Response.json(VIABLE) });
+    const panel = await abrirPanel();
+    expect(within(panel).getByText("Viable")).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: /crear trámite/i })).toBeNull();
+  });
+});

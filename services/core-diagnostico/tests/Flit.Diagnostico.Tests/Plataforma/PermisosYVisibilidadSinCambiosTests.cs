@@ -84,6 +84,8 @@ public sealed class PermisosYVisibilidadSinCambiosTests
     private static readonly string[] OperacionFlit =
     [
         "GET /api/v1/diagnostico/backoffice/consultas/{consulta:guid}/manual",
+        // Hallazgo M3 de seguridad: la auditoría de versiones (motivo y autor) solo la lee la operación FLIT.
+        "GET /api/v1/diagnostico/backoffice/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen/versiones",
         "PUT /api/v1/diagnostico/backoffice/consultas/{consulta:guid}/manual",
         "PUT /api/v1/diagnostico/backoffice/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen",
     ];

@@ -127,6 +127,8 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   // HU #14562 AC24 (D4): «Cerrar lote» pide confirmación antes de llamar a cerrar-panel.
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  // HU #14562 F-05: «Crear trámite» desde el pie del panel del dictamen; el número cambia en cada pedido.
+  const [solicitudTramite, setSolicitudTramite] = useState<{ vehiculoId: string; n: number } | null>(null);
   const volver = urlVolverAlListado(desde);
   // HU #14562 AC27: tarjeta-filtro activa (exclusiva); null = sin filtro.
   const [filtro, setFiltro] = useState<FiltroTablero | null>(null);
@@ -251,6 +253,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
                 empresaId={sesion?.empresa.id}
                 onCreado={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
                 onRefrescar={refrescar}
+                solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
               />
             )}
             {puedeDescargar && grilla && <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} />}
@@ -448,6 +451,15 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           devolverFocoA={dictamen.disparador}
           tramiteAnalizado={grilla?.lote?.tipo_tramite?.nombre ?? null}
           consultas={(grilla?.vehiculos.find((v) => v.id === dictamen.vehiculo.id) ?? dictamen.vehiculo).celdas.map((c) => ({ fuente: c.fuente, estado: c.estado }))}
+          onCrearTramite={
+            puedeDerivar && derivaciones.get(dictamen.vehiculo.id)?.elegible
+              ? () => {
+                  const vehiculoId = dictamen.vehiculo.id;
+                  setDictamen(null);
+                  setSolicitudTramite((s) => ({ vehiculoId, n: (s?.n ?? 0) + 1 }));
+                }
+              : undefined
+          }
         />
       )}
     </>

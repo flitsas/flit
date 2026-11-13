@@ -140,9 +140,15 @@ export async function listarLotesBackoffice(empresa: string, filtros: FiltrosLot
 }
 
 /** GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde=: misma semántica incremental que la grilla de la compañía. */
-export async function obtenerGrillaBackoffice(id: string, empresa: string, desde: number, signal?: AbortSignal): Promise<GrillaBackoffice> {
+export async function obtenerGrillaBackoffice(
+  id: string,
+  empresa: string,
+  desde: number,
+  signal?: AbortSignal,
+  cache?: RequestCache,
+): Promise<GrillaBackoffice> {
   const q = consulta(empresa, { desde });
-  return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal });
+  return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal, cache });
 }
 
 /** Detalle de una celda del backoffice con su origen (solo el backoffice lo muestra, Q5). */
@@ -160,7 +166,8 @@ export function rutaDetalleBackoffice(id: string, vehiculoId: string, fuente: Fu
  */
 export function cargadorDetalleBackoffice(empresa: string): CargadorDetalle {
   return async (loteId, vehiculoId, fuente, signal): Promise<DetalleCeldaBackoffice> => {
-    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal);
+    // HU #14562 (seguridad M2, D19): la lectura del detalle no se guarda en la caché del navegador.
+    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal, "no-store");
     const v = grilla.vehiculos.find((x) => x.id === vehiculoId);
     const c = v?.celdas.find((x) => x.fuente === fuente);
     if (!v || !c) throw new ApiError(404, "No se encontró la celda.", "NO_ENCONTRADO");

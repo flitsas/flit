@@ -576,6 +576,48 @@ public sealed class ConsultaDictamenTests
         compania.Should().NotContain("tramite", "la compañía no ve la auditoría del ajuste");
     }
 
+    // HU #14563 hallazgo M3 de seguridad — las versiones traen ajuste_motivo (@pii:low) y el autor: un SuperAdmin con token de otra
+    // compañía recibe 403 aunque pase la política de configuración del backoffice; el SuperAdmin de FLIT lee la auditoría (200).
+    [Fact]
+    public async Task HU14563_M3_versiones_del_dictamen_solo_para_la_operacion_FLIT()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: Simulado);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await SembrarAsync(empresa, ct);
+        var vid = lote.Vehiculos[0].Id;
+        var ruta = RutaVersiones(lote.Id, vid, empresa.Id);
+
+        var deOtraCompania = api.Token(empresa: Guid.CreateVersion7(), permisos: [], roles: ["SuperAdmin"], tipoEmpresa: "CLIENTE");
+        var deFlit = api.Token(empresa: Guid.CreateVersion7(), permisos: [], roles: ["SuperAdmin"], tipoEmpresa: UsuarioActual.TipoEmpresaFlit);
+
+        (await api.Cliente(deOtraCompania).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var flit = await api.Cliente(deFlit).GetAsync(ruta, ct);
+        flit.StatusCode.Should().Be(HttpStatusCode.OK, await flit.Content.ReadAsStringAsync(ct));
+    }
+
+    // HU #14563 hallazgo L3 de seguridad — el largo del motivo se cuenta en puntos de código, como char_length de PostgreSQL
+    // (ck_dictamenes_ajuste_motivo), no en unidades UTF-16: 5 emojis (10 unidades) no llegan a 10 y son 422; 300 emojis (600
+    // unidades) caben en 500 y se aceptan.
+    [Fact]
+    public void HU14563_L3_el_largo_del_motivo_se_cuenta_en_puntos_de_codigo()
+    {
+        static string Cuerpo(string motivo) =>
+            $$"""{"veredicto":"BLOQUEADO","motivo":"{{motivo}}","version_esperada":1}""";
+        var cinco = string.Concat(Enumerable.Repeat("🚗", 5));
+        var trescientos = string.Concat(Enumerable.Repeat("🚗", 300));
+        cinco.Length.Should().Be(10, "precondición: cada emoji son dos unidades UTF-16");
+
+        var corto = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(Cuerpo(cinco)));
+        corto.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
+
+        OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(Cuerpo(trescientos))).Motivo.Should().Be(trescientos);
+
+        var largo = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(Cuerpo(string.Concat(Enumerable.Repeat("🚗", 501)))));
+        largo.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
+    }
+
     // B-PR6 + P3 por HTTP — sin motivo es 422 MOTIVO_REQUERIDO aunque el veredicto no cambie (el cuerpo legado se retiró); un
     // alertamiento AJUSTE_FLIT con 6 o más dígitos es 422 con el campo señalado. Nada cambia.
     [Fact]

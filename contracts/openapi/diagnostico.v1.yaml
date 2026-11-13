@@ -935,7 +935,9 @@ paths:
       description: >
         HU #13798 (F06-H1, F06-C1..C4/C12). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la grilla. Devuelve
         el resultado normalizado de la celda en un DTO propio y cerrado: nunca origen, usuario manual, transacción ni payload
-        en campos propios; una celda llenada a mano y una consultada por API tienen las mismas claves. HU #14087 AC8
+        en campos propios; una celda llenada a mano y una consultada por API tienen las mismas claves (por eso el avalúo no trae
+        la referencia Fasecolda del llenado manual, hallazgo M1). Responde con Cache-Control no-store y Pragma no-cache: trae
+        respuesta_fuente, respuesta_proveedor y personas (hallazgo M2). HU #14087 AC8
         (decisión del usuario 2026-10-27, enmienda de ADR-0075 en Propuesto): `respuesta_fuente` (en la celda para las
         fuentes del vehículo y en cada persona para las de persona) trae la respuesta COMPLETA de la fuente en proto-JSON,
         con datos personales; null sin respuesta guardada.
@@ -2494,6 +2496,8 @@ paths:
         (RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO) trae SOLO las personas en ERROR con su
         `persona_id` (el que va en el PUT), el documento enmascarado y la `consulta` que define el esquema de su resultado
         (RUNT_PERSONA, RUES o SIMIT); en las del vehículo, `personas` es null. Nunca el documento en claro ni el payload.
+        En el avalúo llenado con referencia Fasecolda trae `referencia` (HU #14563 B6, solo backoffice). Responde con
+        Cache-Control no-store y Pragma no-cache (hallazgo M2).
       responses:
         "200":
           description: Formulario de la celda.
@@ -2815,7 +2819,9 @@ paths:
       operationId: listarVersionesDictamenBackoffice
       summary: Auditoría de versiones del dictamen de un vehículo (backoffice FLIT)
       description: >
-        HU #14563 B7 (D6, D7). Política diagnostico.backoffice de configuración y además diagnostico.auditoria.ver; empresa
+        HU #14563 B7 (D6, D7). Política diagnostico.backoffice de configuración, la de operación FLIT
+        diagnostico.backoffice.operacion (hallazgo M3: trae el motivo y el autor; un SuperAdmin de otra compañía recibe 403) y
+        diagnostico.auditoria.ver; empresa
         explícita en ?empresa= y la lectura queda en diagnostico.lecturas_backoffice. Todas las versiones en orden descendente:
         veredicto, alertamientos con la marca ajuste (AGREGADO/EDITADO), eliminados frente a la versión anterior (por código
         y fuente), origen (AUTOMATICO o AJUSTE_FLIT), usuario {id, nombre} (nombre resuelto por Identidad, no se guarda; null
@@ -2837,7 +2843,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No cumple la política de configuración del backoffice o le falta diagnostico.auditoria.ver.
+          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.auditoria.ver.
         "404":
           description: "`code` = NO_ENCONTRADO si el lote o el vehículo no son de la compañía indicada; SIN_DICTAMEN si no hay versiones."
           content:
@@ -5480,16 +5486,6 @@ components:
               valor: { type: integer, format: int64, nullable: true }
               muestras: { type: integer, nullable: true }
               fecha: { type: string, nullable: true, example: "2026-10-22" }
-        referencia:
-          type: object
-          description: >
-            HU #14563 B6. Referencia Fasecolda del avalúo llenado a mano con ella. La clave no aparece si el avalúo no la trae
-            (siempre ausente en el avalúo por API).
-          properties:
-            codigo_fasecolda: { type: string, nullable: true, pattern: "^[0-9]{8}$", example: "01601234" }
-            marca: { type: string, nullable: true }
-            linea: { type: string, nullable: true }
-            modelo: { type: integer, nullable: true, example: 2020 }
 
     ResultadoImpuestoDetalle:
       type: object
@@ -5567,7 +5563,7 @@ components:
     FormularioLlenadoManual:
       type: object
       description: Formulario del llenado manual (HU #13800). Todas las claves van siempre.
-      required: [id, diagnostico_id, vehiculo_id, fuente, estado, tipo_error, version, admite_manual, motivo, personas]
+      required: [id, diagnostico_id, vehiculo_id, fuente, estado, tipo_error, version, admite_manual, motivo, personas, referencia]
       properties:
         id: { type: string, format: uuid }
         diagnostico_id: { type: string, format: uuid }
@@ -5584,6 +5580,19 @@ components:
           description: Solo en fuentes de persona (null en las del vehículo); solo las personas en ERROR, por orden.
           items:
             $ref: "#/components/schemas/PersonaEnErrorManual"
+        referencia:
+          type: object
+          nullable: true
+          description: >
+            HU #14563 B6 + hallazgo M1 de seguridad (R-20, opción a). Referencia Fasecolda del avalúo llenado a mano con ella;
+            null en cualquier otro caso. Solo la ve el backoffice: el detalle de la compañía, su PDF y el contenido del reporte no
+            la traen, porque revelaría el llenado manual.
+          required: [codigo_fasecolda, marca, linea, modelo]
+          properties:
+            codigo_fasecolda: { type: string, nullable: true, pattern: "^[0-9]{8}$", example: "01601234" }
+            marca: { type: string, nullable: true }
+            linea: { type: string, nullable: true }
+            modelo: { type: integer, nullable: true, example: 2020 }
 
     PersonaEnErrorManual:
       type: object

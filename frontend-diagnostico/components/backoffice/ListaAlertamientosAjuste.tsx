@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { TablaEditable, type ColumnaEditable } from "@flit/ui/TablaEditable";
+import { useId, useState } from "react";
 import { FUENTES } from "@/lib/configuracion";
 import { rotuloAlerta } from "@/lib/dictamen/api";
 import { EFECTOS_DICTAMEN } from "@/lib/rotulos";
@@ -16,7 +15,9 @@ export interface ListaAlertamientosAjusteProps {
 }
 
 const CONTROL =
-  "min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]";
+  "min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] aria-[invalid=true]:border-[color:var(--di-danger)]";
+const ETIQUETA = "text-xs font-semibold text-[color:var(--di-text-secondary)]";
+const ERROR = "text-xs text-[color:var(--di-danger)]";
 const BOTON_TEXTO =
   "min-h-9 rounded-full px-3 text-sm font-semibold text-[color:var(--di-action)] hover:bg-[color:var(--di-accent-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)] disabled:opacity-60";
 
@@ -25,26 +26,28 @@ const numeroDe = (clave: string) => Number.parseInt(clave.replace(/\D+/g, ""), 1
 /** Título de la fila: rótulo del catálogo, o «Alertamiento libre» para AJUSTE_FLIT. Nunca el código crudo. */
 const titulo = (f: FilaAlertamiento) => (f.codigo === CODIGO_AJUSTE_FLIT ? "Alertamiento libre" : rotuloAlerta({ ...f, etiqueta: null }));
 
+/** Índice del alertamiento en un campo de error del API (`alertamientos[1].texto` → 1). */
+const indiceDeCampo = (campo: string) => Number.parseInt(/^alertamientos\[(\d+)\]/.exec(campo)?.[1] ?? "", 10);
+
 /**
- * Alertamientos del ajuste FLIT (HU #14562 · AC45, B7): `TablaEditable` con guardado por fila (texto, efecto y fuente),
- * «Agregar alertamiento» (código AJUSTE_FLIT) y «Eliminar» por fila. Guardar una fila solo actualiza el borrador del
- * panel; el PUT lo hace «Aplicar» con la lista completa. Antes de guardar valida el texto (obligatorio, ≤ 500 y, en los
- * libres, sin secuencias de 6 o más dígitos, P3): si falla, la fila queda en «Error de guardado» con su mensaje.
+ * Alertamientos del ajuste FLIT (HU #14562 · AC45, B7): una tarjeta por alertamiento con texto, efecto y fuente, «Agregar
+ * alertamiento» (código AJUSTE_FLIT) y «Eliminar». Auditoría M8: se edita en línea, sin guardado por fila; cada cambio llega
+ * de inmediato al borrador del panel, así que «Aplicar» (el PUT con la lista completa) nunca sale con un texto viejo, y un
+ * alertamiento inválido deja «Aplicar» deshabilitado. Tarjetas y no tabla: en el panel de 640 px una tabla de 5 columnas
+ * desplazaba en horizontal (AC56).
+ *
+ * Errores (AC56): el de validación local (obligatorio, ≤ 500 y, en los libres, sin secuencias de 6 o más dígitos, P3)
+ * aparece cuando el usuario edita o deja el texto, nunca al abrir; el del API (422 por `alertamientos[i].texto`) se muestra
+ * en cuanto llega. Los dos van junto a su campo con `aria-invalid` y `aria-describedby`.
  */
 export function ListaAlertamientosAjuste({ alertamientos, onCambiar, errores = {}, deshabilitado = false }: ListaAlertamientosAjusteProps) {
-  const [erroresFila, setErroresFila] = useState<Record<string, string>>({});
+  const id = useId();
+  const [tocados, setTocados] = useState<ReadonlySet<string>>(() => new Set());
 
-  const indice = (clave: string) => alertamientos.findIndex((a) => a.clave === clave);
+  const tocar = (clave: string) => setTocados((t) => (t.has(clave) ? t : new Set(t).add(clave)));
 
-  const guardar = (fila: FilaAlertamiento) => {
-    const error = validarAlertamiento(fila);
-    if (error) {
-      setErroresFila((m) => ({ ...m, [fila.clave]: error }));
-      throw new Error(error);
-    }
-    setErroresFila((m) => Object.fromEntries(Object.entries(m).filter(([clave]) => clave !== fila.clave)));
-    onCambiar(alertamientos.map((a) => (a.clave === fila.clave ? { ...fila, ajuste: a.ajuste === "AGREGADO" ? "AGREGADO" : "EDITADO" } : a)));
-  };
+  const cambiar = (clave: string, cambio: Partial<Pick<FilaAlertamiento, "texto" | "efecto" | "fuente">>) =>
+    onCambiar(alertamientos.map((a) => (a.clave === clave ? { ...a, ...cambio, ajuste: a.ajuste === "AGREGADO" ? "AGREGADO" : "EDITADO" } : a)));
 
   const agregar = () => {
     const siguiente = alertamientos.reduce((max, a) => Math.max(max, numeroDe(a.clave)), 0) + 1;
@@ -53,96 +56,116 @@ export function ListaAlertamientosAjuste({ alertamientos, onCambiar, errores = {
 
   const eliminar = (clave: string) => onCambiar(alertamientos.filter((a) => a.clave !== clave));
 
-  const columnas: ColumnaEditable<FilaAlertamiento>[] = [
-    { campo: "codigo", titulo: "Alertamiento", mostrar: (f) => `${f.clave} · ${titulo(f)}` },
-    {
-      campo: "texto",
-      titulo: "Texto",
-      editable: true,
-      editor: (valor, cambiar, etiqueta) => (
-        <input
-          type="text"
-          aria-label={etiqueta}
-          value={String(valor ?? "")}
-          maxLength={TEXTO_ALERTAMIENTO_MAX}
-          disabled={deshabilitado}
-          onChange={(e) => cambiar(e.target.value)}
-          className={CONTROL}
-        />
-      ),
-    },
-    {
-      campo: "efecto",
-      titulo: "Efecto",
-      editable: true,
-      editor: (valor, cambiar, etiqueta) => (
-        <select aria-label={etiqueta} value={String(valor)} disabled={deshabilitado} onChange={(e) => cambiar(e.target.value)} className={CONTROL}>
-          {Object.entries(EFECTOS_DICTAMEN).map(([codigo, nombre]) => (
-            <option key={codigo} value={codigo}>
-              {nombre}
-            </option>
-          ))}
-        </select>
-      ),
-    },
-    {
-      campo: "fuente",
-      titulo: "Fuente",
-      editable: true,
-      editor: (valor, cambiar, etiqueta) => (
-        <select aria-label={etiqueta} value={String(valor)} disabled={deshabilitado} onChange={(e) => cambiar(e.target.value)} className={CONTROL}>
-          {FUENTES.map((f) => (
-            <option key={f.codigo} value={f.codigo}>
-              {f.nombre}
-            </option>
-          ))}
-        </select>
-      ),
-    },
-    {
-      campo: "clave",
-      titulo: "Quitar",
-      mostrar: (f) => (
-        <button type="button" aria-label={`Eliminar ${f.clave}`} disabled={deshabilitado} onClick={() => eliminar(f.clave)} className={BOTON_TEXTO}>
-          Eliminar
-        </button>
-      ),
-    },
-  ];
+  const erroresApi = new Map<string, string>();
+  for (const [campo, mensaje] of Object.entries(errores)) {
+    const fila = alertamientos[indiceDeCampo(campo)];
+    if (fila) erroresApi.set(fila.clave, mensaje);
+  }
 
-  const mensajes = [
-    ...Object.entries(erroresFila).map(([clave, mensaje]) => `${clave}: ${mensaje}`),
-    ...Object.entries(errores)
-      .map(([campo, mensaje]) => {
-        const i = Number.parseInt(/^alertamientos\[(\d+)\]/.exec(campo)?.[1] ?? "", 10);
-        const fila = Number.isInteger(i) ? alertamientos[i] : undefined;
-        return fila && indice(fila.clave) >= 0 ? `${fila.clave}: ${mensaje}` : null;
-      })
-      .filter((m): m is string => m !== null),
-  ];
+  const botonAgregar = (
+    <div>
+      <button type="button" onClick={agregar} disabled={deshabilitado} className={BOTON_TEXTO}>
+        Agregar alertamiento
+      </button>
+    </div>
+  );
+
+  if (alertamientos.length === 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-sm text-[color:var(--di-text-tertiary)]">Sin alertamientos. Un dictamen Bloqueado necesita al menos uno.</p>
+        {botonAgregar}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2">
-      <TablaEditable
-        etiqueta="Alertamientos del ajuste"
-        filas={alertamientos}
-        columnas={columnas}
-        clave={(f) => f.clave}
-        onGuardar={guardar}
-        vacio="Sin alertamientos. Un dictamen Bloqueado necesita al menos uno."
-      />
-      {mensajes.length > 0 && (
-        <div role="alert" className="flex flex-col gap-1 text-sm text-[color:var(--di-danger)]">
-          {mensajes.map((m) => (
-            <p key={m}>{m}</p>
-          ))}
-        </div>
-      )}
-      <div>
-        <button type="button" onClick={agregar} disabled={deshabilitado} className={BOTON_TEXTO}>
-          Agregar alertamiento
-        </button>
-      </div>
+      <ul aria-label="Alertamientos del ajuste" className="flex flex-col gap-3">
+        {alertamientos.map((f, i) => {
+          const base = `${id}-${i}`;
+          const error = erroresApi.get(f.clave) ?? (tocados.has(f.clave) ? validarAlertamiento(f) : null);
+          return (
+            <li key={f.clave} className="rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-3">
+              <fieldset className="flex flex-col gap-3">
+                <legend className="mb-1 text-sm font-semibold text-[color:var(--di-heading)]">{`${f.clave} · ${titulo(f)}`}</legend>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor={`${base}-texto`} className={ETIQUETA}>
+                    Texto
+                  </label>
+                  <input
+                    id={`${base}-texto`}
+                    aria-label={`Texto de ${f.clave}`}
+                    type="text"
+                    value={f.texto}
+                    maxLength={TEXTO_ALERTAMIENTO_MAX}
+                    disabled={deshabilitado}
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? `${base}-error` : undefined}
+                    onChange={(e) => {
+                      tocar(f.clave);
+                      cambiar(f.clave, { texto: e.target.value });
+                    }}
+                    onBlur={() => tocar(f.clave)}
+                    className={CONTROL}
+                  />
+                  {error && (
+                    <p id={`${base}-error`} className={ERROR}>
+                      {error}
+                    </p>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor={`${base}-efecto`} className={ETIQUETA}>
+                      Efecto
+                    </label>
+                    <select
+                      id={`${base}-efecto`}
+                      aria-label={`Efecto de ${f.clave}`}
+                      value={f.efecto}
+                      disabled={deshabilitado}
+                      onChange={(e) => cambiar(f.clave, { efecto: e.target.value as FilaAlertamiento["efecto"] })}
+                      className={CONTROL}
+                    >
+                      {Object.entries(EFECTOS_DICTAMEN).map(([codigo, nombre]) => (
+                        <option key={codigo} value={codigo}>
+                          {nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor={`${base}-fuente`} className={ETIQUETA}>
+                      Fuente
+                    </label>
+                    <select
+                      id={`${base}-fuente`}
+                      aria-label={`Fuente de ${f.clave}`}
+                      value={f.fuente}
+                      disabled={deshabilitado}
+                      onChange={(e) => cambiar(f.clave, { fuente: e.target.value })}
+                      className={CONTROL}
+                    >
+                      {FUENTES.map((fuente) => (
+                        <option key={fuente.codigo} value={fuente.codigo}>
+                          {fuente.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <button type="button" aria-label={`Eliminar ${f.clave}`} disabled={deshabilitado} onClick={() => eliminar(f.clave)} className={BOTON_TEXTO}>
+                    Eliminar
+                  </button>
+                </div>
+              </fieldset>
+            </li>
+          );
+        })}
+      </ul>
+      {botonAgregar}
     </div>
   );
 }
