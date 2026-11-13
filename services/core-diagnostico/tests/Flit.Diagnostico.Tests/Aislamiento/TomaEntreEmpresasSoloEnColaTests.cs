@@ -23,7 +23,8 @@ namespace Flit.Diagnostico.Tests.Aislamiento;
 public sealed partial class TomaEntreEmpresasSoloEnColaTests
 {
     private static readonly string[] ArchivosPermitidos =
-        ["Modulos/Trabajos/ColaConsultas.cs", "Modulos/Trabajos/ColaEvidencias.cs", "Modulos/Trabajos/ColaRedaccion.cs", "Modulos/Trabajos/ColaDerivacion.cs"];
+        ["Modulos/Trabajos/ColaConsultas.cs", "Modulos/Trabajos/ColaEvidencias.cs", "Modulos/Trabajos/ColaRedaccion.cs", "Modulos/Trabajos/ColaDerivacion.cs",
+         "Modulos/Notificaciones/TrabajadorPurgaNotificaciones.cs"];
 
     [Fact]
     public void Solo_la_cola_usa_SQL_crudo_entre_empresas()
