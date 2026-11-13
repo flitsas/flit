@@ -34,7 +34,8 @@ internal sealed record LlenadoManualDto(
 /// <summary>
 /// Lo que el backoffice necesita para llenar una celda (HU #13800, contrato de F06-H5): la celda, su versión (la que se devuelve
 /// en el PUT), si admite el llenado y, si no, por qué, y en las fuentes de persona SOLO las personas en error, con su
-/// <c>persona_id</c> y el documento enmascarado. Nunca el documento en claro ni el payload.
+/// <c>persona_id</c> y el documento enmascarado. Nunca el documento en claro ni el payload. En el avalúo llenado con referencia
+/// Fasecolda (HU #14563 B6) trae esa <c>referencia</c>: es el único lugar donde se ve (hallazgo M1, R-20 opción a); null si no la hay.
 /// </summary>
 internal sealed record FormularioManualDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -46,7 +47,8 @@ internal sealed record FormularioManualDto(
     [property: JsonPropertyName("version")] long Version,
     [property: JsonPropertyName("admite_manual")] bool AdmiteManual,
     [property: JsonPropertyName("motivo")] string? Motivo,
-    [property: JsonPropertyName("personas")] IReadOnlyList<PersonaEnErrorDto>? Personas);
+    [property: JsonPropertyName("personas")] IReadOnlyList<PersonaEnErrorDto>? Personas,
+    [property: JsonPropertyName("referencia")] ReferenciaAvaluoDetalle? Referencia = null);
 
 /// <summary>Una persona en error de una celda de persona, para el formulario del backoffice.</summary>
 internal sealed record PersonaEnErrorDto(
@@ -190,7 +192,19 @@ internal sealed partial class LlenadoManual(
 
         return new FormularioManualDto(
             celda.Id, celda.DiagnosticoId, celda.VehiculoId, CodigosDeEnum.Codigo(celda.Fuente), CodigosDeEnum.Codigo(celda.Estado), celda.TipoError,
-            celda.VersionTablero, motivo is null, motivo, personas);
+            celda.VersionTablero, motivo is null, motivo, personas, ReferenciaDelAvaluo(celda));
+    }
+
+    /// <summary>La referencia Fasecolda guardada en el payload de un avalúo llenado con ella; null en cualquier otro caso.</summary>
+    private static ReferenciaAvaluoDetalle? ReferenciaDelAvaluo(CeldaConsulta celda)
+    {
+        if (celda.Fuente != Fuente.Avaluo || string.IsNullOrWhiteSpace(celda.Payload))
+            return null;
+        using var documento = JsonDocument.Parse(celda.Payload);
+        return documento.RootElement.ValueKind == JsonValueKind.Object
+            && documento.RootElement.TryGetProperty("referencia", out var referencia) && referencia.ValueKind == JsonValueKind.Object
+            ? referencia.Deserialize<ReferenciaAvaluoDetalle>()
+            : null;
     }
 
     /// <summary>Por qué la celda no se llena (código del 409); null si está en ERROR y no la bloquea el RUNT.</summary>
