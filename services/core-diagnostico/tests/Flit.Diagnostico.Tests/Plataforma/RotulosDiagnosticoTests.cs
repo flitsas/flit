@@ -103,6 +103,7 @@ public sealed class RotulosDiagnosticoTests
     [InlineData("INFRACCION_RUNT", "Infracciones registradas en el RUNT")]
     [InlineData("IMPUESTO", "Impuesto vehicular pendiente")]
     [InlineData("SOAT_MAQUINARIA", "SOAT de maquinaria no vigente")]
+    [InlineData("AJUSTE_FLIT", "Ajuste FLIT")] // Cierre BE: alertamiento redactado por soporte (B7); antes salía «Novedad sin clasificar»
     public void Tabla_aprobada_de_rotulos_de_alertas(string codigo, string rotulo) =>
         RotulosDiagnostico.DeAlerta(codigo, "RUNT").Should().Be(rotulo);
 
