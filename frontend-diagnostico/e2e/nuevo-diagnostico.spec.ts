@@ -38,10 +38,10 @@ test.describe("pantalla única de creación", () => {
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
   });
 
-  test("AC1/AC6: desde el inicio, Diagnosticar abre Express con la placa; en 1280 px dos columnas con Parámetros sticky", async ({ page }) => {
+  test("AC1/AC6: desde el inicio, Diagnosticar en línea abre Express con la placa; en 1280 px dos columnas con Parámetros sticky", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
-    await page.getByRole("button", { name: "Diagnosticar" }).click();
+    await page.getByRole("button", { name: "Diagnosticar en línea" }).click();
     await page.waitForURL((url) => url.pathname === "/diagnosticos/nuevo" && url.searchParams.get("modo") === "express");
 
     const vehiculos = page.getByRole("region", { name: "Vehículos" });

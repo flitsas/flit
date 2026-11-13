@@ -64,7 +64,7 @@ export function CapturaExpress() {
         />
         <button type="submit" className={BOTON_PRIMARIO_CLS}>
           <Icono nombre="destello" className="h-4 w-4" />
-          Diagnosticar
+          Diagnosticar en línea
         </button>
       </div>
       {error ? (
