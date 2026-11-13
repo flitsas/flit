@@ -1134,6 +1134,31 @@ export interface ProcedureAttachment {
    * Reemplazar el archivo no es bloqueante; se firmará de nuevo al enviar a OT.
    */
   digitallySigned?: boolean;
+  /**
+   * Bug #14559 — veredicto OCR declarado por el cliente al registrar el adjunto. Informativo, nunca
+   * compuerta (ADR-0085). null/ausente = sin dato (previo al fix, tipo sin OCR o generado) ⇒ «Cargado».
+   */
+  ocrStatus?: AttachmentOcrStatus | null;
+  /** Código cerrado del motivo (solo rejected/skipped). Nunca texto libre del documento (Ley 1581). */
+  ocrReason?: string | null;
+}
+
+/** Bug #14559 — valores persistidos del veredicto OCR del adjunto. */
+export type AttachmentOcrStatus = 'verified' | 'rejected' | 'skipped';
+
+/** Bug #14559 — códigos cerrados del motivo del veredicto OCR (whitelist del backend). */
+export type AttachmentOcrReason =
+  | 'vin_mismatch'
+  | 'tipo_invalido'
+  | 'no_confirmado'
+  | 'ilegible'
+  | 'excede_tamano'
+  | 'analisis_fallido';
+
+/** Bug #14559 — veredicto que el cliente declara en `POST .../attachments/register`. */
+export interface AttachmentOcrVerdict {
+  status: AttachmentOcrStatus;
+  reason?: AttachmentOcrReason;
 }
 
 /**

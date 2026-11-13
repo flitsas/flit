@@ -116,7 +116,9 @@ internal static class AttachmentEndpoints
                 body.Mimetype ?? string.Empty,
                 body.SizeBytes,
                 body.Sha256 ?? string.Empty,
-                body.StoragePath ?? string.Empty);
+                body.StoragePath ?? string.Empty,
+                body.OcrStatus,
+                body.OcrReason);
 
             var userId = ResolveUserId(http.User);
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, userId, ct);
@@ -372,4 +374,7 @@ internal sealed record RegisterAttachmentRequest(
     string? Mimetype,
     long SizeBytes,
     string? Sha256,
-    string? StoragePath);
+    string? StoragePath,
+    // Bug #14559 (ADR-0085) — veredicto OCR del cliente; opcional e informativo (el handler lo normaliza).
+    string? OcrStatus = null,
+    string? OcrReason = null);

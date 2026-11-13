@@ -10,6 +10,8 @@ import {
 } from '@/lib/tramites/archivo-en-memoria';
 import { CODIGO_ADJUNTO_BLOQUEADO_FLITO, mensajeErrorAdjunto } from '@/lib/tramites/flito';
 import type {
+  AttachmentOcrReason,
+  AttachmentOcrVerdict,
   ChecklistView,
   DocumentOcrResult,
   ProcedureAttachment,
@@ -98,6 +100,11 @@ export interface OcrUiResult {
 export interface OcrEvaluation {
   rechazado: boolean;
   motivo?: string;
+  /**
+   * Bug #14559 — código cerrado del motivo del rechazo: es lo único que se persiste en el adjunto.
+   * El `motivo` puede llevar texto libre del modelo o VINs y nunca sale del navegador (Ley 1581).
+   */
+  codigo?: AttachmentOcrReason;
 }
 
 function pickString(v: unknown): string {
@@ -162,16 +169,18 @@ export function evaluateOcr(
   if (apiOk === false) {
     if (data) {
       const validez = data.es_factura_valida ?? data.es_valido;
-      if (validez === false) return { rechazado: true, motivo: motivoDeTipo(data) };
+      if (validez === false) {
+        return { rechazado: true, motivo: motivoDeTipo(data), codigo: 'tipo_invalido' };
+      }
     }
-    return { rechazado: true, motivo: 'El análisis no confirmó el documento.' };
+    return { rechazado: true, motivo: 'El análisis no confirmó el documento.', codigo: 'no_confirmado' };
   }
   if (!data) {
-    return { rechazado: true, motivo: 'No se pudieron leer los datos del documento.' };
+    return { rechazado: true, motivo: 'No se pudieron leer los datos del documento.', codigo: 'ilegible' };
   }
   const validez = data.es_factura_valida ?? data.es_valido;
   if (validez === false) {
-    return { rechazado: true, motivo: motivoDeTipo(data) };
+    return { rechazado: true, motivo: motivoDeTipo(data), codigo: 'tipo_invalido' };
   }
   const docVin = pickString(data.vehiculo_vin) || pickString(data.vehiculo_chasis);
   const tramite = normalizeVin(instanceVin);
@@ -180,6 +189,7 @@ export function evaluateOcr(
     return {
       rechazado: true,
       motivo: `El VIN del documento (${resumirVins(docVin)}) no coincide con el del trámite.`,
+      codigo: 'vin_mismatch',
     };
   }
   return { rechazado: false };
@@ -211,7 +221,11 @@ export interface ProcedureDocumentsState {
   analyzingTipos: ReadonlySet<string>;
   /** id del adjunto en proceso de borrado (null = ninguno). */
   deletingId: string | null;
-  /** Resultado OCR por tipo (verificado / rechazado / no analizado). Vive sólo en sesión. */
+  /**
+   * Resultado OCR por tipo (verificado / rechazado / no analizado). Bug #14559 — se rehidrata desde
+   * `ocrStatus`/`ocrReason` de los adjuntos en cada refresh; lo calculado en sesión (con `data` y el
+   * motivo detallado) gana sobre lo derivado del servidor.
+   */
   ocrResults: Record<string, OcrUiResult>;
   error: string | null;
 }
@@ -258,6 +272,75 @@ export function ocrResultForTipo(
   if (ocrResults[tipo]) return ocrResults[tipo];
   const needle = tipo.toLowerCase();
   return Object.entries(ocrResults).find(([key]) => key.toLowerCase() === needle)?.[1];
+}
+
+// ── Bug #14559 — veredicto OCR persistido en el adjunto ─────────────
+
+const MOTIVO_ANALISIS_FALLIDO =
+  'No se pudo analizar el documento automáticamente: se subió sin verificar.';
+const MOTIVO_EXCEDE_TAMANO = 'Archivo mayor a 10 MB: subido sin análisis automático.';
+
+/**
+ * Texto fijo por código de motivo, para cuando el veredicto se rehidrata del servidor (ahí no hay
+ * `data` ni el motivo detallado de la sesión). El de VIN contiene «VIN» a propósito: el panel decide
+ * su copy con `/VIN/i`.
+ */
+export const OCR_REASON_TEXTO: Readonly<Record<AttachmentOcrReason, string>> = {
+  vin_mismatch: 'El VIN del documento no coincide con el del trámite.',
+  tipo_invalido: 'El documento no pasó la validación de tipo.',
+  no_confirmado: 'El análisis no confirmó el documento.',
+  ilegible: 'No se pudieron leer los datos del documento.',
+  excede_tamano: MOTIVO_EXCEDE_TAMANO,
+  analisis_fallido: MOTIVO_ANALISIS_FALLIDO,
+};
+
+const OCR_STATUSES: ReadonlySet<string> = new Set<OcrStatus>(['verified', 'rejected', 'skipped']);
+
+function esOcrStatus(v: unknown): v is OcrStatus {
+  return typeof v === 'string' && OCR_STATUSES.has(v);
+}
+
+function textoDeMotivo(reason: string | null | undefined): string | undefined {
+  if (!reason || !Object.prototype.hasOwnProperty.call(OCR_REASON_TEXTO, reason)) return undefined;
+  return OCR_REASON_TEXTO[reason as AttachmentOcrReason];
+}
+
+/**
+ * Veredicto OCR por tipo a partir de los adjuntos del servidor. Por tipo manda el adjunto más reciente
+ * (`uploadedAt`): en los tipos que reemplazan hay uno solo y en los múltiples (`otro`,
+ * `anexos_generales`) gana el último, igual que en sesión. Sin `ocrStatus` (adjunto previo al fix, sin
+ * OCR o generado) no hay entrada y la casilla se sigue viendo «Cargado». Clave = `tipo` en minúsculas.
+ */
+export function deriveOcrFromAttachments(
+  attachments: readonly ProcedureAttachment[],
+): Record<string, OcrUiResult> {
+  const masReciente = new Map<string, ProcedureAttachment>();
+  for (const att of attachments) {
+    const key = att.tipo.toLowerCase();
+    const previo = masReciente.get(key);
+    if (!previo || Date.parse(att.uploadedAt) > Date.parse(previo.uploadedAt)) {
+      masReciente.set(key, att);
+    }
+  }
+  const out: Record<string, OcrUiResult> = {};
+  for (const [key, att] of masReciente) {
+    if (!esOcrStatus(att.ocrStatus)) continue;
+    const motivo = att.ocrStatus === 'verified' ? undefined : textoDeMotivo(att.ocrReason);
+    out[key] = motivo
+      ? { status: att.ocrStatus, motivo, data: null }
+      : { status: att.ocrStatus, data: null };
+  }
+  return out;
+}
+
+/** Une lo derivado del servidor con lo de la sesión: la sesión gana (sin distinguir mayúsculas). */
+function mergeOcrResults(
+  derivado: Record<string, OcrUiResult>,
+  sesion: Record<string, OcrUiResult>,
+): Record<string, OcrUiResult> {
+  let base = derivado;
+  for (const key of Object.keys(sesion)) base = withoutOcrForTipo(base, key);
+  return { ...base, ...sesion };
 }
 
 export interface UseProcedureDocumentsOptions {
@@ -313,7 +396,13 @@ export function useProcedureDocuments(
           tramitesClient.getChecklist(instanceId, tenantId),
           tramitesClient.getAttachments(instanceId, tenantId),
         ]);
-        setState((s) => ({ ...s, checklist, attachments, loading: false }));
+        setState((s) => ({
+          ...s,
+          checklist,
+          attachments,
+          ocrResults: mergeOcrResults(deriveOcrFromAttachments(attachments), s.ocrResults),
+          loading: false,
+        }));
       } catch (err) {
         if (opts?.background) return;
         setState((s) => ({
@@ -383,6 +472,8 @@ export function useProcedureDocuments(
       let fileToUpload = file;
       // HU #12776 — ¿este cargue ya le dijo al backend qué fecha tiene el certificado?
       let ocrPersistido = false;
+      // Bug #14559 — veredicto que se declara al registrar (solo códigos; undefined = tipo sin OCR).
+      let veredicto: AttachmentOcrVerdict | undefined;
       const usaOcr = esTipoOcr(await cargarTiposOcr(), tipo);
       const analizaAhora = usaOcr && file.size <= OCR_MAX_BYTES;
 
@@ -405,6 +496,7 @@ export function useProcedureDocuments(
         try {
           ocr = await tramitesClient.analyzeDocument(tipo.toLowerCase(), file, tenantId);
         } catch {
+          veredicto = { status: 'skipped', reason: 'analisis_fallido' };
           setState((s) => ({
             ...s,
             analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
@@ -412,7 +504,7 @@ export function useProcedureDocuments(
               ...s.ocrResults,
               [tipo]: {
                 status: 'skipped',
-                motivo: 'No se pudo analizar el documento automáticamente: se subió sin verificar.',
+                motivo: MOTIVO_ANALISIS_FALLIDO,
                 data: null,
               },
             },
@@ -426,6 +518,9 @@ export function useProcedureDocuments(
           motivo: evaluation.motivo,
           data: ocr.data,
         };
+        veredicto = evaluation.rechazado
+          ? { status: 'rejected', ...(evaluation.codigo ? { reason: evaluation.codigo } : {}) }
+          : { status: 'verified' };
 
         // PDF multi-documento → se sube el recorte, no el original.
         if (ocr.extractedPdfBase64) {
@@ -457,13 +552,14 @@ export function useProcedureDocuments(
         }
       } else if (usaOcr && file.size > OCR_MAX_BYTES) {
         // 10–20 MB: se salta el OCR (excede el límite del análisis), se sube igual y se marca "no analizado".
+        veredicto = { status: 'skipped', reason: 'excede_tamano' };
         setState((s) => ({
           ...s,
           ocrResults: {
             ...s.ocrResults,
             [tipo]: {
               status: 'skipped',
-              motivo: 'Archivo mayor a 10 MB: subido sin análisis automático.',
+              motivo: MOTIVO_EXCEDE_TAMANO,
               data: null,
             },
           },
@@ -487,7 +583,12 @@ export function useProcedureDocuments(
         uploadingTipos: withTipoInSet(s.uploadingTipos, tipo),
       }));
       try {
-        await tramitesClient.uploadAttachment(instanceId, tipo, fileToUpload, tenantId);
+        // Bug #14559 — el veredicto viaja en el register; sin OCR se llama como siempre (4 argumentos).
+        if (veredicto) {
+          await tramitesClient.uploadAttachment(instanceId, tipo, fileToUpload, tenantId, veredicto);
+        } else {
+          await tramitesClient.uploadAttachment(instanceId, tipo, fileToUpload, tenantId);
+        }
         setState((s) => ({
           ...s,
           uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
