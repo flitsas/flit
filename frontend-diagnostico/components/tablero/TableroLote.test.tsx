@@ -107,6 +107,16 @@ describe("/diagnosticos/{id} — los cuatro estados", () => {
   });
 });
 
+describe("/diagnosticos/{id} — HU #14562 AC25: progreso del lote", () => {
+  it("la barra expone aria-valuetext «N de M vehículos terminados» y el avance vive en una región aria-live", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    const barra = screen.getByRole("progressbar", { name: /vehículos terminados/i });
+    expect(barra).toHaveAttribute("aria-valuetext", "1 de 3 vehículos terminados");
+    // Solo el texto del avance se anuncia: el sondeo no lo cambia si N no cambia.
+    expect(screen.getByText("1 de 3 vehículos terminados")).toHaveAttribute("aria-live", "polite");
+  });
+});
+
 describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
   it("a los 3 s pide solo los cambios desde su versión y pinta la celda que cambió", async () => {
     const cambio = grilla({ version: 13, vehiculos: [vehiculo(3, [celda(3, "RUNT", "COMPLETADO", { version: 13 })])] });
