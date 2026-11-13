@@ -50,3 +50,59 @@ describe("SelectorSegmentado (HU #14562 · UI-1)", () => {
     expect(onCambio).not.toHaveBeenCalled();
   });
 });
+
+// HU #14562 · M10 (auditoría): describedBy, etiquetadoPor y el modo bloqueado, que sigue enfocable (aria-disabled y la
+// opción marcada en tabIndex=0) para que teclado y lector lleguen a él y oigan por qué no cambia.
+describe("SelectorSegmentado: describedBy, etiquetadoPor y bloqueado (HU #14562 · M10)", () => {
+  it("M10: describedBy asocia la ayuda al radiogroup", () => {
+    render(
+      <>
+        <SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="todos" onCambio={vi.fn()} describedBy="ayuda" />
+        <p id="ayuda">Express: un vehículo.</p>
+      </>,
+    );
+    expect(screen.getByRole("radiogroup", { name: "Tipo" })).toHaveAccessibleDescription("Express: un vehículo.");
+  });
+
+  it("M10: etiquetadoPor toma el nombre del rótulo visible y no duplica aria-label", () => {
+    render(
+      <>
+        <span id="rotulo">Quién ve los diagnósticos</span>
+        <SelectorSegmentado etiquetadoPor="rotulo" opciones={[...opciones]} valor="todos" onCambio={vi.fn()} />
+      </>,
+    );
+    const grupo = screen.getByRole("radiogroup", { name: "Quién ve los diagnósticos" });
+    expect(grupo).toHaveAttribute("aria-labelledby", "rotulo");
+    expect(grupo).not.toHaveAttribute("aria-label");
+  });
+
+  it("M10: bloqueado sigue enfocable: aria-disabled en el grupo y las opciones, la marcada con tabIndex=0", () => {
+    render(<SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="express" onCambio={vi.fn()} bloqueado />);
+    expect(screen.getByRole("radiogroup", { name: "Tipo" })).toHaveAttribute("aria-disabled", "true");
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).not.toBeDisabled();
+      expect(radio).toHaveAttribute("aria-disabled", "true");
+    }
+    const marcada = screen.getByRole("radio", { name: "Express" });
+    expect(marcada).toHaveAttribute("tabindex", "0");
+    marcada.focus();
+    expect(marcada).toHaveFocus();
+  });
+
+  it("M10: bloqueado ignora el clic y las flechas, y no mueve el foco", () => {
+    const onCambio = vi.fn();
+    render(<SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="express" onCambio={onCambio} bloqueado />);
+    const marcada = screen.getByRole("radio", { name: "Express" });
+    marcada.focus();
+    fireEvent.keyDown(marcada, { key: "ArrowRight" });
+    fireEvent.keyDown(marcada, { key: "End" });
+    fireEvent.click(screen.getByRole("radio", { name: "Masivo" }));
+    expect(onCambio).not.toHaveBeenCalled();
+    expect(marcada).toHaveFocus();
+  });
+
+  it("M10 retrocompatible: deshabilitado sigue siendo inerte (disabled nativo)", () => {
+    render(<SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="express" onCambio={vi.fn()} deshabilitado />);
+    for (const radio of screen.getAllByRole("radio")) expect(radio).toBeDisabled();
+  });
+});

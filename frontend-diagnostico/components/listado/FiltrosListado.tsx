@@ -105,8 +105,10 @@ export function FiltrosListado({ valor, error, onCambiar, onLimpiar }: FiltrosLi
         <span id={`${id}-modo`} className={ETIQUETA_CLS}>
           Tipo
         </span>
+        {/* HU #14562 · M10: nombre desde el rótulo visible y, con un 400 sobre `modo`, el mensaje como descripción. */}
         <SelectorSegmentado<ValorTipo>
-          etiqueta="Tipo"
+          etiquetadoPor={`${id}-modo`}
+          describedBy={error?.campo === "modo" ? errorId("modo") : undefined}
           opciones={OPCIONES_TIPO}
           valor={valor.modo ?? TODOS}
           onCambio={(v) => onCambiar({ modo: v === TODOS ? null : v })}
