@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Microsoft.EntityFrameworkCore;
@@ -65,5 +66,42 @@ internal static class EscritorCeldas
             await seguida.ReloadAsync(ct).ConfigureAwait(false);
         return seguida?.Entity.VersionTablero
             ?? await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sube la versión de fila del tablero (HU #14563, ADR-0086 D-1) en la transacción del escritor: primero la cabecera
+    /// (<see cref="SubirVersionTableroAsync"/>, que la bloquea hasta el commit) y después el vehículo con ese valor. Orden de
+    /// bloqueo canónico: cabecera → vehículo → dictamen o ítem; llámala antes de apagar el dictamen vigente o de tocar el ítem.
+    /// Si el vehículo está seguido, se asigna la propiedad y sale en el <c>SaveChanges</c> del escritor con su <c>xmin</c>; si
+    /// no, va un <c>ExecuteUpdate</c>. Devuelve la versión nueva. No guarda.
+    /// </summary>
+    public static async Task<long> SubirVersionFilaAsync(DiagnosticoDb contexto, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        var version = await SubirVersionTableroAsync(contexto, diagnosticoId, ct).ConfigureAwait(false);
+        var seguido = contexto.ChangeTracker.Entries<VehiculoDiagnostico>().FirstOrDefault(e => e.Entity.Id == vehiculoId);
+        if (seguido is not null)
+        {
+            MarcarFila(seguido.Entity, version);
+            return version;
+        }
+
+        var filas = await contexto.Set<VehiculoDiagnostico>().Where(v => v.Id == vehiculoId && v.DiagnosticoId == diagnosticoId)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.VersionTablero, version), ct).ConfigureAwait(false);
+        if (filas != 1)
+            throw new InvalidOperationException("El vehículo no pertenece al lote en la empresa del contexto.");
+        return version;
+    }
+
+    /// <summary>
+    /// Deja la fila con una versión ya obtenida en esta transacción (la de la celda que cierra y emite el dictamen, HU #14563 AC7):
+    /// no sube la cabecera otra vez. La versión de fila es monótona.
+    /// </summary>
+    public static void MarcarFila(VehiculoDiagnostico vehiculo, long versionTablero)
+    {
+        ArgumentNullException.ThrowIfNull(vehiculo);
+        if (versionTablero < vehiculo.VersionTablero)
+            throw new InvalidOperationException("La versión de fila del tablero no baja.");
+        vehiculo.VersionTablero = versionTablero;
     }
 }
