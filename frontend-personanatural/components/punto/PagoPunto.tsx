@@ -345,7 +345,9 @@ function CobroVigente({ codigo, total }: { codigo: string; total: number | null 
           Total a pagar: <b>{formatearPesos(total)}</b>
         </p>
       )}
-      <p className="text-sm text-muted-foreground">Vale hasta hoy a las 11:59 p. m.</p>
+      <p className="inline-flex w-fit rounded-full bg-warning px-3 py-1 text-sm font-semibold text-secondary">
+        Vale hasta hoy a las 11:59 p. m.
+      </p>
       <p role="status" className="text-sm text-muted-foreground">
         Esperando la confirmación de la caja. Esta pantalla avanza sola.
       </p>
