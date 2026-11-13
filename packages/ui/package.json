@@ -50,7 +50,8 @@
     "./BarraProgreso": "./src/BarraProgreso.tsx",
     "./ListaDefinicion": "./src/ListaDefinicion.tsx",
     "./TarjetaPlegable": "./src/TarjetaPlegable.tsx",
-    "./EtiquetaEnProceso": "./src/EtiquetaEnProceso.tsx"
+    "./EtiquetaEnProceso": "./src/EtiquetaEnProceso.tsx",
+    "./TablaEditable": "./src/TablaEditable.tsx"
   },
   "scripts": {
     "test": "vitest run"

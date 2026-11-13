@@ -38,3 +38,4 @@ export * from "./BarraProgreso";
 export * from "./ListaDefinicion";
 export * from "./TarjetaPlegable";
 export * from "./EtiquetaEnProceso";
+export * from "./TablaEditable";
