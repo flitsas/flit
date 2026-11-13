@@ -52,10 +52,22 @@ internal static class EscritorCeldas
     /// Sube la versión del tablero del lote en <paramref name="contexto"/> (con la empresa de la celda) y la devuelve. El UPDATE
     /// bloquea la fila de la cabecera hasta el fin de la transacción, así que dos celdas del mismo lote nunca leen la misma versión.
     /// </summary>
-    public static async Task<long> SubirVersionTableroAsync(DiagnosticoDb contexto, Guid diagnosticoId, CancellationToken ct)
+    public static Task<long> SubirVersionTableroAsync(DiagnosticoDb contexto, Guid diagnosticoId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
-        var filas = await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId)
+        return SubirVersionTableroAsync(contexto, contexto.Set<CabeceraDiagnostico>(), diagnosticoId, ct);
+    }
+
+    /// <summary>
+    /// Lo mismo sobre <paramref name="cabeceras"/>: el backoffice (HU #14563 B7) pasa las de la empresa explícita
+    /// (<c>EscrituraEntreEmpresas.ParaEditarDeLaEmpresa</c>), porque el filtro global de su contexto es el de FLIT.
+    /// </summary>
+    internal static async Task<long> SubirVersionTableroAsync(
+        DiagnosticoDb contexto, IQueryable<CabeceraDiagnostico> cabeceras, Guid diagnosticoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(cabeceras);
+        var filas = await cabeceras.Where(c => c.Id == diagnosticoId)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.VersionTablero, c => c.VersionTablero + 1), ct).ConfigureAwait(false);
         if (filas != 1)
             throw new InvalidOperationException("La celda no tiene su cabecera en la empresa del contexto.");
@@ -65,7 +77,7 @@ internal static class EscritorCeldas
         if (seguida is not null)
             await seguida.ReloadAsync(ct).ConfigureAwait(false);
         return seguida?.Entity.VersionTablero
-            ?? await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
+            ?? await cabeceras.Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -75,10 +87,23 @@ internal static class EscritorCeldas
     /// Si el vehículo está seguido, se asigna la propiedad y sale en el <c>SaveChanges</c> del escritor con su <c>xmin</c>; si
     /// no, va un <c>ExecuteUpdate</c>. Devuelve la versión nueva. No guarda.
     /// </summary>
-    public static async Task<long> SubirVersionFilaAsync(DiagnosticoDb contexto, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
+    public static Task<long> SubirVersionFilaAsync(DiagnosticoDb contexto, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
-        var version = await SubirVersionTableroAsync(contexto, diagnosticoId, ct).ConfigureAwait(false);
+        return SubirVersionFilaAsync(contexto, contexto.Set<CabeceraDiagnostico>(), contexto.Set<VehiculoDiagnostico>(), diagnosticoId, vehiculoId, ct);
+    }
+
+    /// <summary>
+    /// Lo mismo sobre <paramref name="cabeceras"/> y <paramref name="vehiculos"/> de UNA empresa: el ajuste FLIT del backoffice
+    /// (HU #14563 B7) pasa las de la empresa explícita, con el mismo orden de bloqueo cabecera → vehículo → dictamen.
+    /// </summary>
+    internal static async Task<long> SubirVersionFilaAsync(
+        DiagnosticoDb contexto, IQueryable<CabeceraDiagnostico> cabeceras, IQueryable<VehiculoDiagnostico> vehiculos,
+        Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(vehiculos);
+        var version = await SubirVersionTableroAsync(contexto, cabeceras, diagnosticoId, ct).ConfigureAwait(false);
         var seguido = contexto.ChangeTracker.Entries<VehiculoDiagnostico>().FirstOrDefault(e => e.Entity.Id == vehiculoId);
         if (seguido is not null)
         {
@@ -86,7 +111,7 @@ internal static class EscritorCeldas
             return version;
         }
 
-        var filas = await contexto.Set<VehiculoDiagnostico>().Where(v => v.Id == vehiculoId && v.DiagnosticoId == diagnosticoId)
+        var filas = await vehiculos.Where(v => v.Id == vehiculoId && v.DiagnosticoId == diagnosticoId)
             .ExecuteUpdateAsync(s => s.SetProperty(v => v.VersionTablero, version), ct).ConfigureAwait(false);
         if (filas != 1)
             throw new InvalidOperationException("El vehículo no pertenece al lote en la empresa del contexto.");

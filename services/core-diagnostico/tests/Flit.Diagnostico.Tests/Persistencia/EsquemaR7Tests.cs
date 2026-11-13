@@ -134,6 +134,60 @@ public sealed class EsquemaR7Tests
         nueva.AjusteMotivo.Should().BeNull();
     }
 
+    // HU #14563 AC21/AC29 (schema.md §2.4) — la cadena real: automático, override de veredicto, ajuste FLIT con alertamientos y
+    // recálculo automático. Versiones 1..4 sin huecos, una sola vigente, ajustado_desde_version = version - 1 solo en override y
+    // ajuste, y los CHECK de R7 la aceptan.
+    [Fact]
+    public async Task Cadena_1_a_max_con_override_ajuste_y_recalculo()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var (tenant, vehiculo) = await SembrarVehiculoAsync(conexion, ct);
+        var ahora = new DateTimeOffset(2026, 11, 13, 18, 0, 0, TimeSpan.Zero);
+        var usuario = Guid.CreateVersion7();
+        var evaluado = new Flit.Diagnostico.Domain.Dictamen.DictamenEvaluado("VIABLE", []);
+
+        await using (var db = DosEmpresas.Contexto(api.BaseDeDatos, tenant))
+        {
+            db.Add(EmisorDictamen.FilaAlCerrar(tenant, vehiculo, 1, "TRASPASO_STANDARD", evaluado, false, true, ahora));
+            await db.SaveChangesAsync(ct);
+        }
+
+        await AgregarAsync(api, tenant, vehiculo, v =>
+        {
+            var fila = EmisorDictamen.FilaDeOverride(v, "BLOQUEADO", true, usuario, "TRASPASO_STANDARD", false, true, ahora);
+            fila.AjusteMotivo = MotivoValido;
+            return fila;
+        }, ct);
+        await AgregarAsync(api, tenant, vehiculo, v => EmisorDictamen.FilaDeAjuste(
+            v, "BLOQUEADO",
+            [new AlertamientoAjuste(CodigosDictamen.AjusteFlit, "Soporte confirmo el embargo", "BLOQUEA", "RUNT")],
+            MotivoValido, usuario, ahora), ct);
+        await AgregarAsync(api, tenant, vehiculo, v => EmisorDictamen.FilaAlCerrar(tenant, vehiculo, v.Version + 1, "TRASPASO_STANDARD", evaluado, false, true, ahora), ct);
+
+        await using var lectura = DosEmpresas.Contexto(api.BaseDeDatos, tenant);
+        var cadena = await lectura.Set<DictamenVehiculo>().AsNoTracking().Where(d => d.VehiculoId == vehiculo).OrderBy(d => d.Version).ToListAsync(ct);
+        cadena.Select(d => d.Version).Should().Equal(1, 2, 3, 4);
+        cadena.Should().ContainSingle(d => d.Vigente).Which.Version.Should().Be(4);
+        cadena.Select(d => d.AjustadoDesdeVersion).Should().Equal(null, 1, 2, null);
+        cadena.Select(d => d.RedactadoPor).Should().Equal("PLANTILLA", "PLANTILLA", "MANUAL", "PLANTILLA");
+        cadena[3].AnalisisOverride.Should().BeFalse("D7: el recálculo nace sin marca de ajuste");
+        cadena[3].AjusteMotivo.Should().BeNull();
+    }
+
+    private static async Task AgregarAsync(ApiDePrueba api, Guid tenant, Guid vehiculo, Func<DictamenVehiculo, DictamenVehiculo> siguiente, CancellationToken ct)
+    {
+        await using var db = DosEmpresas.Contexto(api.BaseDeDatos, tenant);
+        var vigente = await db.Set<DictamenVehiculo>().SingleAsync(d => d.VehiculoId == vehiculo && d.Vigente, ct);
+        var nueva = siguiente(vigente);
+        vigente.Vigente = false;
+        nueva.TenantId = tenant;
+        db.Add(nueva);
+        await db.SaveChangesAsync(ct);
+    }
+
     private sealed record Fila
     {
         public int Version { get; init; }
