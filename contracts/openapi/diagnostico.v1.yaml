@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.2.0"
+  version: "1.3.0"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -14,6 +14,12 @@ info:
     guard de suscripción (HU #13726): si la compañía del token no tiene Diagnóstico activo, o no se puede
     verificar con Identidad (fail-closed), responde 403 con code PRODUCTO_NO_HABILITADO. /health y
     /health/ready no pasan por el guard.
+
+    Versión 1.3.0 (HU #14563, rediseño de Diagnóstico): todos los cambios son aditivos salvo uno. RUPTURA en el
+    backoffice: PUT /api/v1/diagnostico/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen exige motivo en todo
+    cuerpo (B-PR6, D9); el cuerpo legado {veredicto, confirmado} sin motivo responde 422 MOTIVO_REQUERIDO. Su único
+    consumidor es el backoffice de FLIT, que sale con el cuerpo nuevo en el mismo despliegue. Las rutas de compañía no
+    cambian de forma incompatible.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -3103,8 +3109,8 @@ paths:
         descendente, luego id. Paginación por cursor: `antes` es el `siguiente` de la página anterior. Lleva ETag débil
         W/"<no_leidas>-<total>-<max creada_en>-<max leida_en>-<antes>-<limite>" (fechas en milisegundos Unix; el cursor y el
         límite distinguen páginas) y Cache-Control private, no-cache; con If-None-Match igual responde 304 sin cuerpo.
-        Los literales de titulo y mensaje y el formato de accion.href son provisionales: pendientes de confirmar por el
-        frontend y el PO.
+        Los literales de titulo y mensaje son provisionales: pendientes de confirmar por el PO. accion.href es la ruta
+        del lote en el frontend (/diagnosticos/{diagnostico_id}).
       parameters:
         - name: limite
           in: query
@@ -5112,7 +5118,7 @@ components:
     VersionDictamen:
       type: object
       additionalProperties: false
-      required: [version, veredicto, vigente, alertamientos, eliminados, origen, usuario, motivo, en, superado_por_recalculo]
+      required: [version, veredicto, vigente, alertamientos, eliminados, origen, usuario, motivo, en, superado_por_recalculo, ajuste_con_tramite]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -5139,6 +5145,11 @@ components:
         motivo: { type: string, nullable: true, description: "@pii:low. Motivo del ajuste; null en las automáticas y en overrides históricos." }
         en: { type: string, format: date-time, description: Instante del ajuste o de la emisión automática. }
         superado_por_recalculo: { type: boolean, description: "D7: la versión es un ajuste y la siguiente es automática." }
+        ajuste_con_tramite:
+          type: boolean
+          description: >
+            HU #14563 AC23 (aditivo, 1.3.0). True si el ajuste se confirmó con confirmar_con_tramite sobre un vehículo que ya
+            tenía trámite (el trámite no se revierte ni se cancela). False en las automáticas y en los ajustes sin trámite.
 
     AlertaVersionDictamen:
       type: object
@@ -5832,8 +5843,8 @@ components:
           description: VER_EVIDENCIAS para los dos tipos de ZIP, VER_DERIVACION para DERIVACION_TERMINADA y VER_LOTE para LOTE_TERMINADO.
         href:
           type: string
-          description: Ruta relativa del frontend; hoy /diagnostico/{diagnostico_id} para todos los tipos (provisional).
-          example: /diagnostico/01a1d385-0649-766f-a224-cf68b10c52a7
+          description: Ruta relativa del frontend, /diagnosticos/{diagnostico_id} para todos los tipos (la página del lote).
+          example: /diagnosticos/01a1d385-0649-766f-a224-cf68b10c52a7
     ErrorRegla:
       type: object
       required: [code, error]
