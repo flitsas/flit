@@ -79,6 +79,9 @@ internal sealed class ManejadorReglas : IExceptionHandler
 {
     public const string CodigoValorInvalido = "VALOR_INVALIDO";
 
+    /// <summary>Conflicto real de concurrencia (<c>xmin</c>) que ningún escritor resolvió: 409, nunca 500 (HU #14563 AC9).</summary>
+    public const string CodigoConflictoConcurrencia = "CONFLICTO_CONCURRENCIA";
+
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(httpContext);
@@ -87,6 +90,8 @@ internal sealed class ManejadorReglas : IExceptionHandler
             ReglaException r => r,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.CheckViolation } } =>
                 new ReglaException(CodigoValorInvalido, "Los datos no cumplen una regla de validación del servicio."),
+            DbUpdateConcurrencyException =>
+                new ReglaException(CodigoConflictoConcurrencia, "Otro cambio se guardó al mismo tiempo. Vuelve a leer y reintenta.", StatusCodes.Status409Conflict),
             _ => null,
         };
         if (regla is null)

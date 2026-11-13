@@ -36,6 +36,10 @@ public sealed record GrillaDto(
     /// <summary>Rótulo del estado del lote (punto 5): «Sin lanzar», «En proceso», «Completado» o «Incompleto».</summary>
     [JsonPropertyName("estado_etiqueta")]
     public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoLote(Estado);
+
+    /// <summary>Elegibilidad ya leída por <see cref="ConsultaGrilla"/> (HU #14563 B1); interna, no viaja.</summary>
+    [JsonIgnore]
+    internal ElegibilidadDeLaGrilla? Elegibilidad { get; init; }
 }
 
 /// <summary>Avance del lote: vehículos en total y cuántos ya terminaron (todas sus celdas en COMPLETADO o NA, R-7).</summary>
@@ -91,7 +95,9 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios,
     [property: JsonPropertyName("pegada")] bool Pegada,
     [property: JsonPropertyName("derivacion")] Derivacion.DerivacionFilaDto? Derivacion = null,
-    [property: JsonPropertyName("veredicto")] string? Veredicto = null)
+    [property: JsonPropertyName("veredicto")] string? Veredicto = null,
+    [property: JsonPropertyName("dictamen_ajustado")] bool DictamenAjustado = false,
+    [property: JsonPropertyName("version")] long Version = 0)
 {
     /// <summary>Rótulo del tipo de identificador (punto 5): «Placa de carro», «Placa de motocarro», «VIN»…</summary>
     [JsonPropertyName("tipo_identificador_etiqueta")]
