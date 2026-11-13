@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { INTERVALO_SONDEO_ZIP_MS, estadoZip, mensajeDescarga, pedirZip, urlArchivoZip, urlExcelLote, type EstadoEvidencia } from "@/lib/reportes/api";
 import { useDescarga } from "@/lib/reportes/useDescarga";
+import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 
 export const MENSAJE_ZIP_ERROR = "No se pudo generar el ZIP; vuelve a pedirlo";
 
@@ -66,7 +67,11 @@ export function DescargasLote({ diagnosticoId, estadoLote, puedeDescargar }: Des
     const temporizador = setTimeout(() => {
       estadoZip(diagnosticoId, enCurso.id, control.signal)
         .then((ev) => {
-          if (!control.signal.aborted) setZip(faseDe(ev));
+          if (control.signal.aborted) return;
+          const siguiente = faseDe(ev);
+          setZip(siguiente);
+          // HU #14562 AC51/AC52: el ZIP terminó; la campana sondea ya para mostrar su aviso persistente.
+          if (siguiente.fase === "lista") pedirSondeoNotificaciones();
         })
         .catch((e: unknown) => {
           if (!control.signal.aborted) setZip({ fase: "error", mensaje: mensajeDescarga(e), reintentable: true });

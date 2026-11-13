@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EVENTO_SONDEAR_NOTIFICACIONES } from "@/lib/notificaciones/useNotificaciones";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { DescargasLote } from "@/components/tablero/DescargasLote";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
@@ -202,5 +203,26 @@ describe("DescargasLote — AC5: 409 SIN_VEHICULOS_TERMINADOS", () => {
     expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
     await avanzar(INTERVALO_SONDEO_ZIP_MS * 2);
     expect(api).toHaveBeenCalledTimes(1);
+  });
+});
+
+// HU #14562 AC51/AC52: cuando el ZIP termina, la campana sondea de inmediato (evento de fe4b, sin esperar sus 30 s).
+describe("DescargasLote — HU #14562 sondeo inmediato de la campana", () => {
+  it("dispara el evento de sondeo cuando el ZIP pasa de preparando a LISTA, una sola vez", async () => {
+    const oyente = vi.fn();
+    window.addEventListener(EVENTO_SONDEAR_NOTIFICACIONES, oyente);
+    simularApi({
+      [PEDIR]: () => Response.json(zip(), { status: 202 }),
+      [ESTADO]: enOrden(zip({ estado: "GENERANDO" }), zip({ estado: "LISTA", generado_en: "2026-10-22T19:31:00+00:00" })),
+    });
+    pintar();
+    await pedirZip();
+    await avanzar(INTERVALO_SONDEO_ZIP_MS);
+    expect(oyente).not.toHaveBeenCalled();
+    await avanzar(INTERVALO_SONDEO_ZIP_MS);
+    expect(oyente).toHaveBeenCalledTimes(1);
+    await avanzar(INTERVALO_SONDEO_ZIP_MS * 3);
+    expect(oyente).toHaveBeenCalledTimes(1);
+    window.removeEventListener(EVENTO_SONDEAR_NOTIFICACIONES, oyente);
   });
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EVENTO_SONDEAR_NOTIFICACIONES } from "@/lib/notificaciones/useNotificaciones";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import TableroDiagnostico from "@/app/(app)/diagnosticos/[id]/page";
@@ -311,6 +312,14 @@ describe("Punto 4 AC4/AC5/AC6/AC7 — resumen al terminar con omitidas por motiv
     const fallidas = resumen.getByRole("list", { name: /placas fallidas/i });
     expect(fallidas).toHaveTextContent(/TST006.*trámites no está disponible/i);
     expect(panel()).not.toHaveTextContent(/OT_NO_HABILITADO|NO_VIABLE|TRAMITES_NO_DISPONIBLE|YA_TIENE_TRAMITE/);
+  });
+
+  it("HU #14562 AC51: al terminar la creación masiva la campana sondea de inmediato", async () => {
+    const oyente = vi.fn();
+    window.addEventListener(EVENTO_SONDEAR_NOTIFICACIONES, oyente);
+    await hastaElResumen();
+    expect(oyente).toHaveBeenCalledTimes(1);
+    window.removeEventListener(EVENTO_SONDEAR_NOTIFICACIONES, oyente);
   });
 
   it("HU #14562 AC30: al terminar no recarga la grilla completa; la fila llega por su versión en el sondeo incremental", async () => {

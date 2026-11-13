@@ -46,6 +46,7 @@ import { CabeceraLote } from "./CabeceraLote";
 import { GrillaLote } from "./GrillaLote";
 import { MetricasLote } from "./MetricasLote";
 import type { FiltroTablero } from "@/lib/tablero/filtrosTablero";
+import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 
 /** «hh:mm» en hora de Colombia (HU #14562 AC26). */
 const HORA = new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Bogota" });
@@ -349,7 +350,11 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
             leerAlInicio={operacion.leerAlInicio}
             noEncoladas={operacion.noEncoladas}
             // HU #14562 AC30: la fila derivada llega por su versión de fila en el sondeo incremental, sin ?desde=0.
-            onTerminada={() => refrescar()}
+            onTerminada={() => {
+              refrescar();
+              // HU #14562 AC51: terminó la creación masiva; la campana sondea de inmediato.
+              pedirSondeoNotificaciones();
+            }}
             onCerrar={() => setOperacion(null)}
           />
         )}
