@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.1.0"
+  version: "1.2.0"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -3923,7 +3923,7 @@ components:
           $ref: "#/components/schemas/AvanceLote"
         vehiculos:
           type: array
-          description: Solo los vehículos con celdas cambiadas desde `desde` (todos con desde=0), en el orden del lote.
+          description: Solo los vehículos con celdas cambiadas desde `desde` (todos con desde=0), en el orden del lote. HU #14563: los conteos (`conteos`) se calculan siempre con todo el lote.
           items:
             $ref: "#/components/schemas/FilaVehiculo"
         estimado_consultas:
@@ -3945,6 +3945,69 @@ components:
           items:
             type: string
             format: uuid
+        conteos:
+          $ref: "#/components/schemas/ConteosGrilla"
+        lote:
+          $ref: "#/components/schemas/LoteGrilla"
+
+    ConteosGrilla:
+      type: object
+      description: >
+        HU #14563 (B1). Grilla de la compañía. Conteos calculados siempre con todo el lote, también en el sondeo incremental
+        (mismo criterio que total_pegadas). Opcional para los clientes actuales.
+      required: [vehiculos, terminados, con_error, con_deuda, bloqueados, listos_tramite]
+      properties:
+        vehiculos: { type: integer, minimum: 0, description: Vehículos del lote. }
+        terminados: { type: integer, minimum: 0, description: Vehículos con todas sus celdas en COMPLETADO o NA (R-7). }
+        con_error: { type: integer, minimum: 0, description: Vehículos con al menos una celda en ERROR. }
+        con_deuda: { type: integer, minimum: 0, description: Vehículos con deuda de impuesto confirmada (la misma definición que tiene_deuda del semáforo). }
+        bloqueados: { type: integer, minimum: 0, description: Vehículos con dictamen vigente BLOQUEADO (0 en SIMPLE). }
+        listos_tramite:
+          type: integer
+          minimum: 0
+          description: Terminados, VIABLE si el modo exige dictamen, sin trámite y sin ítem de derivación vivo (regla de DerivacionFila.elegible).
+
+    LoteGrilla:
+      type: object
+      description: HU #14563 (B2). Grilla de la compañía. Metadatos del lote; viaja siempre, con o sin desde. Opcional para los clientes actuales.
+      required: [modo, tipo_tramite, creado_en, es_express, usuario_creador]
+      properties:
+        modo:
+          type: string
+          enum: [SIMPLE, CON_ANALISIS]
+        tipo_tramite:
+          allOf:
+            - $ref: "#/components/schemas/TipoTramiteLote"
+          nullable: true
+          description: Null en SIMPLE. El nombre sale del catálogo de tipos de trámite; si el código ya no está publicado o el catálogo no responde, es el código.
+        creado_en:
+          type: string
+          format: date-time
+        es_express:
+          type: boolean
+        usuario_creador:
+          type: object
+          required: [id, nombre]
+          properties:
+            id:
+              type: string
+              format: uuid
+            nombre:
+              type: string
+              nullable: true
+              description: Nombre visible que da Identidad (caché de 10 min); null si no responde o no conoce al usuario (la grilla sigue en 200).
+
+    TipoTramiteLote:
+      type: object
+      description: HU #14563. Tipo de trámite del lote (código y nombre del catálogo; el código si ya no está publicado).
+      required: [codigo, nombre]
+      properties:
+        codigo:
+          type: string
+          example: TRASPASO_STANDARD
+        nombre:
+          type: string
+          example: TRASPASO
 
     AvanceLote:
       type: object
@@ -4010,6 +4073,13 @@ components:
             Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): la placa tiene alguna consulta que
             «Reintentar placa» reencolaría. Solo viaja en las filas de la respuesta; para las que no viajan, usar
             vehiculos_pegados del lote.
+        veredicto:
+          type: string
+          nullable: true
+          enum: [VIABLE, BLOQUEADO, null]
+          description: >
+            HU #14563 (B1). Grilla de la compañía. Veredicto del dictamen vigente; null si está pendiente o el lote es SIMPLE.
+            Solo viaja en las filas de la respuesta.
         derivacion:
           allOf:
             - $ref: "#/components/schemas/DerivacionFila"
@@ -4600,6 +4670,18 @@ components:
         celdas_en_error:
           type: integer
           description: Celdas del lote en estado ERROR.
+        modo:
+          type: string
+          enum: [SIMPLE, CON_ANALISIS]
+          description: HU #14563 (B3).
+        tipo_tramite:
+          allOf:
+            - $ref: "#/components/schemas/TipoTramiteLote"
+          nullable: true
+          description: HU #14563 (B3). Null en SIMPLE; nombre del catálogo (una llamada por página) o el código si no responde.
+        es_express:
+          type: boolean
+          description: HU #14563 (B3).
 
     GrillaBackoffice:
       description: Grilla (schema Grilla) más la empresa consultada; las celdas llevan origen y usuario_manual_id (HU #13799).

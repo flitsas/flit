@@ -52,6 +52,7 @@ internal static class DiagnosticosBackofficeEndpoints
         int? tamano,
         HttpContext http,
         DiagnosticoDb db,
+        Flit.Diagnostico.Domain.Catalogos.ICatalogoTiposTramite catalogo,
         CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
@@ -85,12 +86,33 @@ internal static class DiagnosticosBackofficeEndpoints
                 c.Nombre,
                 c.Estado,
                 c.CreadoEn,
+                c.Modo,
+                c.TipoTramiteCodigo,
+                c.EsExpress,
                 Vehiculos = vehiculos.Count(v => v.DiagnosticoId == c.Id),
                 Errores = errores.Count(e => e.DiagnosticoId == c.Id),
             })
             .ToListAsync(ct).ConfigureAwait(false);
+        // HU #14563 B3: los nombres de trámite con UNA llamada al catálogo por página (caché de 5 min); si no responde, el código.
+        IReadOnlyDictionary<string, string> tipos = new Dictionary<string, string>();
+        if (lotes.Any(l => l.TipoTramiteCodigo is not null))
+        {
+            try
+            {
+                tipos = (await catalogo.ListarAsync(ct).ConfigureAwait(false))
+                    .GroupBy(t => t.Codigo, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.Ordinal);
+            }
+            catch (Flit.Diagnostico.Domain.Catalogos.CatalogoTiposTramiteNoDisponibleException)
+            {
+                // El nombre queda en el código.
+            }
+        }
+
         return Results.Ok(new ListaDiagnosticosBackofficeDto(empresa, numero, porPagina, total,
-            [.. lotes.Select(l => new DiagnosticoBackofficeDto(l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores))]));
+            [.. lotes.Select(l => new DiagnosticoBackofficeDto(
+                l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores, CodigosDeEnum.Codigo(l.Modo),
+                l.TipoTramiteCodigo is { } codigo ? new TipoTramiteListadoDto(codigo, tipos.GetValueOrDefault(codigo, codigo)) : null,
+                l.EsExpress))]));
     }
 
     private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, IProtectorDocumentoPersona protector, CancellationToken ct)

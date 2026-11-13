@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Diagnostico.Domain.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
@@ -50,7 +51,8 @@ internal sealed class LecturaDeLaCompania(DiagnosticoDb db) : ILecturaTablero
 /// (<c>intentos_consulta.persona_id</c>).
 /// </summary>
 internal sealed class ConsultaGrilla(
-    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, TimeProvider reloj, Microsoft.Extensions.Options.IOptions<OpcionesConsultas> opciones)
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, TimeProvider reloj, Microsoft.Extensions.Options.IOptions<OpcionesConsultas> opciones,
+    ICatalogoTiposTramite catalogo, IResolutorNombresUsuario nombres)
 {
     public const string CodigoDesdeInvalido = "DESDE_INVALIDO";
 
@@ -63,13 +65,49 @@ internal sealed class ConsultaGrilla(
         var grilla = await LeerAsync(lectura, cabecera, desde, protector, ct).ConfigureAwait(false);
         var pegados = await VehiculosPegadosAsync(lectura, cabecera.Id, reloj.GetUtcNow(), opciones.Value.UmbralPegada, ct).ConfigureAwait(false);
         var esPegado = pegados.ToHashSet();
+        // HU #14563 B1: veredicto vigente y elegibilidad de TODO el lote en consultas por conjunto (sin N+1), para los conteos y las filas.
+        var elegibilidad = await Derivacion.LecturaElegibilidad.LeerAsync(db, cabecera.Id, cabecera.Modo, grilla.IdsVehiculos, ct).ConfigureAwait(false);
+        var conteos = new ConteosGrillaDto(
+            grilla.Avance.Vehiculos, grilla.Avance.Terminados, grilla.ConError, grilla.ConDeuda,
+            elegibilidad.Values.Count(e => e.Veredicto == "BLOQUEADO"), elegibilidad.Values.Count(e => e.Elegible));
+        var lote = await LoteAsync(cabecera, ct).ConfigureAwait(false);
         return new GrillaDto(
             grilla.Cabecera.Id, grilla.Cabecera.Nombre, CodigosDeEnum.Codigo(grilla.Cabecera.Estado), grilla.Cabecera.VersionTablero,
             grilla.Desde, grilla.Columnas, grilla.Avance,
             [.. grilla.Vehiculos.Select(v => new FilaVehiculoDto(
                 v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(Dto)],
-                v.DocumentoDeclarado, v.Propietarios, esPegado.Contains(v.Id)))],
-            grilla.Estimado, pegados.Count, pegados);
+                v.DocumentoDeclarado, v.Propietarios, esPegado.Contains(v.Id),
+                Veredicto: elegibilidad.TryGetValue(v.Id, out var e) ? e.Veredicto : null))],
+            grilla.Estimado, pegados.Count, pegados, conteos, lote);
+    }
+
+    /// <summary>
+    /// Bloque <c>lote</c> (HU #14563 B2): modo, trámite, fecha y express salen de la cabecera ya leída; el nombre del trámite, del
+    /// catálogo (con caché; si no responde, el código) y el del creador, de <see cref="IResolutorNombresUsuario"/> (null si no lo da).
+    /// </summary>
+    private async Task<LoteGrillaDto> LoteAsync(CabeceraDiagnostico cabecera, CancellationToken ct)
+    {
+        TipoTramiteListadoDto? tipo = null;
+        if (cabecera.TipoTramiteCodigo is { } codigo)
+        {
+            var nombre = codigo;
+            try
+            {
+                nombre = (await catalogo.ListarAsync(ct).ConfigureAwait(false)).FirstOrDefault(t => t.Codigo == codigo)?.Nombre ?? codigo;
+            }
+            catch (CatalogoTiposTramiteNoDisponibleException)
+            {
+                // Catálogo caído: el nombre es el código, como en el listado.
+            }
+
+            tipo = new TipoTramiteListadoDto(codigo, nombre);
+        }
+
+        var resueltos = await nombres.ResolverAsync(cabecera.TenantId, [cabecera.UsuarioCreadorId], ct).ConfigureAwait(false);
+        var creador = resueltos.GetValueOrDefault(cabecera.UsuarioCreadorId);
+        return new LoteGrillaDto(
+            CodigosDeEnum.Codigo(cabecera.Modo), tipo, cabecera.CreadoEn, cabecera.EsExpress,
+            new UsuarioCreadorGrillaDto(cabecera.UsuarioCreadorId, creador is null or ResolutorNombresUsuario.NoDisponible ? null : creador));
     }
 
     /// <summary>
@@ -151,10 +189,18 @@ internal sealed class ConsultaGrilla(
             [.. cambiadasPorVehiculo[v.Id].OrderBy(c => ordenFuente.GetValueOrDefault(c.Fuente, int.MaxValue))],
             documentos[v.Id].Declarado, documentos[v.Id].Propietarios)).ToList();
         var terminados = porVehiculo.Values.Count(c => AvanceVehiculo.Terminado(c.Select(x => x.Estado)));
+        // HU #14563 B1: con todo el lote (también en el delta), con la lista de celdas ya leída.
+        var conError = porVehiculo.Values.Count(c => c.Any(x => x.Estado == EstadoCelda.Error));
+        var conDeuda = porVehiculo.Values.Count(c => c.Any(TieneDeuda));
 
         return new GrillaLeida(
             cabecera, desde, AlcanceDto.De(Alcance.Agrupar(cabecera.Alcance)), new AvanceLoteDto(totalVehiculos, terminados), filasLeidas,
-            await EstimadoAsync(lectura, cabecera, ct).ConfigureAwait(false));
+            await EstimadoAsync(lectura, cabecera, ct).ConfigureAwait(false))
+        {
+            ConError = conError,
+            ConDeuda = conDeuda,
+            IdsVehiculos = [.. porVehiculo.Keys],
+        };
     }
 
     /// <summary>
@@ -264,7 +310,17 @@ internal sealed class ConsultaGrilla(
 /// <summary>La grilla leída (HU #13799): común a la compañía y al backoffice; cada uno la proyecta a su DTO.</summary>
 internal sealed record GrillaLeida(
     CabeceraDiagnostico Cabecera, long Desde, AlcanceDto Columnas, AvanceLoteDto Avance, IReadOnlyList<VehiculoLeido> Vehiculos,
-    IReadOnlyList<EstimadoVsConsumidoDto>? Estimado);
+    IReadOnlyList<EstimadoVsConsumidoDto>? Estimado)
+{
+    /// <summary>Vehículos del lote con alguna celda en ERROR (HU #14563).</summary>
+    public int ConError { get; init; }
+
+    /// <summary>Vehículos del lote con deuda de impuesto confirmada, la misma definición del semáforo (HU #14563).</summary>
+    public int ConDeuda { get; init; }
+
+    /// <summary>Ids de todos los vehículos del lote con celdas (para la elegibilidad de los conteos, HU #14563).</summary>
+    public IReadOnlyList<Guid> IdsVehiculos { get; init; } = [];
+}
 
 /// <summary>
 /// Un vehículo de la grilla con sus celdas cambiadas desde <c>desde</c>, en el orden del alcance, y sus documentos ya

@@ -9,8 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Derivacion;
 
-/// <summary>Elegibilidad de un vehículo ya evaluada, con el estado de su último ítem y su trámite.</summary>
-internal sealed record ElegibilidadVehiculo(Guid VehiculoId, string? Motivo, EstadoItemDerivacion? UltimoEstado, Guid? TramiteId, string? TramiteNumero)
+/// <summary>
+/// Elegibilidad de un vehículo ya evaluada, con el estado de su último ítem y su trámite. <c>Veredicto</c> (HU #14563) es el del
+/// dictamen vigente; null si no hay o si el modo no exige dictamen (Simple).
+/// </summary>
+internal sealed record ElegibilidadVehiculo(Guid VehiculoId, string? Motivo, EstadoItemDerivacion? UltimoEstado, Guid? TramiteId, string? TramiteNumero, string? Veredicto = null)
 {
     public bool Elegible => Motivo is null;
 }
@@ -66,7 +69,7 @@ internal static class LecturaElegibilidad
                 TieneTramite: v.TramiteId is not null,
                 ItemVivo: propios.Any(i => i.Estado is EstadoItemDerivacion.Pendiente or EstadoItemDerivacion.Enviado));
             var ultimo = propios.OrderByDescending(i => i.ActualizadoEn).ThenByDescending(i => i.Id).FirstOrDefault();
-            return new ElegibilidadVehiculo(v.Id, ElegibilidadDerivacion.MotivoNoElegible(datos), ultimo?.Estado, v.TramiteId, v.TramiteNumero);
+            return new ElegibilidadVehiculo(v.Id, ElegibilidadDerivacion.MotivoNoElegible(datos), ultimo?.Estado, v.TramiteId, v.TramiteNumero, datos.Veredicto);
         });
     }
 
