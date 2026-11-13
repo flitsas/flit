@@ -70,10 +70,10 @@ describe("PantallaResultado (HU #14562 · UI-1, AC18/AC19)", () => {
     );
     const vivo = document.querySelector("[aria-live='polite']") as HTMLElement;
     expect(vivo).not.toBeNull();
-    expect(vivo).toHaveTextContent(/el tablero en 5 segundos/);
     act(() => {
       vi.advanceTimersByTime(2000);
     });
+    expect(vivo).toHaveTextContent(/el tablero en 5 segundos/);
     fireEvent.click(screen.getByRole("button", { name: "Quedarme aquí" }));
     act(() => {
       vi.advanceTimersByTime(20_000);
@@ -92,11 +92,14 @@ describe("PantallaResultado (HU #14562 · UI-1, AC18/AC19)", () => {
         redireccion={{ segundos: 5, destino: "el tablero", onNavegar: vi.fn() }}
       />,
     );
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
     const antes = document.activeElement;
     const vivo = document.querySelector("[aria-live='polite']") as HTMLElement;
     const textoInicial = vivo.textContent;
     act(() => {
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(1800);
     });
     expect(document.activeElement).toBe(antes);
     expect(vivo.textContent).toBe(textoInicial);
@@ -128,5 +131,76 @@ describe("PantallaResultado (HU #14562 · UI-1, AC18/AC19)", () => {
       <PantallaResultado tono="error" titulo="No pudimos iniciar" primaria={{ etiqueta: "Reintentar", onClick: vi.fn() }} />,
     );
     expect(container.querySelector("[data-tono='error']")).not.toBeNull();
+  });
+});
+
+// HU #14562, auditoría de UI M1 (2.2.1 en lector de pantalla y teclado): el foco va al título, la región viva nace vacía y
+// recibe el texto después, y cualquier interacción dentro de la pantalla detiene la cuenta (AC18: «sin interacción»).
+describe("PantallaResultado — HU #14562 M1: redirección detectable y detenible", () => {
+  const pintar = (onNavegar = vi.fn(), onDetener = vi.fn()) => {
+    render(
+      <PantallaResultado
+        tono="exito"
+        titulo="Diagnóstico iniciado con 2 vehículos"
+        primaria={{ etiqueta: "Ver tablero", onClick: vi.fn() }}
+        secundaria={{ etiqueta: "Volver", href: "/" }}
+        redireccion={{ segundos: 5, destino: "el tablero", onNavegar, onDetener }}
+      />,
+    );
+    return { onNavegar, onDetener };
+  };
+  const vivo = () => document.querySelector("[aria-live='polite']") as HTMLElement;
+
+  it("al aparecer, el foco va al título (h2 enfocable por programa) y eso no detiene la cuenta", () => {
+    const { onNavegar } = pintar();
+    const titulo = screen.getByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" });
+    expect(titulo).toHaveFocus();
+    expect(titulo).toHaveAttribute("tabindex", "-1");
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(onNavegar).toHaveBeenCalledTimes(1);
+  });
+
+  it("la región viva se monta vacía y recibe el aviso de la redirección después", () => {
+    pintar();
+    expect(vivo()).not.toBeNull();
+    expect(vivo().textContent).toBe("");
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(vivo()).toHaveTextContent("Te llevaremos a el tablero en 5 segundos.");
+  });
+
+  it.each([
+    ["una tecla", (s: HTMLElement) => fireEvent.keyDown(s, { key: "Tab" })],
+    ["un toque o clic", (s: HTMLElement) => fireEvent.pointerDown(s)],
+    ["el foco en otro control", () => fireEvent.focusIn(screen.getByRole("link", { name: "Volver" }))],
+  ])("%s dentro de la pantalla detiene la cuenta y lo anuncia", (_caso, interactuar) => {
+    const { onNavegar, onDetener } = pintar();
+    const seccion = screen.getByRole("heading", { name: /Diagnóstico iniciado/ }).closest("section") as HTMLElement;
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    act(() => {
+      interactuar(seccion);
+    });
+    act(() => {
+      vi.advanceTimersByTime(20_000);
+    });
+    expect(onNavegar).not.toHaveBeenCalled();
+    expect(onDetener).toHaveBeenCalledTimes(1);
+    expect(vivo()).toHaveTextContent(/detuvimos la redirección/i);
+    expect(screen.queryByRole("button", { name: "Quedarme aquí" })).toBeNull();
+  });
+
+  it("si «Quedarme aquí» desaparece con el foco, el foco vuelve al título y no cae en el body", () => {
+    pintar();
+    const quedarme = screen.getByRole("button", { name: "Quedarme aquí" });
+    quedarme.focus();
+    act(() => {
+      fireEvent.click(quedarme);
+    });
+    expect(screen.getByRole("heading", { name: /Diagnóstico iniciado/ })).toHaveFocus();
   });
 });
