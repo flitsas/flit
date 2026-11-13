@@ -3,6 +3,14 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
 import { diagnostico, lista } from "@/lib/diagnosticos/__tests__/datosListado";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <ListadoDiagnosticos /> en el inicio (/). Lee los filtros de la URL (?desde=&hasta=&modo=&estado=&nombre=
 // &pagina=), pide GET /diagnosticos con ellos y pinta la tabla; cambiar un filtro reescribe la URL con router.replace y
@@ -354,5 +362,35 @@ describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () =
     const tarjeta = (await screen.findByRole("heading", { name: "Diagnósticos" })).closest("section") as HTMLElement;
     expect(await within(tarjeta).findByText("No pudimos cargar el listado")).toBeInTheDocument();
     expect(within(tarjeta).getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+});
+
+// HU #14562 AC56 (auditoría M6): por debajo de 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo y cada
+// celda dice su columna; la tabla deja de imponer su ancho mínimo, así que no hay scroll horizontal.
+describe("ListadoDiagnosticos — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+
+  it("tabla, cabecera, cuerpo y filas llevan las recetas de tarjeta y cada celda su data-label", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1), diagnostico(2)])) });
+    render(<ListadoDiagnosticos />);
+    const t = await tabla();
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(t)).toContain(c);
+    for (const c of TABLA_MOVIL_THEAD_CLS.split(" ")) expect(clases(t.querySelector("thead")!)).toContain(c);
+    for (const c of TABLA_MOVIL_TBODY_CLS.split(" ")) expect(clases(t.querySelector("tbody")!)).toContain(c);
+    for (const fila of t.querySelectorAll("tbody tr")) {
+      for (const c of TABLA_MOVIL_ROW_CLS.split(" ")) expect(clases(fila)).toContain(c);
+      const celdas = Array.from(fila.children);
+      expect(celdas.map((td) => td.getAttribute("data-label"))).toEqual(["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"]);
+      for (const td of celdas) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
+      for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(celdas[1])).toContain(c);
+    }
+  });
+
+  it("la fila anima su fondo con --dx-motion-rapido y queda quieta con menos movimiento", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    const fila = (await tabla()).querySelector("tbody tr")!;
+    expect(clases(fila)).toContain("motion-reduce:transition-none");
+    expect(clases(fila)).toContain("duration-[var(--dx-motion-rapido)]");
   });
 });
