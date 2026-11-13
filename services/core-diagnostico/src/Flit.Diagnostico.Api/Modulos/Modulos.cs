@@ -36,6 +36,9 @@ public static class Modulos
         services.TryAddSingleton<Catalogos.EstadoCapacidadImpuesto>();
         services.TryAddScoped<Catalogos.ISincronizacionDepartamentosImpuesto, Catalogos.SincronizacionDepartamentosImpuesto>();
         services.AddHostedService<Catalogos.TrabajadorSincronizacionDepartamentosImpuesto>();
+        services.AddOptions<Notificaciones.OpcionesNotificaciones>().Bind(configuration.GetSection(Notificaciones.OpcionesNotificaciones.Seccion));
+        services.TryAddScoped<Notificaciones.PurgaNotificaciones>();
+        services.AddHostedService<Notificaciones.TrabajadorPurgaNotificaciones>();
         return services;
     }
 

@@ -32,6 +32,7 @@ public sealed class EntidadesConTenantTests
                      (typeof(ConfiguracionEmpresa), "configuracion_empresa"), (typeof(CambioContrato), "cambios_contrato"),
                      (typeof(CabeceraDiagnostico), "diagnosticos"), (typeof(HistorialEstadoDiagnostico), "historial_estado_diagnostico"),
                      (typeof(VehiculoDiagnostico), "vehiculos"), (typeof(CeldaConsulta), "consultas"), (typeof(IntentoConsulta), "intentos_consulta"),
+                     (typeof(Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion), "notificaciones"),
                  })
         {
             db.Model.FindEntityType(entidad).Should().NotBeNull($"diagnostico.{tabla} está mapeada (HU #13736, #13738, #13735, #13723)");
