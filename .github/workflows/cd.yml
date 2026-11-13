@@ -1218,7 +1218,7 @@ jobs:
     needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment:
       # develop / staging / production: cada Environment tiene su GITOPS_TOKEN.
       name: ${{ needs.setup.outputs.gh_env }}
@@ -1348,12 +1348,18 @@ jobs:
             exit 1
           fi
 
-      # Argo CD (notificaciones, flit-gitops/docs/argocd-notificaciones) publica el commit status
-      # «argocd/flit2-<ambiente>» = success en la revision de flit-gitops que quedo Synced + Healthy.
-      # Se espera ESE status en lugar de un sleep fijo. Si entro otro commit despues del nuestro, el status
-      # cae en ese commit posterior (que contiene el nuestro): se revisan los commits de main desde la punta
-      # hasta el nuestro. Si el status no aparece o no se puede leer, se sigue con la comprobacion de salud
-      # de siempre: una notificacion rota nunca frena un despliegue.
+      # Argo CD (notificaciones, flit-gitops/docs/argocd-notificaciones) publica en flit-gitops dos commit status:
+      #   argocd/<app>        success = la revision quedo Synced + Healthy | failure = el sync fallo
+      #   argocd/<app>/salud  failure = la app paso a Degraded
+      # Se espera el success. Si entro otro commit despues del nuestro, el status cae en ese commit posterior
+      # (que contiene el nuestro): se revisan los commits de main desde la punta hasta el nuestro.
+      # Un Degraded NO corta la espera, porque puede ser pasajero en pleno rollout. Pero si la espera termina
+      # sin success y hubo Degraded, el despliegue FALLA: es un rollout trabado y el ambiente sigue sirviendo
+      # la version anterior aunque el dominio responda (QA 12/13-nov-2026: los pods nuevos de los frontends
+      # no cabian en la ResourceQuota y el CD salio verde una y otra vez). Los 15 min cubren los 10 min del
+      # progressDeadlineSeconds con que Kubernetes marca un rollout trabado, mas el sondeo de Argo (60 s).
+      # Sin ningun status, o si no se puede leer, se sigue con la comprobacion de salud de siempre: una
+      # notificacion rota nunca frena un despliegue.
       # pdn (169) entra cuando su Argo CD publique el status (vars.ARGO_STATUS_PDN = 'true').
       - name: Esperar a Argo CD (Synced + Healthy)
         if: env.GITOPS_SHA != '' && (needs.setup.outputs.env_name != 'pdn' || vars.ARGO_STATUS_PDN == 'true')
@@ -1362,24 +1368,36 @@ jobs:
           APP: flit2-${{ needs.setup.outputs.env_name }}
           REPO: ${{ github.repository_owner }}/flit-gitops
         run: |
-          fin=$((SECONDS+600))
+          fin=$((SECONDS+900))
+          degradado=""
+          # Ultimo estado de cada contexto en un commit (la API los da del mas nuevo al mas viejo): "<sync> <salud>".
+          JQ="[.[] | select(.context==\"argocd/$APP\")][0].state // \"-\") + \" \" + ([.[] | select(.context==\"argocd/$APP/salud\")][0].state // \"-\""
           while [ $SECONDS -lt $fin ]; do
             if ! shas=$(gh api "repos/$REPO/commits?sha=main&per_page=30" --jq '.[].sha' 2>/dev/null); then
               echo "::warning::No se pueden leer los commits de $REPO; se sigue con la comprobacion de salud."; exit 0
             fi
             for sha in $shas; do
-              if ! st=$(gh api "repos/$REPO/commits/$sha/statuses" --jq "[.[] | select(.context==\"argocd/$APP\")][0].state // empty" 2>/dev/null); then
+              if ! sts=$(gh api "repos/$REPO/commits/$sha/statuses?per_page=100" --jq "($JQ)" 2>/dev/null); then
                 echo "::warning::El token no puede leer los commit statuses de $REPO; se sigue con la comprobacion de salud."; exit 0
               fi
+              st=${sts% *}; salud=${sts#* }
               case "$st" in
                 success) echo "Argo CD: $APP Synced + Healthy en ${sha::7} ($((SECONDS/60)) min)."; echo "ARGO_OK=1" >> "$GITHUB_ENV"; exit 0 ;;
                 failure|error) echo "::error::Argo CD informa '$st' en $APP (${sha::7}). Revisar Argo CD; rollback = revertir el commit de flit-gitops."; exit 1 ;;
               esac
+              if [ "$salud" = "failure" ] && [ -z "$degradado" ]; then
+                degradado=$sha
+                echo "::warning::Argo CD marca $APP Degraded en ${sha::7}; se sigue esperando el Synced + Healthy."
+              fi
               [ "$sha" = "$GITOPS_SHA" ] && break
             done
             sleep 10
           done
-          echo "::warning::Argo CD no confirmo $APP en 10 min (sin status). Ojo: Argo puede decir Synced estando ciego. Se sigue con la comprobacion de salud."
+          if [ -n "$degradado" ]; then
+            echo "::error title=Rollout trabado en ${APP}::Argo CD marco $APP Degraded (${degradado::7}) y en 15 min no quedo Healthy. Lo normal es que un pod nuevo no llegue a Ready o ni se cree (ResourceQuota, imagen, sondas): el ambiente sigue con la version anterior aunque el dominio responda. Revisar: kubectl -n $APP get deploy y los eventos del ReplicaSet nuevo."
+            exit 1
+          fi
+          echo "::warning::Argo CD no confirmo $APP en 15 min (sin status). Ojo: Argo puede decir Synced estando ciego. Se sigue con la comprobacion de salud."
 
       - name: Comprobar que el ambiente responde
         run: |
