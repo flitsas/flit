@@ -38,8 +38,10 @@ test.describe("backoffice: llenado manual", () => {
     await page.getByRole("link", { name: "Backoffice" }).first().click();
     await page.waitForURL(/\/backoffice\/diagnosticos/);
 
-    await page.getByLabel("Identificador de la compañía").fill(empresa!);
-    await page.getByRole("button", { name: "Ver lotes" }).click();
+    // HU #13916 cambió el campo del uuid por el selector «Empresa» (por nombre o NIT); E2E_EMPRESA es el uuid, así que la
+    // compañía entra por la URL, que el selector muestra ya elegida (HU #14562 · AC43).
+    await page.goto(`${APP}/backoffice/diagnosticos?empresa=${encodeURIComponent(empresa!)}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Lotes por compañía" })).toBeVisible();
     await page.getByLabel("Solo lotes con errores").check();
     await expect(page).toHaveURL(/con_errores=true/);
 

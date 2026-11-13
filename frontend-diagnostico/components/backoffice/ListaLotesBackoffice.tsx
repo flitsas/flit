@@ -3,6 +3,7 @@
 import { useEffect, useId, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
@@ -62,6 +63,20 @@ function consultaUrl(f: Filtros): string {
   return q.toString();
 }
 
+/** Banda de contexto del backoffice (AC43, maqueta BackofficeLotes): avisa que se opera como FLIT. */
+function BandaBackoffice() {
+  return (
+    <p
+      role="note"
+      aria-label="Contexto del backoffice"
+      className="inline-flex items-center gap-2 rounded-full border border-[color:var(--di-border)] bg-[var(--di-surface-sunken)] px-3 py-1 text-xs font-semibold text-[color:var(--di-text-secondary)]"
+    >
+      <Icono nombre="escudo" className="h-3.5 w-3.5" />
+      Backoffice FLIT · lo que haces aquí no lo ve la compañía como intervención manual
+    </p>
+  );
+}
+
 /** AC43 (B3): «ID · modo · trámite». Sin `modo` (API previo a B3) solo el ID; nada se infiere. */
 export function contextoLote(d: DiagnosticoBackoffice): string {
   const partes = [d.id];
@@ -97,6 +112,7 @@ function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; chil
 export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   const router = useRouter();
   const id = useId();
+  const [nombreEmpresa, setNombreEmpresa] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<Filtros>({
     empresa: esEmpresaValida(props.empresa) ? props.empresa : "",
     estado: props.estado,
@@ -133,6 +149,12 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
     setCarga({ tipo: "cargando" });
     if (siguiente.empresa) router.replace(`/backoffice/diagnosticos?${consultaUrl(siguiente)}`, { scroll: false });
   }
+
+  // AC43: «{compañía} · N lotes». El nombre solo se conoce si se eligió en el selector; con la compañía solo en la URL
+  // se muestra el total, sin inventar el nombre.
+  const total = carga.tipo === "listo" ? carga.lista.total : null;
+  const lotesTexto = total === null ? null : total === 1 ? "1 lote" : `${total} lotes`;
+  const resumen = hayEmpresa && lotesTexto ? (nombreEmpresa ? `${nombreEmpresa} · ${lotesTexto}` : lotesTexto) : null;
 
   let contenido: React.ReactNode;
   if (!hayEmpresa) {
@@ -232,9 +254,10 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         as="section"
         aria-labelledby="lotes-bo-titulo"
         tituloId="lotes-bo-titulo"
-        titulo="Backoffice de diagnósticos"
-        descripcion="Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error."
+        titulo="Lotes por compañía"
+        descripcion="Revisa lotes con errores, reprocesa consultas y llena datos a mano"
         icono="diagnostico"
+        encima={<BandaBackoffice />}
         acciones={
           <Link href="/backoffice/fuentes-obligatorias" className={BOTON_REINTENTAR_CLS}>
             Fuentes obligatorias
@@ -242,7 +265,14 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         }
       />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-        <SelectorEmpresaBackoffice id={`${id}-empresa`} value={filtros.empresa} onChange={(empresa) => aplicar({ empresa: empresa.id, pagina: 1 })} />
+        <SelectorEmpresaBackoffice
+          id={`${id}-empresa`}
+          value={filtros.empresa}
+          onChange={(empresa) => {
+            setNombreEmpresa(empresa.nombre);
+            aplicar({ empresa: empresa.id, pagina: 1 });
+          }}
+        />
         {hayEmpresa && (
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1">
@@ -270,7 +300,13 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
           </div>
         )}
       </section>
-      <section aria-label="Lotes" className={TARJETA_CLS}>
+      <section aria-labelledby={`${id}-lotes`} className={`${TARJETA_CLS} flex flex-col gap-3`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id={`${id}-lotes`} className="text-base font-semibold text-[color:var(--di-heading)]">
+            Lotes
+          </h2>
+          {resumen && <p className="text-sm text-muted-foreground">{resumen}</p>}
+        </div>
         {contenido}
       </section>
     </>

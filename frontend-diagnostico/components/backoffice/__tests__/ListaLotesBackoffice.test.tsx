@@ -202,3 +202,32 @@ describe("ListaLotesBackoffice — Punto 6: selector de compañía", () => {
     expect(await screen.findByRole("link", { name: "Fuentes obligatorias" })).toHaveAttribute("href", "/backoffice/fuentes-obligatorias");
   });
 });
+
+describe("HU14562 AC43 — rediseño de F-08 con el kit", () => {
+  it("cabecera «Lotes por compañía» con la banda de contexto del backoffice", async () => {
+    conEmpresas();
+    montar();
+    expect(await screen.findByRole("heading", { level: 1, name: "Lotes por compañía" })).toBeInTheDocument();
+    expect(screen.getByText("Revisa lotes con errores, reprocesa consultas y llena datos a mano")).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Contexto del backoffice" })).toHaveTextContent(
+      "Backoffice FLIT · lo que haces aquí no lo ve la compañía como intervención manual",
+    );
+  });
+
+  it("la tarjeta de lotes dice la compañía elegida y el total de lotes del API", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json({ ...listaLotes([lote(1), lote(2)]), total: 5 }) });
+    montar();
+    await elegir("Transportes", /Transportes A SAS/);
+    const tarjeta = await screen.findByRole("region", { name: "Lotes" });
+    expect(await within(tarjeta).findByRole("heading", { level: 2, name: "Lotes" })).toBeInTheDocument();
+    expect(within(tarjeta).getByText("Transportes A SAS · 5 lotes")).toBeInTheDocument();
+  });
+
+  it("con la compañía solo en la URL dice el total sin inventar el nombre", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json({ ...listaLotes([lote(1)]), total: 1 }) });
+    montar({ empresa: EMPRESA_A });
+    const tarjeta = await screen.findByRole("region", { name: "Lotes" });
+    expect(await within(tarjeta).findByText("1 lote")).toBeInTheDocument();
+  });
+});
+
