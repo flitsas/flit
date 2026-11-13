@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { StatusBadge } from "@flit/ui/StatusBadge";
-import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG } from "@flit/ui/table-styles";
+import { TablaEditable, type ColumnaEditable, type EstadoFilaControlado } from "@flit/ui/TablaEditable";
 import { accesoNegado, validarFilas, type ErrorFila, type FilaCapturada, type FilaResumen } from "@/lib/carga/api";
 import { validarIdentificador, validarLongitudIdentificador } from "@/lib/validation/fieldRules";
-import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
 
@@ -72,6 +71,24 @@ export function capturadaDe(e: Edicion): FilaCapturada {
   };
 }
 
+/** Fila de la tabla del kit: los valores se leen de la edición de este componente, que manda. */
+interface FilaTabla {
+  fila: number;
+  identificador: string;
+  tipoDocumento: string;
+  documento: string;
+  edicion: Edicion;
+  original: FilaResumen;
+}
+
+/** Estado de la fila con los rótulos de AC22, para el estado controlado de `TablaEditable`. */
+export function estadoDeEdicion(e: Edicion): EstadoFilaControlado {
+  if (e.revalidando) return { estado: "guardando", texto: "Revalidando", tono: "info" };
+  if (e.errorServidor) return { estado: "error", texto: "Inválido", tono: "danger" };
+  if (e.resumen.valida && !e.errorLocal) return { estado: "sin_cambios", texto: "Corregida", tono: "success" };
+  return { estado: "sin_cambios", texto: "Inválido", tono: "danger" };
+}
+
 const mensajes = (errores: ErrorFila[], campos: ErrorFila["campo"][]) =>
   errores
     .filter((x) => campos.includes(x.campo))
@@ -84,6 +101,11 @@ const mensajes = (errores: ErrorFila[], campos: ErrorFila["campo"][]) =>
  * manda) y la fila cambia de estado. El documento del locatario se muestra enmascarado y rotulado «Declarado por el
  * cliente»; vacío se conserva el del archivo (la confirmación lo reenvía) y, para corregirlo, se vuelve a escribir: ese
  * valor no se guarda en el navegador.
+ *
+ * HU #14562 · M12: la tabla es la `TablaEditable` del kit en modo controlado. Los valores y el estado salen de las
+ * ediciones de este componente (`estadoFila`), sin «Guardar» por fila, porque se revalida al dejar de escribir.
+ * «Reintentar» aparece solo si falló la revalidación y lleva el motivo como descripción. La región viva de la tabla
+ * anuncia «3: Revalidando», «3: Corregida» o «3: Inválido».
  */
 export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, onAccesoNegado }: TablaFilasCorregiblesProps) {
   const [ediciones, setEdiciones] = useState<Map<number, Edicion>>(() => new Map(filas.map((f) => [f.fila, edicionDe(f)])));
@@ -91,7 +113,6 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
   const controladores = useRef(new Map<number, AbortController>());
   const [pagina, setPagina] = useState(0);
   const paginas = Math.max(1, Math.ceil(filas.length / FILAS_POR_PAGINA));
-  const visibles = filas.slice(pagina * FILAS_POR_PAGINA, (pagina + 1) * FILAS_POR_PAGINA);
 
   useEffect(() => {
     const t = temporizadores.current;
@@ -101,6 +122,22 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
       c.forEach((x) => x.abort());
     };
   }, []);
+
+  const filasTabla = useMemo<FilaTabla[]>(
+    () =>
+      filas.slice(pagina * FILAS_POR_PAGINA, (pagina + 1) * FILAS_POR_PAGINA).map((original) => {
+        const edicion = ediciones.get(original.fila) ?? edicionDe(original);
+        return {
+          fila: edicion.resumen.fila,
+          identificador: edicion.identificador,
+          tipoDocumento: edicion.tipoDocumento,
+          documento: edicion.documento,
+          edicion,
+          original,
+        };
+      }),
+    [filas, pagina, ediciones],
+  );
 
   const actualizar = (n: number, cambio: (e: Edicion) => Edicion) =>
     setEdiciones((actual) => {
@@ -155,6 +192,93 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
     );
   }
 
+  // Los editores leen la edición de la fila (cuarto argumento) y escriben con `editar`: la tabla no lleva borrador propio.
+  const columnas: ColumnaEditable<FilaTabla>[] = [
+    { campo: "fila", titulo: "Fila", mostrar: (f) => <span className="font-semibold text-flit-primary">{f.fila}</span> },
+    {
+      campo: "identificador",
+      titulo: "Identificador",
+      editable: true,
+      editor: (_valor, _onCambio, _etiqueta, { fila: n, edicion: e }) => {
+        const errorId = e.errorLocal ?? (mensajes(e.resumen.errores, ["Identificador_Vehiculo"]) || null);
+        const idError = `fila-${n}-error-id`;
+        return (
+          <>
+            <input
+              type="text"
+              aria-label={`Identificador de la fila ${n}`}
+              value={e.identificador}
+              onChange={(x) => editar(n, { identificador: x.target.value })}
+              aria-invalid={errorId ? true : undefined}
+              aria-describedby={errorId ? idError : undefined}
+              autoComplete="off"
+              className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS} uppercase tracking-wider`}
+            />
+            {errorId && (
+              <p id={idError} className={`${ERROR_CLS} mt-1`}>
+                {errorId}
+              </p>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      campo: "tipoDocumento",
+      titulo: "Tipo de documento",
+      editable: true,
+      editor: (_valor, _onCambio, _etiqueta, { fila: n, edicion: e }) => (
+        <select
+          aria-label={`Tipo de documento del locatario de la fila ${n}`}
+          value={e.tipoDocumento}
+          onChange={(x) => editar(n, { tipoDocumento: x.target.value })}
+          className={CAMPO_CLS}
+        >
+          <option value="">Sin documento</option>
+          {TIPOS_DOCUMENTO.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      ),
+    },
+    {
+      campo: "documento",
+      titulo: "Documento del locatario",
+      editable: true,
+      editor: (_valor, _onCambio, _etiqueta, { fila: n, edicion: e, original }) => {
+        const errorDoc = mensajes(e.resumen.errores, ["Tipo_Documento_Locatario", "Documento_Locatario"]) || null;
+        const docConError = original.errores.some((x) => x.campo !== "Identificador_Vehiculo");
+        const idDoc = `fila-${n}-error-doc`;
+        return (
+          <>
+            <input
+              type="text"
+              inputMode="text"
+              aria-label={`Documento del locatario de la fila ${n}`}
+              value={e.documento}
+              onChange={(x) => editar(n, { documento: x.target.value })}
+              aria-invalid={errorDoc ? true : undefined}
+              aria-describedby={errorDoc ? idDoc : undefined}
+              autoComplete="off"
+              placeholder={original.documento_locatario ? (docConError ? "Vuelve a escribirlo" : "Vacío conserva el del archivo") : "Opcional"}
+              className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS}`}
+            />
+            <div className="mt-1">
+              <DocumentoDeclarado tipo={e.resumen.tipo_documento_locatario} documento={e.resumen.documento_locatario} />
+            </div>
+            {errorDoc && (
+              <p id={idDoc} className={`${ERROR_CLS} mt-1`}>
+                {errorDoc}
+              </p>
+            )}
+          </>
+        );
+      },
+    },
+  ];
+
   return (
     <section id={TABLA_FILAS_ID} tabIndex={-1} aria-labelledby="filas-titulo" className={`${TARJETA_CLS} flex flex-col gap-3`}>
       <div>
@@ -163,106 +287,16 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
         </h2>
         <p className={AYUDA_CLS}>Corrige cada fila en la tabla; se revalida sola al dejar de escribir y queda «Corregida» o «Inválido» con el motivo.</p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-separate border-spacing-y-1 text-sm">
-          <thead>
-            <tr style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              {["Fila", "Identificador", "Tipo de documento", "Documento del locatario", "Estado"].map((t) => (
-                <th key={t} scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  {t}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visibles.map((original) => {
-              const e = ediciones.get(original.fila) ?? edicionDe(original);
-              const n = e.resumen.fila;
-              const errorId = e.errorLocal ?? (mensajes(e.resumen.errores, ["Identificador_Vehiculo"]) || null);
-              const errorDoc = mensajes(e.resumen.errores, ["Tipo_Documento_Locatario", "Documento_Locatario"]) || null;
-              const docConError = original.errores.some((x) => x.campo !== "Identificador_Vehiculo");
-              const idError = `fila-${n}-error-id`;
-              const idDoc = `fila-${n}-error-doc`;
-              return (
-                <tr key={n} className="align-top">
-                  <td className="px-4 py-2 font-semibold text-flit-primary">{n}</td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="text"
-                      aria-label={`Identificador de la fila ${n}`}
-                      value={e.identificador}
-                      onChange={(x) => editar(n, { identificador: x.target.value })}
-                      aria-invalid={errorId ? true : undefined}
-                      aria-describedby={errorId ? idError : undefined}
-                      autoComplete="off"
-                      className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS} uppercase tracking-wider`}
-                    />
-                    {errorId && (
-                      <p id={idError} className={`${ERROR_CLS} mt-1`}>
-                        {errorId}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <select
-                      aria-label={`Tipo de documento del locatario de la fila ${n}`}
-                      value={e.tipoDocumento}
-                      onChange={(x) => editar(n, { tipoDocumento: x.target.value })}
-                      className={CAMPO_CLS}
-                    >
-                      <option value="">Sin documento</option>
-                      {TIPOS_DOCUMENTO.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="text"
-                      inputMode="text"
-                      aria-label={`Documento del locatario de la fila ${n}`}
-                      value={e.documento}
-                      onChange={(x) => editar(n, { documento: x.target.value })}
-                      aria-invalid={errorDoc ? true : undefined}
-                      aria-describedby={errorDoc ? idDoc : undefined}
-                      autoComplete="off"
-                      placeholder={original.documento_locatario ? (docConError ? "Vuelve a escribirlo" : "Vacío conserva el del archivo") : "Opcional"}
-                      className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS}`}
-                    />
-                    <div className="mt-1">
-                      <DocumentoDeclarado tipo={e.resumen.tipo_documento_locatario} documento={e.resumen.documento_locatario} />
-                    </div>
-                    {errorDoc && (
-                      <p id={idDoc} className={`${ERROR_CLS} mt-1`}>
-                        {errorDoc}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    {e.revalidando ? (
-                      <StatusBadge tone="info" label="Revalidando" />
-                    ) : e.resumen.valida && !e.errorLocal ? (
-                      <StatusBadge tone="success" label="Corregida" />
-                    ) : (
-                      <StatusBadge tone="danger" label="Inválido" />
-                    )}
-                    {e.errorServidor && (
-                      <div role="alert" className={`${ERROR_CLS} mt-1 flex flex-col items-start gap-1`}>
-                        {e.errorServidor}
-                        <button type="button" onClick={() => void revalidar(e)} className={BOTON_REINTENTAR_CLS}>
-                          Reintentar
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <TablaEditable<FilaTabla>
+        etiqueta="Filas con errores"
+        filas={filasTabla}
+        columnas={columnas}
+        clave={(f) => String(f.fila)}
+        estadoFila={(f) => estadoDeEdicion(f.edicion)}
+        errorFila={(f) => f.edicion.errorServidor}
+        // «Reintentar» (solo tras un fallo de la revalidación) vuelve a pedirla con lo digitado.
+        onGuardar={(f) => revalidar(f.edicion)}
+      />
       {paginas > 1 && (
         <nav aria-label="Páginas de filas con errores" className="flex items-center justify-end gap-2">
           <button type="button" aria-label="Página anterior" disabled={pagina === 0} onClick={() => setPagina((n) => n - 1)} className={BOTON_SECUNDARIO_CLS}>
