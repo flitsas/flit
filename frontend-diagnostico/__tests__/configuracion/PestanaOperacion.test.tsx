@@ -147,3 +147,61 @@ describe("pestaña Operación — fuentes por defecto según fuentes_disponibles
     expect((cuerpo(fetchMock, 0) as { fuentes_por_defecto: string[] }).fuentes_por_defecto).toEqual(["RUNT", "IMPUESTO_DEPARTAMENTAL"]);
   });
 });
+
+// HU #14562 · F-07 · AC42 (UI Kit 2026): RUNT vehículo fijo, pie de alcance, Descartar y conflicto «El contrato cambió».
+describe("pestaña Operación · UI Kit 2026 (AC42)", () => {
+  it("RUNT vehículo queda siempre marcado y bloqueado, y viaja en el PUT aunque no estuviera guardado", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(configuracion()));
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <PestanaOperacion
+        configuracion={configuracion({ operacion: { visibilidad_usuario: "EMPRESA", fuentes_por_defecto: ["AVALUO"], estimado_consultas: "NO_MOSTRAR" } })}
+        puedeEditar
+      />,
+    );
+    const runt = screen.getByRole("checkbox", { name: "RUNT vehículo" });
+    expect(runt).toBeChecked();
+    expect(runt).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+    expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
+    expect((cuerpo(fetchMock, 0) as { fuentes_por_defecto: string[] }).fuentes_por_defecto).toContain("RUNT");
+  });
+
+  it("muestra el pie «Los cambios aplican a los diagnósticos nuevos» y Descartar restaura lo guardado", () => {
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    expect(screen.getByText("Los cambios aplican a los diagnósticos nuevos")).toBeInTheDocument();
+    const descartar = screen.getByRole("button", { name: "Descartar" });
+    expect(descartar).toBeDisabled();
+    const avaluo = screen.getByRole("checkbox", { name: "Avalúo comercial" });
+    const antes = (avaluo as HTMLInputElement).checked;
+    fireEvent.click(avaluo);
+    expect(descartar).toBeEnabled();
+    fireEvent.click(descartar);
+    expect((screen.getByRole("checkbox", { name: "Avalúo comercial" }) as HTMLInputElement).checked).toBe(antes);
+    expect(screen.getByRole("button", { name: "Descartar" })).toBeDisabled();
+  });
+
+  it("un 409 muestra «El contrato cambió», ofrece Recargar y conserva lo digitado", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ title: "Conflicto", code: "CONFIGURACION_DESACTUALIZADA" }, { status: 409 })));
+    const onRecargar = vi.fn();
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar onRecargar={onRecargar} />);
+    fireEvent.click(screen.getByRole("radio", { name: /antes de lanzar/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("El contrato cambió");
+    expect(screen.getByRole("radio", { name: /antes de lanzar/i })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Recargar" }));
+    expect(onRecargar).toHaveBeenCalledTimes(1);
+  });
+
+  it("mientras guarda, el botón anuncia «Guardando…» y queda deshabilitado", async () => {
+    let resolver: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn().mockReturnValueOnce(new Promise<Response>((r) => (resolver = r))));
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+    const boton = await screen.findByRole("button", { name: /Guardando/ });
+    expect(boton).toBeDisabled();
+    resolver(Response.json(configuracion()));
+    expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
+  });
+});
