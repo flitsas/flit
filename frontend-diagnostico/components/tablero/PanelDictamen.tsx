@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { PanelLateral } from "@flit/ui/PanelLateral";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS, Vacio } from "@/components/tablero/vistasDetalle/comun";
 import {
@@ -51,6 +51,37 @@ export function BotonAbrirDictamen({ identificador, onAbrir }: { identificador: 
     <button type="button" className={BOTON_DICTAMEN_CLS} aria-label={`Ver dictamen de ${identificador}`} onClick={(e) => onAbrir(e.currentTarget)}>
       Dictamen
     </button>
+  );
+}
+
+/**
+ * HU #14562 AC28: celda de la columna Dictamen del tablero. El veredicto viene en la fila (`FilaVehiculo.veredicto`, B1), así
+ * que las cifras y la columna no piden el dictamen por vehículo; el GET sale solo al abrir el panel. Con `ajustado` (B7, D6)
+ * se lee «Ajustado por FLIT», sin autor ni motivo.
+ */
+export function BotonDictamenFila({
+  identificador,
+  veredicto,
+  ajustado = false,
+  onAbrir,
+}: {
+  identificador: string;
+  veredicto: { texto: string; tono: "success" | "danger" | "neutral" };
+  ajustado?: boolean;
+  onAbrir: (disparador: HTMLElement) => void;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        className={`rounded-full ${FOCO_CLS}`}
+        aria-label={`Ver dictamen de ${identificador}`}
+        onClick={(e) => onAbrir(e.currentTarget)}
+      >
+        <Etiqueta tono={veredicto.tono}>{veredicto.texto}</Etiqueta>
+      </button>
+      {ajustado && <span className={TEXTO_SECUNDARIO_CLS}>Ajustado por FLIT</span>}
+    </div>
   );
 }
 

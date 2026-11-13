@@ -53,7 +53,18 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
    * Sin ella la columna no existe.
    */
   casillaVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
+  /**
+   * HU #14562 AC28: columna «Dictamen» tras la placa (Viable / Bloqueado / Pendiente, de `FilaVehiculo.veredicto`). Sin ella la
+   * columna no existe (backoffice, que abre el dictamen bajo la placa).
+   */
+  dictamenVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
+  /** Filas a pintar (filtro de tarjeta o búsqueda). Por defecto, todas las de la grilla. */
+  vehiculos?: FilaVehiculo[];
 }
+
+/** HU #14562 AC28: placa y trámite fijos al desplazar en horizontal. */
+const FIJA_IZQ_CLS = "sticky z-10";
+const FIJA_DER_CLS = "sticky right-0 z-10";
 
 /** «—» con nombre accesible cuando el dato no existe. */
 function SinDato({ etiqueta }: { etiqueta: string }) {
@@ -64,10 +75,20 @@ function SinDato({ etiqueta }: { etiqueta: string }) {
   );
 }
 
-function EncabezadoVehiculo({ vehiculo, pedidas, accion }: { vehiculo: FilaVehiculo; pedidas: ReadonlySet<Fuente>; accion?: ReactNode }) {
+function EncabezadoVehiculo({
+  vehiculo,
+  pedidas,
+  accion,
+  izquierda,
+}: {
+  vehiculo: FilaVehiculo;
+  pedidas: ReadonlySet<Fuente>;
+  accion?: ReactNode;
+  izquierda: string;
+}) {
   const resueltas = vehiculo.celdas.filter((c) => pedidas.has(c.fuente) && RESUELTAS.has(c.estado)).length;
   return (
-    <th scope="row" className="px-3 py-2.5 text-left align-top font-normal">
+    <th scope="row" className={`${FIJA_IZQ_CLS} ${izquierda} bg-card px-3 py-2.5 text-left align-top font-normal`}>
       <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary">
         {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
       </span>
@@ -141,8 +162,12 @@ export function GrillaSemaforos({
   tituloAccionVehiculo = "Reporte",
   accionEncabezado,
   casillaVehiculo,
+  dictamenVehiculo,
+  vehiculos = grilla.vehiculos,
 }: GrillaSemaforosProps) {
   const pedidas = fuentesPedidas(grilla.columnas);
+  // Con casilla de selección, la placa queda fija a su derecha (la casilla mide w-10).
+  const izquierdaPlaca = casillaVehiculo ? "left-10" : "left-0";
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
@@ -150,13 +175,23 @@ export function GrillaSemaforos({
         <thead>
           <tr>
             {casillaVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} w-10 align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_IZQ_CLS} left-0 w-10 align-bottom`} style={CABECERA_ESTILO}>
                 <span className="sr-only">Seleccionar</span>
               </th>
             )}
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`} style={CABECERA_ESTILO}>
+            <th
+              scope="col"
+              rowSpan={2}
+              className={`${CABECERA_CLS} ${FIJA_IZQ_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`}
+              style={CABECERA_ESTILO}
+            >
               Placa o VIN
             </th>
+            {dictamenVehiculo && (
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+                Dictamen
+              </th>
+            )}
             <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
               Documento declarado
             </th>
@@ -176,7 +211,7 @@ export function GrillaSemaforos({
               ),
             )}
             {accionVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_DER_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
                 {tituloAccionVehiculo}
               </th>
             )}
@@ -190,16 +225,21 @@ export function GrillaSemaforos({
           </tr>
         </thead>
         <tbody>
-          {grilla.vehiculos.map((v) => {
+          {vehiculos.map((v) => {
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
               <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-card">
                 {casillaVehiculo && (
-                  <td data-columna="seleccion" className={TD_CLS}>
+                  <td data-columna="seleccion" className={`${TD_CLS} ${FIJA_IZQ_CLS} left-0 bg-card`}>
                     {casillaVehiculo(v)}
                   </td>
                 )}
-                <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} accion={accionEncabezado?.(v)} />
+                <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} accion={accionEncabezado?.(v)} izquierda={izquierdaPlaca} />
+                {dictamenVehiculo && (
+                  <td data-columna="dictamen" className={TD_CLS}>
+                    {dictamenVehiculo(v)}
+                  </td>
+                )}
                 <CeldaDocumentoDeclarado vehiculo={v} />
                 <CeldaDocumentosPropietario vehiculo={v} />
                 {FUENTES_TABLA.map((f) => {
@@ -222,7 +262,7 @@ export function GrillaSemaforos({
                     />
                   );
                 })}
-                {accionVehiculo && <td className={TD_CLS}>{accionVehiculo(v)}</td>}
+                {accionVehiculo && <td className={`${TD_CLS} ${FIJA_DER_CLS} bg-card`}>{accionVehiculo(v)}</td>}
               </tr>
             );
           })}

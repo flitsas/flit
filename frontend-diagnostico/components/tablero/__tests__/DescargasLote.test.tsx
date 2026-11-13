@@ -6,7 +6,7 @@ import { INTERVALO_SONDEO_ZIP_MS, type EstadoEvidencia } from "@/lib/reportes/ap
 import { ID, llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: <DescargasLote diagnosticoId={grilla.id} estadoLote={grilla.estado} puedeDescargar={capacidades.descargarReportes} />
-// en el tablero: «Descargar Excel» (enlace con download por el BFF) y «Descargar PDF (.zip)», que pide el ZIP en segundo
+// en el tablero: «Excel del lote» (enlace con download por el BFF) y «PDF de todos (ZIP)», que pide el ZIP en segundo
 // plano, anuncia «Preparando N PDF…» (aria-live) sondeando cada 3 s y, en LISTA, muestra el enlace del .zip; en ERROR, el
 // aviso con Reintentar. Sin la capacidad no pinta nada.
 
@@ -42,7 +42,7 @@ const pintar = (estadoLote: EstadoDiagnostico = "EN_PROCESO", puedeDescargar = t
   render(<DescargasLote diagnosticoId={ID} estadoLote={estadoLote} puedeDescargar={puedeDescargar} />);
 
 const pedirZip = async () => {
-  fireEvent.click(screen.getByRole("button", { name: "Descargar PDF (.zip)" }));
+  fireEvent.click(screen.getByRole("button", { name: "PDF de todos (ZIP)" }));
   await avanzar();
 };
 
@@ -70,9 +70,9 @@ describe("DescargasLote — AC4: sin la capacidad descargarReportes", () => {
 });
 
 describe("DescargasLote — Excel del lote", () => {
-  it("enlace «Descargar Excel» con download a la ruta del Excel del lote", () => {
+  it("enlace «Excel del lote» con download a la ruta del Excel del lote", () => {
     pintar();
-    const excel = screen.getByRole("link", { name: "Descargar Excel" });
+    const excel = screen.getByRole("link", { name: "Excel del lote" });
     expect(excel).toHaveAttribute("href", `/api/v1/diagnostico/diagnosticos/${ID}/excel`);
     expect(excel).toHaveAttribute("download");
   });
@@ -80,10 +80,10 @@ describe("DescargasLote — Excel del lote", () => {
   it("409 LOTE_SIN_LANZAR al descargar: aviso en texto claro, sin romper la barra", async () => {
     simularApi({ [`GET /diagnosticos/${ID}/excel`]: () => Response.json({ code: "LOTE_SIN_LANZAR", error: "x" }, { status: 409 }) });
     pintar();
-    fireEvent.click(screen.getByRole("link", { name: "Descargar Excel" }));
+    fireEvent.click(screen.getByRole("link", { name: "Excel del lote" }));
     await avanzar();
     expect(screen.getByRole("alert")).toHaveTextContent("El lote todavía no se ha lanzado: aún no hay nada que descargar.");
-    expect(screen.getByRole("link", { name: "Descargar Excel" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Excel del lote" })).toBeInTheDocument();
   });
 });
 
@@ -148,7 +148,7 @@ describe("DescargasLote — AC3: el ZIP pasa de «Preparando» al enlace de desc
     const api = simularApi({ [PEDIR]: () => Response.json(zip(), { status: 202 }), [ESTADO]: enOrden(zip({ estado: "GENERANDO" })) });
     pintar();
     await pedirZip();
-    const boton = screen.getByRole("button", { name: "Descargar PDF (.zip)" });
+    const boton = screen.getByRole("button", { name: "PDF de todos (ZIP)" });
     expect(boton).toBeDisabled();
     expect(boton).toHaveAttribute("aria-busy", "true");
     expect(llamadas(api, "POST", `/diagnosticos/${ID}/evidencias`)).toHaveLength(1);

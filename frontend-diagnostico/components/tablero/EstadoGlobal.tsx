@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
+import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
 import { rotular } from "@/lib/rotulos";
@@ -68,16 +69,13 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
  * con la misma ayuda accesible que ListaEstimado (HU #13797), enlazada por aria-describedby; sin la marca, el número tal cual
  * (ampliación de HU #13802, decisión del usuario 2026-10-22). Lo usan el tablero de la compañía y la grilla del backoffice.
  */
-export function EstimadoVsConsumido({ estimado }: { estimado?: Estimado[] }) {
+export function EstimadoVsConsumido({ estimado, plegable = false }: { estimado?: Estimado[]; /** HU #14562 AC33: tarjeta plegable (tablero). */ plegable?: boolean }) {
   const ayudaId = useId();
   if (!estimado?.length) return null;
   const hayMinimo = estimado.some((e) => e.minimo);
   const celda = "border-t border-[var(--table-row-border)] px-3 py-2 text-right tabular-nums";
-  return (
-    <section aria-labelledby="estimado-consumido" className="flex flex-col gap-2">
-      <h2 id="estimado-consumido" className="text-sm font-semibold text-flit-primary">
-        Estimado frente a consumido
-      </h2>
+  const cuerpo = (
+    <>
       <p className={AYUDA_CLS}>Consultas previstas al lanzar el lote y las que se consumieron por fuente (las reutilizadas no cuentan).</p>
       <table className="w-full max-w-xl border-collapse text-sm">
         <thead>
@@ -115,6 +113,23 @@ export function EstimadoVsConsumido({ estimado }: { estimado?: Estimado[] }) {
           del vehículo, y al lanzar el lote algún vehículo no tenía sus personas registradas.
         </p>
       )}
+    </>
+  );
+  if (plegable) {
+    return (
+      <section aria-label="Estimado frente a consumido">
+        <TarjetaPlegable titulo="Estimado frente a consumido" nivelTitulo={2}>
+          <div className="flex flex-col gap-2">{cuerpo}</div>
+        </TarjetaPlegable>
+      </section>
+    );
+  }
+  return (
+    <section aria-labelledby="estimado-consumido" className="flex flex-col gap-2">
+      <h2 id="estimado-consumido" className="text-sm font-semibold text-flit-primary">
+        Estimado frente a consumido
+      </h2>
+      {cuerpo}
     </section>
   );
 }
