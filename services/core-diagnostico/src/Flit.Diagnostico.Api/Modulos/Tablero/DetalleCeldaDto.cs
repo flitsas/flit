@@ -195,12 +195,25 @@ public sealed record ComparendoDetalle(
     [property: JsonPropertyName("estado")] string? Estado,
     [property: JsonPropertyName("organismo")] string? Organismo);
 
-/// <summary>Avalúo comercial: «sin valor comercial» (Q4 = b) o el valor sugerido con su fuente principal, y el valor de cada fuente.</summary>
+/// <summary>
+/// Avalúo comercial: «sin valor comercial» (Q4 = b) o el valor sugerido con su fuente principal, y el valor de cada fuente. La
+/// <c>referencia</c> Fasecolda (HU #14563 B6) solo viene si el avalúo se llenó con ella; si no, la clave no aparece.
+/// </summary>
 public sealed record ResultadoAvaluoDetalle(
     [property: JsonPropertyName("sin_valor_comercial")] bool SinValorComercial,
     [property: JsonPropertyName("valor_sugerido")] long? ValorSugerido,
     [property: JsonPropertyName("fuente_principal")] string? FuentePrincipal,
-    [property: JsonPropertyName("fuentes")] IReadOnlyList<FuenteAvaluoDetalle>? Fuentes) : ResultadoDetalleDto;
+    [property: JsonPropertyName("fuentes")] IReadOnlyList<FuenteAvaluoDetalle>? Fuentes,
+    [property: JsonPropertyName("referencia")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ReferenciaAvaluoDetalle? Referencia = null) : ResultadoDetalleDto;
+
+/// <summary>Referencia Fasecolda del avalúo (HU #14563 B6): código de 8 dígitos, marca, línea y modelo (año).</summary>
+public sealed record ReferenciaAvaluoDetalle(
+    [property: JsonPropertyName("codigo_fasecolda")] string? CodigoFasecolda,
+    [property: JsonPropertyName("marca")] string? Marca,
+    [property: JsonPropertyName("linea")] string? Linea,
+    [property: JsonPropertyName("modelo")] int? Modelo);
 
 /// <summary>Valor de una fuente del avalúo (<c>fasecolda</c>, <c>mercado_libre</c>, <c>base_gravable</c>): estado, valor, muestras y fecha.</summary>
 public sealed record FuenteAvaluoDetalle(

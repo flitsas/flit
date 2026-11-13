@@ -5147,6 +5147,16 @@ components:
               valor: { type: integer, format: int64, nullable: true }
               muestras: { type: integer, nullable: true }
               fecha: { type: string, nullable: true, example: "2026-10-22" }
+        referencia:
+          type: object
+          description: >
+            HU #14563 B6. Referencia Fasecolda del avalúo llenado a mano con ella. La clave no aparece si el avalúo no la trae
+            (siempre ausente en el avalúo por API).
+          properties:
+            codigo_fasecolda: { type: string, nullable: true, pattern: "^[0-9]{8}$", example: "01601234" }
+            marca: { type: string, nullable: true }
+            linea: { type: string, nullable: true }
+            modelo: { type: integer, nullable: true, example: 2020 }
 
     ResultadoImpuestoDetalle:
       type: object
@@ -5319,7 +5329,10 @@ components:
       description: >
         AVALUO. Con `sin_valor_comercial=false`, `valor_sugerido` (mayor que 0) y `fuente_principal` (una fuente enviada con
         estado OK) son obligatorios; con `true` no van y ninguna fuente puede estar en OK. `valor` solo (y obligatorio) en
-        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia).
+        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia). HU #14563 B6: `referencia` opcional (aditiva).
+        Con ella `sin_valor_comercial` va en false, `valor_sugerido` (entero mayor que 0) es obligatorio y entra en `fuentes` como
+        `fasecolda` OK (si ya viene `fasecolda`, en OK y con el mismo valor) y `fuente_principal` es `fasecolda` (si se envía, debe
+        ser `fasecolda`). No se valida que el código exista en Fasecolda.
       additionalProperties: false
       required: [sin_valor_comercial, fuentes]
       properties:
@@ -5338,6 +5351,17 @@ components:
               estado: { type: string, enum: [OK, SIN_DATOS, ERROR] }
               valor: { type: integer, format: int64, minimum: 1, nullable: true }
               muestras: { type: integer, minimum: 1, nullable: true }
+        referencia:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [codigo_fasecolda, modelo]
+          description: "HU #14563 B6. Referencia Fasecolda; un campo desconocido responde 422 con su ruta en `campo`."
+          properties:
+            codigo_fasecolda: { type: string, pattern: "^[0-9]{8}$", example: "01601234", description: "Texto de 8 dígitos." }
+            marca: { type: string, nullable: true, maxLength: 120 }
+            linea: { type: string, nullable: true, maxLength: 120 }
+            modelo: { type: integer, minimum: 1950, description: "Año del modelo, hasta el año actual (Colombia) + 1.", example: 2020 }
 
     ResultadoManualRuntPersona:
       type: object
