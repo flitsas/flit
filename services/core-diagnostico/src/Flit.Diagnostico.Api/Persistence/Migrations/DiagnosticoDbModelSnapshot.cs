@@ -1315,6 +1315,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("id")
                         .HasComment("uuid v7 generado por la aplicación.");
 
+                    b.Property<int?>("AjustadoDesdeVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("ajustado_desde_version")
+                        .HasComment("Versión vigente que reemplazó el override o ajuste FLIT (= version - 1). NULL en las automáticas. [ADR-0086]");
+
+                    b.Property<string>("AjusteMotivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("ajuste_motivo")
+                        .HasComment("@pii:low Motivo del ajuste FLIT (texto libre de soporte, 10..500). Solo backoffice; nunca en DTO de compañía, eventos ni logs. [ADR-0086]");
+
                     b.Property<string>("Alertamientos")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -1370,7 +1381,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("redactado_por")
-                        .HasComment("PLANTILLA o LLM.");
+                        .HasComment("PLANTILLA, LLM o MANUAL (textos editados por FLIT; el LLM no los reescribe).");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -1433,15 +1444,25 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         {
                             t.HasComment("Dictamen de un vehículo (clase (a) de ADR-0072, ADR-0077): tenant_id, xmin y FK compuesta al vehículo. Nace vacía, sin borrado lógico.");
 
+                            t.HasCheckConstraint("ck_dictamenes_ajuste", "analisis_override = (ajustado_desde_version IS NOT NULL) AND (ajustado_desde_version IS NULL OR ajustado_desde_version = version - 1)");
+
+                            t.HasCheckConstraint("ck_dictamenes_ajuste_motivo", "ajuste_motivo IS NULL OR (analisis_override AND char_length(btrim(ajuste_motivo)) BETWEEN 10 AND 500)");
+
                             t.HasCheckConstraint("ck_dictamenes_alertamientos", "jsonb_typeof(alertamientos) = 'array'");
 
                             t.HasCheckConstraint("ck_dictamenes_estado_redaccion", "estado_redaccion IN ('PENDIENTE', 'COMPLETADA')");
 
-                            t.HasCheckConstraint("ck_dictamenes_redactado_por", "redactado_por IN ('PLANTILLA', 'LLM')");
+                            t.HasCheckConstraint("ck_dictamenes_manual", "redactado_por <> 'MANUAL' OR (analisis_override AND ajuste_motivo IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_dictamenes_override", "(usuario_override_id IS NULL) = (override_en IS NULL) AND analisis_override = (usuario_override_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_dictamenes_redactado_por", "redactado_por IN ('PLANTILLA', 'LLM', 'MANUAL')");
 
                             t.HasCheckConstraint("ck_dictamenes_veredicto", "veredicto IN ('VIABLE', 'BLOQUEADO')");
 
-                            t.HasCheckConstraint("ck_redaccion", "(estado_redaccion = 'COMPLETADA') = (redactado_por = 'LLM')");
+                            t.HasCheckConstraint("ck_dictamenes_version", "version >= 1");
+
+                            t.HasCheckConstraint("ck_redaccion", "(estado_redaccion = 'COMPLETADA') = (redactado_por IN ('LLM', 'MANUAL'))");
                         });
                 });
 

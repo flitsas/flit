@@ -284,6 +284,7 @@ internal sealed partial class EmisorDictamen(
             AnalisisOverride = true,
             UsuarioOverrideId = usuarioId,
             OverrideEn = ahora,
+            AjustadoDesdeVersion = vigente.Version,
             CreadoEn = ahora,
         };
     }
