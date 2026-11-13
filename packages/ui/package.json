@@ -51,7 +51,10 @@
     "./ListaDefinicion": "./src/ListaDefinicion.tsx",
     "./TarjetaPlegable": "./src/TarjetaPlegable.tsx",
     "./EtiquetaEnProceso": "./src/EtiquetaEnProceso.tsx",
-    "./TablaEditable": "./src/TablaEditable.tsx"
+    "./TablaEditable": "./src/TablaEditable.tsx",
+    "./SelectorSegmentado": "./src/SelectorSegmentado.tsx",
+    "./ZonaArrastre": "./src/ZonaArrastre.tsx",
+    "./NotificacionPersistente": "./src/NotificacionPersistente.tsx"
   },
   "scripts": {
     "test": "vitest run"
