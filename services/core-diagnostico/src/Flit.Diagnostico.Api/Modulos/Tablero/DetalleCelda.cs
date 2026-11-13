@@ -96,11 +96,16 @@ internal sealed partial class DetalleCelda(
             }
         }
 
+        // HU #14563 B5: una sola consulta por consulta_id; la proyección excluye los intentos manuales y lo interno.
+        var intentos = await db.Set<IntentoConsulta>().AsNoTracking()
+            .Where(i => i.ConsultaId == celda.Id)
+            .ToListAsync(ct).ConfigureAwait(false);
         var datoParcial = codigo == Fuente.ImpuestoDepartamental && ResultadoImpuestoDetalle.EsDatoParcial(respuestaFuente);
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
             celda.MotivoNa is { } motivo ? CodigosDeEnum.Codigo(motivo) : null, celda.TipoError, celda.DatoObtenidoEn, celda.Reutilizada,
-            resultado, personas, respuestaFuente, identificador, cabecera.Nombre, respuestaProveedor, datoParcial);
+            resultado, personas, respuestaFuente, identificador, cabecera.Nombre, respuestaProveedor, datoParcial,
+            AuditoriaConsultaCliente.Desde(intentos));
     }
 
     /// <summary>
