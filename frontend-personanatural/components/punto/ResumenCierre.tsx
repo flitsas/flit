@@ -57,7 +57,7 @@ export function ResumenCierre({ cierre, titulo = "h3" }: { cierre: CierrePuntoRe
             <p aria-label="ID del trámite" className="text-3xl font-bold tracking-wider" data-testid="codigo-cierre">
               {cierre.codigoPublico}
             </p>
-            <button type="button" className={boton("back", "min-h-11 px-4", "none")} onClick={() => void copiar()}>
+            <button type="button" className={boton(cierre.estadoCierre === "registrado" ? "positive" : "back", "min-h-11 px-4", "none")} onClick={() => void copiar()}>
               {copiado ? <Check aria-hidden /> : <Copy aria-hidden />}
               {copiado ? "Copiado" : "Copiar ID"}
             </button>
