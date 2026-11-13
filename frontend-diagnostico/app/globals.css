@@ -5,6 +5,8 @@
 @import "@flit/ui/cursor.css";
 /* Loader de marca (`VehicleLoader`, `.flit-loader`), HU #13729. */
 @import "@flit/ui/loader.css";
+/* Tokens propios de Diagnóstico (UI Kit 2026, HU #14562 · UI-3): solo aquí, nunca en @flit/ui ni @flit/shell. */
+@import "./dx/tokens-dx.css";
 /* Barra común y dock de la suite (B-10). */
 @import "@flit/shell/shell.css";
 
