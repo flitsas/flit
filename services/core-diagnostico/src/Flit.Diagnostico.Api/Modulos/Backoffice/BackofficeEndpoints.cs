@@ -38,6 +38,7 @@ public static class BackofficeEndpoints
         DiagnosticosBackofficeEndpoints.Map(backoffice);
         LlenadoManualEndpoints.Map(backoffice);
         OverrideDictamenEndpoints.Map(backoffice);
+        VersionesDictamenEndpoints.Map(backoffice);
 
         // HU #13741 (escenario 15): la lista de empresas de la plataforma no lee datos de ninguna compañía, así que no pide
         // empresa explícita ni se audita como lectura entre compañías; la política del backoffice sí aplica.

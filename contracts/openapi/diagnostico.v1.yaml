@@ -2699,22 +2699,33 @@ paths:
     put:
       tags: [Backoffice]
       operationId: corregirDictamenVehiculoBackoffice
-      summary: Reemplazar el veredicto del dictamen vigente (backoffice FLIT)
+      summary: Ajuste FLIT del dictamen vigente (backoffice FLIT)
       description: >
-        Corte 7. La misma política del GET, además la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y
-        diagnostico.dictamen.override. El admin de la compañía recibe 403.
-        No vuelve a evaluar ni redacta. El veredicto nuevo es el del cuerpo. Los alertamientos conservan codigo, efecto
-        y fuente, en el mismo orden; el texto vuelve a la plantilla del catálogo del tipo de trámite (si esa fila no está,
-        se conserva el texto guardado). Nace otra versión (la anterior queda vigente=false), con analisis_override, el sub
-        y la fecha del reloj. La redacción queda PENDIENTE para que la cola explique el veredicto nuevo. No genera PDF ni
-        toca el Excel o el ZIP. Publica diagnostico.dictamen.emitido con override=true en la misma transacción.
+        Corte 7; HU #14563 B7 (ADR-0086 D-2, D6, D7, D8, D9). La misma política del GET, además la política de operación FLIT
+        diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de
+        otra compañía recibe 403) y diagnostico.dictamen.override. El admin de la compañía recibe 403.
+        El cuerpo es el estado deseado y el motivo es obligatorio en todo PUT (B-PR6: el cuerpo legado {veredicto, confirmado}
+        sin motivo se retiró). Sin alertamientos reemplaza solo el veredicto: los textos vuelven a la plantilla y la redacción
+        queda PENDIENTE. Con alertamientos nace una versión redactada a mano (redactado_por MANUAL, estado_redaccion
+        COMPLETADA, el LLM no la reescribe) y cada alertamiento lleva ajuste AGREGADO o EDITADO frente a la vigente (solo en
+        backoffice). En los dos casos la anterior queda vigente=false, la nueva guarda el autor, la fecha, el motivo y
+        ajustado_desde_version, y la fila del tablero sube su versión. Orden de bloqueo cabecera → vehículo → dictamen; toda
+        carrera responde 409, nunca 500. No notifica (D8). No genera PDF ni toca el Excel; el PDF y el ZIP siguientes llevan
+        la marca «Ajustado por FLIT» (su huella cambia). Publica diagnostico.dictamen.emitido con override=true (y
+        ajuste_alertamientos=true si hubo alertamientos) en la misma transacción. Un recálculo automático posterior gana (D7).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/CuerpoOverrideDictamen"
-            example: { veredicto: BLOQUEADO, confirmado: true }
+            example:
+              version_esperada: 3
+              veredicto: VIABLE
+              alertamientos:
+                - { codigo: SOAT_NO_VIGENTE, texto: "Soporte verificó el SOAT vigente con la aseguradora.", efecto: ADVIERTE, fuente: RUNT }
+              motivo: "Soporte verificó el SOAT vigente con la aseguradora"
+              confirmar_con_tramite: false
       responses:
         "200":
           description: Dictamen nuevo, con los tres campos de override.
@@ -2740,16 +2751,79 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
         "409":
           description: >
-            Nada cambia. `code` = VEREDICTO_SIN_CAMBIO si el veredicto pedido es el de la vigente.
-            `code` = DICTAMEN_EN_CONFLICTO si dos overrides chocan en ux_dictamen_version o ux_dictamen_vigente.
+            Nada cambia. `code` = VEREDICTO_SIN_CAMBIO si el veredicto y los alertamientos pedidos son los de la vigente.
+            `code` = DICTAMEN_DESACTUALIZADO si version_esperada no es la versión vigente (otro cambio llegó antes).
+            `code` = DICTAMEN_EN_CONFLICTO si dos ajustes chocan en ux_dictamen_version, ux_dictamen_vigente o en el xmin
+            de la vigente. `code` = VEHICULO_CON_TRAMITE si el vehículo ya tiene trámite y no llega confirmar_con_tramite=true
+            (con él, el ajuste se aplica y el trámite no se revierte ni se cancela).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
         "422":
           description: >
-            Nada cambia. `code` = CONFIRMADO_REQUERIDO si confirmado no es true. `code` = VEREDICTO_INVALIDO si el
-            veredicto no es VIABLE ni BLOQUEADO.
+            Nada cambia. `campo` señala el campo cuando aplica; el mensaje es fijo y nunca repite lo digitado.
+            `code` = MOTIVO_REQUERIDO (campo motivo) si falta o tiene menos de 10 o más de 500 caracteres tras recortar.
+            `code` = VERSION_ESPERADA_INVALIDA (campo version_esperada; supuesto aceptado por el orquestador) si no es un
+            entero mayor que cero o falta con alertamientos. `code` = DICTAMEN_INCOHERENTE (campo alertamientos) si un VIABLE
+            trae un alertamiento que bloquea o un BLOQUEADO no trae ninguno. `code` = ALERTAMIENTO_INVALIDO (campo
+            alertamientos) por un código fuera del catálogo (salvo AJUSTE_FLIT o uno de la vigente), un efecto distinto de
+            BLOQUEA/ADVIERTE, una fuente desconocida o un texto vacío o de más de 500 caracteres. `code` =
+            ALERTAMIENTO_CON_DIGITOS (campo alertamientos; supuesto aceptado, P3 = b) si un alertamiento AJUSTE_FLIT trae 6
+            o más dígitos seguidos (el motivo no se filtra). `code` = CONFIRMADO_REQUERIDO si confirmado viene y no es true.
+            `code` = VEREDICTO_INVALIDO si el veredicto no es VIABLE ni BLOQUEADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen/versiones:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote de la compañía indicada.
+        schema: { type: string, format: uuid }
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo de ese lote.
+        schema: { type: string, format: uuid }
+      - name: empresa
+        in: query
+        required: true
+        description: Id de la compañía dueña del lote (uuid distinto de cero, un solo valor).
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Backoffice]
+      operationId: listarVersionesDictamenBackoffice
+      summary: Auditoría de versiones del dictamen de un vehículo (backoffice FLIT)
+      description: >
+        HU #14563 B7 (D6, D7). Política diagnostico.backoffice de configuración y además diagnostico.auditoria.ver; empresa
+        explícita en ?empresa= y la lectura queda en diagnostico.lecturas_backoffice. Todas las versiones en orden descendente:
+        veredicto, alertamientos con la marca ajuste (AGREGADO/EDITADO), eliminados frente a la versión anterior (por código
+        y fuente), origen (AUTOMATICO o AJUSTE_FLIT), usuario {id, nombre} (nombre resuelto por Identidad, no se guarda; null
+        si no responde), motivo, en y superado_por_recalculo (derivado: la versión es un ajuste y la siguiente es automática).
+        Es el único lugar donde sale el motivo del ajuste. La compañía nunca lo ve.
+      responses:
+        "200":
+          description: Versiones del dictamen, de la más nueva a la más vieja.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionesDictamen"
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA). No se audita.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No cumple la política de configuración del backoffice o le falta diagnostico.auditoria.ver.
+        "404":
+          description: "`code` = NO_ENCONTRADO si el lote o el vehículo no son de la compañía indicada; SIN_DICTAMEN si no hay versiones."
           content:
             application/json:
               schema:
@@ -4080,6 +4154,11 @@ components:
           description: >
             HU #14563 (B1). Grilla de la compañía. Veredicto del dictamen vigente; null si está pendiente o el lote es SIMPLE.
             Solo viaja en las filas de la respuesta.
+        dictamen_ajustado:
+          type: boolean
+          description: >
+            HU #14563 (B7, D6). true si el dictamen vigente es un ajuste de soporte FLIT (P1 = a); false sin dictamen, en SIMPLE
+            o tras un recálculo automático (D7).
         derivacion:
           allOf:
             - $ref: "#/components/schemas/DerivacionFila"
@@ -4790,7 +4869,9 @@ components:
     DictamenVehiculo:
       type: object
       additionalProperties: false
-      description: Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa.
+      description: >
+        Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa. HU #14563 (D6, P1 = a): la marca
+        ajustado_por_flit y ajustado_en; nunca el autor, el motivo, la versión anterior ni la marca ajuste por alertamiento.
       required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en]
       properties:
         version: { type: integer, minimum: 1 }
@@ -4802,6 +4883,16 @@ components:
             $ref: "#/components/schemas/AlertaDictamen"
         catalogo_version: { type: integer }
         creado_en: { type: string, format: date-time }
+        ajustado_por_flit:
+          type: boolean
+          description: >
+            HU #14563. true si la vigente es un ajuste de soporte FLIT posterior al despliegue de B7 (ajuste_motivo no nulo;
+            P1 = a). Un recálculo automático la deja en false (D7).
+        ajustado_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: HU #14563. Fecha del ajuste FLIT; null sin ajuste.
 
     DictamenVehiculoBackoffice:
       type: object
@@ -4825,10 +4916,102 @@ components:
     CuerpoOverrideDictamen:
       type: object
       additionalProperties: false
-      required: [veredicto, confirmado]
+      description: >
+        HU #14563 B7. Estado deseado del dictamen. motivo es obligatorio en todo PUT (D9; B-PR6 retiró el cuerpo legado sin
+        motivo). version_esperada es obligatoria con alertamientos. confirmado se mantiene opcional por compatibilidad.
+      required: [veredicto, motivo]
       properties:
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
-        confirmado: { type: boolean, description: Solo true escribe. Cualquier otro valor es 422 CONFIRMADO_REQUERIDO. }
+        motivo:
+          type: string
+          minLength: 10
+          maxLength: 500
+          description: >
+            Motivo del ajuste (10 a 500 caracteres tras recortar). @pii:low: texto libre de soporte, solo backoffice; no se
+            filtra (P3 = b) y nunca sale a la compañía, a eventos, a logs ni a mensajes de error.
+        version_esperada:
+          type: integer
+          minimum: 1
+          description: Versión vigente que leyó soporte. Distinta de la vigente → 409 DICTAMEN_DESACTUALIZADO.
+        alertamientos:
+          type: array
+          maxItems: 50
+          description: Lista completa deseada (lo que no venga se elimina). Ausente = solo veredicto.
+          items:
+            $ref: "#/components/schemas/AlertamientoAjuste"
+        confirmar_con_tramite:
+          type: boolean
+          description: Necesario (true) si el vehículo ya tiene trámite; sin él, 409 VEHICULO_CON_TRAMITE.
+        confirmado: { type: boolean, description: Opcional. Si viene debe ser true; otro valor es 422 CONFIRMADO_REQUERIDO. }
+
+    AlertamientoAjuste:
+      type: object
+      additionalProperties: false
+      required: [codigo, texto, efecto, fuente]
+      properties:
+        codigo:
+          type: string
+          description: Código del catálogo de reglas, uno que ya estaba en la vigente, o AJUSTE_FLIT (redactado por soporte).
+        texto:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Lo ve la compañía. En AJUSTE_FLIT no admite 6 o más dígitos seguidos (422 ALERTAMIENTO_CON_DIGITOS).
+        efecto: { type: string, enum: [BLOQUEA, ADVIERTE] }
+        fuente: { type: string, description: "Código de fuente (RUNT, RUNT_PROPIETARIO, SIMIT_VEHICULO…)." }
+
+    VersionesDictamen:
+      type: object
+      additionalProperties: false
+      required: [versiones]
+      properties:
+        versiones:
+          type: array
+          items:
+            $ref: "#/components/schemas/VersionDictamen"
+
+    VersionDictamen:
+      type: object
+      additionalProperties: false
+      required: [version, veredicto, vigente, alertamientos, eliminados, origen, usuario, motivo, en, superado_por_recalculo]
+      properties:
+        version: { type: integer, minimum: 1 }
+        veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+        vigente: { type: boolean }
+        alertamientos:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertaVersionDictamen"
+        eliminados:
+          type: array
+          description: Alertamientos de la versión anterior que ya no están (por código y fuente). Vacío en la versión 1.
+          items:
+            $ref: "#/components/schemas/AlertaVersionDictamen"
+        origen: { type: string, enum: [AUTOMATICO, AJUSTE_FLIT] }
+        usuario:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [id, nombre]
+          description: Autor del ajuste; null en las automáticas.
+          properties:
+            id: { type: string, format: uuid }
+            nombre: { type: string, nullable: true, description: Resuelto por Identidad; null si no responde. }
+        motivo: { type: string, nullable: true, description: "@pii:low. Motivo del ajuste; null en las automáticas y en overrides históricos." }
+        en: { type: string, format: date-time, description: Instante del ajuste o de la emisión automática. }
+        superado_por_recalculo: { type: boolean, description: "D7: la versión es un ajuste y la siguiente es automática." }
+
+    AlertaVersionDictamen:
+      type: object
+      additionalProperties: false
+      required: [codigo, texto, efecto, fuente, ajuste, etiqueta]
+      properties:
+        codigo: { type: string }
+        texto: { type: string }
+        efecto: { type: string }
+        fuente: { type: string }
+        ajuste: { type: string, nullable: true, enum: [AGREGADO, EDITADO, null] }
+        etiqueta: { type: string, description: Rótulo de la regla (el mismo de AlertaDictamen). }
 
     DetalleCelda:
       type: object
