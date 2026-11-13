@@ -49,7 +49,12 @@ public sealed record DetalleCeldaDto(
     /// </summary>
     [property: JsonPropertyName("dato_parcial")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    bool DatoParcial = false);
+    bool DatoParcial = false,
+    /// <summary>
+    /// HU #14563 B5: auditoría saneada de la consulta (<see cref="AuditoriaConsultaCliente"/>), sin intentos manuales ni datos
+    /// internos. Null si la celda no tiene intentos no manuales.
+    /// </summary>
+    [property: JsonPropertyName("auditoria")] AuditoriaConsulta? Auditoria = null);
 
 /// <summary>
 /// Una persona de una celda de persona: su posición y rol, el tipo de documento, el documento enmascarado (<c>****</c> más
