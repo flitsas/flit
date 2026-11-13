@@ -35,6 +35,8 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
                 $"locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = '{CodigosDeEnum.Codigo(OrigenDocumento.Proveedor)}'");
             t.HasCheckConstraint("ck_vehiculos_identificador_norm", @"identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\s'");
             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
+            // Versión de fila del tablero (HU #14563, ADR-0086 D-1).
+            t.HasCheckConstraint("ck_vehiculos_version_tablero", "version_tablero >= 0");
         });
         builder.HasKey(x => x.Id).HasName("pk_vehiculos");
         // Sostiene las FK compuestas de las celdas y los intentos (HU #13723, ADR-0072 (c)).
@@ -89,6 +91,12 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
             .HasComment("Borrador creado en Trámites (origin=diagnostico, external_ref=id). Se fija una vez (R-16).");
         builder.Property(x => x.TramiteNumero).HasMaxLength(32).HasComment("Número (reference_number) del borrador en Trámites.");
         builder.Property(x => x.TramiteCreadoEn).HasComment("Instante en que Diagnóstico registró el borrador.");
+
+        // Versión de fila del tablero (HU #14563, ADR-0086 D-1): sondeo ?desde= por fila; mismo patrón que la cabecera.
+        builder.Property(x => x.VersionTablero)
+            .HasDefaultValueSql("0").ValueGeneratedNever()
+            .HasComment("Valor de diagnosticos.version_tablero en el último cambio de la FILA (dictamen nuevo o ajustado, trámite creado/omitido/fallido). 0 = sin cambios de fila. Polling ?desde=. [ADR-0086]");
+        builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId, x.VersionTablero }).HasDatabaseName("ix_vehiculos_tablero");
 
         // Concurrencia optimista con la columna de sistema xmin: no agrega columnas a la tabla.
         builder.Property(x => x.Version).IsRowVersion();
