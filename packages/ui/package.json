@@ -54,7 +54,9 @@
     "./TablaEditable": "./src/TablaEditable.tsx",
     "./SelectorSegmentado": "./src/SelectorSegmentado.tsx",
     "./ZonaArrastre": "./src/ZonaArrastre.tsx",
-    "./NotificacionPersistente": "./src/NotificacionPersistente.tsx"
+    "./NotificacionPersistente": "./src/NotificacionPersistente.tsx",
+    "./useTrampaFoco": "./src/useTrampaFoco.ts",
+    "./useRegionViva": "./src/useRegionViva.ts"
   },
   "scripts": {
     "test": "vitest run"
