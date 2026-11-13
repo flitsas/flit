@@ -69,7 +69,8 @@ public sealed class LegalRepresentativeRepositoryTests
         item!.CompanyName.Should().Be("ACME S.A.S.");
         item.CompanyDocumentNumber.Should().Be("900000000-1");
         item.SignatureVaultId.Should().Be(signatureId);
-        item.HasSignatureOrIdentity.Should().BeTrue();
+        // La referencia guardada no basta: sin firma VIGENTE en el baúl no puede firmar hoy.
+        item.HasSignatureOrIdentity.Should().BeFalse();
         item.ProcedureTypeIds.Should().ContainSingle().Which.Should().Be(procType);
         item.IsActive.Should().BeTrue();
     }
