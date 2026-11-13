@@ -87,6 +87,13 @@ public sealed class VehiculoDiagnostico : IEntidadDeEmpresa
     /// <summary>Instante en que Diagnóstico registró el trámite.</summary>
     public DateTimeOffset? TramiteCreadoEn { get; set; }
 
+    /// <summary>
+    /// Versión de fila del tablero (HU #14563, ADR-0086 D-1): el valor de <c>diagnosticos.version_tablero</c> en el último cambio
+    /// de la fila (dictamen nuevo o ajustado, trámite creado, omitido o fallido). 0 = sin cambios de fila. Nunca supera la versión
+    /// del lote. Se fija con <c>EscritorCeldas.SubirVersionFilaAsync</c> o <c>EscritorCeldas.MarcarFila</c>.
+    /// </summary>
+    public long VersionTablero { get; set; }
+
     /// <summary>Token de concurrencia (columna de sistema <c>xmin</c>): el procesador y el usuario no se pisan.</summary>
     public uint Version { get; set; }
 }

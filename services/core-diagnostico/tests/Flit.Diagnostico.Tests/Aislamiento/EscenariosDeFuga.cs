@@ -171,6 +171,12 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaOperacionDerivacion = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Derivacion.DerivacionEndpoints.RutaOperacion;
 
+    /// <summary>
+    /// Bandeja de la campana (HU #14563 B8, AC38): cada empresa siembra un lote y una notificación para el usuario de su token; la
+    /// bandeja devuelve el id del lote, y con el token de A no aparece nada del lote de B.
+    /// </summary>
+    public const string RutaNotificaciones = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Notificaciones.NotificacionesEndpoints.Ruta;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -249,6 +255,23 @@ public static class EscenariosDeFuga
             });
             await db.SaveChangesAsync(ct);
             return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote.Id}/vehiculos/{vehiculo}/dictamen", [exclusivo]);
+        }),
+        new EscenarioDeFuga(RutaNotificaciones, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST912", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var usuario = Guid.Parse(new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(empresa.Token).Subject);
+            await using var db = empresa.Db();
+            db.Add(new global::Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion
+            {
+                TenantId = empresa.Id,
+                UsuarioId = usuario,
+                Tipo = global::Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion.LoteTerminado,
+                DiagnosticoId = lote.Id,
+                ReferenciaId = Guid.NewGuid(),
+                CreadaEn = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+            return new Sembrado(RutaNotificaciones, [lote.Id.ToString()]);
         }),
         new EscenarioDeFuga(RutaOperacionesDerivacion, async (empresa, ct) =>
         {

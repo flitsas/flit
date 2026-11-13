@@ -41,6 +41,10 @@ export interface Dictamen {
   alertamientos: AlertaDictamen[];
   catalogo_version: number;
   creado_en: string;
+  /** B7 (ADR-0086, D6): la versión vigente la ajustó soporte FLIT. Sin autor ni motivo. Opcional hasta que B7 lo exponga. */
+  ajustado_por_flit?: boolean;
+  /** Fecha del ajuste; solo con ajustado_por_flit. */
+  ajustado_en?: string | null;
 }
 
 export interface DictamenBackoffice extends Dictamen {

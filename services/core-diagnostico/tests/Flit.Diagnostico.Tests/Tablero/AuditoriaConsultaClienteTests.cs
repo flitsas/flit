@@ -26,7 +26,7 @@ public sealed class AuditoriaConsultaClienteTests
     private static readonly DateTimeOffset T0 = new(2026, 11, 12, 15, 0, 0, TimeSpan.Zero);
 
     private static readonly string[] Prohibidas =
-        ["servicio", "transaccion", "mensaje", "usuario", "identificador", "persona", "origen", "manual", "tipo_error"];
+        ["servicio", "transaccion", "mensaje", "usuario", "identificador", "persona", "origen", "manual"];
 
     private static IntentoConsulta Intento(int desdeSeg, int duracionSeg, DisparadorIntento disparador, ResultadoIntento estado, bool cache = false) => new()
     {
@@ -64,8 +64,30 @@ public sealed class AuditoriaConsultaClienteTests
         auditoria.DuracionMs.Should().Be(64_000);
         auditoria.Intentos.Should().Be(2);
         auditoria.IntentosDetalle.Should().HaveCount(2);
-        auditoria.IntentosDetalle[0].Should().BeEquivalentTo(new IntentoConsultaCliente(1, T0, T0.AddSeconds(2), 2_000, "ERROR", "AUTOMATICO", false));
+        auditoria.IntentosDetalle[0].Should().BeEquivalentTo(new IntentoConsultaCliente(1, T0, T0.AddSeconds(2), 2_000, "ERROR", "AUTOMATICO", false, "TIMEOUT"));
         auditoria.IntentosDetalle[1].Should().BeEquivalentTo(new IntentoConsultaCliente(2, T0.AddSeconds(60), T0.AddSeconds(64), 4_000, "EXITOSO", "REPROCESO", true));
+    }
+
+    // D15 — el intento en ERROR trae tipo_error: el mismo código de negocio de la grilla (p. ej. TIMEOUT), nunca el mensaje
+    // técnico; el exitoso lo trae en null.
+    [Fact]
+    public void Intento_en_error_trae_tipo_error_como_etiqueta_de_negocio_sin_el_mensaje()
+    {
+        var intentos = new[]
+        {
+            Intento(0, 2, DisparadorIntento.Auto, ResultadoIntento.Error),
+            Intento(60, 4, DisparadorIntento.Reproceso, ResultadoIntento.Success),
+        };
+
+        var json = JsonSerializer.Serialize(AuditoriaConsultaCliente.Desde(intentos));
+
+        using var doc = JsonDocument.Parse(json);
+        var detalle = doc.RootElement.GetProperty("intentos_detalle");
+        detalle[0].TryGetProperty("tipo_error", out var error).Should().BeTrue();
+        error.GetString().Should().Be("TIMEOUT");
+        detalle[1].TryGetProperty("tipo_error", out var exito).Should().BeTrue();
+        exito.ValueKind.Should().Be(JsonValueKind.Null);
+        json.Should().NotContain("mensaje tecnico");
     }
 
     // AC17 — el último intento fue MANUAL: no aparece ni cuenta, y fin es el del último no manual. Solo manual: sin auditoría.
@@ -101,7 +123,7 @@ public sealed class AuditoriaConsultaClienteTests
             .ToList();
 
         nombres.Should().BeEquivalentTo(
-            ["inicio", "fin", "duracion_ms", "intentos", "intentos_detalle", "n", "inicio", "fin", "duracion_ms", "resultado", "disparador", "desde_cache"]);
+            ["inicio", "fin", "duracion_ms", "intentos", "intentos_detalle", "n", "inicio", "fin", "duracion_ms", "resultado", "disparador", "desde_cache", "tipo_error"]);
         nombres.Should().NotContain(n => Prohibidas.Any(x => n.Contains(x, StringComparison.OrdinalIgnoreCase)));
         typeof(DetalleCeldaDto).GetProperty("Auditoria")!.GetCustomAttribute<JsonPropertyNameAttribute>()!.Name.Should().Be("auditoria");
     }

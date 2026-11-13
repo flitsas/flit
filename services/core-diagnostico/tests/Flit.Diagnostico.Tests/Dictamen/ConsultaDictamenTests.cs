@@ -197,6 +197,58 @@ public sealed class ConsultaDictamenTests
     }
 
     [Fact]
+    public void B7_D9_cambiar_el_veredicto_sin_motivo_es_422_MOTIVO_REQUERIDO()
+    {
+        var vigente = Fila();
+        vigente.Veredicto = "VIABLE";
+        var sinMotivo = OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse("""{"veredicto":"BLOQUEADO","confirmado":true}"""));
+        var acto = () => OverrideDictamenEndpoints.ExigirFrenteAVigente(sinMotivo, vigente);
+        var error = acto.Should().Throw<ReglaException>().Which;
+        error.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
+        error.Status.Should().Be(422);
+
+        var corto = () => OverrideDictamenEndpoints.LeerCuerpo(
+            JsonElement.Parse("""{"veredicto":"BLOQUEADO","confirmado":true,"motivo":"   corto   "}"""));
+        corto.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
+
+        var nuevoSinMotivo = () => OverrideDictamenEndpoints.LeerCuerpo(
+            JsonElement.Parse("""{"veredicto":"VIABLE","confirmado":true,"version_esperada":1}"""));
+        nuevoSinMotivo.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
+
+        var conMotivo = OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(
+            """{"veredicto":"BLOQUEADO","confirmado":true,"motivo":"  Soporte verifico 1234567 con la aseguradora  ","version_esperada":1,"confirmar_con_tramite":true}"""));
+        conMotivo.Motivo.Should().Be("Soporte verifico 1234567 con la aseguradora");
+        conMotivo.VersionEsperada.Should().Be(1);
+        conMotivo.ConfirmarConTramite.Should().BeTrue();
+    }
+
+    [Fact]
+    public void B7_P3_un_alertamiento_AJUSTE_FLIT_con_seis_o_mas_digitos_es_422()
+    {
+        const string plantilla = """{"veredicto":"BLOQUEADO","confirmado":true,"motivo":"Soporte verifico el caso","version_esperada":1,"alertamientos":[{"codigo":"AJUSTE_FLIT","texto":"TEXTO","efecto":"BLOQUEA","fuente":"RUNT"}]}""";
+        var conCedula = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(plantilla.Replace("TEXTO", "Propietario 1023456 con embargo", StringComparison.Ordinal)));
+        conCedula.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.AlertamientoConDigitos);
+
+        var cinco = OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(plantilla.Replace("TEXTO", "Embargo del juzgado 12345", StringComparison.Ordinal)));
+        cinco.Alertamientos.Should().ContainSingle().Which.Codigo.Should().Be(CodigosDictamen.AjusteFlit);
+    }
+
+    [Fact]
+    public void B7_version_esperada_vieja_es_409_DICTAMEN_DESACTUALIZADO_y_la_concurrencia_es_conflicto()
+    {
+        var vigente = Fila();
+        vigente.Veredicto = "VIABLE";
+        var cuerpo = OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(
+            """{"veredicto":"BLOQUEADO","confirmado":true,"motivo":"Soporte verifico el caso","version_esperada":2}"""));
+        var acto = () => OverrideDictamenEndpoints.ExigirFrenteAVigente(cuerpo, vigente);
+        var error = acto.Should().Throw<ReglaException>().Which;
+        error.Codigo.Should().Be(CodigosDictamen.DictamenDesactualizado);
+        error.Status.Should().Be(409);
+
+        OverrideDictamenEndpoints.EsConflictoDeDictamen(new DbUpdateConcurrencyException("xmin")).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task La_compania_lee_su_vigente_y_otra_compania_no_la_ve()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -395,7 +447,7 @@ public sealed class ConsultaDictamenTests
             tipoEmpresa: UsuarioActual.TipoEmpresaFlit);
 
     private static StringContent Cuerpo(string veredicto, bool confirmado) =>
-        new($"{{\"veredicto\":\"{veredicto}\",\"confirmado\":{(confirmado ? "true" : "false")}}}", Encoding.UTF8, "application/json");
+        new($"{{\"veredicto\":\"{veredicto}\",\"confirmado\":{(confirmado ? "true" : "false")},\"motivo\":\"Soporte verifico el caso\"}}", Encoding.UTF8, "application/json");
 
     private static async Task<List<DictamenVehiculo>> FilasAsync(EmpresaDePrueba empresa, Guid vehiculo, CancellationToken ct)
     {

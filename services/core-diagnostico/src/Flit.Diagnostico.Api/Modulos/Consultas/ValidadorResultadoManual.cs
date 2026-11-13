@@ -27,6 +27,8 @@ internal sealed record CuerpoManual(long Version, JsonElement? Resultado, IReadO
 /// responde 422 <see cref="CodigoInvalido"/> con <c>campo</c> (ruta del cuerpo, p. ej. <c>resultado.fuentes[0].valor</c>).</item>
 /// <item>La fecha del dato la fija el servidor: el avalúo no acepta <c>fecha</c> en sus fuentes (se pone el día de hoy en
 /// Colombia, como en la consulta por API).</item>
+/// <item>El avalúo admite <c>referencia</c> Fasecolda (HU #14563 B6): con ella el valor entra como <c>fasecolda</c> OK y es la
+/// fuente principal.</item>
 /// <item>RUNT e IMPUESTO_DEPARTAMENTAL no admiten llenado manual (Q3, R-9): <see cref="AdmiteManual"/>.</item>
 /// </list>
 /// Servicio puro: sin base ni HTTP.
@@ -47,6 +49,10 @@ internal static partial class ValidadorResultadoManual
     private static readonly string[] Semaforos = ["VERDE", "AMARILLO", "ROJO"];
     private static readonly string[] FuentesAvaluo = ["fasecolda", "mercado_libre", "base_gravable"];
     private static readonly string[] EstadosAvaluo = [ValorFuenteAvaluo.Ok, ValorFuenteAvaluo.SinDatos, ValorFuenteAvaluo.Error];
+    private const string Fasecolda = "fasecolda";
+
+    /// <summary>Primer año de modelo que admite la referencia Fasecolda del avalúo manual (HU #14563 B6).</summary>
+    public const int ModeloMinimo = 1950;
 
     /// <summary>Verdadero si la fuente se puede llenar a mano: todas salvo RUNT (Q3) e IMPUESTO_DEPARTAMENTAL (R-9).</summary>
     public static bool AdmiteManual(Fuente fuente) => fuente is not (Fuente.Runt or Fuente.ImpuestoDepartamental);
@@ -146,6 +152,7 @@ internal static partial class ValidadorResultadoManual
         var sugerido = o.Entero("valor_sugerido", requerido: false, minimo: 1);
         var principal = o.Catalogo("fuente_principal", FuentesAvaluo, requerido: false);
         var lista = o.Arreglo("fuentes", requerido: true, maximo: FuentesAvaluo.Length)!;
+        var referencia = Referencia(o, hoy);
         o.Fin();
 
         var fecha = hoy.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -166,6 +173,9 @@ internal static partial class ValidadorResultadoManual
             fuentes.Add(new ValorFuenteAvaluo(fuente, estado, valor, muestras is { } m ? (int)m : null, fecha));
         }
 
+        if (referencia is not null)
+            return ConReferencia(campo, sinValor, sugerido, principal, fuentes, referencia, fecha);
+
         if (sinValor)
         {
             if (sugerido is not null)
@@ -182,6 +192,54 @@ internal static partial class ValidadorResultadoManual
         if (principal is null || !fuentes.Any(f => f.Fuente == principal && f.Estado == ValorFuenteAvaluo.Ok))
             throw Invalido($"{campo}.fuente_principal", "fuente_principal es una de las fuentes enviadas con estado OK.");
         return new ResultadoAvaluo(false, sugerido, principal, fuentes);
+    }
+
+    /// <summary>
+    /// HU #14563 B6 (CF-23) — <c>referencia</c> opcional del avalúo: <c>codigo_fasecolda</c> (texto de 8 dígitos) y <c>modelo</c>
+    /// (año de <see cref="ModeloMinimo"/> al año de <paramref name="hoy"/> + 1) obligatorios; <c>marca</c> y <c>linea</c> opcionales.
+    /// Esquema cerrado: un campo desconocido responde 422 con su ruta. Null si no viene.
+    /// </summary>
+    private static ReferenciaAvaluo? Referencia(Objeto padre, DateOnly hoy)
+    {
+        if (padre.Opcional("referencia") is not { } elemento)
+            return null;
+        var r = Objeto.De(elemento, padre.Ruta("referencia"));
+        var codigo = r.Texto("codigo_fasecolda", requerido: true, largo: 8)!;
+        if (!CodigoFasecolda().IsMatch(codigo))
+            throw Invalido(r.Ruta("codigo_fasecolda"), "codigo_fasecolda es el código Fasecolda de 8 dígitos.");
+        var marca = r.Texto("marca", requerido: false, largo: LargoTexto);
+        var linea = r.Texto("linea", requerido: false, largo: LargoTexto);
+        var modelo = r.Entero("modelo", requerido: true, minimo: ModeloMinimo)!.Value;
+        if (modelo > hoy.Year + 1)
+            throw Invalido(r.Ruta("modelo"), $"modelo es un año entre {ModeloMinimo} y {hoy.Year + 1}.");
+        r.Fin();
+        return new ReferenciaAvaluo(codigo, marca, linea, (int)modelo);
+    }
+
+    /// <summary>
+    /// Avalúo con referencia Fasecolda: hay valor comercial, <c>valor_sugerido</c> (entero mayor que 0) es obligatorio y entra en
+    /// <c>fuentes</c> como <c>fasecolda</c> OK (si ya venía, con el mismo valor y en OK), y <c>fuente_principal</c> es
+    /// <c>fasecolda</c>. Las demás fuentes enviadas se conservan.
+    /// </summary>
+    private static ResultadoAvaluo ConReferencia(
+        string campo, bool sinValor, long? sugerido, string? principal, List<ValorFuenteAvaluo> fuentes, ReferenciaAvaluo referencia, string fecha)
+    {
+        if (sinValor)
+            throw Invalido($"{campo}.sin_valor_comercial", "Con referencia Fasecolda hay valor comercial: sin_valor_comercial va en false.");
+        if (sugerido is not { } valor)
+            throw Invalido($"{campo}.valor_sugerido", "valor_sugerido es obligatorio (entero en pesos mayor que 0) con referencia Fasecolda.");
+        if (principal is not null && principal != Fasecolda)
+            throw Invalido($"{campo}.fuente_principal", "Con referencia Fasecolda, fuente_principal es fasecolda.");
+
+        var i = fuentes.FindIndex(f => f.Fuente == Fasecolda);
+        if (i < 0)
+            fuentes.Insert(0, new ValorFuenteAvaluo(Fasecolda, ValorFuenteAvaluo.Ok, valor, null, fecha));
+        else if (fuentes[i].Estado != ValorFuenteAvaluo.Ok)
+            throw Invalido($"{campo}.fuentes[{i}].estado", "Con referencia Fasecolda, la fuente fasecolda va en OK.");
+        else if (fuentes[i].Valor != valor)
+            throw Invalido($"{campo}.fuentes[{i}].valor", "El valor de la fuente fasecolda es el valor_sugerido de la referencia.");
+
+        return new ResultadoAvaluo(false, valor, Fasecolda, fuentes, referencia);
     }
 
     private static ResultadoPersonaRunt RuntPersona(JsonElement elemento, string campo)
@@ -218,6 +276,9 @@ internal static partial class ValidadorResultadoManual
 
     [GeneratedRegex(@"^\d{1,15}(\.\d{1,2})?$", RegexOptions.CultureInvariant)]
     private static partial Regex ValorEnPesos();
+
+    [GeneratedRegex(@"^[0-9]{8}$", RegexOptions.CultureInvariant)]
+    private static partial Regex CodigoFasecolda();
 
     /// <summary>
     /// Un objeto JSON del cuerpo con su ruta: lee cada clave una vez y <see cref="Fin"/> rechaza las que el tipo no tiene (y las
@@ -275,6 +336,9 @@ internal static partial class ValidadorResultadoManual
                 throw Invalido(Ruta(clave), $"{clave} debe ser {Nombre(tipo)}.");
             return valor;
         }
+
+        /// <summary>El valor de la clave sin validar su tipo (lo valida quien lo lee); null si no viene o viene en null.</summary>
+        public JsonElement? Opcional(string clave) => Valor(clave);
 
         public bool? Booleano(string clave, bool requerido)
         {

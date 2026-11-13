@@ -54,6 +54,10 @@ export interface FilaVehiculo {
   vin: string | null;
   /** Todas sus celdas en COMPLETADO o NA (R-7), calculado con todas, no solo con las recibidas. */
   terminado: boolean;
+  /** HU #14563 B1: veredicto vigente; null (o sin la clave) = Pendiente o modo Simple. */
+  veredicto?: "VIABLE" | "BLOQUEADO" | null;
+  /** HU #14563 B7 (D6): el dictamen vigente lo ajustó soporte FLIT. Opcional hasta que B7 lo exponga. */
+  dictamen_ajustado?: boolean;
   /**
    * HU #14087: documento declarado por el cliente (null si no declaró ninguno). Opcional en el tipo porque la fila solo viaja
    * en el sondeo cuando cambia una celda y la grilla del backoffice puede no traerlo: sin la clave, la pantalla pinta «—».
@@ -133,6 +137,28 @@ export interface Grilla {
   vehiculos_pegados?: string[];
   /** Punto 4 (provisional): modo del lote; en SIMPLE, «Crear trámite» pide el tipo. Sin la clave, se pregunta solo si la API lo exige. */
   modo?: ModoDiagnostico;
+  /** HU #14563 B1: conteos de todo el lote (también con ?desde=). Sin la clave, las tarjetas que dependen de ellos se ocultan. */
+  conteos?: ConteosGrilla;
+  /** HU #14563 B2: metadatos del lote. Sin la clave, la cabecera los omite. */
+  lote?: LoteGrilla;
+}
+
+export interface ConteosGrilla {
+  vehiculos: number;
+  terminados: number;
+  con_error: number;
+  con_deuda: number;
+  bloqueados: number;
+  listos_tramite: number;
+}
+
+export interface LoteGrilla {
+  modo: "SIMPLE" | "CON_ANALISIS";
+  /** Null en SIMPLE. */
+  tipo_tramite: { codigo: string; nombre: string } | null;
+  creado_en: string;
+  es_express: boolean;
+  usuario_creador: { id: string; nombre: string | null };
 }
 
 export interface PanelCerrado {

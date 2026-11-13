@@ -40,6 +40,103 @@ export interface ResultadoSimitDetalle {
   /** Como mucho 100. */
   comparendos: Comparendo[];
   comparendos_truncados: boolean;
+  /** HU #14563 B4: los campos tipados se omiten (o llegan null) si la fuente no los informó; nunca se infieren. */
+  total_general?: string | null;
+  total_por_pagar?: string | null;
+  paz_y_salvo?: boolean | null;
+  suspendida?: boolean | null;
+  cancelada?: boolean | null;
+  multas?: MultaSimit[] | null;
+  acuerdos_pago?: AcuerdoPagoSimit[] | null;
+  resoluciones?: ResolucionSimit[] | null;
+  cantidad_resoluciones?: number | null;
+}
+
+/** HU #14563 B4. Infracción de una multa; `descripcion` null si la fuente no la trae. */
+export interface InfraccionSimit {
+  codigo?: string | null;
+  descripcion?: string | null;
+}
+
+/** HU #14563 B4. Multa del SIMIT, sin el infractor. */
+export interface MultaSimit {
+  numero?: string | null;
+  fecha?: string | null;
+  valor?: string | null;
+  valor_pagar?: string | null;
+  estado_cartera?: string | null;
+  organismo?: string | null;
+  codigos?: string | null;
+  infracciones?: InfraccionSimit[] | null;
+}
+
+/** HU #14563 B4. Acuerdo de pago del SIMIT. */
+export interface AcuerdoPagoSimit {
+  estado?: string | null;
+  cuotas_abonadas?: string | null;
+  cuotas_pendientes?: string | null;
+  pendiente?: string | null;
+  fecha?: string | null;
+  organismo?: string | null;
+}
+
+/** HU #14563 B4. Resolución del SIMIT. */
+export interface ResolucionSimit {
+  numero?: string | null;
+  fecha?: string | null;
+  estado?: string | null;
+  valor?: string | null;
+  organismo?: string | null;
+}
+
+/** HU #14563 B5. Un intento no manual de la consulta. `tipo_error` (D15) es opcional: etiqueta de negocio. */
+export interface IntentoConsultaCliente {
+  n: number;
+  inicio: string;
+  fin: string;
+  duracion_ms: number;
+  resultado: "EXITOSO" | "ERROR";
+  disparador: "AUTOMATICO" | "REPROCESO";
+  desde_cache: boolean;
+  tipo_error?: string | null;
+}
+
+/** HU #14563 B5. Auditoría de la consulta visible a la compañía. */
+export interface AuditoriaConsulta {
+  inicio: string;
+  fin: string;
+  duracion_ms: number;
+  intentos: number;
+  intentos_detalle: IntentoConsultaCliente[];
+}
+
+export const FRASE_SIN_PAZ_Y_SALVO_INFORMADO = "La fuente no informó paz y salvo";
+export const FRASE_SIN_VALOR_INFORMADO = "Sin valor informado";
+export const FRASE_SIN_RESOLUCIONES_INFORMADAS = "La fuente no informó resoluciones";
+
+/** Texto del paz y salvo: solo lo que afirma la fuente; nunca se deduce de cero comparendos (R4). */
+export function textoPazYSalvo(valor: boolean | null | undefined): string {
+  if (valor === true) return "Está a paz y salvo";
+  if (valor === false) return "No está a paz y salvo";
+  return FRASE_SIN_PAZ_Y_SALVO_INFORMADO;
+}
+
+/** Total adeudado: `total_por_pagar` y, si falta, `total_general`. Ausente → «Sin valor informado», nunca «$ 0». */
+export function textoTotalSimit(r: ResultadoSimitDetalle): string {
+  const valor = r.total_por_pagar ?? r.total_general ?? null;
+  return valor === null || valor === "" ? FRASE_SIN_VALOR_INFORMADO : formatearPesos(valor);
+}
+
+/** Infracción «código · descripción»; sin descripción, solo el código. */
+export function textoInfraccion(i: InfraccionSimit): string {
+  const codigo = i.codigo ?? "";
+  return i.descripcion ? (codigo ? `${codigo} · ${i.descripcion}` : i.descripcion) : codigo || "—";
+}
+
+/** Duración legible de la auditoría: «850 ms» o «4,2 s». */
+export function textoDuracion(ms: number): string {
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toLocaleString("es-CO", { maximumFractionDigits: 1 })} s`;
 }
 
 export interface FuenteAvaluo {
@@ -177,6 +274,8 @@ export interface DetalleCelda {
   respuesta_proveedor?: RespuestaProveedor | null;
   /** Impuesto en ERROR con dato parcial: se rotula y no se muestra el monto. Ausente si es false. */
   dato_parcial?: boolean;
+  /** HU #14563 B5. Auditoría saneada; ausente o null en el API anterior o sin intentos no manuales. */
+  auditoria?: AuditoriaConsulta | null;
 }
 
 /** Carga el detalle de una celda; la pantalla de backoffice (F06-H5) pasa la suya con `?empresa=`. */

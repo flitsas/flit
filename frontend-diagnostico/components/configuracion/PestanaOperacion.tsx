@@ -17,6 +17,7 @@ import {
   type Fuente,
   type VisibilidadUsuario,
 } from "@/lib/configuracion";
+import { SelectorSegmentado } from "@flit/ui/SelectorSegmentado";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "./estilos";
 
 type Estado =
@@ -132,25 +133,20 @@ export function PestanaOperacion({
         </InlineAlert>
       )}
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className={ETIQUETA_CLS}>Visibilidad de los diagnósticos</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {VISIBILIDADES.map((v) => (
-            <label key={v.valor} className={OPCION_CLS}>
-              <input
-                type="radio"
-                name="visibilidad"
-                value={v.valor}
-                checked={visibilidad === v.valor}
-                onChange={() => setVisibilidad(v.valor)}
-                disabled={deshabilitado}
-                className={MARCA_CLS}
-              />
-              {v.nombre}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <div className="flex flex-col gap-2">
+        <p id="operacion-visibilidad" className={ETIQUETA_CLS}>
+          Quién ve los diagnósticos
+        </p>
+        <p className={AYUDA_CLS}>Aplica al listado y a los tableros.</p>
+        <SelectorSegmentado
+          etiqueta="Quién ve los diagnósticos"
+          opciones={VISIBILIDADES.map((v) => ({ valor: v.valor, label: v.nombre }))}
+          valor={visibilidad}
+          onCambio={setVisibilidad}
+          deshabilitado={deshabilitado}
+          className="self-start"
+        />
+      </div>
 
       <fieldset className="flex flex-col gap-2">
         <legend className={ETIQUETA_CLS}>Fuentes por defecto</legend>

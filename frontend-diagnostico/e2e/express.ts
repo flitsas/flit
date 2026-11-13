@@ -3,7 +3,7 @@ import { expect, type Page } from "@playwright/test";
 /**
  * Lanza un Express desde la tarjeta del título del inicio (HU #14085): «Placa o VIN» + «Diagnosticar» abre la pantalla
  * única /diagnosticos/nuevo en Express con la placa precargada; «Continuar» valida y, si la operación muestra el estimado
- * (ANTES_DE_LANZAR), «Lanzar diagnóstico» confirma. Termina en el tablero /diagnosticos/{id}.
+ * (ANTES_DE_LANZAR), «Lanzar diagnóstico» confirma; en el resultado «Ver tablero» lleva al tablero /diagnosticos/{id}.
  */
 export async function lanzarExpress(page: Page, placa: string, nombre?: string) {
   await page.getByRole("textbox", { name: "Placa o VIN" }).fill(placa);
@@ -18,5 +18,9 @@ export async function lanzarExpress(page: Page, placa: string, nombre?: string) 
   // Con estimado_consultas = ANTES_DE_LANZAR aparece el estimado; si no, el Express se lanza directo.
   await Promise.race([lanzar.waitFor({ state: "visible" }), page.waitForURL(tablero)]);
   if (await lanzar.isVisible()) await lanzar.click();
+  // Pantalla de resultado (AC18): «Ver tablero» evita esperar los 5 s de la redirección automática.
+  const verTablero = page.getByRole("link", { name: "Ver tablero" });
+  await Promise.race([verTablero.waitFor({ state: "visible" }), page.waitForURL(tablero)]);
+  if (await verTablero.isVisible()) await verTablero.click();
   await page.waitForURL(tablero);
 }
