@@ -11,6 +11,28 @@ import { expect, test, type Page } from "@playwright/test";
  *   pnpm --dir frontend exec playwright test ../frontend-diagnostico/e2e/configuracion.spec.ts
  *
  * Las credenciales son de usuarios de prueba del ambiente DEV y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Configuración»
+ *   - tablist «Configuración de Diagnóstico»
+ *   - tab (sin nombre)
+ *   - tabpanel (sin nombre)
+ *   - tabpanel «Contrato»
+ *   - checkbox (sin nombre)
+ *   - combobox «Empresa»
+ *   - tab «Contrato»
+ *   - tab «Operación»
+ *   - button «Guardar operación»
+ *   - option (sin nombre)
+ *   - heading (sin nombre)
+ *   - spinbutton «Límite de vehículos por lote»
+ *   - switch «Suspender la redacción con IA»
+ *   - checkbox «RUNT vehículo»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   - texto «Límite de vehículos por lote»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const AJENOS = /usuario|\broles?\b|suscripci|retenci|purga/i;

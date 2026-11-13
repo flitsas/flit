@@ -13,6 +13,27 @@ import { lanzarExpress } from "./express";
  *
  * E2E_USUARIO es un usuario de la compañía con diagnosticos.crear y diagnosticos.ver. Las credenciales son de usuarios de
  * prueba del ambiente DEV y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - searchbox «Nombre»
+ *   - table «Diagnósticos de la compañía»
+ *   - row (sin nombre)
+ *   - row «new RegExp(nombre)»
+ *   - cell (sin nombre)
+ *   - link (sin nombre)
+ *   - table «/semáforo de consultas/i»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   Del helper express.ts (lanzarExpress):
+ *     - textbox «Placa o VIN»
+ *     - button «Diagnosticar en línea»
+ *     - textbox «Nombre del diagnóstico»
+ *     - button «/^(Continuar|Iniciar diagnóstico)$/»
+ *     - button «Lanzar diagnóstico»
+ *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 /** Placa de prueba terminada en 1: la simulación de RUNT responde con éxito. */

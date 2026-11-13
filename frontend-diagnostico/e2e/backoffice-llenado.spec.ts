@@ -16,6 +16,28 @@ import { expect, test, type Page } from "@playwright/test";
  * E2E_BACKOFFICE_USUARIO es un usuario de la compañía FLIT con el rol backoffice_diagnostico (diagnostico.backoffice.ver y
  * diagnostico.consultas.llenar); E2E_ADMIN_USUARIO, el admin de una compañía cliente. Las credenciales son de usuarios de
  * prueba del ambiente DEV y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - link «Backoffice»
+ *   - heading «Lotes por compañía»
+ *   - table «/lotes de la compañía/i»
+ *   - row (sin nombre)
+ *   - link (sin nombre)
+ *   - table «/semáforo de consultas/i»
+ *   - link «/^Ver detalle de SIMIT vehículo de .+: Error \(se abre en una pestaña nueva\)$/»
+ *   - button «/^Llenar a mano SIMIT vehículo de /»
+ *   - dialog «/llenar a mano/i»
+ *   - button «Confirmar llenado»
+ *   - heading «No tienes acceso»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Solo lotes con errores»
+ *   - etiqueta «Semáforo»
+ *   - texto «Ejecutado»
+ *   - texto «Manual»
+ *   - atributo «data-celda»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 

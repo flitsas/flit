@@ -13,6 +13,15 @@ import { expect, test } from "@playwright/test";
  *
  * Las credenciales son de usuarios de prueba del ambiente DEV y entran solo por variables de entorno.
  * El formulario que se llena es el del HUB: Diagnóstico no tiene uno propio.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - heading «No tienes acceso»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   - texto «/Diagnóstico no está habilitado/»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 

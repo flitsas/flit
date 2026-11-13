@@ -14,6 +14,56 @@ import { lanzarExpress } from "./express";
  *
  * E2E_USUARIO es un usuario de la compañía con diagnosticos.crear y diagnosticos.ver, SIN rol admin (sin
  * reprocesarConsultas). Las credenciales son de usuarios de prueba del ambiente DEV y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - table «/semáforo de consultas/i»
+ *   - row (sin nombre)
+ *   - rowheader «new RegExp(PLACA)»
+ *   - button «/reprocesar/i»
+ *   - button «/^Vehículos: \d+$/»
+ *   - columnheader «Dictamen»
+ *   - button «Ver dictamen de ${PLACA}»
+ *   - dialog «Dictamen · ${PLACA}»
+ *   - button «Cerrar»
+ *   - dialog (sin nombre)
+ *   - link «new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`)»
+ *   - heading «SIMIT vehículo · ${PLACA}»
+ *   - navigation «Migas de pan»
+ *   - link «Diagnósticos»
+ *   - listitem (sin nombre)
+ *   - region «Auditoría de consulta»
+ *   - region «Respuesta de la fuente»
+ *   - group «Respuesta de la fuente»
+ *   - term (sin nombre)
+ *   - table «Comparendos»
+ *   - columnheader «Valor»
+ *   - region «/^resultado$/i»
+ *   - button «Respuesta del proveedor»
+ *   - link «Volver al diagnóstico»
+ *   - link «Volver a diagnósticos»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   - texto «Ejecutado»
+ *   - texto «/manual/i»
+ *   - texto «SIMIT vehículo»
+ *   - texto «/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/»
+ *   - texto «/no tiene guardada la respuesta completa/»
+ *   - texto «Sin registros»
+ *   - texto «/proveedor|desde_cache|http_status|duracion_ms|semaforo/i»
+ *   - texto «/^Cantidad de comparendos$/»
+ *   - texto «/^Comparendos$/»
+ *   - atributo «data-celda»
+ *   - atributo «data-estado»
+ *   Del helper express.ts (lanzarExpress):
+ *     - textbox «Placa o VIN»
+ *     - button «Diagnosticar en línea»
+ *     - textbox «Nombre del diagnóstico»
+ *     - button «/^(Continuar|Iniciar diagnóstico)$/»
+ *     - button «Lanzar diagnóstico»
+ *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 /** Placa de prueba terminada en 1: la simulación de RUNT responde con éxito. */

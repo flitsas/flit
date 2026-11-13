@@ -29,3 +29,47 @@ describe("HU14562 B1 · los E2E usan los rótulos vigentes del semáforo y de lo
     expect(helper).toContain("/^(Continuar|Iniciar diagnóstico)$/");
   });
 });
+
+// HU #14562 · AC55 (y MA-FE-1 del code review): cada uno de los 8 specs lleva en su cabecera la «lista congelada» de los
+// nombres accesibles y los data-* de los que depende. La guarda lee el spec (y el helper express.ts si lo importa) y exige
+// que cada nombre literal y cada data-* que usa aparezca en esa lista, entre «».
+describe("HU14562 AC55 · lista congelada en la cabecera de los 8 E2E", () => {
+  const SPECS = [
+    "listado.spec.ts",
+    "nuevo-diagnostico.spec.ts",
+    "tablero.spec.ts",
+    "evidencias.spec.ts",
+    "impuesto.spec.ts",
+    "configuracion.spec.ts",
+    "backoffice-llenado.spec.ts",
+    "entrada-desde-hub.spec.ts",
+  ];
+  const cabecera = (codigo: string) => codigo.slice(0, codigo.indexOf("*/"));
+  /**
+   * Nombres literales (comillas o plantilla) del name: de getByRole, de getByLabel( y de getByText(, y atributos data-*
+   * de los selectores. El `name:` del archivo de setInputFiles no es un nombre accesible y no cuenta.
+   */
+  const usados = (codigo: string) => {
+    const porRol = [...codigo.matchAll(/getByRole\("[a-z]+",\s*\{[^\n]*?name:\s*(["'`])((?:(?!\1).)+)\1/g)].map((m) => m[2]);
+    const otros = [...codigo.matchAll(/(?:getByLabel\(|getByText\()\s*(["'`])((?:(?!\1).)+)\1/g)].map((m) => m[2]);
+    const nombres = [...porRol, ...otros];
+    const datos = [...codigo.matchAll(/\[(data-[a-z-]+)/g)].map((m) => m[1]);
+    return [...new Set([...nombres, ...datos])];
+  };
+
+  it("los 8 specs existen", () => {
+    for (const spec of SPECS) expect(archivos, spec).toContain(spec);
+  });
+
+  for (const spec of SPECS) {
+    it(`${spec}: la cabecera trae la lista congelada con cada nombre y data-* que usa`, () => {
+      const codigo = texto(spec);
+      const lista = cabecera(codigo);
+      expect(lista, spec).toContain("Lista congelada (HU #14562 · AC55)");
+      const propios = usados(codigo.slice(codigo.indexOf("*/")));
+      const delHelper = codigo.includes('from "./express"') ? usados(texto("express.ts")) : [];
+      const faltan = [...propios, ...delHelper].filter((n) => !lista.includes(`«${n}»`));
+      expect(faltan, `${spec}: faltan en la lista congelada`).toEqual([]);
+    });
+  }
+});

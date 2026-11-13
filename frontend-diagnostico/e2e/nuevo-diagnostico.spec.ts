@@ -12,6 +12,24 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * E2E_USUARIO es un usuario de la compañía con diagnosticos.crear y diagnosticos.ver. Las credenciales son de usuarios de
  * prueba del ambiente DEV y entran solo por variables de entorno. Las placas son ficticias (TST…).
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - textbox «Placa o VIN»
+ *   - button «Diagnosticar en línea»
+ *   - region «Vehículos»
+ *   - region «Parámetros»
+ *   - textbox «Nombre del diagnóstico»
+ *   - button «Validar archivo»
+ *   - radio «Express»
+ *   - radio «Masivo»
+ *   - region «Resumen de validación»
+ *   - radiogroup «Tipo de diagnóstico»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   - etiqueta «/archivo de vehículos/i»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_EXPRESS ?? "TST101";
