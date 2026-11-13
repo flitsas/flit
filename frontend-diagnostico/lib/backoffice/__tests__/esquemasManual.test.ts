@@ -52,12 +52,23 @@ describe("construirCuerpo — SIMIT", () => {
 
 describe("construirCuerpo — AVALUO", () => {
   it("con valor: valor sugerido, fuente principal OK y valor de la fuente OK", () => {
-    const b = avaluo({ valor_sugerido: "48500000", fuente_principal: "fasecolda", fuentes: [{ fuente: "fasecolda", estado: "OK", valor: "48500000", muestras: "3" }] });
+    const b = avaluo({
+      valor_sugerido: "48500000",
+      fuente_principal: "fasecolda",
+      fuentes: [{ fuente: "fasecolda", estado: "OK", valor: "48500000", muestras: "3" }],
+      referencia: { codigo_fasecolda: "01601234", modelo: "2020", marca: "", linea: "" },
+    });
     const { cuerpo, errores } = construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: b });
     expect(errores).toEqual({});
     expect(cuerpo).toEqual({
       version: 10,
-      resultado: { sin_valor_comercial: false, valor_sugerido: 48500000, fuente_principal: "fasecolda", fuentes: [{ fuente: "fasecolda", estado: "OK", valor: 48500000, muestras: 3 }] },
+      resultado: {
+        sin_valor_comercial: false,
+        valor_sugerido: 48500000,
+        fuente_principal: "fasecolda",
+        fuentes: [{ fuente: "fasecolda", estado: "OK", valor: 48500000, muestras: 3 }],
+        referencia: { codigo_fasecolda: "01601234", modelo: 2020 },
+      },
     });
   });
 
@@ -108,5 +119,59 @@ describe("construirCuerpo — fuentes de persona", () => {
     const { cuerpo, errores } = construirCuerpo(f, { [p1.persona_id]: runt });
     expect(cuerpo).toBeNull();
     expect(Object.keys(errores)).toEqual(["personas[0].resultado.licencias[0].categoria"]);
+  });
+});
+
+describe("HU14562 AC44 — avalúo con referencia Fasecolda (B6)", () => {
+  const conValor = (referencia: Partial<AvaluoBorrador["referencia"]>, valor = "48500000") =>
+    avaluo({
+      valor_sugerido: valor,
+      fuente_principal: "fasecolda",
+      fuentes: [{ fuente: "fasecolda", estado: "OK", valor: "48500000", muestras: "" }],
+      referencia: { codigo_fasecolda: "01601234", modelo: "2020", marca: "", linea: "", ...referencia },
+    });
+
+  it("el borrador vacío trae la referencia vacía", () => {
+    expect((borradorVacio("AVALUO") as AvaluoBorrador).referencia).toEqual({ codigo_fasecolda: "", modelo: "", marca: "", linea: "" });
+  });
+
+  it("manda marca y línea solo si se escriben", () => {
+    const { cuerpo } = construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: conValor({ marca: " Marca prueba ", linea: "Línea prueba" }) });
+    expect((cuerpo as unknown as { resultado: { referencia: unknown } }).resultado.referencia).toEqual({
+      codigo_fasecolda: "01601234",
+      modelo: 2020,
+      marca: "Marca prueba",
+      linea: "Línea prueba",
+    });
+  });
+
+  it.each([
+    [{ codigo_fasecolda: "" }, "resultado.referencia.codigo_fasecolda", /obligatorio/i],
+    [{ codigo_fasecolda: "1234" }, "resultado.referencia.codigo_fasecolda", /8 dígitos/],
+    [{ modelo: "" }, "resultado.referencia.modelo", /obligatorio/i],
+    [{ modelo: "1949" }, "resultado.referencia.modelo", /1950/],
+    [{ modelo: String(new Date().getFullYear() + 2) }, "resultado.referencia.modelo", /1950/],
+    [{ marca: "x".repeat(121) }, "resultado.referencia.marca", /120/],
+  ])("referencia %o: error en %s y no hay cuerpo", (ref, campo, mensaje) => {
+    const { cuerpo, errores } = construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: conValor(ref) });
+    expect(cuerpo).toBeNull();
+    expect(errores[campo]).toMatch(mensaje);
+  });
+
+  it("el modelo del año siguiente es válido", () => {
+    const { errores } = construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: conValor({ modelo: String(new Date().getFullYear() + 1) }) });
+    expect(errores).toEqual({});
+  });
+
+  it("valor comercial con decimales o no positivo: error en el valor", () => {
+    expect(construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: conValor({}, "48500000.50") }).errores["resultado.valor_sugerido"]).toMatch(/entero/);
+    expect(construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: conValor({}, "0") }).errores["resultado.valor_sugerido"]).toMatch(/entero/);
+  });
+
+  it("sin valor comercial no pide ni manda la referencia", () => {
+    const b = avaluo({ sin_valor_comercial: true, fuentes: [{ fuente: "fasecolda", estado: "SIN_DATOS", valor: "", muestras: "" }] });
+    const { cuerpo, errores } = construirCuerpo(formulario("AVALUO"), { [CLAVE_VEHICULO]: b });
+    expect(errores).toEqual({});
+    expect((cuerpo as unknown as { resultado: Record<string, unknown> }).resultado).not.toHaveProperty("referencia");
   });
 });
