@@ -361,7 +361,7 @@ describe("PanelDictamen — HU #14562 AC35, AC37 y AC38", () => {
     simularApi({ [`GET ${RUTA}`]: () => Response.json(LLENO) });
     pintar({ consultas: CONSULTAS });
     const consultas = await screen.findByRole("list", { name: "Consultas del vehículo" });
-    expect(within(consultas).getByRole("listitem", { name: /RUNT vehículo/ })).toHaveTextContent("Ejecutado (OK)");
+    expect(within(consultas).getByRole("listitem", { name: /RUNT vehículo/ })).toHaveTextContent("Ejecutado");
     expect(within(consultas).getByRole("listitem", { name: /SIMIT propietario/ })).toHaveTextContent(/error/i);
     const alertas = screen.getByRole("list", { name: "Alertamientos del dictamen" });
     const primera = within(alertas).getAllByRole("listitem")[0];

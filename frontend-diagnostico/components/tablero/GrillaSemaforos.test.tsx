@@ -59,7 +59,9 @@ describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8
     for (const id of ["vehiculo-1", "vehiculo-2", "vehiculo-3"]) {
       for (const fuente of ["RUNT_PROPIETARIO", "SIMIT_VEHICULO", "SIMIT_LOCATARIO", "AVALUO"]) {
         const td = fuenteDe(filaDe(container, id), fuente);
-        expect(td).toHaveAttribute("data-estado", "SIN_SOLICITAR");
+        // HU #14562 AC12: «Sin solicitar» es el estado visual NA con su motivo propio.
+        expect(td).toHaveAttribute("data-estado", "NA");
+        expect(td).toHaveAttribute("data-motivo", "SIN_SOLICITAR");
         expect(td).toHaveTextContent("Sin solicitar");
         expect(within(td).queryByRole("button")).not.toBeInTheDocument();
       }
@@ -156,11 +158,12 @@ describe("GrillaSemaforos — HU #14087 AC4: placa, documento declarado y docume
 
 describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
   it.each([
-    ["celda-3-runt", "PENDIENTE", "neutral", "Sin ejecutar", "var(--badge-neutral-border)"],
-    ["celda-2-runt_locatario", "EN_CURSO", "neutral", "Sin ejecutar", "var(--badge-neutral-border)"],
-    ["celda-2-runt", "COMPLETADO", "success", "Ejecutado (OK)", "var(--badge-success-border)"],
-    ["celda-2-simit_propietario", "ERROR", "danger", "Error", "var(--badge-danger-border)"],
-    ["celda-1-impuesto_departamental", "NA", "warning", "Novedad", "var(--badge-warning-border)"],
+    // HU #14562 AC11: rótulos y tonos --dx-estado-* del kit 2026.
+    ["celda-3-runt", "PENDIENTE", "pendiente", "Sin ejecutar", "var(--dx-estado-pendiente-borde)"],
+    ["celda-2-runt_locatario", "EN_CURSO", "en-curso", "Sin ejecutar (en curso)", "var(--dx-estado-en-curso-borde)"],
+    ["celda-2-runt", "COMPLETADO", "ejecutado", "Ejecutado", "var(--dx-estado-ejecutado-borde)"],
+    ["celda-2-simit_propietario", "ERROR", "error", "Error", "var(--dx-estado-error-borde)"],
+    ["celda-1-impuesto_departamental", "NA", "novedad", "Novedad", "var(--dx-estado-novedad-borde)"],
   ])("%s en %s se pinta con el tono %s, su texto «%s», un icono y el token de color de la etiqueta del kit", (id, estado, tono, texto, fondo) => {
     const { container } = pintar();
     const td = celdaDe(container, id);
@@ -173,24 +176,24 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
     expect(chip.style.getPropertyValue("--c")).toBe(fondo);
   });
 
-  it("EN_CURSO conserva el icono animado; PENDIENTE no", () => {
+  it("HU #14562 AC5: ningún ícono de la grilla gira (ni EN_CURSO ni PENDIENTE)", () => {
     const { container } = pintar();
-    expect(chipDe(celdaDe(container, "celda-2-runt_locatario")).querySelector("svg")!.getAttribute("class")).toMatch(/animate-spin/);
-    expect(chipDe(celdaDe(container, "celda-3-runt")).querySelector("svg")!.getAttribute("class")).not.toMatch(/animate-spin/);
+    expect(chipDe(celdaDe(container, "celda-2-runt_locatario")).querySelector("svg")!.getAttribute("class") ?? "").not.toMatch(/animate-/);
+    expect(chipDe(celdaDe(container, "celda-3-runt")).querySelector("svg")!.getAttribute("class") ?? "").not.toMatch(/animate-/);
   });
 
-  it("«Sin solicitar» usa el tono na (gris del borde), con icono", () => {
+  it("«Sin solicitar» usa su tono propio (--dx-estado-sin-solicitar), con icono", () => {
     const { container } = pintar();
     const chip = chipDe(fuenteDe(filaDe(container, "vehiculo-1"), "AVALUO"));
-    expect(chip).toHaveAttribute("data-tono", "na");
-    expect(chip.style.getPropertyValue("--c")).toBe("var(--border)");
+    expect(chip).toHaveAttribute("data-tono", "sin-solicitar");
+    expect(chip.style.getPropertyValue("--c")).toBe("var(--dx-estado-sin-solicitar-borde)");
     expect(chip.querySelector("svg")).not.toBeNull();
     expect(chip).toHaveTextContent("Sin solicitar");
   });
 
-  it("el texto del error usa la tinta AA del rojo (no el --badge-danger-fg de 4,46:1)", () => {
+  it("el texto del error usa la tinta AA del rojo del semáforo (--dx-estado-error)", () => {
     const { container } = pintar();
-    expect(chipDe(celdaDe(container, "celda-2-simit_propietario")).style.getPropertyValue("--ct")).toBe("var(--badge-pending-fg)");
+    expect(chipDe(celdaDe(container, "celda-2-simit_propietario")).style.getPropertyValue("--ct")).toBe("var(--dx-estado-error)");
   });
 
   it.each([
@@ -205,7 +208,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("el nombre accesible del enlace de la celda lleva fuente, identificador, estado y que abre una pestaña nueva", () => {
     pintar();
-    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: `Ver detalle de Impuesto departamental de TST001: Novedad${NUEVA}` })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST003: Sin ejecutar${NUEVA}` })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: `Ver detalle de SIMIT propietario de TST002: Error${NUEVA}` })).toBeInTheDocument();
@@ -213,7 +216,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("HU #14087: el semáforo es un enlace a la página del detalle en pestaña nueva (target _blank, noopener noreferrer, texto sr-only)", () => {
     const { container } = pintar();
-    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)${NUEVA}` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` });
     const td = enlace.closest("td")!;
     const vehiculoId = td.closest("tr")!.getAttribute("data-vehiculo")!;
     expect(enlace).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/${vehiculoId}/consultas/RUNT`);
@@ -228,7 +231,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("con hrefDetalle propio (backoffice) el enlace va a esa ruta", () => {
     pintar(grilla(), false, { hrefDetalle: (c, v) => `/backoffice/x/${v.id}/${c.fuente}?empresa=e` });
-    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)${NUEVA}` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` });
     expect(enlace.getAttribute("href")).toMatch(/^\/backoffice\/x\/.+\/RUNT\?empresa=e$/);
   });
 });
@@ -370,18 +373,18 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
     expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Novedad${NUEVA}` })).toBeInTheDocument();
   });
 
-  it("el impuesto completado se pinta en verde («Ejecutado (OK)») y su semáforo abre el detalle", () => {
+  it("el impuesto completado se pinta en verde («Ejecutado») y su semáforo abre el detalle", () => {
     const { container } = pintar(conImpuesto("COMPLETADO"));
     const td = celdaDe(container, "celda-7-impuesto_departamental");
-    expect(chipDe(td)).toHaveAttribute("data-tono", "success");
-    expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Ejecutado (OK)${NUEVA}` })).toHaveAttribute("target", "_blank");
+    expect(chipDe(td)).toHaveAttribute("data-tono", "ejecutado");
+    expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Ejecutado${NUEVA}` })).toHaveAttribute("target", "_blank");
   });
 
   it("el impuesto completado con deuda no es verde, con o sin monto", () => {
     const { container } = pintar(conImpuesto("COMPLETADO", { tiene_deuda: true }));
     const td = celdaDe(container, "celda-7-impuesto_departamental");
     expect(td).toHaveAttribute("data-estado", "COMPLETADO");
-    expect(chipDe(td)).toHaveAttribute("data-tono", "warning");
+    expect(chipDe(td)).toHaveAttribute("data-tono", "deuda");
     expect(chipDe(td)).toHaveTextContent("Con deuda");
     expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Con deuda${NUEVA}` })).toBeInTheDocument();
   });
@@ -391,6 +394,6 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
       columnas: { por_vehiculo: ["RUNT"], por_propietario: [], por_locatario: [] },
       vehiculos: [vehiculo(7, [celda(7, "RUNT", "COMPLETADO", { tiene_deuda: true })])],
     }));
-    expect(chipDe(celdaDe(container, "celda-7-runt"))).toHaveAttribute("data-tono", "success");
+    expect(chipDe(celdaDe(container, "celda-7-runt"))).toHaveAttribute("data-tono", "ejecutado");
   });
 });

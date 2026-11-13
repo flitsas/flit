@@ -30,7 +30,7 @@ describe("HU14562 AC39 — detalle con datos completos (D1)", () => {
     expect(within(items[3]).getByText("SIMIT vehículo")).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("heading", { level: 1, name: "SIMIT vehículo · TST001" })).toBeInTheDocument();
     const cabecera = screen.getByRole("region", { name: "SIMIT vehículo · TST001" });
-    expect(within(cabecera).getByText("Ejecutado (OK)")).toBeInTheDocument();
+    expect(within(cabecera).getByText("Ejecutado")).toBeInTheDocument();
   });
 
   it("en el backoffice la miga conserva las rutas del backoffice en sus 4 niveles", async () => {
@@ -64,6 +64,6 @@ describe("HU14562 AC39 — detalle con datos completos (D1)", () => {
     expect(within(auditoria).queryByText(/\*\*\*\*1001/)).not.toBeInTheDocument();
     const filas = within(within(auditoria).getByRole("table", { name: "Personas consultadas" })).getAllByRole("row");
     expect(filas[1]).toHaveTextContent("Propietario");
-    expect(filas[1]).toHaveTextContent("Ejecutado (OK)");
+    expect(filas[1]).toHaveTextContent("Ejecutado");
   });
 });

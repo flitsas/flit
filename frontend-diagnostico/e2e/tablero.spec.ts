@@ -49,7 +49,7 @@ test.describe("tablero del lote", () => {
       if (frame === page.mainFrame()) recargas++;
     });
     await expect(runt).toHaveAttribute("data-estado", "COMPLETADO", { timeout: 30_000 });
-    await expect(runt.getByText("Ejecutado (OK)")).toBeVisible();
+    await expect(runt.getByText("Ejecutado")).toBeVisible();
     expect(recargas).toBe(0);
 
     // AC4: el usuario sin rol admin no ve ningún botón de acción en la grilla (desde HU #14087 cada semáforo es un enlace
@@ -87,7 +87,7 @@ test.describe("tablero del lote", () => {
 
     // Con la simulación encendida, SIMIT del vehículo termina en verde (COMPLETADO) sin recargar.
     const semaforo = grilla.getByRole("link", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) });
-    await expect(semaforo).toHaveAccessibleName(/Ejecutado \(OK\) \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
+    await expect(semaforo).toHaveAccessibleName(/Ejecutado \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
     await expect(semaforo).toHaveAttribute("target", "_blank");
     await expect(semaforo).toHaveAttribute("rel", "noopener noreferrer");
 
@@ -106,7 +106,7 @@ test.describe("tablero del lote", () => {
     // Auditoría de consulta de FLIT: fecha y hora de la consulta y el estado.
     const auditoria = pestana.getByRole("region", { name: "Auditoría de consulta" });
     await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
-    await expect(auditoria.getByText("Ejecutado (OK)")).toBeVisible();
+    await expect(auditoria.getByText("Ejecutado")).toBeVisible();
     // Respuesta de la fuente: solo datos de la consulta, en español; sin la auditoría del proveedor ni nombres crudos.
     const seccionRespuesta = pestana.getByRole("region", { name: "Respuesta de la fuente" });
     if (await seccionRespuesta.getByText(/no tiene guardada la respuesta completa/).count()) {

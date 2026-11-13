@@ -124,7 +124,7 @@ describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
     await avanzar(INTERVALO_SONDEO_MS);
     expect(desdesPedidos(api)).toEqual([0, 12]);
     const fila = screen.getByRole("rowheader", { name: /TST003/ }).closest("tr")!;
-    expect(within(fila).getByText("Ejecutado (OK)")).toBeInTheDocument();
+    expect(within(fila).getByText("Ejecutado")).toBeInTheDocument();
     expect(navegacion.push).not.toHaveBeenCalled();
     expect(navegacion.refresh).not.toHaveBeenCalled();
   });
