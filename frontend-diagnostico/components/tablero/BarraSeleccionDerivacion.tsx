@@ -1,12 +1,14 @@
 "use client";
 
-import { CheckSquare, FilePlus2, XSquare } from "lucide-react";
-import { BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, MARCA_CLS } from "@/components/configuracion/estilos";
+import { CheckSquare, FilePlus2 } from "lucide-react";
+import { BarraSeleccion } from "@flit/ui/BarraSeleccion";
+import { Button } from "@flit/ui/Button";
+import { BOTON_SECUNDARIO_CLS, MARCA_CLS } from "@/components/configuracion/estilos";
 import type { FilaVehiculo } from "@/lib/tablero/api";
 import { rotuloMotivo, type DerivacionFila } from "@/lib/tablero/derivacion";
 
-/** «1 seleccionada» / «N seleccionadas». */
-export const textoSeleccionadas = (n: number) => (n === 1 ? "1 seleccionada" : `${n} seleccionadas`);
+/** HU #14562 AC32: «1 vehículo seleccionado» / «N vehículos seleccionados» (maqueta del tablero). */
+export const textoSeleccionadas = (n: number) => (n === 1 ? "1 vehículo seleccionado" : `${n} vehículos seleccionados`);
 
 export interface CasillaDerivacionProps {
   vehiculo: FilaVehiculo;
@@ -38,7 +40,7 @@ export function CasillaDerivacion({ vehiculo, derivacion, marcada, onCambiar }: 
 }
 
 export interface BarraSeleccionDerivacionProps {
-  /** Placas elegibles del lote (las que «Seleccionar todas» marca). */
+  /** Placas elegibles del lote (las que «Seleccionar todos los elegibles» marca: Viables, terminadas y sin trámite). */
   elegibles: number;
   seleccionadas: number;
   enviando: boolean;
@@ -50,9 +52,9 @@ export interface BarraSeleccionDerivacionProps {
 }
 
 /**
- * Barra de selección del masivo (Punto 4, decisión 4.2, diseño §6): sin preselección, «Seleccionar todas las elegibles»,
- * «Quitar selección», contador «N seleccionadas» (anunciado con aria-live) y «Crear trámites (N)», deshabilitado sin
- * selección o mientras se encola.
+ * Selección para crear trámites (Punto 4; HU #14562 AC32): sin preselección, «Seleccionar todos los elegibles» y, con algo
+ * marcado, la barra de acciones en bloque (`BarraSeleccion`): conteo anunciado por aria-live, «Crear trámites (N)» —que
+ * mientras encola dice «Creando trámites…» con el girador del botón— y «Quitar selección».
  */
 export function BarraSeleccionDerivacion({ elegibles, seleccionadas, enviando, onSeleccionarTodas, onQuitar, onCrear, error }: BarraSeleccionDerivacionProps) {
   return (
@@ -60,26 +62,27 @@ export function BarraSeleccionDerivacion({ elegibles, seleccionadas, enviando, o
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={onSeleccionarTodas} disabled={elegibles === 0 || enviando} className={BOTON_SECUNDARIO_CLS}>
           <CheckSquare className="h-4 w-4" aria-hidden="true" />
-          Seleccionar todas las elegibles
-        </button>
-        <button type="button" onClick={onQuitar} disabled={seleccionadas === 0 || enviando} className={BOTON_SECUNDARIO_CLS}>
-          <XSquare className="h-4 w-4" aria-hidden="true" />
-          Quitar selección
-        </button>
-        <p aria-live="polite" className="text-sm font-medium text-flit-primary">
-          {textoSeleccionadas(seleccionadas)}
-        </p>
-        <button
-          type="button"
-          onClick={onCrear}
-          disabled={seleccionadas === 0 || enviando}
-          aria-busy={enviando}
-          className={`${BOTON_PRIMARIO_CLS} sm:ml-auto`}
-        >
-          <FilePlus2 className="h-4 w-4" aria-hidden="true" />
-          {`Crear trámites (${seleccionadas})`}
+          Seleccionar todos los elegibles
         </button>
       </div>
+      <BarraSeleccion
+        cantidad={seleccionadas}
+        textoSeleccion={textoSeleccionadas}
+        ayuda="Solo se seleccionan vehículos Viables y sin trámite"
+        onQuitar={enviando ? undefined : onQuitar}
+        acciones={
+          <Button cargando={enviando} onClick={onCrear} disabled={seleccionadas === 0}>
+            {enviando ? (
+              "Creando trámites…"
+            ) : (
+              <>
+                <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+                {`Crear trámites (${seleccionadas})`}
+              </>
+            )}
+          </Button>
+        }
+      />
       {error && (
         <p role="alert" aria-label="Resultado de crear trámites" className="text-xs font-semibold" style={{ color: "var(--badge-danger-fg)" }}>
           {error}

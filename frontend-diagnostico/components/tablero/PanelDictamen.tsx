@@ -3,11 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { PanelLateral } from "@flit/ui/PanelLateral";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
+import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
+import { Button } from "@flit/ui/Button";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
+import { ChipEstadoCelda } from "@/components/tablero/CeldaSemaforo";
+import {
+  cuerpoAjusteDictamen,
+  errorAjusteDictamen,
+  puedeAplicarAjuste,
+  type ErrorAjuste,
+  type FilaAlertamiento,
+} from "@/lib/backoffice/ajusteDictamen";
+import { nombreFuente, type Fuente } from "@/lib/configuracion";
+import type { EstadoCelda } from "@/lib/tablero/api";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS, Vacio } from "@/components/tablero/vistasDetalle/comun";
 import {
-  corregirDictamen,
+  ajustarDictamen,
   esSinDictamen,
   obtenerDictamen,
   obtenerDictamenBackoffice,
@@ -32,6 +43,8 @@ export interface PanelDictamenProps {
   devolverFocoA?: HTMLElement | null;
   /** Trámite analizado del lote (`grilla.lote.tipo_tramite`, rótulo de negocio). Sin él, la línea se omite. */
   tramiteAnalizado?: string | null;
+  /** HU #14562 AC35: consultas del vehículo con su estado (de las celdas de la fila). Sin ellas, la sección se omite. */
+  consultas?: ConsultaPanel[];
 }
 
 /** dd/mm/aaaa en la hora de Colombia. Fecha ilegible: el texto crudo. */
@@ -54,15 +67,67 @@ export function BotonAbrirDictamen({ identificador, onAbrir }: { identificador: 
   );
 }
 
+/**
+ * HU #14562 AC28: celda de la columna Dictamen del tablero. El veredicto viene en la fila (`FilaVehiculo.veredicto`, B1), así
+ * que las cifras y la columna no piden el dictamen por vehículo; el GET sale solo al abrir el panel. Con `ajustado` (B7, D6)
+ * se lee «Ajustado por FLIT», sin autor ni motivo.
+ */
+export function BotonDictamenFila({
+  identificador,
+  veredicto,
+  ajustado = false,
+  onAbrir,
+}: {
+  identificador: string;
+  veredicto: { texto: string; tono: "success" | "danger" | "neutral" };
+  ajustado?: boolean;
+  onAbrir: (disparador: HTMLElement) => void;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        className={`rounded-full ${FOCO_CLS}`}
+        aria-label={`Ver dictamen de ${identificador}`}
+        onClick={(e) => onAbrir(e.currentTarget)}
+      >
+        <Etiqueta tono={veredicto.tono}>{veredicto.texto}</Etiqueta>
+      </button>
+      {ajustado && <span className={TEXTO_SECUNDARIO_CLS}>Ajustado por FLIT</span>}
+    </div>
+  );
+}
+
 const nombreVeredicto = (veredicto: Dictamen["veredicto"]) => (veredicto === "BLOQUEADO" ? "Bloqueado" : "Viable");
 
+/** Consulta del vehículo que el panel lista con su estado (AC35); sale de las celdas de la fila, sin pedir nada. */
+export interface ConsultaPanel {
+  fuente: Fuente;
+  estado: EstadoCelda;
+}
+
+/** Alertamientos del dictamen vigente como filas editables del ajuste (clave estable «Alertamiento N»). */
+const filasDe = (dictamen: Dictamen): FilaAlertamiento[] =>
+  dictamen.alertamientos.map((a, i) => ({
+    clave: `Alertamiento ${i + 1}`,
+    codigo: a.codigo,
+    texto: a.texto,
+    efecto: a.efecto === "BLOQUEA" ? "BLOQUEA" : "ADVIERTE",
+    fuente: a.fuente,
+  }));
+
 /**
- * Panel del dictamen vigente (corte 7), el mismo en el tablero del lote y en la grilla del backoffice. No es una ruta
- * y no entra en el sondeo: al abrirse pide el GET. Cuatro estados: vacío (SIN_DICTAMEN), cargando, error con Reintentar
- * y lleno. En lleno se ven el veredicto (con texto, no solo color) y cada alertamiento en el orden del arreglo, con su rótulo
- * y el nombre de la fuente, nunca el código (Punto 5). Si la
- * redacción está pendiente, se lee «redacción IA pendiente». El override solo se ofrece en el backoffice con la capacidad
- * (sus campos viven en components/backoffice/CamposOverrideDictamen).
+ * Panel del dictamen vigente (corte 7; HU #14562 F-05), el mismo en el tablero del lote y en la grilla del backoffice: un
+ * `PanelLateral` de 640 px con el tablero visible detrás. No es una ruta y no entra en el sondeo: al abrirse pide el GET.
+ * Cuatro estados: vacío (SIN_DICTAMEN), cargando, error con Reintentar y lleno. En lleno: veredicto (con texto, no solo
+ * color), aviso si está bloqueado, trámite analizado, fecha de emisión, versión del catálogo, la marca «Ajustado por FLIT»
+ * (D6, sin autor ni motivo), las consultas del vehículo con su estado y cada alertamiento con título, efecto, detalle
+ * (`alertamientos[].texto`, O4) y fuente, nunca el código (Punto 5). Ningún documento de persona (AC38).
+ *
+ * El ajuste FLIT (ADR-0086, D9; B-PR6 en el frontend) solo se ofrece en el backoffice con la capacidad: veredicto,
+ * alertamientos editables, motivo obligatorio y la confirmación explícita antes de «Aplicar». El PUT lleva
+ * `version_esperada`; un 409 de versión ofrece «Recargar» y el 409 VEHICULO_CON_TRAMITE, «Confirmar y aplicar» con
+ * `confirmar_con_tramite`. Lo digitado se conserva ante cualquier error.
  */
 export function PanelDictamen({
   diagnosticoId,
@@ -74,13 +139,16 @@ export function PanelDictamen({
   onClose,
   devolverFocoA,
   tramiteAnalizado,
+  consultas,
 }: PanelDictamenProps) {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
   const [elegido, setElegido] = useState<Dictamen["veredicto"] | null>(null);
   const [confirmado, setConfirmado] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [alertamientos, setAlertamientos] = useState<FilaAlertamiento[] | null>(null);
   const [enviando, setEnviando] = useState(false);
-  const [aviso, setAviso] = useState<string | null>(null);
+  const [errorAjuste, setErrorAjuste] = useState<ErrorAjuste | null>(null);
   // PanelLateral devuelve el foco al elemento activo al abrir; si el que abrió es otro, se le devuelve aquí.
   const disparador = useRef(devolverFocoA);
   useEffect(() => {
@@ -101,7 +169,10 @@ export function PanelDictamen({
     );
     pedido.then(
       (dictamen) => {
-        if (!control.signal.aborted) setCarga({ tipo: "listo", dictamen });
+        if (control.signal.aborted) return;
+        setCarga({ tipo: "listo", dictamen });
+        // Las filas del ajuste nacen del primer dictamen leído; «Recargar» solo renueva la versión y conserva lo digitado.
+        setAlertamientos((actual) => actual ?? filasDe(dictamen));
       },
       (error: unknown) => {
         if (control.signal.aborted) return;
@@ -112,21 +183,37 @@ export function PanelDictamen({
     return () => control.abort();
   }, [diagnosticoId, vehiculoId, empresa, modo, intento]);
 
-  async function reemplazar() {
-    if (!ofreceOverride || !elegido || !confirmado || enviando || !empresa) return;
+  const filas = alertamientos ?? [];
+  const listoParaAplicar =
+    ofreceOverride && carga.tipo === "listo" && confirmado && !enviando && puedeAplicarAjuste({ veredicto: elegido, motivo, alertamientos: filas });
+
+  async function aplicar(confirmarConTramite = false) {
+    if (!ofreceOverride || carga.tipo !== "listo" || !elegido || !empresa || enviando) return;
     setEnviando(true);
-    setAviso(null);
+    setErrorAjuste(null);
     try {
-      const dictamen = await corregirDictamen(diagnosticoId, vehiculoId, empresa, elegido);
+      const cuerpo = cuerpoAjusteDictamen({ versionEsperada: carga.dictamen.version, veredicto: elegido, alertamientos: filas, motivo, confirmarConTramite });
+      const dictamen = await ajustarDictamen(diagnosticoId, vehiculoId, empresa, cuerpo);
       setCarga({ tipo: "listo", dictamen });
+      setAlertamientos(filasDe(dictamen));
       setElegido(null);
       setConfirmado(false);
+      setMotivo("");
     } catch (error) {
-      setAviso(error instanceof Error ? error.message : "No se pudo reemplazar el veredicto.");
+      setErrorAjuste(errorAjusteDictamen(error));
     } finally {
       setEnviando(false);
     }
   }
+
+  function recargar() {
+    setErrorAjuste(null);
+    setIntento((n) => n + 1);
+  }
+
+  const errorCampo = errorAjuste?.campo ?? null;
+  const errorMotivo = errorCampo === "motivo" ? errorAjuste!.mensaje : null;
+  const erroresAlertamientos = errorCampo?.startsWith("alertamientos") ? { [errorCampo]: errorAjuste!.mensaje } : undefined;
 
   let contenido;
   if (carga.tipo === "cargando") {
@@ -187,24 +274,64 @@ export function PanelDictamen({
           </p>
         )}
         {dictamen.estado_redaccion === "PENDIENTE" && <p className="text-sm text-flit-primary">redacción IA pendiente</p>}
-        <ol className="flex flex-col gap-3">
+        <ol aria-label="Alertamientos del dictamen" className="flex flex-col gap-3">
           {dictamen.alertamientos.map((alerta, i) => (
             <li key={`${i}-${alerta.codigo}`} className="rounded-xl border border-border p-3">
-              <p className="text-sm font-semibold text-flit-primary">{rotuloAlerta(alerta)}</p>
+              <h3 className="text-sm font-semibold text-flit-primary">{rotuloAlerta(alerta)}</h3>
               <p className={`mt-1 ${TEXTO_SECUNDARIO_CLS}`}>{`Efecto: ${rotuloEfecto(alerta)}`}</p>
-              <p className={TEXTO_SECUNDARIO_CLS}>{`Fuente: ${rotuloFuenteAlerta(alerta)}`}</p>
               <p className="mt-1 text-sm text-flit-primary">{alerta.texto}</p>
+              <p className={TEXTO_SECUNDARIO_CLS}>{`Fuente: ${rotuloFuenteAlerta(alerta)}`}</p>
             </li>
           ))}
         </ol>
+        {consultas && consultas.length > 0 && (
+          <section aria-labelledby="dictamen-consultas" className="flex flex-col gap-2">
+            <h3 id="dictamen-consultas" className="text-sm font-semibold text-flit-primary">
+              Consultas del vehículo
+            </h3>
+            <ul aria-label="Consultas del vehículo" className="flex flex-col gap-1.5">
+              {consultas.map((c) => (
+                <li key={c.fuente} aria-label={nombreFuente(c.fuente)} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-flit-primary">{nombreFuente(c.fuente)}</span>
+                  <ChipEstadoCelda estado={c.estado} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {ofreceOverride && (
           <CamposOverrideDictamen
             elegido={elegido}
             onElegir={setElegido}
             confirmado={confirmado}
             onConfirmar={setConfirmado}
-            aviso={aviso}
+            aviso={null}
+            motivo={motivo}
+            onMotivo={setMotivo}
+            errorMotivo={errorMotivo}
+            alertamientos={filas}
+            onAlertamientos={setAlertamientos}
+            erroresAlertamientos={erroresAlertamientos}
           />
+        )}
+        {ofreceOverride && errorAjuste && (
+          <InlineAlert
+            tone="error"
+            title="No se aplicó el ajuste"
+            action={
+              errorAjuste.ofrecerRecargar ? (
+                <button type="button" onClick={recargar} className={BOTON_REINTENTAR_CLS}>
+                  Recargar
+                </button>
+              ) : errorAjuste.pedirConfirmarTramite ? (
+                <button type="button" onClick={() => void aplicar(true)} disabled={enviando} className={BOTON_REINTENTAR_CLS}>
+                  Confirmar y aplicar
+                </button>
+              ) : undefined
+            }
+          >
+            {errorAjuste.mensaje}
+          </InlineAlert>
         )}
       </div>
     );
@@ -220,9 +347,9 @@ export function PanelDictamen({
       pie={
         ofreceOverride && carga.tipo === "listo" ? (
           <div className="flex justify-end">
-            <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!elegido || !confirmado || enviando} onClick={() => void reemplazar()}>
-              Reemplazar veredicto
-            </button>
+            <Button cargando={enviando} disabled={!listoParaAplicar} size="sm" onClick={() => void aplicar()}>
+              Aplicar
+            </Button>
           </div>
         ) : undefined
       }

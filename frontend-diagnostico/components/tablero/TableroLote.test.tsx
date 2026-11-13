@@ -4,7 +4,7 @@ import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import TableroDiagnostico from "@/app/(app)/diagnosticos/[id]/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { Grilla } from "@/lib/tablero/api";
-import { INTERVALO_SONDEO_MS } from "@/lib/tablero/useGrillaIncremental";
+import { FALLOS_ANTES_DE_DETENER, INTERVALO_REPOSO_MS, INTERVALO_SONDEO_MS } from "@/lib/tablero/useGrillaIncremental";
 import { ID, V1, celda, desdesPedidos, grilla, llamadas, loteTerminadoConErrores, sesion, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: /diagnosticos/{id} (a donde navegan la confirmación de la carga y el Express) abre el tablero del lote:
@@ -124,7 +124,7 @@ describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
     await avanzar(INTERVALO_SONDEO_MS);
     expect(desdesPedidos(api)).toEqual([0, 12]);
     const fila = screen.getByRole("rowheader", { name: /TST003/ }).closest("tr")!;
-    expect(within(fila).getByText("Ejecutado (OK)")).toBeInTheDocument();
+    expect(within(fila).getByText("Ejecutado")).toBeInTheDocument();
     expect(navegacion.push).not.toHaveBeenCalled();
     expect(navegacion.refresh).not.toHaveBeenCalled();
   });
@@ -245,6 +245,8 @@ describe("/diagnosticos/{id} — AC7: cerrar panel", () => {
     expect(llamadas(api, "POST", `/diagnosticos/${ID}/cerrar-panel`)).toHaveLength(1);
     expect(estadoGlobal()).toHaveTextContent("Incompleto");
     const estimado = screen.getByRole("region", { name: /estimado frente a consumido/i });
+    // HU #14562 AC33: es una tarjeta plegable; se abre para leer la tabla.
+    fireEvent.click(within(estimado).getByRole("button", { name: /estimado frente a consumido/i }));
     const runt = within(estimado).getByRole("row", { name: /RUNT vehículo/ });
     expect(within(runt).getAllByRole("cell").map((c) => c.textContent)).toEqual(["2", "2"]);
     const simit = within(estimado).getByRole("row", { name: /SIMIT propietario/ });
@@ -288,8 +290,8 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
     expect(pdf2).toBeDisabled();
     expect(pdf2).toHaveAccessibleDescription("Disponible cuando terminen las consultas de este vehículo");
     const barra = screen.getByRole("region", { name: "Descargas del lote" });
-    expect(within(barra).getByRole("link", { name: "Descargar Excel" })).toBeInTheDocument();
-    expect(within(barra).getByRole("button", { name: "Descargar PDF (.zip)" })).toBeInTheDocument();
+    expect(within(barra).getByRole("link", { name: "Excel del lote" })).toBeInTheDocument();
+    expect(within(barra).getByRole("button", { name: "PDF de todos (ZIP)" })).toBeInTheDocument();
   });
 
   it("AC6: lote INCOMPLETO, el PDF del vehículo con celdas en error está habilitado con la ayuda de «no disponible»", async () => {
@@ -348,5 +350,176 @@ describe("/diagnosticos/{id} — HU #14087: migas y «Volver a diagnósticos» c
   it("también en los estados de error: el botón de volver está siempre", async () => {
     await montar({ [GRILLA]: () => Response.json({ error: "x" }, { status: 500 }) });
     expect(volver()).toHaveAttribute("href", "/");
+  });
+});
+
+// HU #14562 F-04: cabecera con metadatos (AC23), tarjetas-filtro (AC27/AC31), columna Dictamen y búsqueda (AC28), cambio de
+// dictamen en el sondeo de reposo (AC29), aviso de datos desactualizados (AC26), estimado plegable (AC33) y enmascarado (AC34).
+const LOTE_META = {
+  modo: "CON_ANALISIS" as const,
+  tipo_tramite: { codigo: "TRASPASO_STANDARD", nombre: "Traspaso" },
+  creado_en: "2026-11-12T14:42:00Z",
+  es_express: false,
+  usuario_creador: { id: "00000000-0000-7000-8000-0000000000a1", nombre: "Usuaria Prueba" },
+};
+const CONTEOS = { vehiculos: 3, terminados: 1, con_error: 1, con_deuda: 0, bloqueados: 1, listos_tramite: 0 };
+const tarjeta = (nombre: RegExp) => screen.getByRole("button", { name: nombre });
+const tablaLote = () => screen.getByRole("table", { name: /semáforo de consultas/i });
+const filas = () => within(tablaLote()).getAllByRole("rowheader").map((th) => th.closest("tr")!);
+
+describe("/diagnosticos/{id} — HU #14562 AC23: cabecera con metadatos del lote", () => {
+  it("muestra «ID · modo · trámite · fecha de creación · creador» de grilla.lote y las descargas", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla({ lote: LOTE_META })) }, { verDiagnosticos: true, descargarReportes: true });
+    expect(screen.getByText(/con análisis ia/i)).toHaveTextContent(
+      "ID 00000000 · Con análisis IA · Traspaso · Creado 12/11/2026 09:42 · Por Usuaria Prueba",
+    );
+    expect(estadoGlobal()).toHaveTextContent("En proceso");
+    const descargas = screen.getByRole("region", { name: /descargas del lote/i });
+    expect(within(descargas).getByRole("link", { name: "Excel del lote" })).toBeInTheDocument();
+    expect(within(descargas).getByRole("button", { name: "PDF de todos (ZIP)" })).toBeInTheDocument();
+  });
+
+  it("AC31: sin el nombre del creador ni el trámite, omite lo ausente y no falla", async () => {
+    await montar({
+      [GRILLA]: () => Response.json(grilla({ lote: { ...LOTE_META, modo: "SIMPLE", tipo_tramite: null, usuario_creador: { id: "x", nombre: null } } })),
+    });
+    expect(screen.getByText(/· simple ·/i)).toHaveTextContent("ID 00000000 · Simple · Creado 12/11/2026 09:42");
+    expect(screen.queryByText(/por usuaria/i)).toBeNull();
+  });
+
+  it("AC31: sin grilla.lote la cabecera no pinta metadatos", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    expect(screen.queryByText(/creado \d{2}\/\d{2}\/\d{4}/i)).toBeNull();
+  });
+});
+
+describe("/diagnosticos/{id} — HU #14562 AC27/AC31: tarjetas-filtro con los conteos del servidor", () => {
+  it("pinta las seis tarjetas con los conteos, sin pedir el dictamen por vehículo", async () => {
+    const api = await montar({ [GRILLA]: () => Response.json(grilla({ conteos: CONTEOS })) });
+    expect(tarjeta(/^Vehículos: 3$/)).toHaveAttribute("aria-pressed", "false");
+    expect(tarjeta(/^Terminados: 1$/)).toBeInTheDocument();
+    expect(tarjeta(/^Con error: 1$/)).toBeInTheDocument();
+    expect(tarjeta(/^Con deuda: 0$/)).toBeInTheDocument();
+    expect(tarjeta(/^Bloqueados: 1$/)).toBeInTheDocument();
+    expect(tarjeta(/^Listos para trámite: 0$/)).toBeInTheDocument();
+    expect(api.mock.calls.filter(([url]) => String(url).includes("/dictamen"))).toHaveLength(0);
+  });
+
+  it("activar una tarjeta filtra la grilla en el cliente, es exclusiva y al volver a pulsarla se quita el filtro", async () => {
+    const [a, b, c] = grilla().vehiculos;
+    const api = await montar({ [GRILLA]: () => Response.json(grilla({ conteos: CONTEOS, vehiculos: [a, { ...b, veredicto: "BLOQUEADO" }, c] })) });
+    const pedidas = desdesPedidos(api).length;
+    fireEvent.click(tarjeta(/^Con error/));
+    expect(filas()).toHaveLength(1);
+    fireEvent.click(tarjeta(/^Bloqueados/));
+    expect(tarjeta(/^Bloqueados/)).toHaveAttribute("aria-pressed", "true");
+    expect(tarjeta(/^Con error/)).toHaveAttribute("aria-pressed", "false");
+    expect(filas()).toHaveLength(1);
+    expect(within(filas()[0]).getByRole("rowheader", { name: /TST002/ })).toBeInTheDocument();
+    fireEvent.click(tarjeta(/^Bloqueados/));
+    expect(tarjeta(/^Bloqueados/)).toHaveAttribute("aria-pressed", "false");
+    expect(filas()).toHaveLength(3);
+    expect(desdesPedidos(api).length).toBe(pedidas);
+  });
+
+  it("AC31: sin conteos oculta las tarjetas que dependen de ellos y el Dictamen se lee «Pendiente»", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    expect(tarjeta(/^Vehículos: 3$/)).toBeInTheDocument();
+    expect(tarjeta(/^Terminados: 1$/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Bloqueados/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Listos para trámite/ })).toBeNull();
+    const dictamenes = within(tablaLote()).getAllByRole("button", { name: /^Ver dictamen de / });
+    expect(dictamenes).toHaveLength(3);
+    dictamenes.forEach((b) => expect(b).toHaveTextContent("Pendiente"));
+  });
+});
+
+describe("/diagnosticos/{id} — HU #14562 AC28: columna Dictamen, búsqueda y columnas fijas", () => {
+  it("cada fila trae su Dictamen (Viable / Bloqueado / Pendiente) en su columna, con la marca del ajuste FLIT", async () => {
+    const [a, b, c] = grilla().vehiculos;
+    await montar({
+      [GRILLA]: () => Response.json(grilla({ vehiculos: [{ ...a, veredicto: "VIABLE" }, { ...b, veredicto: "BLOQUEADO", dictamen_ajustado: true }, c] })),
+    });
+    expect(within(tablaLote()).getByRole("columnheader", { name: "Dictamen" })).toBeInTheDocument();
+    expect(within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST001" })).toHaveTextContent("Viable");
+    const bloqueado = within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST002" });
+    expect(bloqueado).toHaveTextContent("Bloqueado");
+    expect(bloqueado.closest("td")).toHaveTextContent(/ajustado por flit/i);
+    expect(within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST003" })).toHaveTextContent("Pendiente");
+    expect(within(tablaLote()).getByRole("rowheader", { name: /TST001/ })).toHaveClass("sticky");
+  });
+
+  it("la búsqueda por placa o VIN filtra las filas en el cliente", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    fireEvent.change(screen.getByRole("searchbox", { name: /buscar por placa o vin/i }), { target: { value: "tst003" } });
+    expect(filas()).toHaveLength(1);
+    expect(within(filas()[0]).getByRole("rowheader", { name: /TST003/ })).toBeInTheDocument();
+  });
+});
+
+describe("/diagnosticos/{id} — HU #14562 AC29: el dictamen ajustado se ve en el sondeo de reposo", () => {
+  it("lote terminado: a los 30 s pide ?desde= y la fila cambia su Dictamen y las tarjetas Bloqueados y Listos", async () => {
+    const v1 = grilla().vehiculos[0];
+    const base = { ...CONTEOS, vehiculos: 1, terminados: 1, con_error: 0 };
+    const terminado = grilla({ estado: "COMPLETADO", vehiculos: [{ ...v1, veredicto: "VIABLE" }], conteos: { ...base, bloqueados: 0, listos_tramite: 1 } });
+    const ajuste = grilla({
+      estado: "COMPLETADO",
+      version: 13,
+      desde: 12,
+      vehiculos: [{ ...v1, veredicto: "BLOQUEADO", dictamen_ajustado: true }],
+      conteos: { ...base, bloqueados: 1, listos_tramite: 0 },
+    });
+    const api = await montar({ [GRILLA]: enOrden(terminado, ajuste) });
+    expect(tarjeta(/^Bloqueados: 0$/)).toBeInTheDocument();
+    await avanzar(INTERVALO_REPOSO_MS);
+    expect(desdesPedidos(api)).toEqual([0, 12]);
+    expect(screen.getByRole("button", { name: "Ver dictamen de TST001" })).toHaveTextContent("Bloqueado");
+    expect(tarjeta(/^Bloqueados: 1$/)).toBeInTheDocument();
+    expect(tarjeta(/^Listos para trámite: 0$/)).toBeInTheDocument();
+    expect(navegacion.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("/diagnosticos/{id} — HU #14562 AC26: refresco detenido", () => {
+  it("tras fallos repetidos avisa «desactualizados desde hh:mm» con la grilla visible; «Actualizar ahora» lo quita y reanuda", async () => {
+    vi.setSystemTime(new Date("2026-11-13T14:05:00Z"));
+    let falla = false;
+    const api = await montar({ [GRILLA]: () => (falla ? Response.json({ error: "x" }, { status: 503 }) : Response.json(grilla())) });
+    falla = true;
+    await avanzar(INTERVALO_SONDEO_MS * FALLOS_ANTES_DE_DETENER);
+    expect(screen.getByText(/datos desactualizados desde 09:05/i)).toBeInTheDocument();
+    expect(tablaLote()).toBeInTheDocument();
+    falla = false;
+    const antes = desdesPedidos(api).length;
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar ahora" }));
+    await avanzar();
+    expect(screen.queryByText(/datos desactualizados/i)).toBeNull();
+    await avanzar(INTERVALO_SONDEO_MS);
+    expect(desdesPedidos(api).length).toBe(antes + 2);
+  });
+});
+
+describe("/diagnosticos/{id} — HU #14562 AC33/AC34: estimado plegable y enmascarado", () => {
+  it("AC33: con el estimado del lote terminado aparece la tarjeta plegable «Estimado frente a consumido», cerrada", async () => {
+    await montar({
+      [GRILLA]: () =>
+        Response.json(grilla({ estado: "COMPLETADO", vehiculos: [grilla().vehiculos[0]], estimado_consultas: [{ fuente: "RUNT", estimadas: 1, consumidas: 1 }] })),
+    });
+    const boton = screen.getByRole("button", { name: /estimado frente a consumido/i });
+    expect(boton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(boton);
+    expect(boton).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("AC33: sin estimado (otra configuración) la tarjeta no aparece", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO", vehiculos: [grilla().vehiculos[0]] })) });
+    expect(screen.queryByRole("button", { name: /estimado frente a consumido/i })).toBeNull();
+  });
+
+  it("AC34: los documentos del propietario siguen enmascarados y ningún documento sale en claro", async () => {
+    const v = { ...grilla().vehiculos[0], propietarios: [{ tipo_documento: "CC", documento_enmascarado: "******7710" }] };
+    await montar({ [GRILLA]: () => Response.json(grilla({ vehiculos: [v] })) });
+    expect(within(tablaLote()).getByText(/CC .*7710/)).toBeInTheDocument();
+    expect(tablaLote().textContent).not.toMatch(/\d{6,}/);
   });
 });

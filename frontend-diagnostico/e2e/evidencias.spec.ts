@@ -54,7 +54,7 @@ test.describe("descargas del tablero", () => {
     const [respuestaExcel, descargaExcel] = await Promise.all([
       page.waitForResponse((r) => new URL(r.url()).pathname.endsWith("/excel")),
       page.waitForEvent("download"),
-      page.getByRole("region", { name: "Descargas del lote" }).getByRole("link", { name: "Descargar Excel" }).click(),
+      page.getByRole("region", { name: "Descargas del lote" }).getByRole("link", { name: "Excel del lote" }).click(),
     ]);
     expect(respuestaExcel.status()).toBe(200);
     expect(respuestaExcel.headers()["content-type"]).toContain("spreadsheetml");

@@ -73,6 +73,8 @@ describe("sin formulario propio", () => {
         join("components", "nuevo"),
         // Punto 4 (crear trámite masivo): casillas de selección de placas del tablero, no de credenciales.
         join("components", "tablero", "BarraSeleccionDerivacion.tsx"),
+        // HU #14562 AC28: búsqueda por placa o VIN del tablero, no de credenciales.
+        join("components", "tablero", "BuscadorGrilla.tsx"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);

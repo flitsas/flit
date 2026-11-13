@@ -185,7 +185,7 @@ describe("PaginaDetalleConsulta — HU #14087 AC7: auditoría de consulta (se qu
     const a = await within(pagina).findByRole("region", { name: "Auditoría de consulta" });
     expect(a).toHaveTextContent("Fecha y hora de la consulta");
     expect(a).toHaveTextContent("22/10/2026 10:00");
-    expect(within(a).getByText("Ejecutado (OK)").closest("[data-tono]")).toHaveAttribute("data-tono", "success");
+    expect(within(a).getByText("Ejecutado").closest("[data-tono]")).toHaveAttribute("data-tono", "ejecutado");
     expect(a).not.toHaveTextContent(/dato original/i);
   });
 
@@ -221,7 +221,7 @@ describe("PaginaDetalleConsulta — HU #14087 AC7: auditoría de consulta (se qu
     expect(p1).toHaveTextContent("Propietario");
     expect(p1).toHaveTextContent("C ****1222");
     expect(p1).toHaveTextContent("22/10/2026 10:00");
-    expect(p1).toHaveTextContent("Ejecutado (OK)");
+    expect(p1).toHaveTextContent("Ejecutado");
     expect(p2).toHaveTextContent("NIT ****4567");
     expect(p2).toHaveTextContent("Sin resultado");
     expect(p3.textContent).not.toMatch(/\*{4}\d/);

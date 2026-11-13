@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { INTERVALO_SONDEO_ZIP_MS, estadoZip, mensajeDescarga, pedirZip, urlArchivoZip, urlExcelLote, type EstadoEvidencia } from "@/lib/reportes/api";
 import { useDescarga } from "@/lib/reportes/useDescarga";
+import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 
 export const MENSAJE_ZIP_ERROR = "No se pudo generar el ZIP; vuelve a pedirlo";
 
@@ -42,8 +43,8 @@ function faseDe(ev: EstadoEvidencia): Zip {
 }
 
 /**
- * Barra de descargas del lote en el tablero (HU #13851, F07-C7/C11/C13): «Descargar Excel» (enlace con download por el BFF)
- * y «Descargar PDF (.zip)», que pide el ZIP en segundo plano (Q2), anuncia «Preparando N PDF…» en una región aria-live y
+ * Barra de descargas del lote en el tablero (HU #13851, F07-C7/C11/C13): «Excel del lote» (enlace con download por el BFF)
+ * y «PDF de todos (ZIP)», que pide el ZIP en segundo plano (Q2), anuncia «Preparando N PDF…» en una región aria-live y
  * sondea el estado cada 3 s hasta LISTA (enlace del .zip) o ERROR (aviso con Reintentar). El sondeo termina en LISTA, en
  * ERROR, si falla la lectura y al desmontar. El 409 SIN_VEHICULOS_TERMINADOS se explica sin enlace.
  */
@@ -66,7 +67,11 @@ export function DescargasLote({ diagnosticoId, estadoLote, puedeDescargar }: Des
     const temporizador = setTimeout(() => {
       estadoZip(diagnosticoId, enCurso.id, control.signal)
         .then((ev) => {
-          if (!control.signal.aborted) setZip(faseDe(ev));
+          if (control.signal.aborted) return;
+          const siguiente = faseDe(ev);
+          setZip(siguiente);
+          // HU #14562 AC51/AC52: el ZIP terminó; la campana sondea ya para mostrar su aviso persistente.
+          if (siguiente.fase === "lista") pedirSondeoNotificaciones();
         })
         .catch((e: unknown) => {
           if (!control.signal.aborted) setZip({ fase: "error", mensaje: mensajeDescarga(e), reintentable: true });
@@ -102,11 +107,11 @@ export function DescargasLote({ diagnosticoId, estadoLote, puedeDescargar }: Des
       <div className="flex flex-wrap items-center gap-3">
         <a href={urlExcelLote(diagnosticoId)} download onClick={excel.alHacerClic} aria-busy={excel.descargando || undefined} className={BOTON_SECUNDARIO_CLS}>
           <Icono nombre="reporte-detallado" className="h-4 w-4" />
-          Descargar Excel
+          Excel del lote
         </a>
         <button type="button" onClick={() => void pedir()} disabled={ocupado || sinLanzar} aria-busy={ocupado} className={BOTON_SECUNDARIO_CLS}>
           <Icono nombre="archivo" className="h-4 w-4" />
-          Descargar PDF (.zip)
+          PDF de todos (ZIP)
         </button>
         {zip.fase === "lista" && (
           <a

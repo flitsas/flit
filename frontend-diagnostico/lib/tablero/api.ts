@@ -58,6 +58,8 @@ export interface FilaVehiculo {
   veredicto?: "VIABLE" | "BLOQUEADO" | null;
   /** HU #14563 B7 (D6): el dictamen vigente lo ajustó soporte FLIT. Opcional hasta que B7 lo exponga. */
   dictamen_ajustado?: boolean;
+  /** HU #14563 B1: versión de fila (sube con cualquier cambio de la fila). Sin la clave, se fusiona como antes. */
+  version?: number;
   /**
    * HU #14087: documento declarado por el cliente (null si no declaró ninguno). Opcional en el tipo porque la fila solo viaja
    * en el sondeo cuando cambia una celda y la grilla del backoffice puede no traerlo: sin la clave, la pantalla pinta «—».
