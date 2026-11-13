@@ -46,8 +46,8 @@ describe("Semáforo — HU #14562 AC11: etiqueta del kit con IconoDx y tono --dx
     expect(etiqueta.style.getPropertyValue("--ct")).toBe(`var(--dx-estado-${tono})`);
     const icono = etiqueta.querySelector("svg")!;
     expect(icono).toHaveAttribute("aria-hidden", "true");
-    // Familia IconoDx: glifo del sistema con viewBox "64 64 896 896".
-    expect(icono).toHaveAttribute("viewBox", "64 64 896 896");
+    // Familia IconoDx: glifo propio sobre la rejilla de 1024 de la base (sin glifos de terceros).
+    expect(icono).toHaveAttribute("viewBox", "0 0 1024 1024");
   });
 
   it("AC5: ningún ícono del semáforo gira dentro de la grilla (EN_CURSO tampoco)", () => {

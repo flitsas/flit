@@ -1,7 +1,7 @@
 import { BaseIconoDx, type IconoDxProps } from "./BaseIconoDx";
 
 /** Locatario (persona con un documento, glifo `f-locatario` de la maqueta). Familia IconoDx (HU #14562 · UI-3): se importa por ruta, sin barril. */
-export function IconoDxLocatario(props: Omit<IconoDxProps, "children" | "viewBox">) {
+export function IconoDxLocatario(props: Omit<IconoDxProps, "children">) {
   return (
     <BaseIconoDx {...props}>
       <circle cx="384" cy="320" r="160" />

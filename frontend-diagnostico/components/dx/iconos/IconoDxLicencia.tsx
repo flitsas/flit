@@ -4,7 +4,7 @@ import { BaseIconoDx, type IconoDxProps } from "./BaseIconoDx";
  * Licencia de conducción. Familia IconoDx (HU #14562 · UI-3): se importa por ruta, sin barril. Se distingue de IconoDxRunt
  * (auditoría m-14): franja superior de tarjeta oficial, foto rectangular a la izquierda y un volante pequeño abajo a la derecha.
  */
-export function IconoDxLicencia(props: Omit<IconoDxProps, "children" | "viewBox">) {
+export function IconoDxLicencia(props: Omit<IconoDxProps, "children">) {
   return (
     <BaseIconoDx {...props}>
       <rect x="96" y="192" width="832" height="640" rx="96" />

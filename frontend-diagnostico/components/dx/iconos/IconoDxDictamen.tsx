@@ -5,7 +5,7 @@ import { BaseIconoDx, type IconoDxProps } from "./BaseIconoDx";
  * HU #14562 · m-10: el visto va con la superficie (blanco en claro, como la maqueta `m-dictamen`): sobre el acento da 3,6:1;
  * con el tinte daba 2,1:1.
  */
-export function IconoDxDictamen(props: Omit<IconoDxProps, "children" | "viewBox">) {
+export function IconoDxDictamen(props: Omit<IconoDxProps, "children">) {
   return (
     <BaseIconoDx {...props}>
       <path d="M256 96h368l208 208v560a64 64 0 0 1-64 64H256a64 64 0 0 1-64-64V160a64 64 0 0 1 64-64z" />

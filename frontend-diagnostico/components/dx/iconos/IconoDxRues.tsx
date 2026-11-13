@@ -1,7 +1,7 @@
 import { BaseIconoDx, type IconoDxProps } from "./BaseIconoDx";
 
 /** RUES (edificio de la empresa). Familia IconoDx (HU #14562 · UI-3): se importa por ruta, sin barril. */
-export function IconoDxRues(props: Omit<IconoDxProps, "children" | "viewBox">) {
+export function IconoDxRues(props: Omit<IconoDxProps, "children">) {
   return (
     <BaseIconoDx {...props}>
       <rect x="192" y="96" width="640" height="832" rx="64" />

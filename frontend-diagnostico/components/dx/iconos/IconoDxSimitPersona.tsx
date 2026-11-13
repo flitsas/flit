@@ -1,7 +1,7 @@
 import { BaseIconoDx, type IconoDxProps } from "./BaseIconoDx";
 
 /** SIMIT de una persona. Familia IconoDx (HU #14562 · UI-3): se importa por ruta, sin barril. */
-export function IconoDxSimitPersona(props: Omit<IconoDxProps, "children" | "viewBox">) {
+export function IconoDxSimitPersona(props: Omit<IconoDxProps, "children">) {
   return (
     <BaseIconoDx {...props}>
       <circle cx="352" cy="320" r="144" />

@@ -1,10 +1,11 @@
 import { BaseIconoDx, type IconoDxProps } from "./BaseIconoDx";
 
-/** Estado novedad (InfoCircleFilled). Familia IconoDx (HU #14562 · UI-3): se importa por ruta, sin barril. */
-export function IconoDxNovedad(props: Omit<IconoDxProps, "children" | "viewBox">) {
+/** Estado novedad (círculo con «i» informativa). Familia IconoDx (HU #14562 · UI-3): se importa por ruta, sin barril. */
+export function IconoDxNovedad(props: Omit<IconoDxProps, "children">) {
   return (
-    <BaseIconoDx {...props} viewBox="64 64 896 896">
-      <path fill="currentColor" stroke="none" d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm32 664c0 4.4-3.6 8-8 8h-48c-4.4 0-8-3.6-8-8V456c0-4.4 3.6-8 8-8h48c4.4 0 8 3.6 8 8v272zm-32-344a48.01 48.01 0 010-96 48.01 48.01 0 010 96z" />
+    <BaseIconoDx {...props}>
+      <circle cx="512" cy="512" r="384" />
+      <path d="M512 336v0M512 464v224" />
     </BaseIconoDx>
   );
 }

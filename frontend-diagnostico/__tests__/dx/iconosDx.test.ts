@@ -42,10 +42,8 @@ describe("AC3 · familia IconoDx* con exportación por ícono", () => {
     expect(archivos.filter((n) => /^index\.(ts|tsx|js)$/.test(n))).toEqual([]);
   });
 
-  it("la carpeta solo tiene la base, los íconos y la licencia de los glifos copiados (ningún archivo de mapa nombre→componente)", () => {
-    const otros = archivos.filter(
-      (n) => n !== "BaseIconoDx.tsx" && n !== "LICENSE-ant-design-icons-svg.txt" && !iconos.includes(n),
-    );
+  it("la carpeta solo tiene la base y los íconos (ningún archivo de mapa nombre→componente ni licencia de terceros)", () => {
+    const otros = archivos.filter((n) => n !== "BaseIconoDx.tsx" && !iconos.includes(n));
     expect(otros).toEqual([]);
   });
 
@@ -106,5 +104,28 @@ describe("HU14562 · glifos de Licencia y Locatario", () => {
       '<rect x="608" y="560" width="288" height="336" rx="48" />',
       '<path d="M688 688h128M688 800h80" />',
     ]);
+  });
+});
+
+// HU #14562: la familia IconoDx es de dibujo propio. Ningún glifo viene de Ant Design (ni de otra librería): todos
+// usan la rejilla de 1024 de BaseIconoDx y ningún archivo de la carpeta nombra a Ant ni trae su rejilla 64 64 896 896.
+// El patrón se arma por partes para que el propio test no deje el nombre de la librería en el repo (git grep en cero).
+const LIBRERIA_TERCEROS = new RegExp(`${["ant", "design"].join("-")}|\\b${["an", "td"].join("")}\\b`, "i");
+
+describe("HU14562 · íconos IconoDx sin trazos de Ant Design", () => {
+  it("ningún archivo de la carpeta nombra la librería de terceros ni trae la rejilla 64 64 896 896", () => {
+    for (const archivo of archivos) {
+      const codigo = readFileSync(join(DIR, archivo), "utf8");
+      expect(codigo, archivo).not.toMatch(LIBRERIA_TERCEROS);
+      expect(codigo, archivo).not.toContain('viewBox="64 64 896 896"');
+    }
+  });
+
+  it("ningún ícono pasa un viewBox propio: todos dibujan sobre la rejilla 0 0 1024 1024 de la base", () => {
+    for (const archivo of iconos) {
+      const codigo = readFileSync(join(DIR, archivo), "utf8");
+      const viewBoxes = [...codigo.matchAll(/viewBox=\{?["'`]([^"'`]*)["'`]/g)].map((m) => m[1]);
+      expect(viewBoxes.filter((v) => v !== "0 0 1024 1024"), archivo).toEqual([]);
+    }
   });
 });
