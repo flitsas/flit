@@ -61,6 +61,41 @@ public sealed class EsquemaR8Tests
         await DebeViolarAsync(() => InsertarAsync(conexion, tenant, lote, "LOTE_TERMINADO", datos, ct), "ck_notificaciones_datos");
     }
 
+    // HU #14563 hallazgo L1 de seguridad — las claves de datos son ^[a-z_]{1,32}$ y los números van de 0 a 100000: así una clave o
+    // un contador no pueden llevar texto libre ni un documento.
+    [Theory]
+    [InlineData("{\"Creadas\":1}")]
+    [InlineData("{\"creadas1\":1}")]
+    [InlineData("{\"cc_10234567\":1}")]
+    [InlineData("{\"abcdefghijklmnopqrstuvwxyzabcdefg\":1}")]
+    [InlineData("{\"cédula\":1}")]
+    [InlineData("{\"total\":100001}")]
+    [InlineData("{\"total\":1023456789}")]
+    [InlineData("{\"total\":-1}")]
+    public async Task HU14563_L1_Ck_datos_rechaza_claves_fuera_del_patron_y_numeros_fuera_de_rango(string datos)
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var (tenant, lote) = await SembrarLoteAsync(conexion, ct);
+
+        await DebeViolarAsync(() => InsertarAsync(conexion, tenant, lote, "LOTE_TERMINADO", datos, ct), "ck_notificaciones_datos");
+    }
+
+    [Fact]
+    public async Task HU14563_L1_Ck_datos_acepta_el_limite_de_numeros_y_claves()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var (tenant, lote) = await SembrarLoteAsync(conexion, ct);
+
+        await InsertarAsync(conexion, tenant, lote, "DERIVACION_TERMINADA",
+            "{\"creadas\":100000,\"omitidas\":0,\"fallidas\":0,\"abcdefghijklmnopqrstuvwxyzabcdef\":1}", ct);
+    }
+
     [Fact]
     public async Task Ck_datos_rechaza_mas_de_512_bytes()
     {
@@ -69,7 +104,8 @@ public sealed class EsquemaR8Tests
         var ct = TestContext.Current.CancellationToken;
         await using var conexion = await AbrirAsync(api, ct);
         var (tenant, lote) = await SembrarLoteAsync(conexion, ct);
-        var grande = "{" + string.Join(",", Enumerable.Range(0, 60).Select(i => $"\"C{i:D2}\":1234567")) + "}";
+        // Claves y números válidos (L1): solo el tamaño viola el CHECK.
+        var grande = "{" + string.Join(",", Enumerable.Range(0, 60).Select(i => $"\"k{(char)('a' + (i / 26))}{(char)('a' + (i % 26))}\":99999")) + "}";
 
         await DebeViolarAsync(() => InsertarAsync(conexion, tenant, lote, "LOTE_TERMINADO", grande, ct), "ck_notificaciones_datos");
     }
