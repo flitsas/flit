@@ -101,7 +101,9 @@ internal sealed partial class ConsumidorDerivacion(
     private async Task CerrarAsync(OperacionDerivacion operacion, ItemDerivacion item, VehiculoDiagnostico vehiculo, ResultadoBorrador resultado, Guid tenant, CancellationToken ct)
     {
         // HU #14563: la versión de fila sube en la transacción del consumidor (la del SDK), antes de que se guarde el ítem.
-        await CierreItemDerivacion.CerrarAsync(db, operacion, item, vehiculo, resultado, reloj.GetUtcNow(), ct).ConfigureAwait(false);
+        var ahora = reloj.GetUtcNow();
+        await CierreItemDerivacion.CerrarAsync(db, operacion, item, vehiculo, resultado, ahora, ct).ConfigureAwait(false);
+        await Notificaciones.EscritorNotificaciones.SiTerminoDerivacionMasivaAsync(db, operacion, ahora, ct).ConfigureAwait(false);
         await despachador.LiberarAsync(tenant, ct).ConfigureAwait(false);
         Cerrado(log, item.Id, operacion.Id, item.Estado, item.MotivoCodigo ?? "-", item.Intentos);
     }

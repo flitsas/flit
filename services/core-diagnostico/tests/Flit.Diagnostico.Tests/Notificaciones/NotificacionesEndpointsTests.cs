@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Notificaciones;
 using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Configuracion;
+using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
 using Flit.Diagnostico.Tests.Persistencia;
 using FluentAssertions;
@@ -100,5 +103,35 @@ public sealed class NotificacionesEndpointsTests
         bandeja.GetProperty("no_leidas").GetInt32().Should().Be(0);
         (await EsquemaR8Tests.ListarAsync(conexion,
             $"SELECT id::text FROM diagnostico.notificaciones WHERE usuario_id = '{otro}' AND leida_en IS NULL", ct)).Should().HaveCount(1);
+    }
+
+    // AC38 — visibilidad PROPIOS: la notificación propia sobre un lote que el usuario ya no ve (lo creó otro) no aparece ni cuenta
+    // en no_leidas, y marcarla responde 404.
+    [Fact]
+    public async Task Lote_oculto_por_PROPIOS_no_aparece_ni_se_puede_marcar()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await EsquemaR8Tests.AbrirAsync(api, ct);
+        var usuario = Guid.NewGuid();
+        var (empresa, lote) = await EsquemaR8Tests.SembrarLoteAsync(conexion, ct);
+        await EsquemaR8Tests.InsertarAsync(conexion, empresa, lote, Notificacion.LoteTerminado, "{}", ct, usuario);
+        var nid = Guid.Parse((await EsquemaR8Tests.ListarAsync(conexion,
+            $"SELECT id::text FROM diagnostico.notificaciones WHERE usuario_id = '{usuario}'", ct)).Single());
+        await using (var db = DosEmpresas.Contexto(api.BaseDeDatos, empresa))
+        {
+            db.Add(new ConfiguracionEmpresa { VisibilidadUsuario = VisibilidadUsuario.Propios });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: PermisosLectura, roles: ["usuario_diagnostico"], sujeto: usuario.ToString()));
+
+        var bandeja = JsonDocument.Parse(await (await cliente.GetAsync(Ruta, ct)).Content.ReadAsStringAsync(ct)).RootElement;
+        bandeja.GetProperty("no_leidas").GetInt32().Should().Be(0);
+        bandeja.GetProperty("items").GetArrayLength().Should().Be(0);
+        (await cliente.PostAsync($"{Ruta}/{nid}/leida", null, ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await EsquemaR8Tests.ListarAsync(conexion,
+            $"SELECT id::text FROM diagnostico.notificaciones WHERE id = '{nid}' AND leida_en IS NULL", ct)).Should().HaveCount(1);
     }
 }

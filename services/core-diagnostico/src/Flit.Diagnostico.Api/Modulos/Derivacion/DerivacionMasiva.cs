@@ -124,6 +124,7 @@ internal sealed partial class DerivacionMasiva(
             operacion.TerminarSiCompleta(ahora);
             db.Add(operacion);
             db.AddRange(items);
+            await Notificaciones.EscritorNotificaciones.SiTerminoDerivacionMasivaAsync(db, operacion, ahora, ct).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
             await despachador.LiberarAsync(cabecera.TenantId, ct).ConfigureAwait(false);
             await transaccion.CommitAsync(ct).ConfigureAwait(false);

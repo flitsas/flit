@@ -133,6 +133,7 @@ internal sealed partial class ReconciliadorDerivacion(
         var operacion = await db.Set<OperacionDerivacion>().SingleAsync(o => o.Id == item.OperacionId, ct).ConfigureAwait(false);
         var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == item.VehiculoId, ct).ConfigureAwait(false);
         await CierreItemDerivacion.CerrarAsync(db, operacion, item, vehiculo, resultado, ahora, ct).ConfigureAwait(false);
+        await Notificaciones.EscritorNotificaciones.SiTerminoDerivacionMasivaAsync(db, operacion, ahora, ct).ConfigureAwait(false);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
