@@ -1,10 +1,12 @@
 "use client";
 
+import { BarraProgreso } from "@flit/ui/BarraProgreso";
 import { Icono } from "@flit/ui/Icono";
 import type { ResumenValidacion as Resumen } from "@/lib/carga/api";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ERROR_CLS } from "@/components/parametrizacion/estilos";
 import { EstimadoConsultas } from "./EstimadoConsultas";
+import { AVISO_SIN_CONSULTAS } from "./SubidaArchivo";
 
 export interface ResumenValidacionProps {
   resumen: Resumen;
@@ -24,8 +26,8 @@ export function motivoBloqueo(resumen: Resumen): string | null {
 // Conteo con su semántica: verde válido, rojo/naranja error y gris para lo consolidado.
 const CONTEOS = [
   { clave: "validos", etiqueta: "Válidos", tono: "success" },
-  { clave: "erroneos", etiqueta: "Erróneos", tono: "danger" },
-  { clave: "duplicados", etiqueta: "Duplicados", tono: "neutral" },
+  { clave: "erroneos", etiqueta: "Con error", tono: "danger" },
+  { clave: "duplicados", etiqueta: "Duplicados consolidados", tono: "neutral" },
 ] as const;
 
 /**
@@ -44,9 +46,10 @@ export function ResumenValidacion({ resumen, onCorregir, onContinuar, confirmand
         <p className={AYUDA_CLS}>
           {resumen.total_filas} filas leídas · límite por lote: {resumen.limite_vehiculos_lote} vehículos
         </p>
+        <p className={AYUDA_CLS}>{AVISO_SIN_CONSULTAS}</p>
       </div>
 
-      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {CONTEOS.map((c) => (
           <div
             key={c.clave}
@@ -59,6 +62,19 @@ export function ResumenValidacion({ resumen, onCorregir, onContinuar, confirmand
             <dd className="text-2xl font-semibold text-flit-primary">{resumen[c.clave]}</dd>
           </div>
         ))}
+        {/* Límite del lote (S1): solo las filas que entran al lote, las válidas, frente al límite del contrato. */}
+        <div className="flex flex-col gap-1 rounded-xl border border-[color:var(--di-border)] px-4 py-3">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-[color:var(--di-text-secondary)]">Límite del lote</dt>
+          <dd className="flex flex-col gap-2 text-2xl font-semibold text-flit-primary">
+            {resumen.validos} de {resumen.limite_vehiculos_lote}
+            <BarraProgreso
+              etiqueta="Vehículos válidos frente al límite del lote"
+              valor={Math.min(resumen.validos, resumen.limite_vehiculos_lote)}
+              maximo={resumen.limite_vehiculos_lote}
+              textoValor={`${resumen.validos} de ${resumen.limite_vehiculos_lote} vehículos`}
+            />
+          </dd>
+        </div>
       </dl>
 
       <EstimadoConsultas estimado={resumen.estimado_consultas} />

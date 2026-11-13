@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@flit/ui/StatusBadge";
 import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG } from "@flit/ui/table-styles";
 import { accesoNegado, validarFilas, type ErrorFila, type FilaCapturada, type FilaResumen } from "@/lib/carga/api";
 import { validarIdentificador, validarLongitudIdentificador } from "@/lib/validation/fieldRules";
-import { AYUDA_CLS, BOTON_REINTENTAR_CLS, CAMPO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
 
@@ -22,6 +23,9 @@ export const TABLA_FILAS_ID = "filas-corregibles";
 
 /** Espera tras la última tecla antes de revalidar con la API. */
 export const DEBOUNCE_MS = 300;
+
+/** Filas con error por página (AC21: se ven todas, paginadas). */
+export const FILAS_POR_PAGINA = 10;
 
 export const TIPOS_DOCUMENTO = ["CC", "CE", "NIT", "PAS", "TI"] as const;
 
@@ -85,6 +89,9 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
   const [ediciones, setEdiciones] = useState<Map<number, Edicion>>(() => new Map(filas.map((f) => [f.fila, edicionDe(f)])));
   const temporizadores = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const controladores = useRef(new Map<number, AbortController>());
+  const [pagina, setPagina] = useState(0);
+  const paginas = Math.max(1, Math.ceil(filas.length / FILAS_POR_PAGINA));
+  const visibles = filas.slice(pagina * FILAS_POR_PAGINA, (pagina + 1) * FILAS_POR_PAGINA);
 
   useEffect(() => {
     const t = temporizadores.current;
@@ -154,7 +161,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
         <h2 id="filas-titulo" className="text-lg font-semibold text-flit-primary">
           Filas con errores
         </h2>
-        <p className={AYUDA_CLS}>Corrige cada fila en la tabla; se revalida sola al dejar de escribir.</p>
+        <p className={AYUDA_CLS}>Corrige cada fila en la tabla; se revalida sola al dejar de escribir y queda «Corregida» o «Inválido» con el motivo.</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[760px] border-separate border-spacing-y-1 text-sm">
@@ -168,7 +175,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
             </tr>
           </thead>
           <tbody>
-            {filas.map((original) => {
+            {visibles.map((original) => {
               const e = ediciones.get(original.fila) ?? edicionDe(original);
               const n = e.resumen.fila;
               const errorId = e.errorLocal ?? (mensajes(e.resumen.errores, ["Identificador_Vehiculo"]) || null);
@@ -235,11 +242,11 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
                   </td>
                   <td className="px-4 py-2">
                     {e.revalidando ? (
-                      <StatusBadge tone="info" label="Revalidando…" />
+                      <StatusBadge tone="info" label="Revalidando" />
                     ) : e.resumen.valida && !e.errorLocal ? (
-                      <StatusBadge tone="success" label="Válida" />
+                      <StatusBadge tone="success" label="Corregida" />
                     ) : (
-                      <StatusBadge tone="danger" label="Errónea" />
+                      <StatusBadge tone="danger" label="Inválido" />
                     )}
                     {e.errorServidor && (
                       <div role="alert" className={`${ERROR_CLS} mt-1 flex flex-col items-start gap-1`}>
@@ -256,6 +263,19 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
           </tbody>
         </table>
       </div>
+      {paginas > 1 && (
+        <nav aria-label="Páginas de filas con errores" className="flex items-center justify-end gap-2">
+          <button type="button" aria-label="Página anterior" disabled={pagina === 0} onClick={() => setPagina((n) => n - 1)} className={BOTON_SECUNDARIO_CLS}>
+            <Icono nombre="izquierda" className="h-4 w-4" />
+          </button>
+          <span className={AYUDA_CLS}>
+            Página {pagina + 1} de {paginas}
+          </span>
+          <button type="button" aria-label="Página siguiente" disabled={pagina >= paginas - 1} onClick={() => setPagina((n) => n + 1)} className={BOTON_SECUNDARIO_CLS}>
+            <Icono nombre="derecha" className="h-4 w-4" />
+          </button>
+        </nav>
+      )}
     </section>
   );
 }

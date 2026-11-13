@@ -86,7 +86,7 @@ describe("Masivo — un solo paso (AC3)", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Identificador de la fila 3" }), { target: { value: "TST124" } });
     await waitFor(() => expect(within(region).getByText("Válidos").nextSibling).toHaveTextContent("3"));
     fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
+    expect(await screen.findByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" })).toBeInTheDocument();
     const [confirmacion] = llamadas(api, "POST", `/diagnosticos/${ID}/vehiculos`);
     expect(formularioDe(confirmacion).get("archivo")).toBe(subido);
     expect(correccionesDe(confirmacion)).toEqual([{ fila: 3, identificador: "TST124" }]);
@@ -111,15 +111,16 @@ describe("Masivo — validaciones en pantalla (AC4)", () => {
     fireEvent.change(await nombre(), { target: { value: "Flota norte" } });
     validar();
     expect(await screen.findByText(/elige el archivo de vehículos/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/archivo de vehículos/i)).toHaveAttribute("aria-invalid", "true");
+    // ZonaArrastre del kit (HU #14562 AC10): el error queda asociado a «Elegir archivo».
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toHaveAccessibleDescription(/elige el archivo de vehículos/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
   });
 
-  it("un formato no admitido se rechaza con el mensaje de siempre, sin llamar a la API", async () => {
+  it("un formato no admitido lo rechaza la ZonaArrastre del kit, sin llamar a la API", async () => {
     const api = montar();
     await nombre();
     elegir(archivo("flota.pdf", "application/pdf"));
-    expect(await screen.findByText(/formato no admitido: sube el archivo en \.xlsx o \.csv/i)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/formato no admitido.*\.xlsx.*\.csv/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
   });
 
@@ -294,7 +295,45 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
     expect(await screen.findByText("No se confirmaron los vehículos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
+    expect(await screen.findByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" })).toBeInTheDocument();
     expect(llamadas(api, "POST", `/diagnosticos/${ID}/vehiculos`)).toHaveLength(2);
+  });
+});
+
+describe("Masivo — resultado «Diagnóstico iniciado con N vehículos» (AC18, AC19, AC16)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"], shouldAdvanceTime: true });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("AC18: al confirmar muestra el resultado con los N confirmados, oculta el selector y a los 5 s navega al tablero", async () => {
+    montar({ [`POST /diagnosticos/${ID}/vehiculos`]: CONFIRMADO });
+    await preparar();
+    validar();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
+    expect(await screen.findByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver tablero" })).toHaveAttribute("href", `/diagnosticos/${ID}`);
+    expect(screen.queryByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeNull();
+    expect(nav.push).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`);
+  });
+
+  it("AC19: «Quedarme aquí» detiene la redirección del masivo", async () => {
+    montar({ [`POST /diagnosticos/${ID}/vehiculos`]: CONFIRMADO });
+    await preparar();
+    validar();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Quedarme aquí" }));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("AC16: el pie del masivo ofrece Cancelar hacia el inicio", async () => {
+    montar();
+    await nombre();
+    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
   });
 });

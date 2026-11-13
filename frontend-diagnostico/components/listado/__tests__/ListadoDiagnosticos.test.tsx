@@ -107,7 +107,8 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     let n = 0;
     simularApi({ "GET /diagnosticos": () => (++n === 1 ? Response.json({ error: "x" }, { status: 500 }) : Response.json(lista([diagnostico(1)]))) });
     render(<ListadoDiagnosticos />);
-    expect(screen.getByRole("status", { name: "Cargando los diagnósticos…" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Cargando diagnósticos…" })).toBeInTheDocument();
+    expect(await screen.findByText("No pudimos cargar el listado")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
     expect(await tabla()).toBeInTheDocument();
   });
@@ -148,7 +149,7 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     expect(consultas(fetchMock)[0]).toEqual({ desde: "2026-10-01", hasta: "2026-10-22", modo: "SIMPLE", estado: "INCOMPLETO", nombre: "TST", pagina: "1", tamano: "10" });
     expect(screen.getByLabelText("Desde")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Hasta")).toHaveValue("2026-10-22");
-    expect(screen.getByLabelText("Tipo")).toHaveValue("SIMPLE");
+    expect(within(screen.getByRole("radiogroup", { name: "Tipo" })).getByRole("radio", { name: "Simple" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByLabelText("Estado")).toHaveValue("INCOMPLETO");
     expect(screen.getByLabelText("Nombre")).toHaveValue("TST");
   });
@@ -244,12 +245,13 @@ describe("ListadoDiagnosticos — paginación estándar 10/20/30/50 (HU #13916)"
 });
 
 describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs compañía sin diagnósticos", () => {
-  it("con filtros y sin resultados: «No hay diagnósticos con estos filtros» con «Limpiar filtros», no el vacío de compañía", async () => {
+  it("con filtros y sin resultados: «Ningún diagnóstico coincide» anunciado (role status) con «Limpiar filtros», no el vacío de compañía", async () => {
     h.params = new URLSearchParams("estado=COMPLETADO&nombre=zzz");
     const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([])) });
     render(<ListadoDiagnosticos />);
-    expect(await screen.findByText("No hay diagnósticos con estos filtros")).toBeInTheDocument();
-    expect(screen.queryByText("Todavía no hay diagnósticos")).toBeNull();
+    expect(await screen.findByText("Ningún diagnóstico coincide")).toBeInTheDocument();
+    expect(screen.getByText("Ningún diagnóstico coincide").closest('[role="status"]')).not.toBeNull();
+    expect(screen.queryByText("Aún no tienes diagnósticos")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
@@ -258,11 +260,11 @@ describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs 
     expect(screen.getByLabelText("Nombre")).toHaveValue("");
   });
 
-  it("sin filtros y sin resultados: «Todavía no hay diagnósticos» y sin «Limpiar filtros»", async () => {
+  it("sin filtros y sin resultados: «Aún no tienes diagnósticos» y sin «Limpiar filtros»", async () => {
     simularApi({ "GET /diagnosticos": () => Response.json(lista([])) });
     render(<ListadoDiagnosticos />);
-    expect(await screen.findByText("Todavía no hay diagnósticos")).toBeInTheDocument();
-    expect(screen.queryByText("No hay diagnósticos con estos filtros")).toBeNull();
+    expect(await screen.findByText("Aún no tienes diagnósticos")).toBeInTheDocument();
+    expect(screen.queryByText("Ningún diagnóstico coincide")).toBeNull();
     expect(screen.queryByRole("button", { name: "Limpiar filtros" })).toBeNull();
   });
 });
@@ -319,5 +321,38 @@ describe("ListadoDiagnosticos — AC14 (HU #14562): un estado de URL que el API 
     expect(screen.getByLabelText("Estado")).toHaveValue("");
     expect(within(screen.getByLabelText("Estado")).queryByRole("option", { name: /Creado|Sin lanzar/ })).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () => {
+  it("el tipo es un SelectorSegmentado Todos/Simple/Con Análisis IA que reescribe la URL", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    const tipo = screen.getByRole("radiogroup", { name: "Tipo" });
+    expect(within(tipo).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todos", "Simple", "Con Análisis IA"]);
+    expect(within(tipo).getByRole("radio", { name: "Todos" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(tipo).getByRole("radio", { name: "Con Análisis IA" }));
+    expect(h.replace).toHaveBeenLastCalledWith("/?modo=CON_ANALISIS", { scroll: false });
+    fireEvent.click(within(tipo).getByRole("radio", { name: "Todos" }));
+    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+  });
+
+  it("con filtros aplicados, «Limpiar» en la barra de filtros los retira de la URL; sin filtros no aparece", async () => {
+    h.params = new URLSearchParams("modo=SIMPLE&nombre=TST");
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    fireEvent.click(within(screen.getByRole("group", { name: "Filtros del listado" })).getByRole("button", { name: "Limpiar" }));
+    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull());
+  });
+
+  it("AC49: el error de módulo queda dentro de la tarjeta con Reintentar y el mensaje del kit", async () => {
+    simularApi({ "GET /diagnosticos": () => Promise.reject(new TypeError("Failed to fetch")) });
+    render(<ListadoDiagnosticos />);
+    const tarjeta = (await screen.findByRole("heading", { name: "Diagnósticos" })).closest("section") as HTMLElement;
+    expect(await within(tarjeta).findByText("No pudimos cargar el listado")).toBeInTheDocument();
+    expect(within(tarjeta).getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 });

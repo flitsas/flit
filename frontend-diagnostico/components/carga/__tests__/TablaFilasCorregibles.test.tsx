@@ -24,11 +24,11 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
   it("editar una fila con un valor válido la revalida al vuelo y pasa a válida", async () => {
     const api = simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [valida()] })) });
     const onFilaRevalidada = montar();
-    expect(within(filaDe()).getByText("Errónea")).toBeInTheDocument();
+    expect(within(filaDe()).getByText("Inválido")).toBeInTheDocument();
 
     fireEvent.change(identificador(), { target: { value: "tst124" } });
 
-    await waitFor(() => expect(within(filaDe()).getByText("Válida")).toBeInTheDocument());
+    await waitFor(() => expect(within(filaDe()).getByText("Corregida")).toBeInTheDocument());
     const [llamada] = llamadas(api, "POST", ruta("/carga/validar-filas"));
     expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 3, identificador: "tst124", tipo_documento_locatario: null, documento_locatario: null }] });
     expect(onFilaRevalidada).toHaveBeenCalledWith(
@@ -42,7 +42,7 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
     montar();
     fireEvent.change(identificador(), { target: { value: "TST12" } });
     fireEvent.change(identificador(), { target: { value: "TST124" } });
-    await waitFor(() => expect(within(filaDe()).getByText("Válida")).toBeInTheDocument());
+    await waitFor(() => expect(within(filaDe()).getByText("Corregida")).toBeInTheDocument());
     const revalidaciones = llamadas(api, "POST", ruta("/carga/validar-filas"));
     expect(revalidaciones).toHaveLength(1);
     expect(cuerpoDe(revalidaciones[0])).toMatchObject({ filas: [{ identificador: "TST124" }] });
@@ -78,7 +78,7 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
     montar();
     fireEvent.change(identificador(), { target: { value: "TST124" } });
     await waitFor(() => expect(identificador()).toHaveAccessibleDescription("El identificador es demasiado largo."));
-    expect(within(filaDe()).getByText("Errónea")).toBeInTheDocument();
+    expect(within(filaDe()).getByText("Inválido")).toBeInTheDocument();
   });
 
   it("un documento enmascarado no se reenvía: el usuario lo vuelve a escribir y viaja solo en la petición", async () => {
@@ -98,7 +98,7 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
 
     fireEvent.change(documento, { target: { value: "1020304050" } });
 
-    await waitFor(() => expect(within(filaDe(6)).getByText("Válida")).toBeInTheDocument());
+    await waitFor(() => expect(within(filaDe(6)).getByText("Corregida")).toBeInTheDocument());
     const [llamada] = llamadas(api, "POST", ruta("/carga/validar-filas"));
     expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 6, identificador: "TST125", tipo_documento_locatario: "CC", documento_locatario: "1020304050" }] });
     expect(localStorage.length + sessionStorage.length).toBe(0);
@@ -110,5 +110,44 @@ describe("TablaFilasCorregibles — vacío", () => {
     simularApi({});
     montar([]);
     expect(screen.getByText(/no hay filas con errores/i)).toBeInTheDocument();
+  });
+});
+
+describe("TablaFilasCorregibles — estados por fila y paginación (AC21, AC22)", () => {
+  it("AC22: mientras el API revalida la fila dice «Revalidando» y al aceptarla queda «Corregida»", async () => {
+    let soltar: (r: Response) => void = () => {};
+    simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => new Promise<Response>((r) => (soltar = r)) });
+    montar();
+    fireEvent.change(identificador(), { target: { value: "TST124" } });
+    expect(await within(filaDe()).findByText("Revalidando")).toBeInTheDocument();
+    soltar(Response.json(resumen({ filas: [valida()] })));
+    expect(await within(filaDe()).findByText("Corregida")).toBeInTheDocument();
+  });
+
+  it("AC22 (negativo): si el API la vuelve a rechazar queda «Inválido» con su mensaje y los valores digitados", async () => {
+    simularApi({
+      [`POST ${ruta("/carga/validar-filas")}`]: () =>
+        Response.json(resumen({ filas: [valida({ valida: false, errores: [{ campo: "Identificador_Vehiculo", code: "NO_EXISTE", mensaje: "La placa no tiene el formato esperado." }] })] })),
+    });
+    montar();
+    fireEvent.change(identificador(), { target: { value: "TST124" } });
+    await waitFor(() => expect(identificador()).toHaveAccessibleDescription("La placa no tiene el formato esperado."));
+    expect(within(filaDe()).getByText("Inválido")).toBeInTheDocument();
+    expect(identificador()).toHaveValue("TST124");
+  });
+
+  it("AC21: con más de 10 filas con error las pagina y permite verlas todas", () => {
+    simularApi({});
+    const filas = Array.from({ length: 12 }, (_, i) => fila({ ...FILA_ERRONEA, fila: i + 2 }));
+    montar(filas);
+    expect(screen.getAllByRole("textbox", { name: /^Identificador de la fila/ })).toHaveLength(10);
+    expect(screen.getByText("Página 1 de 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Página siguiente" }));
+    expect(screen.getByText("Página 2 de 2")).toBeInTheDocument();
+    expect(screen.getAllByRole("textbox", { name: /^Identificador de la fila/ }).map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Identificador de la fila 12",
+      "Identificador de la fila 13",
+    ]);
+    expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
   });
 });

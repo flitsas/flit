@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
-import { PantallaResultado } from "@flit/ui/PantallaResultado";
+import { Button } from "@flit/ui/Button";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import type { Configuracion } from "@/lib/configuracion";
@@ -22,12 +22,13 @@ import {
 } from "@/lib/express/api";
 import { ListaEstimado } from "@/components/carga/EstimadoConsultas";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
-import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDiagnostico";
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorExpress } from "./borradores";
 import { CamposExpress, type ErroresLocatario } from "./CamposExpress";
 import { DosZonas } from "./DosZonas";
+import { ResultadoCreacion } from "./ResultadoCreacion";
 
 type Fase =
   | { tipo: "editando" }
@@ -50,6 +51,8 @@ export interface CreacionExpressProps {
   borrador: BorradorExpress;
   onBorrador: (cambio: Partial<BorradorExpress>) => void;
   onOcupado: (ocupado: boolean) => void;
+  /** Con el resultado a la vista la pantalla oculta el selector Express/Masivo. */
+  onResultado?: (activo: boolean) => void;
 }
 
 /**
@@ -60,7 +63,7 @@ export interface CreacionExpressProps {
  * POST /express y con el 201 navega al tablero. Los 422 se pintan en su campo y el resto de rechazos en un aviso, sin
  * perder lo digitado.
  */
-export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcupado }: CreacionExpressProps) {
+export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcupado, onResultado }: CreacionExpressProps) {
   const router = useRouter();
   const id = useId();
   const formId = `${id}-form`;
@@ -114,7 +117,10 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     setErrorGeneral(null);
     setFase({ tipo: "enviando", texto: "Creando el diagnóstico…" });
     crearExpress(entrada)
-      .then((creado) => setFase({ tipo: "creado", id: creado.id }))
+      .then((creado) => {
+        setFase({ tipo: "creado", id: creado.id });
+        onResultado?.(true);
+      })
       .catch((e: unknown) => manejarError(e, () => lanzar(entrada)));
   }
 
@@ -146,20 +152,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     else lanzar(entrada);
   }
 
-  if (fase.tipo === "creado") {
-    const tablero = `/diagnosticos/${encodeURIComponent(fase.id)}`;
-    // Resultado del kit 2026 (AC18): a los 5 s sin interacción va al tablero; «Quedarme aquí» la detiene (AC19, WCAG 2.2.1).
-    return (
-      <PantallaResultado
-        tono="exito"
-        titulo="Diagnóstico iniciado con 1 vehículo"
-        mensaje="Las consultas ya están en curso. Puedes seguirlas en el tablero del lote."
-        primaria={{ etiqueta: "Ver tablero", href: tablero, enlace: Link }}
-        secundaria={{ etiqueta: "Volver", href: "/", enlace: Link }}
-        redireccion={{ segundos: 5, destino: "el tablero del lote", onNavegar: () => router.push(tablero) }}
-      />
-    );
-  }
+  if (fase.tipo === "creado") return <ResultadoCreacion diagnosticoId={fase.id} vehiculos={1} />;
 
   return (
     <DosZonas
@@ -212,11 +205,14 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                 </div>
               </section>
             ) : (
-              <div className="flex justify-end">
-                <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Link href="/" className={BOTON_SECUNDARIO_CLS}>
+                  Cancelar
+                </Link>
+                <Button type="submit" size="sm" cargando={fase.tipo === "enviando"} disabled={ocupado} className="gap-1.5 text-sm">
                   Continuar
                   <Icono nombre="derecha" className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
           </ParametrosDiagnostico>
