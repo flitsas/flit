@@ -46,6 +46,7 @@ import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
 import { GrillaSemaforos } from "./GrillaSemaforos";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { Modal } from "@flit/ui/Modal";
 
 /**
  * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert con su propio nombre accesible
@@ -120,6 +121,8 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   const [reenviadas, setReenviadas] = useState<string | null>(null);
   const reenviadasRef = useRef<HTMLDivElement>(null);
   const [cerrando, setCerrando] = useState(false);
+  // HU #14562 AC24 (D4): «Cerrar lote» pide confirmación antes de llamar a cerrar-panel.
+  const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   const volver = urlVolverAlListado(desde);
 
@@ -259,6 +262,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
       : undefined;
 
   async function cerrar() {
+    setConfirmandoCierre(false);
     setCerrando(true);
     setAviso(null);
     try {
@@ -429,14 +433,35 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
               Volver a diagnósticos
             </Link>
             {grilla && puedeCerrarPanel(grilla) && (
-              <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
+              <button type="button" onClick={() => setConfirmandoCierre(true)} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
                 <Icono nombre="portapapeles" className="h-4 w-4" />
-                Cerrar panel
+                Cerrar lote
               </button>
             )}
           </>
         }
       />
+      <Modal
+        open={confirmandoCierre}
+        onClose={() => setConfirmandoCierre(false)}
+        title="¿Cerrar el lote?"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setConfirmandoCierre(false)} className={BOTON_SECUNDARIO_CLS}>
+              Cancelar
+            </button>
+            <button type="button" onClick={() => void cerrar()} className={BOTON_PRIMARIO_CLS}>
+              Cerrar lote
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          El lote pasa a Incompleto: las consultas con error quedan sin resultado y no se vuelven a intentar. Esta acción no se
+          puede deshacer.
+        </p>
+      </Modal>
       {contenido}
       {pidiendoTipoMasivo && (
         <ModalTipoTramite

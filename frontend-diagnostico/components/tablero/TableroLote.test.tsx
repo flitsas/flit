@@ -107,6 +107,16 @@ describe("/diagnosticos/{id} — los cuatro estados", () => {
   });
 });
 
+describe("/diagnosticos/{id} — HU #14562 AC25: progreso del lote", () => {
+  it("la barra expone aria-valuetext «N de M vehículos terminados» y el avance vive en una región aria-live", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    const barra = screen.getByRole("progressbar", { name: /vehículos terminados/i });
+    expect(barra).toHaveAttribute("aria-valuetext", "1 de 3 vehículos terminados");
+    // Solo el texto del avance se anuncia: el sondeo no lo cambia si N no cambia.
+    expect(screen.getByText("1 de 3 vehículos terminados")).toHaveAttribute("aria-live", "polite");
+  });
+});
+
 describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
   it("a los 3 s pide solo los cambios desde su versión y pinta la celda que cambió", async () => {
     const cambio = grilla({ version: 13, vehiculos: [vehiculo(3, [celda(3, "RUNT", "COMPLETADO", { version: 13 })])] });
@@ -170,6 +180,45 @@ describe("/diagnosticos/{id} — AC4/AC5: acciones por perfil", () => {
   });
 });
 
+/** HU #14562 AC24: «Cerrar lote» abre la confirmación; el cierre se pide desde el botón del modal. */
+async function confirmarCierre() {
+  fireEvent.click(screen.getByRole("button", { name: "Cerrar lote" }));
+  const modal = screen.getByRole("dialog", { name: "¿Cerrar el lote?" });
+  fireEvent.click(within(modal).getByRole("button", { name: "Cerrar lote" }));
+}
+
+describe("/diagnosticos/{id} — HU #14562 AC24: «Cerrar lote» con confirmación", () => {
+  it("abre un modal que explica el efecto; al cancelar no llama al API y el lote sigue igual", async () => {
+    const api = await montar({
+      [GRILLA]: () => Response.json(loteTerminadoConErrores()),
+      [CERRAR]: () => Response.json({ id: ID, estado: "INCOMPLETO", cerrado_en: "2026-10-21T16:00:00Z" }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar lote" }));
+    const modal = screen.getByRole("dialog", { name: "¿Cerrar el lote?" });
+    expect(modal).toHaveTextContent(/las consultas con error quedan sin resultado/i);
+    fireEvent.click(within(modal).getByRole("button", { name: "Cancelar" }));
+    await avanzar();
+    expect(screen.queryByRole("dialog", { name: "¿Cerrar el lote?" })).not.toBeInTheDocument();
+    expect(llamadas(api, "POST", `/diagnosticos/${ID}/cerrar-panel`)).toHaveLength(0);
+    expect(estadoGlobal()).toHaveTextContent("En proceso");
+  });
+
+  it("al confirmar llama una sola vez a cerrar-panel y el tablero refleja el nuevo estado", async () => {
+    // Tras cerrar, el tablero vuelve a leer el lote una vez: la segunda lectura ya trae INCOMPLETO.
+    const cerrado = loteTerminadoConErrores({ estado: "INCOMPLETO", vehiculos: [], avance: { vehiculos: 2, terminados: 1 } });
+    const api = await montar({
+      [GRILLA]: enOrden(loteTerminadoConErrores(), cerrado),
+      [CERRAR]: () => Response.json({ id: ID, estado: "INCOMPLETO", cerrado_en: "2026-10-21T16:00:00Z" }),
+    });
+    await confirmarCierre();
+    await avanzar();
+    await avanzar();
+    expect(llamadas(api, "POST", `/diagnosticos/${ID}/cerrar-panel`)).toHaveLength(1);
+    expect(estadoGlobal()).toHaveTextContent("Incompleto");
+    expect(screen.queryByRole("dialog", { name: "¿Cerrar el lote?" })).not.toBeInTheDocument();
+  });
+});
+
 describe("/diagnosticos/{id} — AC7: cerrar panel", () => {
   it("el lote terminado con errores pasa a INCOMPLETO y muestra el estimado frente a lo consumido", async () => {
     const cerrado = loteTerminadoConErrores({
@@ -189,7 +238,7 @@ describe("/diagnosticos/{id} — AC7: cerrar panel", () => {
     expect(estadoGlobal()).toHaveTextContent("En proceso");
     expect(screen.queryByRole("region", { name: /estimado frente a consumido/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar panel" }));
+    await confirmarCierre();
     await avanzar();
     await avanzar();
 
@@ -200,12 +249,12 @@ describe("/diagnosticos/{id} — AC7: cerrar panel", () => {
     expect(within(runt).getAllByRole("cell").map((c) => c.textContent)).toEqual(["2", "2"]);
     const simit = within(estimado).getByRole("row", { name: /SIMIT propietario/ });
     expect(within(simit).getAllByRole("cell").map((c) => c.textContent)).toEqual(["2", "1"]);
-    expect(screen.queryByRole("button", { name: "Cerrar panel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cerrar lote" })).not.toBeInTheDocument();
   });
 
-  it("no ofrece Cerrar panel mientras quedan celdas pendientes o si el lote no tiene errores", async () => {
+  it("no ofrece Cerrar lote mientras quedan celdas pendientes o si el lote no tiene errores", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla()) });
-    expect(screen.queryByRole("button", { name: "Cerrar panel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cerrar lote" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -218,7 +267,7 @@ describe("/diagnosticos/{id} — AC7: cerrar panel", () => {
       [GRILLA]: () => Response.json(loteTerminadoConErrores()),
       [CERRAR]: () => Response.json({ code, error: "detalle técnico" }, { status: 409 }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar panel" }));
+    await confirmarCierre();
     await avanzar();
     expect(screen.getByRole("alert")).toHaveTextContent(mensaje);
     expect(desdesPedidos(api)).toEqual([0, 20]);

@@ -43,7 +43,8 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
           <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {texto}
         </span>
-        <span className="text-sm font-medium text-flit-primary">{`${terminados} de ${vehiculos} vehículos terminados`}</span>
+        {/* HU #14562 AC25: solo se anuncia cuando N cambia; el sondeo deja el mismo texto y no hay anuncio. */}
+        <span aria-live="polite" className="text-sm font-medium text-flit-primary">{`${terminados} de ${vehiculos} vehículos terminados`}</span>
         {sondeando && <span className={AYUDA_CLS}>Se actualiza sola cada 3 segundos.</span>}
       </div>
       <div
@@ -52,6 +53,7 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
         aria-valuemin={0}
         aria-valuemax={vehiculos}
         aria-valuenow={terminados}
+        aria-valuetext={`${terminados} de ${vehiculos} vehículos terminados`}
         className="h-2 w-full overflow-hidden rounded-full bg-secondary"
       >
         <div className="h-full rounded-full transition-[width]" style={{ width: `${porcentaje}%`, background: "var(--di-gradient-action)" }} />
