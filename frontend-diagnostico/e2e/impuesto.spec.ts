@@ -36,7 +36,7 @@ test.describe("impuesto departamental en el tablero", () => {
 
     // El alta (pantalla única) ofrece el impuesto cuando la simulación lo declara disponible.
     await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
-    await page.getByRole("button", { name: "Diagnosticar" }).click();
+    await page.getByRole("button", { name: "Diagnosticar en línea" }).click();
     await page.waitForURL((url) => url.pathname === "/diagnosticos/nuevo" && url.searchParams.get("modo") === "express");
     const casilla = page.getByRole("checkbox", { name: "Impuesto departamental" });
     test.skip((await casilla.count()) === 0, "La simulación no ofrece el impuesto: revisar la bandera y la réplica de departamentos");
@@ -52,9 +52,10 @@ test.describe("impuesto departamental en el tablero", () => {
       "El Express no incluye el impuesto: revisar la bandera ImpuestoDisponible y el contrato de la compañía",
     );
 
-    // AC1: sin recargar, el semáforo del impuesto llega a verde (o a N/A si el RUNT simulado no deriva un departamento soportado).
+    // AC1: sin recargar, el semáforo del impuesto llega a «Ejecutado» o «Con deuda» (o a «Novedad» si el RUNT simulado no deriva un
+    // departamento soportado). HU #14562 AC11: el rótulo ya no lleva «(OK)».
     const semaforo = grilla.getByRole("link", { name: new RegExp(`^Ver detalle de Impuesto departamental de ${PLACA}`) });
-    await expect(semaforo).toHaveAccessibleName(/(Ejecutado \(OK\)|Novedad) \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
+    await expect(semaforo).toHaveAccessibleName(/(Ejecutado|Con deuda|Novedad) \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
     test.skip(/Novedad \(/.test((await semaforo.getAttribute("aria-label")) ?? ""), "El vehículo simulado quedó en un departamento no soportado");
 
     await semaforo.focus();

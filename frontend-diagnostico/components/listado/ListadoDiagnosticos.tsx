@@ -8,6 +8,14 @@ import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
 import {
@@ -39,6 +47,9 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorListado } | { t
 
 const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"] as const;
 
+/** Celda del listado; por debajo de 900 px, renglón de la tarjeta con su columna en `data-label` (HU #14562 AC56). */
+const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
+
 /** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
 const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
@@ -51,7 +62,8 @@ const IconoPortapapeles = iconoComo("portapapeles");
  * Tabla con ID corto, nombre, fecha (hora Colombia), modalidad (Express o Masivo, HU #14087), tipo, trámite, chip de estado («Sin lanzar» para CREADO) y creador
  * tal como llega («No disponible» incluido). Clic en la fila o Enter en su enlace abre el tablero, o la carga de vehículos
  * si el lote está sin lanzar. Cuatro estados: cargando, error (400 con campo junto a su filtro, 403 a la página de acceso
- * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno.
+ * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno. Por debajo
+ * de 900 px cada diagnóstico es una tarjeta (recetas TABLA_MOVIL_*, HU #14562 AC56), con el nombre de título.
  */
 export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boolean }) {
   const router = useRouter();
@@ -179,8 +191,8 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
     contenido = (
       <div className="flex flex-col gap-3">
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table aria-label="Diagnósticos de la compañía" className="w-full min-w-[940px] border-collapse text-sm">
-            <thead>
+          <table aria-label="Diagnósticos de la compañía" className={`w-full min-w-[940px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
                 {COLUMNAS.map((t) => (
                   <th key={t} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
@@ -189,7 +201,7 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {lista.diagnosticos.map((d) => {
                 const destino = destinoConFiltros(destinoDiagnostico(d), filtros);
                 const estado = etiquetaEstado(d.estado, d.estado_etiqueta);
@@ -201,12 +213,12 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
                       if ((e.target as HTMLElement).closest("a")) return;
                       router.push(destino);
                     }}
-                    className={`${FILA_TABLA_CLS} cursor-pointer bg-card transition-colors hover:bg-[var(--table-row-hover)]`}
+                    className={`${FILA_TABLA_CLS} cursor-pointer bg-card transition-colors duration-[var(--dx-motion-rapido)] hover:bg-[var(--table-row-hover)] motion-reduce:transition-none ${TABLA_MOVIL_ROW_CLS}`}
                   >
-                    <td className={`${CELDA_TABLA_CLS} font-mono tabular-nums`}>
+                    <td data-label="ID" className={`${CELDA_CLS} font-mono tabular-nums`}>
                       <span title={d.id}>{idCorto(d.id)}</span>
                     </td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Nombre" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
                       <Link
                         href={destino}
                         className={`text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`}
@@ -214,10 +226,16 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
                         {d.nombre}
                       </Link>
                     </td>
-                    <td className={`${CELDA_TABLA_CLS} whitespace-nowrap tabular-nums`}>{fechaDelDato(d.creado_en)}</td>
-                    <td className={CELDA_TABLA_CLS}>{modalidad(d.es_express)}</td>
-                    <td className={CELDA_TABLA_CLS}>{nombreModo(d.modo)}</td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Creado" className={`${CELDA_CLS} whitespace-nowrap tabular-nums`}>
+                      {fechaDelDato(d.creado_en)}
+                    </td>
+                    <td data-label="Modalidad" className={CELDA_CLS}>
+                      {modalidad(d.es_express)}
+                    </td>
+                    <td data-label="Tipo" className={CELDA_CLS}>
+                      {nombreModo(d.modo)}
+                    </td>
+                    <td data-label="Trámite" className={CELDA_CLS}>
                       {d.tipo_tramite ? (
                         nombreTipoTramite(d.tipo_tramite)
                       ) : (
@@ -226,10 +244,12 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
                         </span>
                       )}
                     </td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Estado" className={CELDA_CLS}>
                       <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
                     </td>
-                    <td className={CELDA_TABLA_CLS}>{d.usuario_creador.nombre}</td>
+                    <td data-label="Creador" className={CELDA_CLS}>
+                      {d.usuario_creador.nombre}
+                    </td>
                   </tr>
                 );
               })}

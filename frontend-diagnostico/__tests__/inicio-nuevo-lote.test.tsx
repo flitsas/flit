@@ -42,7 +42,7 @@ describe("Inicio — entrada a la creación desde la tarjeta del título (AC6)",
     await tarjetaTitulo();
     const express = await screen.findByRole("region", { name: "Diagnóstico Express" });
     expect(express).toContainElement(screen.getByRole("textbox", { name: "Placa o VIN" }));
-    expect(express).toContainElement(screen.getByRole("button", { name: "Diagnosticar" }));
+    expect(express).toContainElement(screen.getByRole("button", { name: "Diagnosticar en línea" }));
     const masivo = screen.getByRole("region", { name: "Diagnóstico masivo" });
     expect(within(masivo).getByRole("link", { name: "Nuevo diagnóstico masivo" })).toHaveAttribute("href", "/diagnosticos/nuevo?modo=masivo");
     expect(within(masivo).getByRole("link", { name: /descargar plantilla/i })).toHaveAttribute("href", "/api/v1/diagnostico/plantilla");
@@ -51,7 +51,7 @@ describe("Inicio — entrada a la creación desde la tarjeta del título (AC6)",
   it("con una placa válida, «Diagnosticar» abre /diagnosticos/nuevo en Express con la placa precargada", async () => {
     montarInicio(true);
     fireEvent.change(await screen.findByRole("textbox", { name: "Placa o VIN" }), { target: { value: "tst 123" } });
-    fireEvent.click(screen.getByRole("button", { name: "Diagnosticar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Diagnosticar en línea" }));
     expect(router.push).toHaveBeenCalledWith("/diagnosticos/nuevo?modo=express&placa=TST123");
   });
 

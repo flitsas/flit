@@ -42,6 +42,7 @@ describe("HU14562 AC45 motivo del ajuste", () => {
         onAlertamientos={vi.fn()}
       />,
     );
-    expect(screen.getByRole("table", { name: "Alertamientos del ajuste" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Alertamientos del ajuste" })).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 });

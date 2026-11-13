@@ -43,7 +43,11 @@ const enOrden = (...grillas: Grilla[]) => {
   return () => Response.json(grillas[Math.min(n++, grillas.length - 1)]);
 };
 
-const estadoGlobal = () => screen.getByRole("status", { name: /estado del lote/i });
+/**
+ * Chip del estado del lote. HU #14562 (auditoría m-5): EN_PROCESO usa la EtiquetaEnProceso del kit, cuyo nombre es
+ * «Estado: En proceso»; el resto de estados conserva «Estado del lote: …».
+ */
+const estadoGlobal = () => screen.getByRole("status", { name: /^estado( del lote)?: /i });
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
@@ -471,7 +475,8 @@ describe("/diagnosticos/{id} — HU #14562 AC28: columna Dictamen, búsqueda y c
     expect(bloqueado).toHaveTextContent("Bloqueado");
     expect(bloqueado.closest("td")).toHaveTextContent(/ajustado por flit/i);
     expect(within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST003" })).toHaveTextContent("Pendiente");
-    expect(within(tablaLote()).getByRole("rowheader", { name: /TST001/ })).toHaveClass("sticky");
+    // Fija desde 900 px; por debajo, la fila es tarjeta (auditoría B2, AC56).
+    expect(within(tablaLote()).getByRole("rowheader", { name: /TST001/ })).toHaveClass("min-[900px]:sticky");
   });
 
   it("la búsqueda por placa o VIN filtra las filas en el cliente", async () => {

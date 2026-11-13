@@ -4,6 +4,16 @@ import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
 import { FUENTES } from "@/lib/configuracion";
 import { V1, V2, V3, celda, grilla, llamadas, loteTerminadoConErrores, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import type { Grilla } from "@/lib/tablero/api";
+import { createElement, type ComponentType } from "react";
+import { join, resolve } from "node:path";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <GrillaSemaforos grilla={grilla} puedeReprocesar={sesion.capacidades.reprocesarConsultas}
 // onReprocesada={(celda) => …} onErrorReproceso={(mensaje) => …} /> pinta una fila por vehículo (placa o VIN, documento
@@ -31,6 +41,7 @@ const chipDe = (td: HTMLElement) => td.querySelector<HTMLElement>("[data-tono]")
 const accionesDe = (raiz: Pick<typeof screen, "queryAllByRole"> = screen) => raiz.queryAllByRole("button");
 
 const NUEVA = " (se abre en una pestaña nueva)";
+const DIR_ICONOS = resolve(__dirname, "../dx/iconos");
 
 describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8 fuentes siempre", () => {
   it("cabecera de dos niveles: RUNT y SIMIT agrupan sus 3 fuentes; Avalúo comercial e Impuesto departamental, la suya", () => {
@@ -395,5 +406,107 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
       vehiculos: [vehiculo(7, [celda(7, "RUNT", "COMPLETADO", { tiene_deuda: true })])],
     }));
     expect(chipDe(celdaDe(container, "celda-7-runt"))).toHaveAttribute("data-tono", "ejecutado");
+  });
+});
+
+// HU #14562, auditoría de UI (B2, M6/AC56, M7/AC28, m-4, m-5): la grilla se usa a 360 px, pasa a tarjetas bajo 900 px,
+// lleva el ícono de cada fuente en la cabecera y la cabecera es la del kit (13 px en negrita).
+describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuente y cabecera del kit", () => {
+  const completa = () =>
+    pintar(grilla(), false, {
+      casillaVehiculo: () => <span>casilla</span>,
+      dictamenVehiculo: () => <span>Viable</span>,
+      accionVehiculo: () => <span>pdf</span>,
+      tituloAccionVehiculo: "Acciones",
+    });
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+
+  it("B2: ninguna columna queda fija por debajo de 900 px (sticky y desplazamiento solo con min-[900px])", () => {
+    const { container } = completa();
+    const celdas = Array.from(container.querySelectorAll("tbody th, tbody td"));
+    const fijas = celdas.filter((el) => clases(el).includes("min-[900px]:sticky"));
+    // Casilla, placa y acciones: las tres fijas en escritorio.
+    expect(fijas).toHaveLength(3 * container.querySelectorAll("tbody tr").length);
+    for (const el of celdas) expect(clases(el), el.textContent ?? "").not.toContain("sticky");
+    for (const el of container.querySelectorAll("th, td")) {
+      expect(clases(el).filter((c) => /^(left|right)-/.test(c)), el.textContent ?? "").toEqual([]);
+    }
+    const acciones = screen.getByRole("columnheader", { name: "Acciones" });
+    expect(clases(acciones)).toContain("min-[900px]:right-0");
+  });
+
+  it("AC56: bajo 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo", () => {
+    const { container } = completa();
+    const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(tabla)).toContain(c);
+    for (const c of TABLA_MOVIL_THEAD_CLS.split(" ")) expect(clases(tabla.querySelector("thead")!)).toContain(c);
+    for (const c of TABLA_MOVIL_TBODY_CLS.split(" ")) expect(clases(tabla.querySelector("tbody")!)).toContain(c);
+    for (const fila of container.querySelectorAll("tbody tr")) {
+      for (const c of TABLA_MOVIL_ROW_CLS.split(" ")) expect(clases(fila)).toContain(c);
+    }
+  });
+
+  it("AC56: cada celda de la tarjeta dice su columna con data-label (la fuente, con su nombre)", () => {
+    const { container } = completa();
+    const fila = filaDe(container, "vehiculo-1");
+    const etiquetas = Array.from(fila.children).map((td) => td.getAttribute("data-label"));
+    expect(etiquetas).toEqual([
+      "Seleccionar",
+      "Placa o VIN",
+      "Dictamen",
+      "Documento declarado",
+      "Documento del propietario",
+      ...FUENTES.map((f) => f.nombre),
+      "Acciones",
+    ]);
+    for (const td of fila.children) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
+    for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(within(fila).getByRole("rowheader"))).toContain(c);
+  });
+
+  it("M7/AC28: la cabecera lleva el ícono IconoDx de cada pilar y de cada fuente, decorativo", async () => {
+    pintar();
+    const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
+    const svgDe = (nombre: string) => within(tabla).getByRole("columnheader", { name: nombre }).querySelector("svg");
+    // Import dinámico y no estático: así un ícono que falta hace fallar este caso y no el archivo entero.
+    const icono = async (nombre: string) => {
+      const modulo = (await import(/* @vite-ignore */ join(DIR_ICONOS, `${nombre}.tsx`)).catch(() => undefined)) as
+        | Record<string, ComponentType<{ tamano?: 16 }>>
+        | undefined;
+      expect(modulo, nombre).toBeDefined();
+      return createElement(modulo![nombre], { tamano: 16 });
+    };
+    const esperado: Record<string, string> = {
+      RUNT: "IconoDxRunt",
+      SIMIT: "IconoDxSimit",
+      "Avalúo comercial": "IconoDxAvaluo",
+      "Impuesto departamental": "IconoDxImpuesto",
+      "RUNT vehículo": "IconoDxRunt",
+      "RUNT propietario": "IconoDxRuntPersona",
+      "RUNT locatario": "IconoDxLocatario",
+      "SIMIT vehículo": "IconoDxSimit",
+      "SIMIT propietario": "IconoDxSimitPersona",
+      "SIMIT locatario": "IconoDxLocatario",
+    };
+    for (const [nombre, componente] of Object.entries(esperado)) {
+      const svg = svgDe(nombre);
+      expect(svg, nombre).not.toBeNull();
+      expect(svg).toHaveAttribute("aria-hidden", "true");
+      expect(svg!.innerHTML, nombre).toBe(render(await icono(componente)).container.querySelector("svg")!.innerHTML);
+    }
+  });
+
+  it("m-4: las cabeceras usan la celda de cabecera del kit (13 px en negrita)", () => {
+    pintar();
+    for (const th of screen.getAllByRole("columnheader")) {
+      expect(clases(th)).toContain("text-[0.8125rem]");
+      expect(clases(th)).toContain("font-bold");
+    }
+  });
+
+  it("m-5/m-1: el enlace del semáforo anima con el token --dx-motion-rapido y queda quieto con menos movimiento", () => {
+    pintar();
+    const enlace = screen.getAllByRole("link", { name: /^Ver detalle de / })[0];
+    expect(clases(enlace)).toContain("motion-reduce:transition-none");
+    expect(clases(enlace)).toContain("duration-[var(--dx-motion-rapido)]");
   });
 });

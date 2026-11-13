@@ -29,6 +29,14 @@ describe("detalle — URL por vehículo y fuente", () => {
     expect(url).toBe("/api/v1/diagnostico/diagnosticos/lote-1/vehiculos/vehiculo-2/consultas/SIMIT_VEHICULO");
     expect(init.method).toBe("GET");
   });
+
+  it("HU #14562 (seguridad M2, D19): la lectura del detalle no queda en la caché del navegador (cache: no-store)", async () => {
+    const fetchMock = vi.fn(async () => Response.json(simitVehiculo()));
+    vi.stubGlobal("fetch", fetchMock);
+    await obtenerDetalleCelda("lote-1", "vehiculo-2", "SIMIT_VEHICULO");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.cache).toBe("no-store");
+  });
 });
 
 describe("detalle — traduce 403 y 404", () => {

@@ -7,6 +7,7 @@ import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/componen
 import { Button } from "@flit/ui/Button";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
 import { ChipEstadoCelda } from "@/components/tablero/CeldaSemaforo";
+import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite";
 import {
   cuerpoAjusteDictamen,
   errorAjusteDictamen,
@@ -45,6 +46,12 @@ export interface PanelDictamenProps {
   tramiteAnalizado?: string | null;
   /** HU #14562 AC35: consultas del vehículo con su estado (de las celdas de la fila). Sin ellas, la sección se omite. */
   consultas?: ConsultaPanel[];
+  /**
+   * HU #14562 F-05: atajo «Crear trámite» en el pie, solo con el dictamen VIABLE (AC36). Quien pinta el panel lo pasa cuando
+   * la fila es elegible y la sesión puede derivar; al pulsarlo cierra el panel y abre el flujo de la fila (modales AC37), sin
+   * apilar un modal sobre el panel.
+   */
+  onCrearTramite?: () => void;
 }
 
 /** dd/mm/aaaa en la hora de Colombia. Fecha ilegible: el texto crudo. */
@@ -128,6 +135,8 @@ const filasDe = (dictamen: Dictamen): FilaAlertamiento[] =>
  * alertamientos editables, motivo obligatorio y la confirmación explícita antes de «Aplicar». El PUT lleva
  * `version_esperada`; un 409 de versión ofrece «Recargar» y el 409 VEHICULO_CON_TRAMITE, «Confirmar y aplicar» con
  * `confirmar_con_tramite`. Lo digitado se conserva ante cualquier error.
+ *
+ * Pie (F-05): con `onCrearTramite` y el dictamen VIABLE, «Crear trámite»; el vehículo BLOQUEADO nunca lo tiene (AC36).
  */
 export function PanelDictamen({
   diagnosticoId,
@@ -140,6 +149,7 @@ export function PanelDictamen({
   devolverFocoA,
   tramiteAnalizado,
   consultas,
+  onCrearTramite,
 }: PanelDictamenProps) {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -210,6 +220,9 @@ export function PanelDictamen({
     setErrorAjuste(null);
     setIntento((n) => n + 1);
   }
+
+  const ofreceTramite = onCrearTramite !== undefined && carga.tipo === "listo" && carga.dictamen.veredicto !== "BLOQUEADO";
+  const ofreceAplicar = ofreceOverride && carga.tipo === "listo";
 
   const errorCampo = errorAjuste?.campo ?? null;
   const errorMotivo = errorCampo === "motivo" ? errorAjuste!.mensaje : null;
@@ -345,11 +358,19 @@ export function PanelDictamen({
       ancho={640}
       titulo={`Dictamen · ${identificador}`}
       pie={
-        ofreceOverride && carga.tipo === "listo" ? (
-          <div className="flex justify-end">
-            <Button cargando={enviando} disabled={!listoParaAplicar} size="sm" onClick={() => void aplicar()}>
-              Aplicar
-            </Button>
+        ofreceTramite || ofreceAplicar ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            {ofreceTramite && (
+              <Button size="sm" className="gap-1.5" onClick={onCrearTramite}>
+                <IconoDxCrearTramite tamano={16} />
+                Crear trámite
+              </Button>
+            )}
+            {ofreceAplicar && (
+              <Button cargando={enviando} disabled={!listoParaAplicar} size="sm" onClick={() => void aplicar()}>
+                Aplicar
+              </Button>
+            )}
           </div>
         ) : undefined
       }

@@ -10,6 +10,7 @@ const DIR = resolve(__dirname, "../../components/dx/iconos");
 const ESPERADOS = [
   "IconoDxRunt",
   "IconoDxRuntPersona",
+  "IconoDxLocatario",
   "IconoDxSimit",
   "IconoDxSimitPersona",
   "IconoDxAvaluo",
@@ -79,5 +80,31 @@ describe("AC3 · familia IconoDx* con exportación por ícono", () => {
       expect(codigo, archivo).not.toMatch(/["'`[(]#[0-9a-fA-F]{3,8}\b/);
       expect(codigo, archivo).not.toMatch(/rgba?\(/);
     }
+  });
+});
+
+// HU #14562, auditoría de UI (§4.1, m-14): Licencia se distingue de RUNT a 16–24 px y Locatario sigue el glifo
+// `f-locatario` de la maqueta (persona con un documento).
+describe("HU14562 · glifos de Licencia y Locatario", () => {
+  const glifo = (archivo: string) => {
+    const codigo = readFileSync(join(DIR, `${archivo}.tsx`), "utf8");
+    return [...codigo.matchAll(/<(rect|circle|path)\s[^>]*\/>/g)].map((m) => m[0].replace(/\s+/g, " "));
+  };
+
+  it("IconoDxLicencia no repite el avatar ni el marco de IconoDxRunt", () => {
+    const runt = glifo("IconoDxRunt");
+    const licencia = glifo("IconoDxLicencia");
+    expect(licencia.length).toBeGreaterThan(0);
+    expect(licencia.filter((forma) => runt.includes(forma))).toEqual([]);
+    expect(licencia.join(" ")).not.toContain('cx="336" cy="448"');
+  });
+
+  it("IconoDxLocatario es la persona con documento de la maqueta (f-locatario)", () => {
+    expect(glifo("IconoDxLocatario")).toEqual([
+      '<circle cx="384" cy="320" r="160" />',
+      '<path d="M128 864c0-176 112-288 256-288 48 0 96 12 136 36" />',
+      '<rect x="608" y="560" width="288" height="336" rx="48" />',
+      '<path d="M688 688h128M688 800h80" />',
+    ]);
   });
 });

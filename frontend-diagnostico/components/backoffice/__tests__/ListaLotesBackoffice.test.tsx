@@ -2,6 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ListaLotesBackoffice } from "@/components/backoffice/ListaLotesBackoffice";
 import { EMPRESA_A, listaLotes, lote, simularApi } from "@/lib/backoffice/__tests__/datos";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <ListaLotesBackoffice empresa="" estado={null} conErrores={false} pagina={1} /> en /backoffice/diagnosticos:
 // sin compañía elegida no consulta lotes; la compañía se elige en el selector con búsqueda por nombre o NIT (GET
@@ -239,3 +247,24 @@ describe("HU14562 AC43 — rediseño de F-08 con el kit", () => {
   });
 });
 
+
+// HU #14562 AC56 (auditoría M6): por debajo de 900 px los lotes pasan a tarjetas con las recetas TABLA_MOVIL_* del repo.
+describe("ListaLotesBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+
+  it("tabla, cabecera, cuerpo y filas llevan las recetas de tarjeta y cada celda su data-label", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1), lote(2)])) });
+    montar({ empresa: EMPRESA_A });
+    const t = await screen.findByRole("table", { name: /lotes de la compañía/i });
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(t)).toContain(c);
+    for (const c of TABLA_MOVIL_THEAD_CLS.split(" ")) expect(clases(t.querySelector("thead")!)).toContain(c);
+    for (const c of TABLA_MOVIL_TBODY_CLS.split(" ")) expect(clases(t.querySelector("tbody")!)).toContain(c);
+    for (const fila of t.querySelectorAll("tbody tr")) {
+      for (const c of TABLA_MOVIL_ROW_CLS.split(" ")) expect(clases(fila)).toContain(c);
+      const celdas = Array.from(fila.children);
+      expect(celdas.map((td) => td.getAttribute("data-label"))).toEqual(["Lote", "Estado", "Creado", "Vehículos", "Celdas en error"]);
+      for (const td of celdas) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
+      for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(celdas[0])).toContain(c);
+    }
+  });
+});

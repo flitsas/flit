@@ -1,7 +1,10 @@
 "use client";
 
 import { useId } from "react";
+import { BarraProgreso } from "@flit/ui/BarraProgreso";
+import { EtiquetaEnProceso } from "@flit/ui/EtiquetaEnProceso";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
+import { TABLA_HEADER_CELL_CLS } from "@flit/ui/table-styles";
 import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
@@ -26,39 +29,30 @@ export function vistaEstadoLote(estado: EstadoDiagnostico, etiqueta?: string | n
 
 /**
  * Estado global y avance del lote (HU #13748, F04-C4/C5): chip del estado, barra de vehículos terminados y, si el lote sigue
- * con consultas abiertas, el aviso de que la grilla se actualiza sola.
+ * con consultas abiertas, el aviso de que la grilla se actualiza sola. HU #14562 (auditoría m-5): el lote EN_PROCESO usa la
+ * EtiquetaEnProceso del kit (punto pulsante, quieto con menos movimiento) y el avance, la BarraProgreso del kit.
  */
 export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando: boolean }) {
   const { texto, tono } = vistaEstadoLote(grilla.estado, grilla.estado_etiqueta);
   const { vehiculos, terminados } = grilla.avance;
-  const porcentaje = vehiculos > 0 ? Math.round((terminados / vehiculos) * 100) : 0;
+  const avance = `${terminados} de ${vehiculos} vehículos terminados`;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span
-          role="status"
-          aria-label={`Estado del lote: ${texto}`}
-          {...etiquetaKit(tono)}
-        >
-          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
-          {texto}
-        </span>
+        {grilla.estado === "EN_PROCESO" ? (
+          <EtiquetaEnProceso etiqueta={texto} />
+        ) : (
+          <span role="status" aria-label={`Estado del lote: ${texto}`} {...etiquetaKit(tono)}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
+            {texto}
+          </span>
+        )}
         {/* HU #14562 AC25: solo se anuncia cuando N cambia; el sondeo deja el mismo texto y no hay anuncio. */}
-        <span aria-live="polite" className="text-sm font-medium text-flit-primary">{`${terminados} de ${vehiculos} vehículos terminados`}</span>
+        <span aria-live="polite" className="text-sm font-medium text-flit-primary">{avance}</span>
         {sondeando && <span className={AYUDA_CLS}>Se actualiza sola cada 3 segundos.</span>}
       </div>
-      <div
-        role="progressbar"
-        aria-label="Vehículos terminados"
-        aria-valuemin={0}
-        aria-valuemax={vehiculos}
-        aria-valuenow={terminados}
-        aria-valuetext={`${terminados} de ${vehiculos} vehículos terminados`}
-        className="h-2 w-full overflow-hidden rounded-full bg-secondary"
-      >
-        <div className="h-full rounded-full transition-[width]" style={{ width: `${porcentaje}%`, background: "var(--di-gradient-action)" }} />
-      </div>
+      <BarraProgreso etiqueta="Vehículos terminados" valor={terminados} maximo={vehiculos} textoValor={avance} />
     </div>
   );
 }
@@ -84,7 +78,7 @@ export function EstimadoVsConsumido({ estimado, plegable = false }: { estimado?:
               <th
                 key={t}
                 scope="col"
-                className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-wider ${i === 0 ? "text-left" : "text-right"}`}
+                className={i === 0 ? TABLA_HEADER_CELL_CLS : TABLA_HEADER_CELL_CLS.replace("text-left", "text-right")}
                 style={{ background: "var(--table-header-bg)", color: "var(--table-header-fg)" }}
               >
                 {t}
