@@ -68,6 +68,12 @@ tags:
       (HU #13849). Permiso
       diagnostico.reportes.descargar y la visibilidad de la grilla. Nunca origen, usuario manual, proveedor, transacción ni
       documentos completos (R-20).
+  - name: Notificaciones
+    description: >
+      Campana de Diagnóstico (HU #14563 B8, ADR-0086 D-3, D8): avisos persistentes del usuario del token por ZIP de evidencias
+      listo o fallido, derivación masiva terminada y lote terminado. Solo las del usuario, de su compañía y de lotes que ve
+      (visibilidad PROPIOS). Sin PII: título y mensaje se arman al leer con rótulos fijos y el nombre del lote. Se purgan a
+      los 90 días.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice (D-16, ADR-0073; ajustes 2026-11-11, punto 1). Dos políticas: la de
@@ -3005,6 +3011,126 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/notificaciones:
+    get:
+      tags: [Notificaciones]
+      operationId: bandejaNotificaciones
+      summary: Bandeja de la campana del usuario
+      description: >
+        HU #14563 B8 (AC36, AC38). Permiso diagnostico.diagnosticos.ver. Lista las notificaciones del usuario del token (claim
+        sub), de su compañía y de lotes que puede ver con la misma regla del listado de diagnósticos (con visibilidad PROPIOS,
+        solo los lotes que creó, salvo el admin de la compañía). no_leidas usa la misma visibilidad. Orden: creada_en
+        descendente, luego id. Paginación por cursor: `antes` es el `siguiente` de la página anterior. Lleva ETag débil
+        W/"<no_leidas>-<total>-<max creada_en>-<max leida_en>-<antes>-<limite>" (fechas en milisegundos Unix; el cursor y el
+        límite distinguen páginas) y Cache-Control private, no-cache; con If-None-Match igual responde 304 sin cuerpo.
+        Los literales de titulo y mensaje y el formato de accion.href son provisionales: pendientes de confirmar por el
+        frontend y el PO.
+      parameters:
+        - name: limite
+          in: query
+          required: false
+          description: Tamaño de página (1 a 50; por defecto 20; fuera de rango se acota).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: antes
+          in: query
+          required: false
+          description: Cursor, el `siguiente` de la página anterior (id de la última notificación devuelta).
+          schema:
+            type: string
+            format: uuid
+        - name: If-None-Match
+          in: header
+          required: false
+          description: ETag de una respuesta anterior.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: La página de la bandeja.
+          headers:
+            ETag:
+              description: ETag débil de la bandeja visible para esta página.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BandejaNotificaciones"
+        "304":
+          description: Nada cambió desde el ETag de If-None-Match. Sin cuerpo.
+          headers:
+            ETag:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/notificaciones/{nid}/leida:
+    parameters:
+      - name: nid
+        in: path
+        required: true
+        description: Id de la notificación.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Notificaciones]
+      operationId: marcarNotificacionLeida
+      summary: Marca una notificación como leída
+      description: >
+        HU #14563 B8 (AC37, AC38). Permiso diagnostico.diagnosticos.ver. Idempotente: la primera vez fija leida_en con la mayor
+        entre la hora del servidor y creada_en (nunca antes de creada_en); las siguientes no la cambian y también responden 204.
+      responses:
+        "204":
+          description: Leída (o ya lo estaba).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: no existe, es de otro usuario, de otra compañía o de un lote que el usuario ya no ve
+            (PROPIOS). Sin datos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/notificaciones/leer-todas:
+    post:
+      tags: [Notificaciones]
+      operationId: leerTodasNotificaciones
+      summary: Marca como leídas todas las notificaciones visibles del usuario
+      description: >
+        HU #14563 B8 (AC37). Permiso diagnostico.diagnosticos.ver. Solo las que GET /notificaciones lista (misma visibilidad);
+        leida_en con la misma regla que /leida. Después no_leidas es 0.
+      responses:
+        "204":
+          description: Hecho (también si no había ninguna sin leer).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5428,6 +5554,66 @@ components:
           nullable: true
           enum: [ALMACEN_NO_DISPONIBLE, GENERACION_FALLIDA, GENERACION_INTERRUMPIDA, SIN_VEHICULOS_TERMINADOS, null]
           description: Solo con estado ERROR. Nunca la causa técnica de una fuente.
+    BandejaNotificaciones:
+      type: object
+      required: [no_leidas, items, siguiente]
+      properties:
+        no_leidas:
+          type: integer
+          minimum: 0
+          description: Sin leer en toda la bandeja visible (no solo en esta página).
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificacionCampana"
+        siguiente:
+          type: string
+          format: uuid
+          nullable: true
+          description: Cursor para `antes` de la página siguiente; null si no hay más.
+    NotificacionCampana:
+      type: object
+      required: [id, tipo, creada_en, leida_en, diagnostico_id, titulo, mensaje, accion]
+      description: Sin placa, VIN, documento, nombre de persona ni archivo (O2).
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO]
+        creada_en:
+          type: string
+          format: date-time
+        leida_en:
+          type: string
+          format: date-time
+          nullable: true
+        diagnostico_id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+          description: Rótulo fijo por tipo (provisional).
+          example: Diagnóstico terminado
+        mensaje:
+          type: string
+          description: Rótulo fijo por tipo con el nombre del lote (provisional).
+          example: "El lote «Flota norte» terminó sus consultas."
+        accion:
+          $ref: "#/components/schemas/AccionNotificacion"
+    AccionNotificacion:
+      type: object
+      required: [tipo, href]
+      properties:
+        tipo:
+          type: string
+          enum: [VER_EVIDENCIAS, VER_DERIVACION, VER_LOTE]
+          description: VER_EVIDENCIAS para los dos tipos de ZIP, VER_DERIVACION para DERIVACION_TERMINADA y VER_LOTE para LOTE_TERMINADO.
+        href:
+          type: string
+          description: Ruta relativa del frontend; hoy /diagnostico/{diagnostico_id} para todos los tipos (provisional).
+          example: /diagnostico/01a1d385-0649-766f-a224-cf68b10c52a7
     ErrorRegla:
       type: object
       required: [code, error]
