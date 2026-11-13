@@ -446,6 +446,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           onClose={() => setDictamen(null)}
           devolverFocoA={dictamen.disparador}
           tramiteAnalizado={grilla?.lote?.tipo_tramite?.nombre ?? null}
+          consultas={(grilla?.vehiculos.find((v) => v.id === dictamen.vehiculo.id) ?? dictamen.vehiculo).celdas.map((c) => ({ fuente: c.fuente, estado: c.estado }))}
         />
       )}
     </>
