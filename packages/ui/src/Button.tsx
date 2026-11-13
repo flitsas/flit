@@ -57,8 +57,39 @@ export function buttonClass({
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /**
+   * HU #14562 · UI-1: espera de una acción. Deshabilita el botón, marca aria-busy y pone el girador antes del texto
+   * (gira solo con movimiento permitido). Sin la prop, o en `false`, el marcado es el de siempre.
+   */
+  cargando?: boolean;
 }
 
-export function Button({ variant = "primary", size = "md", className, type = "button", ...rest }: ButtonProps) {
-  return <button type={type} className={buttonClass({ variant, size, className })} {...rest} />;
+export function Button({ variant = "primary", size = "md", className, type = "button", cargando, children, ...rest }: ButtonProps) {
+  if (!cargando) {
+    return (
+      <button type={type} className={buttonClass({ variant, size, className })} {...rest}>
+        {children}
+      </button>
+    );
+  }
+  return (
+    <button type={type} className={buttonClass({ variant, size, className })} {...rest} disabled aria-busy="true">
+      <svg
+        data-parte="girador"
+        aria-hidden="true"
+        focusable="false"
+        viewBox="0 0 24 24"
+        width="1em"
+        height="1em"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        className="shrink-0 motion-safe:animate-spin"
+      >
+        <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+      </svg>
+      {children}
+    </button>
+  );
 }
