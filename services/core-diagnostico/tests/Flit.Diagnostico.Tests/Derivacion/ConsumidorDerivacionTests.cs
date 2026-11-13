@@ -285,6 +285,97 @@ public sealed class ConsumidorDerivacionTests
         (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Republicaciones.Should().Be(0);
     }
 
+    // HU #14563 code review menor 7 — otro proceso confirma la misma DERIVACION_TERMINADA entre la comprobación del escritor y el
+    // INSERT del reconciliador: el choque real en ux_notificaciones_idempotencia (23505) pospone la empresa (como un xmin), no tumba
+    // la vuelta; la siguiente vuelta cierra el ítem y queda una sola notificación.
+    [Fact]
+    public async Task HU14563_menor7_choque_en_ux_notificaciones_idempotencia_pospone_la_empresa_y_la_siguiente_vuelta_cierra()
+    {
+        var falso = new DerivacionTramitesFalso();
+        await using var api = await DerivacionDePrueba.ApiAsync(falso);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, lote, _) = await EncolarAsync(api, ct, ("TST881", "VIABLE"));
+        falso.PorReferencia[lote.Vehiculos[0].Id.ToString()] = (Guid.NewGuid(), "TR-000881");
+        await ColgarAsync(empresa, ct);
+        OperacionDerivacion operacion;
+        await using (var db = empresa.Db())
+            operacion = await db.Set<OperacionDerivacion>().AsNoTracking().SingleAsync(ct);
+        var reconciliador = api.App.Services.GetRequiredService<ReconciliadorDerivacion>();
+
+        // La notificación del otro proceso queda sin confirmar: la comprobación del escritor no la ve y su INSERT espera el índice.
+        await using (var otro = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct))
+        {
+            await using var transaccion = await otro.BeginTransactionAsync(ct);
+            await Persistencia.EsquemaR8Tests.InsertarAsync(
+                otro, empresa.Id, lote.Id, Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion.DerivacionTerminada, "{}", ct,
+                usuario: operacion.UsuarioId, referencia: operacion.Id);
+            var vuelta = reconciliador.ReconciliarAsync(ct);
+            await EsperarInsertBloqueadoAsync(api, vuelta, ct);
+            await transaccion.CommitAsync(ct);
+
+            var primera = await vuelta;
+
+            primera.Creados.Should().Be(0, "la empresa quedó para la siguiente vuelta");
+        }
+
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Enviado, "se revirtió la transacción");
+        var segunda = await reconciliador.ReconciliarAsync(ct);
+        segunda.Creados.Should().Be(1);
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Creado);
+        await using var conexion = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct);
+        (await Persistencia.EsquemaR8Tests.ListarAsync(conexion,
+            $"SELECT referencia_id::text FROM diagnostico.notificaciones WHERE diagnostico_id = '{lote.Id}' AND tipo = 'DERIVACION_TERMINADA'", ct))
+            .Should().Equal(operacion.Id.ToString());
+    }
+
+    // HU #14563 code review menor 8 — orden de bloqueo determinista: el reconciliador recorre los ítems por lote y después por id,
+    // aunque la base los devuelva en otro orden. La tupla del ítem de menor id se mueve al final del heap y aun así su fila sube
+    // la versión primero.
+    [Fact]
+    public async Task HU14563_menor8_reconciliador_cierra_los_items_por_lote_y_por_id()
+    {
+        var falso = new DerivacionTramitesFalso();
+        await using var api = await DerivacionDePrueba.ApiAsync(falso, extra: Credito2);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, lote, _) = await EncolarAsync(api, ct, ("TST891", "VIABLE"), ("TST892", "VIABLE"));
+        falso.PorReferencia[lote.Vehiculos[0].Id.ToString()] = (Guid.NewGuid(), "TR-000891");
+        falso.PorReferencia[lote.Vehiculos[1].Id.ToString()] = (Guid.NewGuid(), "TR-000892");
+        await ColgarAsync(empresa, ct);
+        var items = new List<ItemDerivacion>();
+        foreach (var v in lote.Vehiculos)
+            items.AddRange(await DerivacionDePrueba.ItemsAsync(empresa, v.Id, ct));
+        var ordenados = items.OrderBy(i => i.Id).ToList();
+        await using (var conexion = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct))
+        {
+            await using var mover = new Npgsql.NpgsqlCommand("UPDATE diagnostico.derivaciones SET actualizado_en = actualizado_en WHERE id = @id", conexion);
+            mover.Parameters.AddWithValue("id", ordenados[0].Id);
+            (await mover.ExecuteNonQueryAsync(ct)).Should().Be(1);
+        }
+
+        (await api.App.Services.GetRequiredService<ReconciliadorDerivacion>().ReconciliarAsync(ct)).Creados.Should().Be(2);
+
+        var primero = await DerivacionDePrueba.VehiculoAsync(empresa, ordenados[0].VehiculoId, ct);
+        var segundo = await DerivacionDePrueba.VehiculoAsync(empresa, ordenados[1].VehiculoId, ct);
+        primero.VersionTablero.Should().BeLessThan(segundo.VersionTablero, "el ítem de menor id se cierra (y bloquea su fila) primero");
+    }
+
+    /// <summary>Espera a que la vuelta quede esperando un bloqueo (el INSERT en el índice único) o termine antes, sin pasar de 15 s.</summary>
+    private static async Task EsperarInsertBloqueadoAsync(ApiDePrueba api, Task vuelta, CancellationToken ct)
+    {
+        await using var conexion = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct);
+        var limite = DateTime.UtcNow.AddSeconds(15);
+        while (!vuelta.IsCompleted && DateTime.UtcNow < limite)
+        {
+            await using var comando = new Npgsql.NpgsqlCommand(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'", conexion);
+            if (Convert.ToInt64(await comando.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture) > 0)
+                return;
+            await Task.Delay(50, ct);
+        }
+    }
+
     /// <summary>Siembra el lote, encola todos sus vehículos por el endpoint masivo y devuelve los eventos liberados.</summary>
     private static async Task<(EmpresaDePrueba Empresa, Tablero.LoteSembrado Lote, List<(Guid Empresa, Flit.Diagnostico.Api.Modulos.Derivacion.Bus.DerivacionSolicitada Data, string Payload)> Mensajes)> EncolarAsync(
         ApiDePrueba api, CancellationToken ct, params (string Placa, string Veredicto)[] vehiculos)
