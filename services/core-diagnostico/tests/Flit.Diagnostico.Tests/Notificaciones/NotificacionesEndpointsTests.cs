@@ -68,6 +68,59 @@ public sealed class NotificacionesEndpointsTests
         (await noModificada.Content.ReadAsStringAsync(ct)).Should().BeEmpty();
     }
 
+    // HU #14563 code review menor 10 — el mensaje lleva el nombre del lote: si se renombra, el ETag cambia y el If-None-Match
+    // anterior ya no da 304.
+    [Fact]
+    public async Task Bandeja_cambia_el_ETag_si_se_renombra_el_lote()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await EsquemaR8Tests.AbrirAsync(api, ct);
+        var usuario = Guid.NewGuid();
+        var (empresa, lote) = await EsquemaR8Tests.SembrarLoteAsync(conexion, ct);
+        await EsquemaR8Tests.InsertarAsync(conexion, empresa, lote, Notificacion.LoteTerminado, "{}", ct, usuario);
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: PermisosLectura, sujeto: usuario.ToString()));
+        var antes = (await cliente.GetAsync(Ruta, ct)).Headers.ETag;
+        antes.Should().NotBeNull();
+
+        await using (var renombrar = new Npgsql.NpgsqlCommand("UPDATE diagnostico.diagnosticos SET nombre = 'Lote renombrado' WHERE id = @id", conexion))
+        {
+            renombrar.Parameters.AddWithValue("id", lote);
+            (await renombrar.ExecuteNonQueryAsync(ct)).Should().Be(1);
+        }
+
+        using var condicional = new HttpRequestMessage(HttpMethod.Get, Ruta);
+        condicional.Headers.IfNoneMatch.Add(antes!);
+        var respuesta = await cliente.SendAsync(condicional, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, "el nombre del lote que muestra el mensaje cambió");
+        respuesta.Headers.ETag!.Tag.Should().NotBe(antes!.Tag);
+        (await respuesta.Content.ReadAsStringAsync(ct)).Should().Contain("Lote renombrado");
+    }
+
+    // HU #14563 code review menor 15 (AC38) — la notificación de otra compañía con el mismo sub no se puede marcar: 404 y sigue
+    // sin leer.
+    [Fact]
+    public async Task Marcar_leida_la_de_otra_compania_con_el_mismo_sub_responde_404()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await EsquemaR8Tests.AbrirAsync(api, ct);
+        var usuario = Guid.NewGuid();
+        var (empresa, _) = await EsquemaR8Tests.SembrarLoteAsync(conexion, ct);
+        var (otraEmpresa, loteOtra) = await EsquemaR8Tests.SembrarLoteAsync(conexion, ct);
+        await EsquemaR8Tests.InsertarAsync(conexion, otraEmpresa, loteOtra, Notificacion.LoteTerminado, "{}", ct, usuario);
+        var ajena = Guid.Parse((await EsquemaR8Tests.ListarAsync(conexion,
+            $"SELECT id::text FROM diagnostico.notificaciones WHERE tenant_id = '{otraEmpresa}' AND usuario_id = '{usuario}'", ct)).Single());
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: PermisosLectura, sujeto: usuario.ToString()));
+
+        (await cliente.PostAsync($"{Ruta}/{ajena}/leida", null, ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await EsquemaR8Tests.ListarAsync(conexion,
+            $"SELECT id::text FROM diagnostico.notificaciones WHERE id = '{ajena}' AND leida_en IS NULL", ct)).Should().HaveCount(1);
+    }
+
     // AC37 + AC38 — leída dos veces 204 y una sola fecha >= creada_en; la de otro usuario 404; leer-todas deja no_leidas en 0.
     [Fact]
     public async Task Leida_idempotente_otra_ajena_404_y_leer_todas()
