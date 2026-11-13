@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { ExternalLink, FilePlus2 } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
@@ -250,6 +250,11 @@ export interface AccionTramiteFilaProps {
   onRefrescar: () => void;
   /** Trámite analizado del lote (`grilla.lote.tipo_tramite.nombre`), para el modal del lote Con análisis IA. */
   tramiteAnalizado?: string | null;
+  /**
+   * HU #14562 F-05: cada valor nuevo pide el mismo flujo que pulsar «Crear trámite» en la fila (lo usa el atajo del pie del
+   * panel del dictamen). Sin efecto si la fila ya no es elegible o está creando.
+   */
+  solicitudCrear?: number;
 }
 
 /** Texto y número del trámite con un solo espacio (sin número, solo el texto). */
@@ -273,6 +278,7 @@ export function AccionTramiteFila({
   onCreado,
   onRefrescar,
   tramiteAnalizado,
+  solicitudCrear,
 }: AccionTramiteFilaProps) {
   const derivacion = derivacionDeFila(vehiculo);
   const identificador = vehiculo.placa || vehiculo.vin || vehiculo.identificador;
@@ -336,6 +342,19 @@ export function AccionTramiteFila({
     else if (modo === "CON_ANALISIS") setConfirmando(true);
     else void crear();
   }
+
+  // HU #14562 F-05: el atajo del panel del dictamen abre el mismo flujo de la fila (modales AC37). El foco que quedó en el
+  // botón del dictamen lo toma el modal; al cancelarlo, vuelve al botón «Crear trámite» de la fila.
+  const atenderSolicitud = useEffectEvent(() => {
+    if (derivacion.elegible && !tramite && !enviando && !pidiendoTipo && !confirmando) alPulsar();
+  });
+  // El valor con que monta la fila ya está atendido: si la fila se vuelve a montar (filtro, búsqueda) no reabre el modal.
+  const solicitudAtendida = useRef(solicitudCrear);
+  useEffect(() => {
+    if (!solicitudCrear || solicitudCrear === solicitudAtendida.current) return;
+    solicitudAtendida.current = solicitudCrear;
+    atenderSolicitud();
+  }, [solicitudCrear]);
 
   function cerrarModal() {
     setPidiendoTipo(false);

@@ -386,3 +386,59 @@ describe("PanelDictamen — HU #14562 AC35, AC37 y AC38", () => {
     expect(panel.textContent).not.toMatch(/\d{6,}/);
   });
 });
+
+// HU #14562, auditoría de UI M8: lo que soporte escribe en un alertamiento viaja en el PUT de «Aplicar»; no hay un «Guardar»
+// por fila que, olvidado, haga que el PUT salga con el texto anterior sin aviso.
+describe("PanelDictamen — HU #14562 M8: «Aplicar» nunca pierde lo editado", () => {
+  it("el texto editado de un alertamiento, sin ningún paso extra, es el que manda el PUT", async () => {
+    const api = simularApi({
+      [`GET ${RUTA_BO}`]: () => Response.json(LLENO),
+      [`PUT ${RUTA_BO}`]: () => Response.json({ ...LLENO, version: 2 }),
+    });
+    await abrirAjuste();
+    fireEvent.change(screen.getByRole("textbox", { name: "Texto de Alertamiento 1" }), { target: { value: "El SOAT venció el 01/11/2026." } });
+    fireEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await act(async () => {});
+    expect(cuerpoPut(api, 0).alertamientos[0]).toEqual({ codigo: "SOAT_NO_VIGENTE", texto: "El SOAT venció el 01/11/2026.", efecto: "BLOQUEA", fuente: "RUNT" });
+  });
+
+  it("con un alertamiento inválido «Aplicar» queda deshabilitado y el campo dice por qué", async () => {
+    simularApi({ [`GET ${RUTA_BO}`]: () => Response.json(LLENO) });
+    await abrirAjuste();
+    const texto = screen.getByRole("textbox", { name: "Texto de Alertamiento 1" });
+    fireEvent.change(texto, { target: { value: "" } });
+    fireEvent.blur(texto);
+    expect(screen.getByRole("button", { name: "Aplicar" })).toBeDisabled();
+    expect(texto).toHaveAttribute("aria-invalid", "true");
+    expect(texto).toHaveAccessibleDescription(/Escribe el texto del alertamiento/);
+  });
+});
+
+// HU #14562 F-05 (auditoría §4.4): atajo «Crear trámite» en el pie del panel para el vehículo VIABLE; quien lo pinta decide
+// si la fila es elegible y abre el flujo de la fila (modales AC37). El BLOQUEADO nunca lo ofrece (AC36).
+describe("PanelDictamen — HU #14562 F-05: atajo «Crear trámite» en el pie", () => {
+  it("con onCrearTramite y veredicto VIABLE, el pie ofrece «Crear trámite» y lo avisa a quien lo usa", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, veredicto: "VIABLE", alertamientos: [] }) });
+    const onCrearTramite = vi.fn();
+    pintar({ onCrearTramite });
+    await screen.findByText("Viable");
+    const panel = screen.getByRole("dialog", { name: "Dictamen · TST001" });
+    fireEvent.click(within(panel).getByRole("button", { name: "Crear trámite" }));
+    expect(onCrearTramite).toHaveBeenCalledTimes(1);
+  });
+
+  it("AC36: con veredicto BLOQUEADO no hay atajo aunque llegue onCrearTramite", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(LLENO) });
+    pintar({ onCrearTramite: vi.fn() });
+    expect(await screen.findByText(/el vehículo está bloqueado/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /crear trámite/i })).toBeNull();
+  });
+
+  it("mientras carga o sin dictamen no hay atajo", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ code: "SIN_DICTAMEN", error: "Sin dictamen" }, { status: 404 }) });
+    pintar({ onCrearTramite: vi.fn() });
+    expect(screen.queryByRole("button", { name: /crear trámite/i })).toBeNull();
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /crear trámite/i })).toBeNull();
+  });
+});
