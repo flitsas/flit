@@ -76,17 +76,17 @@ public sealed class VersionFilaTableroTests
         var lote = await SembrarAsync(empresa, ct);
 
         await using (var db = empresa.Db())
-        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-        {
-            await using var tx = await db.Database.BeginTransactionAsync(ct);
-            var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(x => x.Id == lote.Vehiculos[1].Id, ct);
-            var v = await EscritorCeldas.SubirVersionFilaAsync(db, lote.Id, vehiculo.Id, ct);
-            vehiculo.VersionTablero.Should().Be(v);
-            vehiculo.TramiteId = Guid.NewGuid();
-            var guardar = () => db.SaveChangesAsync(ct);
-            await guardar.Should().NotThrowAsync();
-            await tx.CommitAsync(ct);
-        });
+            await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                await using var tx = await db.Database.BeginTransactionAsync(ct);
+                var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(x => x.Id == lote.Vehiculos[1].Id, ct);
+                var v = await EscritorCeldas.SubirVersionFilaAsync(db, lote.Id, vehiculo.Id, ct);
+                vehiculo.VersionTablero.Should().Be(v);
+                vehiculo.TramiteId = Guid.NewGuid();
+                var guardar = () => db.SaveChangesAsync(ct);
+                await guardar.Should().NotThrowAsync();
+                await tx.CommitAsync(ct);
+            });
 
         var (version, filas) = await LeerAsync(empresa, lote.Id, ct);
         filas[lote.Vehiculos[1].Id].Should().Be(version).And.Be(8);
