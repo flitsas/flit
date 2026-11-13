@@ -31,14 +31,15 @@ public sealed partial class EscritoresDeFilaTests
         "EmisorDictamen.Materializar",
         "EmisorDictamen.FilaAlCerrar",
         "EmisorDictamen.FilaDeOverride",
+        // HU #14563 B7: arma la fila del ajuste con alertamientos; el PUT (Reemplazar) sube la versión antes de llamarla.
+        "EmisorDictamen.FilaDeAjuste",
     ];
 
     /// <summary>
-    /// Escritores que aún no llaman al helper y tienen dueño: el override y el ajuste del backoffice son del carril B7, que llamará
-    /// a <see cref="EscritorCeldas.SubirVersionFilaAsync"/> antes de <c>FilaDeOverride</c>. La prueba exige que sigan siendo
-    /// violaciones reales: cuando B7 los enganche, se quitan de aquí.
+    /// Escritores que aún no llaman al helper y tienen dueño. Vacía desde B7: el PUT del backoffice (<c>Reemplazar</c>) llama a
+    /// <see cref="EscritorCeldas.SubirVersionFilaAsync"/> antes de <c>FilaDeOverride</c> o <c>FilaDeAjuste</c>.
     /// </summary>
-    private static readonly string[] PendientesB7 = ["OverrideDictamenEndpoints.Reemplazar"];
+    private static readonly string[] PendientesB7 = [];
 
     [Fact]
     public void HU14563_AC8_Todo_escritor_de_fila_sube_la_version_de_fila()

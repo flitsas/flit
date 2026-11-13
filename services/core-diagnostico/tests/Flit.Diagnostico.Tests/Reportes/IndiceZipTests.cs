@@ -113,6 +113,23 @@ public sealed class IndiceZipTests
         IndiceZip.Dictamen(null).Should().Be("Pendiente");
     }
 
+    // HU #14563 AC32 (D6) — la columna Dictamen del índice lleva la marca del ajuste FLIT; la huella del ZIP cambia con ella, así
+    // que un ZIP de antes del ajuste no se reutiliza.
+    [Fact]
+    public async Task B7_dictamen_ajustado_lleva_la_marca_en_el_indice_y_en_la_huella_del_zip()
+    {
+        var ajustado = new FilaIndiceZip(5, "TST805", "Terminado", "diagnostico-0a1b2c3d-TST805.pdf", "BLOQUEADO", Bloqueado, null, Ajustado: true);
+        var libro = await LibroAsync(Cabecera(conPdf: 1, total: 1), [ajustado]);
+        libro.Dato(0)[5].Should().Be("Bloqueado (ajustado por FLIT)");
+        IndiceZip.Dictamen("VIABLE", ajustado: false).Should().Be("Viable");
+
+        var vehiculo = Guid.Parse("0199f000-0000-7000-8000-0000000000c3");
+        var antes = PlanZip.ClaveDictamenes([(vehiculo, 2, "BLOQUEADO", false)]);
+        var despues = PlanZip.ClaveDictamenes([(vehiculo, 2, "BLOQUEADO", true)]);
+        despues.Should().NotBe(antes);
+        antes.Should().Be($"{vehiculo:D}:2:BLOQUEADO", "sin ajuste la huella de los ZIP existentes no cambia");
+    }
+
     // AC3 — Placa/VIN es texto aunque parezca número (sin conversión numérica) y el texto que parece fórmula queda literal.
     [Fact]
     public async Task Placa_o_vin_es_texto_aunque_parezca_numero()

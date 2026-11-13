@@ -290,6 +290,86 @@ internal sealed partial class EmisorDictamen(
     }
 
     /// <summary>
+    /// La fila del ajuste FLIT con alertamientos (HU #14563 B7, ADR-0086 D-2): el estado completo pedido por soporte. Nace
+    /// <c>MANUAL</c> y <c>COMPLETADA</c> (la cola del LLM no la toma), con el autor, el instante, el motivo y la versión de
+    /// origen. Cada alertamiento lleva <c>ajuste</c> <c>AGREGADO</c> (no estaba en la vigente con ese código y fuente) o
+    /// <c>EDITADO</c> (cambió el texto o el efecto); uno igual no la lleva. Los eliminados no se guardan: se calculan al leer las
+    /// versiones. Si nada cambia (veredicto y alertamientos iguales) es 409 <c>VEREDICTO_SIN_CAMBIO</c> y la vigente sigue.
+    /// </summary>
+    internal static DictamenVehiculo FilaDeAjuste(
+        DictamenVehiculo vigente, string veredicto, IReadOnlyList<AlertamientoAjuste> alertamientos, string motivo, Guid usuarioId, DateTimeOffset ahora)
+    {
+        ArgumentNullException.ThrowIfNull(vigente);
+        ArgumentNullException.ThrowIfNull(alertamientos);
+        ArgumentException.ThrowIfNullOrWhiteSpace(motivo);
+        if (veredicto is not ("VIABLE" or "BLOQUEADO"))
+            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser Viable o Bloqueado.");
+
+        var pendientes = AlertasGuardadas(vigente.Alertamientos);
+        var anteriores = pendientes.Count;
+        var marcadas = new List<AlertaAjustadaJson>(alertamientos.Count);
+        foreach (var pedido in alertamientos)
+        {
+            var fuente = pedido.Fuente ?? string.Empty;
+            var previa = pendientes.FindIndex(a => a.Codigo == pedido.Codigo && a.Fuente == fuente);
+            string? ajuste = "AGREGADO";
+            if (previa >= 0)
+            {
+                var guardada = pendientes[previa];
+                pendientes.RemoveAt(previa);
+                ajuste = guardada.Texto == pedido.Texto && guardada.Efecto == pedido.Efecto ? null : "EDITADO";
+            }
+
+            marcadas.Add(new AlertaAjustadaJson(pedido.Codigo, pedido.Texto, pedido.Efecto, fuente, ajuste));
+        }
+
+        if (veredicto == vigente.Veredicto && pendientes.Count == 0 && marcadas.Count == anteriores && marcadas.TrueForAll(a => a.Ajuste is null))
+            throw ReglaException.Conflicto(CodigosDictamen.VeredictoSinCambio, "El veredicto y los alertamientos pedidos son los del dictamen vigente.");
+
+        var transicion = SiguienteVersion(vigente.Version);
+        vigente.Vigente = false;
+        return new DictamenVehiculo
+        {
+            Id = Guid.CreateVersion7(ahora),
+            TenantId = vigente.TenantId,
+            VehiculoId = vigente.VehiculoId,
+            Version = transicion.Nueva.Version,
+            Vigente = true,
+            Veredicto = veredicto,
+            Alertamientos = JsonSerializer.Serialize(marcadas, Json),
+            CatalogoVersion = vigente.CatalogoVersion,
+            RedactadoPor = "MANUAL",
+            EstadoRedaccion = "COMPLETADA",
+            RedaccionIntentos = 0,
+            RedaccionDisponibleDesde = null,
+            RedaccionLeaseHasta = null,
+            AnalisisOverride = true,
+            UsuarioOverrideId = usuarioId,
+            OverrideEn = ahora,
+            AjusteMotivo = motivo,
+            AjustadoDesdeVersion = vigente.Version,
+            CreadoEn = ahora,
+        };
+    }
+
+    /// <summary>Los alertamientos guardados (código, texto, efecto, fuente), en orden; los campos que falten quedan vacíos.</summary>
+    internal static List<AlertamientoAjuste> AlertasGuardadas(string alertamientos)
+    {
+        using var documento = JsonDocument.Parse(string.IsNullOrWhiteSpace(alertamientos) ? "[]" : alertamientos);
+        var lista = new List<AlertamientoAjuste>();
+        if (documento.RootElement.ValueKind != JsonValueKind.Array)
+            return lista;
+        foreach (var item in documento.RootElement.EnumerateArray())
+        {
+            string Campo(string nombre) =>
+                item.TryGetProperty(nombre, out var valor) && valor.ValueKind == JsonValueKind.String ? valor.GetString() ?? string.Empty : string.Empty;
+            lista.Add(new AlertamientoAjuste(Campo("codigo"), Campo("texto"), Campo("efecto"), Campo("fuente")));
+        }
+
+        return lista;
+    }
+
+    /// <summary>
     /// Null salvo un fallo técnico (<see cref="TipoFalloRedactor.Timeout"/>, <see cref="TipoFalloRedactor.Http5xx"/>,
     /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera, el reloj más esa espera;
     /// sin ella, el reloj. Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
@@ -476,6 +556,13 @@ internal sealed partial class EmisorDictamen(
     [LoggerMessage(EventId = 126785, Level = LogLevel.Information,
         Message = "El vehículo {VehiculoId} escribió el dictamen versión {Version} ({Veredicto}, redacción {EstadoRedaccion})")]
     private static partial void Escrito(ILogger logger, Guid vehiculoId, int version, string veredicto, string estadoRedaccion);
+
+    private sealed record AlertaAjustadaJson(
+        [property: JsonPropertyName("codigo")] string Codigo,
+        [property: JsonPropertyName("texto")] string Texto,
+        [property: JsonPropertyName("efecto")] string Efecto,
+        [property: JsonPropertyName("fuente")] string Fuente,
+        [property: JsonPropertyName("ajuste"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Ajuste);
 
     private sealed record AlertaJson(
         [property: JsonPropertyName("codigo")] string Codigo,

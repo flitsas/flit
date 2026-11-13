@@ -177,6 +177,8 @@ public sealed class VersionFilaTableroTests
                 ajustado.UsuarioOverrideId = Guid.NewGuid();
                 ajustado.OverrideEn = DateTimeOffset.UtcNow;
                 ajustado.AjustadoDesdeVersion = 1;
+                // P1 = a (2026-11-12): la marca «ajustado por FLIT» es ajuste_motivo IS NOT NULL; un override sin motivo no la lleva.
+                ajustado.AjusteMotivo = "Soporte verifico el caso de prueba";
                 db.Add(ajustado);
                 await db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
