@@ -89,7 +89,9 @@ test.describe("tablero del lote", () => {
     await expect(pestana.getByRole("heading", { level: 1, name: `SIMIT vehículo · ${PLACA}` })).toBeVisible();
     const migas = pestana.getByRole("navigation", { name: "Migas de pan" });
     await expect(migas.getByRole("link", { name: "Diagnósticos" })).toBeVisible();
-    await expect(migas.getByText(`SIMIT vehículo · ${PLACA}`)).toHaveAttribute("aria-current", "page");
+    // HU #14562 · AC39: miga de 4 niveles «Diagnósticos › lote › placa › fuente».
+    await expect(migas.getByRole("listitem")).toHaveCount(4);
+    await expect(migas.getByText("SIMIT vehículo", { exact: true })).toHaveAttribute("aria-current", "page");
     // Auditoría de consulta de FLIT: fecha y hora de la consulta y el estado.
     const auditoria = pestana.getByRole("region", { name: "Auditoría de consulta" });
     await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
@@ -97,11 +99,12 @@ test.describe("tablero del lote", () => {
     // Respuesta de la fuente: solo datos de la consulta, en español; sin la auditoría del proveedor ni nombres crudos.
     const seccionRespuesta = pestana.getByRole("region", { name: "Respuesta de la fuente" });
     if (await seccionRespuesta.getByText(/no tiene guardada la respuesta completa/).count()) {
-      const respuesta = seccionRespuesta.getByRole("table", { name: "Respuesta de la fuente" });
-      await expect(respuesta.getByRole("rowheader", { name: "Cantidad de comparendos" })).toBeVisible();
+      // HU #14562 · AC39: el primer nivel es una lista de definición (group + dt/dd).
+      const respuesta = seccionRespuesta.getByRole("group", { name: "Respuesta de la fuente" });
+      await expect(respuesta.getByRole("term").filter({ hasText: /^Cantidad de comparendos$/ })).toBeVisible();
       const tabla = pestana.getByRole("table", { name: "Comparendos" });
       if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "Valor" })).toBeVisible();
-      else await expect(respuesta.getByRole("row", { name: /Comparendos\s*Sin registros/ })).toBeVisible();
+      else await expect(respuesta.locator("div", { has: pestana.getByRole("term").filter({ hasText: /^Comparendos$/ }) }).getByText("Sin registros")).toBeVisible();
     } else {
       await expect(seccionRespuesta.getByRole("region", { name: /^resultado$/i })).toHaveCount(0);
     }

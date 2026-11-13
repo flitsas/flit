@@ -62,9 +62,11 @@ test.describe("impuesto departamental en el tablero", () => {
     await pestana.waitForLoadState();
     await expect(pestana.getByRole("heading", { level: 1, name: `Impuesto departamental · ${PLACA}` })).toBeVisible();
     // HU #14087: la respuesta de la fuente en español (monto total sin formato, vigencias con año/valor/pagada en Sí/No).
-    const respuesta = pestana.getByRole("table", { name: "Respuesta de la fuente" });
-    await expect(respuesta.getByRole("rowheader", { name: "Monto total" })).toBeVisible();
-    await expect(respuesta.getByRole("row", { name: /Monto total\s*\d+$/ })).toBeVisible();
+    // HU #14562 · AC39: el primer nivel de la respuesta es una lista de definición (group + dt/dd).
+    const respuesta = pestana.getByRole("group", { name: "Respuesta de la fuente" });
+    const montoTotal = respuesta.locator("div", { has: pestana.getByRole("term").filter({ hasText: /^Monto total$/ }) });
+    await expect(montoTotal.getByRole("term")).toBeVisible();
+    await expect(montoTotal.getByRole("definition")).toHaveText(/^\d+$/);
     const tabla = pestana.getByRole("table", { name: "Vigencias" });
     if (await tabla.count()) {
       await expect(tabla.getByRole("columnheader", { name: "Pagada" })).toBeVisible();
