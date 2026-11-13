@@ -44,6 +44,13 @@ internal static partial class OverrideDictamenEndpoints
     private const int LargoMaximoTexto = 500;
     private const int MaximoAlertamientos = 50;
 
+    /// <summary>Las claves de <c>CuerpoOverrideDictamen</c> (OpenAPI, <c>additionalProperties: false</c>).</summary>
+    private static readonly HashSet<string> ClavesDelCuerpo =
+        new(["veredicto", "motivo", "version_esperada", "alertamientos", "confirmar_con_tramite", "confirmado"], StringComparer.Ordinal);
+
+    /// <summary>Las claves de <c>AlertamientoAjuste</c> (OpenAPI, <c>additionalProperties: false</c>).</summary>
+    private static readonly HashSet<string> ClavesDelAlertamiento = new(["codigo", "texto", "efecto", "fuente"], StringComparer.Ordinal);
+
     public static void Map(RouteGroupBuilder backoffice)
     {
         ArgumentNullException.ThrowIfNull(backoffice);
@@ -91,23 +98,10 @@ internal static partial class OverrideDictamenEndpoints
 
             var cabecera = await db.DeLaEmpresa<CabeceraDiagnostico>(empresa).SingleAsync(c => c.Id == id, ct).ConfigureAwait(false);
             var ahora = reloj.GetUtcNow();
-            DictamenVehiculo fila;
-            if (pedido.Alertamientos is { } alertamientos)
-            {
-                fila = EmisorDictamen.FilaDeAjuste(vigente, pedido.Veredicto, alertamientos, pedido.Motivo, autor, ahora);
-            }
-            else
-            {
-                var suspendida = await db.DeLaEmpresa<ConfiguracionEmpresa>(empresa)
-                    .Select(c => (bool?)c.RedaccionIaSuspendida).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? false;
-                fila = EmisorDictamen.FilaDeOverride(
-                    vigente, pedido.Veredicto, confirmado: true, autor, cabecera.TipoTramiteCodigo, suspendida, proveedor.Configurado, ahora);
-                fila.AjusteMotivo = pedido.Motivo;
-            }
-
-            fila.TenantId = empresa;
-            // AC23: la versión de auditoría registra que el ajuste se confirmó sobre un vehículo que ya tenía trámite.
-            fila.AjusteConTramite = tramite is not null;
+            // La configuración de redacción solo cuenta en el ajuste de solo veredicto (con alertamientos nace MANUAL/COMPLETADA).
+            var suspendida = pedido.Alertamientos is null && (await db.DeLaEmpresa<ConfiguracionEmpresa>(empresa)
+                .Select(c => (bool?)c.RedaccionIaSuspendida).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? false);
+            var fila = NuevaFila(pedido, vigente, cabecera, autor, empresa, conTramite: tramite is not null, suspendida, proveedor.Configurado, ahora);
             db.Add(fila);
             DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: true);
             try
@@ -123,6 +117,37 @@ internal static partial class OverrideDictamenEndpoints
             return ConsultaDictamen.Backoffice(fila);
         }).ConfigureAwait(false);
         return Results.Ok(dto);
+    }
+
+    /// <summary>
+    /// La versión nueva que deja el PUT (code review menor 13: fuera de la lambda de <see cref="Reemplazar"/>, sin cambiar la
+    /// conducta). Mutador puro, sin contexto: la versión de fila la sube <see cref="Reemplazar"/> antes de llamarlo
+    /// (<c>EscritoresDeFilaTests</c>). Con alertamientos, <see cref="EmisorDictamen.FilaDeAjuste"/> (<c>MANUAL</c>/<c>COMPLETADA</c>);
+    /// sin ellos, <see cref="EmisorDictamen.FilaDeOverride"/> con el motivo y la redacción según <paramref name="redaccionSuspendida"/>.
+    /// La fila lleva la empresa explícita y, por AC23, si el vehículo ya tenía trámite. No la agrega al contexto.
+    /// </summary>
+    internal static DictamenVehiculo NuevaFila(
+        CuerpoAjusteDictamen pedido, DictamenVehiculo vigente, CabeceraDiagnostico cabecera, Guid autor, Guid empresa,
+        bool conTramite, bool redaccionSuspendida, bool proveedorConfigurado, DateTimeOffset ahora)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        ArgumentNullException.ThrowIfNull(cabecera);
+        DictamenVehiculo fila;
+        if (pedido.Alertamientos is { } alertamientos)
+        {
+            fila = EmisorDictamen.FilaDeAjuste(vigente, pedido.Veredicto, alertamientos, pedido.Motivo, autor, ahora);
+        }
+        else
+        {
+            fila = EmisorDictamen.FilaDeOverride(
+                vigente, pedido.Veredicto, confirmado: true, autor, cabecera.TipoTramiteCodigo, redaccionSuspendida, proveedorConfigurado, ahora);
+            fila.AjusteMotivo = pedido.Motivo;
+        }
+
+        fila.TenantId = empresa;
+        // AC23: la versión de auditoría registra que el ajuste se confirmó sobre un vehículo que ya tenía trámite.
+        fila.AjusteConTramite = conTramite;
+        return fila;
     }
 
     /// <summary>
@@ -144,14 +169,17 @@ internal static partial class OverrideDictamenEndpoints
     /// <summary>
     /// Lee y valida el cuerpo del PUT (B7). Aquí, y solo aquí, se valida <c>motivo</c> (<c>ajuste_motivo</c>, <c>@pii:low</c>):
     /// obligatorio en todo PUT (D9 + B-PR6: el cuerpo legado sin motivo se retiró), recortado, 10 a 500 caracteres, sin filtro de
-    /// dígitos (P3 = b). Los mensajes de error son textos fijos: nunca repiten el motivo ni el texto digitado. Los alertamientos,
-    /// si vienen, exigen <c>version_esperada</c>; cada uno con código, texto de 1 a 500, efecto <c>BLOQUEA</c>/<c>ADVIERTE</c> y
-    /// fuente; un <c>AJUSTE_FLIT</c> (lo ve la compañía) no admite 6 o más dígitos seguidos (P3). Con alertamientos, el veredicto
-    /// debe ser coherente: <c>VIABLE</c> sin ninguno que bloquee y <c>BLOQUEADO</c> con al menos uno.
+    /// dígitos (P3 = b). Los mensajes de error son textos fijos: nunca repiten el motivo ni el texto digitado. Una clave fuera del
+    /// contrato, en el cuerpo o en un alertamiento, es 422 <c>VALOR_INVALIDO</c>. <c>version_esperada</c> es obligatoria en todo
+    /// PUT (422 <c>VERSION_ESPERADA_INVALIDA</c>). Los alertamientos, si vienen, llevan cada uno código, texto de 1 a 500 puntos de
+    /// código, efecto <c>BLOQUEA</c>/<c>ADVIERTE</c> y fuente; un <c>AJUSTE_FLIT</c> (lo ve la compañía) no admite 6 o más dígitos
+    /// seguidos (P3). Con alertamientos, el veredicto debe ser coherente: <c>VIABLE</c> sin ninguno que bloquee y <c>BLOQUEADO</c>
+    /// con al menos uno.
     /// </summary>
     internal static CuerpoAjusteDictamen LeerCuerpo(JsonElement json)
     {
         var veredicto = ExigirCuerpo(json);
+        ExigirClavesConocidas(json, ClavesDelCuerpo, prefijo: null);
         int? versionEsperada = null;
         if (json.TryGetProperty("version_esperada", out var version) && version.ValueKind != JsonValueKind.Null)
         {
@@ -167,11 +195,14 @@ internal static partial class OverrideDictamenEndpoints
         if (motivo is null || motivo.EnumerateRunes().Count() is < LargoMinimoMotivo or > LargoMaximoMotivo)
             throw new ReglaException(CodigosDictamen.MotivoRequerido, "motivo: escribe entre 10 y 500 caracteres que expliquen el ajuste.") { Campo = "motivo" };
 
+        // Code review menor 2: B-PR6 retiró el cuerpo legado, así que version_esperada es obligatoria en todo PUT (el frontend la
+        // envía siempre). Se exige después del motivo: un cuerpo legado sigue respondiendo MOTIVO_REQUERIDO.
+        if (versionEsperada is null)
+            throw new ReglaException(CodigosDictamen.VersionEsperadaInvalida, "Todo ajuste exige version_esperada.") { Campo = "version_esperada" };
+
         var alertamientos = LeerAlertamientos(json);
         if (alertamientos is not null)
         {
-            if (versionEsperada is null)
-                throw new ReglaException(CodigosDictamen.VersionEsperadaInvalida, "Un ajuste de alertamientos exige version_esperada.") { Campo = "version_esperada" };
             var bloquea = alertamientos.Exists(a => a.Efecto == "BLOQUEA");
             if ((veredicto == "VIABLE" && bloquea) || (veredicto == "BLOQUEADO" && !bloquea))
                 throw new ReglaException(
@@ -221,13 +252,18 @@ internal static partial class OverrideDictamenEndpoints
         if (lista.ValueKind != JsonValueKind.Array || lista.GetArrayLength() > MaximoAlertamientos)
             throw AlertamientoInvalido($"alertamientos debe ser una lista de hasta {MaximoAlertamientos} elementos.");
         var leidos = new List<AlertamientoAjuste>();
+        var indice = 0;
         foreach (var item in lista.EnumerateArray())
         {
+            if (item.ValueKind == JsonValueKind.Object)
+                ExigirClavesConocidas(item, ClavesDelAlertamiento, prefijo: $"alertamientos[{indice}]");
+            indice++;
             var codigo = Campo(item, "codigo");
             var texto = Campo(item, "texto")?.Trim();
             var efecto = Campo(item, "efecto");
             var fuente = Campo(item, "fuente");
-            if (string.IsNullOrWhiteSpace(codigo) || string.IsNullOrEmpty(texto) || texto.Length > LargoMaximoTexto
+            // Code review menor 5: el largo se cuenta en puntos de código, como el motivo (L3), no en unidades UTF-16.
+            if (string.IsNullOrWhiteSpace(codigo) || string.IsNullOrEmpty(texto) || texto.EnumerateRunes().Count() > LargoMaximoTexto
                 || efecto is not ("BLOQUEA" or "ADVIERTE") || string.IsNullOrWhiteSpace(fuente))
                 throw AlertamientoInvalido("Cada alertamiento lleva código, texto de 1 a 500 caracteres, efecto BLOQUEA o ADVIERTE y fuente.");
             if (codigo == CodigosDictamen.AjusteFlit && SeisOMasDigitos().IsMatch(texto))
@@ -240,6 +276,28 @@ internal static partial class OverrideDictamenEndpoints
 
         return leidos;
     }
+
+    /// <summary>
+    /// Code review menor 4, coherente con <c>additionalProperties: false</c> del contrato: una clave fuera de
+    /// <paramref name="conocidas"/> es 422 <c>VALOR_INVALIDO</c> con el campo señalado. El nombre de la clave solo se repite si
+    /// parece un nombre de campo (minúsculas, dígitos y guion bajo, hasta 40); si no, el campo es el objeto que la trae, para no
+    /// devolver lo digitado.
+    /// </summary>
+    private static void ExigirClavesConocidas(JsonElement objeto, HashSet<string> conocidas, string? prefijo)
+    {
+        foreach (var propiedad in objeto.EnumerateObject())
+        {
+            if (conocidas.Contains(propiedad.Name))
+                continue;
+            var campo = NombreDeCampo().IsMatch(propiedad.Name)
+                ? (prefijo is null ? propiedad.Name : $"{prefijo}.{propiedad.Name}")
+                : prefijo ?? "cuerpo";
+            throw new ReglaException(ManejadorReglas.CodigoValorInvalido, "El cuerpo trae un campo que el contrato no admite.") { Campo = campo };
+        }
+    }
+
+    [GeneratedRegex("^[a-z][a-z0-9_]{0,39}$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex NombreDeCampo();
 
     private static string? Campo(JsonElement item, string campo) =>
         item.ValueKind == JsonValueKind.Object && item.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String

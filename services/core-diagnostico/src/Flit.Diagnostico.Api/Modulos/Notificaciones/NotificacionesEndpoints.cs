@@ -12,8 +12,8 @@ namespace Flit.Diagnostico.Api.Modulos.Notificaciones;
 /// Bandeja de la campana (HU #14563 B8, AC36-AC38, ADR-0086 D-3), con <c>diagnostico.diagnosticos.ver</c>:
 /// <list type="bullet">
 /// <item><c>GET /notificaciones?limite=20&amp;antes={id}</c>: <c>{ no_leidas, items, siguiente }</c> con ETag débil
-/// <c>W/"&lt;no_leidas&gt;-&lt;total&gt;-&lt;max creada_en&gt;-&lt;max leida_en&gt;"</c> (más el cursor y el límite pedidos); con
-/// <c>If-None-Match</c> igual, 304 sin cuerpo.</item>
+/// <c>W/"&lt;no_leidas&gt;-&lt;total&gt;-&lt;max creada_en&gt;-&lt;max leida_en&gt;"</c> (más el cursor y el límite pedidos y un hash de
+/// los nombres de los lotes de la página); con <c>If-None-Match</c> igual, 304 sin cuerpo.</item>
 /// <item><c>POST /notificaciones/{nid}/leida</c>: 204, idempotente; <c>leida_en = GREATEST(ahora, creada_en)</c>; 404 si no es
 /// del usuario o su lote ya no es visible.</item>
 /// <item><c>POST /notificaciones/leer-todas</c>: 204.</item>
@@ -61,13 +61,6 @@ internal static class NotificacionesEndpoints
         var maxCreada = await visibles.MaxAsync(n => (DateTimeOffset?)n.CreadaEn, ct).ConfigureAwait(false);
         var maxLeida = await visibles.MaxAsync(n => n.LeidaEn, ct).ConfigureAwait(false);
         var tope = Math.Clamp(limite ?? LimitePorDefecto, 1, LimiteMaximo);
-        var etag = string.Create(CultureInfo.InvariantCulture,
-            $"W/\"{noLeidas}-{total}-{maxCreada?.ToUnixTimeMilliseconds() ?? 0}-{maxLeida?.ToUnixTimeMilliseconds() ?? 0}-{antes?.ToString("N") ?? "0"}-{tope}\"");
-        respuesta.Headers.CacheControl = "private, no-cache";
-        respuesta.Headers.ETag = etag;
-        if (peticion.Headers.IfNoneMatch.Any(v => string.Equals(v, etag, StringComparison.Ordinal)))
-            return Results.StatusCode(StatusCodes.Status304NotModified);
-
         var pagina = visibles;
         if (antes is { } cursor)
         {
@@ -82,11 +75,28 @@ internal static class NotificacionesEndpoints
                 (n, c) => new { n.Id, n.Tipo, n.CreadaEn, n.LeidaEn, n.DiagnosticoId, Lote = c.Nombre })
             .OrderByDescending(f => f.CreadaEn).ThenByDescending(f => f.Id).Take(tope + 1)
             .ToListAsync(ct).ConfigureAwait(false);
+
+        // Code review menor 10: el mensaje lleva el nombre del lote, así que el ETag suma un hash de los nombres de la página.
+        var lotes = HashDeLotes(filas.Take(tope).Select(f => f.Lote));
+        var etag = string.Create(CultureInfo.InvariantCulture,
+            $"W/\"{noLeidas}-{total}-{maxCreada?.ToUnixTimeMilliseconds() ?? 0}-{maxLeida?.ToUnixTimeMilliseconds() ?? 0}-{antes?.ToString("N") ?? "0"}-{tope}-{lotes}\"");
+        respuesta.Headers.CacheControl = "private, no-cache";
+        respuesta.Headers.ETag = etag;
+        if (peticion.Headers.IfNoneMatch.Any(v => string.Equals(v, etag, StringComparison.Ordinal)))
+            return Results.StatusCode(StatusCodes.Status304NotModified);
+
         var hay = filas.Count > tope;
         var items = filas.Take(tope).Select(f => new NotificacionDto(
             f.Id, f.Tipo, f.CreadaEn, f.LeidaEn, f.DiagnosticoId, Titulo(f.Tipo), Mensaje(f.Tipo, f.Lote),
             new AccionNotificacionDto(Accion(f.Tipo), $"/diagnosticos/{f.DiagnosticoId}"))).ToList();
         return Results.Ok(new BandejaNotificacionesDto(noLeidas, items, hay ? items[^1].Id : null));
+    }
+
+    /// <summary>16 hex del SHA-256 de los nombres de lote de la página, en su orden (cambia si se renombra uno).</summary>
+    internal static string HashDeLotes(IEnumerable<string> nombres)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(string.Join('\u001F', nombres));
+        return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes).AsSpan(0, 8));
     }
 
     private static async Task<IResult> LeidaAsync(Guid nid, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, CancellationToken ct)

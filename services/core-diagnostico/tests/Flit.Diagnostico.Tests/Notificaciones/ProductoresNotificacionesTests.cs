@@ -58,6 +58,36 @@ public sealed class ProductoresNotificacionesTests
         (await FilasAsync(api, lote.Id, ct)).Should().Equal($"{Notificacion.ZipEvidenciasListo}|{usuario}|{referencia}");
     }
 
+    // HU #14563 code review menor 6 — la deduplicación dentro de la unidad de trabajo compara la referencia, no el lote: dos
+    // derivaciones masivas del mismo lote que terminan en la misma unidad de trabajo dejan dos notificaciones; la misma
+    // operación agregada dos veces, una.
+    [Fact]
+    public async Task Escritor_dos_masivas_del_mismo_lote_en_la_misma_unidad_de_trabajo_dejan_dos()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos: [new("TST768", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var usuario = Guid.NewGuid();
+        var primera = Guid.CreateVersion7();
+        var segunda = Guid.CreateVersion7();
+
+        await using (var db = empresa.Db())
+        {
+            var ahora = DateTimeOffset.UtcNow;
+            (await EscritorNotificaciones.AgregarAsync(db, empresa.Id, usuario, Notificacion.DerivacionTerminada, lote.Id, primera, ahora, ct)).Should().BeTrue();
+            (await EscritorNotificaciones.AgregarAsync(db, empresa.Id, usuario, Notificacion.DerivacionTerminada, lote.Id, segunda, ahora, ct))
+                .Should().BeTrue("es otra operación del mismo lote");
+            (await EscritorNotificaciones.AgregarAsync(db, empresa.Id, usuario, Notificacion.DerivacionTerminada, lote.Id, primera, ahora, ct))
+                .Should().BeFalse("la misma operación ya está en la unidad de trabajo");
+            await db.SaveChangesAsync(ct);
+        }
+
+        (await FilasAsync(api, lote.Id, ct)).Should().BeEquivalentTo(
+            $"{Notificacion.DerivacionTerminada}|{usuario}|{primera}", $"{Notificacion.DerivacionTerminada}|{usuario}|{segunda}");
+    }
+
     // AC35 — sin destinatario no inserta; un tipo fuera de los cuatro (DICTAMEN_AJUSTADO, D8) no se acepta.
     [Fact]
     public async Task Escritor_sin_destinatario_no_inserta_y_rechaza_tipos_cerrados()

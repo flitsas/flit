@@ -15,7 +15,9 @@ namespace Flit.Diagnostico.Api.Modulos.Notificaciones;
 /// <item>Solo los cuatro tipos de <see cref="Notificacion.Tipos"/> (D8: no hay DICTAMEN_AJUSTADO); otro lanza <see cref="ArgumentException"/>.</item>
 /// <item>El <c>tenant_id</c> es explícito, el de la fila del hecho, nunca el implícito del contexto.</item>
 /// <item>Idempotente: no agrega si ya existe <c>(tenant, usuario, tipo, referencia)</c> en la base ni si la misma unidad de trabajo
-/// ya tiene una del mismo destinatario, tipo y lote. El índice único <c>ux_notificaciones_idempotencia</c> queda de respaldo.</item>
+/// ya tiene una con esa misma clave (para <c>LOTE_TERMINADO</c>, una del mismo lote). El índice único
+/// <c>ux_notificaciones_idempotencia</c> queda de respaldo: si otro proceso confirma la misma clave entre la comprobación y el
+/// INSERT, el 23505 lo trata el llamador (el reconciliador pospone la empresa).</item>
 /// </list>
 /// No usa SQL crudo: escribe por EF con el filtro de empresa (ADR-0072) y no amplía la lista blanca de
 /// <c>TomaEntreEmpresasSoloEnColaTests</c>.
@@ -33,9 +35,13 @@ internal static class EscritorNotificaciones
         if (usuarioId == Guid.Empty)
             return false;
 
+        // Code review menor 6: la misma clave que ux_notificaciones_idempotencia. Comparar el lote descartaba avisos legítimos, como
+        // dos derivaciones masivas del mismo lote que terminan en la misma unidad de trabajo. LOTE_TERMINADO sí se compara por
+        // lote: su referencia es la fila de historial nueva de cada recálculo, y dos recálculos de la misma transición en una
+        // unidad de trabajo son un solo hecho (el lote termina una vez por transacción).
         var pendiente = db.ChangeTracker.Entries<Notificacion>().Any(e => e.State == EntityState.Added
             && e.Entity.TenantId == tenantId && e.Entity.UsuarioId == usuarioId && e.Entity.Tipo == tipo
-            && (e.Entity.ReferenciaId == referenciaId || e.Entity.DiagnosticoId == diagnosticoId));
+            && (e.Entity.ReferenciaId == referenciaId || (tipo == Notificacion.LoteTerminado && e.Entity.DiagnosticoId == diagnosticoId)));
         if (pendiente)
             return false;
         var existe = await db.Set<Notificacion>().AsNoTracking()

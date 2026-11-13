@@ -618,6 +618,71 @@ public sealed class ConsultaDictamenTests
         largo.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
     }
 
+    // HU #14563 code review menor 2 — B-PR6 retiró el cuerpo legado, así que version_esperada es obligatoria en todo PUT, también
+    // en el de solo veredicto: ausente o null es 422 VERSION_ESPERADA_INVALIDA con el campo señalado. El motivo se valida antes
+    // (un cuerpo legado sigue siendo MOTIVO_REQUERIDO).
+    [Fact]
+    public void HU14563_menor2_version_esperada_obligatoria_en_todo_PUT()
+    {
+        foreach (var sinVersion in new[]
+                 {
+                     """{"veredicto":"BLOQUEADO","motivo":"Soporte verifico el caso"}""",
+                     """{"veredicto":"BLOQUEADO","motivo":"Soporte verifico el caso","version_esperada":null}""",
+                 })
+        {
+            var acto = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(sinVersion));
+            var error = acto.Should().Throw<ReglaException>().Which;
+            (error.Codigo, error.Status, error.Campo).Should().Be((CodigosDictamen.VersionEsperadaInvalida, 422, "version_esperada"));
+        }
+
+        var legado = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse("""{"veredicto":"VIABLE","confirmado":true}"""));
+        legado.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.MotivoRequerido);
+        OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse("""{"veredicto":"BLOQUEADO","motivo":"Soporte verifico el caso","version_esperada":4}"""))
+            .VersionEsperada.Should().Be(4);
+    }
+
+    // HU #14563 code review menor 4 — coherente con additionalProperties: false: una clave desconocida en el cuerpo o en un
+    // alertamiento es 422 VALOR_INVALIDO con el campo señalado. Una clave que no parece un nombre de campo no se repite en el error.
+    [Fact]
+    public void HU14563_menor4_claves_desconocidas_son_422_VALOR_INVALIDO()
+    {
+        const string valido = """{"veredicto":"BLOQUEADO","motivo":"Soporte verifico el caso","version_esperada":1""";
+
+        var arriba = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(valido + ""","veredicto_anterior":"VIABLE"}"""));
+        var error = arriba.Should().Throw<ReglaException>().Which;
+        (error.Codigo, error.Status, error.Campo).Should().Be((ManejadorReglas.CodigoValorInvalido, 422, "veredicto_anterior"));
+
+        var enAlertamiento = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(valido +
+            ""","alertamientos":[{"codigo":"AJUSTE_FLIT","texto":"Embargo confirmado","efecto":"BLOQUEA","fuente":"RUNT","ajuste":"AGREGADO"}]}"""));
+        var deAlertamiento = enAlertamiento.Should().Throw<ReglaException>().Which;
+        (deAlertamiento.Codigo, deAlertamiento.Campo).Should().Be((ManejadorReglas.CodigoValorInvalido, "alertamientos[0].ajuste"));
+
+        var rara = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(valido + ""","cedula 1023456789":"x"}"""));
+        var deRara = rara.Should().Throw<ReglaException>().Which;
+        deRara.Codigo.Should().Be(ManejadorReglas.CodigoValorInvalido);
+        (deRara.Campo + deRara.Message).Should().NotContain("1023456789", "el error no repite lo digitado");
+
+        OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(valido + ""","confirmado":true,"confirmar_con_tramite":false,"alertamientos":null}"""))
+            .Alertamientos.Should().BeNull("las seis claves del contrato se aceptan");
+    }
+
+    // HU #14563 code review menor 5 — el largo del texto del alertamiento se cuenta en puntos de código, como el motivo: 300 emojis
+    // (600 unidades UTF-16) caben en 500; 501 no.
+    [Fact]
+    public void HU14563_menor5_el_largo_del_texto_del_alertamiento_se_cuenta_en_puntos_de_codigo()
+    {
+        static string Cuerpo(string texto) =>
+            $$"""{"veredicto":"BLOQUEADO","motivo":"Soporte verifico el caso","version_esperada":1,"alertamientos":[{"codigo":"AJUSTE_FLIT","texto":"{{texto}}","efecto":"BLOQUEA","fuente":"RUNT"}]}""";
+        var trescientos = string.Concat(Enumerable.Repeat("🚗", 300));
+        trescientos.Length.Should().Be(600, "precondición: cada emoji son dos unidades UTF-16");
+
+        OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(Cuerpo(trescientos))).Alertamientos.Should().ContainSingle()
+            .Which.Texto.Should().Be(trescientos);
+
+        var largo = () => OverrideDictamenEndpoints.LeerCuerpo(JsonElement.Parse(Cuerpo(string.Concat(Enumerable.Repeat("🚗", 501)))));
+        largo.Should().Throw<ReglaException>().Which.Codigo.Should().Be(CodigosDictamen.AlertamientoInvalido);
+    }
+
     // B-PR6 + P3 por HTTP — sin motivo es 422 MOTIVO_REQUERIDO aunque el veredicto no cambie (el cuerpo legado se retiró); un
     // alertamiento AJUSTE_FLIT con 6 o más dígitos es 422 con el campo señalado. Nada cambia.
     [Fact]
@@ -803,7 +868,7 @@ public sealed class ConsultaDictamenTests
             tipoEmpresa: UsuarioActual.TipoEmpresaFlit);
 
     private static StringContent Cuerpo(string veredicto, bool confirmado) =>
-        new($"{{\"veredicto\":\"{veredicto}\",\"confirmado\":{(confirmado ? "true" : "false")},\"motivo\":\"Soporte verifico el caso\"}}", Encoding.UTF8, "application/json");
+        new($"{{\"veredicto\":\"{veredicto}\",\"confirmado\":{(confirmado ? "true" : "false")},\"motivo\":\"Soporte verifico el caso\",\"version_esperada\":1}}", Encoding.UTF8, "application/json");
 
     private static async Task<List<DictamenVehiculo>> FilasAsync(EmpresaDePrueba empresa, Guid vehiculo, CancellationToken ct)
     {

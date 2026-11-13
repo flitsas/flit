@@ -33,6 +33,8 @@ public sealed partial class EscritoresDeFilaTests
         "EmisorDictamen.FilaDeOverride",
         // HU #14563 B7: arma la fila del ajuste con alertamientos; el PUT (Reemplazar) sube la versión antes de llamarla.
         "EmisorDictamen.FilaDeAjuste",
+        // HU #14563 code review menor 13: la construcción de la fila salió de la lambda del PUT; Reemplazar sube la versión antes.
+        "OverrideDictamenEndpoints.NuevaFila",
     ];
 
     /// <summary>
