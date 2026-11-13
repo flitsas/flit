@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BarraSeleccion } from "@flit/ui/BarraSeleccion";
 
 // Uso de ejemplo: <BarraSeleccion cantidad={2} textoSeleccion={(n) => `${n} vehículos seleccionados`}
@@ -11,11 +11,11 @@ describe("BarraSeleccion (HU #14562 · UI-2)", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("con selección es una región con nombre y conteo en aria-live polite", () => {
+  it("con selección es una región con nombre y conteo en aria-live polite", async () => {
     render(<BarraSeleccion cantidad={2} acciones={<button>Crear trámites (2)</button>} />);
     const region = screen.getByRole("region", { name: "Selección" });
     const vivo = region.querySelector("[aria-live='polite']") as HTMLElement;
-    expect(vivo).toHaveTextContent("2 seleccionados");
+    await waitFor(() => expect(vivo).toHaveTextContent("2 seleccionados"));
     expect(screen.getByRole("button", { name: "Crear trámites (2)" })).toBeInTheDocument();
   });
 
@@ -38,5 +38,19 @@ describe("BarraSeleccion (HU #14562 · UI-2)", () => {
   it("muestra la ayuda de la regla de elegibilidad", () => {
     render(<BarraSeleccion cantidad={2} acciones={null} ayuda="Solo Viables y sin trámite" />);
     expect(screen.getByText("Solo Viables y sin trámite")).toBeInTheDocument();
+  });
+});
+
+// HU #14562 · M11 (auditoría): la barra aparece al pasar de 0 a 1; su región viva nace vacía y el conteo llega después,
+// para que el primer «1 seleccionado» se anuncie. El conteo visible queda fuera del árbol accesible (sin doble lectura).
+describe("BarraSeleccion: región viva diferida (HU #14562 · M11)", () => {
+  it("M11: al aparecer, la región viva está vacía, el conteo visible ya se ve y luego se anuncia", async () => {
+    render(<BarraSeleccion cantidad={1} acciones={null} />);
+    const region = screen.getByRole("region", { name: "Selección" });
+    const vivo = region.querySelector("[aria-live='polite']") as HTMLElement;
+    expect(vivo).toBeEmptyDOMElement();
+    const visible = screen.getByText("1 seleccionado");
+    expect(visible).toHaveAttribute("aria-hidden", "true");
+    await waitFor(() => expect(vivo).toHaveTextContent("Selección: 1 seleccionado"));
   });
 });
