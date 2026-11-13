@@ -41,6 +41,7 @@ describe("Cierre del punto", () => {
     expect(screen.getByTestId("radicado-flit2")).toHaveTextContent("TR-2026-000123");
     expect(screen.getByText("Efectivo")).toBeInTheDocument();
     expect(screen.getByText(/366\.000/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copiar ID/ })).toHaveClass("bg-success");
 
     fireEvent.click(screen.getByRole("button", { name: "Volver al inicio" }));
     expect(onTerminar).toHaveBeenCalledTimes(1);
@@ -75,6 +76,7 @@ describe("Cierre del punto", () => {
     montar({ [CIERRE]: () => json(++n === 1 ? registrado({ estadoCierre: "en_registro", radicadoFlit2: undefined }) : registrado()) });
 
     expect(await screen.findByText(/Tu trámite está en proceso de registro/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copiar ID/ })).not.toHaveClass("bg-success");
     expect(await screen.findByText("Tu trámite quedó. Recoge en este organismo.", {}, { timeout: 8000 })).toBeInTheDocument();
   }, 15000);
 
