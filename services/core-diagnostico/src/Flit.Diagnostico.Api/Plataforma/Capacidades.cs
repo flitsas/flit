@@ -5,8 +5,9 @@ namespace Flit.Diagnostico.Api.Plataforma;
 /// manifiesto y, para el backoffice, las dos políticas de <see cref="PoliticaBackoffice"/> (ajustes 2026-11-11, punto 1):
 /// <see cref="Backoffice"/>, <see cref="EditarContrato"/> y <see cref="VerAuditoria"/> siguen la de configuración (SuperAdmin
 /// de cualquier compañía o FLIT con <c>diagnostico.backoffice.ver</c>); <see cref="BackofficeOperacion"/>,
-/// <see cref="LlenarConsultas"/> y <see cref="CorregirDictamen"/>, la de operación FLIT; <see cref="VerVolumetria"/> sigue
-/// exigiendo <c>tenant_type=FLIT</c> (§6.2, D-16). Es una ayuda para la interfaz; cada endpoint vuelve a exigir su permiso.
+/// <see cref="LlenarConsultas"/> y <see cref="CorregirDictamen"/>, la de operación FLIT; <see cref="VerVolumetria"/> exige
+/// <c>tenant_type=FLIT</c> (§6.2, D-16) salvo al SuperAdmin, que tiene todas las capacidades sin mirar la compañía (decisión
+/// D23 de la HU #14563). Es una ayuda para la interfaz; cada endpoint vuelve a exigir su permiso.
 /// </summary>
 public sealed record Capacidades(
     bool CrearDiagnosticos,
@@ -27,7 +28,7 @@ public sealed record Capacidades(
     public static Capacidades De(UsuarioActual usuario)
     {
         ArgumentNullException.ThrowIfNull(usuario);
-        bool DeFlit(string slug) => usuario.EsEmpresaFlit && usuario.Tiene(slug);
+        bool DeFlit(string slug) => (usuario.EsSuperAdmin || usuario.EsEmpresaFlit) && usuario.Tiene(slug);
         return new Capacidades(
             CrearDiagnosticos: usuario.Tiene(Permisos.DiagnosticosCrear),
             VerDiagnosticos: usuario.Tiene(Permisos.DiagnosticosVer),

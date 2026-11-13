@@ -576,8 +576,9 @@ public sealed class ConsultaDictamenTests
         compania.Should().NotContain("tramite", "la compañía no ve la auditoría del ajuste");
     }
 
-    // HU #14563 hallazgo M3 de seguridad — las versiones traen ajuste_motivo (@pii:low) y el autor: un SuperAdmin con token de otra
-    // compañía recibe 403 aunque pase la política de configuración del backoffice; el SuperAdmin de FLIT lee la auditoría (200).
+    // HU #14563 hallazgo M3 de seguridad, con la decisión D23 (2026-11-13) — las versiones traen ajuste_motivo (@pii:low) y el
+    // autor: un usuario de otra compañía que no es SuperAdmin recibe 403 aunque tenga backoffice.ver y auditoria.ver; el SuperAdmin
+    // pasa siempre, con token de otra compañía, sin tenant_type o de FLIT, y lee la auditoría (200).
     [Fact]
     public async Task HU14563_M3_versiones_del_dictamen_solo_para_la_operacion_FLIT()
     {
@@ -589,12 +590,16 @@ public sealed class ConsultaDictamenTests
         var vid = lote.Vehiculos[0].Id;
         var ruta = RutaVersiones(lote.Id, vid, empresa.Id);
 
-        var deOtraCompania = api.Token(empresa: Guid.CreateVersion7(), permisos: [], roles: ["SuperAdmin"], tipoEmpresa: "CLIENTE");
-        var deFlit = api.Token(empresa: Guid.CreateVersion7(), permisos: [], roles: ["SuperAdmin"], tipoEmpresa: UsuarioActual.TipoEmpresaFlit);
+        var operadorDeOtraCompania = api.Token(
+            empresa: Guid.CreateVersion7(), permisos: [Permisos.BackofficeVer, Permisos.AuditoriaVer], roles: ["admin_diagnostico"], tipoEmpresa: "CLIENTE");
+        (await api.Cliente(operadorDeOtraCompania).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        (await api.Cliente(deOtraCompania).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        var flit = await api.Cliente(deFlit).GetAsync(ruta, ct);
-        flit.StatusCode.Should().Be(HttpStatusCode.OK, await flit.Content.ReadAsStringAsync(ct));
+        foreach (var tipo in new[] { "CLIENTE", null, UsuarioActual.TipoEmpresaFlit })
+        {
+            var superAdmin = api.Token(empresa: Guid.CreateVersion7(), permisos: [], roles: ["SuperAdmin"], tipoEmpresa: tipo);
+            var respuesta = await api.Cliente(superAdmin).GetAsync(ruta, ct);
+            respuesta.StatusCode.Should().Be(HttpStatusCode.OK, $"SuperAdmin con tenant_type={tipo ?? "(sin claim)"}: {await respuesta.Content.ReadAsStringAsync(ct)}");
+        }
     }
 
     // HU #14563 hallazgo L3 de seguridad — el largo del motivo se cuenta en puntos de código, como char_length de PostgreSQL

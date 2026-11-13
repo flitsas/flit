@@ -12,7 +12,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// Auditoría de versiones del dictamen de un vehículo (HU #14563 B7, D6/D7, ADR-0086 D-2). Cuelga del grupo <c>/backoffice</c>
 /// (política de configuración, empresa explícita en <c>?empresa=</c>; la lectura queda en <c>lecturas_backoffice</c> como el
 /// GET del dictamen) y exige la política de operación FLIT (<see cref="PoliticaBackoffice.NombreOperacion"/>, hallazgo M3: un
-/// SuperAdmin de otra compañía recibe 403) y <c>diagnostico.auditoria.ver</c>. Devuelve la cadena completa en orden descendente: lo que vio la
+/// usuario de otra compañía recibe 403 aunque tenga el permiso; el SuperAdmin pasa siempre, decisión D23) y
+/// <c>diagnostico.auditoria.ver</c>. Devuelve la cadena completa en orden descendente: lo que vio la
 /// compañía en cada versión, quién y por qué la ajustó (el nombre lo resuelve Identidad; no se guarda), los alertamientos
 /// eliminados frente a la anterior, si un recálculo automático la reemplazó y si el ajuste se confirmó sobre un vehículo que ya tenía
 /// trámite (AC23). Es la única salida de <c>ajuste_motivo</c>.
@@ -29,7 +30,7 @@ internal static class VersionesDictamenEndpoints
     public static void Map(RouteGroupBuilder backoffice)
     {
         ArgumentNullException.ThrowIfNull(backoffice);
-        // HU #14563 M3: trae ajuste_motivo (@pii:low) y el autor; solo la operación FLIT (un SuperAdmin de otra compañía, 403).
+        // HU #14563 M3: trae ajuste_motivo (@pii:low) y el autor; solo la operación FLIT (FLIT con el permiso o el SuperAdmin, D23).
         backoffice.MapGet(Ruta, Listar).RequiereOperacionFlit().RequirePermiso(Permisos.AuditoriaVer).WithName("ListarVersionesDictamenBackoffice");
     }
 

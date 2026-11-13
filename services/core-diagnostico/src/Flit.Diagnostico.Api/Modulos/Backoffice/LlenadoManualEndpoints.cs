@@ -8,9 +8,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// <summary>
 /// Llenado manual de una celda en ERROR (HU #13800, F06-H3, plan §6.1 fila manual). Cuelga del grupo <c>/backoffice</c>
 /// (<see cref="PoliticaBackoffice"/>; empresa explícita en <c>?empresa=</c>) y exige además la política de operación FLIT
-/// (<see cref="PoliticaBackoffice.NombreOperacion"/>: un SuperAdmin de otra compañía recibe 403, ajustes 2026-11-11 punto 1)
-/// y <c>diagnostico.consultas.llenar</c> (rol <c>backoffice_diagnostico</c>): el admin y el usuario
-/// de la compañía reciben 403. Va bajo <c>/backoffice/*</c> y no en <c>/consultas/{cid}/manual</c> porque la escritura entre
+/// (<see cref="PoliticaBackoffice.NombreOperacion"/>: el SuperAdmin de cualquier compañía o un usuario de FLIT con el permiso,
+/// decisión D23) y <c>diagnostico.consultas.llenar</c>: el admin y el usuario de la compañía reciben 403. Va bajo <c>/backoffice/*</c> y no en <c>/consultas/{cid}/manual</c> porque la escritura entre
 /// compañías solo vive en este módulo (<see cref="EscrituraEntreEmpresas"/>, ADR-0073).
 /// <list type="bullet">
 /// <item><c>GET /backoffice/consultas/{consulta}/manual?empresa=</c>: el formulario (<see cref="FormularioManualDto"/>): versión,

@@ -7,7 +7,8 @@ namespace Flit.Diagnostico.Tests.Plataforma;
 
 /// <summary>
 /// HU #13724 (F00.1-H3), escenarios 1 y 3 — permisos y roles por defecto del manifiesto contra la tabla §6.2 del plan
-/// (D-01 = c, R-6). La tabla se copia aquí literal: si el manifiesto cambia sin cambiar el plan, la prueba falla.
+/// (D-01 = c, R-6). La tabla se copia aquí literal: si el manifiesto cambia sin cambiar el plan, la prueba falla. Desde la
+/// decisión D23 (HU #14563, 2026-11-13) no hay rol <c>backoffice_diagnostico</c>: sus capacidades son del SuperAdmin.
 /// </summary>
 /// <example>
 /// <code>
@@ -29,12 +30,6 @@ public sealed partial class PermisosTests
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
             "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.configuracion.editar",
             "diagnostico.consultas.reprocesar",
-        ],
-        ["backoffice_diagnostico"] =
-        [
-            "diagnostico.backoffice.ver", "diagnostico.reportes.descargar", "diagnostico.configuracion.ver",
-            "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.reprocesar", "diagnostico.consultas.llenar",
-            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
         ],
     };
 
@@ -80,14 +75,18 @@ public sealed partial class PermisosTests
         });
     }
 
-    // Escenario 3 — R-6: el backoffice FLIT no crea diagnósticos.
+    // D23 — ningún rol por defecto trae permisos del backoffice FLIT: esas capacidades son del SuperAdmin.
     [Fact]
-    public void Backoffice_no_tiene_diagnosticos_crear()
+    public void Ningun_rol_por_defecto_trae_permisos_del_backoffice()
     {
-        var backoffice = Permisos.RolesPorDefecto.Single(r => r.Codigo == "backoffice_diagnostico");
+        string[] backoffice =
+        [
+            "diagnostico.backoffice.ver", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.llenar",
+            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+        ];
 
-        backoffice.Permisos.Should().NotContain("diagnostico.diagnosticos.crear");
-        backoffice.Permisos.Should().NotContain("diagnostico.derivacion.crear");
+        Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().NotContain("backoffice_diagnostico");
+        Permisos.RolesPorDefecto.Should().AllSatisfy(r => r.Permisos.Should().NotContain(backoffice, r.Codigo));
     }
 
     [GeneratedRegex(@"^diagnostico(\.[a-z]+){2,3}$", RegexOptions.CultureInvariant)]

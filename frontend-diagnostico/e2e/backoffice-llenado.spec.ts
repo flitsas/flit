@@ -13,8 +13,8 @@ import { expect, test, type Page } from "@playwright/test";
  *   E2E_ADMIN_USUARIO=... E2E_ADMIN_CLAVE=... \
  *   pnpm --dir frontend exec playwright test ../frontend-diagnostico/e2e/backoffice-llenado.spec.ts
  *
- * E2E_BACKOFFICE_USUARIO es un usuario de la compañía FLIT con el rol backoffice_diagnostico (diagnostico.backoffice.ver y
- * diagnostico.consultas.llenar); E2E_ADMIN_USUARIO, el admin de una compañía cliente. Las credenciales son de usuarios de
+ * E2E_BACKOFFICE_USUARIO es un usuario SuperAdmin de la compañía FLIT (tiene todas las capacidades de Diagnóstico, decisión
+ * D23); E2E_ADMIN_USUARIO, el admin de una compañía cliente. Las credenciales son de usuarios de
  * prueba del ambiente DEV y entran solo por variables de entorno.
  *
  * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.

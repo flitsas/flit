@@ -18,7 +18,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// Lectura y ajuste FLIT del dictamen vigente para el backoffice (corte 7; HU #14563 B7, ADR-0086 D-2). Cuelgan del grupo
 /// <c>/backoffice</c> (<see cref="PoliticaBackoffice"/> de configuración; empresa explícita en <c>?empresa=</c>, y el GET queda
 /// auditado antes de tocar la fila): el GET es el detalle y lo ve también el SuperAdmin de cualquier compañía. El <c>PUT</c> exige
-/// además la política de operación FLIT (<see cref="PoliticaBackoffice.NombreOperacion"/>) y <c>diagnostico.dictamen.override</c>.
+/// además la política de operación FLIT (<see cref="PoliticaBackoffice.NombreOperacion"/>: el SuperAdmin de cualquier compañía o
+/// un usuario de FLIT con el permiso, decisión D23) y <c>diagnostico.dictamen.override</c>.
 /// La escritura de la otra compañía va por <see cref="EscrituraEntreEmpresas"/>.
 /// <para>
 /// El PUT recibe el estado deseado: veredicto, motivo (obligatorio desde B-PR6), <c>version_esperada</c> y, opcional, los

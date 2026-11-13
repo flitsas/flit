@@ -5,9 +5,10 @@ using Xunit;
 namespace Flit.Diagnostico.Tests.Contratos;
 
 /// <summary>
-/// HU #14563 AC43 (CF-30) — <c>contracts/openapi/diagnostico.v1.yaml</c> tras el rediseño: <c>info.version</c> 1.3.0 con la ruptura
+/// HU #14563 AC43 (CF-30) — <c>contracts/openapi/diagnostico.v1.yaml</c> tras el rediseño: <c>info.version</c> 1.3.1 (la 1.3.0 con la ruptura
 /// del PUT del backoffice anotada (B-PR6: <c>motivo</c> requerido, el cuerpo legado sin motivo se retiró), y los cambios del cierre
-/// declarados (AC23 <c>ajuste_con_tramite</c> en la auditoría, <c>href</c> en plural). Lectura de texto: el repo no tiene parser
+/// declarados (AC23 <c>ajuste_con_tramite</c> en la auditoría, <c>href</c> en plural); la 1.3.1, la decisión D23 del SuperAdmin).
+/// Lectura de texto: el repo no tiene parser
 /// YAML en las pruebas.
 /// </summary>
 /// <example>
@@ -26,7 +27,8 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.3.0\"");
+        info.Should().Contain("version: \"1.3.1\"");
+        info.Should().Contain("Versión 1.3.1").And.Contain("backoffice_diagnostico").And.Contain("SuperAdmin");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
         Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
     }
