@@ -80,7 +80,7 @@ Permisos: escritura solo FLIT (política `diagnostico.backoffice.operacion` + pe
 
 ## Contrato y migraciones
 
-Rutas reales (prefijo `/api/v1/diagnostico`, contrato `contracts/openapi/diagnostico.v1.yaml`, `info.version` 1.2.0). Las del backoffice cuelgan del grupo `/backoffice` con la empresa explícita en `?empresa=`.
+Rutas reales (prefijo `/api/v1/diagnostico`, contrato `contracts/openapi/diagnostico.v1.yaml`, `info.version` 1.3.0). Las del backoffice cuelgan del grupo `/backoffice` con la empresa explícita en `?empresa=`.
 
 | Método y ruta | Bloque | Permiso | Archivo |
 |---------------|--------|---------|---------|
@@ -97,6 +97,7 @@ Migraciones en `services/core-diagnostico/src/Flit.Diagnostico.Api/Persistence/M
 1. `20261113050619_R7_AjusteDictamen.cs`: columnas `ajustado_desde_version` y `ajuste_motivo`, backfill y CHECK de D-2; `Down` bloqueado si hay ajustes FLIT.
 2. `20261113051720_R8_Notificaciones.cs`: tabla `notificaciones` con `fk_notificaciones_diagnosticos` (`CASCADE`), `ix_notificaciones_bandeja`, `ix_notificaciones_no_leidas`, `ix_notificaciones_diagnostico`, `ix_notificaciones_retencion` y `ux_notificaciones_idempotencia`, y CHECK `ck_notificaciones_tipo`, `ck_notificaciones_datos` y `ck_notificaciones_leida`.
 3. `20261113054446_R1_VersionFilaTablero.cs`: `vehiculos.version_tablero`, `ck_vehiculos_version_tablero` e `ix_vehiculos_tablero`.
+4. `20261113070402_R9_AjusteConTramite.cs`: `dictamenes.ajuste_con_tramite` (boolean, default false) y `ck_dictamenes_ajuste_con_tramite`. Registra que el vehículo ya tenía trámite cuando se confirmó el ajuste (AC23). Solo se expone en `GET …/dictamen/versiones`. El Down se bloquea si hay versiones marcadas.
 
 La marca de tiempo de R1 es posterior a las de R7 y R8, así que se aplica al final. El rótulo R1 viene del bloque B1 de la HU, no del orden de aplicación.
 
@@ -268,9 +269,9 @@ La tabla de aplicabilidad de ADR-0072 ya tiene las filas de R1 (`vehiculos`), R7
 - La marca «ajustado por FLIT» (con su fecha) se imprime también en el **PDF por vehículo** y en el **índice del ZIP**, y **entra en la huella del PDF** (`Modulos/Reportes/ContenidoReporteVehiculo.cs`, `ParaHuella`), para que un PDF anterior al ajuste no se reutilice. El PDF ya imprime el dictamen (`Modulos/Reportes/PdfVehiculo.cs:144-145`). El ZIP se regenera solo, porque su huella ya incluye la versión y el veredicto del dictamen vigente (`Modulos/Reportes/EmpaquetadorZip.cs:68-81`).
 
 ### Cambios operacionales
-- Migraciones `R7_AjusteDictamen`, `R8_Notificaciones` y `R1_VersionFilaTablero` (archivos y orden en «Contrato y migraciones»).
+- Migraciones `R7_AjusteDictamen`, `R8_Notificaciones`, `R1_VersionFilaTablero` y `R9_AjusteConTramite` (archivos y orden en «Contrato y migraciones»).
 - Opciones `Diagnostico:Notificaciones:{RetencionDias=90, IntervaloPurga=24 h, TamanoLote=500}` (`Modulos/Notificaciones/OpcionesNotificaciones.cs`); la purga borra en bloques de `TamanoLote`.
-- `info.version` del OpenAPI de Diagnóstico pasa a 1.2.0.
+- `info.version` del OpenAPI de Diagnóstico pasa a 1.3.0: B-PR6 vuelve `motivo` obligatorio en el cuerpo del PUT del backoffice, y el consumidor sale en el mismo despliegue.
 - El evento `diagnostico.dictamen.emitido` gana `ajuste_alertamientos` (opcional, aditivo).
 
 ## ADRs relacionados
