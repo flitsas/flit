@@ -77,7 +77,8 @@ internal sealed class ConsultaGrilla(
             [.. grilla.Vehiculos.Select(v => new FilaVehiculoDto(
                 v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(Dto)],
                 v.DocumentoDeclarado, v.Propietarios, esPegado.Contains(v.Id),
-                Veredicto: elegibilidad.TryGetValue(v.Id, out var e) ? e.Veredicto : null))],
+                Veredicto: elegibilidad.TryGetValue(v.Id, out var e) ? e.Veredicto : null,
+                DictamenAjustado: e?.DictamenAjustado ?? false))],
             grilla.Estimado, pegados.Count, pegados, conteos, lote);
     }
 

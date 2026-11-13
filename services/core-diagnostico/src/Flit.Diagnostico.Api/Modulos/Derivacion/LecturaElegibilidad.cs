@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Derivacion;
 /// Elegibilidad de un vehículo ya evaluada, con el estado de su último ítem y su trámite. <c>Veredicto</c> (HU #14563) es el del
 /// dictamen vigente; null si no hay o si el modo no exige dictamen (Simple).
 /// </summary>
-internal sealed record ElegibilidadVehiculo(Guid VehiculoId, string? Motivo, EstadoItemDerivacion? UltimoEstado, Guid? TramiteId, string? TramiteNumero, string? Veredicto = null)
+internal sealed record ElegibilidadVehiculo(
+    Guid VehiculoId, string? Motivo, EstadoItemDerivacion? UltimoEstado, Guid? TramiteId, string? TramiteNumero, string? Veredicto = null, bool DictamenAjustado = false)
 {
     public bool Elegible => Motivo is null;
 }
@@ -49,9 +50,9 @@ internal static class LecturaElegibilidad
         var veredictos = exige
             ? (await db.Set<DictamenVehiculo>().AsNoTracking()
                     .Where(d => d.Vigente && ids.Contains(d.VehiculoId))
-                    .Select(d => new { d.VehiculoId, d.Veredicto })
+                    .Select(d => new { d.VehiculoId, d.Veredicto, Ajustado = d.AjusteMotivo != null })
                     .ToListAsync(ct).ConfigureAwait(false))
-                .ToDictionary(d => d.VehiculoId, d => d.Veredicto)
+                .ToDictionary(d => d.VehiculoId, d => (d.Veredicto, d.Ajustado))
             : [];
         var items = (await db.Set<ItemDerivacion>().AsNoTracking()
                 .Where(i => ids.Contains(i.VehiculoId) && (excluirItem == null || i.Id != excluirItem))
@@ -65,11 +66,14 @@ internal static class LecturaElegibilidad
             var datos = new DatosElegibilidad(
                 Terminado: Domain.Diagnosticos.AvanceVehiculo.Terminado(estados[v.Id]),
                 ExigeDictamen: exige,
-                Veredicto: veredictos.GetValueOrDefault(v.Id),
+                Veredicto: veredictos.TryGetValue(v.Id, out var vigente) ? vigente.Veredicto : null,
                 TieneTramite: v.TramiteId is not null,
                 ItemVivo: propios.Any(i => i.Estado is EstadoItemDerivacion.Pendiente or EstadoItemDerivacion.Enviado));
             var ultimo = propios.OrderByDescending(i => i.ActualizadoEn).ThenByDescending(i => i.Id).FirstOrDefault();
-            return new ElegibilidadVehiculo(v.Id, ElegibilidadDerivacion.MotivoNoElegible(datos), ultimo?.Estado, v.TramiteId, v.TramiteNumero, datos.Veredicto);
+            // HU #14563 AC26 (P1 = a): la marca de la fila es ajuste_motivo IS NOT NULL en la vigente.
+            return new ElegibilidadVehiculo(
+                v.Id, ElegibilidadDerivacion.MotivoNoElegible(datos), ultimo?.Estado, v.TramiteId, v.TramiteNumero, datos.Veredicto,
+                veredictos.TryGetValue(v.Id, out var marca) && marca.Ajustado);
         });
     }
 

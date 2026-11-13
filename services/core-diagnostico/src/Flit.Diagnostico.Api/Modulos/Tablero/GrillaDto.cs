@@ -91,7 +91,8 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios,
     [property: JsonPropertyName("pegada")] bool Pegada,
     [property: JsonPropertyName("derivacion")] Derivacion.DerivacionFilaDto? Derivacion = null,
-    [property: JsonPropertyName("veredicto")] string? Veredicto = null)
+    [property: JsonPropertyName("veredicto")] string? Veredicto = null,
+    [property: JsonPropertyName("dictamen_ajustado")] bool DictamenAjustado = false)
 {
     /// <summary>Rótulo del tipo de identificador (punto 5): «Placa de carro», «Placa de motocarro», «VIN»…</summary>
     [JsonPropertyName("tipo_identificador_etiqueta")]
