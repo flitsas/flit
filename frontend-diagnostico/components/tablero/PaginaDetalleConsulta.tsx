@@ -21,6 +21,7 @@ import {
   type ErrorDetalle,
 } from "@/lib/tablero/detalle";
 import { VistaDetalleCelda } from "./DetalleCelda";
+import { ChipEstadoCelda } from "./CeldaSemaforo";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle; causa: unknown } | { tipo: "listo"; detalle: Detalle };
@@ -50,8 +51,8 @@ export interface PaginaDetalleConsultaProps {
 
 /**
  * Página del detalle de una consulta (HU #14087), que el semáforo de la grilla abre en una pestaña nueva en vez del modal:
- * tarjeta título con migas «Diagnósticos › {nombre_diagnostico} › {fuente} · {identificador}», h1 «{fuente} ·
- * {identificador}» y «Volver al diagnóstico»; debajo, a ancho completo, la «Auditoría de consulta» y la «Respuesta de la
+ * tarjeta título con migas de 4 niveles «Diagnósticos › {nombre_diagnostico} › {identificador} › {fuente}» (HU #14562 ·
+ * AC39), h1 «{fuente} · {identificador}» con el chip de estado y «Volver al diagnóstico»; debajo, a ancho completo, la «Auditoría de consulta» y la «Respuesta de la
  * fuente» (VistaDetalleCelda). Cuatro estados: cargando (loader de @flit/ui), error (404 o fuente desconocida → no
  * disponible; 403 → página 403 o sin permiso; otro con Reintentar), vacío (lo dice VistaDetalleCelda: sin ejecutar, sin
  * personas o sin campos) y lleno. Sin la capacidad verDiagnosticos de la sesión no se pide nada, como en el tablero.
@@ -155,11 +156,19 @@ export function PaginaDetalleConsulta({
             migas={[
               { texto: "Diagnósticos", href: rutaListado },
               { texto: detalle?.nombre_diagnostico || "Diagnóstico", href: rutaDiagnostico },
-              { texto: titulo },
+              ...(detalle?.identificador ? [{ texto: detalle.identificador }] : []),
+              { texto: nombre },
             ]}
           />
         }
-        debajo={detalle && nota?.(detalle)}
+        debajo={
+          detalle && (
+            <div className="flex flex-col items-start gap-2">
+              <ChipEstadoCelda estado={detalle.estado} />
+              {nota?.(detalle)}
+            </div>
+          )
+        }
         icono="diagnostico"
         acciones={
           <Link href={rutaDiagnostico} className={BOTON_SECUNDARIO_CLS}>
