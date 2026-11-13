@@ -26,7 +26,7 @@ import {
   FILA_TABLA_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
-import { listarLotesBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
+import { listarLotesBackoffice, type DiagnosticoBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { SelectorEmpresaBackoffice } from "./SelectorEmpresaBackoffice";
@@ -60,6 +60,17 @@ function consultaUrl(f: Filtros): string {
   if (f.conErrores) q.set("con_errores", "true");
   if (f.pagina > 1) q.set("pagina", String(f.pagina));
   return q.toString();
+}
+
+/** AC43 (B3): «ID · modo · trámite». Sin `modo` (API previo a B3) solo el ID; nada se infiere. */
+export function contextoLote(d: DiagnosticoBackoffice): string {
+  const partes = [d.id];
+  if (d.modo) {
+    partes.push(d.modo === "CON_ANALISIS" ? "Con análisis IA" : "Simple");
+    if (d.tipo_tramite) partes.push(d.tipo_tramite.nombre);
+    else if (d.es_express) partes.push("Express");
+  }
+  return partes.join(" · ");
 }
 
 /** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
@@ -186,6 +197,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
                       >
                         {d.nombre}
                       </Link>
+                      <p className="mt-0.5 break-all text-xs text-muted-foreground">{contextoLote(d)}</p>
                     </td>
                     <td className={CELDA_TABLA_CLS}>
                       <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
@@ -223,6 +235,11 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         titulo="Backoffice de diagnósticos"
         descripcion="Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error."
         icono="diagnostico"
+        acciones={
+          <Link href="/backoffice/fuentes-obligatorias" className={BOTON_REINTENTAR_CLS}>
+            Fuentes obligatorias
+          </Link>
+        }
       />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
         <SelectorEmpresaBackoffice id={`${id}-empresa`} value={filtros.empresa} onChange={(empresa) => aplicar({ empresa: empresa.id, pagina: 1 })} />

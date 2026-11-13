@@ -5079,6 +5079,11 @@ components:
         resultado: { type: string, enum: [EXITOSO, ERROR] }
         disparador: { type: string, enum: [AUTOMATICO, REPROCESO] }
         desde_cache: { type: boolean }
+        tipo_error:
+          type: string
+          nullable: true
+          example: TIMEOUT
+          description: "D15. Solo en ERROR: el mismo código de negocio que la grilla expone en la celda; nunca el mensaje técnico. null si el intento fue exitoso."
 
     MultaSimit:
       type: object

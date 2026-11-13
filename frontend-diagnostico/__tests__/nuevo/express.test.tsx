@@ -37,6 +37,7 @@ const placa = async () => {
 };
 const documento = () => screen.getByRole("textbox", { name: /número de documento del locatario/i });
 const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de documento del locatario/i });
+const iniciado = () => screen.findByRole("heading", { name: "Diagnóstico iniciado con 1 vehículo" });
 const continuar = async () => fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
 
 describe("Express — placa y nombre autogenerado (AC2)", () => {
@@ -129,7 +130,7 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
     fireEvent.change(await screen.findByRole("combobox", { name: /tipo de trámite/i }), { target: { value: "TRASPASO_STANDARD" } });
     await continuar();
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(await iniciado()).toBeInTheDocument();
     expect(llamadas(api, "POST", "/express/estimado")).toHaveLength(0);
     expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toEqual({
       nombre: "Express TST123",
@@ -165,7 +166,7 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(within(estimado).getByText("RUNT propietario").nextSibling).toHaveTextContent(/^al menos 1$/);
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Lanzar diagnóstico" }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(await iniciado()).toBeInTheDocument();
   });
 
   it("«Anterior» en el estimado vuelve a editar sin lanzar", async () => {
@@ -244,7 +245,38 @@ describe("Express — errores (AC4)", () => {
     expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
     expect(screen.getByText(/diagnóstico no respondió/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(await iniciado()).toBeInTheDocument();
     expect(llamadas(api, "POST", "/express")).toHaveLength(2);
+  });
+});
+
+describe("Express — resultado «Diagnóstico iniciado» con redirección de 5 s (AC18, AC19)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"], shouldAdvanceTime: true });
+    vi.setSystemTime(FECHA);
+  });
+
+  it("AC18: tras crear muestra el resultado con Ver tablero, Volver y Quedarme aquí y a los 5 s navega al tablero", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    await continuar();
+    expect(await iniciado()).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver tablero" })).toHaveAttribute("href", `/diagnosticos/${ID_EXPRESS}`);
+    expect(screen.getByRole("link", { name: "Volver" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("button", { name: "Quedarme aquí" })).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`);
+  });
+
+  it("AC19: «Quedarme aquí» cancela la redirección y lo anuncia en una región polite sin mover el foco", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    await continuar();
+    await iniciado();
+    fireEvent.click(screen.getByRole("button", { name: "Quedarme aquí" }));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.getByText("Detuvimos la redirección. Sigues en esta página.")).toHaveAttribute("aria-live", "polite");
   });
 });

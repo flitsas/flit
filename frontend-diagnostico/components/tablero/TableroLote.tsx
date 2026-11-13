@@ -484,6 +484,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           puedeCorregir={false}
           onClose={() => setDictamen(null)}
           devolverFocoA={dictamen.disparador}
+          tramiteAnalizado={grilla?.lote?.tipo_tramite?.nombre ?? null}
         />
       )}
     </>

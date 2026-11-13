@@ -23,7 +23,8 @@ internal static class AuditoriaConsultaCliente
             n + 1, i.Inicio, i.Fin, Milisegundos(i.Inicio, i.Fin),
             i.Estado == ResultadoIntento.Success ? "EXITOSO" : "ERROR",
             i.Disparador == DisparadorIntento.Reproceso ? "REPROCESO" : "AUTOMATICO",
-            i.DesdeCache)).ToList();
+            i.DesdeCache,
+            i.Estado == ResultadoIntento.Success ? null : i.TipoError)).ToList();
         var inicio = visibles[0].Inicio;
         var fin = visibles[^1].Fin;
         return new AuditoriaConsulta(inicio, fin, Milisegundos(inicio, fin), detalle.Count, detalle);
@@ -40,7 +41,11 @@ public sealed record AuditoriaConsulta(
     [property: JsonPropertyName("intentos")] int Intentos,
     [property: JsonPropertyName("intentos_detalle")] IReadOnlyList<IntentoConsultaCliente> IntentosDetalle);
 
-/// <summary>Un intento visible a la compañía: resultado <c>EXITOSO</c>/<c>ERROR</c> y disparador <c>AUTOMATICO</c>/<c>REPROCESO</c>.</summary>
+/// <summary>
+/// Un intento visible a la compañía: resultado <c>EXITOSO</c>/<c>ERROR</c>, disparador <c>AUTOMATICO</c>/<c>REPROCESO</c> y, en
+/// ERROR, <c>tipo_error</c> (D15): el mismo código de negocio que la grilla expone en la celda (p. ej. <c>TIMEOUT</c>), nunca el
+/// mensaje técnico; null si el intento fue exitoso.
+/// </summary>
 public sealed record IntentoConsultaCliente(
     [property: JsonPropertyName("n")] int N,
     [property: JsonPropertyName("inicio")] DateTimeOffset Inicio,
@@ -48,4 +53,5 @@ public sealed record IntentoConsultaCliente(
     [property: JsonPropertyName("duracion_ms")] long DuracionMs,
     [property: JsonPropertyName("resultado")] string Resultado,
     [property: JsonPropertyName("disparador")] string Disparador,
-    [property: JsonPropertyName("desde_cache")] bool DesdeCache);
+    [property: JsonPropertyName("desde_cache")] bool DesdeCache,
+    [property: JsonPropertyName("tipo_error")] string? TipoError = null);

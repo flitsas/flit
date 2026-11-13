@@ -38,3 +38,7 @@ export * from "./BarraProgreso";
 export * from "./ListaDefinicion";
 export * from "./TarjetaPlegable";
 export * from "./EtiquetaEnProceso";
+export * from "./TablaEditable";
+export * from "./SelectorSegmentado";
+export * from "./ZonaArrastre";
+export * from "./NotificacionPersistente";

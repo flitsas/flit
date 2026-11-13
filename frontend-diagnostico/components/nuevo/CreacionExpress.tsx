@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { PantallaResultado } from "@flit/ui/PantallaResultado";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import type { Configuracion } from "@/lib/configuracion";
@@ -30,7 +32,8 @@ import { DosZonas } from "./DosZonas";
 type Fase =
   | { tipo: "editando" }
   | { tipo: "enviando"; texto: string }
-  | { tipo: "confirmar"; entrada: ExpressEntrada; estimado: EstimadoFuente[] };
+  | { tipo: "confirmar"; entrada: ExpressEntrada; estimado: EstimadoFuente[] }
+  | { tipo: "creado"; id: string };
 type ErrorGeneral = { titulo: string; mensaje: string; reintentar?: () => void };
 
 /** Botón «Anterior» del prototipo: azul marino. */
@@ -67,7 +70,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
   const [errorPlaca, setErrorPlaca] = useState<string | null>(null);
   const [errores, setErrores] = useState<ErroresLocatario>({});
   const [enfocar, setEnfocar] = useState(0);
-  const ocupado = fase.tipo !== "editando";
+  const ocupado = fase.tipo === "enviando" || fase.tipo === "confirmar";
   const nombre = borrador.nombreManual ?? nombreAutogenerado(borrador.placa);
 
   useEffect(() => onOcupado(ocupado), [ocupado, onOcupado]);
@@ -111,7 +114,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     setErrorGeneral(null);
     setFase({ tipo: "enviando", texto: "Creando el diagnóstico…" });
     crearExpress(entrada)
-      .then((creado) => router.push(`/diagnosticos/${encodeURIComponent(creado.id)}`))
+      .then((creado) => setFase({ tipo: "creado", id: creado.id }))
       .catch((e: unknown) => manejarError(e, () => lanzar(entrada)));
   }
 
@@ -141,6 +144,21 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     const entrada = entradaExpress(p.cabecera(nombre), borrador.placa, { tipo: borrador.tipoDocumento, documento: borrador.documento });
     if (configuracion.operacion.estimado_consultas === "ANTES_DE_LANZAR") estimar(entrada);
     else lanzar(entrada);
+  }
+
+  if (fase.tipo === "creado") {
+    const tablero = `/diagnosticos/${encodeURIComponent(fase.id)}`;
+    // Resultado del kit 2026 (AC18): a los 5 s sin interacción va al tablero; «Quedarme aquí» la detiene (AC19, WCAG 2.2.1).
+    return (
+      <PantallaResultado
+        tono="exito"
+        titulo="Diagnóstico iniciado con 1 vehículo"
+        mensaje="Las consultas ya están en curso. Puedes seguirlas en el tablero del lote."
+        primaria={{ etiqueta: "Ver tablero", href: tablero, enlace: Link }}
+        secundaria={{ etiqueta: "Volver", href: "/", enlace: Link }}
+        redireccion={{ segundos: 5, destino: "el tablero del lote", onNavegar: () => router.push(tablero) }}
+      />
+    );
   }
 
   return (
