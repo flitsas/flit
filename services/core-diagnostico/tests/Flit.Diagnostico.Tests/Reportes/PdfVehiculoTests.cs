@@ -782,6 +782,56 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         con.ParaHuella()["dictamen/texto"].Should().Be(textoDictamen);
     }
 
+    /// <summary>
+    /// HU #14563 AC32 (D6) — un dictamen ajustado por FLIT pinta «Ajustado por FLIT el dd/MM/yyyy HH:mm» (hora Colombia) justo
+    /// después del veredicto; sin ajuste no hay marca.
+    /// </summary>
+    [Fact]
+    public void B7_dictamen_ajustado_pinta_la_marca_con_la_fecha_junto_al_veredicto()
+    {
+        const string parrafo = "qv52 epsilon dictamen ajustado unico";
+        var ajustado = new DateTimeOffset(2026, 11, 13, 15, 30, 0, TimeSpan.Zero);
+        var contenido = Contenido("ABC123") with
+        {
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA", parrafo, Version: 4, AjustadoEn: ajustado),
+        };
+        var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
+
+        var orden = new[] { "Bloqueado", "Ajustado por FLIT el 13/11/2026 10:30", parrafo };
+        var desde = 0;
+        foreach (var literal in orden)
+        {
+            var i = texto.IndexOf(PdfDePrueba.Plano(literal), desde, StringComparison.Ordinal);
+            i.Should().BeGreaterThanOrEqualTo(0, $"«{literal}» aparece después del anterior: {texto}");
+            desde = i;
+        }
+
+        var sinAjuste = Contenido("ABC123") with { Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA", parrafo) };
+        PdfDePrueba.Tiene(PdfDePrueba.Texto(PdfVehiculo.Generar(sinAjuste, GeneradoEn)), "Ajustado por FLIT").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// HU #14563 AC32 — la huella del PDF cambia con el ajuste: suma <c>dictamen/ajustado_en</c> y <c>dictamen/version</c> solo si
+    /// el dictamen está ajustado (sin ajuste la huella de los PDF existentes no cambia), y un recálculo (otra versión) la vuelve a cambiar.
+    /// </summary>
+    [Fact]
+    public void B7_la_huella_del_pdf_cambia_con_la_marca_y_la_version()
+    {
+        const string parrafo = "qu63 zeta dictamen huella";
+        var sin = Contenido("ABC123") with { Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA", parrafo, Version: 3) };
+        var ajustado = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA", parrafo, Version: 3, AjustadoEn: GeneradoEn) };
+        var otraVersion = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA", parrafo, Version: 4, AjustadoEn: GeneradoEn) };
+
+        sin.ParaHuella().Keys.Where(k => k.StartsWith("dictamen/", StringComparison.Ordinal))
+            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto"]);
+        ajustado.ParaHuella().Keys.Should().Contain(["dictamen/ajustado_en", "dictamen/version"]);
+
+        static string Huella(ContenidoReporteVehiculo c) => HuellaEvidencia.Calcular(new EntradaHuella(
+            1, TipoEvidencia.Pdf, new CabeceraHuella(Guid.Empty, "Lote", "CON_ANALISIS", "TRASPASO_STANDARD", ["RUNT"]), c.ParaHuella(), []));
+        Huella(ajustado).Should().NotBe(Huella(sin));
+        Huella(otraVersion).Should().NotBe(Huella(ajustado));
+    }
+
     [Fact]
     public void Identificacion_datos_del_diagnostico_secciones_y_nota_en_orden()
     {

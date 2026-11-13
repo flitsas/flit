@@ -326,6 +326,9 @@ internal static partial class PdfVehiculo
     private static void CuerpoDictamen(ColumnDescriptor cuerpo, DictamenEnHuella dictamen)
     {
         cuerpo.Item().Text(VeredictoEnPalabra(dictamen.Veredicto));
+        // HU #14563 AC32 (D6): la marca va junto al veredicto, con la fecha del ajuste en hora Colombia.
+        if (dictamen.AjustadoEn is { } ajustado)
+            cuerpo.Item().Text($"{MarcaAjusteFlit} el {Fecha(ajustado)}");
         if (dictamen.Estado == "PENDIENTE")
             cuerpo.Item().Text(RotulosDiagnostico.AnalisisEnPreparacion);
 
@@ -338,6 +341,9 @@ internal static partial class PdfVehiculo
             cuerpo.Item().Text(parrafo);
         }
     }
+
+    /// <summary>Marca del dictamen ajustado por soporte FLIT (HU #14563, D6), la misma del panel del dictamen y del índice del ZIP.</summary>
+    public const string MarcaAjusteFlit = "Ajustado por FLIT";
 
     /// <summary>El veredicto se lee en palabra. El color no lo sustituye.</summary>
     private static string VeredictoEnPalabra(string veredicto) => RotulosDiagnostico.DeVeredicto(veredicto);
