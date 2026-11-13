@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
-import { Modal } from "@flit/ui/Modal";
+import { PanelLateral } from "@flit/ui/PanelLateral";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
-import { useFocoAtrapado } from "@/components/tablero/DetalleCelda";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS, Vacio } from "@/components/tablero/vistasDetalle/comun";
 import {
   corregirDictamen,
@@ -31,6 +30,15 @@ export interface PanelDictamenProps {
   onClose: () => void;
   /** Botón que abrió el panel: recibe el foco al cerrarlo. */
   devolverFocoA?: HTMLElement | null;
+  /** Trámite analizado del lote (`grilla.lote.tipo_tramite`, rótulo de negocio). Sin él, la línea se omite. */
+  tramiteAnalizado?: string | null;
+}
+
+/** dd/mm/aaaa en la hora de Colombia. Fecha ilegible: el texto crudo. */
+function fechaCorta(iso: string): string {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return iso;
+  return fecha.toLocaleDateString("es-CO", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Bogota" });
 }
 
 type Carga = { tipo: "cargando" } | { tipo: "vacio" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; dictamen: Dictamen };
@@ -65,6 +73,7 @@ export function PanelDictamen({
   puedeCorregir,
   onClose,
   devolverFocoA,
+  tramiteAnalizado,
 }: PanelDictamenProps) {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -72,8 +81,14 @@ export function PanelDictamen({
   const [confirmado, setConfirmado] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
-  const ancla = useRef<HTMLDivElement>(null);
-  useFocoAtrapado(ancla, devolverFocoA);
+  // PanelLateral devuelve el foco al elemento activo al abrir; si el que abrió es otro, se le devuelve aquí.
+  const disparador = useRef(devolverFocoA);
+  useEffect(() => {
+    const destino = disparador.current;
+    return () => {
+      if (destino?.isConnected) destino.focus();
+    };
+  }, []);
   const ofreceOverride = modo === "backoffice" && puedeCorregir;
 
   useEffect(() => {
@@ -144,6 +159,33 @@ export function PanelDictamen({
           Veredicto:{" "}
           <Etiqueta tono={dictamen.veredicto === "BLOQUEADO" ? "danger" : "success"}>{nombreVeredicto(dictamen.veredicto)}</Etiqueta>
         </p>
+        {dictamen.veredicto === "BLOQUEADO" && (
+          <InlineAlert tone="error" title="Vehículo bloqueado">
+            El vehículo está bloqueado: no se puede crear el trámite hasta resolver los impedimentos que bloquean.
+          </InlineAlert>
+        )}
+        <dl className={`grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 ${TEXTO_SECUNDARIO_CLS}`}>
+          {tramiteAnalizado && (
+            <div className="contents">
+              <dt>Trámite analizado</dt>
+              <dd className="font-medium text-flit-primary">{tramiteAnalizado}</dd>
+            </div>
+          )}
+          <div className="contents">
+            <dt>Emitido el</dt>
+            <dd className="font-medium text-flit-primary">{fechaCorta(dictamen.creado_en)}</dd>
+          </div>
+          <div className="contents">
+            <dt>Versión del catálogo</dt>
+            <dd className="font-medium text-flit-primary">{dictamen.catalogo_version}</dd>
+          </div>
+        </dl>
+        {dictamen.ajustado_por_flit && (
+          <p className="text-sm text-flit-primary">
+            <Etiqueta tono="info">Ajustado por FLIT</Etiqueta>
+            {dictamen.ajustado_en ? ` el ${fechaCorta(dictamen.ajustado_en)}` : null}
+          </p>
+        )}
         {dictamen.estado_redaccion === "PENDIENTE" && <p className="text-sm text-flit-primary">redacción IA pendiente</p>}
         <ol className="flex flex-col gap-3">
           {dictamen.alertamientos.map((alerta, i) => (
@@ -169,24 +211,23 @@ export function PanelDictamen({
   }
 
   return (
-    <Modal icono="mazo"
-      open
-      onClose={onClose}
-      busy={enviando}
-      size="lg"
-      zClassName="z-[110]"
-      title={`Dictamen · ${identificador}`}
-      footer={
+    <PanelLateral
+      abierto
+      onCerrar={onClose}
+      ocupado={enviando}
+      ancho={640}
+      titulo={`Dictamen · ${identificador}`}
+      pie={
         ofreceOverride && carga.tipo === "listo" ? (
           <div className="flex justify-end">
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!elegido || !confirmado || enviando} onClick={() => void reemplazar()}>
               Reemplazar veredicto
             </button>
           </div>
-        ) : null
+        ) : undefined
       }
     >
-      <div ref={ancla}>{contenido}</div>
-    </Modal>
+      {contenido}
+    </PanelLateral>
   );
 }
