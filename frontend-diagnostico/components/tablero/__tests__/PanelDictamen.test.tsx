@@ -221,3 +221,39 @@ function Harness() {
     </>
   );
 }
+
+// HU #14562 F-05 (AC35, AC36): el dictamen se lee en un PanelLateral de 640 px, con trámite analizado, fecha de emisión,
+// versión del catálogo, marca «Ajustado por FLIT» (D6, sin autor ni motivo) y aviso de bloqueo.
+describe("PanelDictamen — F-05 panel lateral (HU 14562)", () => {
+  it("AC35: se abre como panel lateral de 640 px con «Cerrar», trámite, fecha de emisión y catálogo", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, veredicto: "VIABLE" }) });
+    pintar({ tramiteAnalizado: "Traspaso" });
+    const panel = await screen.findByRole("dialog", { name: /dictamen · TST001/i });
+    expect(panel).toHaveAttribute("aria-modal", "true");
+    expect(panel.querySelector('[style*="max-width: 640px"]')).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Cerrar" })).toBeInTheDocument();
+    expect(await screen.findByText("Viable")).toBeInTheDocument();
+    expect(screen.getByText(/trámite analizado/i).nextElementSibling).toHaveTextContent("Traspaso");
+    expect(screen.getByText(/emitido el/i).nextElementSibling).toHaveTextContent("03/11/2026");
+    expect(screen.getByText(/versión del catálogo/i).nextElementSibling).toHaveTextContent("1");
+    expect(screen.queryByText(/ajustado por flit/i)).toBeNull();
+  });
+
+  it("AC35: con ajustado_por_flit muestra la marca con la fecha, sin autor ni motivo", async () => {
+    simularApi({
+      [`GET ${RUTA}`]: () =>
+        Response.json({ ...LLENO, ajustado_por_flit: true, ajustado_en: "2026-11-05T15:00:00+00:00" }),
+    });
+    pintar();
+    const marca = await screen.findByText(/ajustado por flit/i);
+    expect(marca.closest("p")).toHaveTextContent("05/11/2026");
+    expect(screen.queryByText(/motivo/i)).toBeNull();
+  });
+
+  it("AC36: con veredicto BLOQUEADO avisa el bloqueo y no ofrece «Crear trámite»", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(LLENO) });
+    pintar();
+    expect(await screen.findByText(/el vehículo está bloqueado/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /crear trámite/i })).toBeNull();
+  });
+});
