@@ -692,6 +692,97 @@ public sealed partial class PagoPuntoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task HU14461_AlAnular_SeEnviaElCorreoDeAnulacionAQuienRadico_ConElCodigo_SinMotivoNiDatosDeLasPartes()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+        _enviador.Enviados.Should().ContainSingle("el de cierre");
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(5));
+
+        await AnularAsync(cobroId);
+
+        _enviador.Enviados.Should().HaveCount(2);
+        var (correo, html) = _enviador.Enviados[1];
+        correo.Should().Be("vendedor@example.org");
+        _enviador.Plantillas[1].Should().Be("persona-natural.pago-anulado-punto");
+        html.Should().Contain(await CodigoPublicoAsync(id)).And.Contain("anulado").And.Contain("Persona de Prueba");
+        html.Should().NotContain("El cliente pagó por error en la caja", "el motivo interno no se comparte");
+        foreach (var dato in new[] { Vendedor, Comprador, "3001234567", "comprador@example.org", "ABC123" })
+            html.Should().NotContain(dato);
+    }
+
+    [Fact]
+    public async Task HU14461_SiQuienRadicoNoTieneCorreoPropio_AlAnularNoSeEnviaNada()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await _host.EnScopeAsync(async sp =>
+        {
+            await sp.GetRequiredService<Flit.PersonaNatural.Api.Pii.PersonaService>().GuardarAsync(
+                id, new Flit.PersonaNatural.Api.Pii.DatosPersona("vendedor", 1, "CC", Vendedor, "Persona de Prueba", null, "3001234567", null), TestContext.Current.CancellationToken);
+            return true;
+        });
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+
+        await AnularAsync(cobroId);
+
+        _enviador.Enviados.Should().BeEmpty("sin correo propio no hubo correo de cierre ni lo hay de anulación");
+    }
+
+    [Fact]
+    public async Task HU14461_SiElEnvioDeLaAnulacionFalla_LaAnulacionQuedaFirme()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+        _enviador.Lanza = true;
+
+        var anulado = await AnularAsync(cobroId);
+
+        anulado.Estado.Should().Be("anulado");
+        (await EstadoDeAsync(id)).Should().Be("pendiente_pago");
+        _enviador.Enviados.Should().ContainSingle("solo el de cierre");
+    }
+
+    [Fact]
+    public async Task HU14461_SiElTransporteDeLaAnulacionCuelga_LaAnulacionNoEsperaMasDelTope_YQuedaFirme()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+        _enviador.Cuelga = true;
+
+        var anulado = await AnularAsync(cobroId);
+
+        anulado.Estado.Should().Be("anulado");
+        (await EstadoDeAsync(id)).Should().Be("pendiente_pago");
+    }
+
+    [Fact]
+    public async Task HU14461_UnaSegundaAnulacionDelMismoCobro_NoReenviaElCorreo()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaAsync(id);
+        var cobroId = await CobroPagadoAsync(id);
+
+        await AnularAsync(cobroId);
+        await FluentActions.Awaiting(() => AnularAsync(cobroId)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable");
+
+        _enviador.Plantillas.Count(p => p == "persona-natural.pago-anulado-punto").Should().Be(1);
+    }
+
+    [Fact]
     public async Task HU14461_AnularDentroDeLaVentana_DejaElCobroAnulado_ConAuditoria_YLaSolicitudVuelveAPendientePago()
     {
         await IniciarAsync();

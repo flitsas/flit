@@ -13,8 +13,10 @@ namespace Flit.PersonaNatural.Api.Caja;
 /// <c>anulado</c> con motivo y quién lo anuló, y la solicitud vuelve a <c>pendiente_pago</c>. Si no: <c>cobro_no_anulable</c>
 /// (<c>ya_en_flit2</c>) y no se cambia nada.
 /// </summary>
-public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptions> opciones, PiiHasher hasher, TimeProvider reloj)
+public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptions> opciones, PiiHasher hasher, TimeProvider reloj, ICorreoDeAnulacion correoAnulacion)
 {
+    internal static readonly TimeSpan TopeCorreoAnulacion = TimeSpan.FromSeconds(3);
+
     public const string CodigoNoAnulable = "cobro_no_anulable";
     public const string CodigoNoEncontrado = "cobro_no_encontrado";
     public const string CodigoMotivoInvalido = "motivo_invalido";
@@ -41,9 +43,10 @@ public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptio
             .Select(c => new { c.SolicitudId }).FirstOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw Regla(404, CodigoNoEncontrado, "No encontramos ese cobro.");
 
+        CobroSolicitud anulado;
         try
         {
-            return await Transaccion.EjecutarAsync(db, async ct2 =>
+            anulado = await Transaccion.EjecutarAsync(db, async ct2 =>
             {
                 var s = await Transaccion.BloquearSolicitudAsync(db, previo.SolicitudId, ct2).ConfigureAwait(false) ?? throw Regla(404, CodigoNoEncontrado, "No encontramos ese cobro.");
                 var cobro = await db.Set<CobroSolicitud>().FirstOrDefaultAsync(c => c.Id == cobroId && c.OrganismoId == organismoId, ct2).ConfigureAwait(false)
@@ -78,6 +81,20 @@ public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptio
         {
             throw NoAnulable("El cobro cambió mientras lo revisaba. Actualice la lista.");
         }
+
+        // Fuera de la transacción y con tope: un fallo o una demora del correo nunca deshace la anulación. Solo la anulación que ganó llega aquí.
+        using var tope = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        tope.CancelAfter(TopeCorreoAnulacion);
+        try
+        {
+            await correoAnulacion.EnviarSiCorrespondeAsync(anulado.Id, tope.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Venció el tope: la anulación ya es firme.
+        }
+
+        return anulado;
     }
 
     private static ReglaDeNegocioException NoAnulable(string detalle) =>

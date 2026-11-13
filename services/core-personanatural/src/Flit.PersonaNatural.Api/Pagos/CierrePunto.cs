@@ -254,7 +254,9 @@ public sealed partial class CorreoDeCierre(
     }
 
     /// <summary>El correo digitado por quien radica; nunca el técnico del punto (ni uno inutilizable).</summary>
-    internal string? CorreoPropio(string? correo, Guid solicitudId)
+    internal string? CorreoPropio(string? correo, Guid solicitudId) => CorreoPropio(configuracion, correo, solicitudId);
+
+    internal static string? CorreoPropio(IConfiguration configuracion, string? correo, Guid solicitudId)
     {
         if (!IdentidadService.CorreoUtilizableInSitu(correo))
             return null;

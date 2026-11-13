@@ -21,6 +21,7 @@ public static class PagoPuntoEndpoints
         services.TryAddScoped<Radicacion.RadicacionDePagadasService>();
         services.TryAddScoped<PagoPuntoService>();
         services.TryAddScoped<ICorreoDeCierre, CorreoDeCierre>();
+        services.TryAddScoped<ICorreoDeAnulacion, CorreoDeAnulacion>();
         services.TryAddScoped<BloqueoConsultaCierre>();
         services.TryAddScoped<CierrePuntoService>();
         return services;

@@ -47,6 +47,7 @@ public static class CajaEndpoints
         services.TryAddScoped<CajaConfirmacionService>();
         services.TryAddScoped<CajaListaService>();
         services.TryAddScoped<CajaAnulacionService>();
+        services.TryAddScoped<Pagos.ICorreoDeAnulacion, Pagos.CorreoDeAnulacion>();
         services.TryAddScoped<RadicacionDePagadasService>();
         services.AddHostedService<RadicacionDePagadasJob>();
         services.TryAddScoped<IResolverCajero>(sp =>
