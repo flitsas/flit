@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ElementType, MouseEventHandler, ReactNode } from "react";
 import { cn } from "./cn";
-import { IconoModulo } from "./Icono";
+import { Icono, IconoModulo } from "./Icono";
 
 /**
  * Tarjeta de cifra del Manual UI Kit 2026 (propuesta-2, `.metrica`): etiqueta arriba, cifra de 24 px en azul, ícono de
@@ -29,6 +29,9 @@ export interface TarjetaMetricaProps {
   /**
    * HU #14562 · UI-2: modo filtro. Con `onAlternar` la tarjeta es un botón con aria-pressed que alterna `activa`
    * (p. ej. las tarjetas de conteo del tablero). Sin la prop, nada cambia.
+   * HU #14562 · M4: la activa no se distingue solo por color. Lleva un borde de 2 px en --kit-azul-texto (3,33:1 sobre la
+   * tarjeta) y una marca de check junto a la cifra. El hover del modo filtro solo cambia el fondo (--kit-hover), así una
+   * tarjeta inactiva con el puntero encima no se ve como activa.
    */
   activa?: boolean;
   onAlternar?: (siguiente: boolean) => void;
@@ -50,9 +53,17 @@ const BASE_CLS =
   "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-[9px] border p-4 text-left " +
   "text-inherit no-underline border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-none";
 
-const ACCIONABLE_CLS =
-  "cursor-pointer transition-colors duration-150 hover:border-[color:var(--kit-azul-texto)] " +
+const FOCO_CLS =
   "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--kit-azul-texto)]";
+
+const ACCIONABLE_CLS = `cursor-pointer transition-colors duration-150 hover:border-[color:var(--kit-azul-texto)] ${FOCO_CLS}`;
+
+/** Modo filtro: el hover solo pinta el fondo; el borde azul queda reservado para la activa. */
+const FILTRO_CLS = `cursor-pointer transition-colors duration-150 hover:bg-[color:var(--kit-hover)] ${FOCO_CLS}`;
+
+/** Activa: borde de 2 px sin mover el contenido (1 px de borde + 1 px de sombra interior) y fondo de acento. */
+const FILTRO_ACTIVA_CLS =
+  "border-[color:var(--kit-azul-texto)] shadow-[inset_0_0_0_1px_var(--kit-azul-texto)] bg-[var(--di-accent-soft)]";
 
 export function TarjetaMetrica({
   etiqueta,
@@ -77,9 +88,9 @@ export function TarjetaMetrica({
   const accionable = href !== undefined || onClick !== undefined || filtro;
   const cls = cn(
     BASE_CLS,
-    accionable && ACCIONABLE_CLS,
+    accionable && (filtro ? FILTRO_CLS : ACCIONABLE_CLS),
     pendiente && "border-[color:var(--kit-naranja)] hover:border-[color:var(--kit-naranja)]",
-    filtro && activa && "border-[color:var(--kit-azul-texto)] bg-[var(--di-accent-soft)]",
+    filtro && activa && FILTRO_ACTIVA_CLS,
     className,
   );
 
@@ -91,6 +102,11 @@ export function TarjetaMetrica({
         style={{ color: colorCifra ?? (pendiente ? "var(--badge-warning-fg)" : "var(--kit-azul-texto)") }}
       >
         {cifra}
+        {filtro && activa ? (
+          <span data-parte="marca-activa" aria-hidden="true" className="ml-2 inline-flex align-middle text-[color:var(--kit-azul-texto)]">
+            <Icono nombre="check" size={16} />
+          </span>
+        ) : null}
       </span>
       {icono ? (
         <IconoModulo

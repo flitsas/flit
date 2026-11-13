@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { Icono } from "./Icono";
 import { MODAL_TITULO_CLS, MODAL_VELO_CLS } from "./Modal";
+import { useTrampaFoco } from "./useTrampaFoco";
 
 /**
  * Panel lateral (drawer) del Manual UI Kit 2026 (HU #14562 · UI-1): se abre a la derecha sobre el velo del Modal, con
@@ -13,6 +14,8 @@ import { MODAL_TITULO_CLS, MODAL_VELO_CLS } from "./Modal";
  * Accesibilidad (AC8): role="dialog" + aria-modal + título accesible; el foco entra al abrir, queda atrapado con Tab y
  * Shift+Tab, Escape o «Cerrar» lo cierran y el foco vuelve al control que lo abrió. Aparece por opacidad (sin escalas)
  * y sin transición con «menos movimiento». Solo usa tokens de @flit/ui; el aspecto propio entra por `className`.
+ * HU #14562 · m-6: la trampa es `useTrampaFoco` (la misma del Modal), con pila de capas: un Modal abierto encima recibe
+ * Tab y Escape, y el panel no los atiende hasta que el Modal se cierra.
  */
 export interface PanelLateralProps {
   abierto: boolean;
@@ -32,9 +35,6 @@ export interface PanelLateralProps {
   children: ReactNode;
 }
 
-const FOCUSABLES =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 export function PanelLateral({
   abierto,
   onCerrar,
@@ -50,46 +50,15 @@ export function PanelLateral({
 }: PanelLateralProps) {
   const tituloId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
-  const cerrarRef = useRef(onCerrar);
-  const ocupadoRef = useRef(ocupado);
-  useEffect(() => {
-    cerrarRef.current = onCerrar;
-    ocupadoRef.current = ocupado;
+
+  // Al abrir, el foco va al primer control del panel; Escape cierra salvo que esté ocupado.
+  useTrampaFoco({
+    activa: abierto,
+    contenedor: panelRef,
+    onEscape: () => {
+      if (!ocupado) onCerrar();
+    },
   });
-
-  useEffect(() => {
-    if (!abierto) return;
-    const previo = document.activeElement as HTMLElement | null;
-    const focusables = () =>
-      Array.from(panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLES) ?? []);
-    (focusables()[0] ?? panelRef.current)?.focus();
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (!ocupadoRef.current) cerrarRef.current();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const lista = focusables();
-      if (lista.length === 0) return;
-      const primero = lista[0];
-      const ultimo = lista[lista.length - 1];
-      const actual = document.activeElement;
-      const dentro = panelRef.current?.contains(actual) ?? false;
-      if (e.shiftKey && (actual === primero || !dentro)) {
-        e.preventDefault();
-        ultimo.focus();
-      } else if (!e.shiftKey && (actual === ultimo || !dentro)) {
-        e.preventDefault();
-        primero.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      if (previo && typeof previo.focus === "function" && previo.isConnected) previo.focus();
-    };
-  }, [abierto]);
 
   if (!abierto || typeof document === "undefined") return null;
 

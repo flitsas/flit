@@ -1,9 +1,14 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { cn } from "./cn";
+import { useRegionVivaLista } from "./useRegionViva";
 
 /**
  * Aviso persistente (HU #14562 · UI-1): `role="status"`, sin autocierre; solo se va con «Cerrar» (`onCerrar`).
  * La posición (arriba a la derecha) la decide quien lo monta, por `className`.
+ * HU #14562 · M11: se monta como región `aria-live` vacía y recibe el contenido (y el `role="status"`) un instante
+ * después, para que el lector de pantalla lo anuncie: una región que nace con su texto no se anuncia de forma fiable.
  */
 export interface AccionNotificacion {
   label: string;
@@ -31,9 +36,13 @@ export function NotificacionPersistente({
   etiquetaCerrar = "Cerrar notificación",
   className,
 }: NotificacionPersistenteProps) {
+  const lista = useRegionVivaLista();
+  if (!lista) return <div aria-live="polite" aria-atomic="true" />;
   return (
     <div
       role="status"
+      aria-live="polite"
+      aria-atomic="true"
       className={cn(
         "flex w-full max-w-sm items-start gap-3 rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-4 shadow-[var(--kit-sombra)] motion-safe:transition-opacity motion-safe:duration-[var(--di-motion-base)]",
         className,

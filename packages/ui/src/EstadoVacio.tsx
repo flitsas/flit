@@ -1,9 +1,14 @@
+"use client";
+
 import { createElement, type ReactNode } from "react";
 import { cn } from "./cn";
+import { useRegionVivaLista } from "./useRegionViva";
 
 /**
  * Estado vacío del Manual UI Kit 2026 (p. 39, HU #14562 · UI-1): ícono en disco, título, mensaje y como máximo dos
  * acciones. `anunciar` lo vuelve role="status" para el vacío que aparece al filtrar. Solo tokens de @flit/ui.
+ * HU #14562 · M11: con `anunciar` se monta como región `aria-live` vacía y recibe el contenido un instante después, para
+ * que el lector de pantalla lo anuncie. Sin `anunciar`, el marcado es el de siempre.
  */
 export interface EstadoVacioProps {
   titulo: ReactNode;
@@ -19,9 +24,13 @@ export interface EstadoVacioProps {
 
 export function EstadoVacio({ titulo, mensaje, icono, acciones, anunciar = false, nivelTitulo = 2, className }: EstadoVacioProps) {
   const visibles = (acciones ?? []).slice(0, 2);
+  const lista = useRegionVivaLista(anunciar);
+  if (anunciar && !lista) return <div aria-live="polite" aria-atomic="true" />;
   return (
     <div
       role={anunciar ? "status" : undefined}
+      aria-live={anunciar ? "polite" : undefined}
+      aria-atomic={anunciar ? "true" : undefined}
       className={cn(
         "flex flex-col items-center gap-3 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-6 py-10 text-center",
         className,

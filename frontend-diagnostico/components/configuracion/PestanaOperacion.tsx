@@ -137,9 +137,13 @@ export function PestanaOperacion({
         <p id="operacion-visibilidad" className={ETIQUETA_CLS}>
           Quién ve los diagnósticos
         </p>
-        <p className={AYUDA_CLS}>Aplica al listado y a los tableros.</p>
+        <p id="operacion-visibilidad-ayuda" className={AYUDA_CLS}>
+          Aplica al listado y a los tableros.
+        </p>
+        {/* HU #14562 · M10: el nombre sale del rótulo visible y la ayuda queda asociada al grupo. */}
         <SelectorSegmentado
-          etiqueta="Quién ve los diagnósticos"
+          etiquetadoPor="operacion-visibilidad"
+          describedBy="operacion-visibilidad-ayuda"
           opciones={VISIBILIDADES.map((v) => ({ valor: v.valor, label: v.nombre }))}
           valor={visibilidad}
           onCambio={setVisibilidad}

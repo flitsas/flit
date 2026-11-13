@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId } from "react";
+import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "./cn";
 import { Icono, type NombreIcono } from "./Icono";
+import { enfocablesDe, useTrampaFoco } from "./useTrampaFoco";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
 // contraste legible en dark). Encapsula el overlay (`fixed inset-0` + backdrop
@@ -16,6 +17,12 @@ import { Icono, type NombreIcono } from "./Icono";
 // UI Kit 2026 (propuesta-2, `.modal`): contenedor blanco de radio 9 px con borde de 1 px y sin sombra; ícono de 52 px
 // centrado sobre el título (1,375 rem, azul), subtítulo gris, X discreta arriba a la derecha y velo azul al 50 % con
 // desenfoque de 5 px. Mismas props y mismo comportamiento (Escape, clic fuera, ocupado, portal).
+// HU #14562 · M2 (auditoría de la oleada): gestión de foco con `useTrampaFoco`, compartida con PanelLateral.
+// - Foco inicial: lo respeta si un hijo ya lo puso dentro al montarse. Si no, va a `[data-autofocus]`, después al primer
+//   campo del cuerpo (input, select o textarea) y, sin campos, al título. En una confirmación no cae en la acción
+//   destructiva.
+// - Tab y Mayús+Tab no salen del diálogo. Escape cierra solo la capa de arriba.
+// - Al cerrar, el foco vuelve al disparador, salvo que quien cierra ya lo haya movido.
 
 /**
  * Clases del velo y del panel del Modal, para los diálogos y drawers propios que conservan su componente (foco, Escape,
@@ -107,16 +114,28 @@ export function Modal({
 }: ModalProps) {
   const titleId = useId();
   void iconBg;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const cuerpoRef = useRef<HTMLDivElement>(null);
 
-  // Escape cierra el modal (salvo que esté ocupado).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, busy, onClose]);
+  // Escape cierra el modal (salvo que esté ocupado); la trampa lee la función en cada pulsación.
+  useTrampaFoco({
+    activa: open,
+    contenedor: panelRef,
+    onEscape: () => {
+      if (!busy) onClose();
+    },
+    focoInicial: () => {
+      const panel = panelRef.current;
+      if (!panel) return null;
+      const marcado = panel.querySelector<HTMLElement>("[data-autofocus]");
+      if (marcado) return marcado;
+      const campo = enfocablesDe(cuerpoRef.current).find((el) => /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName));
+      if (campo) return campo;
+      // El título del encabezado por defecto es enfocable (tabindex=-1); uno propio puede no serlo: entonces, el panel.
+      const titulo = document.getElementById(titleId);
+      return titulo?.hasAttribute("tabindex") ? titulo : panel;
+    },
+  });
 
   // Se renderiza vía portal a <body> (guardado para SSR): un modal anidado dentro de otro cuyo
   // overlay usa `backdrop-blur` heredaría ese containing block y su `fixed inset-0` quedaría
@@ -153,7 +172,9 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground ${panelClassName}`}
+        ref={panelRef}
+        tabIndex={-1}
+        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none outline-none dark:text-foreground ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
           <div className="mx-4 mt-4 shrink-0 sm:mx-6 sm:mt-6">{resolvedHeader}</div>
@@ -168,7 +189,7 @@ export function Modal({
               </span>
             ) : null}
             <div className="min-w-0 leading-tight">
-              <h2 id={titleId} className={cn(titleClassName, "text-[color:var(--di-heading)]")}>
+              <h2 id={titleId} tabIndex={-1} className={cn(titleClassName, "text-[color:var(--di-heading)] outline-none")}>
                 {title}
               </h2>
               {description && <p className={MODAL_DESCRIPCION_CLS}>{description}</p>}
@@ -185,6 +206,7 @@ export function Modal({
         )}
         {/* Márgenes y no padding: el cuerpo conserva su barra de scroll y el `px-*` que algunos llamadores le pasan. */}
         <div
+          ref={cuerpoRef}
           className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
         >
           {children}

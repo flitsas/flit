@@ -42,3 +42,6 @@ export * from "./TablaEditable";
 export * from "./SelectorSegmentado";
 export * from "./ZonaArrastre";
 export * from "./NotificacionPersistente";
+// HU #14562 · M2 y M11 (auditoría de la oleada): trampa de foco de capas y regiones vivas diferidas.
+export * from "./useTrampaFoco";
+export * from "./useRegionViva";

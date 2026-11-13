@@ -26,3 +26,11 @@ describe("EtiquetaEnProceso (HU #14562 · UI-1, AC5)", () => {
     expect(screen.getByRole("status", { name: "Estado: Consultando" })).toHaveTextContent("Consultando");
   });
 });
+
+// HU #14562 (pedido de FE-B): nombre accesible propio para conservar «Estado del lote: En proceso» en el tablero.
+describe("EtiquetaEnProceso: nombreAccesible (HU #14562)", () => {
+  it("nombreAccesible reemplaza el nombre por defecto y conserva el texto visible", () => {
+    render(<EtiquetaEnProceso nombreAccesible="Estado del lote: En proceso" />);
+    expect(screen.getByRole("status", { name: "Estado del lote: En proceso" })).toHaveTextContent("En proceso");
+  });
+});

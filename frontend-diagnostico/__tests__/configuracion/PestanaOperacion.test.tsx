@@ -205,3 +205,16 @@ describe("pestaña Operación · UI Kit 2026 (AC42)", () => {
     expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
   });
 });
+
+// HU #14562 · M10 (auditoría): «Quién ve los diagnósticos» se nombra con su rótulo visible y la ayuda «Aplica al listado
+// y a los tableros.» queda asociada al radiogroup.
+describe("pestaña Operación: selector de visibilidad (HU #14562 · M10)", () => {
+  it("M10: el radiogroup toma el rótulo visible (sin aria-label duplicado) y describe la ayuda", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    const grupo = screen.getByRole("radiogroup", { name: "Quién ve los diagnósticos" });
+    expect(grupo).toHaveAttribute("aria-labelledby", "operacion-visibilidad");
+    expect(grupo).not.toHaveAttribute("aria-label");
+    expect(grupo).toHaveAccessibleDescription("Aplica al listado y a los tableros.");
+  });
+});

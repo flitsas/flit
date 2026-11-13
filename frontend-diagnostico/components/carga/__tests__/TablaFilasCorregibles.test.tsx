@@ -151,3 +151,37 @@ describe("TablaFilasCorregibles — estados por fila y paginación (AC21, AC22)"
     expect(screen.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
   });
 });
+
+// HU #14562 · M12 (auditoría): Carga reutiliza `TablaEditable` del kit en modo controlado (`estadoFila`), sin una tabla
+// editable propia. Se conservan AC21/AC22 y además se gana la región viva y la asociación del error a «Reintentar».
+describe("TablaFilasCorregibles sobre TablaEditable (HU #14562 · M12)", () => {
+  it("M12: la tabla es la TablaEditable del kit: nombre propio, columna Estado y región viva de estado", () => {
+    simularApi({});
+    montar();
+    expect(screen.getByRole("table", { name: "Filas con errores" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Estado" })).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "3" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Estado de Filas con errores" })).toBeEmptyDOMElement();
+  });
+
+  it("M12 · AC22: la región viva anuncia «Revalidando» y luego «Corregida» con el número de fila", async () => {
+    simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [valida()] })) });
+    montar();
+    fireEvent.change(identificador(), { target: { value: "TST124" } });
+    const region = screen.getByRole("status", { name: "Estado de Filas con errores" });
+    await waitFor(() => expect(region).toHaveTextContent("3: Corregida"));
+  });
+
+  it("M12 · AC22 (negativo): si la revalidación falla, «Reintentar 3» lleva el motivo como descripción y no roba el foco", async () => {
+    simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json({ error: "Servicio no disponible" }, { status: 503 }) });
+    montar();
+    const campo = identificador();
+    campo.focus();
+    fireEvent.change(campo, { target: { value: "TST124" } });
+    const reintentar = await within(filaDe()).findByRole("button", { name: "Reintentar 3" });
+    expect(reintentar).toHaveAccessibleDescription(/.+/);
+    expect(within(filaDe()).getByText("Inválido")).toBeInTheDocument();
+    expect(campo).toHaveFocus();
+    expect(campo).toHaveValue("TST124");
+  });
+});

@@ -33,15 +33,33 @@ describe("EstadoVacio (HU #14562 · UI-1)", () => {
     expect(container.querySelector("p")).toBeNull();
   });
 
-  it("anunciar=true lo vuelve role=status (vacío por filtros); por defecto no", () => {
+  it("anunciar=true lo vuelve role=status (vacío por filtros); por defecto no", async () => {
     const { rerender } = render(<EstadoVacio titulo="Ningún diagnóstico coincide" />);
     expect(screen.queryByRole("status")).toBeNull();
     rerender(<EstadoVacio titulo="Ningún diagnóstico coincide" anunciar />);
-    expect(screen.getByRole("status")).toHaveTextContent("Ningún diagnóstico coincide");
+    expect(await screen.findByRole("status")).toHaveTextContent("Ningún diagnóstico coincide");
   });
 
   it("el nivel del encabezado se puede ajustar", () => {
     render(<EstadoVacio titulo="Elige una compañía" nivelTitulo={3} />);
     expect(screen.getByRole("heading", { level: 3, name: "Elige una compañía" })).toBeInTheDocument();
+  });
+});
+
+// HU #14562 · M11 (auditoría): con `anunciar`, la región viva nace vacía y el contenido llega después.
+describe("EstadoVacio anunciar: región viva diferida (HU #14562 · M11)", () => {
+  it("M11: con anunciar se monta como aria-live vacía y luego recibe título y acciones", async () => {
+    const { container } = render(<EstadoVacio titulo="Ningún vehículo coincide" anunciar acciones={[<button key="q">Quitar filtro</button>]} />);
+    const region = container.firstElementChild as HTMLElement;
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toBeEmptyDOMElement();
+    expect(await screen.findByRole("status")).toBe(region);
+    expect(screen.getByRole("heading", { name: "Ningún vehículo coincide" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quitar filtro" })).toBeInTheDocument();
+  });
+
+  it("M11 retrocompatible: sin anunciar el contenido se pinta en el primer render, como antes", () => {
+    render(<EstadoVacio titulo="Aún no tienes diagnósticos" />);
+    expect(screen.getByRole("heading", { name: "Aún no tienes diagnósticos" })).toBeInTheDocument();
   });
 });
