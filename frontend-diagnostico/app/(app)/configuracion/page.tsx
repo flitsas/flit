@@ -89,6 +89,7 @@ export default function ConfiguracionPagina() {
             configuracion={configuracion}
             puedeEditar={capacidades?.editarConfiguracion ?? false}
             onGuardado={alGuardar}
+            onRecargar={reintentar}
           />
         ),
       });
