@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { cn } from "./cn";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "./table-styles";
 
 /**
  * Tabla con guardado por fila (HU #14562 · UI-2 · AC9). Cada fila lleva su propio borrador y su estado:
@@ -19,6 +28,18 @@ import { cn } from "./cn";
  * rótulos por defecto. Además, el borrador se vuelve a sincronizar con la fila mientras no haya una edición pendiente.
  * En modo controlado, «Descartar» y «Guardar» solo aparecen si la fila tiene una edición propia (estado interno editado,
  * o guardando desde «Guardar»): un «guardando» que impone el padre, como «Revalidando», no ofrece esas acciones.
+ *
+ * HU #14562 · M6 (AC56): por debajo de 900 px la tabla pasa a tarjetas con las recetas `TABLA_MOVIL_*` del kit: la
+ * cabecera queda para lectores de pantalla (`sr-only`), cada fila es una tarjeta y cada celda muestra su columna con
+ * `data-label`. Solo se suman clases `max-[900px]:`; en escritorio el marcado y la API son los de antes.
+ *
+ * HU #14562 · N3 y observación 4 del code review: `nombreFila` da el nombre accesible de la fila, de sus campos y
+ * botones, y el de sus anuncios («Fila 3: Corregida»). Sin la prop se usa `clave`, como antes; la clave sigue siendo solo
+ * la identidad de la fila para React. La región viva no lleva aria-label (reemplazaría el texto anunciado) y cada
+ * anuncio monta un nodo nuevo, así dos anuncios iguales seguidos (un segundo fallo al reintentar) se vuelven a leer.
+ *
+ * Observación 3 del code review: mientras la fila guarda, la tabla ignora los cambios de sus campos y le pasa
+ * `guardando` al `editor` (quinto argumento) para que el control propio quede de solo lectura.
  */
 export type EstadoFilaEditable = "sin_cambios" | "editado" | "guardando" | "error";
 
@@ -36,10 +57,16 @@ export interface ColumnaEditable<F> {
   titulo: string;
   editable?: boolean;
   /**
-   * Control propio: recibe el valor actual, el cambio, el nombre accesible que debe llevar y la fila (el borrador), por
-   * si el control necesita otros campos.
+   * Control propio: recibe el valor actual, el cambio, el nombre accesible que debe llevar, la fila (el borrador), por
+   * si el control necesita otros campos, y si la fila está guardando (mientras tanto, el cambio se ignora).
    */
-  editor?: (valor: F[keyof F & string], onCambio: (v: F[keyof F & string]) => void, etiqueta: string, fila: F) => ReactNode;
+  editor?: (
+    valor: F[keyof F & string],
+    onCambio: (v: F[keyof F & string]) => void,
+    etiqueta: string,
+    fila: F,
+    guardando: boolean,
+  ) => ReactNode;
   /** Presentación de una celda no editable. */
   mostrar?: (fila: F) => ReactNode;
 }
@@ -48,7 +75,10 @@ export interface TablaEditableProps<F> {
   etiqueta: string;
   filas: F[];
   columnas: ColumnaEditable<F>[];
+  /** Identidad de la fila para React. */
   clave: (fila: F) => string;
+  /** Nombre accesible de la fila y de sus anuncios, p. ej. «Fila 3». Por defecto, la `clave`. */
+  nombreFila?: (fila: F) => string;
   onGuardar: (fila: F) => Promise<void> | void;
   onDescartar?: (fila: F) => void;
   /** Estado controlado de la fila. null o undefined: el estado interno. */
@@ -98,6 +128,7 @@ function focoEnFila(fila: HTMLElement | null): boolean {
 
 interface FilaEditableProps<F> {
   fila: F;
+  /** Nombre accesible de la fila (de `nombreFila` o la clave). */
   id: string;
   columnas: ColumnaEditable<F>[];
   onGuardar: (fila: F) => Promise<void> | void;
@@ -120,6 +151,8 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
   const enfocar = useRef<"estado" | "reintentar" | null>(null);
   const recienGuardada = useRef(false);
   const anuncioPrevio = useRef<string | null>(null);
+  // Fallos de guardado: un segundo fallo seguido cambia la firma del anuncio aunque el texto sea el mismo.
+  const [fallos, setFallos] = useState(0);
   const errorId = useId();
 
   // M12: si el padre cambia la fila y no hay edición pendiente, el borrador toma el valor nuevo.
@@ -151,7 +184,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
   });
 
   // M3: cada cambio de estado visible (o de su motivo) se anuncia en la región viva de la tabla.
-  const firma = `${visible}|${texto}|${error ?? ""}`;
+  const firma = `${visible}|${texto}|${error ?? ""}|${visible === "error" ? fallos : ""}`;
   const controladaFila = control !== null;
   useEffect(() => {
     if (anuncioPrevio.current === null) {
@@ -166,6 +199,8 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
   }, [firma, controladaFila, visible, texto, error, id, anunciar]);
 
   const cambiar = (campo: keyof F & string, valor: F[keyof F & string]) => {
+    // Observación 3: lo que llegue mientras guarda no entra al borrador (no viajaría en el guardado en curso).
+    if (guardando) return;
     setBorrador((b) => ({ ...b, [campo]: valor }));
     setEstado("editado");
   };
@@ -183,6 +218,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
     } catch {
       if (!montada.current) return;
       if (focoEnFila(filaRef.current)) enfocar.current = "reintentar";
+      setFallos((n) => n + 1);
       setEstado("error");
     }
   }, [borrador, estado, onGuardar]);
@@ -196,14 +232,16 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
   };
 
   return (
-    <tr ref={filaRef} aria-label={id} className="border-b border-[color:var(--di-divider)]">
+    <tr ref={filaRef} aria-label={id} className={`border-b border-[color:var(--di-divider)] ${TABLA_MOVIL_ROW_CLS}`}>
       {columnas.map((c, i) => {
         const etiquetaCampo = `${c.titulo} de ${id}`;
         const valor = borrador[c.campo];
+        // Concatenadas sin `cn`: como en DataTable, la receta de título se suma a la de celda sin que una borre a la otra.
+        const celdaMovil = i === 0 ? `${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}` : TABLA_MOVIL_CELL_CLS;
         let contenido: ReactNode;
         if (c.editable) {
           contenido = c.editor ? (
-            c.editor(valor, (v) => cambiar(c.campo, v), etiquetaCampo, borrador)
+            c.editor(valor, (v) => cambiar(c.campo, v), etiquetaCampo, borrador, guardando)
           ) : (
             <input
               type="text"
@@ -222,17 +260,18 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
           <th
             key={c.campo}
             scope="row"
-            className="px-3 py-2 text-left text-sm font-semibold text-[color:var(--di-text-primary)]"
+            data-label={c.titulo}
+            className={`px-3 py-2 text-left text-sm font-semibold text-[color:var(--di-text-primary)] ${celdaMovil}`}
           >
             {contenido}
           </th>
         ) : (
-          <td key={c.campo} className="px-3 py-2 text-sm text-[color:var(--di-text-primary)]">
+          <td key={c.campo} data-label={c.titulo} className={`px-3 py-2 text-sm text-[color:var(--di-text-primary)] ${celdaMovil}`}>
             {contenido}
           </td>
         );
       })}
-      <td className="px-3 py-2 text-xs font-semibold">
+      <td data-label="Estado" className={`px-3 py-2 text-xs font-semibold ${TABLA_MOVIL_CELL_CLS}`}>
         <span
           ref={estadoRef}
           tabIndex={-1}
@@ -247,7 +286,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
           </span>
         ) : null}
       </td>
-      <td className="px-3 py-2">
+      <td data-label="Acciones" className={`px-3 py-2 ${TABLA_MOVIL_CELL_CLS}`}>
         <div className="flex flex-wrap items-center gap-2">
           {(controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
           visible !== "error" ? (
@@ -301,6 +340,7 @@ export function TablaEditable<F>({
   filas,
   columnas,
   clave,
+  nombreFila,
   onGuardar,
   onDescartar,
   estadoFila,
@@ -309,7 +349,9 @@ export function TablaEditable<F>({
   vacio = "Sin filas",
   className,
 }: TablaEditableProps<F>) {
-  const [anuncio, setAnuncio] = useState("");
+  // N3: cada anuncio lleva su número; el nodo se vuelve a montar y el lector lo lee aunque el texto se repita.
+  const [anuncio, setAnuncio] = useState<{ texto: string; n: number }>({ texto: "", n: 0 });
+  const anunciar = useCallback((texto: string) => setAnuncio((a) => ({ texto, n: a.n + 1 })), []);
   const cabecera = "px-3 py-2 text-left text-xs font-semibold text-[color:var(--di-text-secondary)]";
   return (
     <div
@@ -318,8 +360,8 @@ export function TablaEditable<F>({
         className,
       )}
     >
-      <table aria-label={etiqueta} className="w-full border-collapse">
-        <thead className="bg-[var(--di-surface-sunken)]">
+      <table aria-label={etiqueta} className={`w-full border-collapse ${TABLA_MOVIL_TABLE_CLS}`}>
+        <thead className={`bg-[var(--di-surface-sunken)] ${TABLA_MOVIL_THEAD_CLS}`}>
           <tr>
             {columnas.map((c) => (
               <th key={c.campo} scope="col" className={cabecera}>
@@ -334,12 +376,12 @@ export function TablaEditable<F>({
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {filas.length === 0 ? (
-            <tr>
+            <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
               <td
                 colSpan={columnas.length + 2}
-                className="px-3 py-6 text-center text-sm text-[color:var(--di-text-tertiary)]"
+                className={`px-3 py-6 text-center text-sm text-[color:var(--di-text-tertiary)] ${TABLA_MOVIL_FILA_ANCHA_CLS}`}
               >
                 {vacio}
               </td>
@@ -348,7 +390,7 @@ export function TablaEditable<F>({
             filas.map((f) => (
               <FilaEditable
                 key={clave(f)}
-                id={clave(f)}
+                id={nombreFila?.(f) ?? clave(f)}
                 fila={f}
                 columnas={columnas}
                 onGuardar={onGuardar}
@@ -356,15 +398,16 @@ export function TablaEditable<F>({
                 controlado={estadoFila?.(f)}
                 rotulos={rotulosEstado}
                 error={errorFila?.(f)}
-                anunciar={setAnuncio}
+                anunciar={anunciar}
               />
             ))
           )}
         </tbody>
       </table>
-      {/* M3: región viva de la tabla, montada vacía desde el principio para que el primer cambio también se anuncie. */}
-      <p role="status" aria-label={`Estado de ${etiqueta}`} className="sr-only">
-        {anuncio}
+      {/* M3: región viva de la tabla, montada vacía desde el principio para que el primer cambio también se anuncie.
+          N3: sin aria-label, para que se lea el texto; un nodo por anuncio, para que uno repetido también se lea. */}
+      <p role="status" className="sr-only">
+        {anuncio.n > 0 ? <span key={anuncio.n}>{anuncio.texto}</span> : null}
       </p>
     </div>
   );

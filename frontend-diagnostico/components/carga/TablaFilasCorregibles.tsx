@@ -292,6 +292,8 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
         filas={filasTabla}
         columnas={columnas}
         clave={(f) => String(f.fila)}
+        // HU #14562 · N3: la fila se nombra y se anuncia «Fila N» («Fila 3: Corregida», «Reintentar Fila 3»).
+        nombreFila={(f) => `Fila ${f.fila}`}
         estadoFila={(f) => estadoDeEdicion(f.edicion)}
         errorFila={(f) => f.edicion.errorServidor}
         // «Reintentar» (solo tras un fallo de la revalidación) vuelve a pedirla con lo digitado.

@@ -254,3 +254,19 @@ describe("FuentesObligatoriasBackoffice — estado por fila (AC48)", () => {
     expect(casilla(f, "Impuesto departamental")).not.toBeChecked();
   });
 });
+
+// HU #14562 · M6 (AC56): F-10 es la TablaEditable del kit, así que por debajo de 900 px cada definición es una tarjeta y
+// cada celda dice su columna (definición, RUNT fijo y cada fuente configurable).
+describe("FuentesObligatoriasBackoffice — HU #14562 M6: tarjetas por debajo de 900 px", () => {
+  it("cada celda de la fila lleva el nombre de su columna en data-label", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(SEMILLA) });
+    montar();
+    const f = await screen.findByRole("row", { name: "Tipo de trámite: Traspaso unilateral" });
+    const etiquetas = Array.from(f.children).map((c) => c.getAttribute("data-label"));
+    expect(etiquetas[0]).toBe("Definición");
+    expect(etiquetas[1]).toBe("RUNT vehículo");
+    expect(etiquetas).toContain("Avalúo comercial");
+    expect(etiquetas.slice(-2)).toEqual(["Estado", "Acciones"]);
+    expect(etiquetas.every((e) => !!e)).toBe(true);
+  });
+});
