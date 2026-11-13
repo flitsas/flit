@@ -119,7 +119,17 @@ test.describe("tablero del lote", () => {
     } else {
       await expect(seccionRespuesta.getByRole("region", { name: /^resultado$/i })).toHaveCount(0);
     }
-    await expect(seccionRespuesta.getByText(/proveedor|desde_cache|http_status|duracion_ms|semaforo/i)).toHaveCount(0);
+    // La vista curada sigue sin nombres crudos; la respuesta cruda va aparte, en la tarjeta plegable «Respuesta del proveedor»
+    // (D19), cerrada por defecto y expandible con el teclado.
+    const curada = seccionRespuesta.getByRole("group", { name: "Respuesta de la fuente" });
+    await expect(curada.getByText(/proveedor|desde_cache|http_status|duracion_ms|semaforo/i)).toHaveCount(0);
+    const crudo = seccionRespuesta.getByRole("button", { name: "Respuesta del proveedor" });
+    if (await crudo.count()) {
+      await expect(crudo).toHaveAttribute("aria-expanded", "false");
+      await crudo.focus();
+      await pestana.keyboard.press("Enter");
+      await expect(crudo).toHaveAttribute("aria-expanded", "true");
+    }
     // AC5: nada que delate un dato manual.
     await expect(pestana.getByText(/manual/i)).toHaveCount(0);
 
