@@ -14,6 +14,7 @@ using Flit.Diagnostico.Tests.Api;
 using Flit.Diagnostico.Tests.Tablero;
 using Flit.Tramites.Grpc.V1;
 using Grpc.Core;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,7 +96,8 @@ internal static class DerivacionDePrueba
 {
     public const string UrlTramites = "https://tramites.prueba";
 
-    public static async Task<ApiDePrueba> ApiAsync(DerivacionTramitesFalso falso, bool habilitada = true, Dictionary<string, string?>? extra = null) =>
+    public static async Task<ApiDePrueba> ApiAsync(
+        DerivacionTramitesFalso falso, bool habilitada = true, Dictionary<string, string?>? extra = null, Action<WebApplicationBuilder>? ademas = null) =>
         await ApiDePrueba.ConBaseAsync(configurar: b =>
         {
             var configuracion = new Dictionary<string, string?>
@@ -110,6 +112,7 @@ internal static class DerivacionDePrueba
             b.Configuration.AddInMemoryCollection(configuracion);
             b.Services.AddSingleton<DerivacionTramitesService.DerivacionTramitesServiceClient>(falso);
             b.Services.AddScoped<IClienteDerivacionTramites, ClienteDerivacionTramitesGrpc>();
+            ademas?.Invoke(b);
         });
 
     public static string Ruta(Guid lote, Guid vehiculo) => $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote}/vehiculos/{vehiculo}/tramite";

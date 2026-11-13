@@ -596,6 +596,18 @@ internal static partial class PdfVehiculo
             ]));
         }
 
+        // HU #14563 B6: la referencia Fasecolda del avalúo llenado con ella.
+        if (avaluo.Referencia is { } referencia)
+        {
+            col.Item().Element(c => Tabla(c,
+            [
+                ("Código Fasecolda", referencia.CodigoFasecolda ?? NoRegistra),
+                ("Marca", referencia.Marca ?? NoRegistra),
+                ("Línea", referencia.Linea ?? NoRegistra),
+                ("Modelo", referencia.Modelo?.ToString(CultureInfo.InvariantCulture) ?? NoRegistra),
+            ]));
+        }
+
         if (avaluo.Fuentes is { Count: > 0 } fuentes)
         {
             col.Item().Element(c => Grilla(c, ["Fuente", "Estado", "Valor", "Muestras", "Fecha"],

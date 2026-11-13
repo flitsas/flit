@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode, type ComponentType } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { EstadoVacio } from "@flit/ui/EstadoVacio";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
-import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
 import {
   CABECERA_TABLA_CLS,
@@ -41,20 +42,8 @@ const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Es
 /** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
 const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
-const TEXTO_SECUNDARIO = "max-w-md text-sm text-muted-foreground";
-
-/** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (iconoComo("buscar")). */
-type IconoVacio = ComponentType<{ className?: string; strokeWidth?: number; "aria-hidden"?: boolean | "true" | "false" }>;
-
-function Vacio({ titulo, Icono, children }: { titulo: string; Icono: IconoVacio; children?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 py-10 text-center">
-      <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
-      <h3 className="text-lg font-semibold">{titulo}</h3>
-      {children}
-    </div>
-  );
-}
+const IconoBuscar = iconoComo("buscar");
+const IconoPortapapeles = iconoComo("portapapeles");
 
 /**
  * Listado de diagnósticos de la compañía en el inicio (HU #13852, F08-H2; F08-C1/C2/C5/C6/C7), debajo de la captura
@@ -64,7 +53,7 @@ function Vacio({ titulo, Icono, children }: { titulo: string; Icono: IconoVacio;
  * si el lote está sin lanzar. Cuatro estados: cargando, error (400 con campo junto a su filtro, 403 a la página de acceso
  * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno.
  */
-export function ListadoDiagnosticos() {
+export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const clave = params.toString();
@@ -124,7 +113,7 @@ export function ListadoDiagnosticos() {
 
   let contenido: ReactNode;
   if (carga.tipo === "cargando" || acceso) {
-    contenido = <VehicleLoader label="Cargando los diagnósticos…" />;
+    contenido = <VehicleLoader label="Cargando diagnósticos…" />;
   } else if (carga.tipo === "error" && carga.error.tipo === "CAMPO") {
     contenido = (
       <InlineAlert tone="warning" title="Revisa los filtros">
@@ -135,30 +124,55 @@ export function ListadoDiagnosticos() {
     contenido = (
       <InlineAlert
         tone="error"
-        title="No se pudieron cargar los diagnósticos"
+        title="No pudimos cargar el listado"
         action={
           <button type="button" onClick={reintentar} className={BOTON_REINTENTAR_CLS}>
             Reintentar
           </button>
         }
       >
-        {carga.error.tipo === "AVISO" ? carga.error.mensaje : "Intenta de nuevo en un momento."}
+        {carga.error.tipo === "AVISO" ? carga.error.mensaje : "Revisa tu conexión. Tus diagnósticos siguen procesándose."}
       </InlineAlert>
     );
   } else if (carga.lista.diagnosticos.length === 0 && hayFiltros(filtros)) {
     contenido = (
-      <Vacio titulo="No hay diagnósticos con estos filtros" Icono={iconoComo("buscar")}>
-        <p className={TEXTO_SECUNDARIO}>Cambia las fechas, el tipo, el estado o el nombre, o quita los filtros.</p>
-        <button type="button" onClick={limpiar} className={BOTON_SECUNDARIO_CLS}>
-          Limpiar filtros
-        </button>
-      </Vacio>
+      <EstadoVacio
+        anunciar
+        nivelTitulo={3}
+        icono={<IconoBuscar className="h-7 w-7" aria-hidden="true" strokeWidth={1.5} />}
+        titulo="Ningún diagnóstico coincide"
+        mensaje="Prueba con otro rango de fechas o quita algún filtro."
+        acciones={[
+          <button key="limpiar" type="button" onClick={limpiar} className={BOTON_SECUNDARIO_CLS}>
+            Limpiar filtros
+          </button>,
+        ]}
+      />
     );
   } else if (carga.lista.diagnosticos.length === 0) {
     contenido = (
-      <Vacio titulo="Todavía no hay diagnósticos" Icono={iconoComo("portapapeles")}>
-        <p className={TEXTO_SECUNDARIO}>Aquí verás los diagnósticos vehiculares de tu compañía cuando empiecen a registrarse.</p>
-      </Vacio>
+      <EstadoVacio
+        nivelTitulo={3}
+        icono={<IconoPortapapeles className="h-7 w-7" aria-hidden="true" strokeWidth={1.5} />}
+        titulo="Aún no tienes diagnósticos"
+        mensaje={
+          puedeCrear
+            ? "Diagnostica un vehículo con su placa o carga un archivo con tu flota."
+            : "Aquí verás los diagnósticos vehiculares de tu compañía cuando empiecen a registrarse."
+        }
+        acciones={
+          puedeCrear
+            ? [
+                <Link key="express" href="/diagnosticos/nuevo?modo=express" className={BOTON_PRIMARIO_CLS}>
+                  Diagnosticar un vehículo
+                </Link>,
+                <Link key="masivo" href="/diagnosticos/nuevo?modo=masivo" className={BOTON_SECUNDARIO_CLS}>
+                  Cargar archivo
+                </Link>,
+              ]
+            : undefined
+        }
+      />
     );
   } else {
     const { lista } = carga;
@@ -240,7 +254,7 @@ export function ListadoDiagnosticos() {
       <h2 id="listado-diagnosticos-titulo" className="text-lg font-semibold text-flit-primary">
         Diagnósticos
       </h2>
-      <FiltrosListado valor={filtros} error={errorCampo} onCambiar={aplicar} />
+      <FiltrosListado valor={filtros} error={errorCampo} onCambiar={aplicar} onLimpiar={hayFiltros(filtros) ? limpiar : undefined} />
       <div>{contenido}</div>
     </section>
   );

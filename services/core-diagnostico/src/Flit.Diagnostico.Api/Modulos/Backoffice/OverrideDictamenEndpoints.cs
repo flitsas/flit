@@ -24,7 +24,7 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// El PUT recibe el estado deseado: veredicto, motivo (obligatorio desde B-PR6), <c>version_esperada</c> y, opcional, los
 /// alertamientos completos. Sin alertamientos reemplaza solo el veredicto (textos de plantilla, la cola los redacta); con ellos
 /// nace una versión <c>MANUAL</c>/<c>COMPLETADA</c> (<see cref="EmisorDictamen.FilaDeAjuste"/>). Orden de bloqueo: cabecera →
-/// vehículo (<see cref="EscritorCeldas.SubirVersionFilaAsync(DiagnosticoDb, IQueryable{CabeceraDiagnostico}, IQueryable{VehiculoDiagnostico}, Guid, Guid, CancellationToken)"/>)
+/// vehículo (<see cref="EscritorCeldas.SubirVersionFilaAsync"/> con las filas de la empresa explícita)
 /// → dictamen. Toda carrera termina en 409, nunca en 500. No notifica (D8), no genera PDF y no toca el Excel ni el ZIP.
 /// </para>
 /// <para>
@@ -79,7 +79,7 @@ internal static partial class OverrideDictamenEndpoints
             // Orden de bloqueo canónico (ADR-0086 D-1): cabecera → vehículo con la versión de fila, y después el dictamen. Un PUT
             // concurrente espera aquí y, al seguir, lee la vigente nueva: su version_esperada ya no coincide (409).
             await EscritorCeldas.SubirVersionFilaAsync(
-                db, db.ParaEditarDeLaEmpresa<CabeceraDiagnostico>(empresa), db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(empresa), id, vid, ct)
+                db, id, vid, ct, db.ParaEditarDeLaEmpresa<CabeceraDiagnostico>(empresa), db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(empresa))
                 .ConfigureAwait(false);
             var tramite = await db.DeLaEmpresa<VehiculoDiagnostico>(empresa).Where(v => v.Id == vid)
                 .Select(v => v.TramiteId).SingleAsync(ct).ConfigureAwait(false);

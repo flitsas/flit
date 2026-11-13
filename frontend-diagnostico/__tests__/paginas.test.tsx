@@ -128,7 +128,7 @@ describe("pantalla base con los paquetes de la suite", () => {
 
     const titulo = await screen.findByRole("heading", { level: 1, name: "Diagnóstico vehicular" });
     expect(titulo.closest("section")).toHaveTextContent("Transportes Prueba SAS");
-    expect(await screen.findByText("Todavía no hay diagnósticos")).toBeInTheDocument();
+    expect(await screen.findByText("Aún no tienes diagnósticos")).toBeInTheDocument();
   });
 
   it("el CSS global importa los tokens, el shell y el loader de @flit/ui", () => {

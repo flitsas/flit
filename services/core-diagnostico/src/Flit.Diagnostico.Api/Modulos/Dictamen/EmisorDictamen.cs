@@ -432,6 +432,9 @@ internal sealed partial class EmisorDictamen(
 
         var fila = FilaAlCerrar(
             celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, proveedor.Configurado, ahora);
+        // HU #14563 (ADR-0086 D-1, AC7): la fila toma la versión de la celda que cierra; la cabecera no sube otra vez.
+        await EscritorCeldas.MarcarFilaAsync(
+            db, celda.VehiculoId, celda.VersionTablero, ct, db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(celda.TenantId)).ConfigureAwait(false);
         db.Add(fila);
         DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: false);
         Escrito(log, celda.VehiculoId, fila.Version, fila.Veredicto, fila.EstadoRedaccion);

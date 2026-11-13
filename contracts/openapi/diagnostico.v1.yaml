@@ -754,8 +754,10 @@ paths:
       description: >
         HU #13743 (F04-H1, F04-C1/C3/C8/C10/C11/C13, plan §6.1 fila 04). Permiso diagnostico.diagnosticos.ver.
         Devuelve la versión actual del tablero (`version`), el estado global, las columnas del alcance agrupadas y el
-        avance del lote, y SOLO las celdas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
-        `vehiculos` van solo los vehículos con alguna celda cambiada y, de cada uno, solo esas celdas; `terminado` se
+        avance del lote, y SOLO las celdas o filas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
+        `vehiculos` van solo los vehículos con alguna celda cambiada o con versión de fila (`vehiculos[].version`, HU #14563:
+        dictamen nuevo o ajustado, trámite creado, omitido o fallido) mayor que `desde` y, de cada uno, solo las celdas
+        cambiadas (una fila que cambió sin celdas viaja con `celdas` vacío); `terminado` se
         calcula con todas sus celdas (COMPLETADO o NA, R-7). El cliente guarda `version`, la manda como `desde` en el
         siguiente sondeo y fusiona por `vehiculos[].id` y `celdas[].fuente`. DTO de cliente: nunca lleva el origen de
         la celda, el usuario que la llenó a mano, el payload ni documentos en claro (R-20); cada fila que viaja lleva
@@ -767,7 +769,9 @@ paths:
         - name: desde
           in: query
           required: false
-          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          description: >
+            Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo). Trae las celdas o filas con
+            versión mayor (HU #14563).
           schema:
             type: integer
             format: int64
@@ -2927,7 +2931,9 @@ paths:
         - name: desde
           in: query
           required: false
-          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          description: >
+            Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo). Trae las celdas o filas con
+            versión mayor (HU #14563).
           schema:
             type: integer
             format: int64
@@ -4159,6 +4165,13 @@ components:
           description: >
             HU #14563 (B7, D6). true si el dictamen vigente es un ajuste de soporte FLIT (P1 = a); false sin dictamen, en SIMPLE
             o tras un recálculo automático (D7).
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            HU #14563 (B1, ADR-0086 D-1). Versión de fila: la versión del tablero en el último cambio de la fila (dictamen
+            nuevo o ajustado, trámite creado, omitido o fallido); 0 = sin cambios de fila. Nunca supera `version` del lote.
         derivacion:
           allOf:
             - $ref: "#/components/schemas/DerivacionFila"
@@ -5330,6 +5343,16 @@ components:
               valor: { type: integer, format: int64, nullable: true }
               muestras: { type: integer, nullable: true }
               fecha: { type: string, nullable: true, example: "2026-10-22" }
+        referencia:
+          type: object
+          description: >
+            HU #14563 B6. Referencia Fasecolda del avalúo llenado a mano con ella. La clave no aparece si el avalúo no la trae
+            (siempre ausente en el avalúo por API).
+          properties:
+            codigo_fasecolda: { type: string, nullable: true, pattern: "^[0-9]{8}$", example: "01601234" }
+            marca: { type: string, nullable: true }
+            linea: { type: string, nullable: true }
+            modelo: { type: integer, nullable: true, example: 2020 }
 
     ResultadoImpuestoDetalle:
       type: object
@@ -5502,7 +5525,10 @@ components:
       description: >
         AVALUO. Con `sin_valor_comercial=false`, `valor_sugerido` (mayor que 0) y `fuente_principal` (una fuente enviada con
         estado OK) son obligatorios; con `true` no van y ninguna fuente puede estar en OK. `valor` solo (y obligatorio) en
-        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia).
+        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia). HU #14563 B6: `referencia` opcional (aditiva).
+        Con ella `sin_valor_comercial` va en false, `valor_sugerido` (entero mayor que 0) es obligatorio y entra en `fuentes` como
+        `fasecolda` OK (si ya viene `fasecolda`, en OK y con el mismo valor) y `fuente_principal` es `fasecolda` (si se envía, debe
+        ser `fasecolda`). No se valida que el código exista en Fasecolda.
       additionalProperties: false
       required: [sin_valor_comercial, fuentes]
       properties:
@@ -5521,6 +5547,17 @@ components:
               estado: { type: string, enum: [OK, SIN_DATOS, ERROR] }
               valor: { type: integer, format: int64, minimum: 1, nullable: true }
               muestras: { type: integer, minimum: 1, nullable: true }
+        referencia:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [codigo_fasecolda, modelo]
+          description: "HU #14563 B6. Referencia Fasecolda; un campo desconocido responde 422 con su ruta en `campo`."
+          properties:
+            codigo_fasecolda: { type: string, pattern: "^[0-9]{8}$", example: "01601234", description: "Texto de 8 dígitos." }
+            marca: { type: string, nullable: true, maxLength: 120 }
+            linea: { type: string, nullable: true, maxLength: 120 }
+            modelo: { type: integer, minimum: 1950, description: "Año del modelo, hasta el año actual (Colombia) + 1.", example: 2020 }
 
     ResultadoManualRuntPersona:
       type: object

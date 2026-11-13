@@ -144,15 +144,23 @@ internal static class DerivacionEndpoints
         ArgumentNullException.ThrowIfNull(opciones);
         if (!opciones.Habilitada || grilla.Vehiculos.Count == 0)
             return grilla;
-        var lote = await db.Set<CabeceraDiagnostico>().AsNoTracking().Where(c => c.Id == grilla.Id)
-            .Select(c => new { c.TenantId, c.Modo }).SingleAsync(ct).ConfigureAwait(false);
-        var elegibilidad = await LecturaElegibilidad.LeerAsync(db, grilla.Id, lote.Modo, [.. grilla.Vehiculos.Select(v => v.Id)], ct).ConfigureAwait(false);
+        // HU #14563 B1: la grilla de la compañía ya leyó la elegibilidad de todo el lote; solo sin ella se lee aquí.
+        var (tenant, elegibilidad) = grilla.Elegibilidad is { } leida
+            ? (leida.TenantId, leida.PorVehiculo)
+            : await LeerElegibilidadAsync(grilla, db, ct).ConfigureAwait(false);
         return grilla with
         {
             Vehiculos = [.. grilla.Vehiculos.Select(v => elegibilidad.TryGetValue(v.Id, out var e)
-                ? v with { Derivacion = LecturaElegibilidad.Fila(e, opciones, lote.TenantId) }
+                ? v with { Derivacion = LecturaElegibilidad.Fila(e, opciones, tenant) }
                 : v)],
         };
+    }
+
+    private static async Task<(Guid TenantId, IReadOnlyDictionary<Guid, ElegibilidadVehiculo> PorVehiculo)> LeerElegibilidadAsync(GrillaDto grilla, DiagnosticoDb db, CancellationToken ct)
+    {
+        var lote = await db.Set<CabeceraDiagnostico>().AsNoTracking().Where(c => c.Id == grilla.Id)
+            .Select(c => new { c.TenantId, c.Modo }).SingleAsync(ct).ConfigureAwait(false);
+        return (lote.TenantId, await LecturaElegibilidad.LeerAsync(db, grilla.Id, lote.Modo, [.. grilla.Vehiculos.Select(v => v.Id)], ct).ConfigureAwait(false));
     }
 
     /// <summary>El cuerpo es opcional (en Con análisis no hace falta): sin cuerpo, null; JSON inválido, 400 <c>CUERPO_INVALIDO</c>.</summary>

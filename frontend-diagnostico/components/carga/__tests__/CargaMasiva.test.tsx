@@ -37,6 +37,7 @@ async function montar(rutas: Rutas, capacidades: Partial<CapacidadesDiagnostico>
 
 const subir = async (f = archivo("flota.csv", "text/csv")) => {
   fireEvent.change(await screen.findByLabelText(/archivo de vehículos/i), { target: { files: [f] } });
+  fireEvent.click(screen.getByRole("button", { name: "Validar archivo" }));
   return f;
 };
 const continuar = () => screen.getByRole("button", { name: /continuar solo con los válidos/i });
@@ -104,7 +105,7 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
     const resumenRegion = await screen.findByRole("region", { name: "Resumen de validación" });
     fireEvent.change(screen.getByRole("textbox", { name: "Identificador de la fila 3" }), { target: { value: "TST124" } });
     await waitFor(() => expect(within(resumenRegion).getByText("Válidos").nextSibling).toHaveTextContent("3"));
-    expect(within(resumenRegion).getByText("Erróneos").nextSibling).toHaveTextContent("0");
+    expect(within(resumenRegion).getByText("Con error").nextSibling).toHaveTextContent("0");
 
     fireEvent.click(continuar());
 
@@ -196,5 +197,38 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
     const posts = llamadas(api, "POST", ruta("/vehiculos"));
     expect(posts).toHaveLength(2);
     expect(formularioDe(posts[1]).get("archivo")).toBe(subido);
+  });
+});
+
+describe("/diagnosticos/{id}/carga — tres pasos sin consultas externas (AC20, AC21)", () => {
+  const pasos = () => within(screen.getByRole("list", { name: "Pasos de la carga" })).getAllByRole("listitem");
+
+  it("AC20: con el archivo elegido muestra los pasos, el nombre, el tamaño y Quitar; no analiza hasta «Validar archivo»", async () => {
+    const api = await montar({ [`POST ${ruta("/carga")}`]: () => Response.json(resumen()) });
+    fireEvent.change(await screen.findByLabelText(/archivo de vehículos/i), { target: { files: [archivo("flota.csv", "text/csv")] } });
+    expect(pasos().map((p) => p.textContent)).toEqual(["1Subir archivo", "2Revisar", "3Iniciar"]);
+    expect(pasos()[0]).toHaveAttribute("aria-current", "step");
+    expect(screen.getByText("flota.csv")).toBeInTheDocument();
+    expect(screen.getByText(/\d+ bytes/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quitar archivo" })).toBeInTheDocument();
+    expect(screen.getByText(/la validación no dispara consultas externas/i)).toBeInTheDocument();
+    expect(llamadas(api, "POST", ruta("/carga"))).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Validar archivo" }));
+    const region = await screen.findByRole("region", { name: "Resumen de validación" });
+    expect(pasos()[1]).toHaveAttribute("aria-current", "step");
+    expect(within(region).getByText(/la validación no dispara consultas externas/i)).toBeInTheDocument();
+    for (const t of ["Válidos", "Con error", "Duplicados consolidados", "Límite del lote"]) expect(within(region).getByText(t)).toBeInTheDocument();
+    expect(screen.getByText(/flota\.csv · 4 filas/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /corregir ahora/i })).toBeInTheDocument();
+    expect(continuar()).toBeEnabled();
+  });
+
+  it("AC20: «Quitar archivo» vuelve a la zona vacía sin analizar", async () => {
+    await montar({});
+    fireEvent.change(await screen.findByLabelText(/archivo de vehículos/i), { target: { files: [archivo("flota.csv", "text/csv")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Quitar archivo" }));
+    expect(screen.queryByText("flota.csv")).toBeNull();
+    expect(screen.getByRole("button", { name: "Validar archivo" })).toBeDisabled();
   });
 });
