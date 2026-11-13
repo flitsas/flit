@@ -320,6 +320,7 @@ internal sealed partial class EmpaquetadorZip(
                     propia.Vigente = vigente;
                     propia.VehiculosIncluidos = plan.Incluidos.Count;
                     propia.VehiculosPendientes = plan.Pendientes;
+                    await Notificaciones.EscritorNotificaciones.AgregarAsync(db, propia.TenantId, propia.SolicitadoPor, Notificaciones.Notificacion.ZipEvidenciasListo, propia.DiagnosticoId, propia.Id, propia.GeneradoEn.Value, ct).ConfigureAwait(false);
                     await db.SaveChangesAsync(ct).ConfigureAwait(false);
                     await transaccion.CommitAsync(ct).ConfigureAwait(false);
                     return vigente;
@@ -366,6 +367,7 @@ internal sealed partial class EmpaquetadorZip(
             propia.TipoError = tipoError;
             propia.LeaseHasta = null;
             EnError(log, trabajo.Id, tipoError, propia.Intentos);
+            await Notificaciones.EscritorNotificaciones.AgregarAsync(db, propia.TenantId, propia.SolicitadoPor, Notificaciones.Notificacion.ZipEvidenciasFallido, propia.DiagnosticoId, propia.Id, reloj.GetUtcNow(), ct).ConfigureAwait(false);
         }
 
         try

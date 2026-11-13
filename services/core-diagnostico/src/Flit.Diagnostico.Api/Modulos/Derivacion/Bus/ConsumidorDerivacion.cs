@@ -100,7 +100,9 @@ internal sealed partial class ConsumidorDerivacion(
 
     private async Task CerrarAsync(OperacionDerivacion operacion, ItemDerivacion item, VehiculoDiagnostico vehiculo, ResultadoBorrador resultado, Guid tenant, CancellationToken ct)
     {
-        CierreItemDerivacion.Cerrar(operacion, item, vehiculo, resultado, reloj.GetUtcNow());
+        var ahora = reloj.GetUtcNow();
+        CierreItemDerivacion.Cerrar(operacion, item, vehiculo, resultado, ahora);
+        await Notificaciones.EscritorNotificaciones.SiTerminoDerivacionMasivaAsync(db, operacion, ahora, ct).ConfigureAwait(false);
         await despachador.LiberarAsync(tenant, ct).ConfigureAwait(false);
         Cerrado(log, item.Id, operacion.Id, item.Estado, item.MotivoCodigo ?? "-", item.Intentos);
     }

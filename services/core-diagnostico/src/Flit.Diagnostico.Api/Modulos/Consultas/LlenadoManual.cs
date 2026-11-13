@@ -97,7 +97,7 @@ internal sealed partial class LlenadoManual(
 
     /// <summary>Lo único que el llenado puede escribir en la compañía de la celda.</summary>
     private static readonly Type[] TiposDelLlenado =
-        [typeof(CeldaConsulta), typeof(IntentoConsulta), typeof(CabeceraDiagnostico), typeof(HistorialEstadoDiagnostico), typeof(DictamenVehiculo)];
+        [typeof(CeldaConsulta), typeof(IntentoConsulta), typeof(CabeceraDiagnostico), typeof(HistorialEstadoDiagnostico), typeof(DictamenVehiculo), typeof(Notificaciones.Notificacion)];
 
     public async Task<LlenadoManualDto> LlenarAsync(Guid empresa, Guid consultaId, JsonElement json, CancellationToken ct)
     {
