@@ -91,6 +91,21 @@ describe("HU14562 AC52 notificación persistente del ZIP", () => {
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   });
 
+  it("sin referencia_id (forma real del API) «Descargar» pide el ZIP por POST …/evidencias y baja el que ya está listo", async () => {
+    const zip = aviso(9, { tipo: "ZIP_EVIDENCIAS_LISTO", referencia_id: undefined });
+    const api = simularApi({
+      [`GET ${RUTA}`]: bandejas(bandeja([]), bandeja([zip])),
+      [`POST /diagnosticos/${LOTE}/evidencias`]: () => Response.json({ id: EVIDENCIA, tipo: "ZIP", estado: "LISTA", vehiculos_incluidos: 2, vehiculos_pendientes: 0, creado_en: "2026-11-12T15:00:00+00:00", generado_en: "2026-11-12T15:01:00+00:00", tipo_error: null }),
+      [`POST ${RUTA}/${zip.id}/leida`]: () => new Response(null, { status: 204 }),
+    });
+    render(<CampanaDiagnostico />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Avisos" })).toHaveAttribute("data-cargado", "true"));
+    act(() => pedirSondeoNotificaciones());
+    fireEvent.click(within(await screen.findByRole("status")).getByRole("button", { name: "Descargar" }));
+    await waitFor(() => expect(h.descargar).toHaveBeenCalledWith(`/api/v1/diagnostico/diagnosticos/${LOTE}/evidencias/${EVIDENCIA}/archivo`, "evidencias.zip"));
+    await waitFor(() => expect(pedidos(api, `${RUTA}/${zip.id}/leida`)).toHaveLength(1));
+  });
+
   it("los ZIP no leídos que ya estaban al cargar no abren el aviso (solo están en la campana)", async () => {
     simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([aviso(9, { tipo: "ZIP_EVIDENCIAS_LISTO" })])) });
     render(<CampanaDiagnostico />);

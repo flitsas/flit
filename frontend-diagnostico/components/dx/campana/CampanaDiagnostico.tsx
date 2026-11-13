@@ -9,12 +9,12 @@ import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
 import type { NotificacionDiagnostico } from "@/lib/notificaciones/api";
 import { textoNotificacion } from "@/lib/notificaciones/mensajes";
 import { useNotificaciones } from "@/lib/notificaciones/useNotificaciones";
-import { descargarArchivo, mensajeDescarga, urlArchivoZip } from "@/lib/reportes/api";
+import { descargarArchivo, mensajeDescarga, pedirZip, urlArchivoZip } from "@/lib/reportes/api";
 
 const FOCO = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]";
 const BOTON_TEXTO = `min-h-9 rounded-full px-3 text-sm font-semibold text-[color:var(--di-action)] hover:bg-[color:var(--di-accent-soft)] ${FOCO}`;
 
-const esZipDescargable = (i: NotificacionDiagnostico) => i.tipo === "ZIP_EVIDENCIAS_LISTO" && Boolean(i.referencia_id);
+const esZipDescargable = (i: NotificacionDiagnostico) => i.tipo === "ZIP_EVIDENCIAS_LISTO";
 const avisosSinLeer = (n: number) => (n === 1 ? "1 aviso sin leer" : `${n} avisos sin leer`);
 
 /**
@@ -55,9 +55,15 @@ export function CampanaDiagnostico() {
   };
 
   const descargar = async (i: NotificacionDiagnostico) => {
-    if (!i.referencia_id) return;
     try {
-      await descargarArchivo(urlArchivoZip(i.diagnostico_id, i.referencia_id), "evidencias.zip");
+      // Sin la evidencia en el aviso, el POST del ZIP devuelve el que ya está LISTA (200) del mismo lote.
+      let evidencia = i.referencia_id;
+      if (!evidencia) {
+        const estado = await pedirZip(i.diagnostico_id);
+        if (estado.estado !== "LISTA") throw new Error("El ZIP todavía se está preparando. Espera a que quede listo.");
+        evidencia = estado.id;
+      }
+      await descargarArchivo(urlArchivoZip(i.diagnostico_id, evidencia), "evidencias.zip");
       await n.marcarLeida(i.id);
     } catch (e) {
       setErrorDescarga((m) => ({ ...m, [i.id]: mensajeDescarga(e) }));

@@ -5,6 +5,8 @@ import type { NotificacionDiagnostico } from "@/lib/notificaciones/api";
  * aquí con rótulos fijos a partir de `tipo` y `datos`. De `datos` solo se leen números y códigos conocidos, y el único
  * texto variable es el nombre del lote. Nunca placa, VIN, documento, nombre de persona ni nombre de archivo.
  * Un tipo desconocido devuelve null y no se pinta (D8: no hay aviso por dictamen ajustado).
+ * Si el servidor no manda el nombre del lote ni `datos` (forma actual de `NotificacionDto`), el mensaje es el que armó el
+ * servidor, también con rótulos fijos y el nombre del lote (ADR-0086); el título sigue siendo el del cliente.
  */
 export interface TextoNotificacion {
   titulo: string;
@@ -19,6 +21,14 @@ const numero = (datos: Record<string, unknown> | undefined, clave: string): numb
 const contar = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
 
 export function textoNotificacion(n: NotificacionDiagnostico): TextoNotificacion | null {
+  const texto = textoCliente(n);
+  if (!texto) return null;
+  const delServidor = n.mensaje?.trim();
+  if (delServidor && !n.diagnostico_nombre?.trim() && !n.datos) return { titulo: texto.titulo, mensaje: delServidor };
+  return texto;
+}
+
+function textoCliente(n: NotificacionDiagnostico): TextoNotificacion | null {
   const nombre = n.diagnostico_nombre?.trim();
   const delLote = nombre ? `del lote «${nombre}»` : "de tu lote";
   switch (n.tipo) {
