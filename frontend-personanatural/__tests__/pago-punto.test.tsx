@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DiagnosticoPunto } from "@/components/punto/DiagnosticoPunto";
 import { PagoPunto } from "@/components/punto/PagoPunto";
 import type { EstadoPagoPunto } from "@/lib/api/cliente";
 import { crearCliente } from "@/lib/api/cliente";
@@ -237,4 +238,78 @@ describe("Paso Pago del punto · esperar identidades #14452", () => {
     const lista = await screen.findByRole("list", { name: "Personas pendientes de validar" });
     await waitFor(() => expect(lista).toHaveTextContent("Comprador"));
   });
+});
+
+describe("Asistente del punto: pago retomado, cobro anulado y barra lateral", () => {
+  const CIERRE = "GET /punto/pago/cierre";
+  const cierre = (extra: Record<string, unknown> = {}) => ({
+    estadoCierre: "en_registro",
+    codigoPublico: "PN-2026-0042",
+    valorCop: 150000,
+    medio: "caja",
+    medioCaja: "efectivo",
+    pagadoEn: "2026-11-09T16:00:00Z",
+    recogeEn: { organismo: "Tránsito de Prueba" },
+    ...extra,
+  });
+
+  function montarAsistente(rutas: Record<string, Manejador>) {
+    const todas: Record<string, Manejador> = {
+      "GET /solicitudes/s-1": () => json(solicitudCompleta({ estado: "pendiente_pago" })),
+      [RUTA_DEFINICION]: () => json(definicionCompleta()),
+      ...rutas,
+    };
+    const llamadas: string[] = [];
+    const fetchImpl = (async (url: string, init: RequestInit = {}) => {
+      const clave = `${init.method ?? "GET"} ${String(url).replace("/api/v1/persona-natural", "")}`;
+      llamadas.push(clave);
+      return (todas[clave] ?? (() => json({ code: "no_simulado", message: clave }, 404)))(init);
+    }) as unknown as typeof fetch;
+    renderConQuery(
+      <DiagnosticoPunto
+        cliente={crearCliente({ fetchImpl })}
+        placa="ABC123"
+        documento="1020456789"
+        tipoCodigo="TIPO_A"
+        organismoNombre="Tránsito de Prueba"
+        reanudar={{ solicitudId: "s-1" }}
+        onVolver={vi.fn()}
+        onAviso={vi.fn()}
+      />,
+    );
+    return llamadas;
+  }
+
+  it("con una solicitud reanudada arranca en Pago sin diagnóstico ni actores", async () => {
+    const llamadas = montarAsistente({ [GET_PAGO]: () => json(estado()), [INICIAR]: () => json(estado()) });
+    expect(await screen.findByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    expect(screen.getByText("Paso 5 · Pago", { selector: "h2" })).toBeInTheDocument();
+    expect(llamadas.some((l) => l.includes("diagnostico") || l.includes("actores"))).toBe(false);
+  });
+
+  it("barra lateral: «sin radicado aún» y, al registrarse, «Radicado {radicado}»", async () => {
+    montarAsistente({ [GET_PAGO]: () => json(estado({ pago: PAGO })), [CIERRE]: () => json(cierre({ estadoCierre: "registrado", radicadoFlit2: "TR-2026-000123" })) });
+    expect(await screen.findByText("Canal del punto · Radicado TR-2026-000123", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(screen.queryByText(/sin radicado aún/)).toBeNull();
+  }, 15000);
+
+  it("cobro anulado en el cierre: vuelve a Pago con el aviso amarillo y sin el bloque viejo", async () => {
+    let anulado = false;
+    let n = 0;
+    montarAsistente({
+      [GET_PAGO]: () => json(anulado ? estado() : estado({ pago: PAGO })),
+      [INICIAR]: () => json(estado()),
+      [CIERRE]: () => {
+        if (++n === 1) return json(cierre());
+        anulado = true;
+        return json({ code: "pago_pendiente", message: "El trámite aún no tiene un pago confirmado." }, 409);
+      },
+    });
+    expect(await screen.findByText(/Tu trámite está en proceso de registro/, {}, { timeout: 8000 })).toBeInTheDocument();
+    const aviso = await screen.findByText("La caja anuló el cobro. Genera el pago de nuevo.", {}, { timeout: 10000 });
+    expect(aviso).toHaveClass("border-warning");
+    expect(await screen.findByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    expect(screen.queryByText(/Valor pagado/)).toBeNull();
+    expect(screen.queryByText(/aún no tiene un pago confirmado/)).toBeNull();
+  }, 25000);
 });

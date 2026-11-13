@@ -1,6 +1,7 @@
 "use client";
 
 // HU #14232 — Paso Diagnóstico del canal OT: mismo cascarón y cards del wizard del portal PN, sin solicitud.
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Car, Check } from "lucide-react";
 import { MobilityLoader } from "@/components/MobilityLoader";
@@ -69,6 +70,7 @@ export function DiagnosticoPunto({
   organismoNombre,
   onVolver,
   onTerminar,
+  reanudar,
   onAviso,
 }: {
   cliente: ClientePortal;
@@ -81,10 +83,31 @@ export function DiagnosticoPunto({
   onVolver: () => void;
   /** Al cerrar la confirmación: el punto queda listo para la siguiente persona (sin datos del trámite anterior). */
   onTerminar?: () => void;
+  /** Solicitud reanudada en el punto (pago pendiente): el asistente arranca en Pago, sin pedir diagnóstico ni actores. */
+  reanudar?: { solicitudId: string } | undefined;
   onAviso: (titulo: string, mensaje: string, tono?: "alerta" | "exito" | "info") => void;
 }) {
-  const [paso, setPaso] = useState<FasePaso>("diagnostico");
-  const [solicitudIdPunto, setSolicitudIdPunto] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const [paso, setPasoBase] = useState<FasePaso>(reanudar ? "pago" : "diagnostico");
+  const [solicitudIdPunto, setSolicitudIdPunto] = useState<string | null>(reanudar?.solicitudId ?? null);
+  // Con una solicitud reanudada, Actores no se monta (no abre ni rehidrata nada) hasta que se pida ir a él.
+  const [actoresVisitado, setActoresVisitado] = useState(!reanudar);
+  const [avisoPago, setAvisoPago] = useState<string | null>(null);
+  const [radicadoFlit2, setRadicadoFlit2] = useState<string | null>(null);
+  const setPaso = (p: FasePaso) => {
+    if (p === "actores") setActoresVisitado(true);
+    if (p !== "pago") setAvisoPago(null);
+    setPasoBase(p);
+  };
+  const pagoAnulado = () => {
+    // El pago confirmado quedó en caché: se descarta para que el paso Pago lea el estado real y no vuelva al cierre.
+    if (solicitudIdPunto) {
+      queryClient.removeQueries({ queryKey: ["pn", "punto", "pago", solicitudIdPunto] });
+      queryClient.removeQueries({ queryKey: ["pn", "punto", "cierre", solicitudIdPunto] });
+    }
+    setPasoBase("pago");
+    setAvisoPago("La caja anuló el cobro. Genera el pago de nuevo.");
+  };
   const [estado, setEstado] = useState<EstadoCarga>({ fase: "cargando" });
   const intento = useRef(0);
   const tituloRef = useRef<HTMLHeadingElement | null>(null);
@@ -93,6 +116,7 @@ export function DiagnosticoPunto({
 
   const terminar = () => {
     setSolicitudIdPunto(null);
+    setRadicadoFlit2(null);
     setPaso("diagnostico");
     (onTerminar ?? onVolver)();
   };
@@ -118,6 +142,7 @@ export function DiagnosticoPunto({
   }
 
   useEffect(() => {
+    if (reanudar) return;
     // Diferido un turno (como RequisitosPunto): el estado ya arranca en «cargando» y así el efecto no escribe estado en su cuerpo.
     const id = window.setTimeout(() => void cargar(), 0);
     return () => window.clearTimeout(id);
@@ -180,7 +205,9 @@ export function DiagnosticoPunto({
                 <p className="font-bold text-primary">Mi trámite</p>
               </div>
               <p className="rounded-full bg-primary/10 px-3 py-0.5 text-sm font-semibold text-primary">{placa}</p>
-              <p className="text-xs font-light text-muted-foreground">Canal del punto · sin radicado aún</p>
+              <p className="text-xs font-light text-muted-foreground">
+                {radicadoFlit2 ? `Canal del punto · Radicado ${radicadoFlit2}` : "Canal del punto · sin radicado aún"}
+              </p>
             </div>
             <div className="space-y-3 text-sm">
               <p className="text-center font-bold text-primary">Configuración del trámite</p>
@@ -240,7 +267,8 @@ export function DiagnosticoPunto({
             </h2>
 
             {/* Actores permanece montado al ir a Requisitos/Resumen/Envío para no reabrir identidad del vendedor ya validado. */}
-            {(paso === "actores" || paso === "requisitos" || paso === "resumen" || paso === "pago" || paso === "envio") && (
+            {(paso === "actores" ||
+              (actoresVisitado && (paso === "requisitos" || paso === "resumen" || paso === "pago" || paso === "envio"))) && (
               <div
                 className={paso === "actores" ? undefined : "hidden"}
                 aria-hidden={paso !== "actores"}
@@ -287,16 +315,30 @@ export function DiagnosticoPunto({
                 onTerminar={terminar}
               />
             ) : paso === "pago" && solicitudIdPunto ? (
-              <PagoPunto
+              <>
+                {avisoPago && (
+                  <p role="status" className="rounded-[9px] border border-warning bg-warning/10 p-3 text-sm font-medium text-foreground">
+                    {avisoPago}
+                  </p>
+                )}
+                <PagoPunto
+                  cliente={cliente}
+                  solicitudId={solicitudIdPunto}
+                  tipoCodigo={tipoCodigo}
+                  onVolver={() => setPaso("resumen")}
+                  onIrActores={() => setPaso("actores")}
+                  onPagado={() => setPaso("envio")}
+                />
+              </>
+            ) : paso === "envio" && solicitudIdPunto ? (
+              <CierrePunto
                 cliente={cliente}
                 solicitudId={solicitudIdPunto}
                 tipoCodigo={tipoCodigo}
-                onVolver={() => setPaso("resumen")}
-                onIrActores={() => setPaso("actores")}
-                onPagado={() => setPaso("envio")}
+                onTerminar={terminar}
+                onPagoAnulado={pagoAnulado}
+                onRadicado={setRadicadoFlit2}
               />
-            ) : paso === "envio" && solicitudIdPunto ? (
-              <CierrePunto cliente={cliente} solicitudId={solicitudIdPunto} tipoCodigo={tipoCodigo} onTerminar={terminar} />
             ) : paso === "diagnostico" ? (
               <>
                 <Card title="Diagnóstico de requisitos previos" id="punto-diagnostico-requisitos">

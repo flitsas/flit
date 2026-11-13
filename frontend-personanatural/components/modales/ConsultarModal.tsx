@@ -10,10 +10,12 @@ import { portal, type CierrePuntoRespuesta, type ClientePortal, type EstadoRadic
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import {
+  cedulaValida,
   clasificarRadicadoOCedula,
   normalizarPlaca,
   normalizarRadicadoOCedula,
   placaValida,
+  soloDigitos,
 } from "@/lib/entradas";
 import { formatearFechaHora } from "@/lib/formato";
 import { CLASE_MENSAJE, CLASE_TITULAR, esAprobado, titularDe } from "@/lib/radicados/presentacion";
@@ -33,12 +35,25 @@ interface Props {
    * y no pide placa; si no tiene pago (404) se consulta como siempre con placa + radicado.
    */
   consultaPunto?: boolean;
+  /** Punto: la caja o la recarga dejaron el trámite sin pago; con la cédula de quien radicó se vuelve al paso Pago. */
+  onRetomarPago?: (datos: RetomarPagoDatos) => void;
 }
+
+/** Lo necesario para abrir el asistente del punto directamente en el paso Pago de una solicitud reanudada. */
+export interface RetomarPagoDatos {
+  solicitudId: string;
+  tipoCodigo: string;
+  placa: string;
+  documento: string;
+}
+
+/** Estado del trámite que aún no llegó al OT (se creó en este punto y falta el pago). */
+const ESTADO_SIN_ENVIAR = "pendiente_validacion";
 
 const MENSAJE_FALTA_PLACA = "Para consultar este trámite necesitas ingresar la placa.";
 
 /** Modal «Consultar mi trámite» (diseño UI): placa + radicado o cédula, y tracking de 5 pasos. */
-export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "", consultaPunto = false }: Props) {
+export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "", consultaPunto = false, onRetomarPago }: Props) {
   return (
     <ModalFlit
       abierto={abierto}
@@ -47,7 +62,7 @@ export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = []
       icono={Search}
       descripcion="Ingresa la placa y el número de radicado o cédula."
     >
-      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} radicadoInicial={radicadoInicial} consultaPunto={consultaPunto} />
+      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} radicadoInicial={radicadoInicial} consultaPunto={consultaPunto} onRetomarPago={onRetomarPago} />
     </ModalFlit>
   );
 }
@@ -58,12 +73,14 @@ function ContenidoConsulta({
   onCerrar,
   radicadoInicial,
   consultaPunto,
+  onRetomarPago,
 }: {
   cliente: ClientePortal;
   tipos: readonly TipoTramite[];
   onCerrar: () => void;
   radicadoInicial: string;
   consultaPunto: boolean;
+  onRetomarPago: ((datos: RetomarPagoDatos) => void) | undefined;
 }) {
   const idAyuda = useId();
   const [placa, setPlaca] = useState("");
@@ -160,7 +177,12 @@ function ContenidoConsulta({
               </button>
             </div>
           ) : (
-            <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />
+            <>
+              <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />
+              {consultaPunto && onRetomarPago && consulta.data.macroEstado.codigo === ESTADO_SIN_ENVIAR && (
+                <RetomarPago cliente={cliente} resultado={consulta.data} placaEscrita={placa} onRetomarPago={onRetomarPago} />
+              )}
+            </>
           ))}
       </div>
     </>
@@ -213,5 +235,107 @@ function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRa
         Entendido
       </button>
     </section>
+  );
+}
+
+/** Punto: «Retomar el pago» pide la cédula de quien radicó y reanuda la sesión; con el pago pendiente abre el paso Pago. */
+function RetomarPago({
+  cliente,
+  resultado,
+  placaEscrita,
+  onRetomarPago,
+}: {
+  cliente: ClientePortal;
+  resultado: EstadoRadicado;
+  placaEscrita: string;
+  onRetomarPago: (datos: RetomarPagoDatos) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [cedula, setCedula] = useState("");
+  const [sigueSuCurso, setSigueSuCurso] = useState(false);
+  const bloqueo = useBloqueo();
+  const idCedula = useId();
+
+  const reanudar = useMutation({
+    mutationFn: () => cliente.sesiones.reanudar({ radicado: resultado.radicado, cedula }),
+    onSuccess: (sesion) => {
+      if (sesion.estado !== "pendiente_pago") {
+        setSigueSuCurso(true);
+        return;
+      }
+      onRetomarPago({
+        solicitudId: sesion.solicitudId,
+        tipoCodigo: sesion.tipoTramiteCodigo,
+        placa: resultado.placa ?? placaEscrita,
+        documento: cedula,
+      });
+    },
+    onError: (error) => {
+      bloqueo.registrar(error);
+    },
+  });
+
+  const puedeEnviar = cedulaValida(cedula) && !reanudar.isPending && !bloqueo.bloqueado;
+  const mensajeError = (error: unknown) =>
+    error instanceof ApiError && error.status === 404 ? "No encontramos un trámite con esos datos." : mensajeDe(error);
+
+  if (sigueSuCurso) {
+    return (
+      <p role="status" className="mt-4 rounded-[9px] bg-primary/10 p-3 text-center text-sm text-primary">
+        Tu trámite sigue su curso. Ya no necesitas retomar el pago.
+      </p>
+    );
+  }
+
+  if (!abierto) {
+    return (
+      <button type="button" onClick={() => setAbierto(true)} className={boton("institutional", "mx-auto mt-4 flex h-11 px-10", "none")}>
+        Retomar el pago
+      </button>
+    );
+  }
+
+  return (
+    <form
+      aria-label="Retomar el pago"
+      className="mt-4 grid gap-3 rounded-[9px] border border-border p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (puedeEnviar) reanudar.mutate();
+      }}
+    >
+      <label className="dashboard-label" htmlFor={idCedula}>
+        Cédula de quien radicó
+      </label>
+      <input
+        id={idCedula}
+        required
+        className="field"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="Ej. 1020456789"
+        value={cedula}
+        onChange={(e) => {
+          setCedula(soloDigitos(e.target.value));
+          reanudar.reset();
+        }}
+      />
+      <div aria-live="polite" aria-busy={reanudar.isPending}>
+        {reanudar.isPending && <MobilityLoader />}
+        {bloqueo.bloqueado && (
+          <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-center text-sm text-alert">
+            Demasiados intentos. Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.
+          </p>
+        )}
+        {reanudar.isError && !bloqueo.bloqueado && (
+          <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-center text-sm text-alert">
+            {mensajeError(reanudar.error)}
+          </p>
+        )}
+      </div>
+      <button type="submit" className={boton("institutional", "mx-auto flex h-11 px-10", "none")} disabled={!puedeEnviar}>
+        Continuar
+      </button>
+    </form>
   );
 }
