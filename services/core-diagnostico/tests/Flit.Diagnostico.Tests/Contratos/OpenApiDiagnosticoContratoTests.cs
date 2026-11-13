@@ -28,7 +28,20 @@ public sealed class OpenApiDiagnosticoContratoTests
 
         info.Should().Contain("version: \"1.3.0\"");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
-        Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo]", "B-PR6 retiró el cuerpo legado");
+        Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
+    }
+
+    // HU #14563 code review menores 2, 4 y 10 — el contrato dice lo que hace el código: version_esperada obligatoria en todo PUT,
+    // claves desconocidas 422 VALOR_INVALIDO y el ETag de la bandeja con el hash de los nombres de los lotes de la página.
+    [Fact]
+    public void HU14563_code_review_version_esperada_claves_desconocidas_y_ETag_con_lotes()
+    {
+        var put = Bloque("put:", sangria: 4, desde: "operationId: corregirDictamenVehiculoBackoffice");
+        put.Should().Contain("VALOR_INVALIDO").And.Contain("clave desconocida");
+        put.Should().Contain("VERSION_ESPERADA_INVALIDA (campo version_esperada) si falta");
+
+        var bandeja = Bloque("get:", sangria: 4, desde: "operationId: bandejaNotificaciones");
+        bandeja.Should().Contain("<hash de los nombres de los lotes>");
     }
 
     [Fact]
@@ -44,11 +57,15 @@ public sealed class OpenApiDiagnosticoContratoTests
     }
 
     /// <summary>Desde la línea <paramref name="cabecera"/> con esa sangría hasta la siguiente clave del mismo nivel.</summary>
-    private static string Bloque(string cabecera, int sangria)
+    /// <param name="desde">Si viene, la cabecera es la última anterior a la primera línea que contiene este texto.</param>
+    private static string Bloque(string cabecera, int sangria, string? desde = null)
     {
         var prefijo = new string(' ', sangria);
         var lineas = Yaml.Value.Split('\n');
-        var inicio = Array.FindIndex(lineas, l => l == prefijo + cabecera);
+        var ancla = desde is null ? -1 : Array.FindIndex(lineas, l => l.Contains(desde, StringComparison.Ordinal));
+        var inicio = ancla < 0
+            ? Array.FindIndex(lineas, l => l == prefijo + cabecera)
+            : Array.FindLastIndex(lineas, ancla, l => l == prefijo + cabecera);
         inicio.Should().BeGreaterThanOrEqualTo(0, $"el contrato declara {cabecera}");
         var fin = inicio + 1;
         while (fin < lineas.Length && (lineas[fin].Length == 0 || lineas[fin].StartsWith(prefijo + " ", StringComparison.Ordinal)))
