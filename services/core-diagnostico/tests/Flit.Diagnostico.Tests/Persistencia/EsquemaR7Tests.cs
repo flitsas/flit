@@ -14,7 +14,8 @@ namespace Flit.Diagnostico.Tests.Persistencia;
 /// <summary>
 /// HU #14563 (B7, ADR-0086) — migración <c>R7_AjusteDictamen</c> sobre el schema migrado (base efímera de <see cref="ApiDePrueba"/>):
 /// columnas <c>ajuste_motivo</c> y <c>ajustado_desde_version</c> en <c>dictamenes</c>, <c>MANUAL</c> en <c>redactado_por</c> y los
-/// CHECK nuevos de la cadena de versiones. Las reglas las garantiza la base: se prueban por SQL directo. Placas ficticias.
+/// CHECK nuevos de la cadena de versiones. Las reglas las garantiza la base: se prueban por SQL directo. AC45 cubre además la
+/// precondición del Up (override incoherente) y la guarda del Down (ajustes FLIT). Placas ficticias.
 /// </summary>
 /// <example>
 /// <code>
@@ -175,6 +176,83 @@ public sealed class EsquemaR7Tests
         cadena.Select(d => d.RedactadoPor).Should().Equal("PLANTILLA", "PLANTILLA", "MANUAL", "PLANTILLA");
         cadena[3].AnalisisOverride.Should().BeFalse("D7: el recálculo nace sin marca de ajuste");
         cadena[3].AjusteMotivo.Should().BeNull();
+    }
+
+    // AC45 (code review B-1) — precondición del Up: un override incoherente (autor sin instante) hace fallar R7 con su mensaje
+    // propio antes de tocar el schema, no con una violación genérica de CHECK. La base queda en P4d.
+    [Fact]
+    public async Task Up_de_R7_falla_con_el_mensaje_de_precondicion_si_hay_un_override_incoherente()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        await using var db = DosEmpresas.Contexto(api.BaseDeDatos, null);
+        await db.GetService<IMigrator>().MigrateAsync(MigracionAnterior, ct);
+        var (tenant, vehiculo) = await SembrarVehiculoAsync(conexion, ct);
+        await InsertarAntesDeR7Async(conexion, tenant, vehiculo, ct);
+
+        var error = (await FluentActions.Awaiting(() => db.Database.MigrateAsync(ct)).Should().ThrowAsync<PostgresException>()).Which;
+
+        error.MessageText.Should().Contain("R7_AjusteDictamen: hay dictamenes con override incoherente");
+        error.SqlState.Should().NotBe(PostgresErrorCodes.CheckViolation, "la precondición corre antes de cualquier CHECK nuevo");
+        (await db.Database.GetAppliedMigrationsAsync(ct)).Last().Should().Be(MigracionAnterior);
+        (await ColumnasAsync(conexion, ct)).Should().BeEmpty("R7 no llegó a crear sus columnas");
+        (await ContarAsync(conexion, vehiculo, "usuario_override_id IS NOT NULL AND override_en IS NULL", null, ct))
+            .Should().Be(1, "la fila incoherente sigue ahí para revisarla");
+    }
+
+    // AC45 (code review B-1) — guarda del Down: con un ajuste FLIT (MANUAL con motivo), bajar a P4d deshace R9, R1 y R8 (cada una
+    // en su transacción) y se detiene en R7 con el mensaje de guarda, sin borrar la fila ni las columnas de auditoría.
+    [Fact]
+    public async Task Down_de_R7_se_bloquea_si_hay_ajustes_FLIT_y_no_borra_auditoria()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var (tenant, vehiculo) = await SembrarVehiculoAsync(conexion, ct);
+        await InsertarAsync(conexion, tenant, vehiculo, new Fila { Version = 1 }, ct);
+        await InsertarAsync(
+            conexion, tenant, vehiculo,
+            new Fila { Version = 2, Override = true, Desde = 1, Motivo = MotivoValido, RedactadoPor = "MANUAL", Estado = "COMPLETADA" }, ct);
+        await using var db = DosEmpresas.Contexto(api.BaseDeDatos, null);
+
+        var error = (await FluentActions.Awaiting(() => db.GetService<IMigrator>().MigrateAsync(MigracionAnterior, ct))
+            .Should().ThrowAsync<PostgresException>()).Which;
+
+        error.MessageText.Should().Contain("Rollback de R7_AjusteDictamen bloqueado");
+        (await db.Database.GetAppliedMigrationsAsync(ct)).Last().Should().Be("20261113050619_R7_AjusteDictamen");
+        (await db.Database.GetPendingMigrationsAsync(ct)).Should().Equal(
+            "20261113051720_R8_Notificaciones", "20261113054446_R1_VersionFilaTablero", "20261113070402_R9_AjusteConTramite");
+        (await ColumnasAsync(conexion, ct)).Should().HaveCount(2, "el rollback fallido no quitó ajuste_motivo ni ajustado_desde_version");
+        (await ContarAsync(conexion, vehiculo, "redactado_por = 'MANUAL' AND ajuste_motivo = @m", MotivoValido, ct))
+            .Should().Be(1, "el ajuste FLIT sigue en la auditoría");
+    }
+
+    /// <summary>Dictamen de override con autor y sin instante, insertable antes de R7 (sin sus columnas ni sus CHECK).</summary>
+    private static async Task InsertarAntesDeR7Async(NpgsqlConnection conexion, Guid tenant, Guid vehiculo, CancellationToken ct)
+    {
+        await using var insertar = new NpgsqlCommand(
+            "INSERT INTO diagnostico.dictamenes (id, tenant_id, vehiculo_id, version, vigente, veredicto, alertamientos, catalogo_version, " +
+            "redactado_por, estado_redaccion, redaccion_intentos, analisis_override, usuario_override_id, override_en, creado_en) " +
+            "VALUES (@id, @t, @v, 1, true, 'BLOQUEADO', '[]'::jsonb, 1, 'PLANTILLA', 'PENDIENTE', 0, true, @usuario, NULL, now())",
+            conexion);
+        insertar.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        insertar.Parameters.AddWithValue("t", tenant);
+        insertar.Parameters.AddWithValue("v", vehiculo);
+        insertar.Parameters.AddWithValue("usuario", Guid.NewGuid());
+        await insertar.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Dictámenes del vehículo que cumplen <paramref name="condicion"/> (SQL constante del test; <c>@m</c> es el motivo).</summary>
+    private static async Task<long> ContarAsync(NpgsqlConnection conexion, Guid vehiculo, string condicion, string? motivo, CancellationToken ct)
+    {
+        await using var comando = new NpgsqlCommand($"SELECT count(*) FROM diagnostico.dictamenes WHERE vehiculo_id = @v AND {condicion}", conexion);
+        comando.Parameters.AddWithValue("v", vehiculo);
+        if (motivo is not null)
+            comando.Parameters.AddWithValue("m", motivo);
+        return Convert.ToInt64(await comando.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static async Task AgregarAsync(ApiDePrueba api, Guid tenant, Guid vehiculo, Func<DictamenVehiculo, DictamenVehiculo> siguiente, CancellationToken ct)
