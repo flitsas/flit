@@ -84,7 +84,8 @@ public sealed class PoliticasBackofficeMatrizTests
         new("grilla", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/grilla", null, false, Senal.EmpresaRequerida),
         new("historial", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/historial", null, false, Senal.EmpresaRequerida),
         new("detalle (dictamen GET)", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen", null, false, Senal.EmpresaRequerida),
-        new("versiones del dictamen (B7)", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen/versiones", null, false, Senal.EmpresaRequerida),
+        // HU #14563 hallazgo M3: las versiones traen ajuste_motivo (@pii:low) y el autor; solo las lee la operación FLIT.
+        new("versiones del dictamen (B7)", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen/versiones", null, true, Senal.EmpresaRequerida),
         new("intentos", HttpMethod.Get, $"{Base}/consultas/{Consulta}/intentos", null, false, Senal.EmpresaRequerida),
         new("empresas", HttpMethod.Get, $"{Base}/empresas", null, false, Senal.IdentidadNoConfigurada),
         new("fuentes obligatorias GET", HttpMethod.Get, $"{Base}/fuentes-obligatorias", null, false, Senal.NoDenegada),

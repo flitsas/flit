@@ -30,7 +30,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_notificaciones", x => x.id);
-                    table.CheckConstraint("ck_notificaciones_datos", "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")))') AND octet_length(datos::text) <= 512");
+                    table.CheckConstraint("ck_notificaciones_datos", "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")) || (@.type() == \"number\" && (@ < 0 || @ > 100000)))') AND NOT jsonb_path_exists(datos, 'strict $.keyvalue() ? (!(@.key like_regex \"^[a-z_]{1,32}$\"))') AND octet_length(datos::text) <= 512");
                     table.CheckConstraint("ck_notificaciones_leida", "leida_en IS NULL OR leida_en >= creada_en");
                     table.CheckConstraint("ck_notificaciones_tipo", "tipo IN ('ZIP_EVIDENCIAS_LISTO', 'ZIP_EVIDENCIAS_FALLIDO', 'DERIVACION_TERMINADA', 'LOTE_TERMINADO')");
                     table.ForeignKey(

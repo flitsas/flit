@@ -130,10 +130,10 @@ public sealed class ContenidoReporteTests
         Texto(aMano).Should().NotContainAny(["MANUAL", "\"API\"", manual.UsuarioManualId!.Value.ToString()]);
     }
 
-    // HU #14563 B6 AC18 (CF-23) — avalúo llenado a mano con referencia Fasecolda: la referencia sale en el contenido del reporte
-    // (ResultadoAvaluoDetalle.referencia) y en el PDF del vehículo (código, marca, línea y modelo).
+    // HU #14563 B6 AC18 (CF-23) + hallazgo M1 (R-20, opción a) — avalúo llenado a mano con referencia Fasecolda: la referencia
+    // revela el llenado manual, así que no sale en el contenido del reporte de la compañía ni en su PDF; el valor sí.
     [Fact]
-    public async Task B6_AC18_Referencia_Fasecolda_sale_en_el_contenido_y_en_el_PDF()
+    public async Task B6_AC18_Referencia_Fasecolda_no_sale_en_el_contenido_ni_en_el_PDF()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.ConBaseAsync();
@@ -152,14 +152,14 @@ public sealed class ContenidoReporteTests
 
         var avaluo = contenido.Secciones.Single(s => s.Fuente == "AVALUO").Resultado;
         var json = JsonSerializer.Serialize(avaluo, avaluo!.GetType());
-        json.Should().Contain("\"referencia\":{\"codigo_fasecolda\":\"01601234\",\"marca\":\"MARCA PRUEBA\",\"linea\":\"LINEA PRUEBA\",\"modelo\":2020}");
+        json.Should().NotContain("referencia").And.NotContain("codigo_fasecolda").And.NotContain("01601234");
+        json.Should().Contain("\"valor_sugerido\":52000000");
 
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, Dato));
-        PdfDePrueba.Tiene(texto, "Código Fasecolda").Should().BeTrue(texto);
-        PdfDePrueba.Tiene(texto, "01601234").Should().BeTrue();
-        PdfDePrueba.Tiene(texto, "MARCA PRUEBA").Should().BeTrue();
-        PdfDePrueba.Tiene(texto, "LINEA PRUEBA").Should().BeTrue();
-        PdfDePrueba.Tiene(texto, "2020").Should().BeTrue("el modelo");
+        PdfDePrueba.Tiene(texto, "Código Fasecolda").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "01601234").Should().BeFalse();
+        PdfDePrueba.Tiene(texto, "MARCA PRUEBA").Should().BeFalse();
+        PdfDePrueba.Tiene(texto, "LINEA PRUEBA").Should().BeFalse();
     }
 
     // AC3 (F07-C10) — RUNT_LOCATARIO con un locatario declarado: tipo de documento, «****» y los cuatro últimos, rótulo de

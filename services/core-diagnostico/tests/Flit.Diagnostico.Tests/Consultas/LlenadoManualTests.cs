@@ -570,8 +570,9 @@ public sealed class LlenadoManualTests
     }
 
     // HU #14563 B6 AC18 + AC19 (CF-23, PostgreSQL real) — PUT manual del avalúo con referencia: un cuerpo inválido responde 422 y
-    // no cambia la celda; el válido la deja COMPLETADO con fasecolda, la referencia sale en el detalle de la compañía, el dictamen
-    // del vehículo se recalcula y queda el intento MANUAL con el usuario.
+    // no cambia la celda; el válido la deja COMPLETADO con fasecolda, el dictamen del vehículo se recalcula y queda el intento
+    // MANUAL con el usuario. Hallazgo M1 (R-20, opción a): la referencia revela el llenado manual, así que el detalle de la compañía
+    // no la trae (mismas claves que una celda consultada por API) y solo la ve el backoffice en la lectura de la celda.
     [Fact]
     public async Task B6_AC18_Avaluo_manual_con_referencia_Fasecolda_completa_recalcula_el_dictamen_y_deja_intento_MANUAL()
     {
@@ -615,12 +616,16 @@ public sealed class LlenadoManualTests
 
         var detalle = await TableroAyudas.JsonAsync(
             await empresas.A.Cliente().GetAsync(TableroAyudas.RutaDetalle(lote.Id, celda.VehiculoId, "AVALUO"), ct), ct);
-        var referencia = detalle.GetProperty("resultado").GetProperty("referencia");
-        referencia.GetProperty("codigo_fasecolda").GetString().Should().Be("01601234");
+        detalle.GetProperty("resultado").TryGetProperty("referencia", out _).Should().BeFalse("M1: la compañía no ve la referencia Fasecolda");
+        detalle.GetRawText().Should().NotContainAny(["codigo_fasecolda", "01601234", "MARCA PRUEBA", "LINEA PRUEBA"]);
+        detalle.GetProperty("resultado").GetProperty("fuente_principal").GetString().Should().Be("fasecolda");
+
+        var formulario = await TableroAyudas.JsonAsync(await api.Cliente(token).GetAsync(Ruta(celda.Id, empresas.A.Id), ct), ct);
+        var referencia = formulario.GetProperty("referencia");
+        referencia.GetProperty("codigo_fasecolda").GetString().Should().Be("01601234", "el backoffice sí ve la referencia");
         referencia.GetProperty("marca").GetString().Should().Be("MARCA PRUEBA");
         referencia.GetProperty("linea").GetString().Should().Be("LINEA PRUEBA");
         referencia.GetProperty("modelo").GetInt32().Should().Be(2020);
-        detalle.GetProperty("resultado").GetProperty("fuente_principal").GetString().Should().Be("fasecolda");
 
         var intento = (await IntentosAsync(empresas.A, celda.Id, ct)).Should().ContainSingle().Subject;
         intento.Disparador.Should().Be(DisparadorIntento.Manual);

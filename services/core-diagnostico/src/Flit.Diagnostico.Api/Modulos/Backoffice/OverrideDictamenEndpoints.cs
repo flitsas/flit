@@ -163,7 +163,8 @@ internal static partial class OverrideDictamenEndpoints
         var motivo = json.TryGetProperty("motivo", out var valorMotivo) && valorMotivo.ValueKind == JsonValueKind.String
             ? valorMotivo.GetString()?.Trim()
             : null;
-        if (motivo is null || motivo.Length is < LargoMinimoMotivo or > LargoMaximoMotivo)
+        // HU #14563 L3: el largo se cuenta en puntos de código, como char_length de ck_dictamenes_ajuste_motivo (no en UTF-16).
+        if (motivo is null || motivo.EnumerateRunes().Count() is < LargoMinimoMotivo or > LargoMaximoMotivo)
             throw new ReglaException(CodigosDictamen.MotivoRequerido, "motivo: escribe entre 10 y 500 caracteres que expliquen el ajuste.") { Campo = "motivo" };
 
         var alertamientos = LeerAlertamientos(json);

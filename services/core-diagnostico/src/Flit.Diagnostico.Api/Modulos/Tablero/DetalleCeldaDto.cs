@@ -197,18 +197,20 @@ public sealed record ComparendoDetalle(
 
 /// <summary>
 /// Avalúo comercial: «sin valor comercial» (Q4 = b) o el valor sugerido con su fuente principal, y el valor de cada fuente. La
-/// <c>referencia</c> Fasecolda (HU #14563 B6) solo viene si el avalúo se llenó con ella; si no, la clave no aparece.
+/// referencia Fasecolda del llenado manual (HU #14563 B6) NO viaja aquí: revelaría el llenado manual (R-20, hallazgo M1 de
+/// seguridad, opción a) y una celda llenada a mano debe tener las mismas claves que una consultada por API. Solo la ve el backoffice
+/// (<see cref="ReferenciaAvaluoDetalle"/> en el formulario del llenado manual).
 /// </summary>
 public sealed record ResultadoAvaluoDetalle(
     [property: JsonPropertyName("sin_valor_comercial")] bool SinValorComercial,
     [property: JsonPropertyName("valor_sugerido")] long? ValorSugerido,
     [property: JsonPropertyName("fuente_principal")] string? FuentePrincipal,
-    [property: JsonPropertyName("fuentes")] IReadOnlyList<FuenteAvaluoDetalle>? Fuentes,
-    [property: JsonPropertyName("referencia")]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    ReferenciaAvaluoDetalle? Referencia = null) : ResultadoDetalleDto;
+    [property: JsonPropertyName("fuentes")] IReadOnlyList<FuenteAvaluoDetalle>? Fuentes) : ResultadoDetalleDto;
 
-/// <summary>Referencia Fasecolda del avalúo (HU #14563 B6): código de 8 dígitos, marca, línea y modelo (año).</summary>
+/// <summary>
+/// Referencia Fasecolda del avalúo llenado a mano (HU #14563 B6): código de 8 dígitos, marca, línea y modelo (año). Solo backoffice
+/// (hallazgo M1): nunca en un DTO de compañía, el PDF ni el contenido del reporte.
+/// </summary>
 public sealed record ReferenciaAvaluoDetalle(
     [property: JsonPropertyName("codigo_fasecolda")] string? CodigoFasecolda,
     [property: JsonPropertyName("marca")] string? Marca,
