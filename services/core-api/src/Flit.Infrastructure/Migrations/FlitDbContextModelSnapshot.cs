@@ -10088,6 +10088,16 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("mimetype");
 
+                    b.Property<string>("OcrReason")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("ocr_reason");
+
+                    b.Property<string>("OcrStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ocr_status");
+
                     b.Property<Guid>("ProcedureInstanceId")
                         .HasColumnType("uuid")
                         .HasColumnName("procedure_instance_id");
@@ -10159,6 +10169,10 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("procedure_instance_attachments", "tramites", t =>
                         {
                             t.HasTrigger("tr_procedure_instance_attachments_audit");
+
+                            t.HasCheckConstraint("ck_procedure_instance_attachments_ocr_reason", "ocr_reason IS NULL OR (ocr_status IS NOT NULL AND ocr_status IN ('rejected','skipped') AND ocr_reason IN ('vin_mismatch','tipo_invalido','no_confirmado','ilegible','excede_tamano','analisis_fallido'))");
+
+                            t.HasCheckConstraint("ck_procedure_instance_attachments_ocr_status", "ocr_status IS NULL OR ocr_status IN ('verified','rejected','skipped')");
                         });
                 });
 

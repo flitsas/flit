@@ -24,7 +24,14 @@ public sealed record AttachmentDto(
     DateTimeOffset UploadedAt,
     string? Provider = null,
     /// <summary>True si hay auditoría de firma digital vigente para este adjunto (impronta manual).</summary>
-    bool DigitallySigned = false);
+    bool DigitallySigned = false,
+    /// <summary>
+    /// Bug #14559 (ADR-0085) — veredicto OCR declarado por el cliente al registrar (<c>verified</c>/<c>rejected</c>/<c>skipped</c>)
+    /// o null. Informativo: no es compuerta de avance, envío al OT ni validación.
+    /// </summary>
+    string? OcrStatus = null,
+    /// <summary>Bug #14559 (ADR-0085) — código cerrado del motivo (solo con <c>rejected</c>/<c>skipped</c>) o null.</summary>
+    string? OcrReason = null);
 
 public sealed record AttachmentsResponse(IReadOnlyList<AttachmentDto> Attachments);
 
@@ -191,7 +198,11 @@ public sealed record RegisterAttachmentInput(
     string Mimetype,
     long SizeBytes,
     string Sha256,
-    string StoragePath);
+    string StoragePath,
+    /// <summary>Bug #14559 (ADR-0085) — veredicto OCR que el cliente calculó antes de registrar; opcional e informativo.</summary>
+    string? OcrStatus = null,
+    /// <summary>Bug #14559 (ADR-0085) — código cerrado del motivo del veredicto; opcional.</summary>
+    string? OcrReason = null);
 
 /// <summary>
 /// Sube un adjunto: valida tipo/mime/size, persiste el binario vía <see cref="IAttachmentStorage"/>,
@@ -353,7 +364,8 @@ public sealed class UploadAttachmentHandler(
     }
 
     internal static AttachmentDto ToDto(ProcedureInstanceAttachment a, bool digitallySigned = false) =>
-        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider, digitallySigned);
+        new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider, digitallySigned,
+            a.OcrStatus, a.OcrReason);
 }
 
 /// <summary>
@@ -482,6 +494,8 @@ public sealed class RegisterAttachmentHandler(
             UploadedAt = now,
             UploadedBy = uploadedBy,
         };
+        // Bug #14559 (ADR-0085) — veredicto OCR declarado por el cliente, normalizado ANTES de asignar (CHECK en minúsculas).
+        (attachment.OcrStatus, attachment.OcrReason) = NormalizeOcr(input.OcrStatus, input.OcrReason);
         instance.Attachments.Add(attachment);
         // PK store-generated con Id ya seteado: Added explícito para forzar INSERT (igual que la subida).
         repo.Add(attachment);
@@ -507,6 +521,32 @@ public sealed class RegisterAttachmentHandler(
         }
 
         return (UploadAttachmentHandler.ToDto(attachment), null);
+    }
+
+    private static readonly HashSet<string> OcrStatuses = new(StringComparer.Ordinal)
+    {
+        "verified", "rejected", "skipped",
+    };
+
+    private static readonly HashSet<string> OcrReasons = new(StringComparer.Ordinal)
+    {
+        "vin_mismatch", "tipo_invalido", "no_confirmado", "ilegible", "excede_tamano", "analisis_fallido",
+    };
+
+    /// <summary>
+    /// Bug #14559 (ADR-0085) — trim + minúsculas contra la whitelist. Un status desconocido descarta ambos campos; el motivo
+    /// solo se conserva con <c>rejected</c>/<c>skipped</c> y si es un código conocido. Nunca falla (HU #11996: el OCR no
+    /// impide cargar).
+    /// </summary>
+    private static (string? Status, string? Reason) NormalizeOcr(string? status, string? reason)
+    {
+        var s = status?.Trim().ToLowerInvariant();
+        if (s is null || !OcrStatuses.Contains(s))
+            return (null, null);
+        var r = reason?.Trim().ToLowerInvariant();
+        if (s == "verified" || r is null || !OcrReasons.Contains(r))
+            return (s, null);
+        return (s, r);
     }
 }
 
@@ -751,7 +791,7 @@ public sealed class DeleteAttachmentHandler(
             return AdjuntoProtegido;
 
         // HU #14174 — captura tipo/nombre ANTES de que Retirar los quite de instance.Attachments.
-        var tipoRetiro     = attachment.Tipo;
+        var tipoRetiro = attachment.Tipo;
         var filenameRetiro = attachment.Filename;
 
         var tipo = attachment.Tipo;
@@ -959,11 +999,11 @@ internal static class AttachmentDocumentEventBuilder
         Guid? actorUserId,
         DateTimeOffset atUtc)
     {
-        var accion       = previo is null ? "Cargado" : "Reemplazado";
+        var accion = previo is null ? "Cargado" : "Reemplazado";
         var anteriorText = previo is null
             ? string.Empty
             : $"Cargado · {previo.Tipo} · {previo.Filename}";
-        var nuevoText    = $"{accion} · {tipo} · {filename}";
+        var nuevoText = $"{accion} · {tipo} · {filename}";
         return Build(tenantId, instanceId, anteriorText, nuevoText, actorUserId, atUtc);
     }
 
@@ -980,7 +1020,7 @@ internal static class AttachmentDocumentEventBuilder
         DateTimeOffset atUtc)
     {
         var anteriorText = $"Cargado · {tipo} · {filename}";
-        var nuevoText    = $"Retirado · {tipo} · {filename}";
+        var nuevoText = $"Retirado · {tipo} · {filename}";
         return Build(tenantId, instanceId, anteriorText, nuevoText, actorUserId, atUtc);
     }
 
@@ -1005,13 +1045,13 @@ internal static class AttachmentDocumentEventBuilder
 
         return new ProcedureInstanceEvent
         {
-            Id                  = Guid.NewGuid(),
-            TenantId            = tenantId,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
             ProcedureInstanceId = instanceId,
-            Tipo                = ProcedureFieldChangeRecorder.EventType,
-            Payload             = payload,
-            CreatedAt           = atUtc,
-            CreatedBy           = actorUserId,
+            Tipo = ProcedureFieldChangeRecorder.EventType,
+            Payload = payload,
+            CreatedAt = atUtc,
+            CreatedBy = actorUserId,
         };
     }
 
