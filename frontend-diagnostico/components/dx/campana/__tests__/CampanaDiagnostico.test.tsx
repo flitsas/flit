@@ -129,6 +129,16 @@ describe("HU14562 AC53 sin PII", () => {
 });
 
 describe("HU14562 AC54 campana vacía o con error", () => {
+  it("HU #14562 AC49 cargando: mientras la bandeja no responde, el panel dice «Cargando avisos…» sin lista ni Reintentar", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => new Promise<Response>(() => {}) });
+    render(<CampanaDiagnostico />);
+    const panel = await abrir();
+    expect(within(panel).getByText("Cargando avisos…")).toHaveAttribute("aria-busy", "true");
+    expect(within(panel).queryByRole("list")).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Reintentar" })).toBeNull();
+    expect(screen.getByRole("button", { name: /^Avisos/ })).toHaveAttribute("data-cargado", "false");
+  });
+
   it("vacía: muestra el estado vacío", async () => {
     simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([])) });
     render(<CampanaDiagnostico />);

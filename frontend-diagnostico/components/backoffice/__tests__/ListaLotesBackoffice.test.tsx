@@ -102,6 +102,14 @@ describe("ListaLotesBackoffice — AC1: compañía elegida y filtro «con errore
     expect(await screen.findByText(/no tiene lotes con estos filtros/i)).toBeInTheDocument();
   });
 
+  it("HU #14562 AC49 cargando: mientras la API responde, el cargador del kit con texto y ninguna tabla", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => new Promise<Response>(() => {}) });
+    montar({ empresa: EMPRESA_A });
+    expect(await screen.findByRole("status", { name: "Cargando los lotes…" })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: /lotes de la compañía/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
+
   it("falla: aviso con Reintentar", async () => {
     let n = 0;
     conEmpresas({ "GET /backoffice/diagnosticos": () => (++n === 1 ? Response.json({ error: "x" }, { status: 500 }) : Response.json(listaLotes([lote(1)]))) });
