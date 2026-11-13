@@ -177,3 +177,53 @@ describe("FuentesObligatoriasBackoffice — Punto 5: nombres, no códigos", () =
     aviso.mockRestore();
   });
 });
+
+// HU #14562 · F-10 · AC48 (UI Kit 2026): RUNT vehículo fijo con candado y estado por fila.
+describe("FuentesObligatoriasBackoffice — estado por fila (AC48)", () => {
+  const UNILATERAL = "Tipo de trámite: Traspaso unilateral";
+
+  it("RUNT vehículo aparece fijo con candado y no es una casilla desmarcable", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(SEMILLA) });
+    montar();
+    const region = await screen.findByRole("region", { name: UNILATERAL });
+    expect(within(region).getByText("RUNT vehículo")).toBeInTheDocument();
+    expect(within(region).getByText("Siempre obligatoria")).toBeInTheDocument();
+    expect(within(region).queryByRole("checkbox", { name: "RUNT vehículo" })).toBeNull();
+  });
+
+  it("pasa de «Sin cambios» a «Editado» con Descartar y Guardar, y Descartar restaura", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(SEMILLA) });
+    montar();
+    const region = await screen.findByRole("region", { name: UNILATERAL });
+    expect(within(region).getByText("Sin cambios")).toBeInTheDocument();
+    expect(within(region).queryByRole("button", { name: "Descartar" })).toBeNull();
+    const avaluo = within(region).getByRole("checkbox", { name: "Avalúo comercial" });
+    fireEvent.click(avaluo);
+    expect(within(region).getByText("Editado")).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Guardar" })).toBeEnabled();
+    fireEvent.click(within(region).getByRole("button", { name: "Descartar" }));
+    expect(within(region).getByText("Sin cambios")).toBeInTheDocument();
+    expect(within(region).getByRole("checkbox", { name: "Avalúo comercial" })).not.toBeChecked();
+  });
+
+  it("si el PUT falla muestra «Error de guardado» con Reintentar, que reenvía la fila", async () => {
+    let puts = 0;
+    simularApi({
+      [`GET ${RUTA}`]: () => Response.json(SEMILLA),
+      [`PUT ${RUTA}`]: () => {
+        puts += 1;
+        return puts === 1
+          ? Response.json({ title: "Error" }, { status: 500 })
+          : Response.json({ familia: null, tipo_tramite_codigo: "TRASPASO_UNILATERAL", fuentes: ["AVALUO"] });
+      },
+    });
+    montar();
+    const region = await screen.findByRole("region", { name: UNILATERAL });
+    fireEvent.click(within(region).getByRole("checkbox", { name: "Avalúo comercial" }));
+    fireEvent.click(within(region).getByRole("button", { name: "Guardar" }));
+    expect(await within(region).findByText("Error de guardado")).toBeInTheDocument();
+    fireEvent.click(within(region).getByRole("button", { name: "Reintentar" }));
+    await waitFor(() => expect(within(region).getByText("Sin cambios")).toBeInTheDocument());
+    expect(puts).toBe(2);
+  });
+});

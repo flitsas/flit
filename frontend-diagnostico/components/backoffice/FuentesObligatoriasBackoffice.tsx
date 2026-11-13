@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { TOOLTIP_CLS } from "@/components/parametrizacion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
 import {
@@ -22,6 +22,8 @@ import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
  * Muestra solo las cabeceras que devuelve el GET: una con `fuentes: []` es lista vacía guardada.
  * No resuelve herencia y no llama GET /tipos-tramite. RUNT no tiene casilla.
  * El piso SIMIT_PROPIETARIO y los tres SIMIT del unilateral van bloqueados, enfocables, con el motivo en texto.
+ * Cada definición es una fila editable (HU #14562 · AC48): «Sin cambios», «Editado» con Descartar y Guardar, o
+ * «Error de guardado» con Reintentar. RUNT vehículo se muestra fijo con candado: no es casilla ni viaja en el PUT.
  */
 
 const ALCANCES_PISO = new Set(["TRASPASO", "TRASPASO_STANDARD", "TRASPASO_TRANSFERENCIA_DE_DOMINIO"]);
@@ -38,6 +40,8 @@ interface Borrador {
   /** Título con el nombre de la familia o del tipo (Punto 5); se calcula una vez al leer, no viaja en el PUT. */
   titulo: string;
   fuentes: FuenteConfigurable[];
+  /** Última lista guardada: contra ella se decide «Sin cambios» o «Editado» y a ella vuelve Descartar. */
+  guardadas: FuenteConfigurable[];
   guardando: boolean;
   error: string | null;
 }
@@ -68,15 +72,21 @@ function aBorrador(def: DefinicionFuentesObligatorias): Borrador {
   const crudas = (Array.isArray(def.fuentes) ? def.fuentes : []) as readonly string[];
   const presentes = new Set(FUENTES_CONFIGURABLES.filter((f) => crudas.includes(f)));
   if (ALCANCES_PISO.has(alcance)) presentes.add("SIMIT_PROPIETARIO");
+  const fuentes = FUENTES_CONFIGURABLES.filter((f) => presentes.has(f));
   return {
     clave: def.familia ?? def.tipo_tramite_codigo ?? "sin-alcance",
     familia: def.familia,
     tipo_tramite_codigo: def.tipo_tramite_codigo,
     titulo: tituloDefinicion(def),
-    fuentes: FUENTES_CONFIGURABLES.filter((f) => presentes.has(f)),
+    fuentes,
+    guardadas: fuentes,
     guardando: false,
     error: null,
   };
+}
+
+function editada(def: Borrador): boolean {
+  return def.fuentes.length !== def.guardadas.length || def.fuentes.some((f) => !def.guardadas.includes(f));
 }
 
 function Vacio() {
@@ -133,12 +143,14 @@ export function FuentesObligatoriasBackoffice() {
         tipo_tramite_codigo: def.tipo_tramite_codigo,
         fuentes: fuentesSeleccionadas(alcance, def.fuentes),
       });
+      const fuentes = aBorrador(guardada).fuentes;
       actualizar(def.clave, {
         guardando: false,
         error: null,
         familia: guardada.familia,
         tipo_tramite_codigo: guardada.tipo_tramite_codigo,
-        fuentes: aBorrador(guardada).fuentes,
+        fuentes,
+        guardadas: fuentes,
       });
     } catch (error: unknown) {
       actualizar(def.clave, {
@@ -188,7 +200,13 @@ export function FuentesObligatoriasBackoffice() {
     cuerpo = (
       <div className="flex flex-col gap-4">
         {carga.definiciones.map((def) => (
-          <DefinicionCard key={def.clave} def={def} onAlternar={(fuente) => alternar(def, fuente)} onGuardar={() => guardar(def)} />
+          <DefinicionCard
+            key={def.clave}
+            def={def}
+            onAlternar={(fuente) => alternar(def, fuente)}
+            onGuardar={() => void guardar(def)}
+            onDescartar={() => actualizar(def.clave, { fuentes: def.guardadas, error: null })}
+          />
         ))}
       </div>
     );
@@ -216,7 +234,23 @@ export function FuentesObligatoriasBackoffice() {
   );
 }
 
-function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlternar: (fuente: FuenteConfigurable) => void; onGuardar: () => void }) {
+function EstadoFila({ def }: { def: Borrador }) {
+  if (def.error) return <span className="rounded-full bg-dx-estado-error-fondo px-2.5 py-0.5 text-xs font-semibold text-dx-estado-error">Error de guardado</span>;
+  if (editada(def)) return <span className="rounded-full bg-dx-estado-pendiente-fondo px-2.5 py-0.5 text-xs font-semibold text-dx-estado-pendiente">Editado</span>;
+  return <span className="rounded-full bg-dx-estado-sin-solicitar-fondo px-2.5 py-0.5 text-xs font-semibold text-dx-estado-sin-solicitar">Sin cambios</span>;
+}
+
+function DefinicionCard({
+  def,
+  onAlternar,
+  onGuardar,
+  onDescartar,
+}: {
+  def: Borrador;
+  onAlternar: (fuente: FuenteConfigurable) => void;
+  onGuardar: () => void;
+  onDescartar: () => void;
+}) {
   const baseId = useId();
   const tituloId = `${baseId}-titulo`;
   const alcance = codigoAlcance(def);
@@ -225,13 +259,23 @@ function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlter
 
   return (
     <section aria-labelledby={tituloId} className={`${TARJETA_CLS} flex flex-col gap-4`}>
-      <h2 id={tituloId} className="text-lg font-semibold text-flit-primary">
-        {titulo}
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id={tituloId} className="text-lg font-semibold text-flit-primary">
+          {titulo}
+        </h2>
+        <span aria-live="polite">
+          <EstadoFila def={def} />
+        </span>
+      </div>
       {seleccion.length === 0 && <p className="text-sm text-muted-foreground">Definición guardada con la lista vacía.</p>}
       <fieldset className="flex flex-col gap-2">
         <legend className={ETIQUETA_CLS}>Fuentes</legend>
         <ul className="flex flex-col gap-2">
+          <li className={`${OPCION_CLS} opacity-80`}>
+            <Icono nombre="candado" className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <span className="flex-1">RUNT vehículo</span>
+            <span className="text-xs text-muted-foreground">Siempre obligatoria</span>
+          </li>
           {FUENTES_CONFIGURABLES.map((fuente) => (
             <CasillaFuente
               key={fuente}
@@ -246,15 +290,28 @@ function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlter
         </ul>
       </fieldset>
       {def.error && (
-        <InlineAlert tone="error" title="No se guardó esta definición">
+        <InlineAlert
+          tone="error"
+          title="No se guardó esta definición"
+          action={
+            <button type="button" onClick={onGuardar} disabled={def.guardando} className={BOTON_REINTENTAR_CLS}>
+              Reintentar
+            </button>
+          }
+        >
           {def.error}
         </InlineAlert>
       )}
-      <div>
-        <button type="button" onClick={onGuardar} disabled={def.guardando} className={BOTON_PRIMARIO_CLS}>
-          {def.guardando ? "Guardando…" : "Guardar"}
-        </button>
-      </div>
+      {(editada(def) || def.guardando) && !def.error && (
+        <div className="flex gap-2">
+          <button type="button" onClick={onDescartar} disabled={def.guardando} className={BOTON_SECUNDARIO_CLS}>
+            Descartar
+          </button>
+          <button type="button" onClick={onGuardar} disabled={def.guardando} className={BOTON_PRIMARIO_CLS}>
+            {def.guardando ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }
