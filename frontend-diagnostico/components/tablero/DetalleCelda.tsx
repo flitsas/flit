@@ -3,6 +3,9 @@
 import { useEffect, useId, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
+import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
+import { nombreFuente } from "@/lib/configuracion";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
 import type { EstadoCelda } from "@/lib/tablero/api";
 import {
@@ -11,6 +14,14 @@ import {
   fraseImpuesto,
   textoMotivoNa,
   textoTipoError,
+  textoDuracion,
+  textoInfraccion,
+  textoPazYSalvo,
+  textoTotalSimit,
+  formatearPesos,
+  FRASE_SIN_RESOLUCIONES_INFORMADAS,
+  type AuditoriaConsulta,
+  type ResultadoSimitDetalle,
   type DetalleCelda as Detalle,
   type ResultadoImpuestoDetalle,
   type EstadoPersona,
@@ -172,10 +183,137 @@ function Auditoria({ detalle }: { detalle: Detalle }) {
           </dd>
         </div>
       </dl>
+      {detalle.auditoria && <AuditoriaIntentos fuente={nombreFuente(detalle.fuente)} auditoria={detalle.auditoria} />}
       {detalle.personas && detalle.personas.length > 0 && <TablaPersonas personas={detalle.personas} />}
     </Seccion>
   );
 }
+
+const RESULTADO_INTENTO = { EXITOSO: "Exitoso", ERROR: "Error" } as const;
+const DISPARADOR_INTENTO = { AUTOMATICO: "Automático", REPROCESO: "Reproceso" } as const;
+
+/** HU #14563 B5: fuente, inicio, fin, duración e intentos, y la lista de intentos no manuales. */
+function AuditoriaIntentos({ fuente, auditoria }: { fuente: string; auditoria: AuditoriaConsulta }) {
+  return (
+    <>
+      <ListaDefinicion
+        columnas={2}
+        items={[
+          { termino: "Fuente", valor: fuente },
+          { termino: "Inicio", valor: fechaDelDato(auditoria.inicio) },
+          { termino: "Fin", valor: fechaDelDato(auditoria.fin) },
+          { termino: "Duración", valor: textoDuracion(auditoria.duracion_ms) },
+          { termino: "Intentos", valor: String(auditoria.intentos) },
+        ]}
+      />
+      <div className="overflow-x-auto">
+        <table aria-label="Intentos de la consulta" className="w-full text-sm">
+          <thead className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
+            <tr>
+              <th scope="col" className={CELDA_TABLA_CLS}>N.º</th>
+              <th scope="col" className={CELDA_TABLA_CLS}>Inicio</th>
+              <th scope="col" className={CELDA_TABLA_CLS}>Duración</th>
+              <th scope="col" className={CELDA_TABLA_CLS}>Resultado</th>
+              <th scope="col" className={CELDA_TABLA_CLS}>Disparador</th>
+            </tr>
+          </thead>
+          <tbody>
+            {auditoria.intentos_detalle.map((i) => (
+              <tr key={i.n} className={FILA_TABLA_CLS}>
+                <td className={`${CELDA_TABLA_CLS} tabular-nums`}>{i.n}</td>
+                <td className={`${CELDA_TABLA_CLS} whitespace-nowrap tabular-nums`}>{fechaDelDato(i.inicio)}</td>
+                <td className={`${CELDA_TABLA_CLS} tabular-nums`}>{textoDuracion(i.duracion_ms)}</td>
+                <td className={CELDA_TABLA_CLS}>
+                  <span>{RESULTADO_INTENTO[i.resultado]}</span>
+                  {i.resultado === "ERROR" && i.tipo_error && <span className={`block ${ROTULO_CLS}`}>{textoTipoError(i.tipo_error)}</span>}
+                </td>
+                <td className={CELDA_TABLA_CLS}>{DISPARADOR_INTENTO[i.disparador]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function TablaSimple({ etiqueta, columnas, filas }: { etiqueta: string; columnas: string[]; filas: (string | null | undefined)[][] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table aria-label={etiqueta} className="w-full text-sm">
+        <thead className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
+          <tr>
+            {columnas.map((c) => (
+              <th key={c} scope="col" className={CELDA_TABLA_CLS}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((f, i) => (
+            <tr key={i} className={FILA_TABLA_CLS}>
+              {f.map((v, j) => (
+                <td key={j} className={CELDA_TABLA_CLS}>{v ?? "—"}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const pesosOGuion = (v: string | null | undefined) => (v ? formatearPesos(v) : null);
+
+/**
+ * HU #14563 B4 · AC40: resumen SIMIT desde la proyección tipada del backend (no lee la respuesta cruda). Lo que la fuente no
+ * informó se dice con su frase; nunca se pinta «$ 0» ni se deduce paz y salvo de cero comparendos.
+ */
+function ResumenSimit({ resultado }: { resultado: ResultadoSimitDetalle }) {
+  const resoluciones = resultado.resoluciones;
+  const cantidad = resultado.cantidad_resoluciones ?? (resoluciones ? resoluciones.length : null);
+  const infracciones = (resultado.multas ?? []).flatMap((m) => (m.infracciones ?? []).map((i) => ({ multa: m.numero ?? "—", texto: textoInfraccion(i) })));
+  return (
+    <Seccion titulo="Resumen SIMIT">
+      <ListaDefinicion
+        columnas={2}
+        items={[
+          { termino: "Total adeudado", valor: textoTotalSimit(resultado) },
+          { termino: "Paz y salvo", valor: textoPazYSalvo(resultado.paz_y_salvo) },
+          {
+            termino: "Resoluciones",
+            valor: cantidad === null ? FRASE_SIN_RESOLUCIONES_INFORMADAS : `${cantidad} ${cantidad === 1 ? "resolución" : "resoluciones"}`,
+          },
+        ]}
+      />
+      {resultado.acuerdos_pago && resultado.acuerdos_pago.length > 0 && (
+        <TarjetaPlegable titulo="Acuerdos de pago" abiertaInicial>
+          <TablaSimple
+            etiqueta="Acuerdos de pago"
+            columnas={["Estado", "Cuotas abonadas", "Cuotas pendientes", "Pendiente", "Fecha", "Organismo"]}
+            filas={resultado.acuerdos_pago.map((a) => [a.estado, a.cuotas_abonadas, a.cuotas_pendientes, pesosOGuion(a.pendiente), a.fecha, a.organismo])}
+          />
+        </TarjetaPlegable>
+      )}
+      {resoluciones && resoluciones.length > 0 && (
+        <TarjetaPlegable titulo="Resoluciones" abiertaInicial>
+          <TablaSimple
+            etiqueta="Resoluciones"
+            columnas={["Número", "Fecha", "Estado", "Valor", "Organismo"]}
+            filas={resoluciones.map((r) => [r.numero, r.fecha, r.estado, pesosOGuion(r.valor), r.organismo])}
+          />
+        </TarjetaPlegable>
+      )}
+      {infracciones.length > 0 && (
+        <TarjetaPlegable titulo="Infracciones por comparendo" abiertaInicial>
+          <TablaSimple etiqueta="Infracciones" columnas={["Comparendo", "Infracción"]} filas={infracciones.map((i) => [i.multa, i.texto])} />
+        </TarjetaPlegable>
+      )}
+    </Seccion>
+  );
+}
+
+const esSimitTipado = (d: Detalle): d is Detalle & { resultado: ResultadoSimitDetalle } =>
+  d.fuente === "SIMIT_VEHICULO" && d.estado === "COMPLETADO" && d.resultado !== null && "cantidad_comparendos" in d.resultado;
 
 /**
  * Aviso cuando no hay respuesta completa guardada (HU #14087 AC8 ajustado). Mismo texto para consulta anterior al cambio,
@@ -323,6 +461,7 @@ export function VistaDetalleCelda({ detalle }: { detalle: Detalle }) {
   return (
     <div className="flex flex-col gap-4">
       <Auditoria detalle={detalle} />
+      {esSimitTipado(detalle) && <ResumenSimit resultado={detalle.resultado} />}
       <Respuesta detalle={detalle} />
     </div>
   );
