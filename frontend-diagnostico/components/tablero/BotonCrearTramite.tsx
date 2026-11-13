@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { ExternalLink, FilePlus2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
@@ -14,6 +14,7 @@ import {
   ETIQUETA_CLS,
   FOCO_CLS,
 } from "@/components/configuracion/estilos";
+import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite";
 import { ApiError } from "@/lib/api";
 import { listarTiposTramite, type ModoDiagnostico, type TipoTramite } from "@/lib/diagnosticos/api";
 import type { FilaVehiculo, TramiteFila } from "@/lib/tablero/api";
@@ -159,7 +160,7 @@ export function ModalTipoTramite({
             Cancelar
           </button>
           <button type="button" onClick={() => onConfirmar(codigo)} disabled={!hayTipos || !codigo} className={BOTON_PRIMARIO_CLS}>
-            {abreEnPestana ? <ExternalLink className="h-4 w-4" aria-hidden="true" /> : <FilePlus2 className="h-4 w-4" aria-hidden="true" />}
+            {abreEnPestana ? <ExternalLink className="h-4 w-4" aria-hidden="true" /> : <IconoDxCrearTramite tamano={16} />}
             {textoConfirmar}
           </button>
         </div>
@@ -399,7 +400,8 @@ export function AccionTramiteFila({
         onClick={alPulsar}
         className={FILA_CLS}
       >
-        <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
+        {/* HU #14562 · N5: el mismo glifo de «Crear trámite» que el pie del panel del dictamen. */}
+        <IconoDxCrearTramite tamano={16} className="h-3.5 w-3.5" />
         {enviando ? "Creando…" : "Crear trámite"}
       </button>
     );

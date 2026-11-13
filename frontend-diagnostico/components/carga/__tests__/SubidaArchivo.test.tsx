@@ -3,6 +3,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SubidaArchivo } from "@/components/carga/SubidaArchivo";
 import { ID, archivo, llamadas, resumen, ruta, simularApi } from "./datos";
 
+/**
+ * La alerta con texto. Observación 8 del code review (HU #14562): la ZonaArrastre del kit deja su región role="alert"
+ * vacía desde el montaje, así que junto al InlineAlert del error de la API hay dos alertas; se busca la que tiene texto.
+ */
+const alertaConTexto = async () => {
+  let alerta: HTMLElement | undefined;
+  await waitFor(() => {
+    alerta = screen.getAllByRole("alert").find((a) => (a.textContent ?? "").trim() !== "");
+    expect(alerta).toBeDefined();
+  });
+  return alerta as HTMLElement;
+};
+
 // Uso de ejemplo: <SubidaArchivo diagnosticoId={id} onResumen={(r) => ...} /> ofrece la plantilla, acepta .xlsx y .csv y
 // sube el archivo a POST /diagnosticos/{id}/carga; con el resumen llama a onResumen, y con un rechazo muestra el motivo.
 
@@ -89,7 +102,7 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     montar();
     subir(archivo("flota.xlsx"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("El archivo .xlsx está dañado.");
+    expect(await alertaConTexto()).toHaveTextContent("El archivo .xlsx está dañado.");
   });
 
   it("el 413 avisa que el archivo supera el tamaño máximo", async () => {
@@ -98,7 +111,7 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     montar();
     subir(archivo("flota.xlsx"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("El archivo supera 5 MB.");
+    expect(await alertaConTexto()).toHaveTextContent("El archivo supera 5 MB.");
   });
 
   it("un 500 se muestra como error genérico con Reintentar, que vuelve a subir el mismo archivo", async () => {
@@ -108,7 +121,7 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     const { onResumen } = montar();
     subir(archivo("flota.csv", "text/csv"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/intenta de nuevo/i);
+    expect(await alertaConTexto()).toHaveTextContent(/intenta de nuevo/i);
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(onResumen).toHaveBeenCalled());
     expect(llamadas(api, "POST", ruta("/carga"))).toHaveLength(2);

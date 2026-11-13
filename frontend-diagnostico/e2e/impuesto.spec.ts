@@ -14,6 +14,36 @@ import { lanzarExpress } from "./express";
  *   pnpm --dir frontend exec playwright test ../frontend-diagnostico/e2e/impuesto.spec.ts
  *
  * Las credenciales son de usuarios de prueba y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - textbox «Placa o VIN»
+ *   - button «Diagnosticar en línea»
+ *   - checkbox «Impuesto departamental»
+ *   - table «/semáforo de consultas/i»
+ *   - link «new RegExp(`^Ver detalle de Impuesto departamental de ${PLACA}`)»
+ *   - heading «Impuesto departamental · ${PLACA}»
+ *   - group «Respuesta de la fuente»
+ *   - term (sin nombre)
+ *   - definition (sin nombre)
+ *   - table «Vigencias»
+ *   - columnheader «Pagada»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «/contraseña/i»
+ *   - texto «/^(Sí|No)$/»
+ *   - texto «/proveedor/i»
+ *   - texto «/manual|a mano/i»
+ *   - texto «/^Monto total$/»
+ *   - texto «/^Vigencias$/»
+ *   Del helper express.ts (lanzarExpress):
+ *     - textbox «Placa o VIN»
+ *     - button «Diagnosticar en línea»
+ *     - textbox «Nombre del diagnóstico»
+ *     - button «/^(Continuar|Iniciar diagnóstico)$/»
+ *     - button «Lanzar diagnóstico»
+ *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 /** Placa de prueba terminada en 1: RUNT e impuesto simulados responden con éxito. */

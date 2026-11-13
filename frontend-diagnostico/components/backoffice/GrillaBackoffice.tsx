@@ -30,6 +30,7 @@ import { puedeOperarBackoffice } from "@/lib/sesion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
+import { IconoDxManual } from "@/components/dx/iconos/IconoDxManual";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 export interface GrillaBackofficeProps {
@@ -53,11 +54,14 @@ const BOTON_LLENAR_CLS = BOTON_PRIMARIO_CLS.replace("px-5 py-2 text-sm", "px-3 p
 /** Ruta de la lista de lotes de la compañía elegida. */
 const rutaLista = (empresa: string) => `/backoffice/diagnosticos?empresa=${encodeURIComponent(empresa)}`;
 
-/** Marca de origen manual (texto e icono, nunca solo color). Solo existe en el backoffice (Q5). */
+/**
+ * Marca de origen manual (texto e icono, nunca solo color). Solo existe en el backoffice (Q5). HU #14562 · M7: el glifo es
+ * IconoDxManual, decorativo junto al texto, a 12 px como el ícono anterior.
+ */
 export function MarcaManual() {
   return (
     <Etiqueta tono="info">
-      <Icono nombre="lapiz" className="h-3 w-3" />
+      <IconoDxManual tamano={16} className="h-3 w-3" />
       Manual
     </Etiqueta>
   );

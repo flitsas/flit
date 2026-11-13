@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { REGION_VIVA_RETARDO_MS } from "@flit/ui/useRegionViva";
 import { ZonaArrastre } from "@flit/ui/ZonaArrastre";
 
 // Uso de ejemplo: <ZonaArrastre etiqueta="Archivo de vehículos" aceptar={[".xlsx", ".csv"]} maxBytes={5_000_000}
@@ -66,7 +67,7 @@ describe("ZonaArrastre (HU #14562 · AC10)", () => {
     expect(onArchivo).toHaveBeenCalledTimes(1);
   });
 
-  it("muestra el archivo elegido con «Quitar» que llama onArchivo(null), y el error externo", () => {
+  it("muestra el archivo elegido con «Quitar» que llama onArchivo(null), y el error externo", async () => {
     const onArchivo = vi.fn();
     render(
       <ZonaArrastre
@@ -82,6 +83,38 @@ describe("ZonaArrastre (HU #14562 · AC10)", () => {
     expect(screen.getByText("lote.xlsx")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Quitar archivo" }));
     expect(onArchivo).toHaveBeenCalledWith(null);
-    expect(screen.getByRole("alert")).toHaveTextContent("El servidor rechazó el archivo");
+    // Observación 8 del code review: la región nace vacía y recibe el error un instante después (patrón de useRegionViva).
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("El servidor rechazó el archivo"));
+  });
+});
+
+// Observación 8 del code review (HU #14562): la región `role="alert"` existe vacía desde el montaje, para que el lector
+// de pantalla anuncie el primer error. Un error que ya viene al montar se escribe pasado el retardo de useRegionViva.
+describe("ZonaArrastre: región de error estable (code review, observación 8)", () => {
+  it("sin error, la región role=alert ya existe y está vacía", () => {
+    base();
+    expect(screen.getByRole("alert")).toBeEmptyDOMElement();
+  });
+
+  it("con un error al montar, la región nace vacía y lo recibe tras el retardo", () => {
+    vi.useFakeTimers();
+    try {
+      render(<ZonaArrastre etiqueta="Archivo" aceptar={[".xlsx"]} maxBytes={100} onArchivo={vi.fn()} error="El servidor rechazó el archivo" />);
+      expect(screen.getByRole("alert")).toBeEmptyDOMElement();
+      act(() => {
+        vi.advanceTimersByTime(REGION_VIVA_RETARDO_MS);
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent("El servidor rechazó el archivo");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("un rechazo por la acción del usuario se escribe en la misma región, sin esperar", () => {
+    base();
+    const region = screen.getByRole("alert");
+    fireEvent.change(screen.getByLabelText("Archivo de vehículos", { selector: "input" }), { target: { files: [archivo("x.pdf")] } });
+    expect(screen.getByRole("alert")).toBe(region);
+    expect(region).toHaveTextContent(/Formato no admitido/);
   });
 });

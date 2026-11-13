@@ -42,7 +42,7 @@ describe("HU14562 AC50 campana en la barra", () => {
     expect(items[0]).toHaveTextContent("Diagnóstico terminado");
     expect(items[0]).toHaveTextContent("El lote «Lote flota norte» terminó.");
     expect(items[0]).toHaveTextContent("12/11/2026");
-    expect(within(items[0]).getByRole("link", { name: "Ver lote" })).toHaveAttribute("href", `/diagnosticos/${LOTE}`);
+    expect(within(items[0]).getByRole("link", { name: /^Ver lote/ })).toHaveAttribute("href", `/diagnosticos/${LOTE}`);
   });
 
   it("abrir un aviso lo marca leído (POST …/leida) y «Marcar todas como leídas» llama POST …/leer-todas", async () => {
@@ -56,7 +56,7 @@ describe("HU14562 AC50 campana en la barra", () => {
     render(<CampanaDiagnostico />);
     await screen.findByRole("button", { name: "Avisos, 2 avisos sin leer" });
     const panel = await abrir();
-    fireEvent.click(within(panel).getAllByRole("link", { name: "Ver lote" })[0]);
+    fireEvent.click(within(panel).getAllByRole("link", { name: /^Ver lote/ })[0]);
     await screen.findByRole("button", { name: "Avisos, 1 aviso sin leer" });
     expect(pedidos(api, `${RUTA}/${a1.id}/leida`)).toHaveLength(1);
     fireEvent.click(await abrir().then((p) => within(p).getByRole("button", { name: "Marcar todas como leídas" })));
@@ -195,5 +195,68 @@ describe("HU14562 M5 contraste del contador de la campana", () => {
     const oscuro = valor(bloque(".dark"), "--kit-rojo") ?? claro;
     expect(claro).not.toBeNull();
     for (const fondo of [claro!, oscuro!]) expect(contraste("#ffffff", fondo)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// HU #14562 · m-7 (auditoría de UI): Escape también desde el botón, el error de descarga se anuncia y cada acción de la
+// lista tiene un nombre propio. m-1: el panel es un menú de Diagnóstico y usa --dx-radio, --dx-sombra-dock y aparece por
+// opacidad con --dx-motion-base.
+describe("HU14562 m-7 y m-1 campana", () => {
+  it("m-7: Escape con el foco en el botón cierra el panel abierto", async () => {
+    simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([])) });
+    render(<CampanaDiagnostico />);
+    await abrir();
+    const boton = screen.getByRole("button", { name: "Avisos" });
+    boton.focus();
+    fireEvent.keyDown(boton, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Avisos" })).toBeNull();
+    expect(boton).toHaveFocus();
+  });
+
+  it("m-7: si la descarga del ZIP falla desde la lista, el error se anuncia con role=alert", async () => {
+    // Once: el beforeEach devuelve el mock y vitest lo llama como teardown al terminar la prueba.
+    h.descargar.mockImplementationOnce(async () => {
+      throw new Error("No se pudo descargar el archivo.");
+    });
+    const zip = aviso(9, { tipo: "ZIP_EVIDENCIAS_LISTO", referencia_id: EVIDENCIA });
+    simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([zip])) });
+    render(<CampanaDiagnostico />);
+    const panel = await abrir();
+    fireEvent.click(within(panel).getByRole("button", { name: /^Descargar/ }));
+    const alerta = await within(panel).findByRole("alert");
+    expect(alerta).toHaveTextContent("No se pudo descargar el archivo.");
+    expect(alerta.textContent?.trim()).not.toBe("");
+  });
+
+  it("m-7: cada acción de la lista tiene un nombre único que empieza por su texto visible", async () => {
+    simularApi({
+      [`GET ${RUTA}`]: bandejas(
+        bandeja([
+          aviso(1, { diagnostico_nombre: "Lote flota norte" }),
+          aviso(2, { diagnostico_nombre: "Lote flota sur" }),
+          aviso(3, { tipo: "ZIP_EVIDENCIAS_LISTO", diagnostico_nombre: "Lote flota norte" }),
+          aviso(4, { tipo: "ZIP_EVIDENCIAS_LISTO", diagnostico_nombre: "Lote flota sur" }),
+        ]),
+      ),
+    });
+    render(<CampanaDiagnostico />);
+    const panel = await abrir();
+    const ver = within(panel).getAllByRole("link", { name: /^Ver lote/ });
+    const descargar = within(panel).getAllByRole("button", { name: /^Descargar/ });
+    expect(ver).toHaveLength(2);
+    expect(descargar).toHaveLength(2);
+    const nombres = [...ver, ...descargar].map((el) => el.textContent);
+    expect(new Set(nombres).size).toBe(4);
+    expect(ver[0]).toHaveTextContent(/Lote flota norte/);
+  });
+
+  it("m-1: el panel usa --dx-radio, --dx-sombra-dock y aparece por opacidad con --dx-motion-base", async () => {
+    simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([])) });
+    render(<CampanaDiagnostico />);
+    const clases = (await abrir()).className.split(/\s+/);
+    expect(clases).toContain("rounded-[var(--dx-radio)]");
+    expect(clases).toContain("shadow-[var(--dx-sombra-dock)]");
+    expect(clases).toContain("duration-[var(--dx-motion-base)]");
+    expect(clases).toContain("motion-reduce:transition-none");
   });
 });

@@ -1,11 +1,11 @@
 "use client";
 
-import { useId, useRef, type ReactNode } from "react";
+import { useContext, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { Icono } from "./Icono";
 import { MODAL_TITULO_CLS, MODAL_VELO_CLS } from "./Modal";
-import { useTrampaFoco } from "./useTrampaFoco";
+import { ProfundidadCapa, useTrampaFoco } from "./useTrampaFoco";
 
 /**
  * Panel lateral (drawer) del Manual UI Kit 2026 (HU #14562 · UI-1): se abre a la derecha sobre el velo del Modal, con
@@ -50,6 +50,8 @@ export function PanelLateral({
 }: PanelLateralProps) {
   const tituloId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  // Observación 7 del code review: un Modal dentro del panel sabe que va encima (orden de la pila de useTrampaFoco).
+  const profundidad = useContext(ProfundidadCapa);
 
   // Al abrir, el foco va al primer control del panel; Escape cierra salvo que esté ocupado.
   useTrampaFoco({
@@ -67,6 +69,7 @@ export function PanelLateral({
   };
 
   return createPortal(
+    <ProfundidadCapa.Provider value={profundidad + 1}>
     <div
       role="dialog"
       aria-modal="true"
@@ -109,7 +112,8 @@ export function PanelLateral({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>
         {pie ? <div className="shrink-0 border-t border-[color:var(--di-divider)] px-6 py-4">{pie}</div> : null}
       </div>
-    </div>,
+    </div>
+    </ProfundidadCapa.Provider>,
     document.body,
   );
 }

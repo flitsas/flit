@@ -19,6 +19,8 @@ function montar(filas: FilaResumen[] = [FILA_ERRONEA], onFilaRevalidada = vi.fn(
 
 const identificador = (n = 3) => screen.getByRole("textbox", { name: `Identificador de la fila ${n}` });
 const filaDe = (n = 3) => identificador(n).closest("tr") as HTMLElement;
+/** Región viva de la TablaEditable (HU #14562 · N3: sin aria-label, se ubica junto a la tabla). */
+const regionDeLaTabla = () => within(screen.getByRole("table", { name: "Filas con errores" }).parentElement as HTMLElement).getByRole("status");
 
 describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
   it("editar una fila con un valor válido la revalida al vuelo y pasa a válida", async () => {
@@ -161,27 +163,49 @@ describe("TablaFilasCorregibles sobre TablaEditable (HU #14562 · M12)", () => {
     expect(screen.getByRole("table", { name: "Filas con errores" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Estado" })).toBeInTheDocument();
     expect(screen.getByRole("rowheader", { name: "3" })).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "Estado de Filas con errores" })).toBeEmptyDOMElement();
+    expect(regionDeLaTabla()).toBeEmptyDOMElement();
+    // HU #14562 · N3: la fila se nombra «Fila N»; la clave interna no es su nombre accesible.
+    expect(screen.getByRole("row", { name: "Fila 3" })).toBe(filaDe());
   });
 
   it("M12 · AC22: la región viva anuncia «Revalidando» y luego «Corregida» con el número de fila", async () => {
     simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [valida()] })) });
     montar();
     fireEvent.change(identificador(), { target: { value: "TST124" } });
-    const region = screen.getByRole("status", { name: "Estado de Filas con errores" });
-    await waitFor(() => expect(region).toHaveTextContent("3: Corregida"));
+    const region = regionDeLaTabla();
+    expect(region).not.toHaveAttribute("aria-label");
+    await waitFor(() => expect(region).toHaveTextContent("Fila 3: Corregida"));
   });
 
-  it("M12 · AC22 (negativo): si la revalidación falla, «Reintentar 3» lleva el motivo como descripción y no roba el foco", async () => {
+  it("M12 · AC22 (negativo): si la revalidación falla, «Reintentar Fila 3» lleva el motivo como descripción y no roba el foco", async () => {
     simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json({ error: "Servicio no disponible" }, { status: 503 }) });
     montar();
     const campo = identificador();
     campo.focus();
     fireEvent.change(campo, { target: { value: "TST124" } });
-    const reintentar = await within(filaDe()).findByRole("button", { name: "Reintentar 3" });
+    const reintentar = await within(filaDe()).findByRole("button", { name: "Reintentar Fila 3" });
     expect(reintentar).toHaveAccessibleDescription(/.+/);
     expect(within(filaDe()).getByText("Inválido")).toBeInTheDocument();
     expect(campo).toHaveFocus();
     expect(campo).toHaveValue("TST124");
+  });
+});
+
+// HU #14562 · M6 (AC56): la tabla de Carga es la TablaEditable del kit, así que por debajo de 900 px pasa a tarjetas y cada
+// celda lleva el nombre de su columna en data-label.
+describe("TablaFilasCorregibles: tarjetas por debajo de 900 px (HU #14562 · M6)", () => {
+  it("cada celda de la fila lleva su data-label y la tabla no impone un ancho mínimo", () => {
+    simularApi({});
+    montar();
+    const tabla = screen.getByRole("table", { name: "Filas con errores" });
+    expect(tabla.className).not.toMatch(/min-w-\[/);
+    expect(Array.from(filaDe().children).map((c) => c.getAttribute("data-label"))).toEqual([
+      "Fila",
+      "Identificador",
+      "Tipo de documento",
+      "Documento del locatario",
+      "Estado",
+      "Acciones",
+    ]);
   });
 });

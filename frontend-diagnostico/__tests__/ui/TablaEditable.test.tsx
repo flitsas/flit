@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { TablaEditable, type ColumnaEditable } from "@flit/ui/TablaEditable";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <TablaEditable etiqueta="Fuentes" filas={filas} clave={(f) => f.id}
 //   columnas={[{ campo: "nombre", titulo: "Nombre", editable: true }]} onGuardar={guardarFila} />
@@ -84,7 +93,8 @@ describe("TablaEditable (HU #14562 · AC9)", () => {
 // HU #14562 · M3 (auditoría): el foco no cae en body al guardar o descartar y el cambio de estado se anuncia en una
 // región viva propia de la tabla, que existe vacía antes del primer anuncio.
 describe("TablaEditable: foco y anuncio (HU #14562 · M3)", () => {
-  const region = () => screen.getByRole("status", { name: "Estado de Fuentes" });
+  // HU #14562 · N3: la región viva no lleva aria-label (reemplazaría el texto anunciado); es la única de la tabla.
+  const region = () => screen.getByRole("status");
 
   it("M3: la región viva de la tabla nace vacía y anuncia cada cambio de estado con la fila", async () => {
     let resolver!: () => void;
@@ -233,7 +243,8 @@ describe("TablaEditable: estado controlado (HU #14562 · M12)", () => {
         onGuardar={vi.fn()}
       />,
     );
-    expect(editor).toHaveBeenCalledWith("Alfa", expect.any(Function), "Nombre de A", filas[0]);
+    // Observación 3 del code review: el quinto argumento es `guardando` (false fuera de un guardado).
+    expect(editor).toHaveBeenCalledWith("Alfa", expect.any(Function), "Nombre de A", filas[0], false);
   });
 
   it("M12: si el padre cambia la fila y no hay edición pendiente, la tabla muestra el valor nuevo", () => {
@@ -263,5 +274,145 @@ describe("TablaEditable: estado controlado (HU #14562 · M12)", () => {
       />,
     );
     expect(screen.getByRole("textbox", { name: "Nombre de A" })).toHaveValue("Mío");
+  });
+});
+
+// HU #14562 · M6 (AC56): por debajo de 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* y cada celda dice su
+// columna con data-label. En escritorio el marcado es el mismo de antes (solo se suman clases max-[900px]).
+describe("TablaEditable: tarjetas por debajo de 900 px (HU #14562 · M6 · AC56)", () => {
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+  const tiene = (el: Element, receta: string) => {
+    for (const c of receta.split(" ")) expect(clases(el), c).toContain(c);
+  };
+
+  it("tabla, cabecera, cuerpo, filas y celdas llevan las recetas de tarjeta y cada celda su data-label", () => {
+    render(<TablaEditable etiqueta="Fuentes" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} />);
+    const tabla = screen.getByRole("table", { name: "Fuentes" });
+    tiene(tabla, TABLA_MOVIL_TABLE_CLS);
+    tiene(tabla.querySelector("thead")!, TABLA_MOVIL_THEAD_CLS);
+    tiene(tabla.querySelector("tbody")!, TABLA_MOVIL_TBODY_CLS);
+    for (const tr of tabla.querySelectorAll("tbody tr")) {
+      tiene(tr, TABLA_MOVIL_ROW_CLS);
+      const celdas = Array.from(tr.children);
+      expect(celdas.map((c) => c.getAttribute("data-label"))).toEqual(["Código", "Nombre", "Límite", "Estado", "Acciones"]);
+      for (const c of celdas) tiene(c, TABLA_MOVIL_CELL_CLS);
+      tiene(celdas[0], TABLA_MOVIL_CELL_TITULO_CLS);
+    }
+  });
+
+  it("la fila vacía ocupa la rejilla entera", () => {
+    render(<TablaEditable etiqueta="Fuentes" filas={[]} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} vacio="No hay fuentes" />);
+    const celda = screen.getByText("No hay fuentes");
+    tiene(celda, TABLA_MOVIL_FILA_ANCHA_CLS);
+    tiene(celda.closest("tr")!, TABLA_MOVIL_FILA_ANCHA_CLS);
+  });
+
+  it("retrocompatible: la cabecera sigue siendo legible por lector de pantalla y las columnas conservan su nombre", () => {
+    render(<TablaEditable etiqueta="Fuentes" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} />);
+    for (const t of ["Código", "Nombre", "Límite", "Estado", "Acciones"]) expect(screen.getByRole("columnheader", { name: t })).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "A" })).toBeInTheDocument();
+  });
+});
+
+// HU #14562 · N3 y observación 4 del code review: el nombre accesible de la fila sale de `nombreFila`, separado de la
+// `clave` (que solo identifica la fila para React). La región viva no lleva aria-label y dos anuncios iguales seguidos se
+// vuelven a anunciar.
+describe("TablaEditable: nombreFila y región viva (HU #14562 · N3)", () => {
+  it("N3: la región viva no tiene aria-label, así el lector lee su texto", () => {
+    render(<TablaEditable etiqueta="Fuentes" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} />);
+    expect(screen.getByRole("status")).not.toHaveAttribute("aria-label");
+  });
+
+  it("nombreFila da el nombre de la fila, de sus campos, de sus botones y de sus anuncios; la clave no se anuncia", () => {
+    render(
+      <TablaEditable
+        etiqueta="Fuentes"
+        filas={filas}
+        columnas={columnas}
+        clave={(f) => `id-${f.id}`}
+        nombreFila={(f) => `Fila ${f.id}`}
+        onGuardar={vi.fn()}
+      />,
+    );
+    const a = screen.getByRole("row", { name: "Fila A" });
+    fireEvent.change(within(a).getByRole("textbox", { name: "Nombre de Fila A" }), { target: { value: "Alfa 2" } });
+    expect(within(a).getByRole("button", { name: "Guardar Fila A" })).toBeInTheDocument();
+    expect(within(a).getByRole("button", { name: "Descartar Fila A" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Fila A: Editado");
+    expect(screen.getByRole("status")).not.toHaveTextContent("id-A");
+  });
+
+  it("sin nombreFila se usa la clave, como antes", () => {
+    render(<TablaEditable etiqueta="Fuentes" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} />);
+    expect(screen.getByRole("row", { name: "A" })).toBeInTheDocument();
+  });
+
+  it("dos anuncios idénticos seguidos se repiten: un segundo fallo al reintentar se vuelve a anunciar", async () => {
+    const onGuardar = vi.fn().mockRejectedValue(new Error("500"));
+    render(
+      <TablaEditable
+        etiqueta="Fuentes"
+        filas={filas}
+        columnas={columnas}
+        clave={(f) => f.id}
+        onGuardar={onGuardar}
+        errorFila={(f) => (f.id === "A" ? "El servidor no respondió." : null)}
+      />,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre de A" }), { target: { value: "Alfa 9" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Guardar A" })); });
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("A: Error de guardado. El servidor no respondió.");
+    const primero = region.firstElementChild;
+    expect(primero).not.toBeNull();
+    // Guardando y el nuevo error llegan en el mismo lote de render: el texto es el mismo, pero el nodo cambia.
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Reintentar A" })); });
+    expect(onGuardar).toHaveBeenCalledTimes(2);
+    expect(region).toHaveTextContent("A: Error de guardado. El servidor no respondió.");
+    expect(region.firstElementChild).not.toBe(primero);
+  });
+});
+
+// Observación 3 del code review: mientras la fila guarda, la tabla ignora los cambios del editor y le avisa con el quinto
+// argumento (`guardando`) para que el control propio pueda quedar de solo lectura.
+describe("TablaEditable: ediciones durante el guardado (code review, observación 3)", () => {
+  it("mientras guarda, un cambio del editor no toca el borrador y el editor recibe guardando=true", async () => {
+    let resolver!: () => void;
+    const onGuardar = vi.fn(() => new Promise<void>((r) => { resolver = r; }));
+    const editor = vi.fn(
+      (valor: unknown, onCambio: (v: string) => void, etiqueta: string, _fila: Fila, guardando?: boolean) => (
+        <input aria-label={etiqueta} data-guardando={guardando ? "si" : "no"} value={String(valor)} onChange={(e) => onCambio(e.target.value)} />
+      ),
+    );
+    render(
+      <TablaEditable
+        etiqueta="Fuentes"
+        filas={filas}
+        columnas={[columnas[0], { ...columnas[1], editor: editor as never }, columnas[2]]}
+        clave={(f) => f.id}
+        onGuardar={onGuardar}
+      />,
+    );
+    const campo = screen.getByRole("textbox", { name: "Nombre de A" });
+    expect(campo).toHaveAttribute("data-guardando", "no");
+    fireEvent.change(campo, { target: { value: "Alfa 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar A" }));
+    expect(screen.getByRole("textbox", { name: "Nombre de A" })).toHaveAttribute("data-guardando", "si");
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre de A" }), { target: { value: "Durante" } });
+    expect(screen.getByRole("textbox", { name: "Nombre de A" })).toHaveValue("Alfa 2");
+    expect(onGuardar).toHaveBeenCalledWith({ id: "A", nombre: "Alfa 2", limite: "10" });
+    await act(async () => { resolver(); });
+    expect(screen.getByRole("textbox", { name: "Nombre de A" })).toHaveValue("Alfa 2");
+  });
+
+  it("mientras guarda, el campo de texto por defecto también ignora lo que llegue", async () => {
+    let resolver!: () => void;
+    const onGuardar = vi.fn(() => new Promise<void>((r) => { resolver = r; }));
+    render(<TablaEditable etiqueta="Fuentes" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={onGuardar} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Límite de A" }), { target: { value: "11" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar A" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Nombre de A" }), { target: { value: "Durante" } });
+    expect(screen.getByRole("textbox", { name: "Nombre de A" })).toHaveValue("Alfa");
+    await act(async () => { resolver(); });
   });
 });

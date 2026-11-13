@@ -442,3 +442,47 @@ describe("PanelDictamen — HU #14562 F-05: atajo «Crear trámite» en el pie",
     expect(screen.queryByRole("button", { name: /crear trámite/i })).toBeNull();
   });
 });
+
+// HU #14562 · N4 (reauditoría): con «Aplicar» en el pie, «Crear trámite» pasa a secundario (un solo primario por pie).
+// m-11: «Aplicar» confirma un cambio, así que va en la variante positiva (verde) del kit.
+describe("PanelDictamen — HU #14562 N4 y m-11: jerarquía de botones en el pie", () => {
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+  const VERDE = "bg-[color:var(--kit-verde)]";
+  const PRIMARIO = "bg-[color:var(--kit-azul-relleno)]";
+  const SECUNDARIO = "bg-[color:var(--kit-tinta)]";
+
+  it("con «Aplicar» presente, «Crear trámite» es secundario y «Aplicar» va en positiva", async () => {
+    simularApi({ [`GET ${RUTA_BO}`]: () => Response.json({ ...LLENO, veredicto: "VIABLE", alertamientos: [] }) });
+    pintar({ modo: "backoffice", empresa: EMPRESA_A, puedeCorregir: true, onCrearTramite: vi.fn() });
+    await screen.findByText(/Veredicto:/);
+    const panel = screen.getByRole("dialog", { name: "Dictamen · TST001" });
+    const crear = within(panel).getByRole("button", { name: "Crear trámite" });
+    const aplicar = within(panel).getByRole("button", { name: "Aplicar" });
+    expect(clases(crear)).not.toContain(PRIMARIO);
+    expect(clases(crear)).toContain(SECUNDARIO);
+    expect(clases(aplicar)).toContain(VERDE);
+  });
+
+  it("sin «Aplicar», «Crear trámite» sigue siendo el primario del pie", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, veredicto: "VIABLE", alertamientos: [] }) });
+    pintar({ onCrearTramite: vi.fn() });
+    await screen.findByText("Viable");
+    const crear = within(screen.getByRole("dialog", { name: "Dictamen · TST001" })).getByRole("button", { name: "Crear trámite" });
+    expect(clases(crear)).toContain(PRIMARIO);
+  });
+});
+
+// HU #14562 · m-11: el motivo no nace inválido. El error aparece al salir del campo o en cuanto el usuario escribe.
+describe("PanelDictamen — HU #14562 m-11: validación del motivo", () => {
+  it("al abrir, el motivo no está marcado como inválido ni muestra el error; al salir vacío, sí", async () => {
+    simularApi({ [`GET ${RUTA_BO}`]: () => Response.json(LLENO) });
+    pintar({ modo: "backoffice", empresa: EMPRESA_A, puedeCorregir: true });
+    await screen.findByText(/Veredicto:/);
+    const motivo = screen.getByRole("textbox", { name: "Motivo del ajuste" });
+    expect(motivo).not.toHaveAttribute("aria-invalid");
+    expect(screen.queryByText("El motivo es obligatorio.")).toBeNull();
+    fireEvent.blur(motivo);
+    expect(motivo).toHaveAttribute("aria-invalid", "true");
+    expect(motivo).toHaveAccessibleDescription(/El motivo es obligatorio\./);
+  });
+});

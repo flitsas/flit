@@ -44,10 +44,10 @@ const enOrden = (...grillas: Grilla[]) => {
 };
 
 /**
- * Chip del estado del lote. HU #14562 (auditoría m-5): EN_PROCESO usa la EtiquetaEnProceso del kit, cuyo nombre es
- * «Estado: En proceso»; el resto de estados conserva «Estado del lote: …».
+ * Chip del estado del lote. HU #14562 (auditoría m-5): EN_PROCESO usa la EtiquetaEnProceso del kit; N2 (reauditoría): con
+ * `nombreAccesible`, todos los estados se nombran igual, «Estado del lote: …».
  */
-const estadoGlobal = () => screen.getByRole("status", { name: /^estado( del lote)?: /i });
+const estadoGlobal = () => screen.getByRole("status", { name: /^Estado del lote: / });
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });

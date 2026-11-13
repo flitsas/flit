@@ -19,6 +19,7 @@ import {
 } from "@flit/ui/table-styles";
 import {
   BOTON_REINTENTAR_CLS,
+  BOTON_SECUNDARIO_CLS,
   CAMPO_CLS,
   ETIQUETA_CLS,
   MARCA_CLS,
@@ -273,7 +274,8 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         icono="diagnostico"
         encima={<BandaBackoffice />}
         acciones={
-          <Link href="/backoffice/fuentes-obligatorias" className={BOTON_REINTENTAR_CLS}>
+          // HU #14562 · m-13: acceso de navegación en secundario, no la píldora de 12 px de «Reintentar».
+          <Link href="/backoffice/fuentes-obligatorias" className={BOTON_SECUNDARIO_CLS}>
             Fuentes obligatorias
           </Link>
         }

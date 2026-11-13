@@ -112,9 +112,11 @@ export function CampanaDiagnostico() {
                 {fechaDelDato(item.creada_en)}
               </time>
               <div>
+                {/* HU #14562 · m-7: nombre único por aviso (texto visible + mensaje y fecha para el lector de pantalla). */}
                 {esZipDescargable(item) ? (
                   <button type="button" onClick={() => void descargar(item)} className={BOTON_TEXTO}>
                     Descargar
+                    <span className="sr-only">{`: ${texto!.mensaje} (${fechaDelDato(item.creada_en)})`}</span>
                   </button>
                 ) : (
                   <Link href={`/diagnosticos/${encodeURIComponent(item.diagnostico_id)}`} onClick={() => {
@@ -124,9 +126,14 @@ export function CampanaDiagnostico() {
                     className={BOTON_TEXTO}
                   >
                     Ver lote
+                    <span className="sr-only">{`: ${texto!.mensaje} (${fechaDelDato(item.creada_en)})`}</span>
                   </Link>
                 )}
-                {errorDescarga[item.id] && <p className="text-xs text-[color:var(--di-danger)]">{errorDescarga[item.id]}</p>}
+                {errorDescarga[item.id] && (
+                  <p role="alert" className="text-xs text-[color:var(--di-danger)]">
+                    {errorDescarga[item.id]}
+                  </p>
+                )}
               </div>
             </div>
           </li>
@@ -145,6 +152,13 @@ export function CampanaDiagnostico() {
         aria-controls={abierto ? `${id}-panel` : undefined}
         data-cargado={n.estado !== "cargando"}
         onClick={() => setAbierto((a) => !a)}
+        // HU #14562 · m-7: Escape cierra el panel también con el foco en el botón.
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && abierto) {
+            e.preventDefault();
+            cerrarPanel();
+          }
+        }}
         className={`relative inline-flex size-10 items-center justify-center rounded-full text-[color:var(--di-text-primary)] hover:bg-[color:var(--di-accent-soft)] ${FOCO}`}
       >
         <IconoDxCampana />
@@ -167,7 +181,8 @@ export function CampanaDiagnostico() {
           onKeyDown={(e) => {
             if (e.key === "Escape") cerrarPanel();
           }}
-          className="absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--kit-sombra)]"
+          // HU #14562 · m-1: menú propio de Diagnóstico, con su radio, su sombra de dock y su motion (por opacidad).
+          className="absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--dx-radio)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--dx-sombra-dock)] opacity-100 transition-opacity duration-[var(--dx-motion-base)] starting:opacity-0 motion-reduce:transition-none"
         >
           <div className="flex items-center justify-between gap-2 border-b border-[color:var(--di-divider)] px-4 py-3">
             <h2 className="text-sm font-semibold text-[color:var(--di-heading)]">Avisos</h2>

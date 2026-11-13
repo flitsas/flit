@@ -56,13 +56,13 @@ function bloque(re: RegExp): string {
 }
 
 const ESTADOS = ["pendiente", "en-curso", "ejecutado", "deuda", "error", "novedad", "sin-solicitar"];
+// HU #14562 · m-1: sin -fondo ni --dx-panel-lateral-ancho (no tenían consumidor; ver el bloque m-1 al final).
 const OBLIGATORIOS = [
-  ...ESTADOS.flatMap((e) => [`--dx-estado-${e}`, `--dx-estado-${e}-fondo`, `--dx-estado-${e}-borde`]),
+  ...ESTADOS.flatMap((e) => [`--dx-estado-${e}`, `--dx-estado-${e}-borde`]),
   "--dx-radio",
   "--dx-sombra-dock",
   "--dx-motion-rapido",
   "--dx-motion-base",
-  "--dx-panel-lateral-ancho",
 ];
 
 describe("AC1 · tokens --dx-* aislados en Diagnóstico", () => {
@@ -80,7 +80,7 @@ describe("AC1 · tokens --dx-* aislados en Diagnóstico", () => {
     expect(shell).toBeGreaterThan(dx);
   });
 
-  it("declara en :root los tokens del inventario: estados (con fondo y borde), radio, sombra, motion y panel", () => {
+  it("declara en :root los tokens del inventario: estados (con borde), radio, sombra y motion", () => {
     const raiz = declarados(bloque(/(?:^|\n):root\s*\{([^}]*)\}/));
     for (const token of OBLIGATORIOS) expect(raiz, token).toContain(token);
   });
@@ -129,8 +129,26 @@ describe("AC5 · motion y movimiento reducido", () => {
     for (const token of motion) expect(reducido).toMatch(new RegExp(`${token}:\\s*0ms`));
   });
 
-  it("el panel lateral mide 640 px", () => {
-    expect(bloque(/(?:^|\n):root\s*\{([^}]*)\}/)).toMatch(/--dx-panel-lateral-ancho:\s*640px/);
+});
+
+// HU #14562 · m-1 (auditoría de UI): un token del inventario que nadie consume sobra. Se retiraron los -fondo (el chip
+// del kit calcula su fondo al 10 % del borde), --dx-panel-lateral-ancho (PanelLateral ya mide 640 px por defecto) y
+// --dx-icono-tinte (el visto del dictamen se traza con la superficie, m-10).
+describe("m-1 · todo token --dx-* tiene consumidor", () => {
+  it("cada token declarado en :root se usa fuera de tokens-dx.css y de las pruebas", () => {
+    const fuentes = ["components", "app", "lib"]
+      .flatMap((raiz) => archivos(join(DIAGNOSTICO, raiz)))
+      .filter((ruta) => !/tokens-dx\.css$/.test(ruta) && !/(__tests__|\.test\.)/.test(ruta))
+      .map((ruta) => readFileSync(ruta, "utf8"))
+      .join("\n");
+    // El semáforo arma el nombre con el tono: `var(--dx-estado-${tono})` y `var(--dx-estado-${tono}-borde)`.
+    const porTono = (token: string) => {
+      const m = token.match(/^--dx-estado-(.+?)(-borde)?$/);
+      return !!m && ESTADOS.includes(m[1]) && fuentes.includes("var(--dx-estado-${tono}" + (m[2] ?? "") + ")");
+    };
+    const raiz = declarados(bloque(/(?:^|\n):root\s*\{([^}]*)\}/));
+    const sinUso = raiz.filter((t) => !fuentes.includes(`var(${t})`) && !porTono(t));
+    expect(sinUso, `tokens sin consumidor: ${sinUso.join(", ")}`).toEqual([]);
   });
 });
 
