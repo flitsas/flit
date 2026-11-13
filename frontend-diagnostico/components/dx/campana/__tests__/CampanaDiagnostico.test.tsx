@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
@@ -156,5 +158,42 @@ describe("HU14562 AC54 campana vacía o con error", () => {
     fireEvent.click(within(panel).getByRole("button", { name: "Reintentar" }));
     expect(await within(panel).findByText("Diagnóstico terminado")).toBeInTheDocument();
     expect(pedidos(api, RUTA)).toHaveLength(2);
+  });
+});
+
+// HU #14562, auditoría de UI M5 (1.4.3): el contador de la campana llega a 4,5:1 también en modo oscuro. Blanco sobre
+// --di-danger daba 2,78:1 en oscuro (#ff6b6b); el fondo pasa a --kit-rojo, que vale lo mismo en los dos temas.
+describe("HU14562 M5 contraste del contador de la campana", () => {
+  const tokens = readFileSync(resolve(__dirname, "../../../../../packages/ui/src/styles/tokens.css"), "utf8");
+  const bloque = (selector: string) => {
+    const i = tokens.indexOf(`${selector} {`);
+    return i < 0 ? "" : tokens.slice(i, tokens.indexOf("\n}", i));
+  };
+  const valor = (css: string, token: string) => new RegExp(`${token}:\\s*(#[0-9a-fA-F]{6})`).exec(css)?.[1] ?? null;
+  const luminancia = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contraste = (a: string, b: string) => {
+    const [x, y] = [luminancia(a), luminancia(b)].sort((m, n) => n - m);
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  it("el contador usa texto blanco sobre --kit-rojo, no sobre --di-danger", async () => {
+    simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([aviso(1)])) });
+    render(<CampanaDiagnostico />);
+    const boton = await screen.findByRole("button", { name: "Avisos, 1 aviso sin leer" });
+    const contador = boton.querySelector("span[aria-hidden='true']") as HTMLElement;
+    expect(contador).toHaveTextContent("1");
+    expect(contador.className).toContain("bg-[color:var(--kit-rojo)]");
+    expect(contador.className).not.toContain("--di-danger");
+    expect(contador.className).toContain("text-white");
+  });
+
+  it("blanco sobre --kit-rojo da 4,5:1 o más en claro y en oscuro", () => {
+    const claro = valor(bloque(":root"), "--kit-rojo");
+    const oscuro = valor(bloque(".dark"), "--kit-rojo") ?? claro;
+    expect(claro).not.toBeNull();
+    for (const fondo of [claro!, oscuro!]) expect(contraste("#ffffff", fondo)).toBeGreaterThanOrEqual(4.5);
   });
 });
