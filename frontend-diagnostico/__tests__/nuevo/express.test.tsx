@@ -280,3 +280,58 @@ describe("Express — resultado «Diagnóstico iniciado» con redirección de 5 
     expect(screen.getByText("Detuvimos la redirección. Sigues en esta página.")).toHaveAttribute("aria-live", "polite");
   });
 });
+
+describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () => {
+  it("AC16: el pie ofrece Cancelar hacia el inicio y el botón principal entra en estado cargando mientras se crea", async () => {
+    let soltar: (r: Response) => void = () => {};
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => new Promise<Response>((r) => (soltar = r)) } });
+    await nombre();
+    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
+    await continuar();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continuar" })).toHaveAttribute("aria-busy", "true"));
+    soltar(creadoOk());
+    expect(await iniciado()).toBeInTheDocument();
+  });
+
+  it("AC16: con el resultado a la vista el selector Express/Masivo se oculta", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    expect(screen.getByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeInTheDocument();
+    await continuar();
+    await iniciado();
+    expect(screen.queryByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeNull();
+  });
+
+  it("AC17: Con Análisis IA sin tipo de trámite no envía y el foco va al tipo de trámite con su error", async () => {
+    const api = montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    const tipo = await screen.findByRole("combobox", { name: /tipo de trámite/i });
+    await continuar();
+    await waitFor(() => expect(tipo).toHaveFocus());
+    expect(tipo).toHaveAttribute("aria-invalid", "true");
+    expect(tipo).toHaveAccessibleDescription(/.+/);
+    expect(llamadas(api, "POST", "/express")).toHaveLength(0);
+  });
+
+  it("AC17: un nombre de más de 150 caracteres se indica en el contador al escribir y bloquea el envío", async () => {
+    const api = montar({ query: "modo=express&placa=TST123" });
+    fireEvent.change(await nombre(), { target: { value: "N".repeat(151) } });
+    expect(screen.getByText(/151\/150/)).toBeInTheDocument();
+    await continuar();
+    expect(await screen.findByText(/admite hasta 150 caracteres/i)).toBeInTheDocument();
+    expect(llamadas(api, "POST", "/express")).toHaveLength(0);
+  });
+
+  it("AC17: si el API responde error, el botón sale de cargando y se conserva lo digitado", async () => {
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({}, { status: 500 }) } });
+    fireEvent.change(await nombre(), { target: { value: "Flota de prueba" } });
+    await continuar();
+    expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
+    const boton = screen.getByRole("button", { name: "Continuar" });
+    expect(boton).not.toHaveAttribute("aria-busy");
+    expect(boton).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Nombre del diagnóstico" })).toHaveValue("Flota de prueba");
+    expect(screen.getByRole("textbox", { name: "Placa o VIN" })).toHaveValue("TST123");
+  });
+});

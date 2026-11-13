@@ -99,10 +99,13 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     expect(impuesto).toBeChecked();
   });
 
-  it("sin el impuesto en fuentes_disponibles no lo ofrece aunque esté contratado", async () => {
+  it("AC16: sin el impuesto en fuentes_disponibles lo muestra deshabilitado con «Disponible cuando…» y no lo envía", async () => {
     montarNuevo(navegacion, { config: configuracion({ contrato: { fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] } }) });
-    await screen.findByRole("group", { name: "Por Vehículo" });
-    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
+    const grupo = await screen.findByRole("group", { name: "Por Vehículo" });
+    const impuesto = within(grupo).getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).toBeDisabled();
+    expect(impuesto).not.toBeChecked();
+    expect(impuesto).toHaveAccessibleDescription(/Disponible cuando la consulta automatizada esté en producción/);
   });
 });
 
@@ -213,5 +216,22 @@ describe("Pantalla única — sin la ruta /carga intermedia (AC3)", () => {
     await screen.findByRole("region", { name: "Resumen de validación" });
     expect(screen.queryByRole("link", { name: /cargar vehículos/i })).not.toBeInTheDocument();
     expect(nav.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("Pantalla única — rediseño del kit 2026 (AC16)", () => {
+  it("el selector Express/Masivo es el SelectorSegmentado del kit", async () => {
+    montarNuevo(navegacion);
+    const grupo = await selector();
+    expect(grupo.className).toContain("--di-surface-sunken");
+  });
+
+  it("el alcance dice «N de 8 fuentes» y se actualiza al marcar", async () => {
+    montarNuevo(navegacion);
+    await screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
+    const parametros = screen.getByRole("region", { name: "Parámetros" });
+    expect(within(parametros).getByText("1 de 8 fuentes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "SIMIT vehículo" }));
+    expect(within(parametros).getByText("2 de 8 fuentes")).toBeInTheDocument();
   });
 });
