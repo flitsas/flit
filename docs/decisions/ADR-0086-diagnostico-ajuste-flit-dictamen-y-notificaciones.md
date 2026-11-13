@@ -13,6 +13,7 @@
 **Diseño detallado**: adjunto de implementación de la HU [BACKEND] #14563 (bloques B1, B7 y B8, y sus diagramas de secuencia) en Azure DevOps.
 **Registro de cambios**:
 - 2026-11-12: versión inicial. Propuesto.
+- 2026-11-13: alineado con el código de la HU #14563 (AC41, AC46). Se añaden la sección «Contrato y migraciones» con las rutas y los archivos reales; el PUT ya no acepta el cuerpo legado sin motivo (B-PR6, retirado junto con el front en la misma oleada); `version_esperada` solo es obligatoria con alertamientos; el filtro de 6 o más dígitos aplica al texto de los alertamientos `AJUSTE_FLIT` y no al motivo (P3 = b); el GET de versiones exige `diagnostico.auditoria.ver`; la purga suma la opción `TamanoLote`. Sigue en Propuesto.
 
 ## Decisiones de producto que este ADR asume
 
@@ -51,17 +52,19 @@ Restricciones:
 - Una marca `ajuste: AGREGADO | EDITADO` en cada alertamiento. Los eliminados se calculan contra la versión anterior.
 
 Reglas del PUT:
-- **Estado completo deseado** y `version_esperada` (si no coincide, 409).
+- **Estado completo deseado.** Sin alertamientos, el PUT solo reemplaza el veredicto (los textos vuelven a la plantilla y la cola los redacta); con alertamientos, nace una versión `MANUAL`/`COMPLETADA`.
+- `version_esperada`: si viene y no coincide con la vigente, 409 `DICTAMEN_DESACTUALIZADO`. Es obligatoria cuando el cuerpo trae alertamientos (si falta, 422 `VERSION_ESPERADA_INVALIDA`).
 - Coherencia: `VIABLE` sin ningún alertamiento `BLOQUEA`; `BLOQUEADO` con al menos uno. Si no se cumple, 422.
 - Si el vehículo ya tiene trámite, exige `confirmar_con_tramite` (409 si falta). El trámite no se revierte.
 - **Motivo obligatorio** (10..500) en todo ajuste nuevo, de veredicto o de alertamientos (D9).
-- Transición (D9): el cuerpo legado `{veredicto, confirmado}` sin motivo se acepta **solo si no cambia el veredicto**; se retira cuando la pantalla nueva del backoffice (F-09) esté en DEV.
+- Transición (D9): estaba previsto aceptar el cuerpo legado `{veredicto, confirmado}` sin motivo solo si no cambiaba el veredicto, hasta que la pantalla nueva del backoffice (F-09) llegara a DEV. **Ya se retiró (B-PR6)**: todo PUT sin motivo válido responde 422 `MOTIVO_REQUERIDO`. El front de la HU #14562 (F-09, F-PR14) dejó de enviar el cuerpo legado en la misma oleada, así que ambos llegan juntos a DEV.
+- Texto de los alertamientos: código del catálogo, `AJUSTE_FLIT` o uno que ya estaba en la vigente, texto de 1 a 500, efecto `BLOQUEA`/`ADVIERTE` y fuente conocida; si no, 422 `ALERTAMIENTO_INVALIDO`. Un `AJUSTE_FLIT` (lo ve la compañía) no admite 6 o más dígitos seguidos. El motivo no lleva filtro de dígitos (P3 = b), porque nunca sale del backoffice.
 
 Qué ve cada uno:
 - **Compañía:** solo `ajustado_por_flit` y `ajustado_en`.
-- **Backoffice:** `GET …/dictamen/versiones`, auditado en `lecturas_backoffice`.
+- **Backoffice:** `GET …/dictamen/versiones` (permiso `diagnostico.auditoria.ver`), auditado en `lecturas_backoffice`. Es la única salida de `ajuste_motivo`.
 
-Permisos: escritura solo FLIT (`diagnostico.backoffice.operacion` + `diagnostico.dictamen.override`).
+Permisos: escritura solo FLIT (política `diagnostico.backoffice.operacion` + permiso `diagnostico.dictamen.override`).
 
 **Política de recálculo (D7 = a):** un dictamen automático posterior (reproceso, llenado manual) **gana**; la marca «ajustado por FLIT» desaparece por construcción (la versión automática nace sin override) y el ajuste queda en la auditoría de backoffice como «superado por recálculo» (derivado al leer, sin columna).
 
@@ -75,6 +78,28 @@ Permisos: escritura solo FLIT (`diagnostico.backoffice.operacion` + `diagnostico
 
 **Decisión registrada:** la fila **no guarda texto ni PII**, solo `tipo`, ids y contadores en `datos`, con un CHECK de forma que impide texto libre. El título y el mensaje se arman al leer, con rótulos fijos y el nombre del lote obtenido por join, que respeta la visibilidad `PROPIOS`. Nunca hay placa, VIN, documento, nombre de persona ni archivo. La descarga vuelve a exigir `diagnostico.reportes.descargar`. La campana es `CampanaDiagnostico` y se monta por la ranura `headerActions` de `SuiteShell` desde `DiagnosticoShell`, sin tocar `@flit/shell`.
 
+## Contrato y migraciones
+
+Rutas reales (prefijo `/api/v1/diagnostico`, contrato `contracts/openapi/diagnostico.v1.yaml`, `info.version` 1.2.0). Las del backoffice cuelgan del grupo `/backoffice` con la empresa explícita en `?empresa=`.
+
+| Método y ruta | Bloque | Permiso | Archivo |
+|---------------|--------|---------|---------|
+| `PUT /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen` (ajuste FLIT) | B7 | política `diagnostico.backoffice.operacion` + `diagnostico.dictamen.override` | `Modulos/Backoffice/OverrideDictamenEndpoints.cs` |
+| `GET /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen/versiones` | B7 | `diagnostico.auditoria.ver` | `Modulos/Backoffice/VersionesDictamenEndpoints.cs` |
+| `GET /notificaciones?limite=20&antes={id}` (ETag débil; con `If-None-Match` igual, 304 sin cuerpo) | B8 | `diagnostico.diagnosticos.ver` | `Modulos/Notificaciones/NotificacionesEndpoints.cs` |
+| `POST /notificaciones/{nid}/leida` (204, idempotente; 404 si no es del usuario o su lote ya no es visible) | B8 | `diagnostico.diagnosticos.ver` | `Modulos/Notificaciones/NotificacionesEndpoints.cs` |
+| `POST /notificaciones/leer-todas` (204) | B8 | `diagnostico.diagnosticos.ver` | `Modulos/Notificaciones/NotificacionesEndpoints.cs` |
+
+La compañía lee el dictamen en `GET /diagnosticos/{id}/vehiculos/{vid}/dictamen` (`Modulos/Dictamen/DictamenEndpoints.cs`), que solo agrega `ajustado_por_flit` y `ajustado_en`.
+
+Migraciones en `services/core-diagnostico/src/Flit.Diagnostico.Api/Persistence/Migrations/`, en el orden en que se aplican:
+
+1. `20261113050619_R7_AjusteDictamen.cs`: columnas `ajustado_desde_version` y `ajuste_motivo`, backfill y CHECK de D-2; `Down` bloqueado si hay ajustes FLIT.
+2. `20261113051720_R8_Notificaciones.cs`: tabla `notificaciones` con `fk_notificaciones_diagnosticos` (`CASCADE`), `ix_notificaciones_bandeja`, `ix_notificaciones_no_leidas`, `ix_notificaciones_diagnostico`, `ix_notificaciones_retencion` y `ux_notificaciones_idempotencia`, y CHECK `ck_notificaciones_tipo`, `ck_notificaciones_datos` y `ck_notificaciones_leida`.
+3. `20261113054446_R1_VersionFilaTablero.cs`: `vehiculos.version_tablero`, `ck_vehiculos_version_tablero` e `ix_vehiculos_tablero`.
+
+La marca de tiempo de R1 es posterior a las de R7 y R8, así que se aplica al final. El rótulo R1 viene del bloque B1 de la HU, no del orden de aplicación.
+
 ## Excepciones a ADR-0072 (alcance: solo `diagnostico.notificaciones`)
 
 Este ADR añade a «Excepciones por tabla» de ADR-0072 las siguientes, **acotadas a la tabla `diagnostico.notificaciones`**. Ninguna se extiende a otra tabla del schema; una tabla nueva que quiera lo mismo necesita su propio ADR.
@@ -83,9 +108,9 @@ Este ADR añade a «Excepciones por tabla» de ADR-0072 las siguientes, **acotad
 2. **`ON DELETE CASCADE` hacia `diagnosticos`**: hija de composición pura sin valor de auditoría, admitida por (c). Inerte en la práctica, porque `diagnosticos` no se borra.
 3. **`referencia_id` sin FK ((d)5 / A9)**: es una referencia polimórfica según `tipo` (evidencia, operación de derivación o transición de historial). Alternativa descartada: tres FK tipadas nulas con un CHECK por tipo y tres índices más, en una tabla efímera. La integridad la garantiza la escritura en la transacción del hecho; una referencia huérfana solo produce una notificación que el join de lectura no muestra.
 4. **`ix_notificaciones_retencion (creada_en)` no empieza por `tenant_id` (A11)**: lo usa exclusivamente la purga, que recorre todas las compañías. Los índices de lectura (`ix_notificaciones_bandeja`, `ux_notificaciones_idempotencia`) sí empiezan por `tenant_id`.
-5. **Quinta lectura y escritura entre empresas** (`TrabajadorPurgaNotificaciones`), en la lista blanca de `TomaEntreEmpresasSoloEnColaTests` junto a `ColaConsultas`, `ColaEvidencias`, `ColaRedaccion` y `ColaDerivacion`: SQL constante y parametrizado, sin filas devueltas.
+5. **Quinta lectura y escritura entre empresas** (`Modulos/Notificaciones/TrabajadorPurgaNotificaciones.cs`, clases `PurgaNotificaciones` y `TrabajadorPurgaNotificaciones`), en la lista blanca de `TomaEntreEmpresasSoloEnColaTests` junto a `ColaConsultas`, `ColaEvidencias`, `ColaRedaccion` y `ColaDerivacion`: SQL constante y parametrizado, sin filas devueltas.
 
-El PR de cada migración (R1, R7, R8) actualiza la tabla de aplicabilidad de ADR-0072.
+La tabla de aplicabilidad de ADR-0072 ya tiene las filas de R1 (`vehiculos`), R7 (`dictamenes`) y R8 (`notificaciones`), y su sección «Excepciones por tabla» recoge estas cinco excepciones.
 
 ## Alternativas consideradas
 
@@ -243,8 +268,8 @@ El PR de cada migración (R1, R7, R8) actualiza la tabla de aplicabilidad de ADR
 - La marca «ajustado por FLIT» (con su fecha) se imprime también en el **PDF por vehículo** y en el **índice del ZIP**, y **entra en la huella del PDF** (`Modulos/Reportes/ContenidoReporteVehiculo.cs`, `ParaHuella`), para que un PDF anterior al ajuste no se reutilice. El PDF ya imprime el dictamen (`Modulos/Reportes/PdfVehiculo.cs:144-145`). El ZIP se regenera solo, porque su huella ya incluye la versión y el veredicto del dictamen vigente (`Modulos/Reportes/EmpaquetadorZip.cs:68-81`).
 
 ### Cambios operacionales
-- Migraciones `R1_VersionFilaTablero`, `R7_AjusteDictamen` y `R8_Notificaciones`, una por PR.
-- Opciones `Diagnostico:Notificaciones:{RetencionDias=90, IntervaloPurga}`.
+- Migraciones `R7_AjusteDictamen`, `R8_Notificaciones` y `R1_VersionFilaTablero` (archivos y orden en «Contrato y migraciones»).
+- Opciones `Diagnostico:Notificaciones:{RetencionDias=90, IntervaloPurga=24 h, TamanoLote=500}` (`Modulos/Notificaciones/OpcionesNotificaciones.cs`); la purga borra en bloques de `TamanoLote`.
 - `info.version` del OpenAPI de Diagnóstico pasa a 1.2.0.
 - El evento `diagnostico.dictamen.emitido` gana `ajuste_alertamientos` (opcional, aditivo).
 
@@ -266,7 +291,7 @@ El PR de cada migración (R1, R7, R8) actualiza la tabla de aplicabilidad de ADR
 - **Backend Agent**:
   - `SubirVersionFilaAsync` con una prueba de arquitectura de escritores.
   - Los conteos se calculan con todo el lote, también en el delta.
-  - PUT del dictamen: motivo obligatorio en todo ajuste; cuerpo legado sin motivo solo si no cambia el veredicto (D9).
+  - PUT del dictamen: motivo obligatorio en todo PUT (D9); el cuerpo legado sin motivo ya se retiró (B-PR6).
   - Mapear `DbUpdateConcurrencyException` y el choque en `ux_dictamen_version`/`ux_dictamen_vigente` a 409, nunca a 500.
   - Marca «ajustado por FLIT» en PDF, índice del ZIP y huella del PDF.
   - INSERT de la notificación en la transacción del hecho.
@@ -287,7 +312,7 @@ El PR de cada migración (R1, R7, R8) actualiza la tabla de aplicabilidad de ADR
 - **Security Agent**:
   - R-20 en `ConteosGrilla`, `LoteGrilla`, `DictamenVehiculo.ajustado_*` y `Notificacion`.
   - `motivo` y autor nunca llegan a la compañía.
-  - `ajuste_motivo` es `@pii:low` (texto libre): evaluar el filtro de secuencias de 6 o más dígitos y validar el CHECK de `datos` de `notificaciones`.
+  - `ajuste_motivo` es `@pii:low` (texto libre, sin filtro de dígitos por P3 = b, solo backoffice). El filtro de 6 o más dígitos seguidos aplica al texto de los alertamientos `AJUSTE_FLIT`, que sí ve la compañía. Validar el CHECK de `datos` de `notificaciones`.
   - Notificaciones sin PII (decisión registrada aquí).
 - **Infra Agent**: sin servicios ni colas nuevas. Solo variables opcionales de retención.
 

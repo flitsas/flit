@@ -5,6 +5,7 @@
 **Deciders**: Líder Técnico FLIT (aceptación exclusiva humana, regla FLIT 15). Redactado durante la implementación de la HU #13722.
 **Tags**: arquitectura, backend, datos, seguridad, multi-tenant
 **Épica / Feature / HU**: #12881 / #13715 / #13722 (F00.1-H2), ampliado en #13736 (configuración por compañía) y #13738 (cabecera e historial de estados), y convertido en regla general del schema `diagnostico` para D1 y D2 · **Plan**: `docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` §4 (b), §5, RD-3
+**Enmendado por**: [ADR-0086](ADR-0086-diagnostico-ajuste-flit-dictamen-y-notificaciones.md) (Propuesto, HU #14563): versión de fila en `vehiculos` (R1), ajuste FLIT en `dictamenes` (R7) y excepciones acotadas a `notificaciones` (R8). Este ADR sigue en Propuesto.
 
 ## Contexto
 
@@ -127,7 +128,7 @@ excepción de la HU #13723. `reglas_dictamen` ya tiene la suya en esta sección 
 | `reglas_dictamen` | corte 4 · ADR-0077 | Catálogo global (sin `tenant_id`) | `xmin` | — | Ninguna | A3, A4, A5, A16, A20 (ver excepciones). A3: la PK es uuid v5 estable, no el código natural; la unicidad de negocio es `(catalogo_version, tipo_tramite_codigo, codigo)` |
 | `definiciones_fuentes_obligatorias` | corte 8 · ADR-0078 | Catálogo global (sin `tenant_id`) | `xmin` | `actualizado_en`, `actualizado_por` (`@pii:low`) | Ninguna | A3, A4, A5, A6, A16, A20 (ADR-0078). PK uuid de la aplicación, `ValueGeneratedNever` |
 | `fuentes_definicion_obligatoria` | corte 8 · ADR-0078 | Catálogo global (sin `tenant_id`) | — | — | `definicion_id` → cabecera, `ON DELETE CASCADE`, sin `ON UPDATE` | A3, A4, A5, A8, A20 (ADR-0078). PK `(definicion_id, fuente)` |
-| `dictamenes` | corte 4 · ADR-0077; índice de cola en el corte 6; ajuste FLIT en R7 · ADR-0086 | (a) | `xmin` | `creado_en`; override en `usuario_override_id` / `override_en` (nulos); ajuste FLIT en `ajuste_motivo` (`@pii:low`, 10..500) y `ajustado_desde_version` (= `version - 1`), con `ck_dictamenes_override`, `ck_dictamenes_ajuste`, `ck_dictamenes_ajuste_motivo`, `ck_dictamenes_manual` y `ck_dictamenes_version` | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`, sin `ON UPDATE` emitido; expone `uq_dictamenes_tenant_id`; `ux_dictamen_version (tenant_id, vehiculo_id, version)`; índice único parcial `(tenant_id, vehiculo_id) WHERE vigente` (`ux_dictamen_vigente`) | A11 en `ix_redaccion_pendiente (redaccion_disponible_desde) WHERE estado_redaccion = 'PENDIENTE' AND vigente` (corte 6, ver excepciones). Sin PII en claro (`usuario_override_id` es uuid); `ajuste_motivo` es texto digitado de soporte (`@pii:low`), solo backoffice, nunca en DTO de compañía, eventos ni logs. Sin `HasData` |
+| `dictamenes` | corte 4 · ADR-0077; índice de cola en el corte 6; ajuste FLIT en R7 · ADR-0086 | (a) | `xmin` | `creado_en`; override en `usuario_override_id` / `override_en` (nulos); ajuste FLIT en `ajuste_motivo` (`@pii:low`, 10..500) y `ajustado_desde_version` (= `version - 1`), con `ck_dictamenes_override`, `ck_dictamenes_ajuste`, `ck_dictamenes_ajuste_motivo`, `ck_dictamenes_manual` y `ck_dictamenes_version`; `redactado_por` admite `MANUAL` (R7 reemplaza `ck_dictamenes_redactado_por` y `ck_redaccion`) | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`, sin `ON UPDATE` emitido; expone `uq_dictamenes_tenant_id`; `ux_dictamen_version (tenant_id, vehiculo_id, version)`; índice único parcial `(tenant_id, vehiculo_id) WHERE vigente` (`ux_dictamen_vigente`) | A11 en `ix_redaccion_pendiente (redaccion_disponible_desde) WHERE estado_redaccion = 'PENDIENTE' AND vigente` (corte 6, ver excepciones). Sin PII en claro (`usuario_override_id` es uuid); `ajuste_motivo` es texto digitado de soporte (`@pii:low`), solo backoffice, nunca en DTO de compañía, eventos ni logs. Sin `HasData` |
 | `notificaciones` | #14563 · `R8_Notificaciones` | (a) | `xmin` (`leida_en` mutable) | `usuario_id` (destinatario, `@pii:low`), `creada_en`, `leida_en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `CASCADE` (hija de composición pura, inerte porque `diagnosticos` no se borra) | ADR-0086: purga física a 90 días; `referencia_id` polimórfica sin FK; `ix_notificaciones_retencion (creada_en)` sin `tenant_id` al frente; quinta escritura entre empresas (`TrabajadorPurgaNotificaciones`, lista blanca); `ck_notificaciones_datos` impide texto libre |
 
 ### Excepciones por tabla
@@ -192,6 +193,31 @@ excepción de la HU #13723. `reglas_dictamen` ya tiene la suya en esta sección 
   Es la **cuarta** lectura entre empresas: `ColaDerivacion.SqlColgados` busca, para el reconciliador, ítems ENVIADO
   pasados del margen en todas las empresas. Devuelve solo id y empresa, y cada ítem se trabaja después con su empresa
   fijada (Tradeoff aceptado, «jobs sin usuario»). `TomaEntreEmpresasSoloEnColaTests` lo autoriza junto con las otras tres.
+- **`vehiculos.version_tablero` y ajuste FLIT de `dictamenes` (HU #14563, migraciones `R1_VersionFilaTablero` y
+  `R7_AjusteDictamen`, [ADR-0086](ADR-0086-diagnostico-ajuste-flit-dictamen-y-notificaciones.md)).** No abren excepción:
+  `ix_vehiculos_tablero (tenant_id, diagnostico_id, version_tablero)` empieza por `tenant_id`, y el ajuste FLIT es una
+  versión nueva de `dictamenes` (se apaga la vigente y se inserta N+1), sin edición en sitio ni borrado. Se registran
+  aquí porque cambian el contenido de dos tablas de clase (a); el detalle de columnas y CHECK está en la tabla de
+  aplicabilidad.
+- **`notificaciones`, retención, FK y A11 (HU #14563, migración `R8_Notificaciones`,
+  [ADR-0086](ADR-0086-diagnostico-ajuste-flit-dictamen-y-notificaciones.md) «Excepciones a ADR-0072»).** Acotadas a esta
+  tabla; otra tabla que quiera lo mismo necesita su propio ADR.
+  - **Purga física a los 90 días frente a R-18.** La hace `TrabajadorPurgaNotificaciones` (opciones
+    `Diagnostico:Notificaciones:RetencionDias`, por defecto 90, e `IntervaloPurga`, por defecto 24 h). La fila no es
+    historia de negocio y solo guarda el seudónimo `usuario_id`. R-18 sigue vigente para el resto del schema.
+  - **`fk_notificaciones_diagnosticos` con `ON DELETE CASCADE`** hacia `diagnosticos(tenant_id, id)`: hija de composición
+    pura sin valor de auditoría, admitida por (c). Es inerte porque `diagnosticos` no se borra.
+  - **`referencia_id` sin FK.** Es polimórfica según `tipo` (evidencia, operación de derivación o transición del
+    historial). La integridad la da la escritura en la transacción del hecho.
+  - **A11 en `ix_notificaciones_retencion (creada_en)`**, sin `tenant_id` al frente: lo usa solo la purga, que recorre
+    todas las empresas. Los índices de lectura (`ix_notificaciones_bandeja`, `ix_notificaciones_no_leidas`,
+    `ix_notificaciones_diagnostico` y `ux_notificaciones_idempotencia`) empiezan por `tenant_id`.
+  - Es la **quinta** lectura y escritura entre empresas: `TomaEntreEmpresasSoloEnColaTests` autoriza
+    `Modulos/Notificaciones/TrabajadorPurgaNotificaciones.cs` junto con las cuatro colas. SQL constante y parametrizado,
+    sin filas devueltas.
+  - `ck_notificaciones_datos` impide texto libre en `datos` (solo contadores y códigos, máximo 512 bytes);
+    `ck_notificaciones_tipo` cierra los cuatro tipos (sin tipo para el ajuste FLIT, D8) y `ck_notificaciones_leida` exige
+    `leida_en >= creada_en`.
 
 ## Retención de datos personales
 
@@ -329,3 +355,7 @@ aquí; hasta entonces, ningún endpoint de backoffice escribe entre empresas.
   consultas hasta 24 h tras publicarse; ver «Retención de datos personales»).
 - ADR-0077: catálogo global `diagnostico.reglas_dictamen` (excepción de esta sección) y `diagnostico.dictamenes` como
   clase (a). El veredicto lo calcula el evaluador; el corte 4 solo materializa las tablas.
+- [ADR-0086](ADR-0086-diagnostico-ajuste-flit-dictamen-y-notificaciones.md) (Propuesto): ajuste FLIT del dictamen como
+  versión nueva, versión de fila en `vehiculos` y bandeja de notificaciones. Enmienda este ADR con las filas de R1, R7 y
+  R8 en la tabla de aplicabilidad y las excepciones de `notificaciones` (purga a 90 días, `ON DELETE CASCADE`,
+  `referencia_id` sin FK, A11 en `ix_notificaciones_retencion` y quinta lectura entre empresas).
