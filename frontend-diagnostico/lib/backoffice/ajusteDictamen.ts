@@ -8,6 +8,19 @@ export interface AlertamientoAjuste {
   fuente: string;
 }
 
+/** Fila de la lista editable: el alertamiento más su clave estable y la marca local de lo que hizo soporte. */
+export interface FilaAlertamiento extends AlertamientoAjuste {
+  /** «Alertamiento N»: nombre accesible y clave de la fila; el número no se reutiliza al eliminar. */
+  clave: string;
+  ajuste?: "AGREGADO" | "EDITADO";
+}
+
+/** Código del alertamiento libre (B7): el único al que aplica el filtro de dígitos de P3. */
+export const CODIGO_AJUSTE_FLIT = "AJUSTE_FLIT";
+export const TEXTO_ALERTAMIENTO_MAX = 500;
+/** P3: secuencias de 6 o más dígitos (posibles documentos) en alertamientos visibles a la compañía. */
+const SECUENCIA_DIGITOS = /\d{6,}/;
+
 /** PUT del ajuste FLIT (ADR-0086, D9). El cuerpo viejo `{veredicto, confirmado}` se retiró (B-PR6). */
 export interface CuerpoAjusteDictamen {
   version_esperada: number;
@@ -23,14 +36,14 @@ export const MOTIVO_MAX = 500;
 export function cuerpoAjusteDictamen(p: {
   versionEsperada: number;
   veredicto: CuerpoAjusteDictamen["veredicto"];
-  alertamientos: AlertamientoAjuste[];
+  alertamientos: ReadonlyArray<AlertamientoAjuste>;
   motivo: string;
   confirmarConTramite?: boolean;
 }): CuerpoAjusteDictamen {
   const cuerpo: CuerpoAjusteDictamen = {
     version_esperada: p.versionEsperada,
     veredicto: p.veredicto,
-    alertamientos: p.alertamientos,
+    alertamientos: p.alertamientos.map(({ codigo, texto, efecto, fuente }) => ({ codigo, texto: texto.trim(), efecto, fuente })),
     motivo: p.motivo.trim(),
   };
   if (p.confirmarConTramite) cuerpo.confirmar_con_tramite = true;
@@ -44,6 +57,38 @@ export function validarMotivoAjuste(motivo: string): string | null {
   if (m.length < MOTIVO_MIN) return `Escribe al menos ${MOTIVO_MIN} caracteres.`;
   if (m.length > MOTIVO_MAX) return `El motivo admite máximo ${MOTIVO_MAX} caracteres.`;
   return null;
+}
+
+export interface ErrorCampoAjuste {
+  /** Ruta del campo como la manda el API en el 422 (`alertamientos[i].texto`) o `veredicto` para la coherencia. */
+  campo: string;
+  mensaje: string;
+}
+
+/** Valida un alertamiento suelto (al guardar su fila). */
+export function validarAlertamiento(a: AlertamientoAjuste): string | null {
+  const texto = a.texto.trim();
+  if (!texto) return "Escribe el texto del alertamiento.";
+  if (texto.length > TEXTO_ALERTAMIENTO_MAX) return `El texto admite máximo ${TEXTO_ALERTAMIENTO_MAX} caracteres.`;
+  if (a.codigo === CODIGO_AJUSTE_FLIT && SECUENCIA_DIGITOS.test(texto)) return "No escribas secuencias de 6 o más dígitos (pueden ser documentos).";
+  return null;
+}
+
+/** Valida la lista antes de aplicar: cada fila y la coherencia con el veredicto (la misma regla del 422 DICTAMEN_INCOHERENTE). */
+export function validarAlertamientos(veredicto: CuerpoAjusteDictamen["veredicto"], lista: ReadonlyArray<AlertamientoAjuste>): ErrorCampoAjuste | null {
+  for (const [i, a] of lista.entries()) {
+    const error = validarAlertamiento(a);
+    if (error) return { campo: `alertamientos[${i}].texto`, mensaje: error };
+  }
+  const bloquea = lista.some((a) => a.efecto === "BLOQUEA");
+  if (veredicto === "VIABLE" && bloquea) return { campo: "veredicto", mensaje: MENSAJES.DICTAMEN_INCOHERENTE };
+  if (veredicto === "BLOQUEADO" && !bloquea) return { campo: "veredicto", mensaje: MENSAJES.DICTAMEN_INCOHERENTE };
+  return null;
+}
+
+/** «Aplicar» solo se habilita con veredicto elegido, motivo válido (D9) y alertamientos válidos. */
+export function puedeAplicarAjuste(p: { veredicto: CuerpoAjusteDictamen["veredicto"] | null; motivo: string; alertamientos: ReadonlyArray<AlertamientoAjuste> }): boolean {
+  return p.veredicto !== null && validarMotivoAjuste(p.motivo) === null && validarAlertamientos(p.veredicto, p.alertamientos) === null;
 }
 
 export interface ErrorAjuste {
