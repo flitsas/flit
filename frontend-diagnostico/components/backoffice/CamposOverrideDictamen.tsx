@@ -3,7 +3,8 @@
 import { useId } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { CAMPO_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS } from "@/components/configuracion/estilos";
-import { MOTIVO_MAX, validarMotivoAjuste } from "@/lib/backoffice/ajusteDictamen";
+import { ListaAlertamientosAjuste } from "@/components/backoffice/ListaAlertamientosAjuste";
+import { MOTIVO_MAX, validarMotivoAjuste, type FilaAlertamiento } from "@/lib/backoffice/ajusteDictamen";
 import type { Dictamen } from "@/lib/dictamen/api";
 
 const VEREDICTOS = [
@@ -23,13 +24,18 @@ export interface CamposOverrideDictamenProps {
   onMotivo?: (motivo: string) => void;
   /** Error del API asignado al campo (422 con `campo`, p. ej. el filtro de dígitos P3). */
   errorMotivo?: string | null;
+  /** AC45 (B7): alertamientos del ajuste. Sin `onAlertamientos` la lista no se pinta. */
+  alertamientos?: FilaAlertamiento[];
+  onAlertamientos?: (lista: FilaAlertamiento[]) => void;
+  /** Errores del API por campo de alertamiento (`alertamientos[i].texto`). */
+  erroresAlertamientos?: Readonly<Record<string, string>>;
 }
 
 /**
  * Campos del override del veredicto (corte 7): solo los pinta el `PanelDictamen` en el backoffice y con la capacidad
  * `corregirDictamen`. El panel conserva el estado y el envío; aquí solo van los veredictos y la confirmación explícita.
  */
-export function CamposOverrideDictamen({ elegido, onElegir, confirmado, onConfirmar, aviso, motivo = "", onMotivo, errorMotivo = null }: CamposOverrideDictamenProps) {
+export function CamposOverrideDictamen({ elegido, onElegir, confirmado, onConfirmar, aviso, motivo = "", onMotivo, errorMotivo = null, alertamientos = [], onAlertamientos, erroresAlertamientos }: CamposOverrideDictamenProps) {
   const id = useId();
   const errorLocal = validarMotivoAjuste(motivo);
   const error = errorMotivo ?? errorLocal;
@@ -49,6 +55,12 @@ export function CamposOverrideDictamen({ elegido, onElegir, confirmado, onConfir
           {opcion.nombre}
         </label>
       ))}
+      {onAlertamientos && (
+        <div className="flex flex-col gap-1">
+          <p className={ETIQUETA_CLS}>Alertamientos</p>
+          <ListaAlertamientosAjuste alertamientos={alertamientos} onCambiar={onAlertamientos} errores={erroresAlertamientos} />
+        </div>
+      )}
       {onMotivo && (
         <div className="flex flex-col gap-1">
           <label htmlFor={`${id}-motivo`} className={ETIQUETA_CLS}>

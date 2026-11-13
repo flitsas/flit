@@ -31,4 +31,17 @@ describe("HU14562 AC45 motivo del ajuste", () => {
     render(<CamposOverrideDictamen {...base} />);
     expect(screen.queryByRole("textbox", { name: /motivo/i })).toBeNull();
   });
+
+  it("HU14562 AC45: con onAlertamientos pinta la lista editable de alertamientos", () => {
+    render(
+      <CamposOverrideDictamen
+        {...base}
+        motivo="Motivo suficiente"
+        onMotivo={vi.fn()}
+        alertamientos={[{ clave: "Alertamiento 1", codigo: "AJUSTE_FLIT", texto: "Revisión manual", efecto: "BLOQUEA", fuente: "RUNT" }]}
+        onAlertamientos={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("table", { name: "Alertamientos del ajuste" })).toBeInTheDocument();
+  });
 });

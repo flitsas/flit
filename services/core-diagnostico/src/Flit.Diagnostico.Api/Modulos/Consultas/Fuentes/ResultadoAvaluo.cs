@@ -17,9 +17,17 @@ public sealed record ValorFuenteAvaluo(string Fuente, string Estado, long? Valor
 }
 
 /// <summary>
+/// Referencia Fasecolda del avalúo llenado a mano (HU #14563 B6, CF-23): código Fasecolda de 8 dígitos, marca y línea (opcionales)
+/// y modelo (año). Solo la trae el llenado manual; la consulta por API no la llena y la clave no aparece en su payload. No se
+/// valida que el código exista en Fasecolda.
+/// </summary>
+public sealed record ReferenciaAvaluo(string CodigoFasecolda, string? Marca, string? Linea, int Modelo);
+
+/// <summary>
 /// Resultado normalizado del avalúo comercial (HU #13795, F05-C7), guardado en el payload de la celda AVALUO en snake_case:
 /// <c>sin_valor_comercial</c> (ninguna fuente con valor: la celda queda COMPLETADO, no ERROR, decisión Q4 = b),
-/// <c>valor_sugerido</c> y <c>fuente_principal</c> (nulos sin valor) y <c>fuentes</c> con el valor de cada fuente y su fecha.
+/// <c>valor_sugerido</c> y <c>fuente_principal</c> (nulos sin valor), <c>fuentes</c> con el valor de cada fuente y su fecha y, solo
+/// en el llenado manual, <c>referencia</c> (<see cref="ReferenciaAvaluo"/>, HU #14563 B6).
 /// core-consultas no informa la fecha de cada fuente: es el día en que se consultó (<see cref="ConFecha"/>).
 /// </summary>
 /// <example>
@@ -28,7 +36,8 @@ public sealed record ValorFuenteAvaluo(string Fuente, string Estado, long? Valor
 /// // { sin_valor_comercial: false, valor_sugerido: 48500000, fuente_principal: "fasecolda", fuentes: [...] }
 /// </code>
 /// </example>
-public sealed record ResultadoAvaluo(bool SinValorComercial, long? ValorSugerido, string? FuentePrincipal, IReadOnlyList<ValorFuenteAvaluo> Fuentes)
+public sealed record ResultadoAvaluo(
+    bool SinValorComercial, long? ValorSugerido, string? FuentePrincipal, IReadOnlyList<ValorFuenteAvaluo> Fuentes, ReferenciaAvaluo? Referencia = null)
 {
     /// <summary>
     /// Lee el valor sugerido, la fuente principal y, de cada fuente, su clave, estado, valor (solo con OK y mayor que 0) y
