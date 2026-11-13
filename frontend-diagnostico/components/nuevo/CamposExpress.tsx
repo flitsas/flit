@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, type Ref } from "react";
-import { TIPOS_DOCUMENTO_LOCATARIO } from "@/lib/express/api";
+import { AYUDA_FORMATOS_PLACA, TIPOS_DOCUMENTO_LOCATARIO } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
 import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { AYUDA_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
@@ -71,6 +71,8 @@ export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, di
         ) : (
           <p id={`${placaId}-ayuda`} className={AYUDA_CLS}>
             Escribe la placa o el VIN de un vehículo para diagnosticarlo sin preparar un archivo.
+            {" "}
+            {AYUDA_FORMATOS_PLACA}
           </p>
         )}
       </div>

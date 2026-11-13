@@ -138,3 +138,19 @@ describe("pantalla base con los paquetes de la suite", () => {
     expect(css).toContain('@import "@flit/shell/shell.css"');
   });
 });
+
+describe("F-11 páginas de excepción con el kit (AC49/AC57, HU #14562)", () => {
+  it("la 404 muestra el código 404, su título y la acción para volver al inicio", () => {
+    render(<NotFound />);
+    expect(screen.getByText("404")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Esta página no existe" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/");
+  });
+
+  it("la 403 muestra el código 403 con su mensaje y la acción al hub", async () => {
+    render(await Forbidden({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("403")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para abrir esta página.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ir a mis productos" })).toHaveAttribute("href", "https://dev.flitsas.online/?inicio=1");
+  });
+});
