@@ -498,13 +498,30 @@ describe("PaginaDetalleConsulta — HU #13866: impuesto departamental", () => {
     expect(within(pagina).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
   });
 });
-const sinIntegrador = (pagina: HTMLElement) => {
-  expect(within(pagina).queryByRole("region", { name: /^Respuesta del proveedor/ })).not.toBeInTheDocument();
-  expect(pagina).not.toHaveTextContent(/verifik|intempo|kyverum|certified by/i);
+/**
+ * D19 = b (2026-11-13): la respuesta cruda del proveedor se muestra íntegra dentro de una TarjetaPlegable «Respuesta del
+ * proveedor», cerrada por defecto, en la celda y en cada persona. La vista curada («Respuesta de la fuente») sigue filtrada.
+ * jsdom no sintetiza el clic de Enter/Espacio sobre un <button>: se verifica que el control es un botón nativo enfocable
+ * (el navegador lo activa con el teclado) y que, enfocado, al activarlo se expande.
+ */
+const crudoCerrado = (boton: HTMLElement) => {
+  expect(boton.tagName).toBe("BUTTON");
+  expect(boton).toHaveAttribute("type", "button");
+  expect(boton).toHaveAttribute("aria-expanded", "false");
+  const panel = document.getElementById(boton.getAttribute("aria-controls") ?? "");
+  expect(panel).not.toBeNull();
+  expect(panel).not.toBeVisible();
+  return panel as HTMLElement;
+};
+const expandirConTeclado = (boton: HTMLElement) => {
+  boton.focus();
+  expect(boton).toHaveFocus();
+  fireEvent.click(boton);
+  expect(boton).toHaveAttribute("aria-expanded", "true");
 };
 
-describe("visualización de respuestas sin integrador", () => {
-  it("muestra las licencias del conductor y no el cuerpo del integrador", async () => {
+describe("respuesta cruda del proveedor en tarjeta plegable (D19)", () => {
+  it("cada persona trae su respuesta cruda plegada; la vista curada sigue sin el cuerpo del integrador", async () => {
     const { pagina } = await pintarDetalle(
       detalle("RUNT_PROPIETARIO", {
         personas: [
@@ -520,40 +537,63 @@ describe("visualización de respuestas sin integrador", () => {
         ],
       } as Partial<Detalle>),
     );
-    sinIntegrador(pagina);
     expect(pagina).toHaveTextContent("9999901222");
     expect(pagina).not.toHaveTextContent("****1222");
     const licencias = within(respuesta(pagina)).getByRole("table", { name: "Licencias" });
     expect(licencias).toHaveTextContent("LIC-FICT-0001");
-    expect(licencias).toHaveTextContent("B1");
     expect(licencias).toHaveTextContent("VENCIDA");
-    expect(licencias).toHaveTextContent("SUSPENDIDA");
     expect(respuesta(pagina)).toHaveTextContent("PERSONA FILTRADA");
-    expect(respuesta(pagina)).not.toHaveTextContent("REPRESENTANTE FICTICIO");
-    expect(respuesta(pagina)).not.toHaveTextContent("CONS-FICT-0001");
+    // El cuerpo del integrador solo aparece dentro de las tarjetas plegables, nunca en la vista curada.
+    const paneles = within(respuesta(pagina))
+      .getAllByRole("button", { name: /^Respuesta del proveedor/ })
+      .map((b) => document.getElementById(b.getAttribute("aria-controls") ?? ""));
+    const crudos = within(respuesta(pagina)).queryAllByText(/certified by|CONS-FICT-0001|REPRESENTANTE FICTICIO/i);
+    expect(crudos.length).toBeGreaterThan(0);
+    for (const texto of crudos) expect(paneles.some((p) => p?.contains(texto))).toBe(true);
+
+    const boton1 = within(respuesta(pagina)).getByRole("button", { name: "Respuesta del proveedor · Propietario 1" });
+    const panel1 = crudoCerrado(boton1);
+    expect(panel1).toHaveTextContent("CONS-FICT-0001");
+    expandirConTeclado(boton1);
+    expect(panel1).toBeVisible();
+    expect(within(panel1).getByRole("table", { name: "Respuesta del proveedor · Propietario 1" })).toBeInTheDocument();
+    expect(panel1).toHaveTextContent(/Certified by PROVEEDOR-FICTICIO/);
+
+    const panel2 = crudoCerrado(within(respuesta(pagina)).getByRole("button", { name: "Respuesta del proveedor · Propietario 2" }));
+    expect(panel2).toHaveTextContent("EMPRESA FICTICIA S.A.S.");
   });
 
-  it("SIMIT muestra el resultado de la consulta y no la firma del integrador", async () => {
+  it("SIMIT vehículo: la celda trae su respuesta cruda plegada, con las claves nuevas del proveedor", async () => {
     const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
     const { pagina } = await pintarDetalle(
       detalle("SIMIT_VEHICULO", { resultado: simit, respuesta_proveedor: { ...simitProveedorVehiculo, claveNuevaProveedor: "se-ve" } } as Partial<Detalle>),
     );
-    sinIntegrador(pagina);
     expect(within(respuesta(pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
-    expect(respuesta(pagina)).not.toHaveTextContent("se-ve");
-    expect(respuesta(pagina)).not.toHaveTextContent("EJEMPLO-VEHICULO");
+    const boton = screen.getByRole("button", { name: "Respuesta del proveedor" });
+    const panel = crudoCerrado(boton);
+    expandirConTeclado(boton);
+    expect(panel).toHaveTextContent("se-ve");
+    expect(panel).toHaveTextContent(/Certified by Verifik/);
   });
 
-  it.each(["SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"] as const)("%s no pinta el cuerpo del integrador", async (fuente) => {
+  it.each(["SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"] as const)("%s: la persona trae su respuesta cruda plegada", async (fuente) => {
     const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
     const rol = fuente === "SIMIT_PROPIETARIO" ? "PROPIETARIO" : "LOCATARIO";
+    const nombre = fuente === "SIMIT_PROPIETARIO" ? "Propietario 1" : "Locatario 1";
     const { pagina } = await pintarDetalle(
       detalle(fuente, {
         personas: [{ ...persona(1, { rol, consulta: "SIMIT", resultado: simit, documento_enmascarado: "****0016" }), respuesta_proveedor: simitProveedorPersona }],
       } as Partial<Detalle>),
     );
-    sinIntegrador(pagina);
     expect(within(respuesta(pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
-    expect(respuesta(pagina)).not.toHaveTextContent("9999900016");
+    const boton = within(respuesta(pagina)).getByRole("button", { name: `Respuesta del proveedor · ${nombre}` });
+    const panel = crudoCerrado(boton);
+    expandirConTeclado(boton);
+    expect(panel).toHaveTextContent("9999900016");
+  });
+
+  it("sin respuesta del proveedor no aparece la tarjeta", async () => {
+    await pintarDetalle(simitVehiculo());
+    expect(screen.queryByRole("button", { name: /^Respuesta del proveedor/ })).not.toBeInTheDocument();
   });
 });

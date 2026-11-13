@@ -29,7 +29,7 @@ import {
 } from "@/lib/tablero/detalle";
 import { ChipEstadoCelda, fechaDelDato } from "./CeldaSemaforo";
 import { complementoProveedor, licenciasDesdeProveedor } from "@/lib/tablero/etiquetasRespuesta";
-import { RespuestaFuente } from "./RespuestaFuente";
+import { RespuestaFuente, RespuestaProveedor } from "./RespuestaFuente";
 import { nombreRol } from "@/lib/rotulos";
 import {
   CABECERA_TABLA_CLS,
@@ -356,7 +356,8 @@ const datosDePersona = (p: PersonaDetalle): object | null => {
 const personaResumida = (p: PersonaDetalle) => !p.respuesta_fuente && p.resultado !== null;
 
 /**
- * Respuesta de una persona: datos de la consulta, en español, sin el cuerpo ni el nombre del integrador.
+ * Respuesta de una persona: datos de la consulta, en español, sin el cuerpo ni el nombre del integrador; debajo, la
+ * respuesta cruda del proveedor en su tarjeta plegable (D19).
  * Las licencias de conducción se toman del detalle guardado del conductor.
  */
 function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
@@ -373,7 +374,25 @@ function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
       ) : (
         <Vacio>Sin respuesta de la fuente para esta persona.</Vacio>
       )}
+      {hayCrudo(persona.respuesta_proveedor) && (
+        <CrudoProveedor datos={persona.respuesta_proveedor} titulo={`Respuesta del proveedor · ${titulo}`} nivel={4} />
+      )}
     </section>
+  );
+}
+
+/** Hay respuesta cruda del proveedor que mostrar (null o ausente: consulta anterior, caché o llenado a mano). */
+const hayCrudo = (valor: unknown) => valor !== null && valor !== undefined;
+
+/**
+ * D19 = b (HU #14562 · AC39, D1 = a): la respuesta cruda del proveedor, íntegra y sin filtrar, dentro de una TarjetaPlegable
+ * cerrada por defecto. La vista curada («Respuesta de la fuente») sigue en español y sin el cuerpo del integrador.
+ */
+function CrudoProveedor({ datos, titulo, nivel }: { datos: unknown; titulo: string; nivel: 3 | 4 }) {
+  return (
+    <TarjetaPlegable titulo={titulo} nivelTitulo={nivel}>
+      <RespuestaProveedor datos={datos} etiqueta={titulo} nivel={nivel + 1} />
+    </TarjetaPlegable>
   );
 }
 
@@ -407,7 +426,8 @@ function Impuesto({ resultado }: { resultado: ResultadoImpuestoDetalle }) {
 }
 
 /**
- * «Respuesta de la fuente»: los datos de la consulta, en español y sin el nombre del integrador.
+ * «Respuesta de la fuente»: los datos de la consulta, en español y sin el nombre del integrador, y la respuesta cruda del
+ * proveedor de la celda en su tarjeta plegable (D19).
  * Si no está guardada la respuesta completa, el resultado resumido con un aviso.
  */
 function Respuesta({ detalle }: { detalle: Detalle }) {
@@ -450,7 +470,12 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
   } else {
     cuerpo = <Vacio>Esta consulta no trae campos de respuesta para mostrar.</Vacio>;
   }
-  return <Seccion titulo="Respuesta de la fuente">{cuerpo}</Seccion>;
+  return (
+    <Seccion titulo="Respuesta de la fuente">
+      {cuerpo}
+      {hayCrudo(detalle.respuesta_proveedor) && <CrudoProveedor datos={detalle.respuesta_proveedor} titulo="Respuesta del proveedor" nivel={3} />}
+    </Seccion>
+  );
 }
 
 /**

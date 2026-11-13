@@ -72,10 +72,11 @@ test.describe("impuesto departamental en el tablero", () => {
       await expect(tabla.getByRole("columnheader", { name: "Pagada" })).toBeVisible();
       await expect(tabla.getByText(/^(Sí|No)$/).first()).toBeVisible();
     } else {
-      await expect(respuesta.getByRole("row", { name: /Vigencias\s*Sin registros/ })).toBeVisible();
+      await expect(respuesta.locator("div", { has: pestana.getByRole("term").filter({ hasText: /^Vigencias$/ }) }).getByRole("definition")).toHaveText("Sin registros");
     }
     // Sin la auditoría del proveedor y nada delata un dato manual (R-20).
-    await expect(pestana.getByRole("region", { name: "Respuesta de la fuente" }).getByText(/proveedor/i)).toHaveCount(0);
+    // La vista curada (group) no nombra al proveedor; la respuesta cruda, si llega, va en su tarjeta plegable (D19).
+    await expect(respuesta.getByText(/proveedor/i)).toHaveCount(0);
     await expect(pestana.getByText(/manual|a mano/i)).toHaveCount(0);
     await pestana.close();
   });
