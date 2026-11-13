@@ -13,98 +13,74 @@
  *   --dx-sombra-dock — 3px 3px 3px #557eff4d — solo dock y menús de Diagnóstico; --kit-sombra es de toda la suite.
  *   --dx-motion-rapido — 120ms — CF-04 pide que todo motion de Diagnóstico caiga a 0ms con menos movimiento; --di-motion-fast no.
  *   --dx-motion-base — 180ms — ídem para paneles y diálogos que aparecen por opacidad.
- *   --dx-panel-lateral-ancho — 640px — ancho del panel del dictamen; @flit/ui no fija ancho de drawer.
  *   --dx-icono-acento — #557eff — acento de los íconos bicolor IconoDx (Iconografía); no existe en @flit/ui.
- *   --dx-icono-tinte — #a9c9fc — tinte de relleno de los íconos bicolor IconoDx; no existe en @flit/ui.
- * Cada estado trae -fondo (10 %) y -borde (color pleno); el token base es el color de texto (AA sobre la superficie).
+ * Cada estado trae -borde (color pleno); el token base es el color de texto (AA sobre la superficie).
+ * HU #14562 · m-1 (auditoría de UI): se retiraron los tokens sin consumidor. Los -fondo (el chip del kit calcula su
+ * relleno al 10 % del -borde), --dx-panel-lateral-ancho (PanelLateral ya mide 640 px por defecto) y --dx-icono-tinte (el
+ * visto de IconoDxDictamen se traza con la superficie, m-10). --dx-radio, --dx-sombra-dock y --dx-motion-base los usa
+ * el panel de la campana; --dx-motion-rapido, las filas y los enlaces del semáforo.
  */
 
 @theme inline {
   --color-dx-estado-pendiente: var(--dx-estado-pendiente);
-  --color-dx-estado-pendiente-fondo: var(--dx-estado-pendiente-fondo);
   --color-dx-estado-pendiente-borde: var(--dx-estado-pendiente-borde);
   --color-dx-estado-en-curso: var(--dx-estado-en-curso);
-  --color-dx-estado-en-curso-fondo: var(--dx-estado-en-curso-fondo);
   --color-dx-estado-en-curso-borde: var(--dx-estado-en-curso-borde);
   --color-dx-estado-ejecutado: var(--dx-estado-ejecutado);
-  --color-dx-estado-ejecutado-fondo: var(--dx-estado-ejecutado-fondo);
   --color-dx-estado-ejecutado-borde: var(--dx-estado-ejecutado-borde);
   --color-dx-estado-deuda: var(--dx-estado-deuda);
-  --color-dx-estado-deuda-fondo: var(--dx-estado-deuda-fondo);
   --color-dx-estado-deuda-borde: var(--dx-estado-deuda-borde);
   --color-dx-estado-error: var(--dx-estado-error);
-  --color-dx-estado-error-fondo: var(--dx-estado-error-fondo);
   --color-dx-estado-error-borde: var(--dx-estado-error-borde);
   --color-dx-estado-novedad: var(--dx-estado-novedad);
-  --color-dx-estado-novedad-fondo: var(--dx-estado-novedad-fondo);
   --color-dx-estado-novedad-borde: var(--dx-estado-novedad-borde);
   --color-dx-estado-sin-solicitar: var(--dx-estado-sin-solicitar);
-  --color-dx-estado-sin-solicitar-fondo: var(--dx-estado-sin-solicitar-fondo);
   --color-dx-estado-sin-solicitar-borde: var(--dx-estado-sin-solicitar-borde);
   --color-dx-icono-acento: var(--dx-icono-acento);
-  --color-dx-icono-tinte: var(--dx-icono-tinte);
 }
 
 :root {
   --dx-estado-pendiente: #8b6000;
-  --dx-estado-pendiente-fondo: #f9ac001a;
   --dx-estado-pendiente-borde: #f9ac00;
   --dx-estado-en-curso: #1d53ff;
-  --dx-estado-en-curso-fondo: #557eff1a;
   --dx-estado-en-curso-borde: #1d53ff;
   --dx-estado-ejecutado: #4f7121;
-  --dx-estado-ejecutado-fondo: #8cc63f1a;
   --dx-estado-ejecutado-borde: #8cc63f;
   --dx-estado-deuda: #bd3a00;
-  --dx-estado-deuda-fondo: #ff4e001a;
   --dx-estado-deuda-borde: #ff4e00;
   --dx-estado-error: #c10000;
-  --dx-estado-error-fondo: #c100001a;
   --dx-estado-error-borde: #c10000;
   --dx-estado-novedad: #5e6a7b;
-  --dx-estado-novedad-fondo: #5e6a7b1a;
   --dx-estado-novedad-borde: #5e6a7b;
   --dx-estado-sin-solicitar: #546b7d;
-  --dx-estado-sin-solicitar-fondo: #a9c9fc1a;
   --dx-estado-sin-solicitar-borde: #a9c9fc;
   --dx-radio: 9px;
   --dx-sombra-dock: 3px 3px 3px #557eff4d;
   --dx-motion-rapido: 120ms;
   --dx-motion-base: 180ms;
-  --dx-panel-lateral-ancho: 640px;
   --dx-icono-acento: #557eff;
-  --dx-icono-tinte: #a9c9fc;
 }
 
 .dark {
   --dx-estado-pendiente: #f9ac00;
-  --dx-estado-pendiente-fondo: #f9ac001a;
   --dx-estado-pendiente-borde: #f9ac00;
   --dx-estado-en-curso: #8fb0ff;
-  --dx-estado-en-curso-fondo: #557eff1a;
   --dx-estado-en-curso-borde: #8fb0ff;
   --dx-estado-ejecutado: #a6d95f;
-  --dx-estado-ejecutado-fondo: #8cc63f1a;
   --dx-estado-ejecutado-borde: #a6d95f;
   --dx-estado-deuda: #ff7a40;
-  --dx-estado-deuda-fondo: #ff4e001a;
   --dx-estado-deuda-borde: #ff7a40;
   --dx-estado-error: #ff6b6b;
-  --dx-estado-error-fondo: #c100001a;
   --dx-estado-error-borde: #ff6b6b;
   --dx-estado-novedad: #a9b8d4;
-  --dx-estado-novedad-fondo: #a9b8d41a;
   --dx-estado-novedad-borde: #a9b8d4;
   --dx-estado-sin-solicitar: #a9b8d4;
-  --dx-estado-sin-solicitar-fondo: #3a56881a;
   --dx-estado-sin-solicitar-borde: #3a5688;
   --dx-radio: 9px;
   --dx-sombra-dock: 3px 3px 3px #00000059;
   --dx-motion-rapido: 120ms;
   --dx-motion-base: 180ms;
-  --dx-panel-lateral-ancho: 640px;
   --dx-icono-acento: #8fb0ff;
-  --dx-icono-tinte: #3a5688;
 }
 
 /* CF-04: con «menos movimiento» todo motion de Diagnóstico queda quieto. */
