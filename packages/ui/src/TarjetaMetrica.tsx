@@ -26,6 +26,12 @@ export interface TarjetaMetricaProps {
   /** Componente de enlace para `href` (p. ej. `Link` de next, para navegar sin recargar). Por defecto `<a>`. */
   enlace?: ElementType;
   onClick?: MouseEventHandler<HTMLElement>;
+  /**
+   * HU #14562 · UI-2: modo filtro. Con `onAlternar` la tarjeta es un botón con aria-pressed que alterna `activa`
+   * (p. ej. las tarjetas de conteo del tablero). Sin la prop, nada cambia.
+   */
+  activa?: boolean;
+  onAlternar?: (siguiente: boolean) => void;
   /** Resalta la tarjeta en naranja (`.metrica--pendiente` del kit): algo espera atención. */
   pendiente?: boolean;
   /** Color de la cifra; por defecto el texto principal. */
@@ -57,6 +63,8 @@ export function TarjetaMetrica({
   href,
   enlace: Enlace = "a",
   onClick,
+  activa = false,
+  onAlternar,
   pendiente = false,
   colorCifra,
   title,
@@ -65,11 +73,13 @@ export function TarjetaMetrica({
   "aria-label": ariaLabel,
   "data-testid": testId,
 }: TarjetaMetricaProps) {
-  const accionable = href !== undefined || onClick !== undefined;
+  const filtro = onAlternar !== undefined && href === undefined;
+  const accionable = href !== undefined || onClick !== undefined || filtro;
   const cls = cn(
     BASE_CLS,
     accionable && ACCIONABLE_CLS,
     pendiente && "border-[color:var(--kit-naranja)] hover:border-[color:var(--kit-naranja)]",
+    filtro && activa && "border-[color:var(--kit-azul-texto)] bg-[var(--di-accent-soft)]",
     className,
   );
 
@@ -120,6 +130,22 @@ export function TarjetaMetrica({
       <Enlace href={href} onClick={onClick} {...comunes}>
         {contenido}
       </Enlace>
+    );
+  }
+  if (filtro) {
+    return (
+      <button
+        type="button"
+        aria-pressed={activa}
+        data-activa={activa ? "true" : "false"}
+        onClick={(e) => {
+          onClick?.(e);
+          onAlternar?.(!activa);
+        }}
+        {...comunes}
+      >
+        {contenido}
+      </button>
     );
   }
   if (onClick !== undefined) {
