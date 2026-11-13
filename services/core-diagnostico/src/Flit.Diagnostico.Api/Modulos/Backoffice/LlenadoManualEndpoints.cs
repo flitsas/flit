@@ -27,7 +27,8 @@ internal static class LlenadoManualEndpoints
 
     public static void Map(RouteGroupBuilder backoffice)
     {
-        backoffice.MapGet(Ruta, Formulario).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar)
+        // HU #14563 M2: la lectura de la celda trae personas (enmascaradas) y la referencia del avalúo; no se guarda en caché.
+        backoffice.MapGet(Ruta, Formulario).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar).SinCacheEnRespuesta()
             .WithName("ObtenerFormularioLlenadoManualBackoffice");
         backoffice.MapPut(Ruta, Llenar).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar).WithName("LlenarConsultaManualBackoffice");
     }
