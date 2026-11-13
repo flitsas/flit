@@ -86,6 +86,7 @@ describe("Paso Pago del punto · #14451", () => {
 
     expect(await screen.findByTestId("codigo-cobro")).toHaveTextContent("PN-2026-0042");
     expect(screen.getByText("Vale hasta hoy a las 11:59 p. m.")).toBeInTheDocument();
+    expect(screen.getByText("Vale hasta hoy a las 11:59 p. m.")).toHaveClass("bg-warning");
     expect(screen.getByText("Pendiente de pago")).toBeInTheDocument();
     expect(screen.getByText(/caja del organismo/)).toBeInTheDocument();
     expect(llamadas.filter((l) => l === CAJA)).toHaveLength(1);
