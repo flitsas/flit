@@ -4,7 +4,10 @@
 
 namespace Flit.Diagnostico.Api.Persistence.Migrations
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// HU #14563 (B1, ADR-0086 D-1): versión de fila del tablero en <c>diagnostico.vehiculos</c> (<c>version_tablero</c>,
+    /// <c>ck_vehiculos_version_tablero</c>, <c>ix_vehiculos_tablero</c>). Sin backfill: 0 = sin cambios de fila.
+    /// </summary>
     public partial class R1_VersionFilaTablero : Migration
     {
         /// <inheritdoc />

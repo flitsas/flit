@@ -754,8 +754,10 @@ paths:
       description: >
         HU #13743 (F04-H1, F04-C1/C3/C8/C10/C11/C13, plan §6.1 fila 04). Permiso diagnostico.diagnosticos.ver.
         Devuelve la versión actual del tablero (`version`), el estado global, las columnas del alcance agrupadas y el
-        avance del lote, y SOLO las celdas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
-        `vehiculos` van solo los vehículos con alguna celda cambiada y, de cada uno, solo esas celdas; `terminado` se
+        avance del lote, y SOLO las celdas o filas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
+        `vehiculos` van solo los vehículos con alguna celda cambiada o con versión de fila (`vehiculos[].version`, HU #14563:
+        dictamen nuevo o ajustado, trámite creado, omitido o fallido) mayor que `desde` y, de cada uno, solo las celdas
+        cambiadas (una fila que cambió sin celdas viaja con `celdas` vacío); `terminado` se
         calcula con todas sus celdas (COMPLETADO o NA, R-7). El cliente guarda `version`, la manda como `desde` en el
         siguiente sondeo y fusiona por `vehiculos[].id` y `celdas[].fuente`. DTO de cliente: nunca lleva el origen de
         la celda, el usuario que la llenó a mano, el payload ni documentos en claro (R-20); cada fila que viaja lleva
@@ -767,7 +769,9 @@ paths:
         - name: desde
           in: query
           required: false
-          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          description: >
+            Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo). Trae las celdas o filas con
+            versión mayor (HU #14563).
           schema:
             type: integer
             format: int64
@@ -2853,7 +2857,9 @@ paths:
         - name: desde
           in: query
           required: false
-          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          description: >
+            Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo). Trae las celdas o filas con
+            versión mayor (HU #14563).
           schema:
             type: integer
             format: int64
@@ -4080,6 +4086,18 @@ components:
           description: >
             HU #14563 (B1). Grilla de la compañía. Veredicto del dictamen vigente; null si está pendiente o el lote es SIMPLE.
             Solo viaja en las filas de la respuesta.
+        dictamen_ajustado:
+          type: boolean
+          description: >
+            HU #14563 (B1, D6, D7). Grilla de la compañía. El dictamen vigente es un ajuste u override de FLIT; false sin
+            dictamen, en SIMPLE o tras el recálculo automático (que quita la marca).
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            HU #14563 (B1, ADR-0086 D-1). Versión de fila: la versión del tablero en el último cambio de la fila (dictamen
+            nuevo o ajustado, trámite creado, omitido o fallido); 0 = sin cambios de fila. Nunca supera `version` del lote.
         derivacion:
           allOf:
             - $ref: "#/components/schemas/DerivacionFila"
