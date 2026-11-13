@@ -57,6 +57,17 @@ test.describe("tablero del lote", () => {
     await expect(grilla.getByRole("button", { name: /reprocesar/i })).toHaveCount(0);
     // AC6: ningún indicador de dato manual.
     await expect(grilla.getByText(/manual/i)).toHaveCount(0);
+
+    // HU #14562 AC27/AC28: tarjeta-filtro «Vehículos» y columna Dictamen; el dictamen abre un panel lateral con «Cerrar».
+    await expect(page.getByRole("button", { name: /^Vehículos: \d+$/ })).toBeVisible();
+    await expect(grilla.getByRole("columnheader", { name: "Dictamen" })).toBeVisible();
+    const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
+    await expect(dictamen).toHaveText(/Viable|Bloqueado|Pendiente/);
+    await dictamen.click();
+    const panel = page.getByRole("dialog", { name: `Dictamen · ${PLACA}` });
+    await expect(panel).toBeVisible();
+    await panel.getByRole("button", { name: "Cerrar" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
   test("HU #13801 AC1 / HU #14087: el semáforo verde de SIMIT vehículo abre el detalle en una pestaña nueva", async ({ page, context }) => {
