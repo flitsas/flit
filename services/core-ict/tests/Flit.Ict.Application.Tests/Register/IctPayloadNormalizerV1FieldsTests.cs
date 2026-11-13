@@ -170,7 +170,7 @@ public sealed class IctPayloadNormalizerV1FieldsTests
     }
 
     [Fact]
-    public void Transformations_are_mapped_with_their_tipo_tramite_code_and_description()
+    public void Transformations_are_mapped_with_their_catalogo_b_code_and_description()
     {
         var row = new RegisterRowInput(
             TransactionType: 3,
@@ -178,15 +178,15 @@ public sealed class IctPayloadNormalizerV1FieldsTests
             Plate: "TRF852",
             MoreTransactionTransactionType:
             [
-                new RegisterTransformationInput(7, "Azul AguaMarina"),
-                new RegisterTransformationInput(6, "Estacas"),
+                new RegisterTransformationInput(5, "Azul AguaMarina"),
+                new RegisterTransformationInput(17, "Estacas"),
             ]);
 
         var master = IctPayloadNormalizer.ToMaster(row, Tenant);
 
         master.Transformations.Should().HaveCount(2);
-        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 7 && t.Description == "Azul AguaMarina");
-        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 6 && t.Description == "Estacas");
+        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 5 && t.Description == "Azul AguaMarina");
+        master.Transformations.Should().ContainSingle(t => t.IdTransformationType == 17 && t.Description == "Estacas");
         master.Transformations.Should().OnlyContain(t => t.TenantId == Tenant);
     }
 
@@ -199,27 +199,27 @@ public sealed class IctPayloadNormalizerV1FieldsTests
             Plate: "TRF852",
             MoreTransactionTransactionType:
             [
-                new RegisterTransformationInput(5, "Azul"),
-                new RegisterTransformationInput(99, "Codigo fuera del catalogo Tipo Tramite"),
+                new RegisterTransformationInput(9, "Gasolina"),
+                new RegisterTransformationInput(99, "Codigo fuera del catalogo de transformaciones"),
             ]);
 
         var master = IctPayloadNormalizer.ToMaster(row, Tenant);
 
-        master.Transformations.Should().ContainSingle().Which.IdTransformationType.Should().Be(5);
+        master.Transformations.Should().ContainSingle().Which.IdTransformationType.Should().Be(9);
     }
 
-    /// <summary>Bug #13445 (D6): solo 5 blindaje, 6 carrocería, 7 color y 9 combustible son transformaciones.</summary>
+    /// <summary>Catálogo B (confirmado por FLIT 1): solo 5 color, 9 combustible y 17 carrocería son transformaciones; 6 y 7 (catálogo A) se descartan.</summary>
     [Theory]
     [InlineData(5, true)]
-    [InlineData(6, true)]
-    [InlineData(7, true)]
     [InlineData(9, true)]
-    [InlineData(17, false)]
+    [InlineData(17, true)]
+    [InlineData(6, false)]
+    [InlineData(7, false)]
     [InlineData(8, false)]
     [InlineData(10, false)]
     [InlineData(11, false)]
     [InlineData(1, false)]
-    public void Only_tipo_tramite_transformation_codes_are_kept_bug13445(int codigo, bool seConserva)
+    public void Only_catalogo_b_transformation_codes_are_kept(int codigo, bool seConserva)
     {
         var row = new RegisterRowInput(
             TransactionType: 3,
@@ -250,6 +250,24 @@ public sealed class IctPayloadNormalizerV1FieldsTests
 
         // La PK es (master, código RUNT): una segunda fila con el mismo código reventaría el insert.
         master.Transformations.Should().ContainSingle().Which.Description.Should().Be("Primera");
+    }
+
+    [Fact]
+    public void Vehicle_service_type_se_persiste_en_matricula_y_se_ignora_en_traspaso()
+    {
+        var matricula = new RegisterRowInput(TransactionType: 1, TransactionOperation: 1, VehicleServiceType: 4);
+        var traspaso = new RegisterRowInput(TransactionType: 3, TransactionOperation: 1, Plate: "TRF852", VehicleServiceType: 4);
+
+        IctPayloadNormalizer.ToMaster(matricula, Tenant).VehicleServiceType.Should().Be(4);
+        IctPayloadNormalizer.ToMaster(traspaso, Tenant).VehicleServiceType.Should().BeNull();
+    }
+
+    [Fact]
+    public void Vehicle_service_type_ausente_queda_null()
+    {
+        var row = new RegisterRowInput(TransactionType: 1, TransactionOperation: 1);
+
+        IctPayloadNormalizer.ToMaster(row, Tenant).VehicleServiceType.Should().BeNull();
     }
 
     [Fact]

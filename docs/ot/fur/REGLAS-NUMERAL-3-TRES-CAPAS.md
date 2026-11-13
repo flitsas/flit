@@ -128,7 +128,7 @@ Define `tramites.procedure_types.family` + `code`. Sin prenda ni transformacione
 | Otros | `LEVANTAR_INSCRIBIR_PRENDA` | Levantar e inscribir *(inactivo)* | **11** + **12** | Unir ambos literales de la tabla 2 con un espacio. |
 | Otros | `DUPLICADO_PLACA` | Duplicado de placa | **15** Duplicado de placas | Sin bloque automático. Marca además **OTRO** en el numeral 20 (A FAVOR DE vacío). |
 | Otros | `CAMBIO_CARROCERIA` | Cambio de carrocería | **17** Cambio de carrocería | Obligatoria: `Carroceria nueva(NUEVA CARROCERIA: {CARROCERIA_NUEVA})`. No sumar tabla 3. |
-| Otros | `CONVERSION_COMBUSTIBLE` | Conversiones de combustible | **18** Otros | Obligatoria: `COMBUSTIBLE_NUEVO: {COMBUSTIBLE_NUEVO}`. El blank no tiene casilla de combustible. |
+| Otros | `CONVERSION_COMBUSTIBLE` | Conversiones de combustible | **9** Transformación + **18** Otros | Obligatoria: `COMBUSTIBLE_NUEVO: {COMBUSTIBLE_NUEVO}` (NUEVO TIPO DE COMBUSTIBLE en el numeral 23). El blank no tiene casilla de combustible; el ejemplar oficial `Fur_OtroTramite_CambioCombus.pdf` marca 9 + 18. |
 | Otros | `BLINDAJE` | Blindaje | Ninguna en numeral 3. Marcar **SI** con nivel 1/2/3, **NO** con desmonte | Obligatoria: `BLINDAJE NIVEL 1.` / `BLINDAJE NIVEL 2.` / `BLINDAJE NIVEL 3.` / `DESMONTE DE BLINDAJE.` El trámite tiene cuatro opciones y la casilla es un SI/NO: sin este texto el formulario no distingue un nivel 1 de un nivel 3, y un desmonte sale idéntico a un vehículo que nunca estuvo blindado. Sin opción declarada NO se inventa el texto: sí casilla, no texto. El certificado de blindaje (`certificado_blindaje`) es obligatorio en las cuatro opciones. |
 | Otros | `CAMBIO_LOCATARIO` | Cambio de locatario | **18** Otros | Obligatoria: `CAMBIO DE LOCATARIO por Leasing de {PROPIETARIO} a {NOMBRE_LOCATARIO}, TIPO DE DOCUMENTO {TIPO_DOC_LOCATARIO}, NÚMERO DE DOCUMENTO {NUMERO_LOCATARIO}.` «Leasing de» es texto fijo, igual que en `MATRICULA_LEASING`; el propietario va solo con su nombre. Propietario y locatario son partes distintas y hacen falta las dos. Si el expediente es transferencia de dominio, usar `TRASPASO_TRANSFERENCIA_DE_DOMINIO` (casilla **2**). |
 | Otros | `CAMBIO_ACREEDOR` | Cambio acreedor *(inactivo)* | **18** Otros | Recomendada: `CAMBIO DE ACREEDOR PRENDARIO: {NOMBRE} - NIT {DOC}.` FLIT aún no genera este bloque. |
@@ -176,9 +176,9 @@ El recuadro de características del vehículo conserva el dato **RUNT original**
 | Ninguna / no aplica | No suma | No imprime bloque. |
 | Cambio de color | **+5** | `Color nuevo(NUEVO COLOR: {COLOR_NUEVO})` |
 | Cambio de carrocería | **+17** | `Carroceria nueva(NUEVA CARROCERIA: {CARROCERIA_NUEVA})` |
-| Conversión de combustible | **+18** Otros | `COMBUSTIBLE_NUEVO: {COMBUSTIBLE_NUEVO}` |
+| Conversión de combustible | **+9** Transformación **+18** Otros (sin duplicar si el tipo base ya las marca) | `COMBUSTIBLE_NUEVO: {COMBUSTIBLE_NUEVO}` |
 | Blindaje | No suma numeral 3. Marcar **SI** con nivel 1/2/3, **NO** con desmonte | `BLINDAJE NIVEL {1\|2\|3}.` o `DESMONTE DE BLINDAJE.` (ver tabla 1). |
-| Varias a la vez | Unión de 5 y/o 17 y/o 18 (y SI/NO blindado) | Orden fijo: color, carrocería, combustible, blindaje. Ejemplo: `Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL` |
+| Varias a la vez | Unión de 5 y/o 17 y/o 9+18 (y SI/NO blindado) | Orden fijo: color, carrocería, combustible, blindaje. Ejemplo: `Color nuevo(NUEVO COLOR: MULTICOLOR CON AEROGRAFIAS) Carroceria nueva(NUEVA CARROCERIA: PICKUP) COMBUSTIBLE_NUEVO: DIESEL` |
 
 ---
 

@@ -322,16 +322,25 @@ public sealed class ListProcedureInstancesFilteredHandler(
         var exentas = await ListProcedureInstancesHandler
             .ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
 
+        // Radicados con la firma de baúl copiada al radicar: su baúl sale de la copia, no del baúl en vivo.
+        var baulPorTramite = await ListProcedureInstancesHandler
+            .ResolverBaulPorTramiteAsync(repo, instances, ct).ConfigureAwait(false);
+
         var items = instances
-            .Select(e => ListProcedureInstancesHandler.ToSummary(
-                e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
-                nombres.GetValueOrDefault(e.TenantId),
-                gestores.GetValueOrDefault(e.GestorEfectivoUserId),
-                firmaBaul,
-                conPrenda.Contains(e.Id),
-                revocacionesActivas.GetValueOrDefault(e.Id),
-                exentas.Contains(e.Id)))
+            .Select(e =>
+            {
+                var baulDeE = baulPorTramite.TryGetValue(e.Id, out var baulCopiado) ? baulCopiado : firmaBaul;
+                return ListProcedureInstancesHandler.ToSummary(
+                    e,
+                    IdentityApprovalResolver.ApprovedPartiesFromKeys(
+                        e, identidadKeys, now, baulDeE),
+                    nombres.GetValueOrDefault(e.TenantId),
+                    gestores.GetValueOrDefault(e.GestorEfectivoUserId),
+                    baulDeE,
+                    conPrenda.Contains(e.Id),
+                    revocacionesActivas.GetValueOrDefault(e.Id),
+                    exentas.Contains(e.Id));
+            })
             .ToList();
 
         return items;

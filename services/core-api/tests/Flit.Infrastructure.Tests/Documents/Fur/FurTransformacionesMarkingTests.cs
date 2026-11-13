@@ -62,15 +62,15 @@ public sealed class FurTransformacionesMarkingTests
     }
 
     /// <summary>
-    /// El formulario oficial no tiene casilla de «cambio de combustible»: va en la 18 «OTROS» por
-    /// decisión de negocio (supervisor, 2026-08-19). Esa celda quedó libre al corregir la geometría
-    /// de la HU #11640, donde la ocupaba por error el levantamiento de prenda.
+    /// El formulario oficial no tiene casilla de «cambio de combustible»: el ejemplar del organismo
+    /// (Fur_OtroTramite_CambioCombus.pdf) marca 9 «Transformación» + 18 «Otros».
     /// </summary>
     [Fact]
-    public void CambioDeCombustible_MarcaLaCasilla18Otros()
+    public void CambioDeCombustible_Marca9TransformacionY18Otros()
     {
         var dict = FurFieldMapper.Map(Data(new FurTransformacionesDeclaradas(Combustible: true)));
 
+        dict["requested_process_9"].Text.Should().Be("X");
         dict["requested_process_18"].Text.Should().Be("X");
         dict["requested_process_5"].Text.Should().BeEmpty();
         dict["requested_process_17"].Text.Should().BeEmpty();

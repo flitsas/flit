@@ -73,6 +73,16 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private static ProcedureInstance FinalizeReady(Guid id, Guid tenant)
     {
         var i = Instance(id, tenant);
+        // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         i.Actors.Add(Actor(tenant, id, "comprador"));
         foreach (var t in new[] { "factura", "aduana", "impronta" })
         {
