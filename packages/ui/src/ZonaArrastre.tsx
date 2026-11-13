@@ -2,11 +2,15 @@
 
 import { useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { cn } from "./cn";
+import { useRegionVivaLista } from "./useRegionViva";
 
 /**
  * Zona de carga con arrastre y botón equivalente por teclado (HU #14562 · UI-2 · AC10). Valida extensión y tamaño
  * antes de llamar `onArchivo`; el rechazo se anuncia con `role="alert"` y queda asociado al botón por
  * `aria-describedby`. El arrastre es un atajo: todo se puede hacer con «Elegir archivo».
+ * Observación 8 del code review (HU #14562): la región `role="alert"` existe vacía desde el montaje, con el patrón de
+ * `useRegionViva`: un error que ya viene al montar se escribe pasado el retardo; el rechazo de una acción del usuario
+ * llega después del montaje y se escribe enseguida en la misma región.
  */
 export interface ZonaArrastreProps {
   etiqueta: string;
@@ -47,6 +51,8 @@ export function ZonaArrastre({
 
   const extensiones = aceptar.map((e) => e.toLowerCase());
   const mensajeError = rechazo ?? error ?? null;
+  const regionLista = useRegionVivaLista();
+  const textoError = mensajeError && (regionLista || rechazo !== null) ? mensajeError : null;
   const describe = [ayuda ? idAyuda : null, mensajeError ? idError : null].filter(Boolean).join(" ") || undefined;
 
   const recibir = (f: File | undefined | null) => {
@@ -134,11 +140,10 @@ export function ZonaArrastre({
           </button>
         </div>
       ) : null}
-      {mensajeError ? (
-        <p id={idError} role="alert" className="text-sm font-semibold text-[color:var(--di-danger)]">
-          {mensajeError}
-        </p>
-      ) : null}
+      {/* Vacía queda sr-only: sigue en el árbol accesible y no suma espacio al layout. */}
+      <p id={idError} role="alert" className={textoError ? "text-sm font-semibold text-[color:var(--di-danger)]" : "sr-only"}>
+        {textoError}
+      </p>
     </div>
   );
 }
