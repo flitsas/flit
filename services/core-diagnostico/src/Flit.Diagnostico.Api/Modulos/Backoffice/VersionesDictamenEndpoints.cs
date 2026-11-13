@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// (política de configuración, empresa explícita en <c>?empresa=</c>; la lectura queda en <c>lecturas_backoffice</c> como el
 /// GET del dictamen) y exige <c>diagnostico.auditoria.ver</c>. Devuelve la cadena completa en orden descendente: lo que vio la
 /// compañía en cada versión, quién y por qué la ajustó (el nombre lo resuelve Identidad; no se guarda), los alertamientos
-/// eliminados frente a la anterior y si un recálculo automático la reemplazó. Es la única salida de <c>ajuste_motivo</c>.
+/// eliminados frente a la anterior, si un recálculo automático la reemplazó y si el ajuste se confirmó sobre un vehículo que ya tenía
+/// trámite (AC23). Es la única salida de <c>ajuste_motivo</c>.
 /// </summary>
 internal static class VersionesDictamenEndpoints
 {
@@ -78,7 +79,8 @@ internal static class VersionesDictamenEndpoints
                 autor,
                 fila.AjusteMotivo,
                 fila.AnalisisOverride && fila.OverrideEn is { } en ? en : fila.CreadoEn,
-                fila.AjustadoDesdeVersion is not null && siguiente is { AnalisisOverride: false });
+                fila.AjustadoDesdeVersion is not null && siguiente is { AnalisisOverride: false },
+                fila.AjusteConTramite);
         }
     }
 
@@ -116,7 +118,8 @@ internal sealed record VersionDictamenDto(
     [property: JsonPropertyName("usuario")] UsuarioVersionDto? Usuario,
     [property: JsonPropertyName("motivo")] string? Motivo,
     [property: JsonPropertyName("en")] DateTimeOffset En,
-    [property: JsonPropertyName("superado_por_recalculo")] bool SuperadoPorRecalculo);
+    [property: JsonPropertyName("superado_por_recalculo")] bool SuperadoPorRecalculo,
+    [property: JsonPropertyName("ajuste_con_tramite")] bool AjusteConTramite);
 
 /// <summary>Quien hizo el ajuste: el id guardado y el nombre de Identidad (null si no se pudo resolver).</summary>
 internal sealed record UsuarioVersionDto(

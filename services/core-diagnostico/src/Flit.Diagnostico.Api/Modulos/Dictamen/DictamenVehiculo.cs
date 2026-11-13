@@ -63,6 +63,12 @@ public sealed class DictamenVehiculo : IEntidadDeEmpresa
     /// <summary>Versión vigente que reemplazó el override o ajuste FLIT (siempre <c>Version - 1</c>); null en las automáticas.</summary>
     public int? AjustadoDesdeVersion { get; set; }
 
+    /// <summary>
+    /// True si el vehículo ya tenía trámite cuando soporte confirmó el ajuste con <c>confirmar_con_tramite</c> (HU #14563 AC23,
+    /// ADR-0084). Solo un ajuste puede llevarlo; el trámite no se revierte ni se cancela. Solo backoffice.
+    /// </summary>
+    public bool AjusteConTramite { get; set; }
+
     /// <summary>Instante en que se guardó el dictamen (<c>timestamptz</c>).</summary>
     public DateTimeOffset CreadoEn { get; init; }
 

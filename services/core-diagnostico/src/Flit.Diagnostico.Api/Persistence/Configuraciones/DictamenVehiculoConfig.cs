@@ -39,6 +39,8 @@ internal sealed class DictamenVehiculoConfig : IEntityTypeConfiguration<Dictamen
             t.HasCheckConstraint(
                 "ck_dictamenes_manual",
                 "redactado_por <> 'MANUAL' OR (analisis_override AND ajuste_motivo IS NOT NULL)");
+            // R9_AjusteConTramite (HU #14563 AC23): solo un ajuste registra que el vehículo ya tenía trámite.
+            t.HasCheckConstraint("ck_dictamenes_ajuste_con_tramite", "NOT ajuste_con_tramite OR analisis_override");
         });
         builder.HasKey(x => x.Id).HasName("pk_dictamenes");
         builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_dictamenes_tenant_id");
@@ -72,6 +74,10 @@ internal sealed class DictamenVehiculoConfig : IEntityTypeConfiguration<Dictamen
             .HasComment("@pii:low Motivo del ajuste FLIT (texto libre de soporte, 10..500). Solo backoffice; nunca en DTO de compañía, eventos ni logs. [ADR-0086]");
         builder.Property(x => x.AjustadoDesdeVersion)
             .HasComment("Versión vigente que reemplazó el override o ajuste FLIT (= version - 1). NULL en las automáticas. [ADR-0086]");
+        builder.Property(x => x.AjusteConTramite)
+            .HasDefaultValueSql("false")
+            .ValueGeneratedNever()
+            .HasComment("True si el vehículo ya tenía trámite cuando FLIT confirmó el ajuste (confirmar_con_tramite). Solo en ajustes; solo backoffice. [ADR-0084]");
         builder.Property(x => x.CreadoEn).HasComment("Instante en que se guardó el dictamen (timestamptz).");
 
         builder.HasOne<VehiculoDiagnostico>().WithMany()
