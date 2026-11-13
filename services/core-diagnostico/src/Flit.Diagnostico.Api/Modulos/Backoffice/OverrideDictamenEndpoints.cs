@@ -106,6 +106,8 @@ internal static partial class OverrideDictamenEndpoints
             }
 
             fila.TenantId = empresa;
+            // AC23: la versión de auditoría registra que el ajuste se confirmó sobre un vehículo que ya tenía trámite.
+            fila.AjusteConTramite = tramite is not null;
             db.Add(fila);
             DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: true);
             try

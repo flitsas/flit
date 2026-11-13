@@ -54,7 +54,9 @@ public sealed class NotificacionesEndpointsTests
         items.Should().HaveCount(2);
         items.Select(i => i.GetProperty("tipo").GetString()).Should().BeEquivalentTo([Notificacion.ZipEvidenciasListo, Notificacion.LoteTerminado]);
         items.Should().OnlyContain(i => i.GetProperty("diagnostico_id").GetGuid() == lote);
-        items.Should().OnlyContain(i => i.GetProperty("titulo").GetString()!.Length > 0 && i.GetProperty("accion").GetProperty("href").GetString()!.Contains(lote.ToString()));
+        items.Should().OnlyContain(i => i.GetProperty("titulo").GetString()!.Length > 0);
+        // Cierre BE (defecto de B8): la ruta del frontend es /diagnosticos/{id}, en plural.
+        items.Select(i => i.GetProperty("accion").GetProperty("href").GetString()).Should().AllBe($"/diagnosticos/{lote}");
         var etag = respuesta.Headers.ETag;
         etag.Should().NotBeNull();
         etag!.IsWeak.Should().BeTrue();

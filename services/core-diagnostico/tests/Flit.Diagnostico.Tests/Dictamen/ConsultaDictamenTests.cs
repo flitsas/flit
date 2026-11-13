@@ -535,6 +535,47 @@ public sealed class ConsultaDictamenTests
             (await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().AsNoTracking().SingleAsync(v => v.Id == vid, ct)).TramiteId.Should().Be(tramite);
     }
 
+    // AC23 (cierre BE) — la versión de auditoría registra que el vehículo ya tenía trámite al confirmarse el ajuste con
+    // confirmar_con_tramite: el ajuste sin trámite queda en false, el confirmado con trámite en true y la automática en false.
+    // Solo lo ve el backoffice: la compañía no recibe la marca.
+    [Fact]
+    public async Task B7_AC23_la_version_de_auditoria_registra_el_ajuste_con_tramite()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: Simulado);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await SembrarAsync(empresa, ct);
+        var vid = lote.Vehiculos[0].Id;
+        var ruta = RutaBackoffice(lote.Id, vid, empresa.Id);
+        var flit = Guid.CreateVersion7();
+        using var cliente = api.Cliente(TokenBackoffice(api, flit, corregir: true));
+
+        var sinTramite = await cliente.PutAsync(ruta, Ajuste(1, "BLOQUEADO", AlertasAjuste), ct);
+        sinTramite.StatusCode.Should().Be(HttpStatusCode.OK, await sinTramite.Content.ReadAsStringAsync(ct));
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.Id == vid, ct);
+            vehiculo.TramiteId = Guid.CreateVersion7();
+            vehiculo.TramiteNumero = "TRM-B7-0023";
+            await db.SaveChangesAsync(ct);
+        }
+
+        var conTramite = await cliente.PutAsync(ruta, Ajuste(2, "VIABLE", "[]", confirmarConTramite: true), ct);
+        conTramite.StatusCode.Should().Be(HttpStatusCode.OK, await conTramite.Content.ReadAsStringAsync(ct));
+
+        var versiones = await api.Cliente(TokenAuditor(api, flit)).GetAsync(RutaVersiones(lote.Id, vid, empresa.Id), ct);
+        versiones.StatusCode.Should().Be(HttpStatusCode.OK, await versiones.Content.ReadAsStringAsync(ct));
+        var lista = (await TableroAyudas.JsonAsync(versiones, ct)).GetProperty("versiones").EnumerateArray().ToList();
+        lista.Select(v => v.GetProperty("version").GetInt32()).Should().Equal(3, 2, 1);
+        lista.Select(v => v.TryGetProperty("ajuste_con_tramite", out _)).Should().AllBeEquivalentTo(true, "la clave va siempre en la auditoría");
+        lista.Select(v => v.GetProperty("ajuste_con_tramite").GetBoolean())
+            .Should().Equal([true, false, false], "solo el ajuste confirmado sobre un vehículo con trámite lo registra");
+
+        var compania = await (await empresa.Cliente().GetAsync(RutaCompania(lote.Id, vid), ct)).Content.ReadAsStringAsync(ct);
+        compania.Should().NotContain("tramite", "la compañía no ve la auditoría del ajuste");
+    }
+
     // B-PR6 + P3 por HTTP — sin motivo es 422 MOTIVO_REQUERIDO aunque el veredicto no cambie (el cuerpo legado se retiró); un
     // alertamiento AJUSTE_FLIT con 6 o más dígitos es 422 con el campo señalado. Nada cambia.
     [Fact]

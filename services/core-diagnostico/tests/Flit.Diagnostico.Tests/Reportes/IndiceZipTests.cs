@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Flit.Diagnostico.Api.Modulos.Reportes;
+using Flit.Diagnostico.Api.Plataforma;
 using FluentAssertions;
 using Xunit;
 
@@ -128,6 +129,21 @@ public sealed class IndiceZipTests
         var despues = PlanZip.ClaveDictamenes([(vehiculo, 2, "BLOQUEADO", true)]);
         despues.Should().NotBe(antes);
         antes.Should().Be($"{vehiculo:D}:2:BLOQUEADO", "sin ajuste la huella de los ZIP existentes no cambia");
+    }
+
+    // Cierre BE (HU #14563 B7) — un alertamiento AJUSTE_FLIT que bloquea sale en los motivos del índice con su rótulo «Ajuste FLIT»,
+    // nunca como «Novedad sin clasificar».
+    [Fact]
+    public async Task B7_alertamiento_AJUSTE_FLIT_lleva_su_rotulo_en_los_motivos_del_indice()
+    {
+        const string conAjuste =
+            """[{"codigo":"AJUSTE_FLIT","texto":"Embargo confirmado por soporte","efecto":"BLOQUEA","fuente":"RUNT"}]""";
+        var fila = new FilaIndiceZip(6, "TST806", "Terminado", "diagnostico-0a1b2c3d-TST806.pdf", "BLOQUEADO", conAjuste, null, Ajustado: true);
+
+        var libro = await LibroAsync(Cabecera(conPdf: 1, total: 1), [fila]);
+
+        libro.Dato(0)[6].Should().Be("Ajuste FLIT");
+        IndiceZip.Motivos("BLOQUEADO", conAjuste).Should().NotContain(RotulosDiagnostico.SinClasificar);
     }
 
     // AC3 — Placa/VIN es texto aunque parezca número (sin conversión numérica) y el texto que parece fórmula queda literal.

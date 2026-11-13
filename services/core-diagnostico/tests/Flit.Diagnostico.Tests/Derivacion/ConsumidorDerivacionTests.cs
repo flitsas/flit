@@ -1,9 +1,13 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
+using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Derivacion;
 using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Trabajos;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Derivacion;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
@@ -12,6 +16,7 @@ using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
 
 namespace Flit.Diagnostico.Tests.Derivacion;
 
@@ -101,6 +106,73 @@ public sealed class ConsumidorDerivacionTests
         var item = (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single();
         (item.Estado, item.MotivoCodigo).Should().Be((EstadoItemDerivacion.Omitido, MotivoDerivacion.NoViable));
         falso.Llamadas.Should().BeEmpty();
+    }
+
+    // HU #14563 AC31 (ADR-0084 §4) — derivación en vuelo tras el ajuste: con crédito 1, un ítem queda ENVIADO y otro PENDIENTE. FLIT
+    // ajusta los dos dictámenes a BLOQUEADO por el PUT del backoffice antes de que el consumidor los procese. El consumidor revalida
+    // y deja cada ítem OMITIDO NO_VIABLE sin llamar a Trámites. La fila sube su versión con el ajuste y otra vez con el cierre del
+    // ítem, y en el sondeo listos_tramite queda en 0 (bajó desde 2 antes de encolar y el OMITIDO no lo devuelve a listo).
+    [Fact]
+    public async Task HU14563_AC31_ajuste_a_BLOQUEADO_con_items_en_vuelo_los_deja_OMITIDO_y_la_fila_sube()
+    {
+        var falso = new DerivacionTramitesFalso { Responder = _ => DerivacionTramitesFalso.Creado(Guid.NewGuid(), "TR-000931") };
+        await using var api = await DerivacionDePrueba.ApiAsync(falso, extra: new() { [$"{OpcionesDerivacion.Seccion}:CreditoPorCompania"] = "1" });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await DerivacionDePrueba.SembrarAsync(empresa, ct, vehiculos: [("TST931", true, "VIABLE"), ("TST932", true, "VIABLE")]);
+        using var compania = api.Cliente(DerivacionDePrueba.TokenDerivar(api, empresa));
+        var antes = await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: 0), ct), ct);
+        antes.GetProperty("conteos").GetProperty("listos_tramite").GetInt32().Should().Be(2);
+
+        var encolado = await compania.PostAsJsonAsync(DerivacionDePrueba.RutaMasivo(lote.Id), new { vehiculo_ids = lote.Vehiculos.Select(v => v.Id) }, ct);
+        (await encolado.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("encolados").GetInt32().Should().Be(2);
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Enviado);
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[1].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Pendiente);
+        var enVuelo = (await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: 0), ct), ct)).GetProperty("version").GetInt64();
+
+        using var soporte = api.Cliente(api.Token(
+            empresa: Guid.CreateVersion7(), permisos: [Permisos.BackofficeVer, Permisos.DictamenOverride], roles: ["backoffice_diagnostico"],
+            tipoEmpresa: UsuarioActual.TipoEmpresaFlit));
+        foreach (var vehiculo in lote.Vehiculos)
+        {
+            using var cuerpo = new StringContent(
+                """{"version_esperada":1,"veredicto":"BLOQUEADO","motivo":"Soporte confirmo el embargo con el organismo","alertamientos":[{"codigo":"AJUSTE_FLIT","texto":"Embargo confirmado por soporte","efecto":"BLOQUEA","fuente":"RUNT"}]}""",
+                Encoding.UTF8, "application/json");
+            var ajuste = await soporte.PutAsync(
+                $"{Program.Prefijo}/backoffice/diagnosticos/{lote.Id}/vehiculos/{vehiculo.Id}/dictamen?empresa={empresa.Id}", cuerpo, ct);
+            ajuste.StatusCode.Should().Be(HttpStatusCode.OK, await ajuste.Content.ReadAsStringAsync(ct));
+        }
+
+        var trasAjuste = await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: enVuelo), ct), ct);
+        var filasAjuste = trasAjuste.GetProperty("vehiculos").EnumerateArray().ToList();
+        filasAjuste.Should().HaveCount(2).And.OnlyContain(f => f.GetProperty("veredicto").GetString() == "BLOQUEADO" && f.GetProperty("version").GetInt64() > enVuelo);
+        var versionAjuste = trasAjuste.GetProperty("version").GetInt64();
+
+        // El consumidor procesa el ENVIADO; el cierre libera el PENDIENTE, que también llega al consumidor.
+        var consumidos = new HashSet<Guid>();
+        for (var vuelta = 0; vuelta < 3; vuelta++)
+        {
+            var pendientes = (await DerivacionDePrueba.MensajesAsync(empresa, ct)).Where(m => consumidos.Add(m.Data.ItemId)).ToList();
+            if (pendientes.Count == 0)
+                break;
+            foreach (var mensaje in pendientes)
+                await DerivacionDePrueba.ConsumirAsync(api, empresa.Id, mensaje.Data, ct);
+        }
+
+        foreach (var vehiculo in lote.Vehiculos)
+        {
+            var item = (await DerivacionDePrueba.ItemsAsync(empresa, vehiculo.Id, ct)).Single();
+            (item.Estado, item.MotivoCodigo).Should().Be((EstadoItemDerivacion.Omitido, MotivoDerivacion.NoViable), "revalida con el dictamen ajustado");
+        }
+
+        falso.Llamadas.Should().BeEmpty("ningún ítem llega a Trámites con el dictamen bloqueado");
+        var sondeo = await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: versionAjuste), ct), ct);
+        var filas = sondeo.GetProperty("vehiculos").EnumerateArray().ToList();
+        filas.Should().HaveCount(2).And.OnlyContain(f =>
+            f.GetProperty("version").GetInt64() > versionAjuste && f.GetProperty("derivacion").GetProperty("estado").GetString() == "OMITIDO");
+        sondeo.GetProperty("conteos").GetProperty("listos_tramite").GetInt32().Should().Be(0);
+        sondeo.GetProperty("conteos").GetProperty("bloqueados").GetInt32().Should().Be(2);
     }
 
     [Fact]

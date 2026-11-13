@@ -1320,6 +1320,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("ajustado_desde_version")
                         .HasComment("Versión vigente que reemplazó el override o ajuste FLIT (= version - 1). NULL en las automáticas. [ADR-0086]");
 
+                    b.Property<bool>("AjusteConTramite")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ajuste_con_tramite")
+                        .HasDefaultValueSql("false")
+                        .HasComment("True si el vehículo ya tenía trámite cuando FLIT confirmó el ajuste (confirmar_con_tramite). Solo en ajustes; solo backoffice. [ADR-0084]");
+
                     b.Property<string>("AjusteMotivo")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -1445,6 +1451,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasComment("Dictamen de un vehículo (clase (a) de ADR-0072, ADR-0077): tenant_id, xmin y FK compuesta al vehículo. Nace vacía, sin borrado lógico.");
 
                             t.HasCheckConstraint("ck_dictamenes_ajuste", "analisis_override = (ajustado_desde_version IS NOT NULL) AND (ajustado_desde_version IS NULL OR ajustado_desde_version = version - 1)");
+
+                            t.HasCheckConstraint("ck_dictamenes_ajuste_con_tramite", "NOT ajuste_con_tramite OR analisis_override");
 
                             t.HasCheckConstraint("ck_dictamenes_ajuste_motivo", "ajuste_motivo IS NULL OR (analisis_override AND char_length(btrim(ajuste_motivo)) BETWEEN 10 AND 500)");
 

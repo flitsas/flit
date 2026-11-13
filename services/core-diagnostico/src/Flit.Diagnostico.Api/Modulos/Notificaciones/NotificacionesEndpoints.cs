@@ -85,7 +85,7 @@ internal static class NotificacionesEndpoints
         var hay = filas.Count > tope;
         var items = filas.Take(tope).Select(f => new NotificacionDto(
             f.Id, f.Tipo, f.CreadaEn, f.LeidaEn, f.DiagnosticoId, Titulo(f.Tipo), Mensaje(f.Tipo, f.Lote),
-            new AccionNotificacionDto(Accion(f.Tipo), $"/diagnostico/{f.DiagnosticoId}"))).ToList();
+            new AccionNotificacionDto(Accion(f.Tipo), $"/diagnosticos/{f.DiagnosticoId}"))).ToList();
         return Results.Ok(new BandejaNotificacionesDto(noLeidas, items, hay ? items[^1].Id : null));
     }
 
