@@ -50,12 +50,20 @@ export function cuerpoAjusteDictamen(p: {
   return cuerpo;
 }
 
-/** D9: motivo obligatorio de 10 a 500 caracteres. Devuelve el error o null. */
+/**
+ * Largo en puntos de código (observación 2 del code review, HU #14562): el BE cuenta así, no en unidades UTF-16 como
+ * `String.length`. Un emoji o un carácter fuera del plano básico cuenta 1.
+ */
+export function largoTexto(texto: string): number {
+  return [...texto].length;
+}
+
+/** D9: motivo obligatorio de 10 a 500 caracteres (puntos de código). Devuelve el error o null. */
 export function validarMotivoAjuste(motivo: string): string | null {
-  const m = motivo.trim();
-  if (m.length === 0) return "El motivo es obligatorio.";
-  if (m.length < MOTIVO_MIN) return `Escribe al menos ${MOTIVO_MIN} caracteres.`;
-  if (m.length > MOTIVO_MAX) return `El motivo admite máximo ${MOTIVO_MAX} caracteres.`;
+  const largo = largoTexto(motivo.trim());
+  if (largo === 0) return "El motivo es obligatorio.";
+  if (largo < MOTIVO_MIN) return `Escribe al menos ${MOTIVO_MIN} caracteres.`;
+  if (largo > MOTIVO_MAX) return `El motivo admite máximo ${MOTIVO_MAX} caracteres.`;
   return null;
 }
 
@@ -69,7 +77,7 @@ export interface ErrorCampoAjuste {
 export function validarAlertamiento(a: AlertamientoAjuste): string | null {
   const texto = a.texto.trim();
   if (!texto) return "Escribe el texto del alertamiento.";
-  if (texto.length > TEXTO_ALERTAMIENTO_MAX) return `El texto admite máximo ${TEXTO_ALERTAMIENTO_MAX} caracteres.`;
+  if (largoTexto(texto) > TEXTO_ALERTAMIENTO_MAX) return `El texto admite máximo ${TEXTO_ALERTAMIENTO_MAX} caracteres.`;
   if (a.codigo === CODIGO_AJUSTE_FLIT && SECUENCIA_DIGITOS.test(texto)) return "No escribas secuencias de 6 o más dígitos (pueden ser documentos).";
   return null;
 }

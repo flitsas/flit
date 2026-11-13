@@ -111,3 +111,40 @@ describe("HU14562 AC54 error del sondeo", () => {
     expect(pedidos(api, RUTA)).toHaveLength(2);
   });
 });
+
+// Observación 1 del code review (HU #14562): si el POST de leída o de «leer todas» falla, el contador vuelve a su valor y
+// el siguiente sondeo va sin If-None-Match; con el ETag viejo el servidor respondía 304 y el contador quedaba mal.
+describe("HU14562 code review obs. 1: fallo al marcar leída", () => {
+  it("si POST …/leida falla, revierte el contador y el aviso, y el sondeo siguiente pide sin ETag", async () => {
+    const a1 = aviso(1);
+    const a2 = aviso(2);
+    const api = simularApi({
+      [`GET ${RUTA}`]: bandejas(bandeja([a1, a2])),
+      [`POST ${RUTA}/${a1.id}/leida`]: () => Response.json({ error: "x" }, { status: 500 }),
+    });
+    const { result } = renderHook(() => useNotificaciones());
+    await avanzar(0);
+    expect(result.current.noLeidas).toBe(2);
+    await act(() => result.current.marcarLeida(a1.id));
+    await avanzar(0);
+    expect(result.current.noLeidas).toBe(2);
+    expect(result.current.items.find((i) => i.id === a1.id)?.leida_en).toBeNull();
+    const gets = pedidos(api, RUTA);
+    expect(gets.at(-1)?.etag).toBeNull();
+  });
+
+  it("si POST …/leer-todas falla, el contador vuelve al valor anterior y el sondeo siguiente pide sin ETag", async () => {
+    const api = simularApi({
+      [`GET ${RUTA}`]: bandejas(bandeja([aviso(1), aviso(2), aviso(3, { leida_en: "2026-11-12T16:00:00+00:00" })])),
+      [`POST ${RUTA}/leer-todas`]: () => Response.json({ error: "x" }, { status: 503 }),
+    });
+    const { result } = renderHook(() => useNotificaciones());
+    await avanzar(0);
+    expect(result.current.noLeidas).toBe(2);
+    await act(() => result.current.leerTodas());
+    await avanzar(0);
+    expect(result.current.noLeidas).toBe(2);
+    expect(result.current.items.filter((i) => !i.leida_en)).toHaveLength(2);
+    expect(pedidos(api, RUTA).at(-1)?.etag).toBeNull();
+  });
+});

@@ -52,6 +52,10 @@ export function useNotificaciones(): Notificaciones {
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+  const noLeidasRef = useRef(noLeidas);
+  useEffect(() => {
+    noLeidasRef.current = noLeidas;
+  }, [noLeidas]);
 
   const programar = useCallback((fn: () => void) => {
     if (temporizador.current) clearTimeout(temporizador.current);
@@ -107,32 +111,45 @@ export function useNotificaciones(): Notificaciones {
     };
   }, [sondear]);
 
+  /**
+   * Observación 1 del code review (HU #14562): si el POST falla, lo marcado en el cliente se revierte (contador y avisos) y
+   * el sondeo siguiente va sin If-None-Match. Con el ETag viejo el servidor respondía 304 y el contador quedaba bajo.
+   */
+  const revertir = useCallback((ids: ReadonlySet<string>, marca: string, descontadas: number) => {
+    etag.current = null;
+    setItems((lista) => lista.map((i) => (ids.has(i.id) && i.leida_en === marca ? { ...i, leida_en: null } : i)));
+    setNoLeidas((n) => n + descontadas);
+  }, []);
+
   const marcarLeida = useCallback(
     async (id: string) => {
       const ahora = new Date().toISOString();
-      if (itemsRef.current.some((i) => i.id === id && !i.leida_en)) setNoLeidas((n) => Math.max(0, n - 1));
+      const sinLeer = itemsRef.current.some((i) => i.id === id && !i.leida_en);
+      if (sinLeer) setNoLeidas((n) => Math.max(0, n - 1));
       setItems((lista) => lista.map((i) => (i.id === id && !i.leida_en ? { ...i, leida_en: ahora } : i)));
       try {
         await marcarNotificacionLeida(id);
       } catch {
-        // El siguiente sondeo trae el estado real del servidor.
+        if (sinLeer) revertir(new Set([id]), ahora, 1);
       }
       void sondear();
     },
-    [sondear],
+    [revertir, sondear],
   );
 
   const leerTodas = useCallback(async () => {
     const ahora = new Date().toISOString();
+    const marcadas = new Set(itemsRef.current.filter((i) => !i.leida_en).map((i) => i.id));
+    const antes = noLeidasRef.current;
     setItems((lista) => lista.map((i) => (i.leida_en ? i : { ...i, leida_en: ahora })));
     setNoLeidas(0);
     try {
       await leerTodasNotificaciones();
     } catch {
-      // Ídem: el sondeo corrige si el servidor no lo aplicó.
+      revertir(marcadas, ahora, antes);
     }
     void sondear();
-  }, [sondear]);
+  }, [revertir, sondear]);
 
   const reintentar = useCallback(() => {
     setEstado("cargando");

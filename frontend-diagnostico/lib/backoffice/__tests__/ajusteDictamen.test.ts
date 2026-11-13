@@ -4,6 +4,8 @@ import {
   cuerpoAjusteDictamen,
   errorAjusteDictamen,
   puedeAplicarAjuste,
+  largoTexto,
+  validarAlertamiento,
   validarAlertamientos,
   validarMotivoAjuste,
   type FilaAlertamiento,
@@ -87,5 +89,33 @@ describe("HU14562 AC45 alertamientos del ajuste", () => {
     expect(puedeAplicarAjuste({ veredicto: "VIABLE", motivo: "corto", alertamientos: [] })).toBe(false);
     expect(puedeAplicarAjuste({ veredicto: "VIABLE", motivo: "Motivo suficiente", alertamientos: [] })).toBe(true);
     expect(puedeAplicarAjuste({ veredicto: "VIABLE", motivo: "Motivo suficiente", alertamientos: [fila(1)] })).toBe(false);
+  });
+});
+
+// Observación 2 del code review (HU #14562): el BE cuenta el largo en puntos de código, no en unidades UTF-16. Un emoji
+// cuenta 1, así que el FE no rechaza un motivo que el BE acepta ni acepta uno que el BE rechaza.
+describe("HU14562 code review obs. 2: largos en puntos de código", () => {
+  const EMOJI = "\u{1F697}"; // 1 punto de código, 2 unidades UTF-16.
+
+  it("largoTexto cuenta puntos de código", () => {
+    expect(EMOJI.length).toBe(2);
+    expect(largoTexto(EMOJI)).toBe(1);
+    expect(largoTexto("ñandú")).toBe(5);
+    expect(largoTexto("")).toBe(0);
+  });
+
+  it("el mínimo del motivo se mide en puntos de código: 5 emojis no alcanzan 10", () => {
+    expect(validarMotivoAjuste(EMOJI.repeat(5))).toBe("Escribe al menos 10 caracteres.");
+    expect(validarMotivoAjuste(EMOJI.repeat(10))).toBeNull();
+  });
+
+  it("el máximo del motivo se mide en puntos de código: 500 emojis caben y 501 no", () => {
+    expect(validarMotivoAjuste(EMOJI.repeat(500))).toBeNull();
+    expect(validarMotivoAjuste(EMOJI.repeat(501))).toBe("El motivo admite máximo 500 caracteres.");
+  });
+
+  it("el texto del alertamiento también se mide en puntos de código", () => {
+    expect(validarAlertamiento({ ...ALERTA, texto: EMOJI.repeat(500) })).toBeNull();
+    expect(validarAlertamiento({ ...ALERTA, texto: EMOJI.repeat(501) })).toBe("El texto admite máximo 500 caracteres.");
   });
 });
