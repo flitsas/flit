@@ -4,13 +4,13 @@
 // llama a /radicar. Muestra el ID del trámite (código público) y dónde recogerlo; mientras el registro en FLIT 2.0 está en
 // curso sondea hasta que quede registrado o rechazado.
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConsultarModal } from "@/components/modales/ConsultarModal";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { boton } from "@/components/landing/estilos";
 import { ResumenCierre } from "@/components/punto/ResumenCierre";
 import type { CierrePuntoRespuesta, ClientePortal } from "@/lib/api/cliente";
-import { mensajeDeFallo } from "@/lib/api/errores";
+import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
 
 /** Cada cuánto se vuelve a preguntar mientras el trámite está en registro. */
 export const INTERVALO_SONDEO_CIERRE_MS = 3000;
@@ -21,9 +21,13 @@ export type PropsCierrePunto = {
   tipoCodigo: string;
   /** Sale del wizard (vuelve al inicio del punto). */
   onTerminar: () => void;
+  /** La caja anuló el cobro estando en el cierre (409 tras haber mostrado un pago): el asistente vuelve al paso Pago. */
+  onPagoAnulado?: () => void;
+  /** Llega el radicado de FLIT 2.0 (para la barra lateral del asistente). */
+  onRadicado?: (radicado: string) => void;
 };
 
-export function CierrePunto({ cliente, solicitudId, onTerminar }: PropsCierrePunto) {
+export function CierrePunto({ cliente, solicitudId, onTerminar, onPagoAnulado, onRadicado }: PropsCierrePunto) {
   const [consultando, setConsultando] = useState(false);
   const cierre = useQuery<CierrePuntoRespuesta>({
     queryKey: ["pn", "punto", "cierre", solicitudId],
@@ -32,6 +36,19 @@ export function CierrePunto({ cliente, solicitudId, onTerminar }: PropsCierrePun
     retry: false,
   });
   const datos = cierre.data;
+  // Tras haber mostrado un pago, un 409 es que la caja lo anuló: no queda nada que mostrar aquí.
+  const pagoAnulado = Boolean(onPagoAnulado) && datos !== undefined && cierre.error instanceof ApiError && cierre.error.status === 409;
+  const avisoAnulado = useRef(false);
+  useEffect(() => {
+    if (!pagoAnulado || avisoAnulado.current) return;
+    avisoAnulado.current = true;
+    onPagoAnulado?.();
+  }, [pagoAnulado, onPagoAnulado]);
+  const radicado = datos?.radicadoFlit2 ?? null;
+  useEffect(() => {
+    if (radicado) onRadicado?.(radicado);
+  }, [radicado, onRadicado]);
+  if (pagoAnulado) return null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-4" aria-busy={cierre.isPending}>

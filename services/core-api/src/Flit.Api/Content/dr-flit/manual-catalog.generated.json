@@ -3275,6 +3275,7 @@
             "Pulsa «Generar pago en caja». Aparece el ID del trámite (por ejemplo PN-2026-000123), con un botón para copiarlo, el total y «Vale hasta hoy a las 11:59 p. m.».",
             "La persona va a la caja con ese ID. Cuando la caja confirma el cobro, la pantalla del punto pasa sola al cierre.",
             "Si el día terminó sin pagar, el ID vence: vuelve a «Generar pago en caja» y el total se calcula de nuevo con los precios vigentes.",
+            "Si recargaste la página o la caja anuló el cobro, entra a «Consultar mi trámite» con la placa y el código, pulsa «Retomar el pago» y escribe la cédula de quien radicó. Si la caja anula el cobro mientras ves el cierre, la pantalla vuelve sola a Pago con el aviso «La caja anuló el cobro. Genera el pago de nuevo.».",
             "Si el total es $0, la pantalla muestra «Confirmar» y sigue al cierre sin ir a la caja.",
             "Si el trámite no tiene precio en el organismo, o el organismo no tiene habilitado el pago en caja, la pantalla lo dice y no deja continuar."
           ],

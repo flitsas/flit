@@ -19,7 +19,7 @@ const registrado = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-function montar(rutas: Record<string, Manejador>) {
+function montar(rutas: Record<string, Manejador>, extras: { onPagoAnulado?: () => void; onRadicado?: (r: string) => void } = {}) {
   const llamadas: string[] = [];
   const fetchImpl = (async (url: string, init: RequestInit = {}) => {
     const clave = `${init.method ?? "GET"} ${String(url).replace("/api/v1/persona-natural", "")}`;
@@ -27,7 +27,7 @@ function montar(rutas: Record<string, Manejador>) {
     return (rutas[clave] ?? (() => json({ code: "no_simulado" }, 404)))();
   }) as unknown as typeof fetch;
   const onTerminar = vi.fn();
-  renderConQuery(<CierrePunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" onTerminar={onTerminar} />);
+  renderConQuery(<CierrePunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" onTerminar={onTerminar} {...extras} />);
   return { llamadas, onTerminar };
 }
 
@@ -125,5 +125,40 @@ describe("Cierre del punto", () => {
     fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
 
     await waitFor(() => expect(llamadas).toContain("POST /radicados/consulta"));
+  });
+});
+
+describe("Cierre del punto: pago anulado y radicado", () => {
+  it("avisa el radicado de FLIT 2.0 cuando el cierre lo trae", async () => {
+    const onRadicado = vi.fn();
+    montar({ [CIERRE]: () => json(registrado()) }, { onRadicado });
+    await waitFor(() => expect(onRadicado).toHaveBeenCalledWith("TR-2026-000123"));
+  });
+
+  it("no avisa radicado mientras el trámite sigue en registro sin radicado", async () => {
+    const onRadicado = vi.fn();
+    montar({ [CIERRE]: () => json(registrado({ estadoCierre: "en_registro", radicadoFlit2: undefined })) }, { onRadicado });
+    await screen.findByText(/Tu trámite está en proceso de registro/);
+    expect(onRadicado).not.toHaveBeenCalled();
+  });
+
+  it("409 tras haber mostrado un pago: avisa onPagoAnulado y no deja el bloque viejo ni «Valor pagado»", async () => {
+    let n = 0;
+    const onPagoAnulado = vi.fn();
+    montar(
+      { [CIERRE]: () => (++n === 1 ? json(registrado({ estadoCierre: "en_registro", radicadoFlit2: undefined })) : json({ code: "pago_pendiente", message: "El trámite aún no tiene un pago confirmado." }, 409)) },
+      { onPagoAnulado },
+    );
+    expect(await screen.findByText(/Tu trámite está en proceso de registro/)).toBeInTheDocument();
+    await waitFor(() => expect(onPagoAnulado).toHaveBeenCalledTimes(1), { timeout: 8000 });
+    expect(screen.queryByText(/Valor pagado/)).toBeNull();
+    expect(screen.queryByText(/proceso de registro/)).toBeNull();
+  }, 15000);
+
+  it("409 en la primera carga (sin pago mostrado) conserva el error con «Reintentar» y no avisa anulación", async () => {
+    const onPagoAnulado = vi.fn();
+    montar({ [CIERRE]: () => json({ code: "pago_pendiente", message: "El pago aún no se confirma." }, 409) }, { onPagoAnulado });
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(onPagoAnulado).not.toHaveBeenCalled();
   });
 });
