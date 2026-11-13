@@ -78,12 +78,13 @@ export default function ConfiguracionPagina() {
   } else {
     const configuracion = carga.tipo === "listo" ? carga.configuracion : null;
     const pestanas: Pestana[] = [
-      { id: "contrato", etiqueta: "Contrato", contenido: <PestanaContrato contrato={configuracion?.contrato ?? null} puedeEditar={editarContrato} /> },
+      { id: "contrato", etiqueta: "Contrato", icono: "documento", contenido: <PestanaContrato contrato={configuracion?.contrato ?? null} puedeEditar={editarContrato} /> },
     ];
     if (configuracion)
       pestanas.push({
         id: "operacion",
         etiqueta: "Operación",
+        icono: "ajustes",
         contenido: (
           <PestanaOperacion
             configuracion={configuracion}
