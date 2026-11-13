@@ -29,7 +29,8 @@ const navegacion = nav as unknown as Navegacion;
 type Opciones = Parameters<typeof montarNuevo>[1];
 const montar = (opciones: Opciones = {}) => montarNuevo(navegacion, { query: "modo=express", ...opciones });
 
-const nombre = () => screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
+// El primer montaje del archivo importa la página en frío: con la suite en paralelo puede pasar de 1 s.
+const nombre = () => screen.findByRole("textbox", { name: "Nombre del diagnóstico" }, { timeout: 5000 });
 /** La placa con la configuración ya cargada (mientras llega, el campo se ve deshabilitado). */
 const placa = async () => {
   await nombre();

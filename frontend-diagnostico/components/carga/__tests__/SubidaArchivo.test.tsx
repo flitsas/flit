@@ -16,7 +16,11 @@ function montar(onResumen = vi.fn(), onAccesoNegado = vi.fn()) {
 }
 
 const selector = () => screen.getByLabelText(/archivo de vehículos/i) as HTMLInputElement;
-const subir = (f: File) => fireEvent.change(selector(), { target: { files: [f] } });
+const subir = (f: File) => {
+  fireEvent.change(selector(), { target: { files: [f] } });
+  const validar = screen.getByRole("button", { name: "Validar archivo" });
+  if (!(validar as HTMLButtonElement).disabled) fireEvent.click(validar);
+};
 
 describe("SubidaArchivo — selector y plantilla", () => {
   it("el selector filtra .xlsx y .csv y la plantilla se descarga por el BFF", () => {
@@ -49,14 +53,23 @@ describe("SubidaArchivo — selector y plantilla", () => {
 });
 
 describe("SubidaArchivo — archivo .xls (AC 1)", () => {
-  it("el 422 de un .xls muestra el mensaje de la API que pide guardarlo como .xlsx y no avanza", async () => {
-    simularApi({
+  it("AC10/AC20 (HU #14562): la ZonaArrastre rechaza el .xls en pantalla, con el error asociado y sin llamar a la API", async () => {
+    const api = simularApi({
       [`POST ${ruta("/carga")}`]: () => Response.json({ code: "FORMATO_XLS_NO_ADMITIDO", error: MENSAJE_XLS }, { status: 422 }),
     });
     const { onResumen } = montar();
     subir(archivo("flota.xls", "application/vnd.ms-excel"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(MENSAJE_XLS);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/formato no admitido.*\.xlsx.*\.csv/i);
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toHaveAccessibleDescription(/formato no admitido/i);
+    expect(llamadas(api, "POST", ruta("/carga"))).toHaveLength(0);
     expect(onResumen).not.toHaveBeenCalled();
+  });
+
+  it("AC20 (HU #14562): usa la ZonaArrastre del kit, con «Elegir archivo» operable por teclado", () => {
+    simularApi({});
+    montar();
+    expect(screen.getByTestId("zona-arrastre")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toBeInTheDocument();
   });
 });
 

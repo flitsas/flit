@@ -111,15 +111,16 @@ describe("Masivo — validaciones en pantalla (AC4)", () => {
     fireEvent.change(await nombre(), { target: { value: "Flota norte" } });
     validar();
     expect(await screen.findByText(/elige el archivo de vehículos/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/archivo de vehículos/i)).toHaveAttribute("aria-invalid", "true");
+    // ZonaArrastre del kit (HU #14562 AC10): el error queda asociado a «Elegir archivo».
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toHaveAccessibleDescription(/elige el archivo de vehículos/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
   });
 
-  it("un formato no admitido se rechaza con el mensaje de siempre, sin llamar a la API", async () => {
+  it("un formato no admitido lo rechaza la ZonaArrastre del kit, sin llamar a la API", async () => {
     const api = montar();
     await nombre();
     elegir(archivo("flota.pdf", "application/pdf"));
-    expect(await screen.findByText(/formato no admitido: sube el archivo en \.xlsx o \.csv/i)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/formato no admitido.*\.xlsx.*\.csv/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
   });
 
