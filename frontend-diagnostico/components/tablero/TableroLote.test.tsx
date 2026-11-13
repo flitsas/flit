@@ -11,8 +11,8 @@ import { ID, V1, celda, desdesPedidos, grilla, llamadas, loteTerminadoConErrores
 // tarjeta título con el nombre, estado global y avance, la grilla de semáforos con sondeo cada 3 s y «Cerrar panel»
 // cuando el lote terminó con errores. Cuatro estados: cargando, error con Reintentar, vacío (sin vehículos) y lleno.
 
-const navegacion = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/diagnosticos/x", useRouter: () => navegacion }));
+const navegacion = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), notFound: vi.fn() }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/diagnosticos/x", useRouter: () => navegacion, notFound: navegacion.notFound }));
 
 const USUARIO: Partial<CapacidadesDiagnostico> = { verDiagnosticos: true };
 const ADMIN: Partial<CapacidadesDiagnostico> = { verDiagnosticos: true, reprocesarConsultas: true, editarConfiguracion: true };
@@ -49,6 +49,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   navegacion.push.mockReset();
   navegacion.replace.mockReset();
+  navegacion.notFound.mockReset();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -80,16 +81,40 @@ describe("/diagnosticos/{id} — los cuatro estados", () => {
     expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
   });
 
-  it("error 404: el diagnóstico no existe o no es visible, sin Reintentar", async () => {
+  it("HU #14562 AC49/AC57 error 404 (no existe o es de otro usuario con visibilidad PROPIOS): la página 404 de la app", async () => {
     await montar({ [GRILLA]: () => Response.json({ error: "No existe" }, { status: 404 }) });
-    expect(screen.getByRole("heading", { name: /no encontramos este diagnóstico/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+    expect(navegacion.notFound).toHaveBeenCalled();
+    expect(navegacion.replace).not.toHaveBeenCalled();
+  });
+
+  it("HU #14562 AC49: un 5xx no es la 404: error de módulo con Reintentar y sin notFound", async () => {
+    await montar({ [GRILLA]: () => Response.json({ error: "x" }, { status: 502 }) });
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+    expect(navegacion.notFound).not.toHaveBeenCalled();
+  });
+
+  it("HU #14562 AC49: un 403 de sesión de la grilla (SIN_EMPRESA) lleva a la página 403 con su código", async () => {
+    await montar({ [GRILLA]: () => Response.json({ code: "SIN_EMPRESA", error: "x" }, { status: 403 }) });
+    expect(navegacion.replace).toHaveBeenCalledWith("/403?code=SIN_EMPRESA");
+    expect(navegacion.notFound).not.toHaveBeenCalled();
   });
 
   it("vacío: un lote sin vehículos lo dice y no muestra la grilla", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla({ estado: "CREADO", vehiculos: [], avance: { vehiculos: 0, terminados: 0 } })) });
     expect(screen.getByRole("heading", { name: /todavía no tiene vehículos/i })).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("HU #14562 AC57: el lote sin vehículos ofrece «Cargar vehículos» solo con crearDiagnosticos", async () => {
+    const vacio = () => Response.json(grilla({ estado: "CREADO", vehiculos: [], avance: { vehiculos: 0, terminados: 0 } }));
+    await montar({ [GRILLA]: vacio }, { verDiagnosticos: true, crearDiagnosticos: true });
+    expect(screen.getByRole("link", { name: "Cargar vehículos" })).toHaveAttribute("href", `/diagnosticos/${ID}/carga`);
+  });
+
+  it("HU #14562 AC57 (negativo): sin crearDiagnosticos el lote sin vehículos no ofrece «Cargar vehículos»", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla({ estado: "CREADO", vehiculos: [], avance: { vehiculos: 0, terminados: 0 } })) });
+    expect(screen.getByRole("heading", { name: /todavía no tiene vehículos/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Cargar vehículos" })).toBeNull();
   });
 
   it("sin permiso de ver diagnósticos: estado vacío y ninguna consulta de la grilla", async () => {

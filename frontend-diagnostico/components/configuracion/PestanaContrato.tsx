@@ -94,6 +94,16 @@ function ContratoSoloLectura({ contrato }: { contrato: NivelContrato }) {
         </dd>
         <dt className={ETIQUETA_CLS}>Límite de vehículos por lote</dt>
         <dd className="text-sm font-semibold text-flit-primary">{contrato.limite_vehiculos_lote}</dd>
+        {typeof contrato.redaccion_ia_suspendida === "boolean" && (
+          <>
+            <dt className={ETIQUETA_CLS}>Redacción IA del dictamen</dt>
+            <dd>
+              <span {...etiquetaKit(contrato.redaccion_ia_suspendida ? "warning" : "success")}>
+                {contrato.redaccion_ia_suspendida ? "Suspendida" : "Activa"}
+              </span>
+            </dd>
+          </>
+        )}
       </dl>
     </section>
   );

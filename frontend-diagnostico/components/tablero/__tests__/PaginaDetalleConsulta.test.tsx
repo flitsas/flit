@@ -34,13 +34,14 @@ import { simitProveedorPersona, simitProveedorVehiculo } from "@/lib/tablero/__t
 // «Respuesta de la fuente» (RespuestaFuente: solo datos de la consulta, en español). Cuatro estados: cargando, error (404 no
 // disponible, 403 a la página 403, otro con Reintentar), vacío y lleno; sin la capacidad verDiagnosticos no se pide nada.
 
-const h = vi.hoisted(() => ({ capacidades: { verDiagnosticos: true } as Record<string, boolean>, replace: vi.fn() }));
+const h = vi.hoisted(() => ({ capacidades: { verDiagnosticos: true } as Record<string, boolean>, replace: vi.fn(), notFound: vi.fn() }));
 vi.mock("@/components/DiagnosticoShell", () => ({ useSesion: () => ({ sesion: sesion(h.capacidades), cargando: false, error: null, recargar: () => {} }) }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/diagnosticos/x", useRouter: () => ({ replace: h.replace, push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/diagnosticos/x", useRouter: () => ({ replace: h.replace, push: vi.fn(), refresh: vi.fn() }), notFound: h.notFound }));
 
 beforeEach(() => {
   h.capacidades = { verDiagnosticos: true };
   h.replace.mockReset();
+  h.notFound.mockReset();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -138,12 +139,29 @@ describe("PaginaDetalleConsulta — los otros estados de carga", () => {
     expect(screen.getByRole("heading", { level: 1, name: "RUNT vehículo" })).toBeInTheDocument();
   });
 
-  it("404: dice que no está disponible y no muestra datos", async () => {
+  it("HU #14562 AC49/AC57 404 (no existe o el lote es de otro usuario con PROPIOS): la página 404 de la app, sin datos", async () => {
     const { pagina } = await abrir("SIMIT_VEHICULO", Response.json({ code: "NO_ENCONTRADO", error: "No existe" }, { status: 404 }));
-    expect(await within(pagina).findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+    await waitFor(() => expect(h.notFound).toHaveBeenCalled());
     expect(within(pagina).queryByRole("table")).not.toBeInTheDocument();
     expect(within(pagina).queryByRole("region", { name: "Respuesta de la fuente" })).not.toBeInTheDocument();
-    expect(within(pagina).queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("una fuente desconocida en la ruta sigue siendo «no disponible» en la tarjeta, sin pedir nada ni ir a la 404", async () => {
+    const cargar = vi.fn();
+    render(<PaginaDetalleConsulta loteId={ID} vehiculoId="vehiculo-1" fuente="NO_EXISTE" cargar={cargar} />);
+    expect(await screen.findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+    expect(cargar).not.toHaveBeenCalled();
+    expect(h.notFound).not.toHaveBeenCalled();
+  });
+
+  it("backoffice: el 404 del lote en la compañía elegida se queda en la tarjeta («no disponible»), sin ir a la 404", async () => {
+    const { ApiError } = await import("@/lib/api");
+    render(
+      <PaginaDetalleConsulta loteId={ID} vehiculoId="vehiculo-1" fuente="RUNT" backoffice cargar={() => Promise.reject(new ApiError(404, "No existe", "NO_ENCONTRADO"))} />,
+    );
+    expect(await screen.findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+    expect(h.notFound).not.toHaveBeenCalled();
   });
 
   it("403 de sesión (SIN_EMPRESA): a la página 403, como el tablero", async () => {

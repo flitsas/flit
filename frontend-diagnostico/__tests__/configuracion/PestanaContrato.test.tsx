@@ -65,6 +65,34 @@ describe("pestaña Contrato", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("HU #14562 AC42: con redaccion_ia_suspendida en false, la solo lectura dice «Redacción IA del dictamen: Activa», sin control", () => {
+    render(<PestanaContrato contrato={configuracion({ contrato: { redaccion_ia_suspendida: false } }).contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).getByText("Redacción IA del dictamen")).toBeInTheDocument();
+    expect(within(lectura).getByText("Activa")).toBeInTheDocument();
+    expect(within(lectura).queryByText("Suspendida")).toBeNull();
+    expect(within(lectura).queryAllByRole("switch")).toHaveLength(0);
+  });
+
+  it("HU #14562 AC42: con redaccion_ia_suspendida en true, dice «Suspendida»", () => {
+    render(<PestanaContrato contrato={configuracion({ contrato: { redaccion_ia_suspendida: true } }).contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).getByText("Redacción IA del dictamen")).toBeInTheDocument();
+    expect(within(lectura).getByText("Suspendida")).toBeInTheDocument();
+    expect(within(lectura).queryByText("Activa")).toBeNull();
+  });
+
+  it("HU #14562 AC42 (negativo): sin el campo (API anterior) no muestra la fila de la redacción ni la inventa", () => {
+    render(<PestanaContrato contrato={configuracion().contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).queryByText(/redacción/i)).toBeNull();
+    expect(within(lectura).queryByText("Activa")).toBeNull();
+    expect(within(lectura).queryByText("Suspendida")).toBeNull();
+  });
+
   it("contrato sin fuentes habilitadas muestra el estado vacío", () => {
     render(<PestanaContrato contrato={configuracion({ contrato: { fuentes_habilitadas: [] } }).contrato} puedeEditar={false} />);
 

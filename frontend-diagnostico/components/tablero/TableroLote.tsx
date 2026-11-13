@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState , type ComponentType } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { INLINE_ALERT_TONES, InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
 import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
@@ -102,7 +102,7 @@ function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; chil
  * Tablero del lote (HU #13748, F04-H2) en /diagnosticos/{id}, a donde navegan la confirmación de la carga y el Express:
  * tarjeta título con el nombre del lote, estado global y avance, la grilla de semáforos con sondeo incremental cada 3 s,
  * «Reprocesar» para el admin en las rojas y «Cerrar panel» cuando el lote terminó con errores. Cuatro estados: cargando,
- * error (con Reintentar; 404 como no encontrado), vacío (sin vehículos o sin permiso) y lleno. Arriba, migas «Diagnósticos ›
+ * error (con Reintentar; el 404 va a la página 404 de la app), vacío (sin vehículos o sin permiso) y lleno. Arriba, migas «Diagnósticos ›
  * {lote}» y «Volver a diagnósticos» al listado con los filtros que traía (?desde=, solo como search params de /, HU #14087).
  * Cada semáforo abre su detalle en una pestaña nueva.
  */
@@ -246,6 +246,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
                 diagnosticoId={grilla.id}
                 vehiculo={v}
                 modo={grilla.modo}
+                tramiteAnalizado={grilla.lote?.tipo_tramite?.nombre ?? null}
                 tramitesUrl={tramitesUrl}
                 empresaId={sesion?.empresa.id}
                 onCreado={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
@@ -285,6 +286,10 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     }
   }
 
+  // HU #14562 AC49/AC57: el 404 (no existe o es de otro usuario con visibilidad PROPIOS) es la página 404 de la app, que no
+  // revela si el lote existe.
+  if (puedeVer && error instanceof ApiError && error.status === 404) notFound();
+
   let contenido;
   if (!puedeVer) {
     contenido = (
@@ -294,15 +299,6 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     );
   } else if (cargando || codigo403) {
     contenido = <VehicleLoader label="Cargando el tablero…" />;
-  } else if (error instanceof ApiError && error.status === 404) {
-    contenido = (
-      <Vacio titulo="No encontramos este diagnóstico" Icono={iconoComo("buscar")}>
-        <p className="max-w-md text-sm text-muted-foreground">Puede que no exista o que no tengas acceso a él.</p>
-        <Link href="/" className={BOTON_SECUNDARIO_CLS}>
-          Volver al inicio
-        </Link>
-      </Vacio>
-    );
   } else if (error || !grilla) {
     contenido = (
       <InlineAlert
