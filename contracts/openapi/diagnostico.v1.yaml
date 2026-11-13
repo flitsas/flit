@@ -4950,6 +4950,27 @@ components:
               estado: { type: string, nullable: true }
               organismo: { type: string, nullable: true }
         comparendos_truncados: { type: boolean, description: "true si había más de 100 comparendos." }
+        total_general: { type: string, nullable: true, description: "HU #14563 B4. Texto decimal en pesos. Se omite si la fuente no lo informó (nunca 0 inferido)." }
+        total_por_pagar: { type: string, nullable: true, description: "HU #14563 B4. Se omite si la fuente no lo informó (nunca 0 inferido)." }
+        paz_y_salvo: { type: boolean, nullable: true, description: "HU #14563 B4. Solo si la fuente lo afirma; nunca se deduce de 0 comparendos. Se omite si no vino." }
+        suspendida: { type: boolean, nullable: true, description: "HU #14563 B4. Se omite si la fuente no lo informó." }
+        cancelada: { type: boolean, nullable: true, description: "HU #14563 B4. Se omite si la fuente no lo informó." }
+        multas:
+          type: array
+          nullable: true
+          description: "HU #14563 B4. Multas del SIMIT, sin el infractor. Se omite si la fuente no trae."
+          items: { $ref: "#/components/schemas/MultaSimit" }
+        acuerdos_pago:
+          type: array
+          nullable: true
+          description: "HU #14563 B4. Acuerdos de pago, sin el infractor. Se omite si la fuente no trae."
+          items: { $ref: "#/components/schemas/AcuerdoPagoSimit" }
+        resoluciones:
+          type: array
+          nullable: true
+          description: "HU #14563 B4. Resoluciones, sin el infractor. Se omite (null) si la fuente no las informó; lista vacía si la fuente informó que no hay."
+          items: { $ref: "#/components/schemas/ResolucionSimit" }
+        cantidad_resoluciones: { type: integer, nullable: true, description: "HU #14563 B4. Se omite (null, no 0) si la fuente no informó resoluciones." }
 
     AuditoriaConsulta:
       type: object
@@ -4976,6 +4997,50 @@ components:
         resultado: { type: string, enum: [EXITOSO, ERROR] }
         disparador: { type: string, enum: [AUTOMATICO, REPROCESO] }
         desde_cache: { type: boolean }
+
+    MultaSimit:
+      type: object
+      description: "HU #14563 B4. Una multa del SIMIT. Sin nombre ni documento del infractor."
+      properties:
+        numero: { type: string, nullable: true }
+        fecha: { type: string, nullable: true }
+        valor: { type: string, nullable: true, description: "Texto decimal en pesos." }
+        valor_pagar: { type: string, nullable: true }
+        estado_cartera: { type: string, nullable: true }
+        organismo: { type: string, nullable: true }
+        codigos: { type: string, nullable: true, description: "Códigos de infracción unidos por coma (compatibilidad)." }
+        infracciones:
+          type: array
+          nullable: true
+          items: { $ref: "#/components/schemas/InfraccionSimit" }
+
+    InfraccionSimit:
+      type: object
+      description: "HU #14563 B4. Infracción de una multa."
+      properties:
+        codigo: { type: string, nullable: true, example: C24 }
+        descripcion: { type: string, nullable: true, description: "null si la fuente no la trae." }
+
+    AcuerdoPagoSimit:
+      type: object
+      description: "HU #14563 B4. Acuerdo de pago del SIMIT, sin el infractor."
+      properties:
+        estado: { type: string, nullable: true }
+        cuotas_abonadas: { type: string, nullable: true }
+        cuotas_pendientes: { type: string, nullable: true }
+        pendiente: { type: string, nullable: true }
+        fecha: { type: string, nullable: true }
+        organismo: { type: string, nullable: true }
+
+    ResolucionSimit:
+      type: object
+      description: "HU #14563 B4. Resolución del SIMIT, sin el infractor."
+      properties:
+        numero: { type: string, nullable: true }
+        fecha: { type: string, nullable: true }
+        estado: { type: string, nullable: true }
+        valor: { type: string, nullable: true, description: "Texto decimal en pesos." }
+        organismo: { type: string, nullable: true }
 
     ResultadoAvaluoDetalle:
       type: object

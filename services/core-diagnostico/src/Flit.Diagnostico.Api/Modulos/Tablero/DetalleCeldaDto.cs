@@ -141,7 +141,15 @@ public sealed record ResultadoSimitDetalle(
     IReadOnlyList<MultaSimitDetalle>? Multas = null,
     [property: JsonPropertyName("acuerdos_pago")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<AcuerdoSimitDetalle>? Acuerdos = null) : ResultadoDetalleDto;
+    IReadOnlyList<AcuerdoSimitDetalle>? Acuerdos = null,
+    /// <summary>HU #14563 B4: resoluciones del SIMIT. Null si la fuente no las informó (nunca una lista vacía inferida).</summary>
+    [property: JsonPropertyName("resoluciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ResolucionSimitDetalle>? Resoluciones = null,
+    /// <summary>HU #14563 B4: cuántas resoluciones informó la fuente. Null (no 0) si no las informó.</summary>
+    [property: JsonPropertyName("cantidad_resoluciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? CantidadResoluciones = null) : ResultadoDetalleDto;
 
 /// <summary>Una multa del SIMIT. Sin el infractor: el nombre y el documento no salen.</summary>
 public sealed record MultaSimitDetalle(
@@ -151,7 +159,24 @@ public sealed record MultaSimitDetalle(
     [property: JsonPropertyName("valor_pagar")] string? ValorPagar,
     [property: JsonPropertyName("estado_cartera")] string? EstadoCartera,
     [property: JsonPropertyName("organismo")] string? Organismo,
-    [property: JsonPropertyName("codigos")] string? Codigos);
+    [property: JsonPropertyName("codigos")] string? Codigos,
+    /// <summary>HU #14563 B4: las infracciones de la multa con código y descripción (null si la fuente no trae).</summary>
+    [property: JsonPropertyName("infracciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<InfraccionSimitDetalle>? Infracciones = null);
+
+/// <summary>Una infracción de una multa del SIMIT (HU #14563 B4): código y descripción; la descripción es null si la fuente no la trae.</summary>
+public sealed record InfraccionSimitDetalle(
+    [property: JsonPropertyName("codigo")] string? Codigo,
+    [property: JsonPropertyName("descripcion")] string? Descripcion);
+
+/// <summary>Una resolución del SIMIT (HU #14563 B4), sin el infractor.</summary>
+public sealed record ResolucionSimitDetalle(
+    [property: JsonPropertyName("numero")] string? Numero,
+    [property: JsonPropertyName("fecha")] string? Fecha,
+    [property: JsonPropertyName("estado")] string? Estado,
+    [property: JsonPropertyName("valor")] string? Valor,
+    [property: JsonPropertyName("organismo")] string? Organismo);
 
 /// <summary>Un acuerdo de pago del SIMIT, sin el infractor.</summary>
 public sealed record AcuerdoSimitDetalle(
