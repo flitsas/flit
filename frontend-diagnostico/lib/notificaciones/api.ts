@@ -2,8 +2,9 @@ import { API_PREFIX, ApiError } from "@/lib/api";
 import { isReauthenticating, reauthenticate } from "@flit/auth/client";
 
 /**
- * Campana de Diagnóstico (HU #14562 · AC50–AC54, B8 de HU #14563, ADR-0086). Tipado contra diseno.md §B8 y ADR-0086
- * mientras el OpenAPI de B8 no publica los paths: los campos que el servidor puede no mandar van opcionales.
+ * Campana de Diagnóstico (HU #14562 · AC50–AC54, B8 de HU #14563, ADR-0086). Tipado contra `NotificacionDto` de
+ * `NotificacionesEndpoints.cs` (el OpenAPI aún no publica los paths) y diseno.md §B8: lo que el servidor puede no mandar
+ * va opcional.
  * D8: no existe aviso de dictamen ajustado, por eso no está en `TipoNotificacion`.
  */
 export type TipoNotificacion = "ZIP_EVIDENCIAS_LISTO" | "ZIP_EVIDENCIAS_FALLIDO" | "DERIVACION_TERMINADA" | "LOTE_TERMINADO";
@@ -20,6 +21,11 @@ export interface NotificacionDiagnostico {
   referencia_id?: string;
   /** Solo contadores y códigos (CHECK de la tabla). El texto se arma en el cliente con rótulos fijos. */
   datos?: Record<string, unknown>;
+  /** Texto armado por el servidor con rótulos fijos y el nombre del lote. El título siempre es el del cliente. */
+  titulo?: string;
+  mensaje?: string;
+  /** El `href` del servidor no se usa: la ruta se arma en el cliente (el front no tiene basePath `/diagnostico`). */
+  accion?: { tipo: string; href: string };
 }
 
 export interface RespuestaNotificaciones {

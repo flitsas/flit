@@ -32,4 +32,9 @@ describe("HU14562 AC53 textos de la campana sin PII", () => {
   it("no existe aviso por dictamen ajustado (D8): un tipo desconocido no se pinta", () => {
     expect(textoNotificacion(aviso(7, { tipo: "DICTAMEN_AJUSTADO" as never }))).toBeNull();
   });
+
+  it("forma real del API (sin nombre ni datos, con mensaje del servidor): título fijo del cliente y el mensaje del servidor", () => {
+    const real = aviso(8, { tipo: "ZIP_EVIDENCIAS_LISTO", diagnostico_nombre: undefined, referencia_id: undefined, datos: undefined, mensaje: "El ZIP de evidencias del lote «Lote X» está listo para descargar." });
+    expect(textoNotificacion(real)).toEqual({ titulo: "ZIP de evidencias listo", mensaje: "El ZIP de evidencias del lote «Lote X» está listo para descargar." });
+  });
 });
