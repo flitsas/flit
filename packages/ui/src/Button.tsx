@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, MouseEvent } from "react";
 import { cn } from "./cn";
 
 /**
@@ -24,6 +24,12 @@ const BASE =
 const RELLENO =
   "hover:brightness-90 active:brightness-[.78] active:translate-y-px " +
   "disabled:bg-[color:var(--kit-gris)] disabled:text-white disabled:hover:brightness-100 disabled:active:translate-y-0";
+
+// HU #14562 · M9: el botón en espera usa aria-disabled en lugar de disabled, con el mismo aspecto del deshabilitado.
+// Estas clases solo se agregan con `cargando`; sin la prop, el marcado es el de siempre.
+const ESPERA_GHOST = "aria-disabled:text-[color:var(--kit-gris)] aria-disabled:hover:bg-transparent";
+const ESPERA_RELLENO =
+  "aria-disabled:bg-[color:var(--kit-gris)] aria-disabled:text-white aria-disabled:hover:brightness-100 aria-disabled:active:translate-y-0";
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: `bg-[color:var(--kit-azul-relleno)] text-white ${RELLENO}`,
@@ -58,22 +64,38 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   /**
-   * HU #14562 · UI-1: espera de una acción. Deshabilita el botón, marca aria-busy y pone el girador antes del texto
-   * (gira solo con movimiento permitido). Sin la prop, o en `false`, el marcado es el de siempre.
+   * HU #14562 · UI-1: espera de una acción. Marca aria-busy y pone el girador antes del texto (gira solo con movimiento
+   * permitido). Sin la prop, o en `false`, el marcado es el de siempre.
+   * HU #14562 · M9: el botón queda inoperable con `aria-disabled="true"` y no con `disabled`, para que conserve el foco
+   * de quien lo pulsó con el teclado (2.4.3). Los clics se ignoran y no envía el formulario.
    */
   cargando?: boolean;
 }
 
-export function Button({ variant = "primary", size = "md", className, type = "button", cargando, children, ...rest }: ButtonProps) {
+export function Button({ variant = "primary", size = "md", className, type = "button", cargando, children, onClick, ...rest }: ButtonProps) {
   if (!cargando) {
     return (
-      <button type={type} className={buttonClass({ variant, size, className })} {...rest}>
+      <button type={type} className={buttonClass({ variant, size, className })} onClick={onClick} {...rest}>
         {children}
       </button>
     );
   }
+  // Mientras espera, un `disabled` del llamador (p. ej. «ocupado») tampoco se pone: soltaría el foco igual. El botón ya es
+  // inoperable por aria-disabled y el clic ignorado.
+  const { disabled: _disabled, ...resto } = rest;
+  void _disabled;
   return (
-    <button type={type} className={buttonClass({ variant, size, className })} {...rest} disabled aria-busy="true">
+    <button
+      type={type}
+      className={buttonClass({ variant, size, className: cn(variant === "ghost" ? ESPERA_GHOST : ESPERA_RELLENO, className) })}
+      {...resto}
+      aria-disabled="true"
+      aria-busy="true"
+      onClick={(e: MouseEvent<HTMLButtonElement>) => {
+        // Ignorado mientras espera; preventDefault evita además el envío del formulario con type="submit".
+        e.preventDefault();
+      }}
+    >
       <svg
         data-parte="girador"
         aria-hidden="true"
