@@ -41,8 +41,10 @@ describe("AC3 · familia IconoDx* con exportación por ícono", () => {
     expect(archivos.filter((n) => /^index\.(ts|tsx|js)$/.test(n))).toEqual([]);
   });
 
-  it("la carpeta solo tiene la base y los íconos (ningún archivo de mapa nombre→componente)", () => {
-    const otros = archivos.filter((n) => n !== "BaseIconoDx.tsx" && !iconos.includes(n));
+  it("la carpeta solo tiene la base, los íconos y la licencia de los glifos copiados (ningún archivo de mapa nombre→componente)", () => {
+    const otros = archivos.filter(
+      (n) => n !== "BaseIconoDx.tsx" && n !== "LICENSE-ant-design-icons-svg.txt" && !iconos.includes(n),
+    );
     expect(otros).toEqual([]);
   });
 
