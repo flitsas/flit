@@ -308,3 +308,16 @@ describe("ListadoDiagnosticos — Punto 5 AC6: errores en lenguaje de negocio, s
     aviso.mockRestore();
   });
 });
+
+describe("ListadoDiagnosticos — AC14 (HU #14562): un estado de URL que el API rechaza no viaja", () => {
+  it("?estado=CREADO se descarta: la consulta sale sin estado, el filtro queda en Todos y no hay aviso de error", async () => {
+    h.params = new URLSearchParams("estado=CREADO");
+    const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    expect(consultas(fetchMock)[0]).toEqual({ pagina: "1", tamano: "10" });
+    expect(screen.getByLabelText("Estado")).toHaveValue("");
+    expect(within(screen.getByLabelText("Estado")).queryByRole("option", { name: /Creado|Sin lanzar/ })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

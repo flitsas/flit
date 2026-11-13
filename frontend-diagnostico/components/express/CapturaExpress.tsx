@@ -4,7 +4,7 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { errorIdentificador } from "@/lib/express/api";
+import { AYUDA_FORMATOS_PLACA, errorIdentificador } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
@@ -79,6 +79,8 @@ export function CapturaExpress() {
       ) : (
         <p id={ayudaId} className={AYUDA_CLS}>
           Un vehículo por placa o VIN, o varios desde la plantilla Excel con «Carga masiva».
+          {" "}
+          {AYUDA_FORMATOS_PLACA}
         </p>
       )}
     </form>
