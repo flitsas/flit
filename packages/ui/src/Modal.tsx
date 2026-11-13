@@ -1,11 +1,11 @@
 "use client";
 
-import { useId, useRef } from "react";
+import { useContext, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "./cn";
 import { Icono, type NombreIcono } from "./Icono";
-import { enfocablesDe, useTrampaFoco } from "./useTrampaFoco";
+import { enfocablesDe, ProfundidadCapa, useTrampaFoco } from "./useTrampaFoco";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
 // contraste legible en dark). Encapsula el overlay (`fixed inset-0` + backdrop
@@ -116,6 +116,8 @@ export function Modal({
   void iconBg;
   const panelRef = useRef<HTMLDivElement>(null);
   const cuerpoRef = useRef<HTMLDivElement>(null);
+  // Observación 7 del code review: el contenido sabe que va dentro de esta capa (orden de la pila de useTrampaFoco).
+  const profundidad = useContext(ProfundidadCapa);
 
   // Escape cierra el modal (salvo que esté ocupado); la trampa lee la función en cada pulsación.
   useTrampaFoco({
@@ -157,6 +159,7 @@ export function Modal({
         : header;
 
   return createPortal(
+    <ProfundidadCapa.Provider value={profundidad + 1}>
     <div
       className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-[var(--overlay)] px-3 py-6 backdrop-blur-[5px]`}
       role="dialog"
@@ -217,7 +220,8 @@ export function Modal({
           </div>
         ) : null}
       </div>
-    </div>,
+    </div>
+    </ProfundidadCapa.Provider>,
     document.body,
   );
 }
