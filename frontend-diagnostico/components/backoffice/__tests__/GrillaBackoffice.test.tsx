@@ -228,3 +228,30 @@ describe("Backoffice — HU #14087: página del detalle en pestaña nueva", () =
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/403?code=SIN_PERMISO_BACKOFFICE"));
   });
 });
+
+describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
+  it("D6: el vehículo con dictamen ajustado lleva la marca «Ajustado por FLIT»", async () => {
+    const g = grillaBo();
+    g.vehiculos[0] = { ...g.vehiculos[0], dictamen_ajustado: true };
+    montar(g);
+    await tabla();
+    expect(screen.getAllByText("Ajustado por FLIT")).toHaveLength(1);
+  });
+
+  it("AC47: con verAuditoria, «Auditoría del dictamen de PLACA» abre el panel con las versiones", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    montar(grillaBo(), {
+      [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen/versiones`]: () => Response.json({ versiones: [] }),
+    });
+    await tabla();
+    fireEvent.click(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
+    const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
+    expect(await within(panel).findByText("Este vehículo aún no tiene dictamen.")).toBeInTheDocument();
+  });
+
+  it("AC47: sin verAuditoria no se ofrece la auditoría", async () => {
+    montar();
+    await tabla();
+    expect(screen.queryByRole("button", { name: /^Auditoría del dictamen/ })).toBeNull();
+  });
+});
