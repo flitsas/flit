@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { IconoDxDescargarZip } from "@/components/dx/iconos/IconoDxDescargarZip";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
@@ -110,7 +111,8 @@ export function DescargasLote({ diagnosticoId, estadoLote, puedeDescargar }: Des
           Excel del lote
         </a>
         <button type="button" onClick={() => void pedir()} disabled={ocupado || sinLanzar} aria-busy={ocupado} className={BOTON_SECUNDARIO_CLS}>
-          <Icono nombre="archivo" className="h-4 w-4" />
+          {/* HU #14562 · M7: glifo propio de Diagnóstico para el ZIP de evidencias. */}
+          <IconoDxDescargarZip tamano={16} />
           PDF de todos (ZIP)
         </button>
         {zip.fase === "lista" && (

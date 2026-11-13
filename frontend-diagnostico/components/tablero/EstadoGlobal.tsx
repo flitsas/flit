@@ -41,7 +41,8 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         {grilla.estado === "EN_PROCESO" ? (
-          <EtiquetaEnProceso etiqueta={texto} />
+          // HU #14562 · N2: el mismo nombre que el resto de estados, «Estado del lote: …».
+          <EtiquetaEnProceso etiqueta={texto} nombreAccesible={`Estado del lote: ${texto}`} />
         ) : (
           <span role="status" aria-label={`Estado del lote: ${texto}`} {...etiquetaKit(tono)}>
             <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />

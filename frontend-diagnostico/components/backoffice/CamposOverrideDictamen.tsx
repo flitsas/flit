@@ -1,10 +1,10 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { CAMPO_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS } from "@/components/configuracion/estilos";
 import { ListaAlertamientosAjuste } from "@/components/backoffice/ListaAlertamientosAjuste";
-import { MOTIVO_MAX, validarMotivoAjuste, type FilaAlertamiento } from "@/lib/backoffice/ajusteDictamen";
+import { largoTexto, MOTIVO_MAX, validarMotivoAjuste, type FilaAlertamiento } from "@/lib/backoffice/ajusteDictamen";
 import type { Dictamen } from "@/lib/dictamen/api";
 
 const VEREDICTOS = [
@@ -34,10 +34,14 @@ export interface CamposOverrideDictamenProps {
 /**
  * Campos del override del veredicto (corte 7): solo los pinta el `PanelDictamen` en el backoffice y con la capacidad
  * `corregirDictamen`. El panel conserva el estado y el envío; aquí solo van los veredictos y la confirmación explícita.
+ * HU #14562 · m-11: el motivo no nace inválido; el error local aparece al salir del campo o en cuanto el usuario escribe
+ * (el error del API se muestra siempre). El contador cuenta puntos de código, como el BE (observación 2 del code review).
+ * La confirmación sigue siendo una casilla y no el modal «¿Cambiar a Viable?» de la spec F-09: queda a decisión del PO.
  */
 export function CamposOverrideDictamen({ elegido, onElegir, confirmado, onConfirmar, aviso, motivo = "", onMotivo, errorMotivo = null, alertamientos = [], onAlertamientos, erroresAlertamientos }: CamposOverrideDictamenProps) {
   const id = useId();
-  const errorLocal = validarMotivoAjuste(motivo);
+  const [tocado, setTocado] = useState(false);
+  const errorLocal = tocado || motivo !== "" ? validarMotivoAjuste(motivo) : null;
   const error = errorMotivo ?? errorLocal;
   return (
     <fieldset className="flex flex-col gap-2">
@@ -76,6 +80,7 @@ export function CamposOverrideDictamen({ elegido, onElegir, confirmado, onConfir
             rows={3}
             value={motivo}
             onChange={(e) => onMotivo(e.target.value)}
+            onBlur={() => setTocado(true)}
             aria-invalid={error ? true : undefined}
             aria-describedby={`${id}-aviso ${id}-error`}
             className={CAMPO_CLS.replace("h-11", "min-h-24 py-2")}
@@ -84,7 +89,7 @@ export function CamposOverrideDictamen({ elegido, onElegir, confirmado, onConfir
             <span id={`${id}-error`} className="text-[var(--badge-danger-fg)]">
               {error ?? ""}
             </span>
-            <span className="tabular-nums text-muted-foreground">{`${motivo.trim().length} / ${MOTIVO_MAX}`}</span>
+            <span className="tabular-nums text-muted-foreground">{`${largoTexto(motivo.trim())} / ${MOTIVO_MAX}`}</span>
           </div>
         </div>
       )}

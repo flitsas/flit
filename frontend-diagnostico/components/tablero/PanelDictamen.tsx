@@ -360,14 +360,16 @@ export function PanelDictamen({
       pie={
         ofreceTramite || ofreceAplicar ? (
           <div className="flex flex-wrap justify-end gap-2">
+            {/* HU #14562 · N4: un solo primario por pie; con «Aplicar», «Crear trámite» pasa a secundario. */}
             {ofreceTramite && (
-              <Button size="sm" className="gap-1.5" onClick={onCrearTramite}>
+              <Button variant={ofreceAplicar ? "secondary" : "primary"} size="sm" className="gap-1.5" onClick={onCrearTramite}>
                 <IconoDxCrearTramite tamano={16} />
                 Crear trámite
               </Button>
             )}
+            {/* m-11 (spec F-09): «Aplicar» confirma el cambio de veredicto, en la variante positiva del kit. */}
             {ofreceAplicar && (
-              <Button cargando={enviando} disabled={!listoParaAplicar} size="sm" onClick={() => void aplicar()}>
+              <Button variant="positiva" cargando={enviando} disabled={!listoParaAplicar} size="sm" onClick={() => void aplicar()}>
                 Aplicar
               </Button>
             )}

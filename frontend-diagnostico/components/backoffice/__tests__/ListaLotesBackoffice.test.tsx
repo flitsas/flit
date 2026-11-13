@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ListaLotesBackoffice } from "@/components/backoffice/ListaLotesBackoffice";
 import { EMPRESA_A, listaLotes, lote, simularApi } from "@/lib/backoffice/__tests__/datos";
+import { BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import {
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
@@ -266,5 +267,16 @@ describe("ListaLotesBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px
       for (const td of celdas) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
       for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(celdas[0])).toContain(c);
     }
+  });
+});
+
+// HU #14562 · m-13 (auditoría de UI): el acceso a «Fuentes obligatorias» es un botón secundario del kit, no la píldora de
+// 12 px pensada para «Reintentar».
+describe("ListaLotesBackoffice — HU #14562 m-13", () => {
+  it("«Fuentes obligatorias» usa BOTON_SECUNDARIO_CLS", async () => {
+    conEmpresas();
+    montar();
+    const enlace = await screen.findByRole("link", { name: "Fuentes obligatorias" });
+    expect(enlace.className).toBe(BOTON_SECUNDARIO_CLS);
   });
 });

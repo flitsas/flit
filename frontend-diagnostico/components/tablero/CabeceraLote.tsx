@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { buttonClass } from "@flit/ui/Button";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@flit/ui/Modal";
@@ -93,7 +94,8 @@ export function CabeceraLote({
         size="sm"
         footer={
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onCancelarCierre} className={BOTON_SECUNDARIO_CLS}>
+            {/* HU #14562 · m-13 (spec §1.5): «Cancelar» va en la variante alerta del kit. */}
+            <button type="button" onClick={onCancelarCierre} className={buttonClass({ variant: "alerta", size: "sm", className: "gap-1.5 text-sm" })}>
               Cancelar
             </button>
             <button type="button" onClick={onConfirmarCierre} className={BOTON_PRIMARIO_CLS}>

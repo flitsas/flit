@@ -28,6 +28,11 @@ describe("EstadoGlobal — HU #14562 m-5: componentes del kit en el tablero", ()
     expect(etiqueta.querySelector("[data-marca='punto']")!.className).toContain("motion-safe:animate-pulse");
   });
 
+  it("N2: el lote EN_PROCESO se nombra igual que los demás estados, «Estado del lote: En proceso»", () => {
+    render(<EstadoGlobal grilla={grilla({ estado: "EN_PROCESO" })} sondeando />);
+    expect(screen.getByRole("status", { name: "Estado del lote: En proceso" })).toHaveTextContent("En proceso");
+  });
+
   it("un lote que no está en proceso conserva su chip con «Estado del lote: …» y sin punto pulsante", () => {
     const { container } = render(<EstadoGlobal grilla={grilla({ estado: "COMPLETADO" })} sondeando={false} />);
     expect(screen.getByRole("status", { name: "Estado del lote: Completado" })).toBeInTheDocument();

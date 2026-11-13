@@ -1,8 +1,10 @@
 "use client";
 
-import { CheckSquare, FilePlus2 } from "lucide-react";
+import { useId } from "react";
 import { BarraSeleccion } from "@flit/ui/BarraSeleccion";
 import { Button } from "@flit/ui/Button";
+import { Icono } from "@flit/ui/Icono";
+import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite";
 import { BOTON_SECUNDARIO_CLS, MARCA_CLS } from "@/components/configuracion/estilos";
 import type { FilaVehiculo } from "@/lib/tablero/api";
 import { rotuloMotivo, type DerivacionFila } from "@/lib/tablero/derivacion";
@@ -21,21 +23,33 @@ export interface CasillaDerivacionProps {
  * Casilla de selección de una fila para «Crear trámites (N)» (Punto 4, decisión 4.2). Activa solo en la placa elegible
  * (terminada, VIABLE y sin trámite); en las demás, deshabilitada con el motivo en lenguaje de negocio como descripción
  * accesible y tooltip. Sin datos de derivación en la fila (derivación apagada) no se pinta.
+ * HU #14562 · m-8: el motivo no puede vivir solo en `title` (no llega con teclado, en táctil ni con lector): va en un
+ * texto enlazado por aria-describedby. Ese texto lleva `hidden`: la descripción lo toma igual y el lector no lo repite al
+ * recorrer la fila, donde el motivo ya se ve junto a la acción. El tooltip queda para el puntero.
  */
 export function CasillaDerivacion({ vehiculo, derivacion, marcada, onCambiar }: CasillaDerivacionProps) {
+  const motivoId = `${useId()}-motivo`;
   if (!derivacion.conocida) return null;
   const identificador = vehiculo.placa || vehiculo.vin || vehiculo.identificador;
   const motivo = derivacion.elegible ? undefined : rotuloMotivo(derivacion.motivo ?? (derivacion.tramite ? "YA_TIENE_TRAMITE" : null));
   return (
-    <input
-      type="checkbox"
-      aria-label={`Seleccionar la placa ${identificador}`}
-      checked={derivacion.elegible && marcada}
-      disabled={!derivacion.elegible}
-      title={motivo}
-      onChange={(e) => onCambiar(vehiculo.id, e.target.checked)}
-      className={`${MARCA_CLS} disabled:cursor-not-allowed disabled:opacity-50`}
-    />
+    <>
+      <input
+        type="checkbox"
+        aria-label={`Seleccionar la placa ${identificador}`}
+        aria-describedby={motivo ? motivoId : undefined}
+        checked={derivacion.elegible && marcada}
+        disabled={!derivacion.elegible}
+        title={motivo}
+        onChange={(e) => onCambiar(vehiculo.id, e.target.checked)}
+        className={`${MARCA_CLS} disabled:cursor-not-allowed disabled:opacity-50`}
+      />
+      {motivo && (
+        <span id={motivoId} hidden>
+          {motivo}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -61,7 +75,8 @@ export function BarraSeleccionDerivacion({ elegibles, seleccionadas, enviando, o
     <div role="group" aria-label="Selección para crear trámites" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={onSeleccionarTodas} disabled={elegibles === 0 || enviando} className={BOTON_SECUNDARIO_CLS}>
-          <CheckSquare className="h-4 w-4" aria-hidden="true" />
+          {/* HU #14562 · m-9: íconos del kit y de Diagnóstico, sin lucide. */}
+          <Icono nombre="check" className="h-4 w-4" />
           Seleccionar todos los elegibles
         </button>
       </div>
@@ -76,7 +91,7 @@ export function BarraSeleccionDerivacion({ elegibles, seleccionadas, enviando, o
               "Creando trámites…"
             ) : (
               <>
-                <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+                <IconoDxCrearTramite tamano={16} />
                 {`Crear trámites (${seleccionadas})`}
               </>
             )}

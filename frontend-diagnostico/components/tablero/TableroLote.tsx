@@ -52,8 +52,9 @@ import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificacione
 const HORA = new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Bogota" });
 
 /**
- * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert con su propio nombre accesible
- * (InlineAlert no lo admite y anidaría otro `status`). Recibe el foco: el botón pulsado desaparece al dejar de estar pegada.
+ * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert (que anidaría otro `status`).
+ * Recibe el foco: el botón pulsado desaparece al dejar de estar pegada. HU #14562 · m-15: sin aria-label, que reemplazaba
+ * al texto anunciado; el lector lee «N consultas reenviadas».
  */
 function AvisoReenviadas({ ref, children }: { ref: React.Ref<HTMLDivElement>; children: React.ReactNode }) {
   const { color, background, border, Icon } = INLINE_ALERT_TONES.success;
@@ -63,7 +64,6 @@ function AvisoReenviadas({ ref, children }: { ref: React.Ref<HTMLDivElement>; ch
       tabIndex={-1}
       role="status"
       aria-live="polite"
-      aria-label="Resultado del reintento"
       className={`flex items-center gap-3 rounded-xl p-3 text-xs font-semibold ${FOCO_CLS}`}
       style={{ background, border: `1px solid ${border}`, color }}
     >
@@ -407,6 +407,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
                 : undefined
             }
             onAbrirDictamen={(vehiculo, disparador) => setDictamen({ vehiculo, disparador })}
+            onQuitarFiltro={() => setFiltro(null)}
           />
           <EstimadoVsConsumido estimado={grilla.estimado_consultas} plegable />
         </section>

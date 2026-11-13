@@ -90,7 +90,8 @@ describe("Punto 4 AC1/AC8 — la acción solo con la capacidad y en la fila eleg
   it("la fila no elegible no tiene acción y expone el motivo en lenguaje de negocio, asociado a la placa", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()) });
     const fila = within(tabla()).getAllByRole("row").find((r) => r.getAttribute("data-vehiculo") === "vehiculo-2")!;
-    const motivo = within(fila).getByText(/dictamen no es viable/i);
+    // HU #14562 · m-8: la casilla lleva además el motivo como descripción (texto oculto); aquí se mira el visible.
+    const motivo = within(fila).getByText(/dictamen no es viable/i, { selector: "p" });
     expect(motivo).toBeVisible();
     expect(motivo.textContent).toMatch(/no se puede crear trámite para la placa TST002.*dictamen no es viable/i);
     expect(within(fila).queryByRole("button", { name: /crear trámite/i })).not.toBeInTheDocument();
