@@ -35,6 +35,12 @@ export interface DiagnosticoBackoffice {
   creado_en: string;
   vehiculos: number;
   celdas_en_error: number;
+  /** HU #14563 (B3): modo del lote. */
+  modo?: "SIMPLE" | "CON_ANALISIS";
+  /** HU #14563 (B3): null en SIMPLE; nombre del catálogo o el código. */
+  tipo_tramite?: { codigo: string; nombre: string } | null;
+  /** HU #14563 (B3). */
+  es_express?: boolean;
 }
 
 export interface ListaDiagnosticosBackoffice {

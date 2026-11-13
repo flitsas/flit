@@ -169,4 +169,36 @@ describe("ListaLotesBackoffice — Punto 6: selector de compañía", () => {
     expect(await screen.findByText("No hay empresas con Diagnóstico habilitado")).toBeInTheDocument();
     expect(consultas(fetchMock)).toHaveLength(0);
   });
+
+  it("HU14562 AC43: cada lote muestra «ID · modo · trámite» (B3) y el express se rotula", async () => {
+    conEmpresas({
+      "GET /backoffice/diagnosticos": () =>
+        Response.json(
+          listaLotes([
+            lote(1, { modo: "CON_ANALISIS", tipo_tramite: { codigo: "TRASPASO_STANDARD", nombre: "TRASPASO" }, es_express: false }),
+            lote(2, { modo: "SIMPLE", tipo_tramite: null, es_express: true }),
+          ]),
+        ),
+    });
+    montar({ empresa: EMPRESA_A });
+    const tabla = await screen.findByRole("table", { name: /lotes de la compañía/i });
+    const filas = within(tabla).getAllByRole("row");
+    expect(filas[1]).toHaveTextContent(/00000000-0000-7000-8000-00000000b001 · Con análisis IA · TRASPASO/);
+    expect(filas[2]).toHaveTextContent(/00000000-0000-7000-8000-00000000b002 · Simple · Express/);
+  });
+
+  it("HU14562 AC43: sin modo (API previo a B3) la fila muestra solo el ID, sin inventar", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(3)])) });
+    montar({ empresa: EMPRESA_A });
+    const tabla = await screen.findByRole("table", { name: /lotes de la compañía/i });
+    const fila = within(tabla).getAllByRole("row")[1];
+    expect(fila).toHaveTextContent("00000000-0000-7000-8000-00000000b003");
+    expect(fila).not.toHaveTextContent(/Simple|Con análisis/);
+  });
+
+  it("HU14562 AC43: la cabecera ofrece la acción «Fuentes obligatorias»", async () => {
+    conEmpresas();
+    montar();
+    expect(await screen.findByRole("link", { name: "Fuentes obligatorias" })).toHaveAttribute("href", "/backoffice/fuentes-obligatorias");
+  });
 });
