@@ -161,6 +161,8 @@ public static class Modulos
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<Reportes.ServicioEvidencias>();
         services.AddScoped<Reportes.LectorContenidoReporte>();
+        services.AddScoped<Saneamiento.ConsultaDeuda>();
+        services.AddScoped<Vehiculos.ListadoVehiculos>();
         // HU #13848: PDF corporativo del vehículo (contenido de F07-H2 + huella y registro de F07-H1).
         services.AddScoped<Reportes.DescargaPdfVehiculo>();
         // HU #13849: Excel del lote (mismo contenido de F07-H2, huella del lote y registro de F07-H1).
@@ -197,6 +199,7 @@ public static class Modulos
         Consultas.EndpointsReproceso.Map(api);
         Reportes.ReportesEndpoints.Map(api);
         Reportes.EvidenciasEndpoints.Map(api);
+        Saneamiento.DeudaEndpoints.Map(api);
         Notificaciones.NotificacionesEndpoints.Map(api);
         Saneamiento.SaneamientoEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
