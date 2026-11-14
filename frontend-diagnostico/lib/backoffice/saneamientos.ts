@@ -263,8 +263,8 @@ export function editarObservacion(sid: string, empresa: string, observacion: str
   return llamar(() => ruta(sid, "/observacion", empresa), { method: "PUT", body: { observacion: recortarONull(observacion), version } });
 }
 
-/** POST …/{sid}/renglones: agrega un concepto OTRO. 409 NO_EDITABLE · 422. */
-export function agregarRenglon(sid: string, empresa: string, descripcion: string): Promise<RenglonSaneamiento> {
+/** POST …/{sid}/renglones: agrega un concepto OTRO y devuelve el saneamiento completo (D-65). 409 NO_EDITABLE · 422. */
+export function agregarRenglon(sid: string, empresa: string, descripcion: string): Promise<SaneamientoBackoffice> {
   return llamar(() => ruta(sid, "/renglones", empresa), { method: "POST", body: { descripcion: descripcion.trim() } });
 }
 

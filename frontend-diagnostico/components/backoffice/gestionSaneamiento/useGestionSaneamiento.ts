@@ -379,12 +379,15 @@ export function useGestionSaneamiento(sid: string, empresa: string) {
     setOcupado(true);
     setErrorModal(null);
     try {
-      const nuevo = await agregarRenglon(sid, empresa, descripcion);
-      setSan((s) => (s ? { ...s, renglones: [...s.renglones, nuevo] } : s));
+      // H-1: el POST devuelve el saneamiento completo (D-65), no el renglón. El concepto nuevo es el que no estaba; con
+      // las versiones al día no hace falta releer, y el foco va a una fila que ya no cambia de identidad.
+      const previos = new Set(san?.renglones.map((r) => r.id));
+      const tras = await agregarRenglon(sid, empresa, descripcion);
+      const nuevo = tras.renglones.find((r) => !previos.has(r.id)) ?? tras.renglones.at(-1);
+      setSan(tras);
       setModal(null);
       anunciar(`Se agregó el concepto ${descripcion}.`);
-      enfocar(radioDe(nuevo.id));
-      releer();
+      enfocar(nuevo ? radioDe(nuevo.id) : tituloConceptos);
     } catch (e) {
       if (codigo(e) === "VERSION_DESACTUALIZADA" || codigo(e) === "NO_EDITABLE" || es403(e)) errorDeModal(e);
       else setErrorModal({ texto: mensajeErrorSaneamiento(e, "No pudimos agregar el concepto. Revisa la descripción e intenta de nuevo.") });

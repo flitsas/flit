@@ -189,11 +189,13 @@ describe("gestión de un saneamiento (grupo B, ?empresa=)", () => {
   it("renglones: agregar OTRO, actualizar con nota recortada o null, quitar", async () => {
     const renglon = { id: RID, version: 46, fuente: "OTRO", hallazgo: null, descripcion: "Embargo", automatico: false, resultado: "PENDIENTE", nota: null, evidencia: null };
     const fetchMock = simularApi({
-      [`POST ${BASE}/renglones`]: () => Response.json(renglon, { status: 201 }),
+      // Contrato (D-65): el POST devuelve el saneamiento completo.
+      [`POST ${BASE}/renglones`]: () => Response.json({ id: SID, version: 12, renglones: [renglon] }),
       [`PUT ${BASE}/renglones/${RID}`]: () => Response.json(renglon),
       [`DELETE ${BASE}/renglones/${RID}`]: () => new Response(null, { status: 204 }),
     });
-    await agregarRenglon(SID, EMPRESA_A, "  Embargo ");
+    const tras = await agregarRenglon(SID, EMPRESA_A, "  Embargo ");
+    expect(tras.renglones.map((r) => r.id)).toEqual([RID]);
     await actualizarRenglon(SID, RID, EMPRESA_A, { resultado: "SANEADO", nota: "  pagado  ", version: 45 });
     await actualizarRenglon(SID, RID, EMPRESA_A, { resultado: "PENDIENTE", nota: "   ", version: 46 });
     await quitarRenglon(SID, RID, EMPRESA_A);
