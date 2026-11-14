@@ -157,29 +157,39 @@ describe("HU14562 AC41 — Auditoría de la consulta visible", () => {
       }
     });
 
-    it("negativo: si la tabla cabe, la región conserva rol y nombre pero no es parada de Tab", () => {
+    // O-4 (reauditoría): sin desborde no hay landmark huérfano. role, aria-label y tabIndex salen juntos (un aria-label
+    // en un div sin rol es ARIA prohibido), así que el contenedor queda como div plano.
+    it("negativo: si la tabla cabe, el contenedor no tiene role, aria-label ni tabindex", () => {
       anchoContenido = 300;
       render(<VistaDetalleCelda detalle={conTodo()} />);
       for (const nombre of TABLAS) {
-        const region = screen.getByRole("region", { name: `${nombre}, desplazable` });
-        expect(region).not.toHaveAttribute("tabindex");
-        expect(within(region).getByRole("table", { name: nombre })).toBeInTheDocument();
+        expect(screen.queryByRole("region", { name: `${nombre}, desplazable` })).not.toBeInTheDocument();
+        const contenedor = screen.getByRole("table", { name: nombre }).closest(".overflow-x-auto");
+        expect(contenedor).not.toBeNull();
+        expect(contenedor).not.toHaveAttribute("role");
+        expect(contenedor).not.toHaveAttribute("aria-label");
+        expect(contenedor).not.toHaveAttribute("tabindex");
       }
     });
 
-    it("al cambiar el ancho (ResizeObserver), la parada de Tab aparece y desaparece", () => {
+    it("al cambiar el ancho (ResizeObserver), la región enfocable aparece y desaparece", () => {
       anchoContenido = 300;
       render(<VistaDetalleCelda detalle={conTodo()} />);
-      const region = () => screen.getByRole("region", { name: "Personas consultadas, desplazable" });
-      expect(region()).not.toHaveAttribute("tabindex");
+      const NOMBRE = "Personas consultadas, desplazable";
+      const contenedor = () => screen.getByRole("table", { name: "Personas consultadas" }).closest(".overflow-x-auto");
+      expect(screen.queryByRole("region", { name: NOMBRE })).not.toBeInTheDocument();
+      expect(contenedor()).not.toHaveAttribute("tabindex");
 
       anchoContenido = 720;
       act(() => observadores.forEach((avisar) => avisar()));
-      expect(region()).toHaveAttribute("tabindex", "0");
+      expect(screen.getByRole("region", { name: NOMBRE })).toHaveAttribute("tabindex", "0");
 
       anchoContenido = 300;
       act(() => observadores.forEach((avisar) => avisar()));
-      expect(region()).not.toHaveAttribute("tabindex");
+      expect(screen.queryByRole("region", { name: NOMBRE })).not.toBeInTheDocument();
+      expect(contenedor()).not.toHaveAttribute("role");
+      expect(contenedor()).not.toHaveAttribute("aria-label");
+      expect(contenedor()).not.toHaveAttribute("tabindex");
     });
   });
 

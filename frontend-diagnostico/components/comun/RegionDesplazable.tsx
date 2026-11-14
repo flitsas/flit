@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // HU #14562 · D2 (axe scrollable-region-focusable, WCAG 2.1.1) + O-4 (auditoría D1–D3): contenedor con scroll horizontal
-// de una tabla. Siempre es `region` con nombre «…, desplazable»; solo es parada de Tab (tabIndex 0) cuando el contenido
-// desborda (scrollWidth > clientWidth), para que con la tabla entera a la vista no sume una parada vacía. Se vuelve a
+// de una tabla. Solo cuando el contenido desborda (scrollWidth > clientWidth) es `region` con nombre «…, desplazable» y
+// parada de Tab (tabIndex 0); con la tabla entera a la vista es un div plano, sin landmark ni parada vacía. Se vuelve a
 // medir con ResizeObserver (cambio de ancho de la pantalla o del contenido). Foco visible con --di-action.
 const FOCO_DESPLAZABLE = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]";
 
@@ -35,9 +35,9 @@ export function RegionDesplazable({ nombre, className = "", children }: { nombre
   return (
     <div
       ref={ref}
-      role="region"
-      aria-label={`${nombre}, desplazable`}
-      tabIndex={desborda ? 0 : undefined}
+      // O-4 (reauditoría): rol, nombre y tabIndex van juntos y solo con desborde; sin él es un div plano (sin landmark
+      // huérfano, y un aria-label en un div sin rol es ARIA prohibido).
+      {...(desborda ? { role: "region", "aria-label": `${nombre}, desplazable`, tabIndex: 0 } : {})}
       className={`overflow-x-auto ${FOCO_DESPLAZABLE} ${className}`.trim()}
     >
       {children}
