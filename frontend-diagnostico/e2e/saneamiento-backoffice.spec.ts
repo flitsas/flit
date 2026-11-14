@@ -452,7 +452,7 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
 
     await test.step("C-14: el aviso de la campana abre el tablero con ?saneamiento=con y el chip activo", async () => {
       const campana = page.getByRole("button", { name: /^Avisos/ }).first();
-      const aviso = page.getByRole("region", { name: "Avisos" }).getByRole("link", { name: /^Ver lote: .*saneamiento/i }).first();
+      const aviso = page.getByRole("region", { name: "Avisos" }).getByRole("link", { name: /^Ver lote\s*:.*saneamiento/i }).first();
       let llego = false;
       for (let i = 0; i < 6 && !llego; i++) {
         await page.goto(`${APP}/`);
@@ -464,7 +464,7 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
         }
       }
       if (!llego) {
-        test.info().annotations.push({ type: "omitido", description: "C-14: no llegó el aviso de saneamiento a la campana en 30 s (core-notificaciones)" });
+        test.info().annotations.push({ type: "omitido", description: "C-14: no llegó el aviso de saneamiento a la campana en 30 s (bandeja de notificaciones de core-diagnostico)" });
         return;
       }
       await revisarTemas(page, "campana-1280", { captura: "C-14", paginaCompleta: false });
