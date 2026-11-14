@@ -121,9 +121,18 @@ public sealed class RegistroManifiestoTests
     });
 
     /// <summary>
-    /// Reloj real que anota cada espera de un solo disparo que se le pide (<c>Task.Delay(espera, reloj, ct)</c>), HU #13826:
-    /// la prueba compara la secuencia pedida en vez de los huecos del reloj de pared.
+    /// Reloj real que anota cada espera de un solo disparo que <see cref="RegistroManifiesto"/> le pide
+    /// (<c>Task.Delay(espera, reloj, ct)</c>), HU #13826: la prueba compara la secuencia pedida en vez de los huecos del
+    /// reloj de pared.
     /// </summary>
+    /// <remarks>
+    /// El reloj reemplaza el <see cref="TimeProvider"/> de todo el host y los demás trabajadores también le piden esperas:
+    /// la purga de notificaciones (24 h), las sincronizaciones de catálogos (24 h) y los reconciliadores. Contra la base
+    /// inalcanzable fallan y piden su intervalo; en Linux el puerto 1 rechaza al instante, así que esas esperas caían entre
+    /// los reintentos del manifiesto ({100ms, 1d, 200ms, 400ms} en el CI del PR #892). <c>Task.Delay</c> crea el
+    /// temporizador en la pila de quien espera, así que solo se anota la que pide la máquina de estados de
+    /// <see cref="RegistroManifiesto"/>.
+    /// </remarks>
     private sealed class RelojQueAnotaEsperas : TimeProvider
     {
         private readonly ConcurrentQueue<TimeSpan> _esperas = new();
@@ -132,10 +141,14 @@ public sealed class RegistroManifiestoTests
 
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
-            if (period == Timeout.InfiniteTimeSpan && dueTime > TimeSpan.Zero)
+            if (period == Timeout.InfiniteTimeSpan && dueTime > TimeSpan.Zero && LaPideElRegistro())
                 _esperas.Enqueue(dueTime);
             return System.CreateTimer(callback, state, dueTime, period);
         }
+
+        private static bool LaPideElRegistro() =>
+            new StackTrace().GetFrames().Any(f => f.GetMethod()?.DeclaringType is { } tipo
+                && (tipo == typeof(RegistroManifiesto) || tipo.DeclaringType == typeof(RegistroManifiesto)));
     }
 
     private sealed record Llamado(HttpMethod Metodo, Uri? Url, string? Autorizacion, string Cuerpo, TimeSpan Marca);

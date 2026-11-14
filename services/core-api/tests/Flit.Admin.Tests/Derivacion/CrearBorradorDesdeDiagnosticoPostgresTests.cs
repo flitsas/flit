@@ -30,12 +30,18 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     private const string Scope = "platform.tramites.derivacion";
     private const string Diagnostico = "svc-diagnostico";
 
+    // Cliente de servicio ajeno con nombre propio de esta clase. El registro OIDC vive en la base compartida de la suite y
+    // cada host lo reescribe al arrancar (OidcClientSync, crear o actualizar). PersonaNaturalGrpcTests registra
+    // «svc-otro-prueba» con el scope de persona natural: con el mismo client_id, la clase que arrancaba su host después
+    // dejaba a la otra sin su scope y /connect/token respondía 400 (CI del PR #892, las dos pruebas en rojo a la vez).
+    private const string OtroServicio = "svc-otro-derivacion-prueba";
+
     private WebApplicationFactory<Program> Host(bool habilitada = true, bool exigirPermisos = true) =>
         OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
         {
             b.UseSetting("Tramites:Derivacion:Habilitada", habilitada ? "true" : "false");
             b.UseSetting("Security:ModulePermissionEnforcement:Enabled", exigirPermisos ? "true" : "false");
-            foreach (var cliente in new[] { Diagnostico, "svc-otro-prueba" })
+            foreach (var cliente in new[] { Diagnostico, OtroServicio })
             {
                 b.UseSetting($"Suite:Oidc:ServiceClients:{cliente}:Secret", OidcServerTests.ServiceSecret);
                 b.UseSetting($"Suite:Oidc:ServiceClients:{cliente}:Scopes:0", Scope);
@@ -208,7 +214,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     {
         using var host = Host();
         await using var e = await Escenario.CrearAsync(host, Ct);
-        var cliente = await ClienteAsync(host, "svc-otro-prueba", e.Empresa);
+        var cliente = await ClienteAsync(host, OtroServicio, e.Empresa);
 
         var llamada = () => cliente.CrearBorradorDesdeDiagnosticoAsync(e.Solicitud(), cancellationToken: Ct).ResponseAsync;
 
