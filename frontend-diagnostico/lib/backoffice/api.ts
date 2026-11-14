@@ -4,6 +4,7 @@
 // El origen manual de una celda solo se muestra en esta pantalla (Q5); la vista de la compañía no lo conoce.
 import { ApiError, apiFetch } from "@/lib/api";
 import { esEmpresaValida, type Fuente } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type FilaVehiculo, type Grilla } from "@/lib/tablero/api";
 import type { CargadorDetalle, ConsultaPersona, DetalleCelda } from "@/lib/tablero/detalle";
@@ -121,16 +122,12 @@ export class EmpresaNoElegida extends Error {
 
 /**
  * AP-8 (security-fase3 SF-6): texto para el usuario de un error del backoffice. Nunca el `message` de un ApiError ni de
- * un Error cualquiera: el texto fijo del `code` en `porCodigo`, el de permiso en un 403 o, si no, `respaldo` (el texto
- * fijo de la pantalla). EmpresaNoElegida conserva su mensaje: es un error propio del front con texto fijo.
+ * un Error cualquiera: delega en el traductor común `mensajeErrorFijo` (AP-9, `@/lib/errores`). EmpresaNoElegida
+ * conserva su mensaje: es un error propio del front con texto fijo.
  */
 export function mensajeErrorBackoffice(error: unknown, respaldo: string, porCodigo: Readonly<Record<string, string>> = {}): string {
   if (error instanceof EmpresaNoElegida) return error.message;
-  if (error instanceof ApiError) {
-    if (error.code && Object.prototype.hasOwnProperty.call(porCodigo, error.code)) return porCodigo[error.code];
-    if (error.status === 403) return "No tienes permiso para esta acción.";
-  }
-  return respaldo;
+  return mensajeErrorFijo(error, respaldo, porCodigo);
 }
 
 /** `?empresa=` (y el resto de la consulta) o EmpresaNoElegida, antes de cualquier petición. */

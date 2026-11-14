@@ -4,7 +4,7 @@
 // consola. La API vuelve a validar el identificador, el documento y la cabecera, y responde 422 con el campo que incumple.
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
-import type { Alcance, CabeceraEntrada, EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
+import { ERRORES_CABECERA, type Alcance, type CabeceraEntrada, type EstadoDiagnostico, type ModoDiagnostico } from "@/lib/diagnosticos/api";
 import { limpiarIdentificador, validarIdentificador, validarLongitudIdentificador } from "@/lib/validation/fieldRules";
 
 /**
@@ -75,6 +75,21 @@ const CODIGOS_ACCESO_NEGADO: ReadonlySet<string> = new Set(["SIN_USUARIO", "SIN_
 export function accesoNegadoExpress(error: unknown): string | null {
   return error instanceof ApiError && error.status === 403 && error.code && CODIGOS_ACCESO_NEGADO.has(error.code) ? error.code : null;
 }
+
+/**
+ * AP-9 (SF-6): texto fijo por `code` de POST /express y /express/estimado (contrato diagnostico.v1.yaml): las reglas del
+ * vehículo y del documento del locatario, más las de la cabecera (los mismos códigos de POST /diagnosticos).
+ */
+export const ERRORES_EXPRESS: Readonly<Record<string, string>> = {
+  ...ERRORES_CABECERA,
+  IDENTIFICADOR_REQUERIDO: "Falta el identificador del vehículo (placa o VIN).",
+  IDENTIFICADOR_INVALIDO: "El identificador no es una placa ni un VIN válido.",
+  IDENTIFICADOR_DEMASIADO_LARGO: "El identificador supera el largo máximo de una placa o un VIN: revisa el valor (no se recorta).",
+  TIPO_DOCUMENTO_INVALIDO: "El tipo de documento del locatario no es válido.",
+  DOCUMENTO_INVALIDO:
+    "El número de documento del locatario no es válido: solo dígitos (en pasaporte, letras y dígitos), sin puntos, guiones ni espacios.",
+  DOCUMENTO_INCOMPLETO: "Declara el tipo y el número del documento del locatario, o deja los dos vacíos.",
+};
 
 /** Campo del vehículo de un 422, o null si el error no es de un campo del vehículo. */
 export function campoVehiculo(error: unknown): CampoVehiculo | null {
