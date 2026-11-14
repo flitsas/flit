@@ -26,7 +26,7 @@ import { lanzarExpress } from "./express";
  *   - link (sin nombre)
  *   - table «/semáforo de consultas/i»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   Del helper express.ts (lanzarExpress):
  *     - textbox «Placa o VIN»
  *     - button «Diagnosticar en línea»
@@ -43,7 +43,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
@@ -72,7 +72,8 @@ test.describe("listado de diagnósticos del inicio", () => {
     // AC1: la fila trae tipo, estado y creador; Enter en su enlace abre el tablero.
     await expect(fila.getByRole("cell").nth(3)).not.toBeEmpty();
     await fila.getByRole("link", { name: nombre }).press("Enter");
-    await page.waitForURL(tablero);
+    // HU #14562: el enlace lleva «?desde=<filtros>» para que la miga vuelva al listado filtrado; se compara la ruta.
+    await page.waitForURL((url) => url.pathname === new URL(tablero).pathname);
     await expect(page.getByRole("table", { name: /semáforo de consultas/i })).toBeVisible();
 
     // Volver atrás conserva el filtro en la URL y en el campo.

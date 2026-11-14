@@ -23,7 +23,7 @@ import { lanzarExpress } from "./express";
  *   - region «Descargas del lote»
  *   - link «Excel del lote»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   Del helper express.ts (lanzarExpress):
  *     - textbox «Placa o VIN»
  *     - button «Diagnosticar en línea»
@@ -40,7 +40,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
 }

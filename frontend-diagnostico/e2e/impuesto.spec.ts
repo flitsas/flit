@@ -19,6 +19,7 @@ import { lanzarExpress } from "./express";
  * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
  *   - button «/ingresar|iniciar sesión/i»
  *   - heading «Diagnóstico vehicular»
+ *   - checkbox «RUNT vehículo» (espera de carga del alcance)
  *   - textbox «Placa o VIN»
  *   - button «Diagnosticar en línea»
  *   - checkbox «Impuesto departamental»
@@ -31,7 +32,7 @@ import { lanzarExpress } from "./express";
  *   - table «Vigencias»
  *   - columnheader «Pagada»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   - texto «/^(Sí|No)$/»
  *   - texto «/proveedor/i»
  *   - texto «/manual|a mano/i»
@@ -46,14 +47,15 @@ import { lanzarExpress } from "./express";
  *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
-/** Placa de prueba terminada en 1: RUNT e impuesto simulados responden con éxito. */
-const PLACA = process.env.E2E_PLACA_IMPUESTO ?? "TST201";
+/** Placa de prueba terminada en Z: el simulador de core-consultas responde RUNT con el fixture intempo-impuesto (departamento
+ * soportado) y el impuesto con éxito. Terminada en 1 el RUNT simulado queda en un departamento sin impuesto y el test se omite. */
+const PLACA = process.env.E2E_PLACA_IMPUESTO ?? "TST20Z";
 
 async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
@@ -68,6 +70,8 @@ test.describe("impuesto departamental en el tablero", () => {
     await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
     await page.getByRole("button", { name: "Diagnosticar en línea" }).click();
     await page.waitForURL((url) => url.pathname === "/diagnosticos/nuevo" && url.searchParams.get("modo") === "express");
+    // count() no espera: primero que el alcance haya cargado la configuración (RUNT vehículo siempre se ofrece).
+    await expect(page.getByRole("checkbox", { name: "RUNT vehículo" })).toBeVisible();
     const casilla = page.getByRole("checkbox", { name: "Impuesto departamental" });
     test.skip((await casilla.count()) === 0, "La simulación no ofrece el impuesto: revisar la bandera y la réplica de departamentos");
     await expect(casilla).toBeVisible();

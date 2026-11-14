@@ -20,14 +20,14 @@ import { expect, test } from "@playwright/test";
  *   - heading «Diagnóstico vehicular»
  *   - heading «No tienes acceso»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   - texto «/Diagnóstico no está habilitado/»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 
 async function iniciarSesionEnElHub(page: import("@playwright/test").Page, usuario: string, clave: string) {
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
 }
 
@@ -39,7 +39,8 @@ test.describe("entrada desde el hub", () => {
 
     // Escenario 1: el navegador termina en el authorize del hub, con client_id (aud) diagnostico y PKCE.
     await page.waitForURL((url) => !url.href.startsWith(APP));
-    const authorize = page.url();
+    // El authorize del hub redirige a /login?returnUrl=/connect/authorize?...: los parámetros llegan codificados.
+    const authorize = decodeURIComponent(page.url());
     expect(authorize).toContain("client_id=diagnostico");
     expect(authorize).toContain("code_challenge_method=S256");
 

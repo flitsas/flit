@@ -28,7 +28,7 @@ import { expect, test, type Page } from "@playwright/test";
  *   - region «Resumen de validación»
  *   - radiogroup «Tipo de diagnóstico»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   - etiqueta «/archivo de vehículos/i»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
@@ -38,7 +38,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();

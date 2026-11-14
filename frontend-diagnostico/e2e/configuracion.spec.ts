@@ -31,7 +31,7 @@ import { expect, test, type Page } from "@playwright/test";
  *   - switch «Suspender la redacción con IA»
  *   - checkbox «RUNT vehículo»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   - texto «Límite de vehículos por lote»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
@@ -41,7 +41,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/configuracion`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/configuracion`);
   await expect(page.getByRole("heading", { level: 1, name: "Configuración" })).toBeVisible();

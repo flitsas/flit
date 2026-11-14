@@ -45,7 +45,7 @@ import { lanzarExpress } from "./express";
  *   - link «Volver al diagnóstico»
  *   - link «Volver a diagnósticos»
  *   - etiqueta «/correo|usuario/i»
- *   - etiqueta «/contraseña/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
  *   - texto «Ejecutado»
  *   - texto «/manual/i»
  *   - texto «SIMIT vehículo»
@@ -73,7 +73,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
@@ -155,8 +155,9 @@ test.describe("tablero del lote", () => {
     await expect(migas.getByText("SIMIT vehículo", { exact: true })).toHaveAttribute("aria-current", "page");
     // Auditoría de consulta de FLIT: fecha y hora de la consulta y el estado.
     const auditoria = pestana.getByRole("region", { name: "Auditoría de consulta" });
-    await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
-    await expect(auditoria.getByText("Ejecutado")).toBeVisible();
+    // HU #14562: la auditoría trae además la tabla de intentos con sus propias fechas; basta la primera.
+    await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/).first()).toBeVisible();
+    await expect(auditoria.getByText("Ejecutado").first()).toBeVisible();
     // Respuesta de la fuente: solo datos de la consulta, en español; sin la auditoría del proveedor ni nombres crudos.
     const seccionRespuesta = pestana.getByRole("region", { name: "Respuesta de la fuente" });
     if (await seccionRespuesta.getByText(/no tiene guardada la respuesta completa/).count()) {
