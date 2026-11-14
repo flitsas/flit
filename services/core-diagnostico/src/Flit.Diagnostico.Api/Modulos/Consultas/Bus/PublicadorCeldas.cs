@@ -145,9 +145,12 @@ internal sealed partial class PublicadorCeldas(
             throw new InvalidOperationException("El cierre de una celda exige la transacción de quien la cierra.");
 
         var ahora = reloj.GetUtcNow();
+        // HU #14576 (H-8): el UPDATE de la versión bloquea la fila de la cabecera hasta el commit y pone en fila los cierres del
+        // lote. Va ANTES de la foto: así las hermanas (y el recálculo del lote, que usa las seguidas) se leen ya confirmadas por el
+        // cierre anterior. Con la foto primero, dos celdas que cerraban a la vez se veían EN_CURSO y ninguna veía el flanco.
+        var version = versionTablero ?? await EscritorCeldas.SubirVersionTableroAsync(db, celda.DiagnosticoId, ct).ConfigureAwait(false);
         // La foto va antes de aplicar y de las celdas que este cierre publique: el «después» solo cambia esta celda.
         var foto = await emisor.PrepararAsync(celda, ct).ConfigureAwait(false);
-        var version = versionTablero ?? await EscritorCeldas.SubirVersionTableroAsync(db, celda.DiagnosticoId, ct).ConfigureAwait(false);
         var reprocesoDeLaRunt = celda.ReprocesoUsuarioId;
         EscritorCeldas.Aplicar(celda, resultado, version, ahora);
         if (intentos.Count > 0)

@@ -370,7 +370,8 @@ internal sealed partial class EmisorDictamen(
 
     /// <summary>
     /// Foto al entrar al cierre, antes de publicar celdas anidadas. Null si este lote no dictamina: simple, sin tipo o fuera
-    /// de la familia.
+    /// de la familia. Quien llama ya tiene el lock de la cabecera (la versión del tablero subida en su transacción, HU #14576
+    /// H-8): sin él, dos cierres simultáneos del mismo vehículo se ven EN_CURSO entre sí y ninguno detecta el flanco.
     /// </summary>
     public async Task<FotoFlanco?> PrepararAsync(CeldaConsulta celda, CancellationToken ct)
     {
