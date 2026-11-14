@@ -64,6 +64,15 @@ export function hayPendientes(deuda: Pick<PanelDeuda, "dictamen" | "fuentes">): 
 const MILES = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 });
 /** «$ 1.250.000»: pesos con separador de miles, sin decimales. */
 const pesos = (valor: number) => `$ ${MILES.format(valor)}`;
+/**
+ * UA-6: un saldo que llega como texto (BE-C-2). Si es un número («300000», «300000.50») se pinta en pesos; si no («$1.250.000»,
+ * «1.250.000,00») va tal como llega, como el «Valor» de los comparendos (S17). Nunca «$ NaN».
+ */
+const saldo = (valor: string) => {
+  const texto = valor.trim();
+  const n = texto === "" ? Number.NaN : Number(texto);
+  return Number.isFinite(n) ? pesos(n) : valor;
+};
 const siNo = (valor: boolean | null | undefined) => (valor === true ? "Sí" : valor === false ? "No" : null);
 
 /** «Consultado el {fecha}» (fecha de la consulta, regla de lib/tablero/detalle.ts). */
@@ -105,8 +114,7 @@ function TablaSimple({ nombre, columnas, filas }: { nombre: string; columnas: { 
   );
 }
 
-function ContenidoSimit({ fuente }: { fuente: FuenteDeudaSimit }) {
-  const rotulo = ROTULO_FUENTE[fuente.fuente];
+function ContenidoSimit({ fuente, rotulo }: { fuente: FuenteDeudaSimit; rotulo: string }) {
   const comparendos = fuente.comparendos ?? [];
   const acuerdos = fuente.acuerdos_pago ?? [];
   const items = [
@@ -130,7 +138,7 @@ function ContenidoSimit({ fuente }: { fuente: FuenteDeudaSimit }) {
       {acuerdos.length > 0 && (
         <ul aria-label={`Acuerdos de pago de ${rotulo}`} className="flex flex-col gap-1 text-sm text-flit-primary">
           {acuerdos.map((a, i) => (
-            <li key={i}>{`Acuerdo de pago con saldo pendiente de ${pesos(a.saldo_pendiente)}`}</li>
+            <li key={i}>{`Acuerdo de pago con saldo pendiente de ${saldo(a.saldo_pendiente)}`}</li>
           ))}
         </ul>
       )}
@@ -160,7 +168,7 @@ function ContenidoVigencia({ fuente }: { fuente: FuenteDeudaVigencia }) {
   return <p className="text-sm text-flit-primary">{`${texto} ${fechaCorta(fuente.vence)}`}</p>;
 }
 
-function ContenidoFuente({ fuente }: { fuente: FuenteDeudaPanel }) {
+function ContenidoFuente({ fuente, rotulo }: { fuente: FuenteDeudaPanel; rotulo: string }) {
   if (fuente.estado === "NO_APLICA") {
     return (
       <p className="text-sm text-flit-primary">
@@ -178,7 +186,7 @@ function ContenidoFuente({ fuente }: { fuente: FuenteDeudaPanel }) {
       detalle = <ContenidoVigencia fuente={fuente} />;
       break;
     default:
-      detalle = <ContenidoSimit fuente={fuente} />;
+      detalle = <ContenidoSimit fuente={fuente} rotulo={rotulo} />;
   }
   return (
     <div className="flex flex-col gap-2">
@@ -186,6 +194,17 @@ function ContenidoFuente({ fuente }: { fuente: FuenteDeudaPanel }) {
       {detalle}
     </div>
   );
+}
+
+/**
+ * UA-3: rótulo de la tarjeta. Con varias entradas de la misma fuente (BE-C-1: una por propietario), con su ordinal: «SIMIT
+ * del propietario 1 de 2». Nunca el documento, para no ponerlo en el nombre de un botón.
+ */
+function rotuloConOrdinal(fuentes: readonly FuenteDeudaPanel[], i: number): string {
+  const base = ROTULO_FUENTE[fuentes[i].fuente];
+  const mismas = fuentes.filter((f) => f.fuente === fuentes[i].fuente);
+  if (mismas.length < 2) return base;
+  return `${base} ${mismas.indexOf(fuentes[i]) + 1} de ${mismas.length}`;
 }
 
 export interface SeccionesDeudaProps {
@@ -249,22 +268,24 @@ export function SeccionesDeuda({ deuda }: SeccionesDeudaProps) {
             No encontramos deudas ni pendientes en las fuentes consultadas.
           </InlineAlert>
         )}
-        {fuentes.map((fuente) => {
+        {fuentes.map((fuente, i) => {
           const estado = ESTADO_FUENTE[fuente.estado];
+          const rotulo = rotuloConOrdinal(fuentes, i);
           return (
             <TarjetaPlegable
-              key={fuente.fuente}
+              // UA-3: puede haber varias entradas de la misma fuente (una por propietario): la key no se repite.
+              key={`${fuente.fuente}-${i}`}
               nivelTitulo={4}
               abiertaInicial={estado.abierta}
               titulo={
                 <span className="flex flex-wrap items-center gap-2">
-                  <span>{ROTULO_FUENTE[fuente.fuente]}</span>
+                  <span>{rotulo}</span>
                   <span className="sr-only">: </span>
                   <EtiquetaTono tono={estado.tono}>{estado.texto}</EtiquetaTono>
                 </span>
               }
             >
-              <ContenidoFuente fuente={fuente} />
+              <ContenidoFuente fuente={fuente} rotulo={rotulo} />
             </TarjetaPlegable>
           );
         })}

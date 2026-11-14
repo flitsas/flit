@@ -14,8 +14,8 @@ import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { SIN_PERMISO_SANEAMIENTO } from "@/components/backoffice/AccesoSaneamientos";
 import { HistorialSaneamiento } from "@/components/backoffice/HistorialSaneamiento";
 import { ModalAgregarConcepto, ModalConfirmar, ModalEvidencia, ModalMotivo, type ErrorModal } from "@/components/backoffice/ModalesSaneamiento";
-import { ENLACE_CLS, RenglonesEditables, RenglonesLectura, type AccionesRenglon } from "@/components/backoffice/RenglonesGestion";
-import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { RenglonesEditables, RenglonesLectura, type AccionesRenglon } from "@/components/backoffice/RenglonesGestion";
+import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ENLACE_ACCION_CLS, ETIQUETA_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { useRegionVivaPantalla } from "@/components/saneamiento/RegionVivaPantalla";
 import { EtiquetaTono, SeccionesDeuda } from "@/components/saneamiento/SeccionesDeuda";
@@ -104,7 +104,7 @@ function sinClave<T>(registro: Record<string, T>, clave: string): Record<string,
 
 const codigo = (e: unknown) => (e instanceof ApiError ? e.code : undefined);
 const es403 = (e: unknown) => e instanceof ApiError && e.status === 403;
-const ENLACE_PELIGRO_CLS = `${ENLACE_CLS} text-[color:var(--di-danger)]`;
+const ENLACE_PELIGRO_CLS = `${ENLACE_ACCION_CLS} text-[color:var(--di-danger)]`;
 
 /** Por encima de 1024 px la deuda va abierta en su columna; por debajo, plegada (spec-ui §6.1, D-14). Sin matchMedia: ancha. */
 function useAncha(): boolean {
@@ -624,7 +624,7 @@ export function GestionSaneamiento({ sid, empresa }: GestionSaneamientoProps) {
   } else if (enGestion) {
     gestion = (
       <div className="flex flex-col gap-5">
-        <h3 id={`${id}-conceptos`} tabIndex={-1} className="text-base font-semibold text-flit-primary focus:outline-none">
+        <h3 id={`${id}-conceptos`} tabIndex={-1} className={`self-start rounded-[9px] text-base font-semibold text-flit-primary ${FOCO_CLS}`}>
           Conceptos a sanear
         </h3>
         <RenglonesEditables key={generacion} renglones={san.renglones} acciones={acciones} errores={errores} descargas={descargas} />
@@ -741,7 +741,7 @@ export function GestionSaneamiento({ sid, empresa }: GestionSaneamientoProps) {
           </span>
         }
         acciones={
-          <div data-estado-saneamiento={id} tabIndex={-1} className="flex flex-wrap items-center gap-2 rounded-full focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--di-action)]">
+          <div data-estado-saneamiento={id} tabIndex={-1} className="flex flex-wrap items-center gap-2 rounded-full focus:outline-2 focus:outline-offset-2 focus:outline-[var(--di-action)]">
             <EtiquetaSaneamiento estado={san.estado} backoffice />
             {veredicto && <EtiquetaTono tono={veredicto === "BLOQUEADO" ? "danger" : "success"}>{veredicto === "BLOQUEADO" ? "Bloqueado" : "Viable"}</EtiquetaTono>}
           </div>

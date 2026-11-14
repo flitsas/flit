@@ -73,7 +73,7 @@ describe("AC24 — la ruta solo para FLIT con gestionarSaneamiento (negativo)", 
     const api = conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])) });
     render(await PaginaSaneamientos({ searchParams: Promise.resolve({ estado: ["SOLICITADO", "EN_GESTION"], placa: "tst" }) }));
     await tabla();
-    expect(consultas(api)[0]).toBe("estado=SOLICITADO&estado=EN_GESTION&placa=TST&pagina=1&tamano=25");
+    expect(consultas(api)[0]).toBe("estado=SOLICITADO&estado=EN_GESTION&placa=TST&pagina=1&tamano=10");
   });
 });
 
@@ -107,7 +107,7 @@ describe("AC26 / AC40 — cuatro estados de la bandeja", () => {
     expect(await screen.findByRole("heading", { name: "Ningún saneamiento coincide" })).toBeInTheDocument();
     const vacio = screen.getByRole("heading", { name: "Ningún saneamiento coincide" }).closest("div")!;
     fireEvent.click(within(vacio).getByRole("button", { name: "Limpiar filtros" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=10"));
     expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos", { scroll: false });
   });
 
@@ -134,7 +134,7 @@ describe("AC26 — tabla y filtros", () => {
     });
     montar();
     const t = await tabla();
-    expect(consultas(api)[0]).toBe("estado=SOLICITADO&pagina=1&tamano=25");
+    expect(consultas(api)[0]).toBe("estado=SOLICITADO&pagina=1&tamano=10");
     const cabeceras = within(t).getAllByRole("columnheader").map((c) => c.textContent?.trim());
     expect(cabeceras).toEqual(
       expect.arrayContaining(["Placa", "Compañía", "Diagnóstico", "Modo", "Dictamen", "Estado", "Solicitado", "Tomado", "Cerrado", "Pendientes"]),
@@ -162,7 +162,7 @@ describe("AC26 — tabla y filtros", () => {
     expect(within(grupo).getByRole("button", { name: "Saneamiento solicitado" })).toHaveAttribute("aria-pressed", "true");
     expect(within(grupo).getByRole("button", { name: "Anulado" })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(within(grupo).getByRole("button", { name: "En saneamiento" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&estado=EN_GESTION&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&estado=EN_GESTION&pagina=1&tamano=10"));
     expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos?estado=SOLICITADO&estado=EN_GESTION", { scroll: false });
   });
 
@@ -171,7 +171,7 @@ describe("AC26 — tabla y filtros", () => {
     montar();
     await tabla();
     fireEvent.click(screen.getByRole("button", { name: "Saneamiento solicitado" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("pagina=1&tamano=10"));
     expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos?estado=", { scroll: false });
   });
 
@@ -181,9 +181,9 @@ describe("AC26 — tabla y filtros", () => {
     await tabla();
     fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "tst001" } });
     fireEvent.submit(screen.getByRole("search", { name: "Filtros de la bandeja" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&pagina=1&tamano=10"));
     fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-11-01" } });
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&desde=2026-11-01&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&desde=2026-11-01&pagina=1&tamano=10"));
     fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-11-30" } });
     await waitFor(() => expect(consultas(api).at(-1)).toContain("hasta=2026-11-30"));
   });
@@ -195,9 +195,9 @@ describe("AC26 — tabla y filtros", () => {
     const selector = await screen.findByRole("combobox", { name: "Empresa" });
     fireEvent.change(selector, { target: { value: "Transportes" } });
     fireEvent.click(screen.getByRole("option", { name: /Transportes A SAS/ }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe(`estado=SOLICITADO&empresa=${EMPRESA_A}&pagina=1&tamano=25`));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe(`estado=SOLICITADO&empresa=${EMPRESA_A}&pagina=1&tamano=10`));
     fireEvent.click(screen.getByRole("button", { name: "Todas las compañías" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=10"));
   });
 
   it("paginación en el servidor: la página 2 pide pagina=2", async () => {
@@ -206,7 +206,7 @@ describe("AC26 — tabla y filtros", () => {
     await tabla();
     expect(screen.getByText("60 saneamientos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /página 2/i }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=2&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=2&tamano=10"));
   });
 });
 
@@ -217,10 +217,10 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja(filas())) });
     montar("estado=");
     await tabla();
-    const casillaGestion = screen.getByRole("checkbox", { name: "Seleccionar TST003" });
+    const casillaGestion = screen.getByRole("checkbox", { name: "Seleccionar la placa TST003" });
     expect(casillaGestion).toBeDisabled();
     expect(casillaGestion).toHaveAccessibleDescription("Solo se toman las solicitudes sin tomar");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar las solicitudes sin tomar de esta página" }));
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" }));
     expect(screen.getByRole("button", { name: "Tomar (2)" })).toBeInTheDocument();
     expect(casillaGestion).not.toBeChecked();
   });
@@ -234,8 +234,8 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     const refrescar = vi.fn();
     montar("estado=", refrescar);
     await tabla();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar TST001" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar TST002" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST002" }));
     fireEvent.click(screen.getByRole("button", { name: "Tomar (2)" }));
     const aviso = await screen.findByText("Se tomó 1 saneamiento. 1 no se pudo tomar porque cambió de estado.", { ignore: SIN_REGION });
     const [, init] = llamadas(api, "POST", `${BASE}/tomar`)[0] as [string, RequestInit];
@@ -243,7 +243,13 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     await waitFor(() => expect(consultas(api)).toHaveLength(2));
     expect(refrescar).toHaveBeenCalled();
     expect(aviso.closest("[tabindex='-1']")).toHaveFocus();
-    expect(document.querySelector("[data-region-viva]")).toHaveTextContent("Se tomó 1 saneamiento. 1 no se pudo tomar porque cambió de estado.");
+    // UA-4: un solo canal. El foco va al aviso, así que ni la región viva ni el aviso se anuncian por su cuenta.
+    expect(document.querySelector("[data-region-viva]")).toHaveTextContent("");
+    const contenedor = aviso.closest("[tabindex='-1']") as HTMLElement;
+    expect(contenedor.querySelector("[role='status'], [role='alert'], [aria-live]")).toBeNull();
+    // UA-9: el destino del foco conserva el indicador visible.
+    expect(contenedor.className).not.toContain("focus:outline-none");
+    expect(contenedor.className).toContain("focus-visible:outline-2");
   });
 
   it("los omitidos por NO_ENCONTRADO se explican aparte, en español", async () => {
@@ -254,7 +260,7 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     });
     montar("estado=");
     await tabla();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar las solicitudes sin tomar de esta página" }));
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" }));
     fireEvent.click(screen.getByRole("button", { name: "Tomar (2)" }));
     expect(await screen.findByText("No se tomó ningún saneamiento. 2 no se pudieron tomar porque ya no existen.", { ignore: SIN_REGION })).toBeInTheDocument();
   });
@@ -290,6 +296,82 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
   });
 });
 
+describe("Auditoría UI (UA-1, UA-2, UA-10, UA-13)", () => {
+  it("UA-1: el <thead> no lleva controles; «Seleccionar las solicitudes sin tomar» es un botón visible antes de la barra", async () => {
+    conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1), filaBandeja(2), filaBandeja(3, { estado: "EN_GESTION" })])) });
+    montar("estado=");
+    const t = await tabla();
+    const thead = t.querySelector("thead") as HTMLElement;
+    expect(within(thead).queryByRole("checkbox")).toBeNull();
+    expect(within(thead).queryAllByRole("button")).toHaveLength(0);
+    expect(within(thead).getByText("Selección")).toHaveClass("sr-only");
+    const todas = screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" });
+    expect(todas).toBeEnabled();
+    fireEvent.click(todas);
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa TST002" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa TST003" })).not.toBeChecked();
+  });
+
+  it("UA-1: sin solicitudes sin tomar en la página, el botón queda deshabilitado", async () => {
+    conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1, { estado: "EN_GESTION" })])) });
+    montar("estado=");
+    await tabla();
+    expect(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" })).toBeDisabled();
+  });
+
+  it("UA-2: «Filas por página» del kit con 10/20/30/50; el cambio vuelve a la página 1 con el tamaño nuevo", async () => {
+    const api = conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)], { total: 60, pagina: 2 })) });
+    montar("pagina=2");
+    await tabla();
+    const selector = screen.getByRole("combobox", { name: "Filas por página" });
+    expect(within(selector).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "30", "50"]);
+    fireEvent.change(selector, { target: { value: "20" } });
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=20"));
+    expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos?tamano=20", { scroll: false });
+  });
+
+  it("UA-10: sin placa muestra el VIN o el identificador, o «Sin placa»; nunca el vehiculo_id", async () => {
+    conEmpresas({
+      [`GET ${BASE}`]: () =>
+        json(
+          listaBandeja([
+            filaBandeja(1, { placa: null, vin: "VINPRUEBA0000001" }),
+            filaBandeja(2, { placa: null, identificador: "MOTOR-PRUEBA-2" }),
+            filaBandeja(3, { placa: null }),
+          ]),
+        ),
+    });
+    montar();
+    const t = await tabla();
+    expect(t).not.toHaveTextContent(/vehiculo-\d/);
+    expect(within(t).getByRole("link", { name: "VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(within(t).getByRole("link", { name: "MOTOR-PRUEBA-2" })).toBeInTheDocument();
+    expect(within(t).getByRole("link", { name: "Sin placa" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar el vehículo sin placa" })).toBeInTheDocument();
+  });
+
+  it("UA-13: «Tomar (N)» es el Button del kit: en vuelo queda aria-busy con el girador y conserva el foco", async () => {
+    let soltar: (r: Response) => void = () => {};
+    conEmpresas({
+      [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])),
+      [`POST ${BASE}/tomar`]: () => new Promise<Response>((r) => (soltar = r)),
+    });
+    montar();
+    await tabla();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
+    const boton = screen.getByRole("button", { name: "Tomar (1)" });
+    fireEvent.click(boton);
+    const enVuelo = await screen.findByRole("button", { name: /Tomando…/ });
+    expect(enVuelo).toHaveAttribute("aria-busy", "true");
+    expect(enVuelo).toHaveAttribute("aria-disabled", "true");
+    expect(enVuelo).not.toBeDisabled();
+    soltar(json({ tomados: 1, omitidos: [] }));
+    expect(await screen.findByText("Se tomó 1 saneamiento.", { ignore: SIN_REGION })).toBeInTheDocument();
+  });
+});
+
 describe("AC28 — ir a la gestión", () => {
   it("la placa es un enlace a /backoffice/saneamientos/{sid}?empresa= y el clic en la fila navega allí", async () => {
     const fila = filaBandeja(1);
@@ -306,7 +388,7 @@ describe("AC28 — ir a la gestión", () => {
     conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])) });
     montar();
     await tabla();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar TST001" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
     expect(h.push).not.toHaveBeenCalled();
     expect(LOTE_BO).toBeTruthy();
   });

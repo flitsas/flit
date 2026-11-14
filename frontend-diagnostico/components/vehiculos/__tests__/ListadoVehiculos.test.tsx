@@ -49,7 +49,7 @@ function filaVeh(n: number, cambios: Partial<FilaVehiculoListado> = {}): FilaVeh
 
 const lista = (vehiculos: FilaVehiculoListado[], extra: Partial<ListaVehiculos> = {}): ListaVehiculos => ({
   pagina: 1,
-  tamano: 25,
+  tamano: 10,
   total: vehiculos.length,
   vehiculos,
   ...extra,
@@ -116,7 +116,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     expect(screen.getByText("4 vehículos")).toBeInTheDocument();
   });
 
-  it("sin filtros pide la página 1 de 25; con filtros en la URL los manda normalizados y los muestra en los controles", async () => {
+  it("sin filtros pide la página 1 de 10; con filtros en la URL los manda normalizados y los muestra en los controles", async () => {
     h.params = new URLSearchParams("vista=vehiculos&placa=tst&veredicto=BLOQUEADO&saneamiento_estado=SOLICITADO&con_tramite=false&pagina=2&tamano=50");
     const api = simularApi({ "GET /vehiculos": () => Response.json(lista(filasBase(), { pagina: 2, tamano: 50, total: 60 })) });
     pintar();
@@ -137,7 +137,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     fireEvent.change(screen.getByRole("combobox", { name: "Dictamen" }), { target: { value: "VIABLE" } });
     expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&veredicto=VIABLE", { scroll: false });
     await waitFor(() => expect(screen.getByText("1 vehículo")).toBeInTheDocument());
-    expect(consultas(api).at(-1)).toEqual({ veredicto: "VIABLE", pagina: "1", tamano: "25" });
+    expect(consultas(api).at(-1)).toEqual({ veredicto: "VIABLE", pagina: "1", tamano: "10" });
   });
 
   it("«Actualizar» vuelve a pedir la misma consulta; no hay refresco automático", async () => {
@@ -157,7 +157,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
 
   it("cambiar de página: URL con la página, foco en la tabla y anuncio «Página 2 de 3»", async () => {
     const api = simularApi({
-      "GET /vehiculos": (url) => Response.json(lista([filaVeh(Number(url.searchParams.get("pagina")))], { total: 60, pagina: Number(url.searchParams.get("pagina")) })),
+      "GET /vehiculos": (url) => Response.json(lista([filaVeh(Number(url.searchParams.get("pagina")))], { total: 30, pagina: Number(url.searchParams.get("pagina")) })),
     });
     pintar();
     await tabla();
@@ -170,15 +170,18 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     expect(region()).toHaveTextContent("Página 2 de 3");
   });
 
-  it("filas por página 25, 50 o 100: cambiar el tamaño vuelve a la página 1", async () => {
+  it("UA-2: «Filas por página» es el del pie del kit (10/20/30/50): cambiar el tamaño vuelve a la página 1", async () => {
     const api = simularApi({ "GET /vehiculos": () => Response.json(lista(filasBase(), { total: 300 })) });
     pintar();
     await tabla();
-    const tamano = screen.getByRole("combobox", { name: "Filas por página" });
-    expect(within(tamano).getAllByRole("option").map((o) => o.textContent)).toEqual(["25", "50", "100"]);
-    fireEvent.change(tamano, { target: { value: "100" } });
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&tamano=100", { scroll: false });
-    await waitFor(() => expect(consultas(api).at(-1)).toEqual({ pagina: "1", tamano: "100" }));
+    const selectores = screen.getAllByRole("combobox", { name: "Filas por página" });
+    expect(selectores).toHaveLength(1);
+    const tamano = selectores[0];
+    expect(tamano.closest(".kit-paginacion")).not.toBeNull();
+    expect(within(tamano).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "30", "50"]);
+    fireEvent.change(tamano, { target: { value: "30" } });
+    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&tamano=30", { scroll: false });
+    await waitFor(() => expect(consultas(api).at(-1)).toEqual({ pagina: "1", tamano: "30" }));
   });
 });
 
@@ -421,8 +424,44 @@ describe("ListadoVehiculos — AC22: selección, «Sanear (N)» y «Descargar de
     expect(JSON.parse(String(init.body))).toEqual({ vehiculo_ids: ["vehiculo-1", "vehiculo-5"] });
     expect(within(fila("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();
     expect(casilla("TST005")).toBeChecked();
-    expect(screen.getAllByText(texto).some((n) => n.closest("[role='alert']"))).toBe(true);
+    // UA-4: el foco se queda en «Sanear», así que el único anuncio es la región viva; el aviso visible no es región viva.
+    const visibles = screen.getAllByText(texto).filter((n) => !n.closest("[data-region-viva-vehiculos]"));
+    expect(visibles).toHaveLength(1);
+    expect(visibles[0].closest("[role='alert'], [role='status'], [aria-live]")).toBeNull();
     expect(screen.getByRole("button", { name: /^Sanear \(/ })).toHaveFocus();
+  });
+
+  it("UA-7: con 0 solicitados el título dice «No se solicitó el saneamiento»", async () => {
+    simularApi({
+      "GET /vehiculos": () => Response.json(lista([filaVeh(1)])),
+      "POST /saneamientos/solicitudes": () => Response.json({ solicitados: 0, omitidos: [{ vehiculo_id: "vehiculo-1", motivo: "NO_ENCONTRADO" }] }),
+    });
+    pintar({ puedeSanear: true });
+    await tabla();
+    fireEvent.click(casilla("TST001"));
+    fireEvent.click(within(barra()).getByRole("button", { name: "Sanear (1)" }));
+    const texto = "No se solicitó el saneamiento de ningún vehículo. 1 se omitió: 1 no disponible.";
+    const visibles = (await screen.findAllByText(texto)).filter((n) => !n.closest("[data-region-viva-vehiculos]"));
+    const destino = visibles[0].closest("[tabindex='-1']") as HTMLElement;
+    expect(within(destino).getByText("No se solicitó el saneamiento")).toBeInTheDocument();
+    expect(within(destino).queryByText("Saneamiento solicitado")).toBeNull();
+  });
+
+  it("UA-4: todas solicitadas (selección vacía): foco en el aviso, sin región viva y con el título «Saneamiento solicitado»", async () => {
+    simularApi({
+      "GET /vehiculos": () => Response.json(lista([filaVeh(1)])),
+      "POST /saneamientos/solicitudes": () => Response.json({ solicitados: 1, omitidos: [] }),
+    });
+    pintar({ puedeSanear: true });
+    await tabla();
+    fireEvent.click(casilla("TST001"));
+    fireEvent.click(within(barra()).getByRole("button", { name: "Sanear (1)" }));
+    const aviso = await screen.findByText("Se solicitó el saneamiento de 1 vehículo.");
+    const destino = aviso.closest("[tabindex='-1']") as HTMLElement;
+    await waitFor(() => expect(destino).toHaveFocus());
+    expect(destino.querySelector("[role='alert'], [role='status'], [aria-live]")).toBeNull();
+    expect(within(destino).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(region()).not.toHaveTextContent("Se solicitó el saneamiento");
   });
 
   it("«Sanear (N)» con error: «No pudimos solicitar el saneamiento. Intenta de nuevo.» y la selección se conserva", async () => {
@@ -467,6 +506,48 @@ describe("ListadoVehiculos — AC22: selección, «Sanear (N)» y «Descargar de
     expect(within(barra()).queryByRole("button", { name: /^Descargar deuda/ })).toBeNull();
     expect(within(barra()).getByRole("button", { name: "Sanear (1)" })).toBeInTheDocument();
     expect(casilla("TST003")).toBeDisabled();
+  });
+});
+
+describe("ListadoVehiculos — UA-5: vehículos sin placa", () => {
+  it("con VIN o identificador: se ve en el título y va en los nombres accesibles; sin ninguno, «sin placa», nunca vacío", async () => {
+    simularApi({
+      "GET /vehiculos": () =>
+        Response.json(
+          lista([
+            filaVeh(1, { placa: null, vin: "VINPRUEBA0000001" }),
+            filaVeh(2, { placa: null, vin: null, identificador: "MOTOR-PRUEBA-2" }),
+            filaVeh(3, { placa: null }),
+          ]),
+        ),
+    });
+    pintar();
+    await tabla();
+    const conVin = fila("VINPRUEBA0000001");
+    expect(within(conVin).getByRole("rowheader")).toHaveTextContent("VINPRUEBA0000001");
+    expect(within(conVin).getByRole("checkbox", { name: "Seleccionar la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(within(conVin).getByRole("button", { name: "Solicitar saneamiento de la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(within(conVin).getByRole("button", { name: "Ver deuda de la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    const conId = fila("MOTOR-PRUEBA-2");
+    expect(within(conId).getByRole("checkbox", { name: "Seleccionar la placa MOTOR-PRUEBA-2" })).toBeInTheDocument();
+    const sinNada = fila("Sin placa");
+    expect(within(sinNada).getByRole("checkbox", { name: "Seleccionar el vehículo sin placa" })).toBeInTheDocument();
+    expect(within(sinNada).getByRole("button", { name: "Ver deuda del vehículo sin placa" })).toBeInTheDocument();
+    expect(within(sinNada).getByRole("button", { name: "Solicitar saneamiento del vehículo sin placa" })).toBeInTheDocument();
+    for (const b of screen.getAllByRole("button")) expect(b.getAttribute("aria-label") ?? "").not.toMatch(/placa $/);
+  });
+
+  it("«Ver deuda» de un vehículo con VIN abre PS-2 con el VIN como descripción", async () => {
+    simularApi({
+      "GET /vehiculos": () => Response.json(lista([filaVeh(1, { placa: null, vin: "VINPRUEBA0000001" })])),
+      [`GET ${rutaVeh(1, "deuda")}`]: () => Response.json(deudaSinPendientes()),
+      [`GET ${rutaVeh(1, "saneamiento")}`]: sinSan,
+    });
+    pintar();
+    await tabla();
+    fireEvent.click(screen.getByRole("button", { name: "Ver deuda de la placa VINPRUEBA0000001" }));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getAllByText("VINPRUEBA0000001").length).toBeGreaterThan(0);
   });
 });
 

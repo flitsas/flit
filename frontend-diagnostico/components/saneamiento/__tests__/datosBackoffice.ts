@@ -42,7 +42,7 @@ export function filaBandeja(n: number, cambios: Partial<FilaBandeja> = {}): Fila
 }
 
 export function listaBandeja(saneamientos: FilaBandeja[], cambios: Partial<ListaBandeja> = {}): ListaBandeja {
-  return { pagina: 1, tamano: 25, total: saneamientos.length, saneamientos, ...cambios };
+  return { pagina: 1, tamano: 10, total: saneamientos.length, saneamientos, ...cambios };
 }
 
 export const RID_PROPIETARIO = "00000000-0000-7000-8000-00000000r001";

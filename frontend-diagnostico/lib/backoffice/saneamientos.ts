@@ -4,6 +4,7 @@
 // evidencias; sin una compañía válida no sale ninguna petición (EmpresaNoElegida).
 // SP-15: el saneamiento de FLIT es un tipo propio (historial con usuario_id), separado del que ve la compañía. SP-7: la
 // deuda de la gestión tiene su propia ruta del backoffice, auditada. SP-2: los renglones quitados no vuelven.
+import { TAMANO_DE_PAGINA_POR_DEFECTO, TAMANOS_DE_PAGINA } from "@flit/ui/usePaginacion";
 import { API_PREFIX, ApiError, apiFetch, type RequestOptions } from "@/lib/api";
 import { EmpresaNoElegida } from "@/lib/backoffice/api";
 import { esEmpresaValida } from "@/lib/configuracion";
@@ -32,6 +33,9 @@ export interface FilaBandeja {
   diagnostico_nombre: string;
   vehiculo_id: string;
   placa: string | null;
+  /** UA-10: VIN y otro identificador del vehículo sin placa; opcionales hasta que BE-B los agregue a la bandeja. */
+  vin?: string | null;
+  identificador?: string | null;
   modo: ModoDiagnostico;
   veredicto: "VIABLE" | "BLOQUEADO" | null;
   estado: EstadoSaneamiento;
@@ -51,7 +55,8 @@ export interface ListaBandeja {
 
 /** Evento del historial completo de FLIT: con quién lo hizo. */
 export interface EventoHistorialBackoffice extends EventoHistorial {
-  usuario_id: string;
+  /** UA-11: puede llegar nulo (evento de sistema); entonces el historial dice solo «FLIT». */
+  usuario_id: string | null;
 }
 
 /** Saneamiento que ve FLIT (SP-15): mismo cuerpo que el de la compañía, con el historial completo y su usuario. */
@@ -114,8 +119,9 @@ export type CierreSaneamiento = { resultado: "SANEADO"; version: number } | { re
 const ESTADOS: readonly EstadoSaneamiento[] = ["SOLICITADO", "EN_GESTION", "SANEADO", "NO_PROCEDE", "ANULADO"];
 /** PS-4: por defecto, las solicitudes sin tomar. */
 export const ESTADOS_BANDEJA_POR_DEFECTO: readonly EstadoSaneamiento[] = ["SOLICITADO"];
-export const TAMANO_BANDEJA_POR_DEFECTO = 25;
-export const TAMANOS_BANDEJA: readonly number[] = [25, 50, 100, 200];
+/** UA-2: el estándar de paginación del kit (HU #13916), opciones 10/20/30/50 y 10 por defecto. El servidor admite 1 a 100. */
+export const TAMANO_BANDEJA_POR_DEFECTO = TAMANO_DE_PAGINA_POR_DEFECTO;
+export const TAMANOS_BANDEJA: readonly number[] = TAMANOS_DE_PAGINA;
 /** «Tomar» varios: 1 a 200 (§6.2). */
 export const MAXIMO_TOMAR = 200;
 /** Evidencia: 10 MB por defecto (§6.4, `Diagnostico:Saneamiento:EvidenciaMaximoBytes`). El servidor manda. */

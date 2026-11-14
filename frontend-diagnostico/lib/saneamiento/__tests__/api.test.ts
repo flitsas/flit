@@ -68,7 +68,7 @@ const deuda: PanelDeuda = {
       paz_y_salvo: false,
       comparendos: [{ numero: "N-1", fecha: "2026-01-01", valor: "450000.00", estado: "PENDIENTE" }],
       comparendos_truncados: false,
-      acuerdos_pago: [{ saldo_pendiente: 300000 }],
+      acuerdos_pago: [{ saldo_pendiente: "300000" }],
     },
     { fuente: "IMPUESTO", estado: "CON_DEUDA", consultado_en: "2026-11-14T15:00:00Z", monto_total: 1250000, vigencias: [{ anio: 2025, valor: 1250000, pagada: false }] },
     { fuente: "SOAT", estado: "NO_VIGENTE", vence: "2026-10-01" },

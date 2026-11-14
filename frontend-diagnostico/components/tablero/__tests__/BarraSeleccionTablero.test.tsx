@@ -197,8 +197,8 @@ describe("AC10 — casilla de la fila: elegible para alguna de las dos acciones"
 
 describe("AC11 — texto del resultado de «Sanear (N)»", () => {
   it("sin omitidos: éxito, singular y plural", () => {
-    expect(mensajeSolicitudSaneamiento({ solicitados: 1, omitidos: [] })).toEqual({ tono: "success", texto: "Se solicitó el saneamiento de 1 vehículo." });
-    expect(mensajeSolicitudSaneamiento({ solicitados: 8, omitidos: [] })).toEqual({ tono: "success", texto: "Se solicitó el saneamiento de 8 vehículos." });
+    expect(mensajeSolicitudSaneamiento({ solicitados: 1, omitidos: [] })).toEqual({ tono: "success", titulo: "Saneamiento solicitado", texto: "Se solicitó el saneamiento de 1 vehículo." });
+    expect(mensajeSolicitudSaneamiento({ solicitados: 8, omitidos: [] })).toEqual({ tono: "success", titulo: "Saneamiento solicitado", texto: "Se solicitó el saneamiento de 8 vehículos." });
   });
 
   it("6 solicitados y 2 omitidos (YA_SOLICITADO y NO_TERMINADO): aviso con el motivo de cada uno en español", () => {
@@ -210,6 +210,7 @@ describe("AC11 — texto del resultado de «Sanear (N)»", () => {
       ],
     });
     expect(r.tono).toBe("warning");
+    expect(r.titulo).toBe("Saneamiento solicitado");
     expect(r.texto).toBe("Se solicitó el saneamiento de 6 vehículos. 2 se omitieron: 1 con consultas por terminar y 1 que ya tenía saneamiento.");
   });
 
@@ -227,20 +228,25 @@ describe("AC11 — texto del resultado de «Sanear (N)»", () => {
     );
   });
 
-  it("ninguno solicitado: lo dice sin «0 vehículos» (D-29)", () => {
+  it("ninguno solicitado: lo dice sin «0 vehículos» (D-29) y, UA-7, el título también: «No se solicitó el saneamiento»", () => {
     expect(mensajeSolicitudSaneamiento({ solicitados: 0, omitidos: [{ vehiculo_id: "x", motivo: "YA_SOLICITADO" }] })).toEqual({
       tono: "warning",
+      titulo: "No se solicitó el saneamiento",
       texto: "No se solicitó el saneamiento de ningún vehículo. 1 se omitió: 1 que ya tenía saneamiento.",
     });
   });
 
-  it("la barra muestra el resultado bajo la selección con el título «Saneamiento solicitado» y el error con role=alert", () => {
+  it("la barra muestra el resultado bajo la selección con su título y el error con role=alert; UA-4: el aviso no es región viva", () => {
     const { rerender } = render(
-      <BarraSeleccionTablero {...base({ sanear: { cantidad: 1, enviando: false, onSanear: vi.fn(), resultado: { n: 1, tono: "success", texto: "Se solicitó el saneamiento de 1 vehículo." } } })} />,
+      <BarraSeleccionTablero
+        {...base({ sanear: { cantidad: 1, enviando: false, onSanear: vi.fn(), resultado: { n: 1, tono: "success", titulo: "Saneamiento solicitado", texto: "Se solicitó el saneamiento de 1 vehículo." } } })}
+      />,
     );
-    const aviso = screen.getByRole("status");
+    const aviso = screen.getByText("Se solicitó el saneamiento de 1 vehículo.").closest("[tabindex='-1']") as HTMLElement;
     expect(aviso).toHaveTextContent("Saneamiento solicitado");
-    expect(aviso).toHaveTextContent("Se solicitó el saneamiento de 1 vehículo.");
+    // UA-4: el resultado se anuncia por la región viva de la pantalla o por el foco, nunca por el aviso.
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(aviso.querySelector("[role='alert'], [role='status'], [aria-live]")).toBeNull();
     rerender(<BarraSeleccionTablero {...base({ sanear: { cantidad: 1, enviando: false, onSanear: vi.fn(), error: "No pudimos solicitar el saneamiento. Intenta de nuevo." } })} />);
     expect(screen.getByRole("alert")).toHaveTextContent("No pudimos solicitar el saneamiento. Intenta de nuevo.");
   });
@@ -248,9 +254,27 @@ describe("AC11 — texto del resultado de «Sanear (N)»", () => {
   it("si la selección quedó vacía, el foco va al resultado (el botón «Sanear» desapareció)", () => {
     render(
       <BarraSeleccionTablero
-        {...base({ seleccionadas: 0, sanear: { cantidad: 0, enviando: false, onSanear: vi.fn(), resultado: { n: 1, tono: "success", texto: "Se solicitó el saneamiento de 2 vehículos." } } })}
+        {...base({ seleccionadas: 0, sanear: { cantidad: 0, enviando: false, onSanear: vi.fn(), resultado: { n: 1, tono: "success", titulo: "Saneamiento solicitado", texto: "Se solicitó el saneamiento de 2 vehículos." } } })}
       />,
     );
     expect(screen.getByText("Se solicitó el saneamiento de 2 vehículos.").closest("[tabindex='-1']")).toHaveFocus();
+  });
+
+  it("UA-7: el título del aviso es el que trae el resultado («No se solicitó el saneamiento» con 0 solicitados)", () => {
+    render(
+      <BarraSeleccionTablero
+        {...base({
+          seleccionadas: 1,
+          sanear: {
+            cantidad: 1,
+            enviando: false,
+            onSanear: vi.fn(),
+            resultado: { n: 1, tono: "warning", titulo: "No se solicitó el saneamiento", texto: "No se solicitó el saneamiento de ningún vehículo. 1 se omitió: 1 no disponible." },
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText("No se solicitó el saneamiento")).toBeInTheDocument();
+    expect(screen.queryByText("Saneamiento solicitado")).toBeNull();
   });
 });

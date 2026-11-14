@@ -254,7 +254,9 @@ describe("PanelDeudaSaneamiento — AC16: saneamiento para el cliente", () => {
     const eventos = within(within(seccion).getByRole("list", { name: "Historial del saneamiento" })).getAllByRole("listitem");
     expect(eventos).toHaveLength(3);
     expect(eventos[0]).toHaveTextContent("Se solicitó el saneamiento");
-    expect(eventos[0]).toHaveTextContent("Tu compañía");
+    // UA-8: el autor del SOLICITADO sale de solicitado_por_mi.
+    expect(eventos[0]).toHaveTextContent("Tú");
+    expect(eventos[0]).not.toHaveTextContent("Tu compañía");
     expect(eventos[1]).toHaveTextContent("FLIT empezó el saneamiento");
     expect(eventos[1]).toHaveTextContent("FLIT");
     expect(eventos[2]).toHaveTextContent("FLIT cargó una evidencia");
@@ -270,6 +272,22 @@ describe("PanelDeudaSaneamiento — AC16: saneamiento para el cliente", () => {
     pintar();
     const seccion = await screen.findByRole("region", { name: "Saneamiento" });
     expect(seccion).toHaveTextContent("PorOtro usuario de la compañía");
+    // UA-8: el evento SOLICITADO del historial lleva el mismo actor.
+    const [solicitado] = within(within(seccion).getByRole("list", { name: "Historial del saneamiento" })).getAllByRole("listitem");
+    expect(solicitado).toHaveTextContent("Se solicitó el saneamiento");
+    expect(solicitado).toHaveTextContent("Otro usuario de la compañía");
+  });
+
+  it("UA-8: DESMARCADO sigue rotulado «Tu compañía» (no se sabe quién fue, SP-15)", async () => {
+    simularApi({
+      [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta()),
+      [`GET ${RUTA_SANEAMIENTO}`]: () =>
+        json(saneamientoEnGestion({ historial: [{ evento: "DESMARCADO", ocurrido_en: "2026-11-06T12:00:00+00:00", actor: "COMPANIA", fuente: null, motivo: null }] })),
+    });
+    pintar();
+    const seccion = await screen.findByRole("region", { name: "Saneamiento" });
+    const [evento] = within(within(seccion).getByRole("list", { name: "Historial del saneamiento" })).getAllByRole("listitem");
+    expect(evento).toHaveTextContent("Tu compañía");
   });
 
   it("NO_PROCEDE muestra el motivo del cierre; un REABIERTO muestra su motivo en el historial", async () => {

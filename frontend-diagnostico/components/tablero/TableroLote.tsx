@@ -274,7 +274,9 @@ export function TableroLote({
       setSeleccion((s) => new Set([...s].filter((id) => !solicitadas.has(id))));
       const mensaje = mensajeSolicitudSaneamiento(r);
       setResultadoSanear((previo) => ({ n: (previo?.n ?? 0) + 1, ...mensaje }));
-      anunciar(mensaje.texto);
+      // UA-4: un solo canal. Si queda selección, el foco se queda en «Sanear» y anuncia la región viva; si no, el foco va al
+      // aviso (BarraSeleccionTablero) y ese foco ya lo lee.
+      if (seleccionadas.some((id) => !solicitadas.has(id))) anunciar(mensaje.texto);
       refrescar();
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {

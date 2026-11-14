@@ -12,7 +12,7 @@ import {
   type EstadoSaneamientoActivo,
   type SaneamientoFila,
 } from "@/lib/saneamiento/api";
-import { ROTULO_MOTIVO_NO_ELEGIBLE, etiquetaSaneamiento } from "@/lib/saneamiento/estados";
+import { ROTULO_MOTIVO_NO_ELEGIBLE, deLaPlaca, etiquetaSaneamiento } from "@/lib/saneamiento/estados";
 
 /** Fila sin saneamiento tras desmarcar: vuelve a ser elegible (el servidor lo confirma en el siguiente sondeo). */
 export const SIN_SANEAMIENTO: SaneamientoFila = { estado: null, elegible: true, motivo_no_elegible: null };
@@ -109,7 +109,7 @@ export function BotonSanear({
       <button
         type="button"
         aria-haspopup="dialog"
-        aria-label={texto ? `Ver saneamiento de la placa ${identificador}: ${texto}` : `Ver saneamiento de la placa ${identificador}`}
+        aria-label={texto ? `Ver saneamiento ${deLaPlaca(identificador)}: ${texto}` : `Ver saneamiento ${deLaPlaca(identificador)}`}
         onClick={(e) => onAbrirPanel(e.currentTarget)}
         className={`${base} ${ENCENDIDA_CLS}`}
       >
@@ -136,7 +136,11 @@ export function BotonSanear({
     try {
       if (encendida) await desmarcarSaneamiento(diagnosticoId, vehiculo.id);
       else await marcarSaneamiento(diagnosticoId, vehiculo.id);
-      onAnunciar?.(encendida ? `Se quitó la solicitud de saneamiento de ${identificador}.` : `Saneamiento solicitado para ${identificador}.`);
+      onAnunciar?.(
+        encendida
+          ? `Se quitó la solicitud de saneamiento de ${identificador || "el vehículo sin placa"}.`
+          : `Saneamiento solicitado para ${identificador || "el vehículo sin placa"}.`,
+      );
       onConfirmado?.(siguiente.estado, siguiente);
     } catch (e) {
       onCambio(previo.estado, previo);
@@ -156,7 +160,7 @@ export function BotonSanear({
     <>
       <button
         type="button"
-        aria-label={`Solicitar saneamiento de la placa ${identificador}`}
+        aria-label={`Solicitar saneamiento ${deLaPlaca(identificador)}`}
         aria-pressed={encendida}
         aria-busy={enVuelo || undefined}
         aria-disabled={noElegible || undefined}

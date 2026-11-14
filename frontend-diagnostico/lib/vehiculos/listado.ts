@@ -3,6 +3,7 @@
 // Correcciones del brief de la Fase 0: el estado del vehículo es EN_PROCESO o TERMINADO, calculado con sus celdas (C1), y
 // el modo es el del contrato vigente, SIMPLE o CON_ANALISIS (C2). D-10: la pantalla filtra por un valor de cada lista
 // aunque la API acepte repetibles.
+import { TAMANO_DE_PAGINA_POR_DEFECTO, TAMANOS_DE_PAGINA } from "@flit/ui/usePaginacion";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { ModoDiagnostico } from "@/lib/diagnosticos/api";
 import { MODOS } from "@/lib/diagnosticos/listado";
@@ -16,6 +17,9 @@ export type FiltroSaneamiento = "CON" | "SIN";
 export interface FilaVehiculoListado {
   vehiculo_id: string;
   placa: string | null;
+  /** UA-5: VIN y otro identificador del vehículo sin placa. Opcionales hasta que BE-B los agregue a `FilaPlacaDto`. */
+  vin?: string | null;
+  identificador?: string | null;
   diagnostico_id: string;
   diagnostico_nombre: string;
   diagnostico_creado_en: string;
@@ -59,9 +63,15 @@ export type ErrorVehiculos =
   | { tipo: "ACCESO"; code: string }
   | { tipo: "AVISO"; mensaje: string; reiniciarPagina: boolean };
 
-/** PS-3 (spec-ui §4.3): 25 por defecto, opciones 25/50/100 (el contrato admite hasta 100). */
-export const TAMANO_VEHICULOS_POR_DEFECTO = 25;
-export const TAMANOS_VEHICULOS: readonly number[] = [25, 50, 100];
+/**
+ * PS-3: el estándar de paginación del kit (HU #13916, auditoría UI UA-2): opciones 10/20/30/50 y 10 por defecto, como el
+ * listado de diagnósticos. El contrato admite de 1 a 100.
+ */
+export const TAMANO_VEHICULOS_POR_DEFECTO = TAMANO_DE_PAGINA_POR_DEFECTO;
+export const TAMANOS_VEHICULOS: readonly number[] = TAMANOS_DE_PAGINA;
+
+/** UA-5: lo que identifica a la fila: la placa, o el VIN, o el identificador; "" si no llega ninguno. */
+export const identificadorFila = (f: Pick<FilaVehiculoListado, "placa" | "vin" | "identificador">): string => f.placa || f.vin || f.identificador || "";
 
 export const ESTADOS_VEHICULO: readonly EstadoVehiculo[] = ["EN_PROCESO", "TERMINADO"];
 export const VEREDICTOS_FILTRO: readonly VeredictoFiltro[] = ["VIABLE", "BLOQUEADO", "SIN_DICTAMEN"];

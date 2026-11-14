@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { SeccionesDeuda } from "@/components/saneamiento/SeccionesDeuda";
+import type { FuenteDeudaSimit } from "@/lib/saneamiento/api";
 import { deudaCompleta, deudaSinPendientes } from "./datosDeuda";
 
 // Uso de ejemplo: <SeccionesDeuda deuda={panelDeuda} /> pinta las secciones «Dictamen» y «Deuda por fuente» de PS-2 con los
@@ -107,6 +108,49 @@ describe("SeccionesDeuda — AC15: deuda por fuente", () => {
   it("con hallazgos no muestra «Sin pendientes»", () => {
     render(<SeccionesDeuda deuda={deudaCompleta()} />);
     expect(screen.queryByText("No encontramos deudas ni pendientes en las fuentes consultadas.")).not.toBeInTheDocument();
+  });
+
+  it("UA-6: un saldo del acuerdo de pago que no es numérico se muestra tal como llega, nunca «$ NaN»", () => {
+    const deuda = deudaCompleta();
+    const simit = deuda.fuentes.find((f) => f.fuente === "SIMIT_PROPIETARIO") as FuenteDeudaSimit;
+    simit.acuerdos_pago = [{ saldo_pendiente: "$1.250.000" }, { saldo_pendiente: "1.250.000,00" }, { saldo_pendiente: "450000" }];
+    render(<SeccionesDeuda deuda={deuda} />);
+    const acuerdos = within(screen.getByRole("list", { name: "Acuerdos de pago de SIMIT del propietario" })).getAllByRole("listitem");
+    expect(acuerdos.map((a) => a.textContent)).toEqual([
+      "Acuerdo de pago con saldo pendiente de $1.250.000",
+      "Acuerdo de pago con saldo pendiente de 1.250.000,00",
+      "Acuerdo de pago con saldo pendiente de $ 450.000",
+    ]);
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
+  it("UA-3: dos entradas SIMIT_PROPIETARIO: tarjetas con nombre propio por ordinal, sin documento, y abrir/cerrar independiente", () => {
+    const deuda = deudaCompleta();
+    const primera = deuda.fuentes.find((f) => f.fuente === "SIMIT_PROPIETARIO") as FuenteDeudaSimit;
+    const segunda: FuenteDeudaSimit = { ...primera, persona: { tipo_documento: "CC", documento: "900000002" }, comparendos: [], comparendos_truncados: false, acuerdos_pago: [] };
+    deuda.fuentes = [...deuda.fuentes, segunda];
+    const avisos: unknown[] = [];
+    const error = vi.spyOn(console, "error").mockImplementation((...args) => void avisos.push(args));
+    render(<SeccionesDeuda deuda={deuda} />);
+    const nombres = screen.getAllByRole("button").map((b) => b.textContent ?? "");
+    expect(nombres.filter((n) => n.startsWith("SIMIT del propietario"))).toEqual([
+      "SIMIT del propietario 1 de 2: Con deuda",
+      "SIMIT del propietario 2 de 2: Con deuda",
+    ]);
+    // El nombre del botón no lleva el número de documento.
+    expect(nombres.join(" ")).not.toMatch(/900000001|900000002/);
+    // Sin aviso de React por keys repetidas.
+    expect(avisos.some((a) => String((a as unknown[])[0]).includes("same key"))).toBe(false);
+    error.mockRestore();
+    const p1 = tarjeta(/^SIMIT del propietario 1 de 2/);
+    const p2 = tarjeta(/^SIMIT del propietario 2 de 2/);
+    expect(p1).toHaveAttribute("aria-expanded", "true");
+    expect(p2).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(p2);
+    expect(p2).toHaveAttribute("aria-expanded", "false");
+    expect(p1).toHaveAttribute("aria-expanded", "true");
+    // La tabla interna también se distingue por el ordinal.
+    expect(within(contenidoDe(p1)).getByRole("table", { name: "Comparendos de SIMIT del propietario 1 de 2" })).toBeInTheDocument();
   });
 
   it("SP-11: aunque la respuesta trajera un nombre, nunca se pinta", () => {

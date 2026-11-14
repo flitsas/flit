@@ -177,6 +177,9 @@ describe("AC30 — Tomar y anular", () => {
     expect(llamadas(f, "POST", `${RUTA_DETALLE}/tomar`)).toHaveLength(1);
     expect(screen.getByRole("row", { name: "SIMIT del propietario" })).toBeInTheDocument();
     await waitFor(() => expect(titulo).toHaveFocus());
+    // UA-9: el destino del foco programático conserva el indicador visible (sin focus:outline-none).
+    expect(titulo.className).not.toContain("focus:outline-none");
+    expect(titulo.className).toContain("focus-visible:outline-2");
     expect(region()).toHaveTextContent("Saneamiento tomado. Se generaron 2 conceptos.");
     expect(refrescar).toHaveBeenCalled();
   });
@@ -205,6 +208,10 @@ describe("AC30 — Tomar y anular", () => {
     expect(gestion()).toHaveTextContent("La compañía lo pidió por error.");
     expect(region()).toHaveTextContent("Saneamiento anulado.");
     await waitFor(() => expect(document.querySelector("[data-estado-saneamiento]")).toHaveFocus());
+    // UA-9: tras un clic con ratón el foco programático también se dibuja (focus:, no solo focus-visible:).
+    const estado = document.querySelector("[data-estado-saneamiento]") as HTMLElement;
+    expect(estado.className).not.toContain("focus:outline-none");
+    expect(estado.className).toContain("focus:outline-2");
   });
 
   it("EN_GESTION también ofrece «Anular»", async () => {
@@ -634,6 +641,20 @@ describe("AC36 — historial completo", () => {
     expect(items[4]).toHaveTextContent("Saneamiento solicitado → En saneamiento");
     expect(items[5]).toHaveTextContent("Se solicitó el saneamiento");
     expect(items[5]).toHaveTextContent("Compañía");
+  });
+
+  it("UA-11: un evento de FLIT sin usuario_id dice solo «FLIT», sin «· usuario »", async () => {
+    api(
+      saneamientoBo({
+        historial: [{ evento: "TOMADO", ocurrido_en: "2026-11-04T15:00:00+00:00", actor: "FLIT", fuente: null, motivo: null, usuario_id: null }],
+      }),
+    );
+    montar();
+    await listo();
+    const [item] = within(screen.getByRole("list", { name: "Historial" })).getAllByRole("listitem");
+    expect(item).toHaveTextContent("FLIT empezó el saneamiento");
+    expect(item).not.toHaveTextContent("usuario");
+    expect(item.lastElementChild).toHaveTextContent(/^FLIT$/);
   });
 });
 

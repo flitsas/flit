@@ -25,6 +25,7 @@ import {
   BOTON_PRIMARIO_CLS,
   BOTON_REINTENTAR_CLS,
   BOTON_SECUNDARIO_CLS,
+  ENLACE_ACCION_CLS,
   FOCO_CLS,
   MARCA_CLS,
   TARJETA_CLS,
@@ -49,10 +50,10 @@ import {
   solicitarSaneamientos,
   type SaneamientoFila,
 } from "@/lib/saneamiento/api";
-import { ROTULO_MOTIVO_NO_ELEGIBLE } from "@/lib/saneamiento/estados";
+import { ROTULO_MOTIVO_NO_ELEGIBLE, deLaPlaca, laPlaca } from "@/lib/saneamiento/estados";
 import {
-  TAMANOS_VEHICULOS,
   filtrosVehiculosDesdeUrl,
+  identificadorFila,
   hayFiltrosVehiculos,
   listarVehiculos,
   traducirErrorVehiculos,
@@ -81,8 +82,6 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorVehiculos } | {
 const COLUMNAS = ["Placa", "Diagnóstico", "Fecha", "Modo", "Estado", "Dictamen", "Saneamiento", "Trámite", "Acciones"] as const;
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 const ERROR_CLS = "text-xs font-semibold text-[color:var(--di-danger)]";
-const ENLACE_CLS = `inline-flex items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
-const SELECT_TAMANO_CLS = `h-9 rounded-[9px] border border-input bg-card px-2 text-sm text-flit-primary ${FOCO_CLS}`;
 
 const ERROR_DESCARGA = "No pudimos generar el archivo. Intenta de nuevo.";
 const ERROR_SANEAR = "No pudimos solicitar el saneamiento. Intenta de nuevo.";
@@ -129,7 +128,7 @@ function seleccionDe(f: FilaVehiculoListado, puedeSanear: boolean, puedeDescarga
   return { habilitada, sanear, descargar, motivo: unicos.length ? unicos.join(" · ") : undefined };
 }
 
-/** Casilla «Seleccionar la placa X»: deshabilitada, el motivo va en un texto `hidden` por `aria-describedby` y en `title`. */
+/** Casilla «Seleccionar la placa X» (sin identificador, «Seleccionar el vehículo sin placa»): deshabilitada, el motivo va en un texto `hidden` por `aria-describedby` y en `title`. */
 function Casilla({ placa, seleccion, marcada, onCambiar }: { placa: string; seleccion: SeleccionFila; marcada: boolean; onCambiar: (marcada: boolean) => void }) {
   const motivoId = `${useId()}-motivo`;
   const motivo = seleccion.habilitada ? undefined : seleccion.motivo;
@@ -137,7 +136,7 @@ function Casilla({ placa, seleccion, marcada, onCambiar }: { placa: string; sele
     <>
       <input
         type="checkbox"
-        aria-label={`Seleccionar la placa ${placa}`}
+        aria-label={`Seleccionar ${laPlaca(placa)}`}
         aria-describedby={motivo ? motivoId : undefined}
         checked={seleccion.habilitada && marcada}
         disabled={!seleccion.habilitada}
@@ -338,7 +337,9 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
       setSeleccion((s) => new Set([...s].filter((id) => !solicitadas.has(id))));
       const mensaje = mensajeSolicitudSaneamiento(r);
       setResultadoSanear((previo) => ({ n: (previo?.n ?? 0) + 1, ...mensaje }));
-      anunciar(mensaje.texto);
+      // UA-4: un solo canal. Con selección restante el foco se queda en «Sanear» y anuncia la región viva; si la selección
+      // queda vacía, el foco va al aviso y ese foco ya lo lee.
+      if (seleccionadas.some((id) => !solicitadas.has(id))) anunciar(mensaje.texto);
     } catch (e) {
       if (!negar(e)) setErrorSanear(mensajeErrorSaneamiento(e, ERROR_SANEAR));
     } finally {
@@ -498,7 +499,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
             )}
             {resultadoSanear && (
               <div ref={resultadoRef} tabIndex={-1} className={`rounded-[9px] ${FOCO_CLS}`}>
-                <InlineAlert tone={resultadoSanear.tono} title="Saneamiento solicitado">
+                <InlineAlert tone={resultadoSanear.tono} title={resultadoSanear.titulo} vivo={false}>
                   {resultadoSanear.texto}
                 </InlineAlert>
               </div>
@@ -528,7 +529,8 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
             </thead>
             <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {datos.vehiculos.map((f) => {
-                const placa = f.placa || "";
+                // UA-5: la placa, o el VIN, o el identificador (como el tablero); sin ninguno, «Sin placa».
+                const placa = identificadorFila(f);
                 const seleccionFila = selecciones.get(f.vehiculo_id) ?? seleccionDe(f, puedeSanear, puedeDescargar);
                 const estado = ESTADO_VEHICULO[f.estado] ?? ESTADO_VEHICULO.EN_PROCESO;
                 const dictamen = dictamenDe(f);
@@ -540,7 +542,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                       </td>
                     )}
                     <th scope="row" data-label="Placa" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} text-left font-semibold`}>
-                      {esPlaca(placa) ? <Placa placa={placa} /> : <span className="break-all font-mono">{placa || "—"}</span>}
+                      {esPlaca(placa) ? <Placa placa={placa} /> : placa ? <span className="break-all font-mono">{placa}</span> : <span>Sin placa</span>}
                     </th>
                     <td data-label="Diagnóstico" className={`${CELDA_CLS} break-words`}>
                       {f.diagnostico_nombre}
@@ -579,7 +581,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                       <div className="flex flex-col items-start gap-2 max-[900px]:items-end">
                         <BotonSanear
                           diagnosticoId={f.diagnostico_id}
-                          vehiculo={{ id: f.vehiculo_id, placa }}
+                          vehiculo={{ id: f.vehiculo_id, placa: f.placa, vin: f.vin, identificador: f.identificador }}
                           saneamiento={f.saneamiento}
                           puedeSanear={puedeSanear}
                           onCambio={(_estado, saneamiento) => actualizarFila(f.vehiculo_id, saneamiento)}
@@ -587,14 +589,14 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                           onRefrescar={refrescar}
                           onAnunciar={anunciar}
                         />
-                        <Link href={`/diagnosticos/${encodeURIComponent(f.diagnostico_id)}`} aria-label={`Abrir el diagnóstico ${f.diagnostico_nombre}`} className={ENLACE_CLS}>
+                        <Link href={`/diagnosticos/${encodeURIComponent(f.diagnostico_id)}`} aria-label={`Abrir el diagnóstico ${f.diagnostico_nombre}`} className={ENLACE_ACCION_CLS}>
                           Abrir diagnóstico
                         </Link>
                         {terminado(f) && (
                           <button
                             type="button"
                             aria-haspopup="dialog"
-                            aria-label={`Ver deuda de la placa ${placa}`}
+                            aria-label={`Ver deuda ${deLaPlaca(placa)}`}
                             onClick={(e) => setPanel({ fila: f, disparador: e.currentTarget })}
                             className={`${ACCION_FILA_CLS} whitespace-nowrap`}
                           >
@@ -611,31 +613,19 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
           </table>
         </div>
         <p className="text-sm text-muted-foreground">{contarVehiculos(datos.total)}</p>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          {/* D-105: el selector del kit ofrece su lista estándar; la grilla de placas admite 25, 50 o 100 (spec-ui §4.3). */}
-          <label className="flex items-center gap-2 text-[0.8125rem] text-muted-foreground">
-            Filas por página
-            <select value={datos.tamano} onChange={(e) => aplicar({ tamano: Number(e.target.value), pagina: 1 })} className={SELECT_TAMANO_CLS}>
-              {TAMANOS_VEHICULOS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Pagination
-            className="flex-1"
-            page={datos.pagina}
-            pageSize={datos.tamano}
-            totalCount={datos.total}
-            onPageChange={(pagina) => {
-              focoTablaPendiente.current = true;
-              aplicar({ pagina });
-            }}
-            ariaLabel="Paginación de vehículos"
-            noun="vehículos"
-          />
-        </div>
+        {/* UA-2 (rechaza D-105): el pie estándar del kit, con «Filas por página» de TAMANOS_DE_PAGINA. */}
+        <Pagination
+          page={datos.pagina}
+          pageSize={datos.tamano}
+          totalCount={datos.total}
+          onPageChange={(pagina) => {
+            focoTablaPendiente.current = true;
+            aplicar({ pagina });
+          }}
+          onPageSizeChange={(tamano) => aplicar({ tamano, pagina: 1 })}
+          ariaLabel="Paginación de vehículos"
+          noun="vehículos"
+        />
       </div>
     );
   }
@@ -653,13 +643,18 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
           key={panel.fila.vehiculo_id}
           diagnosticoId={panel.fila.diagnostico_id}
           vehiculoId={panel.fila.vehiculo_id}
-          identificador={panel.fila.placa || ""}
+          identificador={identificadorFila(panel.fila) || "Sin placa"}
           puedeSanear={puedeSanear}
           puedeDescargar={puedeDescargar}
           devolverFocoA={panel.disparador}
           onClose={() => setPanel(null)}
           onCambioEstado={(estado) => actualizarFila(panel.fila.vehiculo_id, filaDeEstado(estado))}
-          accionBandera={banderaPanelDeuda(panel.fila.diagnostico_id, { id: panel.fila.vehiculo_id, placa: panel.fila.placa })}
+          accionBandera={banderaPanelDeuda(panel.fila.diagnostico_id, {
+            id: panel.fila.vehiculo_id,
+            placa: panel.fila.placa,
+            vin: panel.fila.vin,
+            identificador: panel.fila.identificador,
+          })}
         />
       )}
     </section>
