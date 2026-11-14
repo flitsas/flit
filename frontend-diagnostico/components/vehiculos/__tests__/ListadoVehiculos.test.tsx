@@ -509,6 +509,48 @@ describe("ListadoVehiculos — AC22: selección, «Sanear (N)» y «Descargar de
   });
 });
 
+describe("ListadoVehiculos — UA-5: vehículos sin placa", () => {
+  it("con VIN o identificador: se ve en el título y va en los nombres accesibles; sin ninguno, «sin placa», nunca vacío", async () => {
+    simularApi({
+      "GET /vehiculos": () =>
+        Response.json(
+          lista([
+            filaVeh(1, { placa: null, vin: "VINPRUEBA0000001" }),
+            filaVeh(2, { placa: null, vin: null, identificador: "MOTOR-PRUEBA-2" }),
+            filaVeh(3, { placa: null }),
+          ]),
+        ),
+    });
+    pintar();
+    await tabla();
+    const conVin = fila("VINPRUEBA0000001");
+    expect(within(conVin).getByRole("rowheader")).toHaveTextContent("VINPRUEBA0000001");
+    expect(within(conVin).getByRole("checkbox", { name: "Seleccionar la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(within(conVin).getByRole("button", { name: "Solicitar saneamiento de la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(within(conVin).getByRole("button", { name: "Ver deuda de la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    const conId = fila("MOTOR-PRUEBA-2");
+    expect(within(conId).getByRole("checkbox", { name: "Seleccionar la placa MOTOR-PRUEBA-2" })).toBeInTheDocument();
+    const sinNada = fila("Sin placa");
+    expect(within(sinNada).getByRole("checkbox", { name: "Seleccionar el vehículo sin placa" })).toBeInTheDocument();
+    expect(within(sinNada).getByRole("button", { name: "Ver deuda del vehículo sin placa" })).toBeInTheDocument();
+    expect(within(sinNada).getByRole("button", { name: "Solicitar saneamiento del vehículo sin placa" })).toBeInTheDocument();
+    for (const b of screen.getAllByRole("button")) expect(b.getAttribute("aria-label") ?? "").not.toMatch(/placa $/);
+  });
+
+  it("«Ver deuda» de un vehículo con VIN abre PS-2 con el VIN como descripción", async () => {
+    simularApi({
+      "GET /vehiculos": () => Response.json(lista([filaVeh(1, { placa: null, vin: "VINPRUEBA0000001" })])),
+      [`GET ${rutaVeh(1, "deuda")}`]: () => Response.json(deudaSinPendientes()),
+      [`GET ${rutaVeh(1, "saneamiento")}`]: sinSan,
+    });
+    pintar();
+    await tabla();
+    fireEvent.click(screen.getByRole("button", { name: "Ver deuda de la placa VINPRUEBA0000001" }));
+    const panel = await screen.findByRole("dialog");
+    expect(within(panel).getAllByText("VINPRUEBA0000001").length).toBeGreaterThan(0);
+  });
+});
+
 describe("ListadoVehiculos — AC23/AC42: 360 px y tokens", () => {
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 

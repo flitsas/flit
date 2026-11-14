@@ -17,6 +17,9 @@ export type FiltroSaneamiento = "CON" | "SIN";
 export interface FilaVehiculoListado {
   vehiculo_id: string;
   placa: string | null;
+  /** UA-5: VIN y otro identificador del vehículo sin placa. Opcionales hasta que BE-B los agregue a `FilaPlacaDto`. */
+  vin?: string | null;
+  identificador?: string | null;
   diagnostico_id: string;
   diagnostico_nombre: string;
   diagnostico_creado_en: string;

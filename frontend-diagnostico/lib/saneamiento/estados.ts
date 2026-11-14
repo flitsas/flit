@@ -74,3 +74,11 @@ export function rotuloConcepto(renglon: Pick<RenglonSaneamiento, "fuente" | "des
   const descripcion = renglon.descripcion?.trim();
   return renglon.fuente === "OTRO" && descripcion ? `${fuente}: ${descripcion}` : fuente;
 }
+
+/**
+ * Nombre accesible del vehículo de una fila (UA-5, UA-10): «la placa ABC123» (o el VIN, o el identificador, como el tablero);
+ * sin ninguno, «el vehículo sin placa». Nunca queda «… la placa » vacío ni un id interno.
+ */
+export const laPlaca = (identificador: string): string => (identificador ? `la placa ${identificador}` : "el vehículo sin placa");
+/** «de la placa ABC123» o «del vehículo sin placa». */
+export const deLaPlaca = (identificador: string): string => (identificador ? `de la placa ${identificador}` : "del vehículo sin placa");

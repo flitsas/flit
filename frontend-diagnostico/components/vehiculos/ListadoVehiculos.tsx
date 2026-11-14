@@ -49,9 +49,10 @@ import {
   solicitarSaneamientos,
   type SaneamientoFila,
 } from "@/lib/saneamiento/api";
-import { ROTULO_MOTIVO_NO_ELEGIBLE } from "@/lib/saneamiento/estados";
+import { ROTULO_MOTIVO_NO_ELEGIBLE, deLaPlaca, laPlaca } from "@/lib/saneamiento/estados";
 import {
   filtrosVehiculosDesdeUrl,
+  identificadorFila,
   hayFiltrosVehiculos,
   listarVehiculos,
   traducirErrorVehiculos,
@@ -128,7 +129,7 @@ function seleccionDe(f: FilaVehiculoListado, puedeSanear: boolean, puedeDescarga
   return { habilitada, sanear, descargar, motivo: unicos.length ? unicos.join(" · ") : undefined };
 }
 
-/** Casilla «Seleccionar la placa X»: deshabilitada, el motivo va en un texto `hidden` por `aria-describedby` y en `title`. */
+/** Casilla «Seleccionar la placa X» (sin identificador, «Seleccionar el vehículo sin placa»): deshabilitada, el motivo va en un texto `hidden` por `aria-describedby` y en `title`. */
 function Casilla({ placa, seleccion, marcada, onCambiar }: { placa: string; seleccion: SeleccionFila; marcada: boolean; onCambiar: (marcada: boolean) => void }) {
   const motivoId = `${useId()}-motivo`;
   const motivo = seleccion.habilitada ? undefined : seleccion.motivo;
@@ -136,7 +137,7 @@ function Casilla({ placa, seleccion, marcada, onCambiar }: { placa: string; sele
     <>
       <input
         type="checkbox"
-        aria-label={`Seleccionar la placa ${placa}`}
+        aria-label={`Seleccionar ${laPlaca(placa)}`}
         aria-describedby={motivo ? motivoId : undefined}
         checked={seleccion.habilitada && marcada}
         disabled={!seleccion.habilitada}
@@ -529,7 +530,8 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
             </thead>
             <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {datos.vehiculos.map((f) => {
-                const placa = f.placa || "";
+                // UA-5: la placa, o el VIN, o el identificador (como el tablero); sin ninguno, «Sin placa».
+                const placa = identificadorFila(f);
                 const seleccionFila = selecciones.get(f.vehiculo_id) ?? seleccionDe(f, puedeSanear, puedeDescargar);
                 const estado = ESTADO_VEHICULO[f.estado] ?? ESTADO_VEHICULO.EN_PROCESO;
                 const dictamen = dictamenDe(f);
@@ -541,7 +543,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                       </td>
                     )}
                     <th scope="row" data-label="Placa" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} text-left font-semibold`}>
-                      {esPlaca(placa) ? <Placa placa={placa} /> : <span className="break-all font-mono">{placa || "—"}</span>}
+                      {esPlaca(placa) ? <Placa placa={placa} /> : placa ? <span className="break-all font-mono">{placa}</span> : <span>Sin placa</span>}
                     </th>
                     <td data-label="Diagnóstico" className={`${CELDA_CLS} break-words`}>
                       {f.diagnostico_nombre}
@@ -580,7 +582,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                       <div className="flex flex-col items-start gap-2 max-[900px]:items-end">
                         <BotonSanear
                           diagnosticoId={f.diagnostico_id}
-                          vehiculo={{ id: f.vehiculo_id, placa }}
+                          vehiculo={{ id: f.vehiculo_id, placa: f.placa, vin: f.vin, identificador: f.identificador }}
                           saneamiento={f.saneamiento}
                           puedeSanear={puedeSanear}
                           onCambio={(_estado, saneamiento) => actualizarFila(f.vehiculo_id, saneamiento)}
@@ -595,7 +597,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                           <button
                             type="button"
                             aria-haspopup="dialog"
-                            aria-label={`Ver deuda de la placa ${placa}`}
+                            aria-label={`Ver deuda ${deLaPlaca(placa)}`}
                             onClick={(e) => setPanel({ fila: f, disparador: e.currentTarget })}
                             className={`${ACCION_FILA_CLS} whitespace-nowrap`}
                           >
@@ -642,13 +644,18 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
           key={panel.fila.vehiculo_id}
           diagnosticoId={panel.fila.diagnostico_id}
           vehiculoId={panel.fila.vehiculo_id}
-          identificador={panel.fila.placa || ""}
+          identificador={identificadorFila(panel.fila) || "Sin placa"}
           puedeSanear={puedeSanear}
           puedeDescargar={puedeDescargar}
           devolverFocoA={panel.disparador}
           onClose={() => setPanel(null)}
           onCambioEstado={(estado) => actualizarFila(panel.fila.vehiculo_id, filaDeEstado(estado))}
-          accionBandera={banderaPanelDeuda(panel.fila.diagnostico_id, { id: panel.fila.vehiculo_id, placa: panel.fila.placa })}
+          accionBandera={banderaPanelDeuda(panel.fila.diagnostico_id, {
+            id: panel.fila.vehiculo_id,
+            placa: panel.fila.placa,
+            vin: panel.fila.vin,
+            identificador: panel.fila.identificador,
+          })}
         />
       )}
     </section>
