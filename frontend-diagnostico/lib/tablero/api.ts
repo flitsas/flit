@@ -5,6 +5,7 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
 import type { EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
+import type { SaneamientoFila } from "@/lib/saneamiento/api";
 
 export type EstadoCelda = "PENDIENTE" | "EN_CURSO" | "COMPLETADO" | "ERROR" | "NA";
 export type MotivoNa = "SERVICIO_PUBLICO" | "DEPARTAMENTO_NO_SOPORTADO" | "SIN_DOCUMENTO_LOCATARIO";
@@ -91,6 +92,11 @@ export interface FilaVehiculo {
     estado: "PENDIENTE" | "ENVIADO" | "CREADO" | "OMITIDO" | "FALLIDO" | null;
     tramite: TramiteFila | null;
   } | null;
+  /**
+   * Saneamiento (plan §6.1, HU #14577): estado no anulado, elegibilidad y motivo. Opcional: un backend anterior, o una fila
+   * del sondeo sin cambios, no lo trae; sin la clave la fila se trata como sin saneamiento.
+   */
+  saneamiento?: SaneamientoFila | null;
   celdas: CeldaGrilla[];
 }
 

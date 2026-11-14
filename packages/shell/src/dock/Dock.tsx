@@ -3,7 +3,7 @@
 import { useId, type RefObject } from "react";
 import Link from "next/link";
 import { Icono } from "@flit/ui/Icono";
-import type { DockEntry, DockGroup } from "../nav";
+import { formatoInsignia, type DockEntry, type DockGroup } from "../nav";
 import { DockGlyph } from "./DockGlyph";
 import { useDisclosureNav } from "./useDisclosureNav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
@@ -136,7 +136,16 @@ function DockGroupPill({
 
   const pillClass = `dock-pill ${showLabels ? "" : "dock-pill--compacta"}`;
   const label = <span className={showLabels ? "truncate" : "sr-only"}>{pillLabel}</span>;
-  const art = <DockGlyph icon={glyph.icon} ilustracion={glyph.ilustracion} className="dock-pill__glifo" />;
+  // Insignia del grupo (spec-ui §1.4): el submenú está cerrado por defecto, así que la suma va sobre el glifo. El número
+  // visible es decorativo; el nombre accesible lleva el real («Backoffice, 150 pendientes»).
+  const insignia = formatoInsignia(group.badge);
+  const pillName = insignia ? `${pillLabel}, ${group.badge} pendientes` : pillLabel;
+  const art = (
+    <>
+      <DockGlyph icon={glyph.icon} ilustracion={glyph.ilustracion} className="dock-pill__glifo" />
+      {insignia && <Insignia texto={insignia} flotante />}
+    </>
+  );
 
   if (sole) {
     return (
@@ -145,7 +154,7 @@ function DockGroupPill({
         href={sole.href}
         onClick={onNavigate}
         className={pillClass}
-        aria-label={pillLabel}
+        aria-label={pillName}
         title={!showLabels ? pillLabel : undefined}
         aria-current={sole.active ? "page" : undefined}
       >
@@ -163,7 +172,7 @@ function DockGroupPill({
         type="button"
         onClick={onToggle}
         className={pillClass}
-        aria-label={pillLabel}
+        aria-label={pillName}
         title={!showLabels ? pillLabel : undefined}
         aria-expanded={open}
         aria-controls={panelId}
@@ -237,12 +246,13 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
 export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
   const uid = useId();
   const descId = item.descripcion ? `${uid}-desc` : undefined;
+  const insignia = formatoInsignia(item.badge);
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
       className="dock-entrada"
-      aria-label={item.label}
+      aria-label={insignia ? `${item.label}, ${item.badge} ${item.badgeTexto ?? "pendientes"}` : item.label}
       aria-describedby={descId}
       aria-current={item.active ? "page" : undefined}
     >
@@ -252,6 +262,19 @@ export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigat
         <strong>{item.label}</strong>
         {item.descripcion && <small id={descId}>{item.descripcion}</small>}
       </span>
+      {insignia && <Insignia texto={insignia} />}
     </Link>
+  );
+}
+
+/**
+ * Insignia del dock (spec-ui §1.4, `.dock-insignia`): «n» o «99+», decorativa (aria-hidden); el número real va en el nombre
+ * accesible del control que la lleva. `flotante`: en la esquina del glifo (píldora y lanzador móvil); si no, en línea.
+ */
+export function Insignia({ texto, flotante = false }: { texto: string; flotante?: boolean }) {
+  return (
+    <span aria-hidden="true" className={flotante ? "dock-insignia dock-insignia--flotante" : "dock-insignia"}>
+      {texto}
+    </span>
   );
 }

@@ -7,6 +7,7 @@ import { esEmpresaValida, type Fuente } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type FilaVehiculo, type Grilla } from "@/lib/tablero/api";
 import type { CargadorDetalle, ConsultaPersona, DetalleCelda } from "@/lib/tablero/detalle";
+import type { SaneamientoFilaBackoffice } from "@/lib/backoffice/saneamientos";
 
 export type OrigenCelda = "API" | "MANUAL";
 
@@ -17,8 +18,10 @@ export interface CeldaGrillaBackoffice extends CeldaGrilla {
   usuario_manual_id: string | null;
 }
 
-export interface FilaVehiculoBackoffice extends Omit<FilaVehiculo, "celdas"> {
+export interface FilaVehiculoBackoffice extends Omit<FilaVehiculo, "celdas" | "saneamiento"> {
   celdas: CeldaGrillaBackoffice[];
+  /** Saneamiento de la fila en el backoffice (plan §6.1): estado e id para enlazar a la gestión, sin elegibilidad. */
+  saneamiento?: SaneamientoFilaBackoffice | null;
 }
 
 export interface GrillaBackoffice extends Omit<Grilla, "vehiculos"> {

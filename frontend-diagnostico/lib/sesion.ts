@@ -21,6 +21,13 @@ export interface CapacidadesDiagnostico {
   corregirDictamen: boolean;
   verAuditoria: boolean;
   verVolumetria: boolean;
+  /**
+   * Saneamiento (plan §5.3): marcar, desmarcar y pedir varios (permiso `diagnostico.saneamiento.solicitar`; el SuperAdmin
+   * también, decisión E3). Opcional: un back anterior no la manda y cuenta como false (`puedeSanear`).
+   */
+  sanear?: boolean;
+  /** Saneamiento (plan §5.3): bandeja y gestión FLIT del backoffice. Opcional; ausente = false (`puedeGestionarSaneamiento`). */
+  gestionarSaneamiento?: boolean;
 }
 
 export interface SesionDiagnostico {
@@ -34,4 +41,14 @@ export interface SesionDiagnostico {
 /** Override del dictamen y llenado manual del backoffice: solo con `backofficeOperacion` en true (ausente = false). */
 export function puedeOperarBackoffice(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
   return capacidades?.backofficeOperacion === true;
+}
+
+/** Bandera de saneamiento: solo con `sanear` en true (ausente = false). La API vuelve a exigir el permiso. */
+export function puedeSanear(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
+  return capacidades?.sanear === true;
+}
+
+/** Bandeja y gestión de saneamientos del backoffice: solo con `gestionarSaneamiento` en true (ausente = false). */
+export function puedeGestionarSaneamiento(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
+  return capacidades?.gestionarSaneamiento === true;
 }
