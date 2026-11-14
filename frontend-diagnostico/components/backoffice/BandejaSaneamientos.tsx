@@ -342,7 +342,11 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
                       )}
                     </td>
                     <th scope="row" data-label="Placa" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} text-left`}>
-                      <Link href={irA(f)} className={`font-semibold uppercase tracking-wider text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`}>
+                      {/* AP-2 (N-1): el respaldo «Sin placa» va en texto normal, como en PS-3; solo un identificador real va en mayúsculas. */}
+                      <Link
+                        href={irA(f)}
+                        className={`font-semibold ${identificador ? "uppercase tracking-wider" : ""} text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`}
+                      >
                         {identificador || "Sin placa"}
                       </Link>
                     </th>

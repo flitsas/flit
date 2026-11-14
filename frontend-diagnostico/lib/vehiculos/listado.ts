@@ -185,7 +185,10 @@ const MENSAJES_CAMPO: Record<CampoFiltroVehiculos, string> = {
 /** Código de la 403 cuando la API niega sin cuerpo, como el listado de diagnósticos. */
 const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";
 
-/** 403 → acceso negado; 400 con campo de filtro → ese control; PAGINACION_INVALIDA → reiniciar; el resto → aviso. */
+/** AP-7 (SF-6, AC43): texto fijo para el resto de errores; nunca el mensaje del servidor ni el de una excepción. */
+const ERROR_CARGA = "No pudimos cargar los vehículos.";
+
+/** 403 → acceso negado; 400 con campo de filtro → ese control; PAGINACION_INVALIDA → reiniciar; el resto → aviso fijo. */
 export function traducirErrorVehiculos(error: unknown): ErrorVehiculos {
   if (error instanceof ApiError) {
     if (error.status === 403) return { tipo: "ACCESO", code: error.code || SIN_PERMISOS };
@@ -196,7 +199,6 @@ export function traducirErrorVehiculos(error: unknown): ErrorVehiculos {
       const mensaje = error.code === "RANGO_INVALIDO" ? "La fecha final no puede ser anterior a la inicial." : MENSAJES_CAMPO[campo];
       return { tipo: "CAMPO", campo, mensaje };
     }
-    return { tipo: "AVISO", mensaje: error.message, reiniciarPagina: false };
   }
-  return { tipo: "AVISO", mensaje: error instanceof Error ? error.message : "No pudimos cargar los vehículos.", reiniciarPagina: false };
+  return { tipo: "AVISO", mensaje: ERROR_CARGA, reiniciarPagina: false };
 }

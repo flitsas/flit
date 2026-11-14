@@ -352,6 +352,42 @@ describe("Auditoría UI (UA-1, UA-2, UA-10, UA-13)", () => {
     expect(screen.getByRole("checkbox", { name: "Seleccionar el vehículo sin placa" })).toBeInTheDocument();
   });
 
+  it("AP-2 (N-1): «Sin placa» va en texto normal; solo la placa, el VIN o el identificador heredan las mayúsculas", async () => {
+    conEmpresas({
+      [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1), filaBandeja(2, { placa: null, vin: "VINPRUEBA0000002" }), filaBandeja(3, { placa: null })])),
+    });
+    montar();
+    const t = await tabla();
+    const sinPlaca = within(t).getByRole("link", { name: "Sin placa" });
+    expect(sinPlaca).not.toHaveClass("uppercase");
+    expect(sinPlaca).not.toHaveClass("tracking-wider");
+    expect(sinPlaca.querySelector(".uppercase")).toBeNull();
+    expect(within(t).getByRole("link", { name: "TST001" })).toHaveClass("uppercase", "tracking-wider");
+    expect(within(t).getByRole("link", { name: "VINPRUEBA0000002" })).toHaveClass("uppercase", "tracking-wider");
+  });
+
+  it("AP-1: la fila usa placa || vin || identificador; la placa gana al VIN y el VIN al identificador", async () => {
+    conEmpresas({
+      [`GET ${BASE}`]: () =>
+        json(
+          listaBandeja([
+            filaBandeja(1, { placa: "TST001", vin: "VINPRUEBA0000011", identificador: "MOTOR-PRUEBA-11" }),
+            filaBandeja(2, { placa: null, vin: "VINPRUEBA0000012", identificador: "MOTOR-PRUEBA-12" }),
+            filaBandeja(3, { placa: "", vin: null, identificador: "MOTOR-PRUEBA-13" }),
+          ]),
+        ),
+    });
+    montar();
+    const t = await tabla();
+    expect(within(t).getByRole("link", { name: "TST001" })).toBeInTheDocument();
+    expect(within(t).getByRole("link", { name: "VINPRUEBA0000012" })).toBeInTheDocument();
+    expect(within(t).getByRole("link", { name: "MOTOR-PRUEBA-13" })).toBeInTheDocument();
+    expect(t).not.toHaveTextContent("VINPRUEBA0000011");
+    expect(t).not.toHaveTextContent("MOTOR-PRUEBA-11");
+    expect(t).not.toHaveTextContent("MOTOR-PRUEBA-12");
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa VINPRUEBA0000012" })).toBeInTheDocument();
+  });
+
   it("UA-13: «Tomar (N)» es el Button del kit: en vuelo queda aria-busy con el girador y conserva el foco", async () => {
     let soltar: (r: Response) => void = () => {};
     conEmpresas({
