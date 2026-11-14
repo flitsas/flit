@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { cn } from "./cn";
 import {
+  TABLA_CONTENEDOR_CELL_CLS,
+  TABLA_CONTENEDOR_CELL_TITULO_CLS,
+  TABLA_CONTENEDOR_FILA_ANCHA_CLS,
+  TABLA_CONTENEDOR_ROW_CLS,
+  TABLA_CONTENEDOR_TABLE_CLS,
+  TABLA_CONTENEDOR_TBODY_CLS,
+  TABLA_CONTENEDOR_THEAD_CLS,
+  TABLA_CONTENEDOR_WRAP_CLS,
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
   TABLA_MOVIL_FILA_ANCHA_CLS,
@@ -48,6 +56,10 @@ import {
  * guardado falla, lo digitado se conserva aunque el padre pase otro objeto fila con la misma clave (D-69). Tras
  * un guardado la celda de estado dice `rotuloGuardado` (por defecto «Guardado») en tono success hasta el siguiente
  * cambio, el foco no se mueve y la columna «Acciones» solo muestra «Reintentar» en error.
+ *
+ * HU #14577 · hallazgo E2E H-10: `apilado="contenedor"` (aditivo; por defecto "pantalla", el de siempre) pasa a tarjetas
+ * según el ancho del envoltorio (container query, recetas `TABLA_CONTENEDOR_*`) y no del viewport, para tablas que viven
+ * en una columna angosta de un diseño a dos columnas. Solo cambian clases; marcado, foco y guardado son los mismos.
  */
 export type EstadoFilaEditable = "sin_cambios" | "editado" | "guardando" | "error";
 
@@ -81,6 +93,44 @@ export interface ColumnaEditable<F> {
   guardarAlCambiarMs?: number;
 }
 
+/** "pantalla" (por defecto): tarjetas por debajo de 900 px de viewport. "contenedor": por el ancho del envoltorio (H-10). */
+export type ApiladoTabla = "pantalla" | "contenedor";
+
+/** Recetas de tarjeta de cada modo de apilado. */
+interface RecetasApilado {
+  envoltorio: string;
+  tabla: string;
+  cabecera: string;
+  cuerpo: string;
+  fila: string;
+  celda: string;
+  celdaTitulo: string;
+  filaAncha: string;
+}
+
+const RECETAS: Record<ApiladoTabla, RecetasApilado> = {
+  pantalla: {
+    envoltorio: "",
+    tabla: TABLA_MOVIL_TABLE_CLS,
+    cabecera: TABLA_MOVIL_THEAD_CLS,
+    cuerpo: TABLA_MOVIL_TBODY_CLS,
+    fila: TABLA_MOVIL_ROW_CLS,
+    celda: TABLA_MOVIL_CELL_CLS,
+    celdaTitulo: TABLA_MOVIL_CELL_TITULO_CLS,
+    filaAncha: TABLA_MOVIL_FILA_ANCHA_CLS,
+  },
+  contenedor: {
+    envoltorio: TABLA_CONTENEDOR_WRAP_CLS,
+    tabla: TABLA_CONTENEDOR_TABLE_CLS,
+    cabecera: TABLA_CONTENEDOR_THEAD_CLS,
+    cuerpo: TABLA_CONTENEDOR_TBODY_CLS,
+    fila: TABLA_CONTENEDOR_ROW_CLS,
+    celda: TABLA_CONTENEDOR_CELL_CLS,
+    celdaTitulo: TABLA_CONTENEDOR_CELL_TITULO_CLS,
+    filaAncha: TABLA_CONTENEDOR_FILA_ANCHA_CLS,
+  },
+};
+
 /** "boton" (por defecto): Guardar y Descartar por fila. "automatico": guarda al salir del campo o tras `guardarAlCambiarMs`. */
 export type ModoGuardado = "boton" | "automatico";
 
@@ -106,6 +156,8 @@ export interface TablaEditableProps<F> {
   guardado?: ModoGuardado;
   /** Solo en guardado automático: rótulo visible tras guardar con éxito (tono success). Por defecto «Guardado». */
   rotuloGuardado?: string;
+  /** Cuándo pasa a tarjetas: por el viewport ("pantalla", por defecto) o por el ancho de su envoltorio ("contenedor"). */
+  apilado?: ApiladoTabla;
 }
 
 const TEXTO_ESTADO: Record<EstadoFilaEditable, string> = {
@@ -156,6 +208,7 @@ interface FilaEditableProps<F> {
   anunciar: (texto: string) => void;
   automatico: boolean;
   rotuloGuardado: string;
+  recetas: RecetasApilado;
 }
 
 function FilaEditable<F>({
@@ -170,6 +223,7 @@ function FilaEditable<F>({
   anunciar,
   automatico,
   rotuloGuardado,
+  recetas,
 }: FilaEditableProps<F>) {
   const [borrador, setBorrador] = useState<F>(fila);
   const [estado, setEstado] = useState<EstadoFilaEditable>("sin_cambios");
@@ -349,12 +403,12 @@ function FilaEditable<F>({
   };
 
   return (
-    <tr ref={filaRef} aria-label={id} className={`border-b border-[color:var(--di-divider)] ${TABLA_MOVIL_ROW_CLS}`}>
+    <tr ref={filaRef} aria-label={id} className={`border-b border-[color:var(--di-divider)] ${recetas.fila}`}>
       {columnas.map((c, i) => {
         const etiquetaCampo = `${c.titulo} de ${id}`;
         const valor = borrador[c.campo];
         // Concatenadas sin `cn`: como en DataTable, la receta de título se suma a la de celda sin que una borre a la otra.
-        const celdaMovil = i === 0 ? `${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}` : TABLA_MOVIL_CELL_CLS;
+        const celdaMovil = i === 0 ? `${recetas.celda} ${recetas.celdaTitulo}` : recetas.celda;
         let contenido: ReactNode;
         if (c.editable) {
           contenido = c.editor ? (
@@ -393,7 +447,7 @@ function FilaEditable<F>({
           </td>
         );
       })}
-      <td data-label="Estado" className={`px-3 py-2 text-xs font-semibold ${TABLA_MOVIL_CELL_CLS}`}>
+      <td data-label="Estado" className={`px-3 py-2 text-xs font-semibold ${recetas.celda}`}>
         {/* Foco (H-6, WCAG 2.4.7): sin `focus:outline-none`, que en Tailwind 4 anula el contorno de focus-visible. */}
         <span
           ref={estadoRef}
@@ -409,7 +463,7 @@ function FilaEditable<F>({
           </span>
         ) : null}
       </td>
-      <td data-label="Acciones" className={`px-3 py-2 ${TABLA_MOVIL_CELL_CLS}`}>
+      <td data-label="Acciones" className={`px-3 py-2 ${recetas.celda}`}>
         <div className="flex flex-wrap items-center gap-2">
           {!automatico &&
           (controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
@@ -474,7 +528,9 @@ export function TablaEditable<F>({
   className,
   guardado = "boton",
   rotuloGuardado = TEXTO_GUARDADO,
+  apilado = "pantalla",
 }: TablaEditableProps<F>) {
+  const recetas = RECETAS[apilado];
   // N3: cada anuncio lleva su número; el nodo se vuelve a montar y el lector lo lee aunque el texto se repita.
   const [anuncio, setAnuncio] = useState<{ texto: string; n: number }>({ texto: "", n: 0 });
   const anunciar = useCallback((texto: string) => setAnuncio((a) => ({ texto, n: a.n + 1 })), []);
@@ -483,11 +539,12 @@ export function TablaEditable<F>({
     <div
       className={cn(
         "overflow-x-auto rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface)]",
+        recetas.envoltorio,
         className,
       )}
     >
-      <table aria-label={etiqueta} className={`w-full border-collapse ${TABLA_MOVIL_TABLE_CLS}`}>
-        <thead className={`bg-[var(--di-surface-sunken)] ${TABLA_MOVIL_THEAD_CLS}`}>
+      <table aria-label={etiqueta} className={`w-full border-collapse ${recetas.tabla}`}>
+        <thead className={`bg-[var(--di-surface-sunken)] ${recetas.cabecera}`}>
           <tr>
             {columnas.map((c) => (
               <th key={c.campo} scope="col" className={cabecera}>
@@ -502,12 +559,12 @@ export function TablaEditable<F>({
             </th>
           </tr>
         </thead>
-        <tbody className={TABLA_MOVIL_TBODY_CLS}>
+        <tbody className={recetas.cuerpo}>
           {filas.length === 0 ? (
-            <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+            <tr className={recetas.filaAncha}>
               <td
                 colSpan={columnas.length + 2}
-                className={`px-3 py-6 text-center text-sm text-[color:var(--di-text-tertiary)] ${TABLA_MOVIL_FILA_ANCHA_CLS}`}
+                className={`px-3 py-6 text-center text-sm text-[color:var(--di-text-tertiary)] ${recetas.filaAncha}`}
               >
                 {vacio}
               </td>
@@ -527,6 +584,7 @@ export function TablaEditable<F>({
                 anunciar={anunciar}
                 automatico={guardado === "automatico"}
                 rotuloGuardado={rotuloGuardado}
+                recetas={recetas}
               />
             ))
           )}

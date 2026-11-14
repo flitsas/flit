@@ -24,6 +24,9 @@ import { LIMITES_TEXTO } from "@/lib/saneamiento/textoLibre";
 // automático (FE-0, §8): el resultado guarda 600 ms tras el último cambio y la nota al salir del campo; cada fila guarda
 // sola, con su versión, y conserva lo digitado si falla. La evidencia no pasa por el borrador: se sube en el acto (D-05).
 // En SANEADO y NO_PROCEDE, la misma información en solo lectura.
+// Hallazgo E2E H-10: la tabla vive en la columna derecha del diseño a dos columnas (≈680 px a 1280 px de pantalla) y no
+// cabe como tabla; pasa a tarjetas por el ancho de su contenedor (`apilado="contenedor"`), con el segmentado en una sola
+// línea y la nota de al menos 12rem. Solo si la tarjeta es más angosta que el segmentado (≈23rem, un celular) se parte.
 
 
 const OPCIONES_RESULTADO: { valor: ResultadoRenglon; label: string }[] = [
@@ -31,6 +34,14 @@ const OPCIONES_RESULTADO: { valor: ResultadoRenglon; label: string }[] = [
   { valor: "SANEADO", label: ROTULO_RESULTADO.SANEADO },
   { valor: "NO_PROCEDE", label: ROTULO_RESULTADO.NO_PROCEDE },
 ];
+
+/**
+ * H-10: el segmentado del kit en una sola línea, como en el resto de la suite. Solo se parte si su contenedor (el envoltorio
+ * de la tabla) mide menos de 23rem, donde las tres opciones no caben en horizontal ni a todo el ancho de la tarjeta.
+ */
+export const SEGMENTADO_EN_LINEA_CLS = "flex-nowrap @max-[23rem]:flex-wrap";
+/** H-10: la nota nunca baja de 12rem; en la tarjeta ocupa el resto de la línea o la línea entera. */
+export const NOTA_CLS = "flex min-w-[12rem] flex-1 flex-col gap-1";
 
 const TONO_RESULTADO: Record<ResultadoRenglon, StatusTone> = { PENDIENTE: "neutral", SANEADO: "success", NO_PROCEDE: "neutral" };
 
@@ -156,6 +167,7 @@ export function RenglonesEditables({ renglones, acciones, errores, descargas }: 
             opciones={OPCIONES_RESULTADO}
             valor={valor as ResultadoRenglon}
             bloqueado={guardando}
+            className={SEGMENTADO_EN_LINEA_CLS}
             onCambio={(v) => {
               marcar(fila.id);
               onCambio(v as Fila["resultado"]);
@@ -172,7 +184,7 @@ export function RenglonesEditables({ renglones, acciones, errores, descargas }: 
         const texto = (valor as string | null) ?? "";
         const contador = `nota-${fila.id}-contador`;
         return (
-          <span className="flex flex-col gap-1">
+          <span className={NOTA_CLS}>
             <textarea
               aria-label={etiqueta}
               aria-describedby={contador}
@@ -207,6 +219,7 @@ export function RenglonesEditables({ renglones, acciones, errores, descargas }: 
     <TablaEditable<Fila>
       etiqueta="Conceptos a sanear"
       guardado="automatico"
+      apilado="contenedor"
       filas={filas}
       columnas={columnas}
       clave={(f) => f.id}
