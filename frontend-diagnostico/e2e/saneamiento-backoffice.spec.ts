@@ -442,8 +442,8 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
       await expect(panel.getByText("Gestionado por FLIT en la prueba E2E.")).toBeVisible();
       await expect(panel.getByRole("table", { name: "Conceptos del saneamiento" })).toContainText("Prenda de prueba E2E");
       await expect(panel.getByRole("list", { name: "Historial del saneamiento" })).toContainText("FLIT cerró el saneamiento como saneado");
-      // SP-15: la compañía nunca ve el id ni el nombre del operador.
-      await expect(panel.getByText(/FLIT · usuario/)).toHaveCount(0);
+      // SP-15 + E8 (D-42/UA-8): la compañía nunca ve el id, el nombre ni el rótulo del operador de FLIT.
+      await expect(panel.getByText(/Otro operador de FLIT|FLIT · usuario/)).toHaveCount(0);
       await descargar(page, panel.getByRole("link", { name: `Descargar evidencia de ${CONCEPTO}` }), /\.pdf$/i);
       await descargar(page, panel.getByRole("link", { name: "Descargar PDF" }), /\.pdf$/i);
       await revisarTemas(page, "panel-cliente-saneado-640", { captura: "C-5", paginaCompleta: false });

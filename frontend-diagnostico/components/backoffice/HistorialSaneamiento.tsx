@@ -5,7 +5,8 @@ import { ROTULO_FUENTE, etiquetaSaneamiento } from "@/lib/saneamiento/estados";
 import { fechaCorta } from "@/lib/tablero/detalle";
 
 // Historial completo del backoffice (spec-ui §6.7; plan §3.5; HU #14577 AC36): todos los eventos, el más reciente primero,
-// con fecha, texto, estado anterior y nuevo, concepto, actor («Compañía» o «FLIT · usuario {8}», D-13) y motivo.
+// con fecha, texto, estado anterior y nuevo, concepto, actor y motivo. E8 (D-42/UA-8, sustituye D-13): el actor es «Tú»,
+// «Otro operador de FLIT», «FLIT» (sistema) o «Usuario de la compañía»; nunca un id ni un trozo de id.
 // D-63: los eventos no traen estados; se deducen recorriendo el historial en orden (la máquina de estados del plan §3.2).
 
 const TEXTO: Record<EventoSaneamiento, string> = {
@@ -54,9 +55,29 @@ export function lineasHistorial(historial: readonly EventoHistorialBackoffice[])
   return lineas.reverse();
 }
 
+/** Uuid nulo: lo que manda el back (Guid.Empty) cuando el claim `sub` no se pudo leer; cuenta como evento de sistema. */
+const UUID_VACIO = /^[0-]+$/;
+
+/**
+ * Actor de un evento del historial de FLIT (E8, D-42/UA-8). `usuario_id` y `usuarioSesionId` son el mismo `sub` del token
+ * (GET /sesion → usuario.id; el back escribe el evento con UsuarioActual.Id): se comparan sin distinguir mayúsculas.
+ */
+export function actorHistorial(e: EventoHistorialBackoffice, usuarioSesionId?: string | null): string {
+  if (e.actor !== "FLIT") return "Usuario de la compañía";
+  const id = e.usuario_id?.trim().toLowerCase();
+  if (!id || UUID_VACIO.test(id)) return "FLIT";
+  return id === usuarioSesionId?.trim().toLowerCase() ? "Tú" : "Otro operador de FLIT";
+}
+
 const rotuloEstado = (e: EstadoSaneamiento) => etiquetaSaneamiento(e, { backoffice: true })?.texto ?? "";
 
-export function HistorialSaneamiento({ historial }: { historial: readonly EventoHistorialBackoffice[] }) {
+export interface HistorialSaneamientoProps {
+  historial: readonly EventoHistorialBackoffice[];
+  /** Id del usuario de la sesión (GET /sesion → usuario.id); sin él, ningún evento sale «Tú». */
+  usuarioSesionId?: string | null;
+}
+
+export function HistorialSaneamiento({ historial, usuarioSesionId }: HistorialSaneamientoProps) {
   const lineas = lineasHistorial(historial);
   return (
     <section aria-labelledby="historial-saneamiento" className="flex flex-col gap-3">
@@ -83,7 +104,9 @@ export function HistorialSaneamiento({ historial }: { historial: readonly Evento
                   </span>
                 )}
                 {fuente && e.evento !== "RENGLON_ACTUALIZADO" && <span className={AYUDA_CLS}>{`Concepto: ${fuente}`}</span>}
-                <span className={AYUDA_CLS}>{e.actor !== "FLIT" ? "Compañía" : e.usuario_id ? `FLIT · usuario ${e.usuario_id.slice(0, 8)}` : "FLIT"}</span>
+                <span className={AYUDA_CLS} data-actor>
+                  {actorHistorial(e, usuarioSesionId)}
+                </span>
                 {e.motivo?.trim() && <span className="whitespace-pre-line break-words">{`Motivo: ${e.motivo}`}</span>}
               </li>
             );
