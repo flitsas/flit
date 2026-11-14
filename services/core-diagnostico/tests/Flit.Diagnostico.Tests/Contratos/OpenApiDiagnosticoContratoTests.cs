@@ -27,7 +27,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.3.1\"");
+        info.Should().Contain("version: \"1.4.0\"", "HU #14576 sube a 1.4.0, aditivo");
         info.Should().Contain("Versión 1.3.1").And.Contain("backoffice_diagnostico").And.Contain("SuperAdmin");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
         Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
@@ -56,6 +56,57 @@ public sealed class OpenApiDiagnosticoContratoTests
         var accion = Bloque("AccionNotificacion:", sangria: 4);
         accion.Should().Contain("/diagnosticos/{diagnostico_id}").And.Contain("example: /diagnosticos/");
         accion.Should().NotContain("/diagnostico/{diagnostico_id}");
+    }
+
+    /// <summary>Rutas del saneamiento en esta rama (HU #14576): las del cliente (BE-A), las de deuda y placas (BE-C) y las del backoffice (BE-B).</summary>
+    private static readonly string[] RutasSaneamiento =
+    [
+        "/diagnosticos/{id}/vehiculos/{vid}/saneamiento:",
+        "/diagnosticos/{id}/vehiculos/{vid}/saneamiento/renglones/{rid}/evidencia:",
+        "/saneamientos/solicitudes:",
+        "/diagnosticos/{id}/vehiculos/{vid}/deuda:",
+        "/diagnosticos/{id}/vehiculos/{vid}/deuda/pdf:",
+        "/diagnosticos/{id}/vehiculos/{vid}/deuda/excel:",
+        "/vehiculos/deuda/excel:",
+        "/vehiculos:",
+        "/backoffice/saneamientos:",
+        "/backoffice/saneamientos/resumen:",
+        "/backoffice/saneamientos/excel:",
+        "/backoffice/saneamientos/tomar:",
+        "/backoffice/saneamientos/{sid}:",
+        "/backoffice/saneamientos/{sid}/deuda:",
+        "/backoffice/saneamientos/{sid}/tomar:",
+        "/backoffice/saneamientos/{sid}/observacion:",
+        "/backoffice/saneamientos/{sid}/renglones:",
+        "/backoffice/saneamientos/{sid}/renglones/{rid}:",
+        "/backoffice/saneamientos/{sid}/renglones/{rid}/evidencia:",
+        "/backoffice/saneamientos/{sid}/cerrar:",
+        "/backoffice/saneamientos/{sid}/reabrir:",
+        "/backoffice/saneamientos/{sid}/anular:",
+    ];
+
+    // HU #14576 AC51 — 1.4.0 aditivo: todas las rutas del saneamiento, los campos nuevos de la grilla y de la sesión, y los esquemas
+    // con los nombres que ya usa el front (D-19, D-20, D-22, D-26).
+    [Fact]
+    public void HU14576_AC51_version_1_4_0_con_las_rutas_y_esquemas_del_saneamiento()
+    {
+        var info = Bloque("info:", sangria: 0);
+        info.Should().Contain("Versión 1.4.0").And.Contain("aditivo");
+        var paths = Bloque("paths:", sangria: 0);
+        foreach (var ruta in RutasSaneamiento)
+            paths.Split('\n').Should().Contain("  /api/v1/diagnostico" + ruta, $"el contrato declara {ruta}");
+
+        Bloque("ListaBandejaSaneamientos:", sangria: 4).Should().Contain("saneamientos:", "D-19");
+        Bloque("ListadoVehiculos:", sangria: 4).Should().Contain("vehiculos:", "D-19");
+        Bloque("SaneamientoBackoffice:", sangria: 4).Should().Contain("usuario_id").And.NotContain("solicitado_por_mi", "D-22");
+        Bloque("RenglonSaneamiento:", sangria: 4).Should().NotContain("referencia").And.NotContain("sha256", "D-22");
+        Bloque("PersonaDeuda:", sangria: 4).Should().NotContain("nombre:", "SP-11, BE-C-1");
+        Bloque("SaneamientoFilaBackoffice:", sangria: 4).Should().Contain("id:").And.NotContain("elegible");
+        Bloque("SaneamientoFila:", sangria: 4).Should().Contain("elegible:").And.Contain("motivo_no_elegible:");
+        Yaml.Value.Should().Contain("TEXTO_INVALIDO").And.Contain("VERSION_DESACTUALIZADA").And.Contain("VERSION_INVALIDA")
+            .And.Contain("DEMASIADOS_REEMPLAZOS").And.Contain("ARCHIVO_NO_ES_PDF").And.Contain("DEMASIADAS_FILAS").And.Contain("NO_EDITABLE");
+        Yaml.Value.Should().NotContain("CON_ANALISIS_IA", "C2: el modo se serializa SIMPLE | CON_ANALISIS");
+        Bloque("Capacidades:", sangria: 4).Should().Contain("sanear:").And.Contain("gestionarSaneamiento:");
     }
 
     /// <summary>Desde la línea <paramref name="cabecera"/> con esa sangría hasta la siguiente clave del mismo nivel.</summary>

@@ -47,7 +47,7 @@ public sealed class PoliticasBackofficeMatrizTests
     private static readonly string[] PermisosBackoffice =
     [
         Permisos.BackofficeVer, Permisos.ConfiguracionContratoEditar, Permisos.AuditoriaVer, Permisos.ConsultasLlenar,
-        Permisos.DictamenOverride, Permisos.ConfiguracionVer,
+        Permisos.DictamenOverride, Permisos.ConfiguracionVer, Permisos.SaneamientoGestionar,
     ];
 
     private enum Senal
@@ -74,6 +74,7 @@ public sealed class PoliticasBackofficeMatrizTests
     private static readonly Guid Consulta = Guid.NewGuid();
     private static readonly Guid EmpresaRuta = Guid.NewGuid();
     private static readonly Guid OtraEmpresa = Guid.NewGuid();
+    private static readonly Guid Saneamiento = Guid.NewGuid();
 
     private static readonly Seccion[] Secciones =
     [
@@ -94,6 +95,13 @@ public sealed class PoliticasBackofficeMatrizTests
         new("override del dictamen PUT", HttpMethod.Put, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen", "{}", true, Senal.EmpresaRequerida),
         new("llenado manual GET", HttpMethod.Get, $"{Base}/consultas/{Consulta}/manual", null, true, Senal.EmpresaRequerida),
         new("llenado manual PUT", HttpMethod.Put, $"{Base}/consultas/{Consulta}/manual", "{}", true, Senal.EmpresaRequerida),
+        // HU #14576 (ADR-0087 D-5): la bandeja entre compañías (grupo A, sin empresa explícita: sin base no se deniega) y la gestión
+        // de un saneamiento (grupo B, con empresa explícita) son de la operación FLIT.
+        new("bandeja de saneamientos", HttpMethod.Get, $"{Base}/saneamientos", null, true, Senal.NoDenegada),
+        new("resumen de saneamientos", HttpMethod.Get, $"{Base}/saneamientos/resumen", null, true, Senal.NoDenegada),
+        new("tomar varios saneamientos", HttpMethod.Post, $"{Base}/saneamientos/tomar", """{ "items": [] }""", true, Senal.NoDenegada),
+        new("detalle de un saneamiento", HttpMethod.Get, $"{Base}/saneamientos/{Saneamiento}", null, true, Senal.EmpresaRequerida),
+        new("cerrar un saneamiento", HttpMethod.Post, $"{Base}/saneamientos/{Saneamiento}/cerrar", "{}", true, Senal.EmpresaRequerida),
     ];
 
     private static readonly Dictionary<string, Actor> Actores = new Actor[]

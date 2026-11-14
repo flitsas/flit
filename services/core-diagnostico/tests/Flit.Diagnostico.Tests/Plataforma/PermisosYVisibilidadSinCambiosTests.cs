@@ -44,6 +44,7 @@ public sealed class PermisosYVisibilidadSinCambiosTests
     private static readonly string[] PermisosDeCompania =
     [
         "* /api/v1/diagnostico/{*path:nonfile} => -",
+        "DELETE /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento => diagnostico.saneamiento.solicitar",
         "GET /api/v1/diagnostico/configuracion => diagnostico.configuracion.ver",
         "GET /api/v1/diagnostico/diagnosticos => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/evidencias/{eid:guid} => diagnostico.reportes.descargar",
@@ -54,12 +55,18 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/tramites/operaciones => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/tramites/operaciones/{opId:guid} => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/consultas/{fuente} => diagnostico.diagnosticos.ver",
+        "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/deuda => diagnostico.diagnosticos.ver",
+        "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/deuda/excel => diagnostico.reportes.descargar",
+        "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/deuda/pdf => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/pdf => diagnostico.reportes.descargar",
+        "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento => diagnostico.diagnosticos.ver",
+        "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento/renglones/{rid:guid}/evidencia => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/notificaciones => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/plantilla => diagnostico.diagnosticos.crear",
         "GET /api/v1/diagnostico/sesion => -",
         "GET /api/v1/diagnostico/tipos-tramite => diagnostico.diagnosticos.crear",
+        "GET /api/v1/diagnostico/vehiculos => diagnostico.diagnosticos.ver",
         "POST /api/v1/diagnostico/consultas/{cid:guid}/reprocesar => diagnostico.consultas.reprocesar",
         "POST /api/v1/diagnostico/diagnosticos => diagnostico.diagnosticos.crear",
         "POST /api/v1/diagnostico/diagnosticos/{id:guid}/carga => diagnostico.diagnosticos.crear",
@@ -76,18 +83,38 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         "POST /api/v1/diagnostico/express/estimado => diagnostico.diagnosticos.crear",
         "POST /api/v1/diagnostico/notificaciones/leer-todas => diagnostico.diagnosticos.ver",
         "POST /api/v1/diagnostico/notificaciones/{nid:guid}/leida => diagnostico.diagnosticos.ver",
+        "POST /api/v1/diagnostico/saneamientos/solicitudes => diagnostico.saneamiento.solicitar",
+        "POST /api/v1/diagnostico/vehiculos/deuda/excel => diagnostico.reportes.descargar",
         "PUT /api/v1/diagnostico/configuracion => diagnostico.configuracion.editar",
         "PUT /api/v1/diagnostico/diagnosticos/{id:guid} => diagnostico.diagnosticos.crear",
+        "PUT /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento => diagnostico.saneamiento.solicitar",
     ];
 
     /// <summary>Rutas del backoffice que exigen la política de operación FLIT (escritura sobre datos de una compañía).</summary>
     private static readonly string[] OperacionFlit =
     [
+        "DELETE /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/renglones/{rid:guid}",
+        "DELETE /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/renglones/{rid:guid}/evidencia",
         "GET /api/v1/diagnostico/backoffice/consultas/{consulta:guid}/manual",
         // Hallazgo M3 de seguridad: la auditoría de versiones (motivo y autor) solo la lee la operación FLIT.
         "GET /api/v1/diagnostico/backoffice/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen/versiones",
+        "GET /api/v1/diagnostico/backoffice/saneamientos",
+        "GET /api/v1/diagnostico/backoffice/saneamientos/excel",
+        "GET /api/v1/diagnostico/backoffice/saneamientos/resumen",
+        "GET /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}",
+        "GET /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/deuda",
+        "GET /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/renglones/{rid:guid}/evidencia",
+        "POST /api/v1/diagnostico/backoffice/saneamientos/tomar",
+        "POST /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/anular",
+        "POST /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/cerrar",
+        "POST /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/reabrir",
+        "POST /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/renglones",
+        "POST /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/tomar",
         "PUT /api/v1/diagnostico/backoffice/consultas/{consulta:guid}/manual",
         "PUT /api/v1/diagnostico/backoffice/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen",
+        "PUT /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/observacion",
+        "PUT /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/renglones/{rid:guid}",
+        "PUT /api/v1/diagnostico/backoffice/saneamientos/{sid:guid}/renglones/{rid:guid}/evidencia",
     ];
 
     [Fact]
@@ -103,6 +130,9 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         reales.Where(r => r.Contains("/notificaciones", StringComparison.Ordinal)).Should()
             .HaveCount(3).And.OnlyContain(r => r.EndsWith(" => " + Permisos.DiagnosticosVer, StringComparison.Ordinal),
                 "las rutas nuevas de compañía (B8) exigen diagnostico.diagnosticos.ver");
+        // HU #14576: las escrituras del saneamiento de la compañía exigen saneamiento.solicitar y las descargas, reportes.descargar.
+        reales.Where(r => r.Contains("/saneamiento", StringComparison.Ordinal) && !r.StartsWith("GET ", StringComparison.Ordinal)).Should()
+            .HaveCount(3).And.OnlyContain(r => r.EndsWith(" => " + Permisos.SaneamientoSolicitar, StringComparison.Ordinal));
     }
 
     [Fact]

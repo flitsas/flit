@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.3.1"
+  version: "1.4.0"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -26,6 +26,13 @@ info:
     backoffice_diagnostico del manifiesto y sus capacidades quedan en el SuperAdmin, que pasa siempre la política de
     operación FLIT (override, versiones del dictamen y llenado manual) sin mirar tenant_type. Los demás usuarios siguen
     necesitando tenant_type=FLIT y diagnostico.backoffice.ver.
+
+    Versión 1.4.0 (HU #14576, saneamiento en Diagnóstico, ADR-0087): cambio aditivo. Rutas nuevas de la compañía (marcar,
+    desmarcar y leer el saneamiento, masivo, evidencia, panel de deuda con su PDF y su Excel, Excel de varias placas y la
+    grilla de placas GET /vehiculos) y del backoffice (/backoffice/saneamientos: bandeja entre compañías, resumen, Excel y
+    tomar varios, sin empresa explícita; y la gestión de un saneamiento con ?empresa=). En contratos existentes solo se
+    agregan campos opcionales: saneamiento en la fila de la grilla del lote y de la del backoffice, y las capacidades sanear
+    y gestionarSaneamiento. Ningún campo existente cambia. El modo se serializa SIMPLE o CON_ANALISIS.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -86,6 +93,10 @@ tags:
       listo o fallido, derivación masiva terminada y lote terminado. Solo las del usuario, de su compañía y de lotes que ve
       (visibilidad PROPIOS). Sin PII: título y mensaje se arman al leer con rótulos fijos y el nombre del lote. Se purgan a
       los 90 días.
+  - name: Saneamiento
+    description: >
+      Saneamiento de vehículos (HU #14576, ADR-0087): la compañía marca la bandera «Sanear» y FLIT lo gestiona por fuera, sin
+      dinero. Panel de deuda por fuente, exportable, y grilla de placas de la compañía. Campos en snake_case.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice (D-16, ADR-0073; ajustes 2026-11-11, punto 1). Dos políticas: la de
@@ -3236,6 +3247,411 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/saneamiento:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: vid, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Saneamiento]
+      operationId: obtenerSaneamientoVehiculo
+      summary: Saneamiento no anulado del vehículo para la compañía (plan §6.3)
+      description: diagnostico.diagnosticos.ver y la visibilidad del lote. Cache-Control no-store. Tipo separado del de FLIT (SP-15).
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoCliente" } } } }
+        "404": { description: "NO_ENCONTRADO (lote o vehículo) o SIN_SANEAMIENTO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+    put:
+      tags: [Saneamiento]
+      operationId: marcarSaneamientoVehiculo
+      summary: Marca la bandera «Sanear» (sin cuerpo; idempotente en SOLICITADO)
+      description: >
+        diagnostico.saneamiento.solicitar (el SuperAdmin pasa por la regla general, decisión E3). Con ?empresa= responde 403
+        SANEAMIENTO_DESDE_BACKOFFICE: desde el backoffice no se marca.
+      responses:
+        "201": { description: Creado., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoCliente" } } } }
+        "200": { description: Ya estaba SOLICITADO., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoCliente" } } } }
+        "403": { description: SANEAMIENTO_DESDE_BACKOFFICE o sin permiso., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: "VEHICULO_NO_TERMINADO o YA_SOLICITADO (hay uno en otro estado no anulado).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+    delete:
+      tags: [Saneamiento]
+      operationId: desmarcarSaneamientoVehiculo
+      summary: Desmarca la bandera (solo en SOLICITADO)
+      responses:
+        "204": { description: Desmarcado (queda ANULADO). }
+        "404": { description: NO_ENCONTRADO o SIN_SANEAMIENTO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: SANEAMIENTO_EN_GESTION., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/saneamiento/renglones/{rid}/evidencia:
+    get:
+      tags: [Saneamiento]
+      operationId: descargarEvidenciaSaneamientoVehiculo
+      summary: PDF de evidencia de un renglón para la compañía
+      description: >
+        diagnostico.reportes.descargar y la visibilidad del lote. Cadena lote, vehículo, saneamiento no anulado y renglón no
+        quitado (404 sin distinguir el eslabón). Content-Disposition attachment con evidencia-{placa}-{fuente}.pdf (placa reducida
+        a A-Z0-9), nunca el nombre original. Cabeceras X-Content-Type-Options nosniff, Content-Security-Policy sandbox y
+        Cache-Control no-store.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: vid, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: rid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: El PDF., content: { application/pdf: { schema: { type: string, format: binary } } } }
+        "404": { description: Sin evidencia o fuera de la cadena., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/saneamientos/solicitudes:
+    post:
+      tags: [Saneamiento]
+      operationId: solicitarSaneamientosMasivo
+      summary: Marca varios vehículos (1 a 500 ids distintos, de uno o varios lotes)
+      description: diagnostico.saneamiento.solicitar. Síncrono y en una transacción. Los ids que el usuario no ve salen como NO_ENCONTRADO.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ListaVehiculosIds" } } }
+      responses:
+        "200": { description: Resultado., content: { application/json: { schema: { $ref: "#/components/schemas/SolicitudesSaneamiento" } } } }
+        "400": { description: LISTA_INVALIDA (campo vehiculo_ids)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/deuda:
+    get:
+      tags: [Saneamiento]
+      operationId: obtenerDeudaVehiculo
+      summary: Panel de deuda por fuente (plan §6.5)
+      description: diagnostico.diagnosticos.ver y la visibilidad del lote. Cache-Control no-store (trae el documento completo de la persona, sin nombre, SP-11).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: vid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: El panel., content: { application/json: { schema: { $ref: "#/components/schemas/PanelDeuda" } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: VEHICULO_NO_TERMINADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/deuda/pdf:
+    get:
+      tags: [Saneamiento]
+      operationId: descargarPdfDeuda
+      summary: PDF del panel de deuda (deuda-{placa}.pdf)
+      description: diagnostico.reportes.descargar. Cabeceras de descarga segura (nosniff, CSP sandbox, no-store y attachment).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: vid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: El PDF., content: { application/pdf: { schema: { type: string, format: binary } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: VEHICULO_NO_TERMINADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/deuda/excel:
+    get:
+      tags: [Saneamiento]
+      operationId: descargarExcelDeuda
+      summary: Excel del panel de deuda (deuda-{placa}.xlsx; documento enmascarado)
+      description: diagnostico.reportes.descargar. Hojas Resumen, SIMIT, Impuesto, SOAT y RTM y Saneamiento.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: vid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: El xlsx., content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: VEHICULO_NO_TERMINADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/vehiculos/deuda/excel:
+    post:
+      tags: [Saneamiento]
+      operationId: descargarExcelDeudaVarios
+      summary: Excel de deuda de varias placas (1 a 200 ids distintos; deuda-vehiculos.xlsx)
+      description: >
+        diagnostico.reportes.descargar. Los ids no visibles, inexistentes o sin terminar se omiten y solo suman a «Omitidos: n» en
+        la hoja Resumen, sin ids (SP-9).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ListaVehiculosIds" } } }
+      responses:
+        "200": { description: El xlsx., content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
+        "400": { description: LISTA_INVALIDA (campo vehiculo_ids)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/vehiculos:
+    get:
+      tags: [Saneamiento]
+      operationId: listarVehiculosCompania
+      summary: Grilla de placas de la compañía (plan §6.6)
+      description: >
+        diagnostico.diagnosticos.ver y la visibilidad de AccesoLote. Orden por creación del lote descendente y placa. Los lotes
+        CREADO no salen. Filtros de lista cerrada: un valor fuera de lista o un parámetro único repetido es 400 FILTRO_INVALIDO;
+        hasta antes de desde, RANGO_INVALIDO; tamano fuera de 1..100 o pagina × tamano mayor que 10 000, PAGINACION_INVALIDA.
+      parameters:
+        - { name: placa, in: query, schema: { type: string, maxLength: 20 }, description: Prefijo sobre el identificador normalizado. }
+        - { name: estado, in: query, schema: { type: array, items: { type: string, enum: [EN_PROCESO, TERMINADO] } }, style: form, explode: true }
+        - { name: veredicto, in: query, schema: { type: array, items: { type: string, enum: [VIABLE, BLOQUEADO, SIN_DICTAMEN] } }, style: form, explode: true }
+        - { name: saneamiento, in: query, schema: { type: string, enum: [CON, SIN] } }
+        - { name: saneamiento_estado, in: query, schema: { type: array, items: { type: string, enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE] } }, style: form, explode: true }
+        - { name: modo, in: query, schema: { $ref: "#/components/schemas/ModoDiagnostico" } }
+        - { name: con_tramite, in: query, schema: { type: boolean } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200": { description: La página., content: { application/json: { schema: { $ref: "#/components/schemas/ListadoVehiculos" } } } }
+        "400": { description: FILTRO_INVALIDO, RANGO_INVALIDO o PAGINACION_INVALIDA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos:
+    get:
+      tags: [Backoffice]
+      operationId: listarSaneamientosBackoffice
+      summary: Bandeja de saneamientos entre compañías (grupo A, ADR-0087 D-5)
+      description: >
+        Política de operación FLIT y diagnostico.saneamiento.gestionar; sin empresa explícita (la empresa es un filtro). Orden
+        solicitado_en ascendente. Antes de responder audita en lecturas_backoffice, en un solo guardado, cada empresa distinta de la
+        página (y la del filtro empresa aunque la página salga vacía); si la auditoría falla, no hay filas (SP-4). Sin datos
+        personales en la fila. Filtros inválidos: 400 FILTRO_INVALIDO, RANGO_INVALIDO o PAGINACION_INVALIDA (tamano 1 a 100 con
+        25 por defecto, pagina × tamano hasta 10 000).
+      parameters:
+        - { name: estado, in: query, schema: { type: array, items: { $ref: "#/components/schemas/EstadoSaneamiento" } }, style: form, explode: true, description: Sin estado = todos. }
+        - { name: empresa, in: query, schema: { type: string, format: uuid } }
+        - { name: placa, in: query, schema: { type: string, maxLength: 20 }, description: Prefijo sobre el identificador normalizado. }
+        - { name: desde, in: query, schema: { type: string, format: date }, description: Sobre solicitado_en, hora Colombia. }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+        - { name: pagina, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: tamano, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200": { description: La página., content: { application/json: { schema: { $ref: "#/components/schemas/ListaBandejaSaneamientos" } } } }
+        "400": { description: Filtro inválido., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "403": { description: Sin la operación FLIT o sin el permiso (también un usuario de otra compañía con los permisos). }
+
+  /api/v1/diagnostico/backoffice/saneamientos/resumen:
+    get:
+      tags: [Backoffice]
+      operationId: resumenSaneamientosBackoffice
+      summary: Solicitudes sin tomar de todas las compañías, para la insignia del menú (no audita)
+      responses:
+        "200": { description: El conteo., content: { application/json: { schema: { $ref: "#/components/schemas/ResumenSaneamientos" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/excel:
+    get:
+      tags: [Backoffice]
+      operationId: descargarExcelSaneamientosBackoffice
+      summary: Excel de la bandeja con los mismos filtros (saneamientos.xlsx)
+      description: Hasta 5 000 filas; más, 422 DEMASIADAS_FILAS. Audita las empresas exportadas. Cabeceras de descarga segura (SP-18). Texto literal, nunca fórmula (SP-21).
+      parameters:
+        - { name: estado, in: query, schema: { type: array, items: { $ref: "#/components/schemas/EstadoSaneamiento" } }, style: form, explode: true }
+        - { name: empresa, in: query, schema: { type: string, format: uuid } }
+        - { name: placa, in: query, schema: { type: string, maxLength: 20 } }
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: hasta, in: query, schema: { type: string, format: date } }
+      responses:
+        "200": { description: El xlsx., content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
+        "422": { description: DEMASIADAS_FILAS., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/tomar:
+    post:
+      tags: [Backoffice]
+      operationId: tomarSaneamientosBackoffice
+      summary: Toma varios saneamientos (1 a 200 pares empresa/id distintos)
+      description: >
+        Única ruta donde la empresa viene en el cuerpo (excepción a ADR-0073, SP-1). Por empresa, en secuencia, en una sola
+        transacción. Un par empresa/id que no coincide sale como NO_ENCONTRADO, igual que un id inexistente; uno que no está
+        SOLICITADO, como TRANSICION_INVALIDA. Una empresa que no es uuid o es cero: 400 LISTA_INVALIDA. Un aviso
+        SANEAMIENTO_TOMADO por par (solicitante, diagnóstico).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoTomarSaneamientos" } } }
+      responses:
+        "200": { description: Resultado., content: { application/json: { schema: { $ref: "#/components/schemas/ResultadoTomarSaneamientos" } } } }
+        "400": { description: LISTA_INVALIDA (campo items)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: VERSION_DESACTUALIZADA si otro cambio se guardó al mismo tiempo., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    get:
+      tags: [Backoffice]
+      operationId: obtenerSaneamientoBackoffice
+      summary: Detalle para FLIT con el historial completo (grupo B, auditado)
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "400": { description: EMPRESA_REQUERIDA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "404": { description: NO_ENCONTRADO (el sid no es de esa empresa o no es un uuid)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/deuda:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    get:
+      tags: [Backoffice]
+      operationId: obtenerDeudaSaneamientoBackoffice
+      summary: Panel de deuda del vehículo del saneamiento (SP-7), auditado y sin caché
+      responses:
+        "200": { description: El panel (misma forma que el de la compañía)., content: { application/json: { schema: { $ref: "#/components/schemas/PanelDeuda" } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: VEHICULO_NO_TERMINADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/tomar:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    post:
+      tags: [Backoffice]
+      operationId: tomarSaneamientoBackoffice
+      summary: SOLICITADO a EN_GESTION; genera los renglones con hallazgo la primera vez (sin cuerpo)
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/observacion:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    put:
+      tags: [Backoffice]
+      operationId: editarObservacionSaneamientoBackoffice
+      summary: Observación general de FLIT (0 a 1000 caracteres o null), visible para la compañía
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoObservacionSaneamiento" } } }
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "409": { description: NO_EDITABLE o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: "VERSION_INVALIDA, VALOR_INVALIDO o TEXTO_INVALIDO (campo observacion).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/renglones:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    post:
+      tags: [Backoffice]
+      operationId: agregarRenglonSaneamientoBackoffice
+      summary: Agrega un renglón OTRO (descripción de 3 a 200); devuelve el saneamiento completo (D-65)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoRenglonOtro" } } }
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "409": { description: NO_EDITABLE., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: VALOR_INVALIDO o TEXTO_INVALIDO (campo descripcion)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/renglones/{rid}:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/RenglonId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    put:
+      tags: [Backoffice]
+      operationId: editarRenglonSaneamientoBackoffice
+      summary: Resultado y nota del renglón con su version; devuelve el renglón
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoRenglonSaneamiento" } } }
+      responses:
+        "200": { description: El renglón., content: { application/json: { schema: { $ref: "#/components/schemas/RenglonSaneamiento" } } } }
+        "404": { description: NO_ENCONTRADO (el renglón no es de ese saneamiento o está quitado)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: NO_EDITABLE o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: "VERSION_INVALIDA, VALOR_INVALIDO (resultado o nota) o TEXTO_INVALIDO (nota).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+    delete:
+      tags: [Backoffice]
+      operationId: quitarRenglonSaneamientoBackoffice
+      summary: Quita el renglón (borrado lógico, queda en el historial); devuelve el saneamiento completo (D-65)
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: NO_EDITABLE., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/renglones/{rid}/evidencia:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/RenglonId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    put:
+      tags: [Backoffice]
+      operationId: subirEvidenciaSaneamientoBackoffice
+      summary: Sube o reemplaza el PDF de evidencia (multipart, un solo archivo en el campo archivo)
+      description: >
+        Hasta Diagnostico:Saneamiento:EvidenciaMaximoBytes (10 485 760 por defecto); el tope actúa antes de leer el cuerpo.
+        Content-Type application/pdf sin parámetros, extensión .pdf, %PDF- en el byte 0 y %%EOF en los últimos 1024 bytes; el
+        servidor no abre el PDF. El almacén recibe un nombre generado por el servidor; el original solo se muestra, saneado. Tope de
+        20 reemplazos por renglón. El archivo anterior queda huérfano (ADR-0087).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo: { type: string, format: binary }
+      responses:
+        "200": { description: El renglón., content: { application/json: { schema: { $ref: "#/components/schemas/RenglonSaneamiento" } } } }
+        "400": { description: ARCHIVO_REQUERIDO (vacío, sin el campo archivo o con más de un archivo)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "404": { description: NO_ENCONTRADO., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: NO_EDITABLE o DEMASIADOS_REEMPLAZOS., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { description: ARCHIVO_MUY_GRANDE., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: ARCHIVO_NO_ES_PDF., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+    delete:
+      tags: [Backoffice]
+      operationId: quitarEvidenciaSaneamientoBackoffice
+      summary: Quita la evidencia; devuelve el saneamiento completo (D-65)
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "404": { description: NO_ENCONTRADO (también si no tenía evidencia)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "409": { description: NO_EDITABLE., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+    get:
+      tags: [Backoffice]
+      operationId: descargarEvidenciaSaneamientoBackoffice
+      summary: Descarga la evidencia (evidencia-{placa}-{fuente}.pdf, cabeceras de descarga segura)
+      responses:
+        "200": { description: El PDF., content: { application/pdf: { schema: { type: string, format: binary } } } }
+        "404": { description: Sin evidencia o fuera de la cadena., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/cerrar:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    post:
+      tags: [Backoffice]
+      operationId: cerrarSaneamientoBackoffice
+      summary: EN_GESTION a SANEADO o NO_PROCEDE (con motivo)
+      description: SANEADO exige al menos un renglón, ninguno PENDIENTE y uno SANEADO (422 CIERRE_INCOMPLETO). No toca el dictamen.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoCerrarSaneamiento" } } }
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: "CIERRE_INCOMPLETO, MOTIVO_REQUERIDO, TEXTO_INVALIDO, VERSION_INVALIDA o VALOR_INVALIDO (resultado).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/reabrir:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    post:
+      tags: [Backoffice]
+      operationId: reabrirSaneamientoBackoffice
+      summary: SANEADO o NO_PROCEDE a EN_GESTION, con motivo (los renglones no se regeneran)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoMotivoSaneamiento" } } }
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: "MOTIVO_REQUERIDO, TEXTO_INVALIDO o VERSION_INVALIDA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
+  /api/v1/diagnostico/backoffice/saneamientos/{sid}/anular:
+    parameters:
+      - { $ref: "#/components/parameters/SaneamientoId" }
+      - { $ref: "#/components/parameters/EmpresaExplicitaSaneamiento" }
+    post:
+      tags: [Backoffice]
+      operationId: anularSaneamientoBackoffice
+      summary: SOLICITADO o EN_GESTION a ANULADO, con motivo
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CuerpoMotivoSaneamiento" } } }
+      responses:
+        "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
+        "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "422": { description: "MOTIVO_REQUERIDO, TEXTO_INVALIDO o VERSION_INVALIDA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3246,6 +3662,26 @@ components:
   responses:
     Unauthorized:
       description: Sin sesión, token inválido o de otro producto.
+
+  parameters:
+    SaneamientoId:
+      name: sid
+      in: path
+      required: true
+      description: Id del saneamiento; una ruta con un valor que no es uuid no existe (404, SP-6).
+      schema: { type: string, format: uuid }
+    RenglonId:
+      name: rid
+      in: path
+      required: true
+      description: Id del renglón, del mismo saneamiento y no quitado (404 si no, SP-6).
+      schema: { type: string, format: uuid }
+    EmpresaExplicitaSaneamiento:
+      name: empresa
+      in: query
+      required: true
+      description: Empresa explícita del backoffice (ADR-0073); los GET quedan auditados en lecturas_backoffice.
+      schema: { type: string, format: uuid }
 
   schemas:
     Sesion:
@@ -3344,6 +3780,12 @@ components:
           type: boolean
         verVolumetria:
           type: boolean
+        sanear:
+          type: boolean
+          description: HU #14576. diagnostico.saneamiento.solicitar (el SuperAdmin la tiene por la regla general, decisión E3). Opcional para el front.
+        gestionarSaneamiento:
+          type: boolean
+          description: HU #14576. Política de operación FLIT y diagnostico.saneamiento.gestionar. Opcional para el front.
         backofficeOperacion:
           type: boolean
           description: >
@@ -4257,6 +4699,8 @@ components:
       type: object
       required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, documento_declarado, propietarios]
       properties:
+        saneamiento:
+          $ref: "#/components/schemas/SaneamientoFila"
         id:
           type: string
           format: uuid
@@ -4950,6 +5394,10 @@ components:
         - type: object
           required: [celdas]
           properties:
+            saneamiento:
+              description: HU #14576 AC35. Reemplaza el saneamiento de FilaVehiculo en el backoffice, sin elegibilidad; null si no hay.
+              allOf:
+                - $ref: "#/components/schemas/SaneamientoFilaBackoffice"
             celdas:
               type: array
               items:
@@ -5874,6 +6322,380 @@ components:
           type: string
           description: Ruta relativa del frontend, /diagnosticos/{diagnostico_id} para todos los tipos (la página del lote).
           example: /diagnosticos/01a1d385-0649-766f-a224-cf68b10c52a7
+    EstadoSaneamiento:
+      type: string
+      enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE, ANULADO]
+      description: Estado del saneamiento (plan §3.2). ANULADO es final.
+
+    SaneamientoFila:
+      type: object
+      description: >
+        Saneamiento en una fila de la grilla del lote (HU #14576 AC35): estado del no anulado (null si no hay), si se puede
+        marcar y por qué no.
+      required: [estado, elegible, motivo_no_elegible]
+      properties:
+        estado: { type: string, nullable: true, enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE] }
+        elegible: { type: boolean }
+        motivo_no_elegible: { type: string, nullable: true, enum: [NO_TERMINADO, YA_SOLICITADO] }
+
+    SaneamientoFilaBackoffice:
+      type: object
+      nullable: true
+      description: Saneamiento no anulado en una fila de la grilla del backoffice (AC35), sin elegibilidad; null si no hay.
+      required: [estado, id]
+      properties:
+        estado: { type: string, enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE] }
+        id: { type: string, format: uuid }
+
+    EvidenciaSaneamiento:
+      type: object
+      nullable: true
+      description: Evidencia del renglón. Nunca se exponen la referencia del almacén ni el sha (§6.3, D-22).
+      required: [nombre, tamano, subida_en]
+      properties:
+        nombre: { type: string, maxLength: 200, description: Nombre original saneado (sin rutas ni caracteres de control). }
+        tamano: { type: integer, format: int64, minimum: 1 }
+        subida_en: { type: string, format: date-time }
+
+    RenglonSaneamiento:
+      type: object
+      description: Renglón no quitado. version es su xmin, para el PUT del renglón.
+      required: [id, version, fuente, hallazgo, descripcion, automatico, resultado, nota, evidencia]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, format: int64, minimum: 0 }
+        fuente: { type: string, enum: [SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, IMPUESTO, SOAT, RTM, OTRO] }
+        hallazgo: { type: string, nullable: true, enum: [DEUDA, NO_VIGENTE, SIN_VERIFICAR] }
+        descripcion: { type: string, nullable: true, maxLength: 200 }
+        automatico: { type: boolean }
+        resultado: { type: string, enum: [PENDIENTE, SANEADO, NO_PROCEDE] }
+        nota: { type: string, nullable: true, maxLength: 500 }
+        evidencia: { $ref: "#/components/schemas/EvidenciaSaneamiento" }
+
+    EventoSaneamientoCliente:
+      type: object
+      description: Evento para la compañía, con actor genérico; sin RENGLON_ACTUALIZADO ni OBSERVACION_EDITADA.
+      required: [evento, ocurrido_en, actor, fuente, motivo]
+      properties:
+        evento:
+          type: string
+          enum: [SOLICITADO, DESMARCADO, TOMADO, RENGLON_AGREGADO, RENGLON_QUITADO, RENGLON_ACTUALIZADO, EVIDENCIA_CARGADA, EVIDENCIA_QUITADA, OBSERVACION_EDITADA, CERRADO_SANEADO, CERRADO_NO_PROCEDE, REABIERTO, ANULADO_FLIT]
+        ocurrido_en: { type: string, format: date-time }
+        actor: { type: string, enum: [COMPANIA, FLIT] }
+        fuente: { type: string, nullable: true }
+        motivo: { type: string, nullable: true, maxLength: 500 }
+
+    SaneamientoCliente:
+      type: object
+      description: >
+        Saneamiento que ve la compañía (§6.3, SP-15). version es el xmin. Nunca trae usuario_id, quién tomó, cerró o anuló, la
+        referencia del almacén ni el sha.
+      required: [id, version, estado, solicitado_en, solicitado_por_mi, tomado_en, cerrado_en, motivo_cierre, motivo_anulacion, observacion_flit, renglones, historial]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, format: int64, minimum: 0 }
+        estado: { $ref: "#/components/schemas/EstadoSaneamiento" }
+        solicitado_en: { type: string, format: date-time }
+        solicitado_por_mi: { type: boolean }
+        tomado_en: { type: string, format: date-time, nullable: true }
+        cerrado_en: { type: string, format: date-time, nullable: true }
+        motivo_cierre: { type: string, nullable: true, maxLength: 500 }
+        motivo_anulacion: { type: string, nullable: true, maxLength: 500 }
+        observacion_flit: { type: string, nullable: true, maxLength: 1000 }
+        renglones: { type: array, items: { $ref: "#/components/schemas/RenglonSaneamiento" } }
+        historial: { type: array, items: { $ref: "#/components/schemas/EventoSaneamientoCliente" } }
+
+    EventoSaneamientoBackoffice:
+      allOf:
+        - $ref: "#/components/schemas/EventoSaneamientoCliente"
+        - type: object
+          description: El de la compañía más quién actuó y los estados de la transición (null en las ediciones, D-63).
+          required: [usuario_id, estado_anterior, estado_nuevo]
+          properties:
+            usuario_id: { type: string, format: uuid }
+            estado_anterior: { type: string, nullable: true, enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE, ANULADO] }
+            estado_nuevo: { type: string, nullable: true, enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE, ANULADO] }
+
+    SaneamientoBackoffice:
+      type: object
+      description: >
+        Saneamiento que ve FLIT (§6.2, SP-15, D-22): historial completo con usuario_id; sin el indicador de quién solicitó, la referencia del almacén ni la huella.
+        Con el contexto del encabezado de la gestión (D-60): empresa, lote, vehículo, placa (o identificador) y veredicto vigente.
+      required: [id, version, empresa, diagnostico_id, diagnostico_nombre, vehiculo_id, placa, veredicto, estado, solicitado_en, tomado_en, cerrado_en, motivo_cierre, motivo_anulacion, observacion_flit, renglones, historial]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, format: int64, minimum: 0 }
+        empresa: { type: string, format: uuid }
+        diagnostico_id: { type: string, format: uuid }
+        diagnostico_nombre: { type: string }
+        vehiculo_id: { type: string, format: uuid }
+        placa: { type: string, nullable: true }
+        veredicto: { type: string, nullable: true, enum: [VIABLE, BLOQUEADO] }
+        estado: { $ref: "#/components/schemas/EstadoSaneamiento" }
+        solicitado_en: { type: string, format: date-time }
+        tomado_en: { type: string, format: date-time, nullable: true }
+        cerrado_en: { type: string, format: date-time, nullable: true }
+        motivo_cierre: { type: string, nullable: true }
+        motivo_anulacion: { type: string, nullable: true }
+        observacion_flit: { type: string, nullable: true }
+        renglones: { type: array, items: { $ref: "#/components/schemas/RenglonSaneamiento" } }
+        historial: { type: array, items: { $ref: "#/components/schemas/EventoSaneamientoBackoffice" } }
+
+    ListaVehiculosIds:
+      type: object
+      required: [vehiculo_ids]
+      properties:
+        vehiculo_ids:
+          type: array
+          minItems: 1
+          description: Ids distintos (los repetidos no cuentan); 500 en el masivo y 200 en el Excel de varias placas.
+          items: { type: string, format: uuid }
+
+    SolicitudesSaneamiento:
+      type: object
+      required: [solicitados, omitidos]
+      properties:
+        solicitados: { type: integer, minimum: 0 }
+        omitidos:
+          type: array
+          items:
+            type: object
+            required: [vehiculo_id, motivo]
+            properties:
+              vehiculo_id: { type: string, format: uuid }
+              motivo: { type: string, enum: [NO_TERMINADO, YA_SOLICITADO, NO_ENCONTRADO] }
+
+    PersonaDeuda:
+      type: object
+      description: Persona de la fuente SIMIT (SP-11, BE-C-1), sin nombre; el documento completo solo en el JSON (no-store) y en el PDF.
+      required: [tipo_documento, documento]
+      properties:
+        tipo_documento: { type: string }
+        documento: { type: string }
+
+    FuenteDeuda:
+      type: object
+      description: >
+        Una fuente del panel (plan §6.5). Las claves opcionales solo vienen cuando aplican a la fuente. En SIMIT de persona hay
+        una entrada por persona. El valor de cada comparendo y el saldo de los acuerdos van como texto, tal como llegan (S17).
+      required: [fuente, estado]
+      properties:
+        fuente: { type: string, enum: [SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, IMPUESTO, SOAT, RTM] }
+        estado: { type: string, enum: [CON_DEUDA, NO_VIGENTE, SIN_VERIFICAR, SIN_HALLAZGO, NO_APLICA] }
+        consultado_en: { type: string, format: date-time }
+        motivo_na: { type: string }
+        persona: { $ref: "#/components/schemas/PersonaDeuda" }
+        paz_y_salvo: { type: boolean }
+        comparendos:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            properties:
+              numero: { type: string, nullable: true }
+              fecha: { type: string, nullable: true }
+              valor: { type: string, nullable: true }
+              estado: { type: string, nullable: true }
+        comparendos_truncados: { type: boolean }
+        acuerdos_pago:
+          type: array
+          items:
+            type: object
+            properties:
+              estado: { type: string, nullable: true }
+              saldo_pendiente: { type: string, nullable: true }
+        monto_total: { type: integer, format: int64 }
+        vigencias:
+          type: array
+          items:
+            type: object
+            required: [anio, valor, pagada]
+            properties:
+              anio: { type: integer }
+              valor: { type: integer, format: int64 }
+              pagada: { type: boolean }
+        vence: { type: string }
+
+    PanelDeuda:
+      type: object
+      description: Panel de deuda (plan §6.5, BE-C). dictamen es null en modo Simple o sin dictamen vigente. Sin totales del SIMIT (S17).
+      required: [vehiculo, modo, dictamen, fuentes, saneamiento]
+      properties:
+        vehiculo:
+          type: object
+          required: [id, placa]
+          properties:
+            id: { type: string, format: uuid }
+            placa: { type: string, description: Placa, o VIN, o el identificador normalizado. }
+        modo: { $ref: "#/components/schemas/ModoDiagnostico" }
+        dictamen:
+          type: object
+          nullable: true
+          required: [veredicto, catalogo_version, motivos]
+          properties:
+            veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+            catalogo_version: { type: integer }
+            motivos:
+              type: array
+              items:
+                type: object
+                required: [codigo, efecto, texto]
+                properties:
+                  codigo: { type: string }
+                  efecto: { type: string, enum: [BLOQUEA, ADVIERTE] }
+                  texto: { type: string }
+        fuentes: { type: array, items: { $ref: "#/components/schemas/FuenteDeuda" } }
+        saneamiento:
+          type: object
+          nullable: true
+          required: [estado]
+          properties:
+            estado: { type: string, enum: [SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE] }
+
+    FilaPlaca:
+      type: object
+      description: >
+        Una fila de GET /vehiculos (plan §6.6). estado es EN_PROCESO o TERMINADO, calculado sobre las celdas (C1). UA-5: vin e
+        identificador (el valor cargado), nullables, para nombrar una fila sin placa.
+      required: [vehiculo_id, placa, diagnostico_id, diagnostico_nombre, diagnostico_creado_en, modo, estado, veredicto, saneamiento, tramite, vin, identificador]
+      properties:
+        vehiculo_id: { type: string, format: uuid }
+        placa: { type: string, description: Placa, o VIN, o el identificador normalizado. }
+        vin: { type: string, nullable: true }
+        identificador: { type: string, nullable: true }
+        diagnostico_id: { type: string, format: uuid }
+        diagnostico_nombre: { type: string }
+        diagnostico_creado_en: { type: string, format: date-time }
+        modo: { $ref: "#/components/schemas/ModoDiagnostico" }
+        estado: { type: string, enum: [EN_PROCESO, TERMINADO] }
+        veredicto: { type: string, nullable: true, enum: [VIABLE, BLOQUEADO] }
+        saneamiento: { $ref: "#/components/schemas/SaneamientoFila" }
+        tramite:
+          type: object
+          nullable: true
+          required: [id, numero]
+          properties:
+            id: { type: string, format: uuid }
+            numero: { type: string, nullable: true }
+
+    ListadoVehiculos:
+      type: object
+      required: [pagina, tamano, total, vehiculos]
+      properties:
+        pagina: { type: integer, minimum: 1 }
+        tamano: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        vehiculos: { type: array, items: { $ref: "#/components/schemas/FilaPlaca" }, description: D-19. }
+
+    FilaBandejaSaneamiento:
+      type: object
+      description: Fila de la bandeja entre compañías, sin datos personales (ADR-0087 D-5).
+      required: [id, empresa, diagnostico_id, diagnostico_nombre, vehiculo_id, placa, modo, veredicto, estado, solicitado_en, tomado_en, cerrado_en, renglones_total, renglones_pendientes]
+      properties:
+        id: { type: string, format: uuid }
+        empresa: { type: string, format: uuid }
+        diagnostico_id: { type: string, format: uuid }
+        diagnostico_nombre: { type: string }
+        vehiculo_id: { type: string, format: uuid }
+        placa: { type: string, nullable: true }
+        modo: { $ref: "#/components/schemas/ModoDiagnostico" }
+        veredicto: { type: string, nullable: true, enum: [VIABLE, BLOQUEADO] }
+        estado: { $ref: "#/components/schemas/EstadoSaneamiento" }
+        solicitado_en: { type: string, format: date-time }
+        tomado_en: { type: string, format: date-time, nullable: true }
+        cerrado_en: { type: string, format: date-time, nullable: true }
+        renglones_total: { type: integer, minimum: 0 }
+        renglones_pendientes: { type: integer, minimum: 0 }
+
+    ListaBandejaSaneamientos:
+      type: object
+      required: [pagina, tamano, total, saneamientos]
+      properties:
+        pagina: { type: integer, minimum: 1 }
+        tamano: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        saneamientos: { type: array, items: { $ref: "#/components/schemas/FilaBandejaSaneamiento" }, description: D-19. }
+
+    ResumenSaneamientos:
+      type: object
+      required: [solicitados]
+      properties:
+        solicitados: { type: integer, minimum: 0 }
+
+    CuerpoTomarSaneamientos:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [empresa, id]
+            properties:
+              empresa: { type: string, format: uuid }
+              id: { type: string, format: uuid }
+
+    ResultadoTomarSaneamientos:
+      type: object
+      required: [tomados, omitidos]
+      properties:
+        tomados: { type: integer, minimum: 0 }
+        omitidos:
+          type: array
+          items:
+            type: object
+            required: [id, motivo]
+            properties:
+              id: { type: string, format: uuid }
+              motivo: { type: string, enum: [TRANSICION_INVALIDA, NO_ENCONTRADO] }
+
+    VersionSaneamiento:
+      type: integer
+      format: int64
+      minimum: 0
+      maximum: 4294967295
+      description: >
+        xmin leído (del saneamiento, o del renglón en su PUT). Distinto del vigente: 409 VERSION_DESACTUALIZADA. Ausente o no
+        entero: 422 VERSION_INVALIDA (brief C6).
+
+    CuerpoObservacionSaneamiento:
+      type: object
+      required: [version]
+      properties:
+        observacion: { type: string, nullable: true, maxLength: 1000, description: "0 a 1000 puntos de código; vacía o null la borra. Sin caracteres de control ni bidireccionales (422 TEXTO_INVALIDO)." }
+        version: { $ref: "#/components/schemas/VersionSaneamiento" }
+
+    CuerpoRenglonOtro:
+      type: object
+      required: [descripcion]
+      properties:
+        descripcion: { type: string, minLength: 3, maxLength: 200 }
+
+    CuerpoRenglonSaneamiento:
+      type: object
+      required: [resultado, version]
+      properties:
+        resultado: { type: string, enum: [PENDIENTE, SANEADO, NO_PROCEDE] }
+        nota: { type: string, nullable: true, maxLength: 500 }
+        version: { $ref: "#/components/schemas/VersionSaneamiento" }
+
+    CuerpoCerrarSaneamiento:
+      type: object
+      required: [resultado, version]
+      properties:
+        resultado: { type: string, enum: [SANEADO, NO_PROCEDE] }
+        motivo: { type: string, minLength: 10, maxLength: 500, description: Obligatorio con NO_PROCEDE (422 MOTIVO_REQUERIDO). }
+        version: { $ref: "#/components/schemas/VersionSaneamiento" }
+
+    CuerpoMotivoSaneamiento:
+      type: object
+      required: [motivo, version]
+      properties:
+        motivo: { type: string, minLength: 10, maxLength: 500, description: "Sin espacios al inicio ni al final (422 MOTIVO_REQUERIDO); sin caracteres de control (422 TEXTO_INVALIDO)." }
+        version: { $ref: "#/components/schemas/VersionSaneamiento" }
+
     ErrorRegla:
       type: object
       required: [code, error]
