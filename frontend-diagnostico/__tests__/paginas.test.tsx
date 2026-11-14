@@ -71,8 +71,8 @@ describe("sin formulario propio", () => {
         join("components", "listado"),
         // Pantalla única de creación (HU #14085): placa o VIN, documento del locatario y archivo de vehículos.
         join("components", "nuevo"),
-        // Punto 4 (crear trámite masivo): casillas de selección de placas del tablero, no de credenciales.
-        join("components", "tablero", "BarraSeleccionDerivacion.tsx"),
+        // Punto 4 (crear trámite masivo) y HU #14577 (sanear en bloque): casillas de selección de placas del tablero, no de credenciales.
+        join("components", "tablero", "BarraSeleccionTablero.tsx"),
         // HU #14562 AC28: búsqueda por placa o VIN del tablero, no de credenciales.
         join("components", "tablero", "BuscadorGrilla.tsx"),
       ];
