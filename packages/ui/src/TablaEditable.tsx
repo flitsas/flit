@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { cn } from "./cn";
 import {
+  TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS,
   TABLA_CONTENEDOR_CELL_CLS,
   TABLA_CONTENEDOR_CELL_TITULO_CLS,
   TABLA_CONTENEDOR_FILA_ANCHA_CLS,
@@ -60,6 +61,9 @@ import {
  * HU #14577 · hallazgo E2E H-10: `apilado="contenedor"` (aditivo; por defecto "pantalla", el de siempre) pasa a tarjetas
  * según el ancho del envoltorio (container query, recetas `TABLA_CONTENEDOR_*`) y no del viewport, para tablas que viven
  * en una columna angosta de un diseño a dos columnas. Solo cambian clases; marcado, foco y guardado son los mismos.
+ *
+ * HU #14577 · hallazgo E2E H-13: en ese modo, la celda «Acciones» de un renglón sin botones se oculta en la tarjeta
+ * (`TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS`); en la tabla ancha sigue, con su cabecera. El modo "pantalla" no cambia.
  */
 export type EstadoFilaEditable = "sin_cambios" | "editado" | "guardando" | "error";
 
@@ -106,6 +110,8 @@ interface RecetasApilado {
   celda: string;
   celdaTitulo: string;
   filaAncha: string;
+  /** Se suma a `celda` cuando la celda no tiene nada en ese renglón (H-13). Vacía: la celda se pinta igual. */
+  celdaSinContenido: string;
 }
 
 const RECETAS: Record<ApiladoTabla, RecetasApilado> = {
@@ -118,6 +124,7 @@ const RECETAS: Record<ApiladoTabla, RecetasApilado> = {
     celda: TABLA_MOVIL_CELL_CLS,
     celdaTitulo: TABLA_MOVIL_CELL_TITULO_CLS,
     filaAncha: TABLA_MOVIL_FILA_ANCHA_CLS,
+    celdaSinContenido: "",
   },
   contenedor: {
     envoltorio: TABLA_CONTENEDOR_WRAP_CLS,
@@ -128,6 +135,7 @@ const RECETAS: Record<ApiladoTabla, RecetasApilado> = {
     celda: TABLA_CONTENEDOR_CELL_CLS,
     celdaTitulo: TABLA_CONTENEDOR_CELL_TITULO_CLS,
     filaAncha: TABLA_CONTENEDOR_FILA_ANCHA_CLS,
+    celdaSinContenido: TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS,
   },
 };
 
@@ -402,6 +410,14 @@ function FilaEditable<F>({
     onDescartar?.(fila);
   };
 
+  // H-13: qué botones lleva la celda «Acciones»; sin ninguno, en tarjeta no se pinta su línea.
+  const conGuardarDescartar =
+    !automatico &&
+    (controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
+    visible !== "error";
+  const conReintentar = visible === "error";
+  const conAcciones = conGuardarDescartar || conReintentar;
+
   return (
     <tr ref={filaRef} aria-label={id} className={`border-b border-[color:var(--di-divider)] ${recetas.fila}`}>
       {columnas.map((c, i) => {
@@ -463,11 +479,9 @@ function FilaEditable<F>({
           </span>
         ) : null}
       </td>
-      <td data-label="Acciones" className={`px-3 py-2 ${recetas.celda}`}>
+      <td data-label="Acciones" className={`px-3 py-2 ${recetas.celda}${!conAcciones && recetas.celdaSinContenido ? ` ${recetas.celdaSinContenido}` : ""}`}>
         <div className="flex flex-wrap items-center gap-2">
-          {!automatico &&
-          (controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
-          visible !== "error" ? (
+          {conGuardarDescartar ? (
             <>
               <button
                 type="button"
@@ -495,7 +509,7 @@ function FilaEditable<F>({
               </button>
             </>
           ) : null}
-          {visible === "error" ? (
+          {conReintentar ? (
             <button
               ref={reintentarRef}
               type="button"

@@ -130,3 +130,10 @@ export const TABLA_CONTENEDOR_CELL_TITULO_CLS =
   '@max-[80rem]:text-sm @max-[80rem]:font-semibold';
 /** En una fila a todo el ancho (vacío) y en su `<td>`. */
 export const TABLA_CONTENEDOR_FILA_ANCHA_CLS = '@max-[80rem]:col-span-full @max-[80rem]:block';
+/**
+ * HU #14577 · hallazgo E2E H-13 — además de {@link TABLA_CONTENEDOR_CELL_CLS}, en una celda que en ese renglón no tiene
+ * nada que mostrar (la de acciones de `TablaEditable` sin «Guardar», «Descartar» ni «Reintentar»): en la tarjeta no se
+ * pinta la línea con la etiqueta sola. En la tabla ancha la celda sigue, para no descuadrar las columnas ni la cabecera
+ * que lee el lector de pantalla. Va con `!` porque la receta de celda pone `flex` en la misma variante.
+ */
+export const TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS = '@max-[80rem]:hidden!';
