@@ -119,6 +119,20 @@ export class EmpresaNoElegida extends Error {
   }
 }
 
+/**
+ * AP-8 (security-fase3 SF-6): texto para el usuario de un error del backoffice. Nunca el `message` de un ApiError ni de
+ * un Error cualquiera: el texto fijo del `code` en `porCodigo`, el de permiso en un 403 o, si no, `respaldo` (el texto
+ * fijo de la pantalla). EmpresaNoElegida conserva su mensaje: es un error propio del front con texto fijo.
+ */
+export function mensajeErrorBackoffice(error: unknown, respaldo: string, porCodigo: Readonly<Record<string, string>> = {}): string {
+  if (error instanceof EmpresaNoElegida) return error.message;
+  if (error instanceof ApiError) {
+    if (error.code && Object.prototype.hasOwnProperty.call(porCodigo, error.code)) return porCodigo[error.code];
+    if (error.status === 403) return "No tienes permiso para esta acción.";
+  }
+  return respaldo;
+}
+
 /** `?empresa=` (y el resto de la consulta) o EmpresaNoElegida, antes de cualquier petición. */
 function consulta(empresa: string, extra: Record<string, string | number | undefined> = {}): string {
   const id = empresa.trim();
@@ -234,20 +248,28 @@ const AVISOS_409: Record<string, string> = {
   CELDA_BLOQUEADA_POR_RUNT: "Esta celda depende del RUNT del vehículo, que también falló: no se llena a mano.",
 };
 
-/** 422 con campo → junto al campo; 409, 403, 404 y el resto → aviso del formulario. Nada cambia en ningún error. */
+/** AP-8 (SF-6): textos fijos de los 422 por campo del PUT manual (los dos `code` del contrato que traen `campo`). */
+const CAMPOS_422: Record<string, string> = {
+  RESULTADO_INVALIDO: "Revisa este dato: no cumple lo que pide esta fuente.",
+  PERSONA_NO_EN_ERROR: "Esta persona ya no está en error: no se llena a mano.",
+};
+
+/** AP-8 (SF-6): un 409 con un `code` fuera de AVISOS_409 también es «la celda cambió»; nunca el mensaje de la API. */
+const AVISO_409_GENERICO = "La celda cambió mientras la llenabas. La grilla se vuelve a leer; ábrela de nuevo si sigue en error.";
+
+/** 422 con campo → junto al campo; 409, 403, 404 y el resto → aviso del formulario, siempre con texto fijo. Nada cambia. */
 export function traducirErrorLlenado(error: unknown): ErrorLlenado {
   if (error instanceof ApiError) {
-    if (error.status === 422 && error.campo && (error.code === "RESULTADO_INVALIDO" || error.code === "PERSONA_NO_EN_ERROR"))
-      return { tipo: "CAMPO", campo: error.campo, mensaje: error.message, recargarGrilla: false };
+    if (error.status === 422 && error.campo && error.code && Object.prototype.hasOwnProperty.call(CAMPOS_422, error.code))
+      return { tipo: "CAMPO", campo: error.campo, mensaje: CAMPOS_422[error.code], recargarGrilla: false };
     if (error.status === 409)
-      return { tipo: "AVISO", mensaje: (error.code && AVISOS_409[error.code]) || error.message, recargarGrilla: true };
+      return { tipo: "AVISO", mensaje: (error.code && AVISOS_409[error.code]) || AVISO_409_GENERICO, recargarGrilla: true };
     if (error.status === 422 && error.code === "FUENTE_NO_ADMITE_MANUAL")
       return { tipo: "AVISO", mensaje: "Esta fuente no se llena a mano.", recargarGrilla: false };
     if (error.status === 403) return { tipo: "AVISO", mensaje: "No tienes permiso para llenar consultas a mano.", recargarGrilla: false };
     if (error.status === 404) return { tipo: "AVISO", mensaje: "La consulta no existe en esta compañía.", recargarGrilla: true };
   }
-  if (error instanceof EmpresaNoElegida) return { tipo: "AVISO", mensaje: error.message, recargarGrilla: false };
-  return { tipo: "AVISO", mensaje: error instanceof Error ? error.message : "No se pudo llenar la consulta.", recargarGrilla: false };
+  return { tipo: "AVISO", mensaje: mensajeErrorBackoffice(error, "No se pudo llenar la consulta. Intenta de nuevo en un momento."), recargarGrilla: false };
 }
 
 const RESUELTA = (c: CeldaGrilla) => c.estado === "COMPLETADO" || c.estado === "NA";

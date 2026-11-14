@@ -168,7 +168,8 @@ describe("FormularioLlenadoManual — errores: el 422 junto al campo y el 409 co
     escribir("Modelo (año)", "2020");
   }
 
-  it("422 RESULTADO_INVALIDO con campo: el mensaje queda junto a ese campo y no se avisa la celda llenada", async () => {
+  // AP-8 (SF-6): reescrito; antes afirmaba que junto al campo iba el mensaje de la API. Ahora va un texto fijo.
+  it("422 RESULTADO_INVALIDO con campo: un texto fijo queda junto a ese campo y no se avisa la celda llenada", async () => {
     const { onLlenada } = montar(formulario("AVALUO"), () =>
       Response.json({ code: "RESULTADO_INVALIDO", error: "El valor supera el máximo permitido.", campo: "resultado.fuentes[0].valor" }, { status: 422 }),
     );
@@ -176,15 +177,18 @@ describe("FormularioLlenadoManual — errores: el 422 junto al campo y el 409 co
     confirmar();
 
     const campo = within(dialogo()).getByLabelText("Valor de la fuente 1 (pesos)");
-    await waitFor(() => esperarErrorJunto(campo, /supera el máximo/));
+    await waitFor(() => esperarErrorJunto(campo, /Revisa este dato: no cumple lo que pide esta fuente\./));
+    expect(within(dialogo()).queryByText(/supera el máximo/)).toBeNull();
     expect(onLlenada).not.toHaveBeenCalled();
   });
 
-  it("422 con un campo que no está en el formulario: aviso general con el mensaje", async () => {
+  // AP-8 (SF-6): reescrito; antes afirmaba que el aviso general repetía el mensaje de la API.
+  it("422 con un campo que no está en el formulario: aviso general con texto fijo, sin el mensaje de la API", async () => {
     montar(formulario("AVALUO"), () => Response.json({ code: "RESULTADO_INVALIDO", error: "El campo «proveedor» no existe.", campo: "resultado.proveedor" }, { status: 422 }));
     await llenarAvaluoValido();
     confirmar();
-    expect(await within(dialogo()).findByText(/proveedor/)).toBeInTheDocument();
+    expect(await within(dialogo()).findByText("Revisa este dato: no cumple lo que pide esta fuente.")).toBeInTheDocument();
+    expect(within(dialogo()).queryByText(/proveedor/)).toBeNull();
   });
 
   it("409 CELDA_MODIFICADA: aviso, pide recargar la grilla y no avisa la celda llenada", async () => {
@@ -239,7 +243,8 @@ describe("HU14562 AC44 — referencia Fasecolda en el llenado del avalúo", () =
     expect(llamadas(fetchMock, "PUT", "/backoffice/consultas/celda-1-avaluo/manual")).toHaveLength(0);
   });
 
-  it("con la referencia válida, el PUT la lleva y un 422 del API sobre ella se muestra en su campo", async () => {
+  // AP-8 (SF-6): reescrito; el 422 sobre la referencia se señala en su campo con texto fijo, no con el de la API.
+  it("con la referencia válida, el PUT la lleva y un 422 del API sobre ella se señala en su campo", async () => {
     const { fetchMock } = montar(formulario("AVALUO"), () =>
       Response.json({ code: "RESULTADO_INVALIDO", error: "El código Fasecolda no existe.", campo: "resultado.referencia.codigo_fasecolda" }, { status: 422 }),
     );
@@ -248,8 +253,22 @@ describe("HU14562 AC44 — referencia Fasecolda en el llenado del avalúo", () =
     escribir("Modelo (año)", "2020");
     escribir("Marca", "Marca prueba");
     confirmar();
-    await waitFor(() => esperarErrorJunto(within(dialogo()).getByLabelText("Código Fasecolda"), /no existe/));
+    await waitFor(() => esperarErrorJunto(within(dialogo()).getByLabelText("Código Fasecolda"), /Revisa este dato/));
+    expect(within(dialogo()).queryByText(/no existe/)).toBeNull();
     const [put] = llamadas(fetchMock, "PUT", "/backoffice/consultas/celda-1-avaluo/manual");
     expect(JSON.parse(String((put[1] as RequestInit).body)).resultado.referencia).toEqual({ codigo_fasecolda: "01601234", modelo: 2020, marca: "Marca prueba" });
+  });
+});
+
+// AP-8 (security-fase3 SF-6): ni la lectura ni el envío del formulario muestran el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("FormularioLlenadoManual — AP-8: textos fijos", () => {
+  it("400 al enviar: aviso fijo, sin el mensaje de la API", async () => {
+    montar(formulario("SIMIT_VEHICULO"), () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }));
+    await within(dialogo()).findByLabelText("Semáforo");
+    confirmar();
+    expect(await within(dialogo()).findByText("No se pudo llenar la consulta. Intenta de nuevo en un momento.")).toBeInTheDocument();
+    expect(dialogo()).not.toHaveTextContent(SECRETO_AP8);
   });
 });
