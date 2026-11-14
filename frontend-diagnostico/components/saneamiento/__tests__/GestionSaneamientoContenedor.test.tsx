@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { GestionSaneamiento } from "@/components/backoffice/GestionSaneamiento";
 import { sesion } from "@/__tests__/configuracion/datos";
 import { ResumenSaneamientosContext } from "@/lib/backoffice/useResumenSaneamientos";
@@ -111,5 +111,63 @@ describe("H-10 — TablaEditable: `apilado` es aditivo", () => {
     for (const c of clases(r.TABLA_CONTENEDOR_THEAD_CLS)) expect(thead.classList).toContain(c);
     const celdaTitulo = tabla.querySelector("tbody th") as HTMLElement;
     for (const c of clases(r.TABLA_CONTENEDOR_CELL_TITULO_CLS)) expect(celdaTitulo.classList).toContain(c);
+  });
+});
+
+// Hallazgo E2E H-13 (HU #14577, captura C-10-gestion-1023): en tarjeta, cada concepto mostraba una línea «Acciones» sin
+// nada al lado, porque en guardado automático esa columna solo tiene «Reintentar» cuando el renglón falló. En tarjeta
+// (contenedor < 80rem) la celda vacía se oculta; en la tabla ancha la celda y su cabecera siguen (estructura y lector).
+// Uso de ejemplo: <TablaEditable apilado="contenedor" …/> → la celda «Acciones» sin botones lleva
+// TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS; con «Reintentar», «Guardar» o «Descartar», no.
+describe("H-13 — la fila «Acciones» vacía no se pinta en la tarjeta", () => {
+  const ocultaEnTarjeta = () => clases(r.TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS);
+  const celdaAcciones = (fila: Element) => fila.querySelector('td[data-label="Acciones"]') as HTMLElement;
+  const props = {
+    etiqueta: "T",
+    filas: [{ id: "a", nombre: "A", nota: "x" }],
+    columnas: [
+      { campo: "nombre" as const, titulo: "Nombre" },
+      { campo: "nota" as const, titulo: "Nota", editable: true },
+    ],
+    clave: (f: { id: string }) => f.id,
+    onGuardar: () => {},
+  };
+
+  it("en la gestión, sin error, la celda «Acciones» de cada concepto se oculta en tarjeta y la cabecera sigue", async () => {
+    const tabla = await montarGestion();
+    expect(ocultaEnTarjeta().length).toBeGreaterThan(0);
+    for (const c of ocultaEnTarjeta()) expect(c.startsWith("@max-[80rem]:")).toBe(true);
+    const filas = within(tabla).getAllByRole("row").filter((f) => f.closest("tbody"));
+    for (const fila of filas) {
+      const celda = celdaAcciones(fila);
+      expect(within(celda).queryAllByRole("button")).toHaveLength(0);
+      for (const c of ocultaEnTarjeta()) expect(celda.classList).toContain(c);
+    }
+    expect(within(tabla).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+  });
+
+  it("con «Reintentar» (renglón en error) la celda «Acciones» se ve en tarjeta", () => {
+    render(<TablaEditable {...props} apilado="contenedor" guardado="automatico" estadoFila={() => "error"} />);
+    const celda = celdaAcciones(screen.getByRole("row", { name: "a" }));
+    expect(within(celda).getByRole("button", { name: "Reintentar a" })).toBeInTheDocument();
+    expect(ocultaEnTarjeta().length).toBeGreaterThan(0);
+    for (const c of ocultaEnTarjeta()) expect(celda.classList).not.toContain(c);
+  });
+
+  it("con «Guardar» y «Descartar» (guardado por botón, fila editada) la celda se ve; sin editar, se oculta", () => {
+    render(<TablaEditable {...props} apilado="contenedor" />);
+    const fila = screen.getByRole("row", { name: "a" });
+    expect(ocultaEnTarjeta().length).toBeGreaterThan(0);
+    for (const c of ocultaEnTarjeta()) expect(celdaAcciones(fila).classList).toContain(c);
+    fireEvent.change(within(fila).getByRole("textbox", { name: "Nota de a" }), { target: { value: "y" } });
+    expect(within(celdaAcciones(fila)).getByRole("button", { name: "Guardar a" })).toBeInTheDocument();
+    for (const c of ocultaEnTarjeta()) expect(celdaAcciones(fila).classList).not.toContain(c);
+  });
+
+  it("aditivo: sin apilado=\"contenedor\" (viewport) la celda «Acciones» no cambia de clases", () => {
+    render(<TablaEditable {...props} />);
+    const celda = celdaAcciones(screen.getByRole("row", { name: "a" }));
+    for (const c of clases(recetas.TABLA_MOVIL_CELL_CLS)) expect(celda.classList).toContain(c);
+    expect(Array.from(celda.classList).some((c) => c.includes("hidden"))).toBe(false);
   });
 });
