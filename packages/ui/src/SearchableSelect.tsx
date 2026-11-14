@@ -263,7 +263,8 @@ export function SearchableSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-card py-1 shadow-[var(--shadow-modal)]"
           >
             {filtradas.length === 0 && (
-              <li className="px-3 py-2 text-xs opacity-60">{noResultsLabel}</li>
+              // HU #14562 · N-1: como el hint (O-6), el token terciario en vez de opacity-60 (AA con la lista abierta).
+              <li className="px-3 py-2 text-xs text-[color:var(--di-text-tertiary)]">{noResultsLabel}</li>
             )}
             {filtradas.map((o, i) => {
               const activa = i === indiceActivo;

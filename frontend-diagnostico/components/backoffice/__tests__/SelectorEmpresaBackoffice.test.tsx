@@ -151,3 +151,17 @@ describe("SelectorEmpresaBackoffice — O-6: contraste del hint de las opciones"
     expect(hint.className).not.toMatch(/\bopacity-/);
   });
 });
+
+// HU #14562 · N-1 (reauditoría O-1–O-7): el texto de lista vacía («Ninguna empresa coincide») tenía `opacity-60`
+// (≈4,13:1 en claro). Mismo tratamiento que O-6: --di-text-tertiary, sin opacidad.
+describe("SelectorEmpresaBackoffice — N-1: contraste del «sin resultados»", () => {
+  it("el texto de lista vacía usa el token de texto terciario y no se apaga con opacidad", async () => {
+    empresasOk();
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Empresa" }), { target: { value: "Empresa inexistente" } });
+    const vacio = within(screen.getByRole("listbox")).getByText("Ninguna empresa coincide");
+    expect(vacio).toHaveClass("text-[color:var(--di-text-tertiary)]");
+    expect(vacio.className).not.toMatch(/\bopacity-/);
+  });
+});
