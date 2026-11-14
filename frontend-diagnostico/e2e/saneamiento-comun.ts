@@ -173,6 +173,8 @@ export async function recorrerConTab(page: Page, pantalla: string, opciones: { p
     const paso = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null;
       if (!el || el === document.body) return null;
+      // El indicador de desarrollo de `next dev` (shadow DOM en <nextjs-portal>) recibe foco; no existe en producción.
+      if (el.tagName === "NEXTJS-PORTAL") return { foco: "nextjs-portal", invisible: false, sinIndicador: false, devtools: true };
       const r = el.getBoundingClientRect();
       const recortado = (n: Element) => {
         const s = getComputedStyle(n);
@@ -192,7 +194,7 @@ export async function recorrerConTab(page: Page, pantalla: string, opciones: { p
         sinIndicador: !(indicador(el) || indicador(el.parentElement) || indicador(el.parentElement?.parentElement ?? null)),
       };
     });
-    if (!paso) continue;
+    if (!paso || "devtools" in paso) continue;
     if (opciones.ambito && !(await opciones.ambito.evaluate((n) => n.contains(document.activeElement)))) break;
     if (paso.foco === primero) break;
     primero ??= paso.foco;
@@ -225,12 +227,24 @@ async function elegirConAnalisis(page: Page): Promise<boolean> {
   return true;
 }
 
-/** Abre el tablero desde la pantalla de resultado («Ver tablero») o espera la redirección. Devuelve el id del lote. */
+const enTablero = (page: Page) => TABLERO.test(new URL(page.url()).pathname);
+
+/**
+ * Llega al tablero desde la pantalla de resultado. No pulsa «Ver tablero»: la app redirige sola a los pocos segundos y
+ * cualquier interacción con la pantalla (foco o clic) cancela esa redirección («Detuvimos la redirección…»), así que el
+ * clic competía con ella y `waitForURL` vencía. Se lee el `href` del enlace y se navega con `page.goto`; si la app ya
+ * redirigió, basta con esperar la URL (`commit`: no hace falta esperar la carga completa). Devuelve el id del lote.
+ */
 async function irAlTablero(page: Page): Promise<string> {
   const verTablero = page.getByRole("link", { name: "Ver tablero" });
-  await Promise.race([verTablero.waitFor({ state: "visible" }), page.waitForURL(TABLERO)]);
-  if (await verTablero.isVisible()) await verTablero.click();
-  await page.waitForURL(TABLERO);
+  await Promise.race([verTablero.waitFor({ state: "visible" }), page.waitForURL(TABLERO, { waitUntil: "commit" })]);
+  if (!enTablero(page)) {
+    const href = await verTablero.getAttribute("href", { timeout: 2_000 }).catch(() => null);
+    // Si la redirección propia gana la carrera, el goto se aborta (ERR_ABORTED): la URL final es la misma.
+    if (href && !enTablero(page)) await page.goto(new URL(href, APP).href, { waitUntil: "commit" }).catch(() => undefined);
+  }
+  await page.waitForURL(TABLERO, { waitUntil: "commit" });
+  await page.waitForLoadState("domcontentloaded");
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }
 

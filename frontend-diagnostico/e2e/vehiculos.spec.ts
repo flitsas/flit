@@ -41,6 +41,10 @@ import {
  *   - texto «Cargando vehículos…» · «Faltan consultas por terminar»
  */
 
+// Sesión única por usuario: dos tests a la vez con el mismo usuario se invalidan la sesión (bucle de reautenticación en
+// «Abriendo Diagnóstico…»). Los tests de este archivo van en serie en un mismo worker (ver cabecera de playwright.config.ts).
+test.describe.configure({ mode: "serial" });
+
 const tabla = (page: Page) => page.getByRole("table", { name: "Vehículos de la compañía" });
 const casilla = (page: Page, id: string) => page.getByRole("checkbox", { name: `Seleccionar la placa ${id}` });
 const filtros = (page: Page) => page.getByRole("group", { name: "Filtros de vehículos" });
@@ -144,7 +148,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
     await test.step("AC22: «Descargar deuda (2)» baja un solo Excel y «Sanear (2)» solicita los dos", async () => {
       await casilla(page, V1).check();
       await casilla(page, V2).check();
-      await expect(page.getByText("2 vehículos seleccionados")).toBeVisible();
+      await expect(page.getByText("2 vehículos seleccionados", { exact: true })).toBeVisible();
       await descargar(page, page.getByRole("button", { name: /^Descargar deuda \(2\)$/ }), /\.xlsx$/i);
       await page.getByRole("button", { name: /^Sanear \(2\)$/ }).click();
       await expect(page.locator(":focus")).toContainText("Se solicitó el saneamiento de 2 vehículos.");
@@ -155,7 +159,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
 
     await test.step("La selección se limpia al cambiar los filtros", async () => {
       await casilla(page, V1).check();
-      await expect(page.getByText("1 vehículo seleccionado")).toBeVisible();
+      await expect(page.getByText("1 vehículo seleccionado", { exact: true })).toBeVisible();
       await filtros(page).getByRole("combobox", { name: "Estado del vehículo" }).selectOption("TERMINADO");
       await expect(casilla(page, V1)).not.toBeChecked();
     });

@@ -61,6 +61,10 @@ import {
  *     · link «Descargar evidencia de <concepto>» · button «/^Avisos/» · region «Avisos» · link «/^Ver lote: /»
  */
 
+// Sesión única por usuario: dos tests a la vez con el mismo usuario se invalidan la sesión (bucle de reautenticación en
+// «Abriendo Diagnóstico…»). Los tests de este archivo van en serie en un mismo worker (ver cabecera de playwright.config.ts).
+test.describe.configure({ mode: "serial" });
+
 const RESUMEN = /\/api\/v1\/diagnostico\/backoffice\/saneamientos\/resumen$/;
 const BANDEJA = /\/api\/v1\/diagnostico\/backoffice\/saneamientos\?/;
 const EXCEL = /\/api\/v1\/diagnostico\/backoffice\/saneamientos\/excel/;
@@ -278,7 +282,14 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
       await modal.getByRole("button", { name: "Agregar", exact: true }).click();
       await expect(modal).toHaveCount(0);
       await expect(bo.getByRole("row", { name: CONCEPTO })).toBeVisible();
-      await expect(bo.getByRole("radiogroup", { name: `Resultado de ${CONCEPTO}` }).locator(":focus")).toHaveCount(1);
+      // Blanda: si el foco no llega, el resto del recorrido AC45 sigue y el mensaje dice dónde quedó el foco.
+      const enfocado = () =>
+        bo.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          const grupo = el?.closest('[role="radiogroup"]')?.getAttribute("aria-label") ?? "";
+          return `${grupo} › ${el?.tagName.toLowerCase()} «${(el?.getAttribute("aria-label") || el?.innerText || "").trim().slice(0, 60)}»`;
+        });
+      await expect.configure({ soft: true }).poll(enfocado, { message: "AC33: el foco va al resultado de la fila nueva", timeout: 5_000 }).toMatch(new RegExp(`^Resultado de ${CONCEPTO} › `));
     });
 
     const fila = () => bo.getByRole("row", { name: CONCEPTO });
@@ -491,7 +502,7 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
       await modal.getByRole("button", { name: "Cerrar como no procede" }).click();
       await expect(modal).toHaveCount(0);
       expect(await estadoBackoffice(bo, sid)).toBe("NO_PROCEDE");
-      await expect(bo.getByText("No procede en la prueba E2E")).toBeVisible();
+      await expect(bo.getByText("No procede en la prueba E2E", { exact: true })).toBeVisible();
       await bo.getByRole("button", { name: "Reabrir" }).click();
       const reabrir = bo.getByRole("dialog", { name: "Reabrir el saneamiento" });
       await reabrir.getByRole("textbox", { name: "Motivo" }).fill("Segunda reapertura de la prueba E2E");
@@ -507,7 +518,7 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
       await modal.getByRole("button", { name: "Anular", exact: true }).click();
       await expect(modal).toHaveCount(0);
       expect(await estadoBackoffice(bo, sid)).toBe("ANULADO");
-      await expect(bo.getByText("Saneamiento anulado")).toBeVisible();
+      await expect(bo.getByText("Saneamiento anulado", { exact: true })).toBeVisible();
       await expect(bo.getByRole("button", { name: "Anular", exact: true })).toHaveCount(0);
       await expect(bo.getByRole("heading", { level: 2, name: "Historial" })).toBeVisible();
       await expect(bo.getByText("FLIT anuló el saneamiento").first()).toBeVisible();

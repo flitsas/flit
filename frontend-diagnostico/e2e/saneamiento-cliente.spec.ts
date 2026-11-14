@@ -53,6 +53,10 @@ import {
  *   - texto «Saneamiento solicitado» · «Saneamiento en curso» · «Vehículo bloqueado» · «Faltan consultas por terminar»
  */
 
+// Sesión única por usuario: dos tests a la vez con el mismo usuario se invalidan la sesión (bucle de reautenticación en
+// «Abriendo Diagnóstico…»). Los tests de este archivo van en serie en un mismo worker (ver cabecera de playwright.config.ts).
+test.describe.configure({ mode: "serial" });
+
 const ruta = (diagnosticoId: string, vehiculoId: string) => new RegExp(`/diagnosticos/${diagnosticoId}/vehiculos/${vehiculoId}/saneamiento$`);
 const bandera = (page: Page, placa: string) => page.getByRole("button", { name: `Solicitar saneamiento de la placa ${placa}` });
 const grilla = (page: Page) => page.getByRole("table", { name: /semáforo de consultas/i });
@@ -118,7 +122,8 @@ test.describe("PS-1 tablero del lote", () => {
       const e = bandera(page, E);
       await expect(e).toHaveAttribute("aria-disabled", "true");
       await expect(e).toHaveAccessibleDescription("Faltan consultas por terminar");
-      await e.click();
+      // aria-disabled: Playwright no lo pulsa por su cuenta; se fuerza el clic para comprobar que no cambia nada.
+      await e.click({ force: true });
       await expect(e).toHaveAttribute("aria-pressed", "false");
       const casilla = page.getByRole("checkbox", { name: `Seleccionar la placa ${E}` });
       if (await casilla.count()) {
@@ -214,7 +219,8 @@ test.describe("PS-1 tablero del lote", () => {
       expect(cuerpo.solicitados).toBe(1);
       expect(cuerpo.omitidos).toEqual([{ vehiculo_id: vidB, motivo: "YA_SOLICITADO" }]);
       const resultado = "Se solicitó el saneamiento de 1 vehículo. 1 se omitió: 1 que ya tenía saneamiento.";
-      await expect(page.getByText(resultado)).toBeVisible();
+      // El aviso se pinta en la barra de selección y se repite en la región `status` que lo anuncia: basta el primero.
+      await expect(page.getByText(resultado).first()).toBeVisible();
       await expect(sanear).toBeFocused();
       await expect(fila(page, C)).toContainText("Saneamiento solicitado");
       await revisarTemas(page, "tablero-resultado-parcial-1280", { captura: "C-3" });
@@ -248,7 +254,7 @@ test.describe("PS-1 tablero del lote", () => {
       }
       await individual.click();
       const modal = page.getByRole("dialog");
-      await expect(modal.getByText("Saneamiento en curso")).toBeVisible();
+      await expect(modal.getByText("Saneamiento en curso", { exact: true })).toBeVisible();
       await expect(modal.getByText("Este vehículo tiene un saneamiento en curso. Puedes crear el trámite igual.")).toBeVisible();
       await revisarTemas(page, "crear-tramite-individual-1280", { captura: "C-4", paginaCompleta: false });
       await page.keyboard.press("Escape");
@@ -353,6 +359,12 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
         test.info().annotations.push({ type: "omitido", description: "Entrada desde el dictamen: la compañía no permite Con Análisis IA" });
         return;
       }
+      // El dictamen del análisis IA se calcula después de que terminan las consultas: hasta entonces la celda dice
+      // «Pendiente» y el panel «no tiene un dictamen vigente». Se recarga hasta que el lote lo muestre.
+      await expect(async () => {
+        await page.reload();
+        await expect(dictamen).toContainText(/Bloqueado/i, { timeout: 5_000 });
+      }).toPass({ timeout: 150_000, intervals: [3_000] });
       await dictamen.click();
       const panelDictamen = page.getByRole("dialog", { name: `Dictamen · ${F}` });
       await expect(panelDictamen.getByText("Vehículo bloqueado")).toBeVisible();
