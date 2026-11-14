@@ -8,6 +8,7 @@ using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Saneamiento;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Diagnosticos;
 using Flit.Diagnostico.Tests.Plataforma;
@@ -239,5 +240,43 @@ public sealed class ConsultaDeudaTests
 
         var sinPermiso = api.Token(empresa: empresas.A.Id, permisos: [Permisos.ConfiguracionVer], roles: ["usuario_diagnostico"]);
         (await api.Cliente(sinPermiso).GetAsync(DeudaDePrueba.RutaPanel(deA.Id, deA.Vehiculos.Single().Id), ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // AC36 — el panel trae el saneamiento no anulado con su estado (y sus renglones para el PDF y el Excel); con el saneamiento ANULADO
+    // o sin saneamiento, null. Lo que no es del JSON (renglones, evidencia) no sale en él.
+    [Fact]
+    public async Task Http_panel_trae_saneamiento_vigente_y_null_si_anulado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await SaneamientoDePrueba.LoteAsync(empresa, ["TST761", "TST762", "TST763"], ct);
+        var enGestion = lote.Vehiculos.Single(v => v.Placa == "TST761").Id;
+        var anulado = lote.Vehiculos.Single(v => v.Placa == "TST762").Id;
+        var saneamiento = await SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, enGestion, EstadoSaneamiento.EnGestion, ct);
+        await SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, anulado, EstadoSaneamiento.Anulado, ct);
+        await using (var db = empresa.Db())
+        {
+            db.Add(new RenglonSaneamiento
+            {
+                TenantId = empresa.Id, SaneamientoId = saneamiento.Id, Fuente = FuenteSaneamiento.SimitVehiculo, Hallazgo = HallazgoSaneamiento.Deuda,
+                Automatico = true, Resultado = ResultadoRenglonSaneamiento.Pendiente, Nota = "Nota TST761", CreadoPor = Guid.NewGuid(), CreadoEn = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var cliente = api.Cliente(DeudaDePrueba.TokenDescargar(api, empresa.Id));
+        var conSaneamiento = await DeudaDePrueba.JsonAsync(await cliente.GetAsync(DeudaDePrueba.RutaPanel(lote.Id, enGestion), ct), ct);
+        conSaneamiento.GetProperty("saneamiento").GetProperty("estado").GetString().Should().Be("EN_GESTION");
+        DeudaDePrueba.Claves(conSaneamiento.GetProperty("saneamiento")).Should().Equal(["estado"]);
+        (await DeudaDePrueba.JsonAsync(await cliente.GetAsync(DeudaDePrueba.RutaPanel(lote.Id, anulado), ct), ct))
+            .GetProperty("saneamiento").ValueKind.Should().Be(JsonValueKind.Null, "anulado no cuenta");
+        (await DeudaDePrueba.JsonAsync(await cliente.GetAsync(DeudaDePrueba.RutaPanel(lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST763").Id), ct), ct))
+            .GetProperty("saneamiento").ValueKind.Should().Be(JsonValueKind.Null);
+
+        var excel = await cliente.GetAsync(DeudaDePrueba.RutaExcel(lote.Id, enGestion), ct);
+        var libro = Reportes.ExcelDePrueba.Leer(await excel.Content.ReadAsByteArrayAsync(ct));
+        libro.Hojas["Saneamiento"].Skip(1).Should().ContainSingle(f => f.Contains("En gestión") && f.Contains("SIMIT_VEHICULO") && f.Contains("Nota TST761"));
     }
 }

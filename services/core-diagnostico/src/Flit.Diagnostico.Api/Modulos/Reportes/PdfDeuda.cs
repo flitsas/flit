@@ -59,7 +59,7 @@ internal static class PdfDeuda
         ["SOLICITADO"] = "Solicitado",
         ["EN_GESTION"] = "En gestión",
         ["SANEADO"] = "Saneado",
-        ["NO_SANEABLE"] = "No saneable",
+        ["NO_PROCEDE"] = "No procede",
         ["ANULADO"] = "Anulado",
     };
 

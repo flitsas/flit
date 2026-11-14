@@ -1,4 +1,3 @@
-using System.Globalization;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
@@ -12,6 +11,7 @@ using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Dictamen;
+using Flit.Diagnostico.Domain.Saneamiento;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Saneamiento;
@@ -103,10 +103,36 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
                 .SingleOrDefaultAsync(d => d.VehiculoId == vehiculoId && d.TenantId == tenant && d.Vigente, ct).ConfigureAwait(false)
             : null;
         var hoy = DateOnly.FromDateTime(reloj.GetUtcNow().ToOffset(VigenciaDelDia.OffsetColombia).DateTime);
-        return Armar(vehiculoId, contenido, cabecera.Modo, dictamen, null, hoy, cabecera.TipoTramiteCodigo) with
+        var saneamiento = await SaneamientoAsync(tenant, vehiculoId, ct).ConfigureAwait(false);
+        return Armar(vehiculoId, contenido, cabecera.Modo, dictamen, saneamiento, hoy, cabecera.TipoTramiteCodigo) with
         {
             DiagnosticoNombre = cabecera.Nombre,
             DiagnosticoCreadoEn = cabecera.CreadoEn,
+        };
+    }
+
+    /// <summary>
+    /// El saneamiento no anulado del vehículo con sus renglones vigentes (sin la referencia, el nombre ni el sha de la evidencia: solo si
+    /// la tiene); null si no hay.
+    /// </summary>
+    private async Task<SaneamientoDeudaDto?> SaneamientoAsync(Guid tenant, Guid vehiculoId, CancellationToken ct)
+    {
+        var vigente = await db.Set<Saneamiento>().AsNoTracking()
+            .Where(s => s.TenantId == tenant && s.VehiculoId == vehiculoId && s.Estado != EstadoSaneamiento.Anulado)
+            .Select(s => new { s.Id, s.Estado })
+            .SingleOrDefaultAsync(ct).ConfigureAwait(false);
+        if (vigente is null)
+            return null;
+        var renglones = await db.Set<RenglonSaneamiento>().AsNoTracking()
+            .Where(r => r.TenantId == tenant && r.SaneamientoId == vigente.Id && r.QuitadoEn == null)
+            .OrderBy(r => r.CreadoEn).ThenBy(r => r.Id)
+            .Select(r => new { r.Fuente, r.Hallazgo, r.Resultado, r.Descripcion, r.Nota, ConEvidencia = r.EvidenciaReferencia != null })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return new SaneamientoDeudaDto(CodigosDeEnum.Codigo(vigente.Estado))
+        {
+            Renglones = [.. renglones.Select(r => new RenglonDeudaDto(
+                CodigosDeEnum.Codigo(r.Fuente), r.Hallazgo is { } h ? CodigosDeEnum.Codigo(h) : string.Empty, CodigosDeEnum.Codigo(r.Resultado),
+                r.Descripcion, r.Nota, r.ConEvidencia))],
         };
     }
 
@@ -134,7 +160,7 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
         if (De(Fuente.SimitLocatario) is { } locatario)
         {
             // C4: en leasing sin documento del locatario la consulta exigida no se pudo hacer.
-            if (runt is { EsLeasing: true, HayDocumentoLocatario: false })
+            if (PredicadosDictamen.SimitLocatarioSinVerificar(runt))
                 fuentes.Add(new FuenteDeudaDto(FuentesDeuda.SimitLocatario, EstadosDeuda.SinVerificar, locatario.DatoObtenidoEn, locatario.MotivoNa));
             else
                 fuentes.AddRange(SimitDePersonas(FuentesDeuda.SimitLocatario, locatario, tipo, hoy));
@@ -200,7 +226,7 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
     {
         var hechos = LectorHechosDictamen.Leer(new PedidoLectura(
             tipo, hoy, null, null, new LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>(EstadoCelda.Completado, [simit]), null, null, null, null, null)).SimitVehiculo;
-        var deuda = hechos is not null && (TieneMultas(hechos) || hechos.Acuerdos.Any(a => a.SaldoPendientePesos != 0));
+        var deuda = hechos is not null && (PredicadosDictamen.TieneMultas(hechos) || PredicadosDictamen.TieneAcuerdoConSaldo(hechos));
         return new FuenteDeudaDto(
             fuente, deuda ? EstadosDeuda.ConDeuda : EstadosDeuda.SinHallazgo, consultado,
             Persona: persona,
@@ -218,7 +244,7 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
             return new FuenteDeudaDto(FuentesDeuda.Impuesto, EstadosDeuda.SinVerificar, seccion.DatoObtenidoEn);
         var hechos = LectorHechosDictamen.Leer(new PedidoLectura(
             tipo, hoy, null, null, null, null, null, null, null, new LecturaCelda<ResultadoImpuestoDetalle>(EstadoCelda.Completado, impuesto)));
-        var deuda = hechos.ImpuestoTieneDeuda || hechos.ImpuestoMontoPesos is > 0;
+        var deuda = PredicadosDictamen.ImpuestoConDeuda(hechos);
         return new FuenteDeudaDto(
             FuentesDeuda.Impuesto, deuda ? EstadosDeuda.ConDeuda : EstadosDeuda.SinHallazgo, seccion.DatoObtenidoEn,
             MontoTotal: impuesto.MontoTotal,
@@ -231,9 +257,9 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
         if (runt is null || detalle is null)
             return SinRunt(FuentesDeuda.Soat, runtSeccion);
         var vence = (detalle.Soat.FirstOrDefault(s => Cubre(s.Estado)) ?? (detalle.Soat.Count > 0 ? detalle.Soat[0] : null))?.FechaVencimiento;
-        var estado = Cubre(runt.EstadosSoat) ? EstadosDeuda.SinHallazgo
-            : runt.Clase == ClaseVehiculoDictamen.Remolque ? EstadosDeuda.NoAplica
-            : EstadosDeuda.NoVigente;
+        var estado = PredicadosDictamen.SoatNoVigente(runt) ? EstadosDeuda.NoVigente
+            : !PredicadosDictamen.Cubre(runt.EstadosSoat) ? EstadosDeuda.NoAplica
+            : EstadosDeuda.SinHallazgo;
         return new FuenteDeudaDto(FuentesDeuda.Soat, estado, runtSeccion.DatoObtenidoEn, Vence: vence);
     }
 
@@ -243,13 +269,9 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
         if (runt is null || detalle is null)
             return SinRunt(FuentesDeuda.Rtm, runtSeccion);
         var vence = (detalle.Rtm.FirstOrDefault(r => Cubre(r.Estado)) ?? (detalle.Rtm.Count > 0 ? detalle.Rtm[0] : null))?.FechaVigencia;
-        string estado;
-        if (ClasificadorVehiculoDictamen.AniosPrimeraRtm(runt.Clase, runt.Servicio) is not { } anios)
-            estado = EstadosDeuda.NoAplica;
-        else if (runt.FechaMatricula is { } matricula && hoy < matricula.AddYears(anios))
-            estado = EstadosDeuda.SinHallazgo;
-        else
-            estado = Cubre(runt.EstadosRtm) ? EstadosDeuda.SinHallazgo : EstadosDeuda.NoVigente;
+        var estado = ClasificadorVehiculoDictamen.AniosPrimeraRtm(runt.Clase, runt.Servicio) is null ? EstadosDeuda.NoAplica
+            : PredicadosDictamen.RtmNoVigente(runt, hoy) ? EstadosDeuda.NoVigente
+            : EstadosDeuda.SinHallazgo;
         return new FuenteDeudaDto(FuentesDeuda.Rtm, estado, runtSeccion.DatoObtenidoEn, Vence: vence);
     }
 
@@ -287,13 +309,8 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
         return new VehiculoRunt(detalle.Placa, detalle.Vin, detalle.Servicio, detalle.Clase, detalle.Organismo, propietarios, locatarios, string.Empty, null);
     }
 
-    // Predicados de deuda del evaluador (EvaluadorDictamen.TieneMultas y Cubre), sin cambio de comportamiento.
-    private static bool TieneMultas(HechosSimit simit) => simit.CantidadComparendos > 0 || simit.PazYSalvo == false;
-
-    private static bool Cubre(IReadOnlyList<string?> estados) => estados.Any(Cubre);
-
-    private static bool Cubre(string? estado) =>
-        (string.IsNullOrWhiteSpace(estado) ? string.Empty : estado.Trim().Replace('_', ' ').ToUpper(CultureInfo.InvariantCulture)) is "VIGENTE" or "NO REQUIERE";
+    /// <summary>La póliza o revisión cubre (mismo criterio de <see cref="PredicadosDictamen.Cubre"/>), para elegir la fecha que se muestra.</summary>
+    private static bool Cubre(string? estado) => PredicadosDictamen.Cubre([estado]);
 }
 
 /// <summary>Los paneles del Excel de varias placas y cuántos ids pedidos se omitieron (no visibles, inexistentes o sin terminar).</summary>

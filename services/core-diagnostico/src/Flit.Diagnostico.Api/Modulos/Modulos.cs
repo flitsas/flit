@@ -162,6 +162,7 @@ public static class Modulos
         services.AddScoped<Reportes.ServicioEvidencias>();
         services.AddScoped<Reportes.LectorContenidoReporte>();
         services.AddScoped<Saneamiento.ConsultaDeuda>();
+        services.AddScoped<Vehiculos.ListadoVehiculos>();
         // HU #13848: PDF corporativo del vehículo (contenido de F07-H2 + huella y registro de F07-H1).
         services.AddScoped<Reportes.DescargaPdfVehiculo>();
         // HU #13849: Excel del lote (mismo contenido de F07-H2, huella del lote y registro de F07-H1).

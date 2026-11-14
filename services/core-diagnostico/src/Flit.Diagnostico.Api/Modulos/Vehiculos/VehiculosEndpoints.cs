@@ -25,11 +25,18 @@ internal static partial class VehiculosEndpoints
     public const string RutaValidarFilas = DiagnosticosEndpoints.Ruta + "/{id:guid}/carga/validar-filas";
     public const string RutaVehiculos = DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos";
 
+    /// <summary>Grilla de placas de la compañía (plan §6.6, HU #14576 AC39): <see cref="ListadoVehiculos"/>.</summary>
+    public const string RutaListado = "/vehiculos";
+
     public static void Map(RouteGroupBuilder api)
     {
         api.MapPost(RutaValidarFilas, ValidarFilas).RequirePermiso(Permisos.DiagnosticosCrear).WithName("ValidarFilasCargaDiagnostico");
+        api.MapGet(RutaListado, Listar).RequirePermiso(Permisos.DiagnosticosVer).WithName("ListarVehiculos");
         api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).DisableAntiforgery().WithName("ConfirmarVehiculosDiagnostico");
     }
+
+    private static async Task<IResult> Listar(HttpRequest peticion, ListadoVehiculos listado, CancellationToken ct) =>
+        Results.Ok(await listado.ListarAsync(FiltroVehiculos.Leer(peticion.Query), ct).ConfigureAwait(false));
 
     private static async Task<IResult> ValidarFilas(
         Guid id, FilasAValidarDto cuerpo, DiagnosticoDb db, UsuarioActual usuario, ILoggerFactory logs, CancellationToken ct)
