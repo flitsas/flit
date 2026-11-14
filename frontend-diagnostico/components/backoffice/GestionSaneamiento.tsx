@@ -7,6 +7,7 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { NotificacionPersistente } from "@flit/ui/NotificacionPersistente";
 import { HistorialSaneamiento } from "@/components/backoffice/HistorialSaneamiento";
+import { useSesion } from "@/components/DiagnosticoShell";
 import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { rotuloEmpresa, useNombresEmpresas } from "@/lib/backoffice/useNombresEmpresas";
@@ -34,6 +35,7 @@ export interface GestionSaneamientoProps {
 
 export function GestionSaneamiento({ sid, empresa }: GestionSaneamientoProps) {
   const nombres = useNombresEmpresas();
+  const { sesion } = useSesion();
   const g = useGestionSaneamiento(sid, empresa);
   const { carga, san, deuda } = g;
 
@@ -81,7 +83,7 @@ export function GestionSaneamiento({ sid, empresa }: GestionSaneamientoProps) {
         <ColumnaGestion g={g} san={san} />
       </div>
       <section className={TARJETA_CLS} aria-label="Pie del saneamiento">
-        <HistorialSaneamiento historial={san.historial} />
+        <HistorialSaneamiento historial={san.historial} usuarioSesionId={sesion?.usuario.id} />
       </section>
 
       <ModalesGestion g={g} />

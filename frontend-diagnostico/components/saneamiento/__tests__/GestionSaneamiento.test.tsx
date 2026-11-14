@@ -619,7 +619,7 @@ describe("AC35 — solo lectura y reapertura", () => {
 });
 
 describe("AC36 — historial completo", () => {
-  it("todos los eventos, el más reciente primero, con fecha, estado anterior y nuevo, fuente, motivo e id de usuario", async () => {
+  it("todos los eventos, el más reciente primero, con fecha, estado anterior y nuevo, fuente, motivo y actor sin id", async () => {
     api(
       saneamientoBo({
         historial: [
@@ -641,13 +641,29 @@ describe("AC36 — historial completo", () => {
     expect(items[0]).toHaveTextContent("FLIT reabrió el saneamiento");
     expect(items[0]).toHaveTextContent("Saneamiento no procede → En saneamiento");
     expect(items[0]).toHaveTextContent("Motivo: Llegó el levantamiento.");
-    expect(items[0]).toHaveTextContent("FLIT · usuario a1b2c3d4");
+    // E8 (D-42/UA-8): USUARIO_FLIT no es el de la sesión; nunca se muestra un trozo del id.
+    expect(items[0]).toHaveTextContent("Otro operador de FLIT");
+    expect(lista).not.toHaveTextContent("a1b2c3d4");
     expect(items[1]).toHaveTextContent("En saneamiento → Saneamiento no procede");
     expect(items[2]).toHaveTextContent("Se editó la observación");
     expect(items[3]).toHaveTextContent("Se actualizó el concepto SOAT");
     expect(items[4]).toHaveTextContent("Saneamiento solicitado → En saneamiento");
     expect(items[5]).toHaveTextContent("Se solicitó el saneamiento");
-    expect(items[5]).toHaveTextContent("Compañía");
+    expect(items[5]).toHaveTextContent("Usuario de la compañía");
+  });
+
+  it("E8 (D-42/UA-8): el evento de FLIT hecho por el usuario de la sesión dice «Tú», sin el id", async () => {
+    const yo = sesion(h.capacidades).usuario.id;
+    api(
+      saneamientoBo({
+        historial: [{ evento: "TOMADO", ocurrido_en: "2026-11-04T15:00:00+00:00", actor: "FLIT", fuente: null, motivo: null, usuario_id: yo }],
+      }),
+    );
+    montar();
+    await listo();
+    const [item] = within(screen.getByRole("list", { name: "Historial" })).getAllByRole("listitem");
+    expect(item.lastElementChild).toHaveTextContent(/^Tú$/);
+    expect(item).not.toHaveTextContent(yo.slice(0, 8));
   });
 
   it("UA-11: un evento de FLIT sin usuario_id dice solo «FLIT», sin «· usuario »", async () => {
