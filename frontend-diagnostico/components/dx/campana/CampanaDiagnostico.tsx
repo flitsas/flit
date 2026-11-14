@@ -143,7 +143,9 @@ export function CampanaDiagnostico() {
   }
 
   return (
-    <div ref={contenedorRef} className="relative">
+    // HU #14562 · D1: `suite-ancla` + `suite-panel-barra` de @flit/shell anclan el panel al botón y, a ≤ 640 px, a la barra
+    // con 8 px a cada lado (si no, a 360 px el panel se corta por la izquierda).
+    <div ref={contenedorRef} className="suite-ancla">
       <button
         ref={botonRef}
         type="button"
@@ -182,7 +184,7 @@ export function CampanaDiagnostico() {
             if (e.key === "Escape") cerrarPanel();
           }}
           // HU #14562 · m-1: menú propio de Diagnóstico, con su radio, su sombra de dock y su motion (por opacidad).
-          className="absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2rem))] rounded-[var(--dx-radio)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--dx-sombra-dock)] opacity-100 transition-opacity duration-[var(--dx-motion-base)] starting:opacity-0 motion-reduce:transition-none"
+          className="suite-panel-barra rounded-[var(--dx-radio)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--dx-sombra-dock)] opacity-100 transition-opacity duration-[var(--dx-motion-base)] starting:opacity-0 motion-reduce:transition-none"
         >
           <div className="flex items-center justify-between gap-2 border-b border-[color:var(--di-divider)] px-4 py-3">
             <h2 className="text-sm font-semibold text-[color:var(--di-heading)]">Avisos</h2>
