@@ -36,7 +36,7 @@ import {
   FILA_TABLA_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
-import { listarLotesBackoffice, type DiagnosticoBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
+import { listarLotesBackoffice, mensajeErrorBackoffice, type DiagnosticoBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { SelectorEmpresaBackoffice } from "./SelectorEmpresaBackoffice";
@@ -194,7 +194,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
           </button>
         }
       >
-        {carga.error instanceof Error ? carga.error.message : "Intenta de nuevo en un momento."}
+        {mensajeErrorBackoffice(carga.error, "Intenta de nuevo en un momento.")}
       </InlineAlert>
     );
   } else if (carga.lista.diagnosticos.length === 0) {
