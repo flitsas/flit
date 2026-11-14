@@ -20,13 +20,14 @@ internal sealed record FiltroBandeja(
     IReadOnlySet<EstadoSaneamiento> Estados, Guid? Empresa, string? Placa, DateTimeOffset? Desde, DateTimeOffset? Hasta, int Pagina, int Tamano)
 {
     public const int TamanoPorDefecto = 25;
-    public const int TamanoMaximo = 200;
+    /// <summary>UA-2: 1..100 (el selector del kit ofrece 10, 20, 30 y 50; 25 por defecto).</summary>
+    public const int TamanoMaximo = 100;
     public const int DesplazamientoMaximo = 10_000;
     public const int PlacaMaxima = 20;
 
     /// <summary>
     /// Lee la consulta: <c>estado</c> repetible de la lista cerrada, <c>empresa</c> uuid, <c>placa</c> normalizada como el identificador
-    /// (prefijo, hasta 20), <c>desde</c>/<c>hasta</c> AAAA-MM-DD, <c>pagina</c> ≥ 1, <c>tamano</c> 1..200 y desplazamiento ≤ 10 000. Todo
+    /// (prefijo, hasta 20), <c>desde</c>/<c>hasta</c> AAAA-MM-DD, <c>pagina</c> ≥ 1, <c>tamano</c> 1..100 y desplazamiento ≤ 10 000. Todo
     /// fuera de rango es 400 (nunca se recorta en silencio) y un parámetro único repetido también.
     /// </summary>
     public static FiltroBandeja Leer(IQueryCollection query)

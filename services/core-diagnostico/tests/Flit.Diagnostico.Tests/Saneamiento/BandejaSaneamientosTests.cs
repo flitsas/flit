@@ -48,8 +48,8 @@ public sealed class BandejaSaneamientosTests
         await GestionDePrueba.RenglonAsync(b, sb.Id, FuenteSaneamiento.Soat, ResultadoRenglonSaneamiento.Saneado, ct);
         using var cliente = api.Cliente(GestionDePrueba.TokenFlit(api));
 
-        var todos = await cliente.GetAsync($"{GestionDePrueba.Base}?tamano=200", ct);
-        var dosEstados = await cliente.GetAsync($"{GestionDePrueba.Base}?estado=SOLICITADO&estado=EN_GESTION&tamano=200", ct);
+        var todos = await cliente.GetAsync($"{GestionDePrueba.Base}?tamano=100", ct);
+        var dosEstados = await cliente.GetAsync($"{GestionDePrueba.Base}?estado=SOLICITADO&estado=EN_GESTION&tamano=100", ct);
         var deB = await cliente.GetAsync($"{GestionDePrueba.Base}?empresa={b.Id}", ct);
         var porPlaca = await cliente.GetAsync($"{GestionDePrueba.Base}?placa=sba10", ct);
         var fuera = await cliente.GetAsync($"{GestionDePrueba.Base}?desde=2020-01-01&hasta=2020-01-02", ct);
@@ -75,6 +75,8 @@ public sealed class BandejaSaneamientosTests
         (await GestionDePrueba.JsonAsync(porPlaca, ct)).GetProperty("total").GetInt32().Should().Be(3, "la placa se normaliza y busca por prefijo");
         (await GestionDePrueba.JsonAsync(fuera, ct)).GetProperty("total").GetInt32().Should().Be(0);
         (await GestionDePrueba.JsonAsync(porDefecto, ct)).GetProperty("tamano").GetInt32().Should().Be(25);
+        foreach (var tamano in new[] { 10, 20, 30, 50 })
+            (await cliente.GetAsync($"{GestionDePrueba.Base}?tamano={tamano}", ct)).StatusCode.Should().Be(HttpStatusCode.OK, $"UA-2: tamano={tamano} del selector del kit");
     }
 
     // SP-10 — placa sin letras ni dígitos, estado fuera de lista, tamaño fuera de rango, desplazamiento grande, rango invertido o
@@ -82,7 +84,8 @@ public sealed class BandejaSaneamientosTests
     [Theory]
     [InlineData("placa=%25", "FILTRO_INVALIDO")]
     [InlineData("estado=XYZ", "FILTRO_INVALIDO")]
-    [InlineData("tamano=201", "PAGINACION_INVALIDA")]
+    [InlineData("tamano=101", "PAGINACION_INVALIDA")]
+    [InlineData("tamano=0", "PAGINACION_INVALIDA")]
     [InlineData("pagina=100000", "PAGINACION_INVALIDA")]
     [InlineData("desde=2026-11-10&hasta=2026-11-01", "RANGO_INVALIDO")]
     [InlineData("empresa=no-es-uuid", "FILTRO_INVALIDO")]
@@ -115,7 +118,7 @@ public sealed class BandejaSaneamientosTests
         var flit = Guid.NewGuid();
         using var cliente = api.Cliente(GestionDePrueba.TokenFlit(api, usuario: flit));
 
-        (await cliente.GetAsync($"{GestionDePrueba.Base}?tamano=200", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await cliente.GetAsync($"{GestionDePrueba.Base}?tamano=100", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
         var lecturasPagina = await LecturasAsync(api, flit, ct);
         (await cliente.GetAsync($"{GestionDePrueba.Base}/resumen", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
         var trasResumen = await LecturasAsync(api, flit, ct);
