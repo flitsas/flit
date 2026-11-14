@@ -21,7 +21,7 @@ namespace Flit.Diagnostico.Tests.Reportes;
 /// HU #14576 AC38 (plan §6.5, SP-9, SP-11, SP-18, SP-21) — Excel de deuda de un vehículo (<c>GET …/deuda/excel</c>) y de varias
 /// placas (<c>POST /vehiculos/deuda/excel</c>): hojas Resumen, SIMIT, Impuesto, SOAT y RTM, Saneamiento; SIMIT como texto e
 /// impuesto como número; texto que parece fórmula queda literal y el libro no tiene ningún <c>&lt;f&gt;</c> ni vínculos;
-/// documentos enmascarados. Se lee con <see cref="ExcelDePrueba"/> y el XML crudo del paquete.
+/// documento de la persona del SIMIT completo, el mismo del panel (S18, decisión E9). Se lee con <see cref="ExcelDePrueba"/> y el XML crudo del paquete.
 /// </summary>
 /// <example>
 /// <code>
@@ -60,7 +60,7 @@ public sealed partial class ExcelDeudaTests
         nombre.Should().NotContain(" ");
     }
 
-    // AC38 — una placa: las cinco hojas en orden, sin columna Placa; SIMIT como texto, impuesto como número; documento enmascarado.
+    // AC38 — una placa: las cinco hojas en orden, sin columna Placa; SIMIT como texto, impuesto como número; documento completo.
     [Fact]
     public void Libro_de_una_placa_trae_las_cinco_hojas_con_tipos_correctos()
     {
@@ -77,8 +77,11 @@ public sealed partial class ExcelDeudaTests
         simit.Skip(1).Should().Contain(f => f.Contains("450000.00"));
         CeldaInline(bytes, "SIMIT", "450000.00").Should().BeTrue("el valor del SIMIT es texto en línea, nunca número (SP-21)");
         CeldaNumero(bytes, "Impuesto", "1250000").Should().BeTrue("el impuesto es número");
-        libro.Texto.Should().Contain("****3040");
-        libro.Texto.Should().NotContain(DeudaDePrueba.DocumentoPropietario, "ninguna celda trae el documento completo (SP-11)");
+        libro.Texto.Should().NotContain("****3040", "el Excel de deuda no enmascara el documento (S18, decisión E9)");
+        libro.Hojas["Resumen"].Single(f => f[0] == "SIMIT_PROPIETARIO")[1].Should().Be(DeudaDePrueba.DocumentoPropietario,
+            "la celda Documento trae el número completo, el mismo del panel de deuda");
+        simit.Skip(1).Where(f => f[0] == "SIMIT_PROPIETARIO").Select(f => f[1]).Should().HaveCount(2)
+            .And.OnlyContain(d => d == DeudaDePrueba.DocumentoPropietario, "comparendo y acuerdo de pago llevan el documento completo");
         libro.Hojas["Saneamiento"].Skip(1).Should().Contain(f => f.Contains("Nota de prueba"));
         libro.Hojas["Resumen"].Skip(1).Select(f => f[0]).Should().Contain(["Dictamen", "SIMIT_PROPIETARIO", "IMPUESTO", "SOAT", "RTM"]);
     }

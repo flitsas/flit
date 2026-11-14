@@ -31,7 +31,7 @@ public sealed class PdfDeudaTests
         new DictamenDeudaDto("BLOQUEADO", 2, [new MotivoDeudaDto("SIMIT_PROPIETARIO", "BLOQUEA", "El propietario tiene comparendos.")]),
         [
             new FuenteDeudaDto("SIMIT_PROPIETARIO", EstadosDeuda.ConDeuda, DeudaDePrueba.Dato,
-                Persona: new PersonaDeudaDto("C", DeudaDePrueba.DocumentoPropietario, "****3040"), PazYSalvo: false,
+                Persona: new PersonaDeudaDto("C", DeudaDePrueba.DocumentoPropietario), PazYSalvo: false,
                 Comparendos: [new ComparendoDeudaDto("TST-C-0731", "2026-09-30", "450000.00", "PENDIENTE")], ComparendosTruncados: false,
                 AcuerdosPago: [new AcuerdoDeudaDto("VIGENTE", "300000")]),
             new FuenteDeudaDto("IMPUESTO", EstadosDeuda.ConDeuda, DeudaDePrueba.Dato, MontoTotal: 1250000,
