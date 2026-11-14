@@ -51,7 +51,6 @@ import {
 } from "@/lib/saneamiento/api";
 import { ROTULO_MOTIVO_NO_ELEGIBLE } from "@/lib/saneamiento/estados";
 import {
-  TAMANOS_VEHICULOS,
   filtrosVehiculosDesdeUrl,
   hayFiltrosVehiculos,
   listarVehiculos,
@@ -611,31 +610,19 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
           </table>
         </div>
         <p className="text-sm text-muted-foreground">{contarVehiculos(datos.total)}</p>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          {/* D-105: el selector del kit ofrece su lista estándar; la grilla de placas admite 25, 50 o 100 (spec-ui §4.3). */}
-          <label className="flex items-center gap-2 text-[0.8125rem] text-muted-foreground">
-            Filas por página
-            <select value={datos.tamano} onChange={(e) => aplicar({ tamano: Number(e.target.value), pagina: 1 })} className={SELECT_TAMANO_CLS}>
-              {TAMANOS_VEHICULOS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Pagination
-            className="flex-1"
-            page={datos.pagina}
-            pageSize={datos.tamano}
-            totalCount={datos.total}
-            onPageChange={(pagina) => {
-              focoTablaPendiente.current = true;
-              aplicar({ pagina });
-            }}
-            ariaLabel="Paginación de vehículos"
-            noun="vehículos"
-          />
-        </div>
+        {/* UA-2 (rechaza D-105): el pie estándar del kit, con «Filas por página» de TAMANOS_DE_PAGINA. */}
+        <Pagination
+          page={datos.pagina}
+          pageSize={datos.tamano}
+          totalCount={datos.total}
+          onPageChange={(pagina) => {
+            focoTablaPendiente.current = true;
+            aplicar({ pagina });
+          }}
+          onPageSizeChange={(tamano) => aplicar({ tamano, pagina: 1 })}
+          ariaLabel="Paginación de vehículos"
+          noun="vehículos"
+        />
       </div>
     );
   }

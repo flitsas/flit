@@ -73,7 +73,7 @@ describe("AC24 — la ruta solo para FLIT con gestionarSaneamiento (negativo)", 
     const api = conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])) });
     render(await PaginaSaneamientos({ searchParams: Promise.resolve({ estado: ["SOLICITADO", "EN_GESTION"], placa: "tst" }) }));
     await tabla();
-    expect(consultas(api)[0]).toBe("estado=SOLICITADO&estado=EN_GESTION&placa=TST&pagina=1&tamano=25");
+    expect(consultas(api)[0]).toBe("estado=SOLICITADO&estado=EN_GESTION&placa=TST&pagina=1&tamano=10");
   });
 });
 
@@ -107,7 +107,7 @@ describe("AC26 / AC40 — cuatro estados de la bandeja", () => {
     expect(await screen.findByRole("heading", { name: "Ningún saneamiento coincide" })).toBeInTheDocument();
     const vacio = screen.getByRole("heading", { name: "Ningún saneamiento coincide" }).closest("div")!;
     fireEvent.click(within(vacio).getByRole("button", { name: "Limpiar filtros" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=10"));
     expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos", { scroll: false });
   });
 
@@ -134,7 +134,7 @@ describe("AC26 — tabla y filtros", () => {
     });
     montar();
     const t = await tabla();
-    expect(consultas(api)[0]).toBe("estado=SOLICITADO&pagina=1&tamano=25");
+    expect(consultas(api)[0]).toBe("estado=SOLICITADO&pagina=1&tamano=10");
     const cabeceras = within(t).getAllByRole("columnheader").map((c) => c.textContent?.trim());
     expect(cabeceras).toEqual(
       expect.arrayContaining(["Placa", "Compañía", "Diagnóstico", "Modo", "Dictamen", "Estado", "Solicitado", "Tomado", "Cerrado", "Pendientes"]),
@@ -162,7 +162,7 @@ describe("AC26 — tabla y filtros", () => {
     expect(within(grupo).getByRole("button", { name: "Saneamiento solicitado" })).toHaveAttribute("aria-pressed", "true");
     expect(within(grupo).getByRole("button", { name: "Anulado" })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(within(grupo).getByRole("button", { name: "En saneamiento" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&estado=EN_GESTION&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&estado=EN_GESTION&pagina=1&tamano=10"));
     expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos?estado=SOLICITADO&estado=EN_GESTION", { scroll: false });
   });
 
@@ -171,7 +171,7 @@ describe("AC26 — tabla y filtros", () => {
     montar();
     await tabla();
     fireEvent.click(screen.getByRole("button", { name: "Saneamiento solicitado" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("pagina=1&tamano=10"));
     expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos?estado=", { scroll: false });
   });
 
@@ -181,9 +181,9 @@ describe("AC26 — tabla y filtros", () => {
     await tabla();
     fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "tst001" } });
     fireEvent.submit(screen.getByRole("search", { name: "Filtros de la bandeja" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&pagina=1&tamano=10"));
     fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-11-01" } });
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&desde=2026-11-01&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&placa=TST001&desde=2026-11-01&pagina=1&tamano=10"));
     fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-11-30" } });
     await waitFor(() => expect(consultas(api).at(-1)).toContain("hasta=2026-11-30"));
   });
@@ -195,9 +195,9 @@ describe("AC26 — tabla y filtros", () => {
     const selector = await screen.findByRole("combobox", { name: "Empresa" });
     fireEvent.change(selector, { target: { value: "Transportes" } });
     fireEvent.click(screen.getByRole("option", { name: /Transportes A SAS/ }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe(`estado=SOLICITADO&empresa=${EMPRESA_A}&pagina=1&tamano=25`));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe(`estado=SOLICITADO&empresa=${EMPRESA_A}&pagina=1&tamano=10`));
     fireEvent.click(screen.getByRole("button", { name: "Todas las compañías" }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=10"));
   });
 
   it("paginación en el servidor: la página 2 pide pagina=2", async () => {
@@ -206,7 +206,7 @@ describe("AC26 — tabla y filtros", () => {
     await tabla();
     expect(screen.getByText("60 saneamientos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /página 2/i }));
-    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=2&tamano=25"));
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=2&tamano=10"));
   });
 });
 

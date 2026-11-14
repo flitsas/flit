@@ -366,12 +366,13 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
             </tbody>
           </table>
         </div>
-        {/* D-61: sin «Filas por página»: el kit ofrece 10/20/30/50 y la bandeja pagina de a 25 (§6.2). */}
+        {/* UA-2 (rechaza D-61): el pie estándar del kit, con «Filas por página» de TAMANOS_DE_PAGINA. */}
         <Pagination
           page={lista.pagina}
           pageSize={lista.tamano}
           totalCount={lista.total}
           onPageChange={(pagina) => aplicar({ pagina })}
+          onPageSizeChange={(tamano) => aplicar({ tamano, pagina: 1 })}
           ariaLabel="Paginación de saneamientos"
           noun="saneamientos"
         />

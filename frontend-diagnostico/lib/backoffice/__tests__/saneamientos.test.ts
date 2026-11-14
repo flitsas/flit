@@ -3,6 +3,8 @@ import { EmpresaNoElegida } from "@/lib/backoffice/api";
 import {
   MAXIMO_EVIDENCIA_BYTES,
   MAXIMO_TOMAR,
+  TAMANOS_BANDEJA,
+  TAMANO_BANDEJA_POR_DEFECTO,
   actualizarRenglon,
   agregarRenglon,
   anularSaneamiento,
@@ -27,6 +29,7 @@ import {
   type FiltrosBandeja,
   type SaneamientoBackoffice,
 } from "@/lib/backoffice/saneamientos";
+import { TAMANOS_DE_PAGINA, TAMANO_DE_PAGINA_POR_DEFECTO } from "@flit/ui/usePaginacion";
 import { EMPRESA_A, llamadas, simularApi } from "./datos";
 
 // Uso de ejemplo: grupo A (entre compañías): await listarBandeja(filtrosBandejaDesdeUrl(params)); await tomarSaneamientos(items).
@@ -57,8 +60,10 @@ const detalle: SaneamientoBackoffice = {
 };
 
 describe("bandeja: filtros en la URL (grupo A, §6.2)", () => {
-  it("por defecto: solo SOLICITADO, sin compañía, página 1 y tamaño 25", () => {
-    expect(porDefecto()).toEqual({ estados: ["SOLICITADO"], empresa: "", placa: "", desde: "", hasta: "", pagina: 1, tamano: 25 });
+  it("UA-2: por defecto: solo SOLICITADO, sin compañía, página 1 y el tamaño por defecto del kit (10)", () => {
+    expect(porDefecto()).toEqual({ estados: ["SOLICITADO"], empresa: "", placa: "", desde: "", hasta: "", pagina: 1, tamano: 10 });
+    expect(TAMANO_BANDEJA_POR_DEFECTO).toBe(TAMANO_DE_PAGINA_POR_DEFECTO);
+    expect(TAMANOS_BANDEJA).toEqual([...TAMANOS_DE_PAGINA]);
     expect(urlBandeja(porDefecto())).toBe("/backoffice/saneamientos");
     expect(hayFiltrosBandeja(porDefecto())).toBe(false);
   });
@@ -67,7 +72,13 @@ describe("bandeja: filtros en la URL (grupo A, §6.2)", () => {
     const f = filtrosBandejaDesdeUrl(new URLSearchParams("estado=EN_GESTION&estado=ANULADO&estado=OTRO&empresa=no-es-uuid&tamano=7"));
     expect(f.estados).toEqual(["EN_GESTION", "ANULADO"]);
     expect(f.empresa).toBe("");
-    expect(f.tamano).toBe(25);
+    expect(f.tamano).toBe(10);
+  });
+
+  it("UA-2: acepta los tamaños del kit (10/20/30/50) y descarta los de antes (25, 100, 200)", () => {
+    for (const n of [10, 20, 30, 50]) expect(filtrosBandejaDesdeUrl(new URLSearchParams(`tamano=${n}`)).tamano).toBe(n);
+    for (const n of [25, 100, 200]) expect(filtrosBandejaDesdeUrl(new URLSearchParams(`tamano=${n}`)).tamano).toBe(10);
+    expect(urlBandeja({ ...porDefecto(), tamano: 20 })).toBe("/backoffice/saneamientos?tamano=20");
   });
 
   it("todos apagados (estado= vacío) equivale a todos: la consulta no manda estado", () => {
@@ -93,7 +104,7 @@ describe("bandeja: filtros en la URL (grupo A, §6.2)", () => {
     expect(url.searchParams.get("placa")).toBe("ABC");
     expect(url.searchParams.get("empresa")).toBe(EMPRESA_A);
     expect(url.searchParams.get("pagina")).toBe("1");
-    expect(url.searchParams.get("tamano")).toBe("25");
+    expect(url.searchParams.get("tamano")).toBe("10");
   });
 
   it("listarBandeja con una respuesta sin lista lanza un error legible", async () => {

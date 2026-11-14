@@ -49,7 +49,7 @@ function filaVeh(n: number, cambios: Partial<FilaVehiculoListado> = {}): FilaVeh
 
 const lista = (vehiculos: FilaVehiculoListado[], extra: Partial<ListaVehiculos> = {}): ListaVehiculos => ({
   pagina: 1,
-  tamano: 25,
+  tamano: 10,
   total: vehiculos.length,
   vehiculos,
   ...extra,
@@ -116,7 +116,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     expect(screen.getByText("4 vehículos")).toBeInTheDocument();
   });
 
-  it("sin filtros pide la página 1 de 25; con filtros en la URL los manda normalizados y los muestra en los controles", async () => {
+  it("sin filtros pide la página 1 de 10; con filtros en la URL los manda normalizados y los muestra en los controles", async () => {
     h.params = new URLSearchParams("vista=vehiculos&placa=tst&veredicto=BLOQUEADO&saneamiento_estado=SOLICITADO&con_tramite=false&pagina=2&tamano=50");
     const api = simularApi({ "GET /vehiculos": () => Response.json(lista(filasBase(), { pagina: 2, tamano: 50, total: 60 })) });
     pintar();
@@ -137,7 +137,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     fireEvent.change(screen.getByRole("combobox", { name: "Dictamen" }), { target: { value: "VIABLE" } });
     expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&veredicto=VIABLE", { scroll: false });
     await waitFor(() => expect(screen.getByText("1 vehículo")).toBeInTheDocument());
-    expect(consultas(api).at(-1)).toEqual({ veredicto: "VIABLE", pagina: "1", tamano: "25" });
+    expect(consultas(api).at(-1)).toEqual({ veredicto: "VIABLE", pagina: "1", tamano: "10" });
   });
 
   it("«Actualizar» vuelve a pedir la misma consulta; no hay refresco automático", async () => {
@@ -157,7 +157,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
 
   it("cambiar de página: URL con la página, foco en la tabla y anuncio «Página 2 de 3»", async () => {
     const api = simularApi({
-      "GET /vehiculos": (url) => Response.json(lista([filaVeh(Number(url.searchParams.get("pagina")))], { total: 60, pagina: Number(url.searchParams.get("pagina")) })),
+      "GET /vehiculos": (url) => Response.json(lista([filaVeh(Number(url.searchParams.get("pagina")))], { total: 30, pagina: Number(url.searchParams.get("pagina")) })),
     });
     pintar();
     await tabla();
@@ -170,15 +170,18 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     expect(region()).toHaveTextContent("Página 2 de 3");
   });
 
-  it("filas por página 25, 50 o 100: cambiar el tamaño vuelve a la página 1", async () => {
+  it("UA-2: «Filas por página» es el del pie del kit (10/20/30/50): cambiar el tamaño vuelve a la página 1", async () => {
     const api = simularApi({ "GET /vehiculos": () => Response.json(lista(filasBase(), { total: 300 })) });
     pintar();
     await tabla();
-    const tamano = screen.getByRole("combobox", { name: "Filas por página" });
-    expect(within(tamano).getAllByRole("option").map((o) => o.textContent)).toEqual(["25", "50", "100"]);
-    fireEvent.change(tamano, { target: { value: "100" } });
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&tamano=100", { scroll: false });
-    await waitFor(() => expect(consultas(api).at(-1)).toEqual({ pagina: "1", tamano: "100" }));
+    const selectores = screen.getAllByRole("combobox", { name: "Filas por página" });
+    expect(selectores).toHaveLength(1);
+    const tamano = selectores[0];
+    expect(tamano.closest(".kit-paginacion")).not.toBeNull();
+    expect(within(tamano).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "30", "50"]);
+    fireEvent.change(tamano, { target: { value: "30" } });
+    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&tamano=30", { scroll: false });
+    await waitFor(() => expect(consultas(api).at(-1)).toEqual({ pagina: "1", tamano: "30" }));
   });
 });
 
