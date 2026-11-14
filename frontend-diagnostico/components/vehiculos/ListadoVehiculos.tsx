@@ -337,7 +337,9 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
       setSeleccion((s) => new Set([...s].filter((id) => !solicitadas.has(id))));
       const mensaje = mensajeSolicitudSaneamiento(r);
       setResultadoSanear((previo) => ({ n: (previo?.n ?? 0) + 1, ...mensaje }));
-      anunciar(mensaje.texto);
+      // UA-4: un solo canal. Con selección restante el foco se queda en «Sanear» y anuncia la región viva; si la selección
+      // queda vacía, el foco va al aviso y ese foco ya lo lee.
+      if (seleccionadas.some((id) => !solicitadas.has(id))) anunciar(mensaje.texto);
     } catch (e) {
       if (!negar(e)) setErrorSanear(mensajeErrorSaneamiento(e, ERROR_SANEAR));
     } finally {
@@ -497,7 +499,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
             )}
             {resultadoSanear && (
               <div ref={resultadoRef} tabIndex={-1} className={`rounded-[9px] ${FOCO_CLS}`}>
-                <InlineAlert tone={resultadoSanear.tono} title="Saneamiento solicitado">
+                <InlineAlert tone={resultadoSanear.tono} title={resultadoSanear.titulo} vivo={false}>
                   {resultadoSanear.texto}
                 </InlineAlert>
               </div>

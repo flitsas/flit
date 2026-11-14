@@ -243,7 +243,13 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     await waitFor(() => expect(consultas(api)).toHaveLength(2));
     expect(refrescar).toHaveBeenCalled();
     expect(aviso.closest("[tabindex='-1']")).toHaveFocus();
-    expect(document.querySelector("[data-region-viva]")).toHaveTextContent("Se tomó 1 saneamiento. 1 no se pudo tomar porque cambió de estado.");
+    // UA-4: un solo canal. El foco va al aviso, así que ni la región viva ni el aviso se anuncian por su cuenta.
+    expect(document.querySelector("[data-region-viva]")).toHaveTextContent("");
+    const contenedor = aviso.closest("[tabindex='-1']") as HTMLElement;
+    expect(contenedor.querySelector("[role='status'], [role='alert'], [aria-live]")).toBeNull();
+    // UA-9: el destino del foco conserva el indicador visible.
+    expect(contenedor.className).not.toContain("focus:outline-none");
+    expect(contenedor.className).toContain("focus-visible:outline-2");
   });
 
   it("los omitidos por NO_ENCONTRADO se explican aparte, en español", async () => {

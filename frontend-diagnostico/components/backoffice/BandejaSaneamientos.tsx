@@ -92,7 +92,8 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
   const id = useId();
   const nombres = useNombresEmpresas();
   const resumen = useResumenSaneamientos();
-  const { anunciar, region } = useRegionVivaPantalla();
+  // Región viva única de la pantalla (spec-ui §1.6). El resultado de «Tomar» no va aquí: el foco va al aviso (UA-4).
+  const { region } = useRegionVivaPantalla();
   const [filtros, setFiltros] = useState<FiltrosBandeja>(iniciales);
   const [placa, setPlaca] = useState(iniciales.placa);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
@@ -181,9 +182,9 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
     try {
       const r = await tomarSaneamientos(elegidas.slice(0, MAXIMO_TOMAR).map((f) => ({ empresa: f.empresa, id: f.id })));
       const resultado = textoResultadoTomar(r);
+      // UA-4: un solo canal. El foco va al aviso (que no es región viva) y ese foco lo lee; no se anuncia aparte.
       enfocarAviso.current = true;
       setAviso(resultado);
-      anunciar(resultado.texto);
       setSeleccion(new Set());
       setIntento((n) => n + 1);
       resumen.refrescar();
@@ -443,8 +444,9 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
         )}
       </section>
       {aviso && (
-        <div ref={avisoRef} tabIndex={-1} className="focus:outline-none">
-          <InlineAlert tone={aviso.tono} title={aviso.tono === "success" ? "Saneamientos tomados" : "Algunos no se tomaron"}>
+        // UA-9: el destino del foco conserva el indicador visible. UA-4: el aviso no es región viva; lo lee el foco.
+        <div ref={avisoRef} tabIndex={-1} className={`rounded-[9px] ${FOCO_CLS}`}>
+          <InlineAlert tone={aviso.tono} title={aviso.tono === "success" ? "Saneamientos tomados" : "Algunos no se tomaron"} vivo={false}>
             {aviso.texto}
           </InlineAlert>
         </div>

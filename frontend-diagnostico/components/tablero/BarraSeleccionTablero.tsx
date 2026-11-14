@@ -106,6 +106,8 @@ export interface ResultadoSanearVisible {
   /** Cambia en cada solicitud, para volver a mover el foco aunque el texto se repita. */
   n: number;
   tono: "success" | "warning";
+  /** UA-7: «Saneamiento solicitado» o, con 0 solicitados, «No se solicitó el saneamiento». */
+  titulo: string;
   texto: string;
 }
 
@@ -123,20 +125,22 @@ const OMISIONES: readonly [MotivoOmision, string, string][] = [
  * Texto del resultado de POST /saneamientos/solicitudes (spec-ui §2.4, HU #14577 AC11): «Se solicitó el saneamiento de X
  * vehículos.» y, si hubo omitidos, «Y se omitieron: A con consultas por terminar, B que ya tenían saneamiento y C no
  * disponibles.» (solo las partes con cuenta). Sin omitidos, tono de éxito; con omitidos, de aviso. Ninguno solicitado: «No se
- * solicitó el saneamiento de ningún vehículo.» (D-29).
+ * solicitó el saneamiento de ningún vehículo.» (D-29). El título sigue al cuerpo (UA-7): «Saneamiento solicitado» si se
+ * solicitó alguno; si no, «No se solicitó el saneamiento».
  */
-export function mensajeSolicitudSaneamiento(r: ResultadoSolicitud): { tono: "success" | "warning"; texto: string } {
+export function mensajeSolicitudSaneamiento(r: ResultadoSolicitud): Omit<ResultadoSanearVisible, "n"> {
+  const titulo = r.solicitados > 0 ? "Saneamiento solicitado" : "No se solicitó el saneamiento";
   const cabeza =
     r.solicitados > 0
       ? `Se solicitó el saneamiento de ${contar(r.solicitados, "vehículo", "vehículos")}.`
       : "No se solicitó el saneamiento de ningún vehículo.";
-  if (r.omitidos.length === 0) return { tono: "success", texto: cabeza };
+  if (r.omitidos.length === 0) return { tono: "success", titulo, texto: cabeza };
   const partes = OMISIONES.map(([motivo, s, p]) => [r.omitidos.filter((o) => o.motivo === motivo).length, s, p] as const)
     .filter(([n]) => n > 0)
     .map(([n, s, p]) => contar(n, s, p));
   const total = r.omitidos.length;
   const detalle = partes.length ? `: ${unirConY(partes)}` : "";
-  return { tono: "warning", texto: `${cabeza} ${total} ${total === 1 ? "se omitió" : "se omitieron"}${detalle}.` };
+  return { tono: "warning", titulo, texto: `${cabeza} ${total} ${total === 1 ? "se omitió" : "se omitieron"}${detalle}.` };
 }
 
 // ---------- Barra ----------
@@ -307,7 +311,8 @@ export function BarraSeleccionTablero({ elegibles, seleccionadas, onSeleccionarT
       )}
       {resultado && (
         <div ref={resultadoRef} tabIndex={-1} className={`rounded-[9px] ${FOCO_CLS}`}>
-          <InlineAlert tone={resultado.tono} title="Saneamiento solicitado">
+          {/* UA-4: no es región viva; lo anuncia la región de la pantalla (el foco se quedó) o el foco que llega aquí. */}
+          <InlineAlert tone={resultado.tono} title={resultado.titulo} vivo={false}>
             {resultado.texto}
           </InlineAlert>
         </div>

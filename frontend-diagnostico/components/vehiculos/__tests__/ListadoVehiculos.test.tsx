@@ -424,8 +424,44 @@ describe("ListadoVehiculos — AC22: selección, «Sanear (N)» y «Descargar de
     expect(JSON.parse(String(init.body))).toEqual({ vehiculo_ids: ["vehiculo-1", "vehiculo-5"] });
     expect(within(fila("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();
     expect(casilla("TST005")).toBeChecked();
-    expect(screen.getAllByText(texto).some((n) => n.closest("[role='alert']"))).toBe(true);
+    // UA-4: el foco se queda en «Sanear», así que el único anuncio es la región viva; el aviso visible no es región viva.
+    const visibles = screen.getAllByText(texto).filter((n) => !n.closest("[data-region-viva-vehiculos]"));
+    expect(visibles).toHaveLength(1);
+    expect(visibles[0].closest("[role='alert'], [role='status'], [aria-live]")).toBeNull();
     expect(screen.getByRole("button", { name: /^Sanear \(/ })).toHaveFocus();
+  });
+
+  it("UA-7: con 0 solicitados el título dice «No se solicitó el saneamiento»", async () => {
+    simularApi({
+      "GET /vehiculos": () => Response.json(lista([filaVeh(1)])),
+      "POST /saneamientos/solicitudes": () => Response.json({ solicitados: 0, omitidos: [{ vehiculo_id: "vehiculo-1", motivo: "NO_ENCONTRADO" }] }),
+    });
+    pintar({ puedeSanear: true });
+    await tabla();
+    fireEvent.click(casilla("TST001"));
+    fireEvent.click(within(barra()).getByRole("button", { name: "Sanear (1)" }));
+    const texto = "No se solicitó el saneamiento de ningún vehículo. 1 se omitió: 1 no disponible.";
+    const visibles = (await screen.findAllByText(texto)).filter((n) => !n.closest("[data-region-viva-vehiculos]"));
+    const destino = visibles[0].closest("[tabindex='-1']") as HTMLElement;
+    expect(within(destino).getByText("No se solicitó el saneamiento")).toBeInTheDocument();
+    expect(within(destino).queryByText("Saneamiento solicitado")).toBeNull();
+  });
+
+  it("UA-4: todas solicitadas (selección vacía): foco en el aviso, sin región viva y con el título «Saneamiento solicitado»", async () => {
+    simularApi({
+      "GET /vehiculos": () => Response.json(lista([filaVeh(1)])),
+      "POST /saneamientos/solicitudes": () => Response.json({ solicitados: 1, omitidos: [] }),
+    });
+    pintar({ puedeSanear: true });
+    await tabla();
+    fireEvent.click(casilla("TST001"));
+    fireEvent.click(within(barra()).getByRole("button", { name: "Sanear (1)" }));
+    const aviso = await screen.findByText("Se solicitó el saneamiento de 1 vehículo.");
+    const destino = aviso.closest("[tabindex='-1']") as HTMLElement;
+    await waitFor(() => expect(destino).toHaveFocus());
+    expect(destino.querySelector("[role='alert'], [role='status'], [aria-live]")).toBeNull();
+    expect(within(destino).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(region()).not.toHaveTextContent("Se solicitó el saneamiento");
   });
 
   it("«Sanear (N)» con error: «No pudimos solicitar el saneamiento. Intenta de nuevo.» y la selección se conserva", async () => {

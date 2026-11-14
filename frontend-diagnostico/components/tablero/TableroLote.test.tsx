@@ -762,8 +762,10 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     const [, init] = llamadas(api, "POST", RUTA_MASIVO)[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({ vehiculo_ids: ["vehiculo-1", "vehiculo-5"] });
     const texto = "Se solicitó el saneamiento de 1 vehículo. 1 se omitió: 1 con consultas por terminar.";
-    const aviso = screen.getAllByText(texto).map((n) => n.closest("[role='alert']")).find(Boolean)!;
+    const aviso = screen.getAllByText(texto).map((n) => n.closest("[tabindex='-1']")).find(Boolean) as HTMLElement;
     expect(aviso).toHaveTextContent("Saneamiento solicitado");
+    // UA-4: el aviso visible no es región viva; el anuncio va solo por la región de la pantalla (el foco no se movió).
+    expect(aviso.querySelector("[role='alert'], [role='status'], [aria-live]")).toBeNull();
     expect(within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")).toHaveTextContent("Saneamiento solicitado");
     expect(within(fila("TST005")).getByRole("checkbox")).toBeChecked();
     expect(within(fila("TST001")).getByRole("checkbox")).not.toBeChecked();
@@ -772,6 +774,31 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     // El mismo texto en la región viva de la pantalla.
     expect(screen.getAllByText(texto).some((n) => n.closest(".sr-only"))).toBe(true);
     expect(desdesPedidos(api).length).toBeGreaterThan(1);
+  });
+
+  it("UA-4: todas solicitadas (selección vacía): el foco va al aviso y la región viva no repite el texto", async () => {
+    let solicitado = false;
+    await montarSan(
+      {
+        [GRILLA]: () =>
+          Response.json(solicitado ? loteSan({ "vehiculo-1": { saneamiento: san("SOLICITADO") }, "vehiculo-5": { saneamiento: san("SOLICITADO") } }) : loteSan()),
+        [`POST ${RUTA_MASIVO}`]: () => {
+          solicitado = true;
+          return Response.json({ solicitados: 2, omitidos: [] });
+        },
+      },
+      SANEA,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sanear (2)" }));
+    await avanzar();
+    await avanzar();
+    const texto = "Se solicitó el saneamiento de 2 vehículos.";
+    const nodos = screen.getAllByText(texto);
+    expect(nodos.some((n) => n.closest(".sr-only"))).toBe(false);
+    const aviso = nodos.map((n) => n.closest("[tabindex='-1']")).find(Boolean) as HTMLElement;
+    expect(aviso).toHaveFocus();
+    expect(aviso.querySelector("[role='alert'], [role='status'], [aria-live]")).toBeNull();
   });
 
   it("AC11: 400 LISTA_INVALIDA: mensaje de error y la selección se conserva", async () => {
