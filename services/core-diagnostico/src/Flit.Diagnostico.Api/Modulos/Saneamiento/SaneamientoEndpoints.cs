@@ -12,6 +12,7 @@ namespace Flit.Diagnostico.Api.Modulos.Saneamiento;
 /// <item><c>DELETE …/saneamiento</c>: desmarca en SOLICITADO (204).</item>
 /// <item><c>POST /saneamientos/solicitudes</c>: masivo de 1 a 500.</item>
 /// <item><c>GET …/saneamiento</c>: detalle para la compañía (§6.3), con <c>diagnostico.diagnosticos.ver</c>.</item>
+/// <item><c>GET …/saneamiento/renglones/{rid}/evidencia</c>: el PDF del renglón, con <c>diagnostico.reportes.descargar</c> (BE-B, AC47).</item>
 /// </list>
 /// Marcar, desmarcar y el masivo exigen <c>diagnostico.saneamiento.solicitar</c> (el SuperAdmin pasa por la regla general, decisión
 /// E3, y opera en la empresa de su sesión) y responden 403 <see cref="CodigoDesdeBackoffice"/> con <c>?empresa=</c>: desde el
@@ -23,6 +24,8 @@ internal static class SaneamientoEndpoints
 
     public const string RutaSolicitudes = "/saneamientos/solicitudes";
 
+    public const string RutaEvidencia = Ruta + "/renglones/{rid:guid}/evidencia";
+
     public const string CodigoDesdeBackoffice = "SANEAMIENTO_DESDE_BACKOFFICE";
 
     private const string MensajeDesdeBackoffice = "Desde el backoffice no se marca el saneamiento de un vehículo.";
@@ -32,6 +35,10 @@ internal static class SaneamientoEndpoints
         services.AddScoped<SolicitudSaneamiento>();
         // Brief C5: las lecturas del vehículo para los hallazgos (las usa la toma de BE-B).
         services.AddScoped<Dictamen.LecturasVehiculo>();
+        // HU #14576 BE-B: la gestión FLIT del backoffice (grupos A y B de ADR-0087 D-5).
+        services.AddScoped<Backoffice.BandejaSaneamientos>();
+        services.AddScoped<Backoffice.GestionSaneamientoBackoffice>();
+        services.AddScoped<Backoffice.EvidenciaSaneamiento>();
         return services;
     }
 
@@ -55,5 +62,10 @@ internal static class SaneamientoEndpoints
             .RequirePermiso(Permisos.DiagnosticosVer)
             .SinCacheEnRespuesta()
             .WithName("ObtenerSaneamientoVehiculo");
+        // HU #14576 AC47: la compañía descarga la evidencia de un renglón con reportes.descargar, como el resto de las descargas (SP-18).
+        api.MapGet(RutaEvidencia, (Guid id, Guid vid, Guid rid, SolicitudSaneamiento solicitud, CancellationToken ct) => solicitud.EvidenciaAsync(id, vid, rid, ct))
+            .RequirePermiso(Permisos.ReportesDescargar)
+            .DescargaSegura()
+            .WithName("DescargarEvidenciaSaneamientoVehiculo");
     }
 }

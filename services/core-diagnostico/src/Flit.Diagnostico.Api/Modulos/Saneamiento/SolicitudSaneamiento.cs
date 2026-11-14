@@ -19,7 +19,8 @@ namespace Flit.Diagnostico.Api.Modulos.Saneamiento;
 /// ruta con <c>{id}/{vid}</c> (SP-9): lote visible (404), vehículo de ese lote (404), y solo entonces los códigos de negocio. Las
 /// escrituras van por <see cref="EscritorSaneamiento"/> en una transacción. Logs: ids, estados y conteos; nunca placa ni textos.
 /// </summary>
-internal sealed partial class SolicitudSaneamiento(DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, ILogger<SolicitudSaneamiento> logger)
+internal sealed partial class SolicitudSaneamiento(
+    DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, ILogger<SolicitudSaneamiento> logger, Infraestructura.Archivos.IFabricaAlmacen almacenes)
 {
     public const string CodigoNoTerminado = "VEHICULO_NO_TERMINADO";
     public const string CodigoYaSolicitado = ElegibilidadSaneamiento.YaSolicitado;
@@ -147,6 +148,28 @@ internal sealed partial class SolicitudSaneamiento(DiagnosticoDb db, UsuarioActu
         var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, id, seguir: false, ct).ConfigureAwait(false);
         await VehiculoDelLoteAsync(cabecera, vid, ct).ConfigureAwait(false);
         return await DetalleDeAsync(cabecera.TenantId, vid, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// GET evidencia (AC47, SP-9, SP-18): lote visible → vehículo del lote → saneamiento no anulado → renglón no quitado con evidencia;
+    /// cualquier eslabón que falte es 404. El nombre es <c>evidencia-{placa}-{fuente}.pdf</c>, nunca el original.
+    /// </summary>
+    public async Task<IResult> EvidenciaAsync(Guid id, Guid vid, Guid rid, CancellationToken ct)
+    {
+        var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, id, seguir: false, ct).ConfigureAwait(false);
+        await VehiculoDelLoteAsync(cabecera, vid, ct).ConfigureAwait(false);
+        var tenant = cabecera.TenantId;
+        var sid = await Vigentes(tenant, vid).AsNoTracking().Select(s => (Guid?)s.Id).SingleOrDefaultAsync(ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("La evidencia");
+        var renglon = await db.Set<RenglonSaneamiento>().AsNoTracking()
+            .Where(r => r.TenantId == tenant && r.Id == rid && r.SaneamientoId == sid && r.QuitadoEn == null && r.EvidenciaReferencia != null)
+            .Select(r => new { r.EvidenciaReferencia, r.Fuente })
+            .SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La evidencia");
+        var placa = await db.Set<VehiculoDiagnostico>().AsNoTracking().Where(v => v.TenantId == tenant && v.Id == vid)
+            .Select(v => v.Placa ?? v.IdentificadorNorm).SingleAsync(ct).ConfigureAwait(false);
+        var bytes = await almacenes.Para(db).LeerAsync(renglon.EvidenciaReferencia!, ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("La evidencia");
+        return Results.File(bytes, Backoffice.EvidenciaSaneamiento.ContentTypePdf, Backoffice.EvidenciaSaneamiento.NombreDescarga(placa, renglon.Fuente));
     }
 
     private async Task<SaneamientoClienteDto> DetalleDeAsync(Guid tenant, Guid vid, CancellationToken ct)

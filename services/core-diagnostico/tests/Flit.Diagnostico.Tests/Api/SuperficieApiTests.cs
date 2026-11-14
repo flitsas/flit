@@ -49,6 +49,9 @@ public sealed class SuperficieApiTests
 
         rutas.Should().Contain(r => r.Patron.TrimStart('/') == Program.Prefijo.TrimStart('/') + "/sesion", "la superficie que se recorre es la publicada");
         deEscritura.Should().BeEmpty("Diagnóstico no administra compañías, usuarios, roles ni suscripciones (R-4)");
+        // HU #14576: las escrituras del saneamiento son del circuito del vehículo, no de la plataforma.
+        rutas.Where(r => r.Patron.Contains("/saneamiento", StringComparison.Ordinal) && r.Metodos.Intersect(MetodosDeEscritura, StringComparer.OrdinalIgnoreCase).Any())
+            .Should().HaveCount(14, "3 del cliente y 11 del backoffice");
 
         var todo = TodosLosPermisos();
         using var cliente = api.Cliente(api.Token(permisos: todo, roles: ["admin_diagnostico", "backoffice_diagnostico"], tipoEmpresa: "FLIT"));
@@ -77,5 +80,6 @@ public sealed class SuperficieApiTests
         "diagnostico.reportes.descargar", "diagnostico.derivacion.crear", "diagnostico.configuracion.ver",
         "diagnostico.configuracion.editar", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.reprocesar",
         "diagnostico.consultas.llenar", "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+        "diagnostico.saneamiento.solicitar", "diagnostico.saneamiento.gestionar",
     ];
 }

@@ -38,6 +38,8 @@ public sealed class SuperAdminOperacionFlitTests
         ("llenado manual PUT", HttpMethod.Put, $"{Base}/consultas/{Consulta}/manual", "{}"),
         ("override del dictamen PUT", HttpMethod.Put, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen", "{}"),
         ("versiones del dictamen GET", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen/versiones", null),
+        // HU #14576: la gestión de un saneamiento (grupo B) también es de la operación FLIT.
+        ("tomar un saneamiento POST", HttpMethod.Post, $"{Base}/saneamientos/{Lote}/tomar", null),
     ];
 
     // Casos 1 y 2 — SuperAdmin de una compañía no FLIT, o sin claim tenant_type: la política de operación no lo frena.
@@ -74,7 +76,7 @@ public sealed class SuperAdminOperacionFlitTests
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
         var capacidades = (await respuesta.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("capacidades");
-        foreach (var capacidad in new[] { "backofficeOperacion", "llenarConsultas", "corregirDictamen", "verVolumetria", "backoffice", "verAuditoria" })
+        foreach (var capacidad in new[] { "backofficeOperacion", "llenarConsultas", "corregirDictamen", "verVolumetria", "backoffice", "verAuditoria", "gestionarSaneamiento", "sanear" })
             capacidades.GetProperty(capacidad).GetBoolean().Should().BeTrue($"{capacidad}: el SuperAdmin tiene todas las capacidades (D23)");
     }
 
@@ -87,7 +89,7 @@ public sealed class SuperAdminOperacionFlitTests
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.SinBaseAsync();
         var token = api.Token(
-            permisos: [Permisos.BackofficeVer, Permisos.ConsultasLlenar, Permisos.DictamenOverride, Permisos.AuditoriaVer, Permisos.VolumetriaVer],
+            permisos: [Permisos.BackofficeVer, Permisos.ConsultasLlenar, Permisos.DictamenOverride, Permisos.AuditoriaVer, Permisos.VolumetriaVer, Permisos.SaneamientoGestionar],
             roles: ["admin_diagnostico"], tipoEmpresa: tipoEmpresa);
         using var cliente = api.Cliente(token);
 
@@ -99,7 +101,7 @@ public sealed class SuperAdminOperacionFlitTests
 
         var sesion = await cliente.GetAsync(Program.Prefijo + "/sesion", ct);
         var capacidades = (await sesion.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("capacidades");
-        foreach (var capacidad in new[] { "backofficeOperacion", "llenarConsultas", "corregirDictamen", "verVolumetria" })
+        foreach (var capacidad in new[] { "backofficeOperacion", "llenarConsultas", "corregirDictamen", "verVolumetria", "gestionarSaneamiento" })
             capacidades.GetProperty(capacidad).GetBoolean().Should().BeFalse($"{capacidad}: es de la compañía FLIT");
     }
 
@@ -107,7 +109,7 @@ public sealed class SuperAdminOperacionFlitTests
     [Fact]
     public void Roles_por_defecto_son_solo_usuario_y_admin()
     {
-        string[] usuario = [Permisos.DiagnosticosCrear, Permisos.DiagnosticosVer, Permisos.ReportesDescargar, Permisos.DerivacionCrear, Permisos.ConfiguracionVer];
+        string[] usuario = [Permisos.DiagnosticosCrear, Permisos.DiagnosticosVer, Permisos.ReportesDescargar, Permisos.DerivacionCrear, Permisos.ConfiguracionVer, Permisos.SaneamientoSolicitar];
 
         Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().Equal("usuario_diagnostico", "admin_diagnostico");
         Permisos.RolesPorDefecto.Single(r => r.Codigo == "usuario_diagnostico").Permisos.Should().BeEquivalentTo(usuario);

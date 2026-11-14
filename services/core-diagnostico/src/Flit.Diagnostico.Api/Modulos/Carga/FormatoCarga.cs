@@ -1,3 +1,4 @@
+using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Plataforma;
 
 namespace Flit.Diagnostico.Api.Modulos.Carga;
@@ -24,7 +25,6 @@ internal static class FormatoCarga
 
     private static readonly byte[] FirmaZip = [0x50, 0x4B, 0x03, 0x04];
     private static readonly byte[] FirmaOle = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
-    private static readonly byte[] FirmaPdf = "%PDF"u8.ToArray();
 
     public static TablaCarga Leer(string? nombre, byte[] contenido)
     {
@@ -47,7 +47,7 @@ internal static class FormatoCarga
             return LectorXlsx.Leer(contenido);
         }
 
-        if (Empieza(contenido, FirmaZip) || Empieza(contenido, FirmaPdf) || contenido.AsSpan().Contains((byte)0))
+        if (Empieza(contenido, FirmaZip) || contenido.AsSpan().StartsWith(FirmasArchivo.Pdf) || contenido.AsSpan().Contains((byte)0))
             throw NoAdmitido();
         return LectorCsv.Leer(contenido);
     }
