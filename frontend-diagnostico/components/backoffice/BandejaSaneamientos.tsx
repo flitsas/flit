@@ -27,6 +27,7 @@ import {
   BOTON_REINTENTAR_CLS,
   BOTON_SECUNDARIO_CLS,
   CAMPO_CLS,
+  CAMPO_FECHA_CLS,
   ENLACE_ACCION_CLS,
   ETIQUETA_CLS,
   FOCO_CLS,
@@ -449,11 +450,11 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
           </label>
           <label className="flex flex-col gap-1">
             <span className={ETIQUETA_CLS}>Desde</span>
-            <input type="date" value={filtros.desde} max={filtros.hasta || undefined} onChange={(e) => aplicar({ desde: e.target.value })} className={CAMPO_CLS} />
+            <input type="date" value={filtros.desde} max={filtros.hasta || undefined} onChange={(e) => aplicar({ desde: e.target.value })} className={CAMPO_FECHA_CLS} />
           </label>
           <label className="flex flex-col gap-1">
             <span className={ETIQUETA_CLS}>Hasta</span>
-            <input type="date" value={filtros.hasta} min={filtros.desde || undefined} onChange={(e) => aplicar({ hasta: e.target.value })} className={CAMPO_CLS} />
+            <input type="date" value={filtros.hasta} min={filtros.desde || undefined} onChange={(e) => aplicar({ hasta: e.target.value })} className={CAMPO_FECHA_CLS} />
           </label>
           <span className={`${AYUDA_CLS} sm:col-span-3`}>Las fechas son las de la solicitud. La placa se aplica al pulsar Enter o al salir del campo.</span>
         </form>

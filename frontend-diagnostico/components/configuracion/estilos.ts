@@ -16,6 +16,14 @@ export const BOTON_REINTENTAR_CLS = `rounded-full border border-current px-3 py-
 
 export const CAMPO_CLS = `h-11 w-full rounded-[9px] border border-input bg-card px-3.5 text-base text-flit-primary focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] disabled:opacity-60 ${FOCO_CLS}`;
 
+/**
+ * Campo de fecha (HU #14577, hallazgo E2E H-7). En Chromium el `<input type="date">` tiene una parada de Tab en el botón del
+ * calendario, dentro del shadow DOM del agente de usuario; con el foco ahí el host deja de casar con `:focus` y
+ * `:focus-visible` y CAMPO_CLS no pinta ni contorno ni sombra. `:focus-within` sí casa, así que se repite el foco del kit
+ * con esa variante. CAMPO_CLS queda igual para texto, select y textarea.
+ */
+export const CAMPO_FECHA_CLS = `${CAMPO_CLS} focus-within:border-[color:var(--di-action)] focus-within:shadow-[var(--kit-sombra)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring`;
+
 export const ETIQUETA_CLS = "text-sm font-semibold text-flit-primary";
 
 export const AYUDA_CLS = "text-xs text-muted-foreground";

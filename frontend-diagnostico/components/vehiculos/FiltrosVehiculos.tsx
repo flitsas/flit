@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useId, useState, type KeyboardEvent } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_SECUNDARIO_CLS, CAMPO_CLS, CAMPO_FECHA_CLS, ETIQUETA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
 import type { ModoDiagnostico } from "@/lib/diagnosticos/api";
 import type { EstadoSaneamientoActivo } from "@/lib/saneamiento/api";
@@ -109,7 +109,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
   const control = error ? CONTROL_DE[error.campo] : null;
   const errorId = (c: Control) => `${id}-${c}-error`;
   const invalido = (c: Control) => (control === c ? { "aria-invalid": true as const, "aria-describedby": errorId(c) } : {});
-  const clase = (c: Control, extra: string) => `${CAMPO_CLS} ${extra} ${control === c ? CAMPO_INVALIDO_CLS : ""}`.trim();
+  const clase = (c: Control, extra: string, base = CAMPO_CLS) => `${base} ${extra} ${control === c ? CAMPO_INVALIDO_CLS : ""}`.trim();
   const mensaje = (c: Control) =>
     control === c && error ? (
       <p id={errorId(c)} className={ERROR_CLS}>
@@ -245,7 +245,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
           value={valor.desde}
           max={valor.hasta || undefined}
           onChange={(e) => onCambiar({ desde: e.target.value })}
-          className={clase("desde", "w-full min-[480px]:w-44")}
+          className={clase("desde", "w-full min-[480px]:w-44", CAMPO_FECHA_CLS)}
           {...invalido("desde")}
         />,
       )}
@@ -258,7 +258,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
           value={valor.hasta}
           min={valor.desde || undefined}
           onChange={(e) => onCambiar({ hasta: e.target.value })}
-          className={clase("hasta", "w-full min-[480px]:w-44")}
+          className={clase("hasta", "w-full min-[480px]:w-44", CAMPO_FECHA_CLS)}
           {...invalido("hasta")}
         />,
       )}
