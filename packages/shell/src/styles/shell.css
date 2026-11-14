@@ -216,8 +216,8 @@
     min-width: 0;
   }
 
+  /* HU #14562 · O-3: sin opacity (daba 4,48:1 sobre la franja azul); el texto queda sólido, como el nombre. */
   .suite-menu-usuario__cabeza small {
-    opacity: 0.85;
     font-size: 0.75rem;
   }
 
@@ -983,6 +983,13 @@
   .suite-solo-movil { display: none; }
   .suite-menu-usuario .suite-menu-usuario__productos ul { padding: 4px 0; }
   .suite-menu-usuario__productos { border-bottom: 1px solid var(--di-border); }
+  /* O-1 (auditoría D1–D3): el `li + li` del kit cuenta `li.suite-solo-movil` aunque esté oculto, y pintaba una línea sobre
+     la primera entrada de cuenta («Ayuda») a todos los anchos; en móvil se sumaba al border-bottom del grupo (2 px). La
+     línea entre el grupo y «Ayuda» es solo ese border-bottom; en escritorio el menú queda como antes de D1. */
+  .suite-menu-usuario li.suite-solo-movil + li .suite-menu-usuario__entrada { border-top: 0; }
+  /* O-2: dentro del menú de usuario «Ir al inicio» es una entrada más, sin el borde superior del pie del panel ▦ (que
+     con el radio de 9 px se veía como una pestaña suelta). El radio se conserva: es el del fondo al pasar el ratón. */
+  .suite-menu-usuario__productos .suite-menu-productos__pie { border-top: 0; }
   .suite-menu-usuario__entrada:focus-visible,
   .suite-menu-usuario__salir:focus-visible { outline: 2px solid var(--kit-azul-texto); outline-offset: 2px; }
 
@@ -1002,5 +1009,9 @@
       max-height: calc(100dvh - 80px); overflow-x: clip; overflow-y: auto;
     }
     .suite-solo-movil { display: block; }
+    /* O-7: los íconos de los productos y de «Ir al inicio» alineados con los de «Ayuda» (borde izquierdo del contenido
+       del menú). Las entradas conservan su relleno de 12 px y el fondo al pasar el ratón sale hacia el margen del panel. */
+    .suite-menu-usuario .suite-menu-usuario__productos ul { margin-inline: -12px; }
+    .suite-menu-usuario__productos .suite-menu-productos__pie { margin-inline: -12px; padding-inline: 12px; }
   }
 }
