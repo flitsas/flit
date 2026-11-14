@@ -6303,7 +6303,8 @@ components:
           format: uuid
         tipo:
           type: string
-          enum: [ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO]
+          enum: [ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO, SANEAMIENTO_TOMADO, SANEAMIENTO_CERRADO, SANEAMIENTO_REABIERTO, SANEAMIENTO_ANULADO]
+          description: Los cuatro SANEAMIENTO_* son de la 1.4.0 (HU #14576, aditivo).
         creada_en:
           type: string
           format: date-time
@@ -6324,6 +6325,18 @@ components:
           example: "El lote «Flota norte» terminó sus consultas."
         accion:
           $ref: "#/components/schemas/AccionNotificacion"
+        datos:
+          type: object
+          nullable: true
+          description: >
+            Objeto plano: solo contadores y códigos, sin PII (CHECK ck_notificaciones_datos). SANEAMIENTO_* lleva cantidad (entero, mínimo 1)
+            y SANEAMIENTO_CERRADO además resultado (SANEADO | NO_PROCEDE); DERIVACION_TERMINADA, creadas/omitidas/fallidas.
+            Agregado en la 1.4.0 (HU #14576, aditivo).
+          additionalProperties:
+            oneOf:
+              - type: integer
+              - type: string
+          example: { cantidad: 2, resultado: SANEADO }
     AccionNotificacion:
       type: object
       required: [tipo, href]
@@ -6331,7 +6344,7 @@ components:
         tipo:
           type: string
           enum: [VER_EVIDENCIAS, VER_DERIVACION, VER_LOTE]
-          description: VER_EVIDENCIAS para los dos tipos de ZIP, VER_DERIVACION para DERIVACION_TERMINADA y VER_LOTE para LOTE_TERMINADO.
+          description: VER_EVIDENCIAS para los dos tipos de ZIP, VER_DERIVACION para DERIVACION_TERMINADA y VER_LOTE para LOTE_TERMINADO y los SANEAMIENTO_*.
         href:
           type: string
           description: Ruta relativa del frontend, /diagnosticos/{diagnostico_id} para todos los tipos (la página del lote).
