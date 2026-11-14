@@ -149,8 +149,11 @@ describe("traducirErrorVehiculos", () => {
     expect(traducirErrorVehiculos(new ApiError(400, "x", "PAGINACION_INVALIDA", "tamano"))).toMatchObject({ tipo: "AVISO", reiniciarPagina: true });
   });
 
-  it("el resto → aviso con su mensaje", () => {
-    expect(traducirErrorVehiculos(new ApiError(500, "Diagnóstico no respondió."))).toEqual({ tipo: "AVISO", mensaje: "Diagnóstico no respondió.", reiniciarPagina: false });
-    expect(traducirErrorVehiculos("raro")).toEqual({ tipo: "AVISO", mensaje: "No pudimos cargar los vehículos.", reiniciarPagina: false });
+  it("AP-7 (SF-6): el resto → aviso con texto fijo; nunca el mensaje del servidor ni el de un Error", () => {
+    const fijo = { tipo: "AVISO", mensaje: "No pudimos cargar los vehículos.", reiniciarPagina: false };
+    expect(traducirErrorVehiculos(new ApiError(500, "Detalle interno del servidor"))).toEqual(fijo);
+    expect(traducirErrorVehiculos(new ApiError(409, "Texto del servidor", "OTRO_CODIGO"))).toEqual(fijo);
+    expect(traducirErrorVehiculos(new Error("Texto de una excepción"))).toEqual(fijo);
+    expect(traducirErrorVehiculos("raro")).toEqual(fijo);
   });
 });
