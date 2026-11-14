@@ -10,9 +10,11 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// <c>GET /backoffice/consultas/{consulta}/intentos?empresa=</c> (HU #13737, F03-C11, plan §6.1 fila 03): la auditoría de los
-/// intentos de una celda, solo para el backoffice FLIT. Cuelga del grupo <c>/backoffice</c> (<see cref="PoliticaBackoffice"/>:
-/// <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>; empresa explícita, la lectura queda en
-/// <c>lecturas_backoffice</c>) y exige además <c>diagnostico.auditoria.ver</c>. Un usuario de la compañía recibe 403. Lee la
+/// intentos de una celda, solo para el backoffice FLIT. Cuelga del grupo <c>/backoffice</c> (política de configuración de
+/// <see cref="PoliticaBackoffice"/>, <see cref="PoliticaBackoffice.CumpleConfiguracion"/>: SuperAdmin de cualquier compañía, o
+/// <c>tenant_type=FLIT</c> con <c>diagnostico.backoffice.ver</c>; empresa explícita, la lectura queda en
+/// <c>lecturas_backoffice</c>) y exige además <c>diagnostico.auditoria.ver</c>. Un usuario de otra compañía que no es SuperAdmin
+/// recibe 403 aunque tenga el permiso. Lee la
 /// celda y sus intentos de la empresa indicada con <see cref="LecturaEntreEmpresas"/>; si la celda no es de esa empresa, 404
 /// <c>CONSULTA_NO_ENCONTRADA</c>. Los intentos no llevan documentos (solo placa o VIN consultado).
 /// </summary>

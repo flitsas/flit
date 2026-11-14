@@ -16,7 +16,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Lotes de UNA compañía para el backoffice FLIT (HU #13799, F06-H2, F06-C5/C6/C7). Cuelgan del grupo <c>/backoffice</c>:
-/// <see cref="PoliticaBackoffice"/> (<c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>) y la empresa explícita en
+/// la política de configuración de <see cref="PoliticaBackoffice"/> (<see cref="PoliticaBackoffice.CumpleConfiguracion"/>: SuperAdmin
+/// de cualquier compañía, o <c>tenant_type=FLIT</c> con <c>diagnostico.backoffice.ver</c>) y la empresa explícita en
 /// <c>?empresa=</c> (sin ella, 400 <c>EMPRESA_REQUERIDA</c>; con ella, la lectura queda en <c>lecturas_backoffice</c> antes de leer).
 /// Toda lectura va por <see cref="LecturaEntreEmpresas"/> con esa empresa: un lote de otra compañía responde 404.
 /// <list type="bullet">
