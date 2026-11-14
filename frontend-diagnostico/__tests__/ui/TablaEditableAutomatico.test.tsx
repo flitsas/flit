@@ -215,6 +215,93 @@ describe("TablaEditable · guardado automático (saneamiento, spec-ui §8)", () 
     expect(onGuardar.mock.calls[1][0]).toMatchObject({ nota: "Nota digitada" });
   });
 
+  it("D-69: si falla y el padre repinta la fila con un objeto nuevo y la misma id, lo digitado se conserva y Reintentar lo envía", async () => {
+    const enviados: Fila[] = [];
+    let fallar = true;
+    function Contenedor() {
+      const [datos, setDatos] = useState(filas);
+      return (
+        <>
+        <button type="button" onClick={() => setDatos((d) => d.map((x) => ({ ...x })))}>
+          Repintar
+        </button>
+        <TablaEditable
+          guardado="automatico"
+          rotulosEstado={ROTULOS}
+          etiqueta="Conceptos"
+          filas={datos}
+          columnas={columnas}
+          clave={(f) => f.id}
+          onGuardar={async (f) => {
+            enviados.push(f);
+            if (fallar) {
+              // El padre repinta (p. ej. marca el error del renglón): objetos fila nuevos con la misma id.
+              setDatos((d) => d.map((x) => ({ ...x })));
+              throw new Error("red");
+            }
+          }}
+        />
+        </>
+      );
+    }
+    render(<Contenedor />);
+    fireEvent.change(nota("A"), { target: { value: "Nota digitada" } });
+    await act(async () => {
+      fireEvent.blur(nota("A"), { relatedTarget: nota("B") });
+    });
+    expect(enviados).toHaveLength(1);
+    expect(estadoDe("A")).toHaveTextContent("No se guardó");
+    expect(nota("A")).toHaveValue("Nota digitada");
+
+    // Segundo repintado del padre con otra identidad, ya en error: lo digitado sigue ahí.
+    fireEvent.click(screen.getByRole("button", { name: "Repintar" }));
+    expect(nota("A")).toHaveValue("Nota digitada");
+    expect(estadoDe("A")).toHaveTextContent("No se guardó");
+    fallar = false;
+    const reintentar = within(fila("A")).getByRole("button", { name: "Reintentar A" });
+    await act(async () => {
+      fireEvent.click(reintentar);
+    });
+    expect(enviados).toHaveLength(2);
+    expect(enviados[1]).toMatchObject({ id: "A", nota: "Nota digitada" });
+  });
+
+  it("D-69: con el padre repintando en cada intento, Reintentar guarda lo digitado y la fila queda en «Guardado»", async () => {
+    const enviados: Fila[] = [];
+    let fallar = true;
+    function Contenedor() {
+      const [datos, setDatos] = useState(filas);
+      return (
+        <TablaEditable
+          guardado="automatico"
+          rotulosEstado={ROTULOS}
+          etiqueta="Conceptos"
+          filas={datos}
+          columnas={columnas}
+          clave={(f) => f.id}
+          onGuardar={async (f) => {
+            enviados.push(f);
+            setDatos((d) => d.map((x) => ({ ...x })));
+            if (fallar) throw new Error("red");
+          }}
+        />
+      );
+    }
+    render(<Contenedor />);
+    fireEvent.change(nota("A"), { target: { value: "Primera" } });
+    await act(async () => {
+      fireEvent.blur(nota("A"), { relatedTarget: nota("B") });
+    });
+    expect(nota("A")).toHaveValue("Primera");
+    fallar = false;
+    await act(async () => {
+      fireEvent.click(within(fila("A")).getByRole("button", { name: "Reintentar A" }));
+    });
+    expect(enviados[1]).toMatchObject({ id: "A", nota: "Primera" });
+    expect(estadoDe("A")).toHaveTextContent("Guardado");
+    expect(nota("A")).toHaveValue("Primera");
+  });
+
   it("la columna Acciones se pinta siempre, vacía si no hay error", () => {
     render(<TablaEditable guardado="automatico" etiqueta="Conceptos" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} />);
     expect(screen.getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();

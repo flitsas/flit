@@ -44,7 +44,8 @@ import {
  * Saneamiento (spec-ui §8, FE-0): `guardado="automatico"` es aditivo; sin la prop, todo es como antes. En automático no hay
  * Guardar ni Descartar: cada celda editable guarda al salir de ella (si la fila tiene cambios) y las columnas con
  * `guardarAlCambiarMs` guardan ese tiempo después del último cambio (salir de la celda adelanta el guardado). Un cambio que
- * llega mientras guarda se conserva y se envía al terminar, sobre la fila nueva que mande el padre (versión al día). Tras
+ * llega mientras guarda se conserva y se envía al terminar, sobre la fila nueva que mande el padre (versión al día). Si el
+ * guardado falla, lo digitado se conserva aunque el padre pase otro objeto fila con la misma clave (D-69). Tras
  * un guardado la celda de estado dice `rotuloGuardado` (por defecto «Guardado») en tono success hasta el siguiente
  * cambio, el foco no se mueve y la columna «Acciones» solo muestra «Reintentar» en error.
  */
@@ -188,6 +189,9 @@ function FilaEditable<F>({
   // empezó el último guardado, si hay un cambio esperando a que termine el guardado en curso y el temporizador.
   const borradorRef = useRef<F>(borrador);
   const cambios = useRef<Partial<F>>({});
+  // D-69: los campos que viajan en el guardado en curso. Si falla, vuelven a `cambios` y sobreviven a una fila nueva del
+  // padre con la misma clave, así «Reintentar» reenvía lo digitado.
+  const enCurso = useRef<Partial<F>>({});
   const pendiente = useRef(false);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   const estadoActual = useRef<EstadoFilaEditable>(estado);
@@ -198,7 +202,7 @@ function FilaEditable<F>({
   // que el usuario cambió después del último guardado se conserva sobre la fila nueva (p. ej. con su versión al día).
   if (fila !== filaPrevia) {
     setFilaPrevia(fila);
-    if (automatico) setBorrador({ ...fila, ...cambios.current });
+    if (automatico) setBorrador({ ...fila, ...enCurso.current, ...cambios.current });
     else if (estado === "sin_cambios") setBorrador(fila);
   }
 
@@ -255,6 +259,7 @@ function FilaEditable<F>({
     if (estadoActual.current === "guardando") return;
     cancelarTemporizador();
     const enviado = borradorRef.current;
+    enCurso.current = { ...enCurso.current, ...cambios.current };
     cambios.current = {};
     pendiente.current = false;
     estadoActual.current = "guardando";
@@ -263,6 +268,7 @@ function FilaEditable<F>({
     setEstado("guardando");
     try {
       await onGuardar(enviado);
+      enCurso.current = {};
       if (!montada.current) return;
       if (automatico && pendiente.current) {
         // Llegó un cambio mientras guardaba: sale en cuanto el padre pinte la fila nueva (efecto de abajo).
@@ -279,6 +285,9 @@ function FilaEditable<F>({
       estadoActual.current = "sin_cambios";
       setEstado("sin_cambios");
     } catch {
+      // D-69: lo enviado vuelve a ser cambio pendiente (lo digitado después, si lo hay, manda sobre él).
+      cambios.current = { ...enCurso.current, ...cambios.current };
+      enCurso.current = {};
       if (!montada.current) return;
       if (focoEnFila(filaRef.current)) enfocar.current = "reintentar";
       setFallos((n) => n + 1);
