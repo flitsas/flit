@@ -220,7 +220,7 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     const casillaGestion = screen.getByRole("checkbox", { name: "Seleccionar TST003" });
     expect(casillaGestion).toBeDisabled();
     expect(casillaGestion).toHaveAccessibleDescription("Solo se toman las solicitudes sin tomar");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar las solicitudes sin tomar de esta página" }));
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" }));
     expect(screen.getByRole("button", { name: "Tomar (2)" })).toBeInTheDocument();
     expect(casillaGestion).not.toBeChecked();
   });
@@ -254,7 +254,7 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     });
     montar("estado=");
     await tabla();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar las solicitudes sin tomar de esta página" }));
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" }));
     fireEvent.click(screen.getByRole("button", { name: "Tomar (2)" }));
     expect(await screen.findByText("No se tomó ningún saneamiento. 2 no se pudieron tomar porque ya no existen.", { ignore: SIN_REGION })).toBeInTheDocument();
   });

@@ -164,7 +164,6 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
   const filas = carga.tipo === "listo" ? carga.lista.saneamientos : [];
   const seleccionables = filas.filter((f) => f.estado === "SOLICITADO");
   const elegidas = seleccionables.filter((f) => seleccion.has(f.id));
-  const todas = seleccionables.length > 0 && elegidas.length === seleccionables.length;
 
   function alternar(fila: FilaBandeja) {
     setSeleccion((previa) => {
@@ -251,6 +250,18 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
+        {/* UA-1: «todas» es un botón visible antes de la barra, como el tablero y PS-3; el <thead> no lleva controles. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSeleccion(new Set(seleccionables.map((f) => f.id)))}
+            disabled={seleccionables.length === 0 || tomando}
+            className={BOTON_SECUNDARIO_CLS}
+          >
+            <Icono nombre="check" className="h-4 w-4" />
+            Seleccionar las solicitudes sin tomar
+          </button>
+        </div>
         <BarraSeleccion
           cantidad={elegidas.length}
           etiqueta="Saneamientos elegidos"
@@ -273,14 +284,7 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
             <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
                 <th scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
-                  <input
-                    type="checkbox"
-                    className={MARCA_CLS}
-                    aria-label="Seleccionar las solicitudes sin tomar de esta página"
-                    checked={todas}
-                    disabled={seleccionables.length === 0}
-                    onChange={() => setSeleccion(todas ? new Set() : new Set(seleccionables.map((f) => f.id)))}
-                  />
+                  <span className="sr-only">Selección</span>
                 </th>
                 {COLUMNAS.map((c) => (
                   <th key={c} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
