@@ -9,7 +9,8 @@ import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteSh
 import { rutaKit } from "@flit/ui/iconos-mapas";
 import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { SesionDiagnostico } from "@/lib/sesion";
+import { ResumenSaneamientosContext, useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
+import { puedeGestionarSaneamiento, type SesionDiagnostico } from "@/lib/sesion";
 
 export interface UsuarioShell extends ShellUser {
   permissions: string[];
@@ -62,10 +63,39 @@ const NAV_BACKOFFICE: NavCatalog = {
   sections: [{ id: "backoffice", label: "Backoffice", icon: iconoComo("escudo"), side: "left", ilustracion: rutaKit("modulo/diagnostico") }, ...NAV.sections],
   items: [
     { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: iconoComo("escudo"), ilustracion: rutaKit("modulo/diagnostico") },
+    // «Saneamientos» (HU #14577, spec-ui §1.4) entra aquí por `navBackoffice`, solo con gestionarSaneamiento.
     { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: iconoComo("lista"), ilustracion: rutaKit("modulo/fuentes-oficiales") },
     ...NAV.items,
   ],
 };
+
+/**
+ * Dock del backoffice con la entrada «Saneamientos» (HU #14577 AC24/AC25), después de «Backoffice» y antes de «Fuentes
+ * obligatorias». Solo con la capacidad gestionarSaneamiento: se filtra al armar el catálogo, no con `permission`. Lleva la
+ * insignia de solicitudes sin tomar (0 o desconocido: sin insignia). La API vuelve a exigir el permiso en cada ruta.
+ */
+function navBackoffice(gestionar: boolean, solicitados: number | null): NavCatalog {
+  if (!gestionar) return NAV_BACKOFFICE;
+  const [primera, ...resto] = NAV_BACKOFFICE.items;
+  return {
+    ...NAV_BACKOFFICE,
+    items: [
+      primera,
+      {
+        key: "backoffice-saneamientos",
+        label: "Saneamientos",
+        href: "/backoffice/saneamientos",
+        section: "backoffice",
+        icon: iconoComo("pago"),
+        ilustracion: rutaKit("modulo/diagnostico"),
+        descripcion: "Solicitudes de las compañías",
+        ...(solicitados !== null ? { badge: solicitados } : {}),
+        badgeTexto: "solicitudes sin tomar",
+      },
+      ...resto,
+    ],
+  };
+}
 
 /** Código de la 403 cuando la API niega el acceso sin decir por qué (usuario sin ningún permiso diagnostico.*). */
 const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";
@@ -107,6 +137,13 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   const valor = useMemo(() => ({ ...estado, recargar, tramitesUrl }), [estado, recargar, tramitesUrl]);
   const usuario = useMemo(() => ({ ...user, tenantName: estado.sesion?.empresa.nombre || user.tenantName }), [user, estado.sesion]);
+  const backoffice = estado.sesion?.capacidades.backoffice === true;
+  const gestionarSaneamiento = backoffice && puedeGestionarSaneamiento(estado.sesion?.capacidades);
+  const resumen = useSondeoResumenSaneamientos(gestionarSaneamiento);
+  const nav = useMemo(
+    () => (backoffice ? navBackoffice(gestionarSaneamiento, resumen.solicitados) : NAV),
+    [backoffice, gestionarSaneamiento, resumen.solicitados],
+  );
 
   let contenido: ReactNode = children;
   if (estado.cargando) contenido = <VehicleLoader label="Abriendo Diagnóstico…" />;
@@ -131,12 +168,14 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   return (
     <SesionContext.Provider value={valor}>
-      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl}
+      <ResumenSaneamientosContext.Provider value={resumen}>
+      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={nav} user={usuario} accountUrl={tramitesUrl}
         layout="app"
         headerActions={estado.sesion ? <CampanaDiagnostico /> : undefined}
       >
         <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>
       </SuiteShell>
+      </ResumenSaneamientosContext.Provider>
     </SesionContext.Provider>
   );
 }

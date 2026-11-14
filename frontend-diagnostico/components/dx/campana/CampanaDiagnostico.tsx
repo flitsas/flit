@@ -6,7 +6,7 @@ import Link from "next/link";
 import { NotificacionPersistente } from "@flit/ui/NotificacionPersistente";
 import { IconoDxCampana } from "@/components/dx/iconos/IconoDxCampana";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
-import type { NotificacionDiagnostico } from "@/lib/notificaciones/api";
+import { TIPOS_SANEAMIENTO, type NotificacionDiagnostico } from "@/lib/notificaciones/api";
 import { textoNotificacion } from "@/lib/notificaciones/mensajes";
 import { useNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 import { descargarArchivo, mensajeDescarga, pedirZip, urlArchivoZip } from "@/lib/reportes/api";
@@ -119,7 +119,7 @@ export function CampanaDiagnostico() {
                     <span className="sr-only">{`: ${texto!.mensaje} (${fechaDelDato(item.creada_en)})`}</span>
                   </button>
                 ) : (
-                  <Link href={`/diagnosticos/${encodeURIComponent(item.diagnostico_id)}`} onClick={() => {
+                  <Link href={`/diagnosticos/${encodeURIComponent(item.diagnostico_id)}${TIPOS_SANEAMIENTO.has(item.tipo) ? "?saneamiento=con" : ""}`} onClick={() => {
                       setAbierto(false);
                       void n.marcarLeida(item.id);
                     }}

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
+import { useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
 
 // Uso de ejemplo: <DiagnosticoShell user={usuarioDelToken} tramitesUrl="https://tramites">{pantalla}</DiagnosticoShell>
 // pide GET /api/v1/diagnostico/sesion y, con la sesión, dibuja la barra de la suite con la compañía y la pantalla.
@@ -128,5 +129,113 @@ describe("DiagnosticoShell", () => {
     montar();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: /^Avisos/ })).toBeNull();
+  });
+});
+
+describe("HU14577 AC24/AC25 entrada «Saneamientos» con insignia de pendientes", () => {
+  const conBackoffice = (gestionarSaneamiento: boolean) => ({ ...sesion, capacidades: { ...sesion.capacidades, backoffice: true, gestionarSaneamiento } });
+  const api = (gestionar: boolean, solicitados: number) =>
+    vi.fn(async (u: RequestInfo | URL) => {
+      const url = String(u);
+      if (url.startsWith("/api/v1/diagnostico/notificaciones")) return Response.json({ no_leidas: 0, items: [], siguiente: null });
+      if (url === "/api/v1/diagnostico/backoffice/saneamientos/resumen") return Response.json({ solicitados });
+      return Response.json(conBackoffice(gestionar));
+    });
+  const pedidosResumen = (f: ReturnType<typeof api>) => f.mock.calls.filter(([u]) => String(u) === "/api/v1/diagnostico/backoffice/saneamientos/resumen");
+  const abrirBackoffice = async () => {
+    const [pildora] = await screen.findAllByRole("button", { name: /^Backoffice/ });
+    fireEvent.click(pildora);
+    return pildora;
+  };
+
+  it("con gestionarSaneamiento: la entrada lleva a /backoffice/saneamientos y muestra 12 (en la entrada y en la píldora)", async () => {
+    const f = api(true, 12);
+    vi.stubGlobal("fetch", f);
+    montar();
+    await screen.findByText("pantalla base");
+    await waitFor(() => expect(pedidosResumen(f)).toHaveLength(1));
+    const pildora = await abrirBackoffice();
+    await waitFor(() => expect(pildora).toHaveAccessibleName("Backoffice, 12 pendientes"));
+    const [entrada] = await screen.findAllByRole("link", { name: "Saneamientos, 12 solicitudes sin tomar" });
+    expect(entrada).toHaveAttribute("href", "/backoffice/saneamientos");
+    expect(entrada.querySelector(".dock-insignia")).toHaveTextContent(/^12$/);
+  });
+
+  it("con 0 no pinta insignia", async () => {
+    vi.stubGlobal("fetch", api(true, 0));
+    montar();
+    await screen.findByText("pantalla base");
+    await abrirBackoffice();
+    const [entrada] = await screen.findAllByRole("link", { name: "Saneamientos" });
+    expect(entrada.querySelector(".dock-insignia")).toBeNull();
+  });
+
+  it("con 150 pinta «99+» y el nombre lleva el número real", async () => {
+    vi.stubGlobal("fetch", api(true, 150));
+    montar();
+    await screen.findByText("pantalla base");
+    await abrirBackoffice();
+    const [entrada] = await screen.findAllByRole("link", { name: "Saneamientos, 150 solicitudes sin tomar" });
+    expect(entrada.querySelector(".dock-insignia")).toHaveTextContent(/^99\+$/);
+  });
+
+  it("sin gestionarSaneamiento (aunque tenga backoffice) no ve la entrada ni se pide el resumen", async () => {
+    const f = api(false, 12);
+    vi.stubGlobal("fetch", f);
+    montar();
+    await screen.findByText("pantalla base");
+    await abrirBackoffice();
+    expect(screen.queryAllByRole("link", { name: /^Saneamientos/ })).toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "Fuentes obligatorias" }).length).toBeGreaterThan(0);
+    expect(pedidosResumen(f)).toHaveLength(0);
+  });
+});
+
+describe("HU14577 AC25 sondeo del resumen cada 60 s solo con la pestaña visible", () => {
+  let visible: DocumentVisibilityState = "visible";
+  beforeEach(() => {
+    visible = "visible";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visible);
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const resumen = () => vi.fn(async () => Response.json({ solicitados: 4 }));
+
+  it("pide al montar y cada 60 s mientras está visible; oculta no pide; al volver visible pide en el acto", async () => {
+    const f = resumen();
+    vi.stubGlobal("fetch", f);
+    const { result } = renderHook(() => useSondeoResumenSaneamientos(true));
+    await act(async () => {});
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(result.current.solicitados).toBe(4);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(f).toHaveBeenCalledTimes(2);
+    visible = "hidden";
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(f).toHaveBeenCalledTimes(2);
+    visible = "visible";
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it("sin la capacidad no pide nunca; si falla conserva el último valor sin error", async () => {
+    const f = resumen();
+    vi.stubGlobal("fetch", f);
+    renderHook(() => useSondeoResumenSaneamientos(false));
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(f).not.toHaveBeenCalled();
+
+    const g = vi.fn().mockResolvedValueOnce(Response.json({ solicitados: 7 })).mockResolvedValue(Response.json({ error: "x" }, { status: 503 }));
+    vi.stubGlobal("fetch", g);
+    const { result } = renderHook(() => useSondeoResumenSaneamientos(true));
+    await act(async () => {});
+    expect(result.current.solicitados).toBe(7);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(g).toHaveBeenCalledTimes(2);
+    expect(result.current.solicitados).toBe(7);
   });
 });
