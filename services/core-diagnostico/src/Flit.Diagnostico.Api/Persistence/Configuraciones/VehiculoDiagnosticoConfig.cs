@@ -1,5 +1,6 @@
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Domain.Saneamiento;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -37,6 +38,9 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
             // Versión de fila del tablero (HU #14563, ADR-0086 D-1).
             t.HasCheckConstraint("ck_vehiculos_version_tablero", "version_tablero >= 0");
+            // Copia del estado del saneamiento no anulado (HU #14576, ADR-0087): nunca ANULADO (sin saneamiento vigente es null).
+            t.HasCheckConstraint("ck_vehiculos_saneamiento_estado",
+                $"saneamiento_estado IS NULL OR saneamiento_estado IN ('{CodigosDeEnum.Codigo(EstadoSaneamiento.Solicitado)}', '{CodigosDeEnum.Codigo(EstadoSaneamiento.EnGestion)}', '{CodigosDeEnum.Codigo(EstadoSaneamiento.Saneado)}', '{CodigosDeEnum.Codigo(EstadoSaneamiento.NoProcede)}')");
         });
         builder.HasKey(x => x.Id).HasName("pk_vehiculos");
         // Sostiene las FK compuestas de las celdas y los intentos (HU #13723, ADR-0072 (c)).
@@ -97,6 +101,14 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
             .HasDefaultValueSql("0").ValueGeneratedNever()
             .HasComment("Valor de diagnosticos.version_tablero en el último cambio de la FILA (dictamen nuevo o ajustado, trámite creado/omitido/fallido). 0 = sin cambios de fila. Polling ?desde=. [ADR-0086]");
         builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId, x.VersionTablero }).HasDatabaseName("ix_vehiculos_tablero");
+
+        // Saneamiento (HU #14576, ADR-0087): copia del estado para la grilla del lote y la de placas, sin join por fila.
+        builder.Property(x => x.SaneamientoEstado)
+            .HasConversion(CodigosDeEnum.Convertidor<EstadoSaneamiento>()).HasMaxLength(16)
+            .HasComment("Estado del saneamiento no anulado del vehículo (copia); null si no hay. Lo escribe solo EscritorSaneamiento, en la transacción de la transición. [ADR-0087]");
+        builder.HasIndex(x => new { x.TenantId, x.SaneamientoEstado }).HasFilter("saneamiento_estado IS NOT NULL").HasDatabaseName("ix_vehiculos_saneamiento");
+        builder.HasIndex(x => new { x.TenantId, x.IdentificadorNorm }, "ix_vehiculos_identificador_prefijo")
+            .HasOperators("uuid_ops", "varchar_pattern_ops").HasDatabaseName("ix_vehiculos_identificador_prefijo");
 
         // Concurrencia optimista con la columna de sistema xmin: no agrega columnas a la tabla.
         builder.Property(x => x.Version).IsRowVersion();

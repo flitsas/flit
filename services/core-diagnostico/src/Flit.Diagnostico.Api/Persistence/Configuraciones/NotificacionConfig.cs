@@ -31,10 +31,10 @@ internal sealed class NotificacionConfig : IEntityTypeConfiguration<Notificacion
         builder.Property(x => x.TenantId).HasComment("Empresa dueña del lote y de la notificación.");
         builder.Property(x => x.UsuarioId).HasComment("@pii:low Destinatario: seudónimo uuid (claim sub); quien disparó el hecho.");
         builder.Property(x => x.Tipo).HasMaxLength(32)
-            .HasComment("ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA o LOTE_TERMINADO (D8: sin DICTAMEN_AJUSTADO).");
+            .HasComment("ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO o SANEAMIENTO_TOMADO/CERRADO/REABIERTO/ANULADO (D8: sin DICTAMEN_AJUSTADO; ADR-0087).");
         builder.Property(x => x.DiagnosticoId).HasComment("Lote al que se refiere el aviso.");
         builder.Property(x => x.ReferenciaId)
-            .HasComment("Id del hecho según tipo: evidencias.id (ZIP_*), derivacion_operaciones.id (DERIVACION_TERMINADA), historial_estado_diagnostico.id (LOTE_TERMINADO). Sin FK (polimórfica, ADR-0086).");
+            .HasComment("Id del hecho según tipo: evidencias.id (ZIP_*), derivacion_operaciones.id (DERIVACION_TERMINADA), historial_estado_diagnostico.id (LOTE_TERMINADO), saneamiento_historial.id (SANEAMIENTO_*, ADR-0087). Sin FK (polimórfica, ADR-0086).");
         builder.Property(x => x.Datos).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb")
             .HasComment("@pii:none Solo contadores y códigos (p. ej. {\"creadas\":3,\"fallidas\":1}); el CHECK impide texto libre.");
         builder.Property(x => x.CreadaEn).HasComment("Instante del hecho (timestamptz). Base de la retención.");
