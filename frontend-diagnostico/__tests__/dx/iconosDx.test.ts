@@ -28,6 +28,7 @@ const ESPERADOS = [
   "IconoDxDescargarZip",
   "IconoDxCrearTramite",
   "IconoDxDictamen",
+  "IconoDxBandera",
 ];
 
 const archivos = readdirSync(DIR);
