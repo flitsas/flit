@@ -161,13 +161,13 @@ sequenceDiagram
     Note over API,DB: El dictamen no se toca (D-4)
     C->>FE: Ve «Saneado» en el tablero y descarga la evidencia
     FE->>API: GET …/saneamiento/renglones/{rid}/evidencia
-    API->>AL: AbrirAsync(referencia)
+    API->>AL: LeerAsync(referencia) en stream
     API-->>FE: application/pdf (attachment)
 ```
 
 ## Excepciones a ADR-0072 (alcance: solo las tablas de saneamiento)
 
-Este ADR añade a «Excepciones por tabla» de ADR-0072 las siguientes, alineadas con el DDL final del `database-agent` (`.claude/state/saneamiento/schema.md` §1). Ninguna se extiende a otra tabla del schema; las filas de las tres tablas y de `vehiculos` ya están en la tabla de aplicabilidad de ADR-0072.
+Este ADR añade a «Excepciones por tabla» de ADR-0072 las siguientes, alineadas con el DDL final, que está en la migración `20261114171738_S1_Saneamiento` y en sus configuraciones EF (`Persistence/Configuraciones/Saneamiento*Config.cs`, `RenglonSaneamientoConfig.cs` y `EventoSaneamientoConfig.cs`). Ninguna se extiende a otra tabla del schema; las filas de las tres tablas y de `vehiculos` ya están en la tabla de aplicabilidad de ADR-0072.
 
 1. **A11 en `ix_saneamientos_bandeja (estado, solicitado_en, id)`**: no empieza por `tenant_id` porque lo usan exclusivamente la bandeja, el Excel y el resumen (insignia) entre compañías de D-5, solo desde `Modulos/Backoffice`. `id` desempata el orden de la paginación. Mismo criterio que `ix_redaccion_pendiente`. Los demás índices nuevos empiezan por `tenant_id`.
 2. **(d)5 en `saneamiento_historial.renglon_id` sin FK**: el renglón se puede quitar (excepción 3) y el historial no se reescribe. La fuente se copia en la fila para que el historial se lea sin el renglón. Mismo criterio que `notificaciones.referencia_id` (ADR-0086).
@@ -288,7 +288,7 @@ Datos personales: `solicitado_por`, `tomado_por`, `cerrado_por`, `anulado_por`, 
   - `ON DELETE RESTRICT` en todas las FK (renglones e historial → saneamientos; saneamientos → `diagnosticos` y `vehiculos`). Ningún `CASCADE`.
   - CHECK de estados, fuentes, hallazgos, resultados, eventos, `descripcion` obligatoria en `OTRO` y `ck_renglon_evidencia` de todo o nada.
   - Comentarios `@pii:low` en autores y textos libres; el historial termina en «Solo inserción.».
-  - El DDL que manda es `.claude/state/saneamiento/schema.md`. Las filas de las tres tablas y la columna de `vehiculos` ya están en la tabla de aplicabilidad de ADR-0072, citando las excepciones 1 a 4.
+  - El DDL que manda es la migración `20261114171738_S1_Saneamiento` con sus configuraciones EF. Las filas de las tres tablas y la columna de `vehiculos` ya están en la tabla de aplicabilidad de ADR-0072, citando las excepciones 1 a 4.
 - **Backend Agent**:
   - Toda escritura por `EscritorSaneamiento`, en una transacción, con subida de la versión de fila.
   - Dominio puro en `Flit.Diagnostico.Domain/Saneamiento`, sin EF ni HTTP.
