@@ -198,6 +198,7 @@ public static class Modulos
         Reportes.ReportesEndpoints.Map(api);
         Reportes.EvidenciasEndpoints.Map(api);
         Notificaciones.NotificacionesEndpoints.Map(api);
+        Saneamiento.SaneamientoEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

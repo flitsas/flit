@@ -21,6 +21,12 @@ public static class Permisos
     public const string AuditoriaVer = "diagnostico.auditoria.ver";
     public const string VolumetriaVer = "diagnostico.volumetria.ver";
 
+    /// <summary>Marcar y desmarcar el saneamiento de un vehículo y el masivo (HU #14576, plan saneamiento §5.1). Los dos roles por defecto.</summary>
+    public const string SaneamientoSolicitar = "diagnostico.saneamiento.solicitar";
+
+    /// <summary>Gestión FLIT del saneamiento (§5.1, S13): ningún rol por defecto; exige además la operación FLIT.</summary>
+    public const string SaneamientoGestionar = "diagnostico.saneamiento.gestionar";
+
     /// <summary>
     /// Módulos del manifiesto con sus permisos y el nombre que ve el administrador de roles. El código de módulo es global
     /// en la plataforma (<c>security.modules</c>), por eso lleva el prefijo <c>diagnostico_</c>.
@@ -47,9 +53,13 @@ public static class Permisos
             (BackofficeVer, "Ver diagnósticos de todas las compañías"), (AuditoriaVer, "Ver la auditoría de consultas y dictámenes"),
             (VolumetriaVer, "Ver la volumetría y la conversión"),
         ]),
+        ("diagnostico_saneamiento", "Diagnóstico · Saneamiento",
+        [
+            (SaneamientoSolicitar, "Solicitar el saneamiento de un vehículo"), (SaneamientoGestionar, "Gestionar saneamientos (backoffice FLIT)"),
+        ]),
     ];
 
-    private static readonly string[] Usuario = [DiagnosticosCrear, DiagnosticosVer, ReportesDescargar, DerivacionCrear, ConfiguracionVer];
+    private static readonly string[] Usuario = [DiagnosticosCrear, DiagnosticosVer, ReportesDescargar, DerivacionCrear, ConfiguracionVer, SaneamientoSolicitar];
 
     /// <summary>
     /// Roles por defecto (§6.2). <c>admin_diagnostico</c> es el rol de sistema que la plataforma ya asigna a todo

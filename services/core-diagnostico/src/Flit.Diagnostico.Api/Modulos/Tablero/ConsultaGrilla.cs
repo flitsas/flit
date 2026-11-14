@@ -12,6 +12,7 @@ using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Estimacion;
 using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Saneamiento;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 
@@ -81,11 +82,22 @@ internal sealed class ConsultaGrilla(
                 v.DocumentoDeclarado, v.Propietarios, esPegado.Contains(v.Id),
                 Veredicto: elegibilidad.TryGetValue(v.Id, out var e) ? e.Veredicto : null,
                 DictamenAjustado: e?.DictamenAjustado ?? false,
-                Version: v.VersionFila))],
+                Version: v.VersionFila,
+                Saneamiento: SaneamientoDeLaFila(v.Terminado, v.SaneamientoEstado)))],
             grilla.Estimado, pegados.Count, pegados, conteos, lote)
         {
             Elegibilidad = new ElegibilidadDeLaGrilla(cabecera.TenantId, elegibilidad),
         };
+    }
+
+    /// <summary>
+    /// Saneamiento de la fila (HU #14576 AC35): la copia <c>vehiculos.saneamiento_estado</c> (sin join) y la elegibilidad de
+    /// <see cref="ElegibilidadSaneamiento"/> con el <c>terminado</c> de la fila, calculado con todas sus celdas.
+    /// </summary>
+    internal static Saneamiento.SaneamientoFilaDto SaneamientoDeLaFila(bool terminado, EstadoSaneamiento? estado)
+    {
+        var motivo = ElegibilidadSaneamiento.MotivoNoElegible(terminado, estado);
+        return new Saneamiento.SaneamientoFilaDto(estado is { } e ? CodigosDeEnum.Codigo(e) : null, motivo is null, motivo);
     }
 
     /// <summary>
@@ -184,6 +196,7 @@ internal sealed class ConsultaGrilla(
                 v.Placa,
                 v.Vin,
                 v.VersionTablero,
+                v.SaneamientoEstado,
                 Captura = new DocumentoCapturado(
                     v.LocatarioDocOrigen, v.LocatarioDocTipo, v.LocatarioDocCifrado, v.LocatarioDeclaradoDocTipo, v.LocatarioDeclaradoDocCifrado),
             })
@@ -196,7 +209,7 @@ internal sealed class ConsultaGrilla(
             v.Id, v.Orden, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.TipoIdentificador), v.Placa, v.Vin,
             AvanceVehiculo.Terminado(porVehiculo.GetValueOrDefault(v.Id, []).Select(c => c.Estado)),
             [.. cambiadasPorVehiculo[v.Id].OrderBy(c => ordenFuente.GetValueOrDefault(c.Fuente, int.MaxValue))],
-            documentos[v.Id].Declarado, documentos[v.Id].Propietarios, v.VersionTablero)).ToList();
+            documentos[v.Id].Declarado, documentos[v.Id].Propietarios, v.VersionTablero, v.SaneamientoEstado)).ToList();
         var terminados = porVehiculo.Values.Count(c => AvanceVehiculo.Terminado(c.Select(x => x.Estado)));
         // HU #14563 B1: con todo el lote (también en el delta), con la lista de celdas ya leída.
         var conError = porVehiculo.Values.Count(c => c.Any(x => x.Estado == EstadoCelda.Error));
@@ -341,7 +354,8 @@ internal sealed record GrillaLeida(
 /// </summary>
 internal sealed record VehiculoLeido(
     Guid Id, int Orden, string Identificador, string TipoIdentificador, string? Placa, string? Vin, bool Terminado, IReadOnlyList<CeldaLeida> Celdas,
-    DocumentoDeclaradoDto? DocumentoDeclarado, IReadOnlyList<PropietarioGrillaDto> Propietarios, long VersionFila = 0);
+    DocumentoDeclaradoDto? DocumentoDeclarado, IReadOnlyList<PropietarioGrillaDto> Propietarios, long VersionFila = 0,
+    EstadoSaneamiento? SaneamientoEstado = null);
 
 /// <summary>
 /// La elegibilidad que ya leyó la grilla de la compañía (HU #14563 B1), con la empresa del lote: la columna de derivación la reutiliza

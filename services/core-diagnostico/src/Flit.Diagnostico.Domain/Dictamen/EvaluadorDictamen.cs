@@ -35,7 +35,7 @@ public static class EvaluadorDictamen
         if (runt is not null)
             AgregarPropiedad(hechos, runt, reglas);
         AgregarLicencia(hechos, leasing, reglas);
-        if (hechos.ImpuestoTieneDeuda || hechos.ImpuestoMontoPesos is > 0)
+        if (PredicadosDictamen.ImpuestoConDeuda(hechos))
             reglas.Add(Emitir(hechos, "IMPUESTO", "IMPUESTO_DEPARTAMENTAL", hechos.ImpuestoMontoPesos is > 0 ? hechos.ImpuestoMontoPesos : null));
         AgregarFuentes(hechos, reglas);
 
@@ -60,7 +60,7 @@ public static class EvaluadorDictamen
     /// </summary>
     private static void AgregarCobertura(HechosDictamen hechos, HechosRuntVehiculo runt, List<ReglaEvaluada> reglas)
     {
-        if (!Cubre(runt.EstadosSoat))
+        if (!PredicadosDictamen.Cubre(runt.EstadosSoat))
         {
             if (runt.Clase == ClaseVehiculoDictamen.Maquinaria)
                 reglas.Add(Emitir(hechos, "SOAT_MAQUINARIA", "RUNT"));
@@ -68,9 +68,7 @@ public static class EvaluadorDictamen
                 reglas.Add(Emitir(hechos, "SOAT_NO_VIGENTE", "RUNT"));
         }
 
-        if (ClasificadorVehiculoDictamen.AniosPrimeraRtm(runt.Clase, runt.Servicio) is { } anios
-            && EvaluaRtm(runt.FechaMatricula, hechos.Hoy, anios)
-            && !Cubre(runt.EstadosRtm))
+        if (PredicadosDictamen.RtmNoVigente(runt, hechos.Hoy))
             reglas.Add(Emitir(hechos, "RTM_NO_VIGENTE", "RUNT"));
         if (EstadoDispara(runt.EstadoVehiculo))
             reglas.Add(Emitir(hechos, "ESTADO_VEHICULO", "RUNT"));
@@ -122,7 +120,7 @@ public static class EvaluadorDictamen
 
         foreach (var (simit, fuente) in leidas)
         {
-            if (TieneMultas(simit))
+            if (PredicadosDictamen.TieneMultas(simit))
                 reglas.Add(Emitir(hechos, fuente, fuente));
         }
 
@@ -137,7 +135,7 @@ public static class EvaluadorDictamen
 
         foreach (var (simit, fuente) in leidas)
         {
-            if (simit.Acuerdos.Any(a => a.SaldoPendientePesos != 0))
+            if (PredicadosDictamen.TieneAcuerdoConSaldo(simit))
                 reglas.Add(Emitir(hechos, "SIMIT_ACUERDO_PAGO", fuente));
         }
     }
@@ -169,24 +167,10 @@ public static class EvaluadorDictamen
         }
     }
 
-    private static bool Cubre(IReadOnlyList<string?> estados) =>
-        estados.Any(estado => Normalizar(estado) is "VIGENTE" or "NO REQUIERE");
-
-    private static bool EvaluaRtm(DateOnly? fechaMatricula, DateOnly hoy, int anios) =>
-        fechaMatricula is null || hoy >= fechaMatricula.Value.AddYears(anios);
-
     private static bool EstadoDispara(string? estado)
     {
         var normalizado = Normalizar(estado);
         return normalizado is not ("REGISTRADO" or "ACTIVO");
-    }
-
-    /// <summary>Multas del catálogo v2: comparendos o sin paz y salvo. Licencia y acuerdo de pago van aparte.</summary>
-    private static bool TieneMultas(HechosSimit simit)
-    {
-        if (simit.Acuerdos is null)
-            throw new ArgumentException("Los acuerdos de SIMIT no pueden ser nulos.", nameof(simit));
-        return simit.CantidadComparendos > 0 || simit.PazYSalvo == false;
     }
 
     private static bool LicenciaDispara(LicenciaConductor licencia)
@@ -196,8 +180,7 @@ public static class EvaluadorDictamen
         return mala || !licencia.CertificadoAptitudVigente;
     }
 
-    private static string Normalizar(string? valor) =>
-        string.IsNullOrWhiteSpace(valor) ? string.Empty : valor.Trim().Replace('_', ' ').ToUpperInvariant();
+    private static string Normalizar(string? valor) => PredicadosDictamen.Normalizar(valor);
 
     private static ReglaEvaluada Emitir(HechosDictamen hechos, string codigo, string fuente, long? monto = null)
     {

@@ -177,6 +177,12 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaNotificaciones = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Notificaciones.NotificacionesEndpoints.Ruta;
 
+    /// <summary>
+    /// Detalle del saneamiento para el cliente (HU #14576 AC26, AC33): cada empresa siembra un lote con un vehículo y su saneamiento;
+    /// el detalle devuelve el id del saneamiento, y con el token de A el de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaSaneamiento = Program.Prefijo + DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/saneamiento";
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -272,6 +278,13 @@ public static class EscenariosDeFuga
             });
             await db.SaveChangesAsync(ct);
             return new Sembrado(RutaNotificaciones, [lote.Id.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaSaneamiento, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST913", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var vehiculo = lote.Vehiculos.Single().Id;
+            var saneamiento = await Saneamiento.SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, vehiculo, global::Flit.Diagnostico.Domain.Saneamiento.EstadoSaneamiento.Solicitado, ct);
+            return new Sembrado(Saneamiento.SaneamientoDePrueba.Ruta(lote.Id, vehiculo), [saneamiento.Id.ToString()]);
         }),
         new EscenarioDeFuga(RutaOperacionesDerivacion, async (empresa, ct) =>
         {
