@@ -6,7 +6,8 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ZonaArrastre } from "@flit/ui/ZonaArrastre";
 import { ApiError } from "@/lib/api";
-import { EXTENSIONES_ADMITIDAS, URL_PLANTILLA, accesoNegado, analizarCarga, extensionDe, type ResumenValidacion } from "@/lib/carga/api";
+import { ERRORES_CARGA, EXTENSIONES_ADMITIDAS, URL_PLANTILLA, accesoNegado, analizarCarga, extensionDe, type ResumenValidacion } from "@/lib/carga/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 
 export interface SubidaArchivoProps {
@@ -105,7 +106,8 @@ export function SubidaArchivo({ diagnosticoId, onResumen, onAccesoNegado }: Subi
         return;
       }
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setEstado({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo analizar el archivo.", reintentar: reintentable ? elegido : null });
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      setEstado({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo analizar el archivo.", ERRORES_CARGA), reintentar: reintentable ? elegido : null });
     }
   }
 

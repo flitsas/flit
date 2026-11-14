@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SubidaArchivo } from "@/components/carga/SubidaArchivo";
+import { ERRORES_CARGA } from "@/lib/carga/api";
 import { ID, archivo, llamadas, resumen, ruta, simularApi } from "./datos";
 
 /**
@@ -21,6 +22,7 @@ const alertaConTexto = async () => {
 
 afterEach(() => vi.unstubAllGlobals());
 
+const SECRETO = "mensaje del servidor que no debe verse";
 const MENSAJE_XLS = "El formato .xls no se admite: guarde el archivo como .xlsx y vuelva a subirlo";
 
 function montar(onResumen = vi.fn(), onAccesoNegado = vi.fn()) {
@@ -96,22 +98,50 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     expect(onResumen).not.toHaveBeenCalled();
   });
 
-  it("el 415 de la API (archivo ilegible) muestra su mensaje", async () => {
+  // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje del servidor; ahora el texto fijo del code (ERRORES_CARGA).
+  it("AP-9: el 415 ARCHIVO_ILEGIBLE muestra el texto fijo del code, nunca el mensaje del servidor", async () => {
     simularApi({
-      [`POST ${ruta("/carga")}`]: () => Response.json({ code: "ARCHIVO_ILEGIBLE", error: "El archivo .xlsx está dañado." }, { status: 415 }),
+      [`POST ${ruta("/carga")}`]: () => Response.json({ code: "ARCHIVO_ILEGIBLE", error: SECRETO }, { status: 415 }),
     });
     montar();
     subir(archivo("flota.xlsx"));
-    expect(await alertaConTexto()).toHaveTextContent("El archivo .xlsx está dañado.");
+    const alerta = await alertaConTexto();
+    expect(alerta).toHaveTextContent(ERRORES_CARGA.ARCHIVO_ILEGIBLE);
+    expect(alerta).not.toHaveTextContent(SECRETO);
   });
 
-  it("el 413 avisa que el archivo supera el tamaño máximo", async () => {
+  // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje del servidor.
+  it("AP-9: el 413 ARCHIVO_DEMASIADO_GRANDE avisa con texto fijo que el archivo supera el tamaño máximo", async () => {
     simularApi({
-      [`POST ${ruta("/carga")}`]: () => Response.json({ code: "ARCHIVO_DEMASIADO_GRANDE", error: "El archivo supera 5 MB." }, { status: 413 }),
+      [`POST ${ruta("/carga")}`]: () => Response.json({ code: "ARCHIVO_DEMASIADO_GRANDE", error: SECRETO }, { status: 413 }),
     });
     montar();
     subir(archivo("flota.xlsx"));
-    expect(await alertaConTexto()).toHaveTextContent("El archivo supera 5 MB.");
+    const alerta = await alertaConTexto();
+    expect(alerta).toHaveTextContent(/supera el tamaño máximo/);
+    expect(alerta).not.toHaveTextContent(SECRETO);
+  });
+
+  it.each(["COLUMNA_REQUERIDA", "ARCHIVO_REQUERIDO", "FORMATO_XLS_NO_ADMITIDO", "DIAGNOSTICO_NO_EDITABLE"] as const)(
+    "AP-9: el rechazo %s muestra el texto fijo del code, sin Reintentar",
+    async (code) => {
+      simularApi({ [`POST ${ruta("/carga")}`]: () => Response.json({ code, error: SECRETO }, { status: code === "DIAGNOSTICO_NO_EDITABLE" ? 409 : 422 }) });
+      montar();
+      subir(archivo("flota.xlsx"));
+      const alerta = await alertaConTexto();
+      expect(alerta).toHaveTextContent(ERRORES_CARGA[code]);
+      expect(alerta).not.toHaveTextContent(SECRETO);
+      expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+    },
+  );
+
+  it("AP-9: un 422 con un code fuera del contrato cae en el respaldo fijo", async () => {
+    simularApi({ [`POST ${ruta("/carga")}`]: () => Response.json({ code: "OTRO", error: SECRETO }, { status: 422 }) });
+    montar();
+    subir(archivo("flota.xlsx"));
+    const alerta = await alertaConTexto();
+    expect(alerta).toHaveTextContent("No se pudo analizar el archivo.");
+    expect(alerta).not.toHaveTextContent(SECRETO);
   });
 
   it("un 500 se muestra como error genérico con Reintentar, que vuelve a subir el mismo archivo", async () => {
@@ -121,7 +151,8 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     const { onResumen } = montar();
     subir(archivo("flota.csv", "text/csv"));
-    expect(await alertaConTexto()).toHaveTextContent(/intenta de nuevo/i);
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await alertaConTexto()).toHaveTextContent("No se pudo analizar el archivo.");
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(onResumen).toHaveBeenCalled());
     expect(llamadas(api, "POST", ruta("/carga"))).toHaveLength(2);

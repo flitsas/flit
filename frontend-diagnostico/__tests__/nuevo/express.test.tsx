@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ERRORES_EXPRESS } from "@/lib/express/api";
 import { FECHA, ID_EXPRESS, creadoOk, cuerpoDe, llamadas, montarNuevo, type Navegacion } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/nuevo?modo=express&placa=TST123 abre el Express (HU #14085) con la placa precargada a la
@@ -26,6 +27,7 @@ afterEach(() => {
 });
 
 const navegacion = nav as unknown as Navegacion;
+const SECRETO = "mensaje del servidor que no debe verse";
 type Opciones = Parameters<typeof montarNuevo>[1];
 const montar = (opciones: Opciones = {}) => montarNuevo(navegacion, { query: "modo=express", ...opciones });
 
@@ -193,12 +195,13 @@ describe("Express — errores (AC4)", () => {
       query: "modo=express&placa=TST123",
       rutas: {
         "POST /express": () =>
-          Response.json({ code: "IDENTIFICADOR_DEMASIADO_LARGO", error: "El identificador es demasiado largo.", campo: "identificador" }, { status: 422 }),
+          Response.json({ code: "IDENTIFICADOR_DEMASIADO_LARGO", error: SECRETO, campo: "identificador" }, { status: 422 }),
       },
     });
     await nombre();
     await continuar();
-    await waitFor(async () => expect(await placa()).toHaveAccessibleDescription("El identificador es demasiado largo."));
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo del code.
+    await waitFor(async () => expect(await placa()).toHaveAccessibleDescription(ERRORES_EXPRESS.IDENTIFICADOR_DEMASIADO_LARGO));
     expect(await placa()).toHaveAttribute("aria-invalid", "true");
     expect(await placa()).toHaveValue("TST123");
     expect(nav.push).not.toHaveBeenCalled();
@@ -207,15 +210,48 @@ describe("Express — errores (AC4)", () => {
   it("el 422 del documento se pinta en su campo", async () => {
     montar({
       query: "modo=express&placa=TST123",
-      rutas: { "POST /express": () => Response.json({ code: "DOCUMENTO_INVALIDO", error: "El documento no es válido.", campo: "documento_locatario" }, { status: 422 }) },
+      rutas: { "POST /express": () => Response.json({ code: "DOCUMENTO_INVALIDO", error: SECRETO, campo: "documento_locatario" }, { status: 422 }) },
     });
     await nombre();
     fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
     fireEvent.change(documento(), { target: { value: "12" } });
     await continuar();
-    expect(await screen.findByText("El documento no es válido.")).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API.
+    expect(await screen.findByText(ERRORES_EXPRESS.DOCUMENTO_INVALIDO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
     expect(documento()).toHaveAttribute("aria-invalid", "true");
     expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("AP-9: el 422 del tipo de documento se pinta en su campo con el texto fijo del code", async () => {
+    montar({
+      query: "modo=express&placa=TST123",
+      rutas: { "POST /express": () => Response.json({ code: "TIPO_DOCUMENTO_INVALIDO", error: SECRETO, campo: "tipo_documento_locatario" }, { status: 422 }) },
+    });
+    await nombre();
+    fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
+    fireEvent.change(documento(), { target: { value: "12345" } });
+    await continuar();
+    expect(await screen.findByText(ERRORES_EXPRESS.TIPO_DOCUMENTO_INVALIDO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 503 CATALOGO_NO_DISPONIBLE da el aviso general con el texto fijo del code", async () => {
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({ code: "CATALOGO_NO_DISPONIBLE", error: SECRETO }, { status: 503 }) } });
+    await nombre();
+    await continuar();
+    expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
+    expect(screen.getByText(ERRORES_EXPRESS.CATALOGO_NO_DISPONIBLE)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 422 sin campo da «Revisa la parametrización» con el texto fijo del code", async () => {
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({ code: "FUENTE_NO_HABILITADA", error: SECRETO }, { status: 422 }) } });
+    await nombre();
+    await continuar();
+    expect(await screen.findByText("Revisa la parametrización")).toBeInTheDocument();
+    expect(screen.getByText(ERRORES_EXPRESS.FUENTE_NO_HABILITADA)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
   });
 
   it("403 sin código: «Sin permiso para crear diagnósticos», sin navegar y conservando el modo y lo digitado", async () => {
@@ -246,7 +282,8 @@ describe("Express — errores (AC4)", () => {
     await nombre();
     await continuar();
     expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
-    expect(screen.getByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(screen.getByText("No se pudo completar la acción.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await iniciado()).toBeInTheDocument();
     expect(llamadas(api, "POST", "/express")).toHaveLength(2);

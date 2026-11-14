@@ -78,10 +78,19 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     });
     expect(await screen.findByRole("status", { name: "Cargando la parametrización…" })).toBeInTheDocument();
     expect(await screen.findByText("No se pudo cargar la parametrización")).toBeInTheDocument();
-    expect(screen.getByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(screen.getByText("No se pudo cargar la configuración.")).toBeInTheDocument();
     falla = false;
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByRole("textbox", { name: "Nombre del diagnóstico" })).toBeInTheDocument();
+  });
+
+  it("AP-9: un 4xx al leer la configuración muestra el respaldo fijo, nunca el mensaje del servidor", async () => {
+    montarNuevo(navegacion, {
+      rutas: { "GET /configuracion": () => Response.json({ code: "OTRO", error: "mensaje del servidor que no debe verse" }, { status: 422 }) },
+    });
+    expect(await screen.findByText("No se pudo cargar la configuración.")).toBeInTheDocument();
+    expect(screen.queryByText("mensaje del servidor que no debe verse")).not.toBeInTheDocument();
   });
 
   it("un 403 de sesión al leer la configuración lleva a /403 con su código", async () => {

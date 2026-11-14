@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ERRORES_CARGA } from "@/lib/carga/api";
+import { ERRORES_CABECERA } from "@/lib/diagnosticos/api";
 import { ID, TIPOS, archivo, correccionesDe, cuerpoDe, diagnostico, fila, formularioDe, indiceDe, llamadas, montarNuevo, resumen, type Navegacion } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/nuevo?modo=masivo (HU #14085): el usuario escribe el nombre, elige fuentes y modo, elige
@@ -21,6 +23,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const navegacion = nav as unknown as Navegacion;
+const SECRETO = "mensaje del servidor que no debe verse";
 type Rutas = NonNullable<Parameters<typeof montarNuevo>[1]>["rutas"];
 
 const CREADO = () => Response.json(diagnostico(), { status: 201 });
@@ -222,16 +225,18 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     expect(within(screen.getByRole("radiogroup", { name: "Tipo de diagnóstico" })).getByRole("radio", { name: "Masivo" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("archivo rechazado (422) muestra el motivo de la API; el siguiente intento usa PUT /diagnosticos/{id} y no otro POST", async () => {
+  // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo del code del contrato.
+  it("AP-9: archivo rechazado (422) muestra el texto fijo del code; el siguiente intento usa PUT /diagnosticos/{id} y no otro POST", async () => {
     let veces = 0;
     const api = montar({
       [`POST ${RUTA_CARGA}`]: () =>
-        ++veces === 1 ? Response.json({ code: "FORMATO_XLS", error: "Guarda el archivo como .xlsx." }, { status: 422 }) : ANALISIS(),
+        ++veces === 1 ? Response.json({ code: "FORMATO_XLS_NO_ADMITIDO", error: SECRETO }, { status: 422 }) : ANALISIS(),
       [`PUT /diagnosticos/${ID}`]: () => Response.json(diagnostico()),
     });
     await preparar();
     validar();
-    expect(await screen.findByText("Guarda el archivo como .xlsx.")).toBeInTheDocument();
+    expect(await screen.findByText(ERRORES_CARGA.FORMATO_XLS_NO_ADMITIDO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
     expect(screen.getByText("No se pudo analizar el archivo")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
 
@@ -257,7 +262,8 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     });
     const subido = await preparar();
     validar();
-    expect(await screen.findByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByText("No se pudo analizar el archivo.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await screen.findByRole("region", { name: "Resumen de validación" });
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(1);
@@ -271,12 +277,40 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     let veces = 0;
     montar({
       [`POST ${RUTA_CARGA}`]: () => (++veces === 1 ? new Response("", { status: 500 }) : ANALISIS()),
-      [`PUT /diagnosticos/${ID}`]: () => Response.json({ code: "DIAGNOSTICO_NO_EDITABLE", error: "El diagnóstico ya no se puede editar." }, { status: 409 }),
+      [`PUT /diagnosticos/${ID}`]: () => Response.json({ code: "DIAGNOSTICO_NO_EDITABLE", error: SECRETO }, { status: 409 }),
     });
     await preparar();
     validar();
     fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
-    expect(await screen.findByText("El diagnóstico ya no se puede editar.")).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API.
+    expect(await screen.findByText(ERRORES_CABECERA.DIAGNOSTICO_NO_EDITABLE)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 503 CATALOGO_NO_DISPONIBLE al guardar la cabecera muestra el texto fijo del code", async () => {
+    montar({ "POST /diagnosticos": () => Response.json({ code: "CATALOGO_NO_DISPONIBLE", error: SECRETO }, { status: 503 }) });
+    await preparar();
+    validar();
+    expect(await screen.findByText(ERRORES_CABECERA.CATALOGO_NO_DISPONIBLE)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 500 al guardar la cabecera cae en el respaldo fijo", async () => {
+    montar({ "POST /diagnosticos": () => Response.json({ error: SECRETO }, { status: 500 }) });
+    await preparar();
+    validar();
+    expect(await screen.findByText("No se pudo guardar el diagnóstico.")).toBeInTheDocument();
+  });
+
+  it("AP-9: un 422 LIMITE_SUPERADO al confirmar muestra el texto fijo del code, sin el mensaje del servidor", async () => {
+    montar({ [`POST /diagnosticos/${ID}/vehiculos`]: () => Response.json({ code: "LIMITE_SUPERADO", error: SECRETO, campo: "vehiculos" }, { status: 422 }) });
+    await preparar();
+    validar();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
+    expect(await screen.findByText(ERRORES_CARGA.LIMITE_SUPERADO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
   });
 
   it("un 403 de sesión en la subida lleva a la página 403 con su código", async () => {

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { TablaEditable, type ColumnaEditable, type EstadoFilaControlado } from "@flit/ui/TablaEditable";
-import { accesoNegado, validarFilas, type ErrorFila, type FilaCapturada, type FilaResumen } from "@/lib/carga/api";
+import { ERRORES_CARGA, accesoNegado, validarFilas, type ErrorFila, type FilaCapturada, type FilaResumen } from "@/lib/carga/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { validarIdentificador, validarLongitudIdentificador } from "@/lib/validation/fieldRules";
 import { AYUDA_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
@@ -164,7 +165,8 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
       if (controller.signal.aborted) return;
       const code = accesoNegado(error);
       if (code && onAccesoNegado) return onAccesoNegado(code);
-      const mensaje = error instanceof Error ? error.message : "No se pudo revalidar la fila.";
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      const mensaje = mensajeErrorFijo(error, "No se pudo revalidar la fila.", ERRORES_CARGA);
       actualizar(n, (e) => ({ ...e, revalidando: false, errorServidor: mensaje }));
     }
   }

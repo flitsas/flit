@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import CargaDiagnostico from "@/app/(app)/diagnosticos/[id]/carga/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
-import type { FilaResumen } from "@/lib/carga/api";
+import { ERRORES_CARGA, type FilaResumen } from "@/lib/carga/api";
 import { ID, archivo, correccionesDe, fila, formularioDe, llamadas, resumen, ruta, sesion, simularApi } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/{id}/carga sube el archivo, muestra el Resumen de Validación con la tabla de filas
@@ -22,6 +22,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+const SECRETO = "mensaje del servidor que no debe verse";
 const CREADOR: Partial<CapacidadesDiagnostico> = { crearDiagnosticos: true, verDiagnosticos: true };
 type Rutas = Parameters<typeof simularApi>[0];
 
@@ -163,21 +164,28 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
     expect(screen.queryByText(/sin el documento del locatario/i)).not.toBeInTheDocument();
   });
 
+  // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo de cada code del contrato.
   it.each([
-    [409, "VEHICULOS_YA_CONFIRMADOS", "El lote ya tiene vehículos confirmados."],
-    [413, "ARCHIVO_DEMASIADO_GRANDE", "El archivo supera el tamaño máximo de 5 MB."],
-    [415, "ARCHIVO_ILEGIBLE", "No se pudo leer el archivo."],
-    [422, "CORRECCIONES_INVALIDAS", "Las correcciones no son válidas."],
-    [422, "SIN_VALIDOS", "No hay vehículos válidos para confirmar."],
-  ])("un %i %s muestra el motivo de la API, sin Reintentar, y no navega", async (status, code, mensaje) => {
+    [409, "VEHICULOS_YA_CONFIRMADOS"],
+    [409, "DIAGNOSTICO_NO_EDITABLE"],
+    [413, "ARCHIVO_DEMASIADO_GRANDE"],
+    [415, "ARCHIVO_ILEGIBLE"],
+    [415, "FORMATO_NO_ADMITIDO"],
+    [422, "CORRECCIONES_INVALIDAS"],
+    [422, "SIN_VALIDOS"],
+    [422, "LIMITE_SUPERADO"],
+    [422, "COLUMNA_REQUERIDA"],
+  ] as const)("AP-9: un %i %s muestra el texto fijo del code, sin Reintentar, y no navega", async (status, code) => {
+    const mensaje = ERRORES_CARGA[code];
     await montar({
       [`POST ${ruta("/carga")}`]: () => Response.json(resumen()),
-      [`POST ${ruta("/vehiculos")}`]: () => Response.json({ code, error: mensaje }, { status }),
+      [`POST ${ruta("/vehiculos")}`]: () => Response.json({ code, error: SECRETO }, { status }),
     });
     await subir();
     await screen.findByRole("region", { name: "Resumen de validación" });
     fireEvent.click(continuar());
     expect(await screen.findByText(mensaje)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
     expect(navegacion.push).not.toHaveBeenCalled();
   });
@@ -191,7 +199,8 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
     const subido = await subir();
     await screen.findByRole("region", { name: "Resumen de validación" });
     fireEvent.click(continuar());
-    expect(await screen.findByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByText("No se pudieron confirmar los vehículos.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(navegacion.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
     const posts = llamadas(api, "POST", ruta("/vehiculos"));
