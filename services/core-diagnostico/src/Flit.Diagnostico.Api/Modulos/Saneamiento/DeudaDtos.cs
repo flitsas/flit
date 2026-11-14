@@ -74,12 +74,11 @@ internal sealed record FuenteDeudaDto(
 
 /// <summary>
 /// La persona de una fuente SIMIT de persona: tipo y número de documento completo, como el detalle de la celda (SP-11). Nunca
-/// el nombre. <see cref="DocumentoEnmascarado"/> es el del Excel (<c>****</c> + 4) y no sale en el JSON.
+/// el nombre. El PDF y el Excel de deuda usan este mismo número (S18).
 /// </summary>
 internal sealed record PersonaDeudaDto(
     [property: JsonPropertyName("tipo_documento")] string TipoDocumento,
-    [property: JsonPropertyName("documento")] string Documento,
-    [property: JsonIgnore] string DocumentoEnmascarado);
+    [property: JsonPropertyName("documento")] string Documento);
 
 /// <summary>Un comparendo: el valor va como texto, tal como llega (S17).</summary>
 internal sealed record ComparendoDeudaDto(

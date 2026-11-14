@@ -224,7 +224,7 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
 
         foreach (var p in personas)
         {
-            var persona = new PersonaDeudaDto(p.TipoDocumento, p.Documento ?? p.DocumentoEnmascarado, p.DocumentoEnmascarado);
+            var persona = new PersonaDeudaDto(p.TipoDocumento, p.Documento ?? p.DocumentoEnmascarado);
             var consultado = p.ConsultadoEn ?? seccion.DatoObtenidoEn;
             yield return p is { Estado: EstadoPersonaReporte.Ok, Resultado: ResultadoSimitDetalle simit }
                 ? Simit(fuente, simit, consultado, persona, tipo, hoy)

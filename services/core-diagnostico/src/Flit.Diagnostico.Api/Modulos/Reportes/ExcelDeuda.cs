@@ -17,7 +17,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// <item>Todo texto de origen externo (comparendo, estado, organismo, nota, motivo, nombre del lote) va con <c>Cell.Of(string)</c>:
 /// texto en línea, nunca fórmula; el que parece fórmula queda literal (<see cref="TabularWorkbookWriter.PareceFormula"/>, SP-21).</item>
 /// <item>Los valores del SIMIT (comparendos y saldo de acuerdos) van como texto, tal como llegan (S17); los del impuesto, número.</item>
-/// <item>El documento de persona va enmascarado (<c>****</c> + 4), como el Excel del lote (SP-11). Sin vínculos.</item>
+/// <item>El documento de la persona del SIMIT va completo, el mismo <see cref="PersonaDeudaDto.Documento"/> que muestra el panel de
+/// deuda (S18, «sin enmascarado adicional»; decisión E9, que revierte SP-11 solo para este Excel). Sin vínculos.</item>
 /// </list>
 /// </summary>
 /// <example>
@@ -56,11 +57,11 @@ internal static class ExcelDeuda
             resumen.Add(Fila(Cell.Of("Dictamen"), Cell.Empty, Cell.Of(panel.Dictamen is { } d ? RotulosDiagnostico.DeVeredicto(d.Veredicto) : "Sin dictamen"), Cell.Empty, Cell.Empty));
             foreach (var f in panel.Fuentes)
             {
-                resumen.Add(Fila(Cell.Of(f.Fuente), Cell.Of(f.Persona?.DocumentoEnmascarado), Cell.Of(Estado(f.Estado)), Cell.Of(f.MotivoNa), Fecha(f.ConsultadoEn)));
+                resumen.Add(Fila(Cell.Of(f.Fuente), Cell.Of(f.Persona?.Documento), Cell.Of(Estado(f.Estado)), Cell.Of(f.MotivoNa), Fecha(f.ConsultadoEn)));
                 foreach (var c in f.Comparendos ?? [])
-                    simit.Add(Fila(Cell.Of(f.Fuente), Cell.Of(f.Persona?.DocumentoEnmascarado), Cell.Of("Comparendo"), Cell.Of(c.Numero), Cell.Of(c.Fecha), Cell.Of(c.Valor), Cell.Of(c.Estado)));
+                    simit.Add(Fila(Cell.Of(f.Fuente), Cell.Of(f.Persona?.Documento), Cell.Of("Comparendo"), Cell.Of(c.Numero), Cell.Of(c.Fecha), Cell.Of(c.Valor), Cell.Of(c.Estado)));
                 foreach (var a in f.AcuerdosPago ?? [])
-                    simit.Add(Fila(Cell.Of(f.Fuente), Cell.Of(f.Persona?.DocumentoEnmascarado), Cell.Of("Acuerdo de pago"), Cell.Empty, Cell.Empty, Cell.Of(a.SaldoPendiente), Cell.Of(a.Estado)));
+                    simit.Add(Fila(Cell.Of(f.Fuente), Cell.Of(f.Persona?.Documento), Cell.Of("Acuerdo de pago"), Cell.Empty, Cell.Empty, Cell.Of(a.SaldoPendiente), Cell.Of(a.Estado)));
                 if (f.Fuente == FuentesDeuda.Impuesto)
                 {
                     var monto = f.MontoTotal is { } m ? Cell.Of(m) : Cell.Empty;

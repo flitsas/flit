@@ -3345,7 +3345,7 @@ paths:
     get:
       tags: [Saneamiento]
       operationId: descargarExcelDeuda
-      summary: Excel del panel de deuda (deuda-{placa}.xlsx; documento enmascarado)
+      summary: Excel del panel de deuda (deuda-{placa}.xlsx; documento completo, como el panel)
       description: diagnostico.reportes.descargar. Hojas Resumen, SIMIT, Impuesto, SOAT y RTM y Saneamiento.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
