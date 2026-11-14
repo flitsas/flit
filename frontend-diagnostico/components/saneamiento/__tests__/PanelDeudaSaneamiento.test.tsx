@@ -404,6 +404,23 @@ describe("PanelDeudaSaneamiento — AC18: descargas", () => {
     expect(llamadas(fetchMock, "GET", `${RUTA_DEUDA}/pdf`)).toHaveLength(1);
   });
 
+  it("N-3: sin placa y sin Content-Disposition, el nombre por defecto es deuda-sin-placa (como el servidor), no la etiqueta «Sin placa»", async () => {
+    simularApi({
+      [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta({ vehiculo: { id: VEHICULO, placa: null } })),
+      [`GET ${RUTA_SANEAMIENTO}`]: () => json(saneamientoEnGestion()),
+      [`GET ${RUTA_DEUDA}/pdf`]: () => new Response(new Blob(["%PDF"])),
+      [`GET ${RUTA_DEUDA}/excel`]: () => new Response(new Blob(["x"])),
+    });
+    pintar({ identificador: "Sin placa" });
+    const pdf = await screen.findByRole("link", { name: "Descargar PDF" });
+    fireEvent.click(pdf);
+    await waitFor(() => expect(descargados).toEqual(["deuda-sin-placa.pdf"]));
+    fireEvent.click(screen.getByRole("link", { name: "Descargar Excel" }));
+    await waitFor(() => expect(descargados).toEqual(["deuda-sin-placa.pdf", "deuda-sin-placa.xlsx"]));
+    // El texto visible no cambia.
+    expect(screen.getByRole("dialog", { name: "Deuda y saneamiento" })).toHaveTextContent("Sin placa");
+  });
+
   it("si la descarga falla: mensaje en español y se puede reintentar", async () => {
     let veces = 0;
     simularApi({

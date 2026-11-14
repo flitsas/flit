@@ -37,6 +37,7 @@ import {
   type Saneamiento,
   type SaneamientoFila,
 } from "@/lib/saneamiento/api";
+import { nombreDescargaDeuda } from "@/lib/saneamiento/descargas";
 import { ROTULO_HALLAZGO, ROTULO_RESULTADO, rotuloConcepto } from "@/lib/saneamiento/estados";
 import { useDescarga } from "@/lib/reportes/useDescarga";
 
@@ -282,8 +283,10 @@ export function PanelDeudaSaneamiento({
   // Estado optimista de la bandera; `undefined` = manda lo leído. Se limpia al llegar el detalle recargado.
   const [estadoLocal, setEstadoLocal] = useState<EstadoSaneamientoActivo | null | undefined>(undefined);
   const [anuncio, setAnuncio] = useState<{ n: number; texto: string } | null>(null);
-  const pdf = useDescarga(`deuda-${identificador}.pdf`);
-  const excel = useDescarga(`deuda-${identificador}.xlsx`);
+  // N-3: el nombre por defecto sale de la placa leída, como el del servidor; nunca de la etiqueta visible «Sin placa».
+  const placaLeida = deuda.tipo === "listo" ? deuda.deuda.vehiculo.placa : null;
+  const pdf = useDescarga(nombreDescargaDeuda(placaLeida, "pdf"));
+  const excel = useDescarga(nombreDescargaDeuda(placaLeida, "xlsx"));
 
   // PanelLateral devuelve el foco al elemento activo al abrir; si quien abrió es otro (el dictamen reemplazado), aquí.
   const disparador = useRef(devolverFocoA);
