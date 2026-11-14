@@ -48,7 +48,7 @@ public sealed class NotificacionesEndpointsTests
         var respuesta = await cliente.GetAsync(Ruta + "?limite=20", ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
-        var cuerpo = JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync(ct)).RootElement;
+        var cuerpo = JsonElement.Parse(await respuesta.Content.ReadAsStringAsync(ct));
         cuerpo.GetProperty("no_leidas").GetInt32().Should().Be(2);
         var items = cuerpo.GetProperty("items").EnumerateArray().ToList();
         items.Should().HaveCount(2);
@@ -154,7 +154,7 @@ public sealed class NotificacionesEndpointsTests
         (await cliente.PostAsync($"{Ruta}/{ajena}/leida", null, ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await cliente.PostAsync($"{Ruta}/leer-todas", null, ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var bandeja = JsonDocument.Parse(await (await cliente.GetAsync(Ruta, ct)).Content.ReadAsStringAsync(ct)).RootElement;
+        var bandeja = JsonElement.Parse(await (await cliente.GetAsync(Ruta, ct)).Content.ReadAsStringAsync(ct));
         bandeja.GetProperty("no_leidas").GetInt32().Should().Be(0);
         (await EsquemaR8Tests.ListarAsync(conexion,
             $"SELECT id::text FROM diagnostico.notificaciones WHERE usuario_id = '{otro}' AND leida_en IS NULL", ct)).Should().HaveCount(1);
@@ -182,7 +182,7 @@ public sealed class NotificacionesEndpointsTests
 
         var cliente = api.Cliente(api.Token(empresa: empresa, permisos: PermisosLectura, roles: ["usuario_diagnostico"], sujeto: usuario.ToString()));
 
-        var bandeja = JsonDocument.Parse(await (await cliente.GetAsync(Ruta, ct)).Content.ReadAsStringAsync(ct)).RootElement;
+        var bandeja = JsonElement.Parse(await (await cliente.GetAsync(Ruta, ct)).Content.ReadAsStringAsync(ct));
         bandeja.GetProperty("no_leidas").GetInt32().Should().Be(0);
         bandeja.GetProperty("items").GetArrayLength().Should().Be(0);
         (await cliente.PostAsync($"{Ruta}/{nid}/leida", null, ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
