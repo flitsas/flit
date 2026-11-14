@@ -130,7 +130,8 @@ export interface FuenteDeudaSimit extends FuenteDeudaBase {
   /** Hasta 100, como el detalle de la celda. */
   comparendos?: ComparendoDeuda[];
   comparendos_truncados?: boolean;
-  acuerdos_pago?: Array<{ saldo_pendiente: number }>;
+  /** UA-6 (BE-C-2): el saldo va como texto, tal como llega del SIMIT; solo se formatea si es numérico. */
+  acuerdos_pago?: Array<{ saldo_pendiente: string }>;
 }
 
 export interface FuenteDeudaImpuesto extends FuenteDeudaBase {

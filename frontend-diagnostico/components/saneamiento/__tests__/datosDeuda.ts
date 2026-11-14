@@ -46,7 +46,7 @@ export function deudaCompleta(cambios: Partial<PanelDeuda> = {}): PanelDeuda {
           { numero: "C-0002", fecha: "2026-02-20", valor: "$ 120.000", estado: "Cobro coactivo" },
         ],
         comparendos_truncados: true,
-        acuerdos_pago: [{ saldo_pendiente: 300000 }],
+        acuerdos_pago: [{ saldo_pendiente: "300000" }],
       },
       { fuente: "SIMIT_VEHICULO", estado: "SIN_VERIFICAR", consultado_en: null },
     ],
