@@ -1,15 +1,18 @@
 import Link from "next/link";
+import { PaginaExcepcion } from "@flit/ui/PaginaExcepcion";
 
+// 404 con la página de excepción del UI Kit 2026 (HU #14562, F-11). También la ve quien abre un lote ajeno con visibilidad
+// PROPIOS (AC57): la API responde 404 y la pantalla no revela si el lote existe.
 export default function NotFound() {
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <h1 className="text-2xl font-semibold text-flit-primary">Esta página no existe</h1>
-      <Link
-        href="/"
-        className="font-semibold text-[var(--flit-brand-ink)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        Volver al inicio
-      </Link>
+    <main className="flex min-h-full flex-col items-center justify-center">
+      <PaginaExcepcion
+        codigo={404}
+        titulo="Esta página no existe"
+        mensaje="Revisa la dirección o vuelve al inicio para buscar el diagnóstico."
+        accion={{ etiqueta: "Volver al inicio", href: "/" }}
+        enlace={Link}
+      />
     </main>
   );
 }

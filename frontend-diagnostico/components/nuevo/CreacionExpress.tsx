@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { Button } from "@flit/ui/Button";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import type { Configuracion } from "@/lib/configuracion";
@@ -20,17 +22,19 @@ import {
 } from "@/lib/express/api";
 import { ListaEstimado } from "@/components/carga/EstimadoConsultas";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
-import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDiagnostico";
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorExpress } from "./borradores";
 import { CamposExpress, type ErroresLocatario } from "./CamposExpress";
 import { DosZonas } from "./DosZonas";
+import { ResultadoCreacion } from "./ResultadoCreacion";
 
 type Fase =
   | { tipo: "editando" }
   | { tipo: "enviando"; texto: string }
-  | { tipo: "confirmar"; entrada: ExpressEntrada; estimado: EstimadoFuente[] };
+  | { tipo: "confirmar"; entrada: ExpressEntrada; estimado: EstimadoFuente[] }
+  | { tipo: "creado"; id: string };
 type ErrorGeneral = { titulo: string; mensaje: string; reintentar?: () => void };
 
 /** Botón «Anterior» del prototipo: azul marino. */
@@ -47,17 +51,19 @@ export interface CreacionExpressProps {
   borrador: BorradorExpress;
   onBorrador: (cambio: Partial<BorradorExpress>) => void;
   onOcupado: (ocupado: boolean) => void;
+  /** Con el resultado a la vista la pantalla oculta el selector Express/Masivo. */
+  onResultado?: (activo: boolean) => void;
 }
 
 /**
  * Express en la pantalla única (HU #14085; reglas de la HU #13755): a la izquierda la placa o el VIN y el locatario, a la
- * derecha los parámetros con el nombre autogenerado, que sigue a la placa mientras el usuario no lo edite. «Continuar»
- * valida la placa con la regla de Trámites y el rechazo por longitud, los parámetros y el tipo de documento; con
+ * derecha los parámetros con el nombre autogenerado, que sigue a la placa mientras el usuario no lo edite. El botón principal
+ * («Continuar» con estimado antes de lanzar, «Iniciar diagnóstico» sin él) valida la placa con la regla de Trámites y el rechazo por longitud, los parámetros y el tipo de documento; con
  * estimado_consultas = ANTES_DE_LANZAR pide POST /express/estimado y lo muestra en Parámetros antes de lanzar; lanza con
  * POST /express y con el 201 navega al tablero. Los 422 se pintan en su campo y el resto de rechazos en un aviso, sin
  * perder lo digitado.
  */
-export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcupado }: CreacionExpressProps) {
+export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcupado, onResultado }: CreacionExpressProps) {
   const router = useRouter();
   const id = useId();
   const formId = `${id}-form`;
@@ -67,8 +73,11 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
   const [errorPlaca, setErrorPlaca] = useState<string | null>(null);
   const [errores, setErrores] = useState<ErroresLocatario>({});
   const [enfocar, setEnfocar] = useState(0);
-  const ocupado = fase.tipo !== "editando";
+  const ocupado = fase.tipo === "enviando" || fase.tipo === "confirmar";
   const nombre = borrador.nombreManual ?? nombreAutogenerado(borrador.placa);
+  // HU #14562 (auditoría §4.3, AC16): con el estimado antes de lanzar, el botón lleva al paso del estimado («Continuar»); sin
+  // él, lanza directo y dice lo que hace («Iniciar diagnóstico»).
+  const conEstimado = configuracion.operacion.estimado_consultas === "ANTES_DE_LANZAR";
 
   useEffect(() => onOcupado(ocupado), [ocupado, onOcupado]);
 
@@ -111,7 +120,10 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     setErrorGeneral(null);
     setFase({ tipo: "enviando", texto: "Creando el diagnóstico…" });
     crearExpress(entrada)
-      .then((creado) => router.push(`/diagnosticos/${encodeURIComponent(creado.id)}`))
+      .then((creado) => {
+        setFase({ tipo: "creado", id: creado.id });
+        onResultado?.(true);
+      })
       .catch((e: unknown) => manejarError(e, () => lanzar(entrada)));
   }
 
@@ -139,9 +151,11 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
       return;
     }
     const entrada = entradaExpress(p.cabecera(nombre), borrador.placa, { tipo: borrador.tipoDocumento, documento: borrador.documento });
-    if (configuracion.operacion.estimado_consultas === "ANTES_DE_LANZAR") estimar(entrada);
+    if (conEstimado) estimar(entrada);
     else lanzar(entrada);
   }
+
+  if (fase.tipo === "creado") return <ResultadoCreacion diagnosticoId={fase.id} vehiculos={1} />;
 
   return (
     <DosZonas
@@ -194,11 +208,14 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                 </div>
               </section>
             ) : (
-              <div className="flex justify-end">
-                <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
-                  Continuar
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Link href="/" className={BOTON_SECUNDARIO_CLS}>
+                  Cancelar
+                </Link>
+                <Button type="submit" size="sm" cargando={fase.tipo === "enviando"} disabled={ocupado} className="gap-1.5 text-sm">
+                  {conEstimado ? "Continuar" : "Iniciar diagnóstico"}
                   <Icono nombre="derecha" className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
           </ParametrosDiagnostico>

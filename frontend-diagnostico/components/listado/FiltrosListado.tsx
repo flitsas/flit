@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useState } from "react";
-import { CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
+import { SelectorSegmentado } from "@flit/ui/SelectorSegmentado";
+import { BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
 import type { ModoDiagnostico } from "@/lib/diagnosticos/api";
 import {
@@ -22,14 +23,23 @@ export interface FiltrosListadoProps {
   /** 400 con `campo`: el control queda inválido con el mensaje junto a él. */
   error: { campo: CampoFiltro; mensaje: string } | null;
   onCambiar: (cambios: Partial<Filtros>) => void;
+  /** «Limpiar» de la barra: solo se ofrece cuando hay filtros aplicados. */
+  onLimpiar?: () => void;
 }
+
+const TODOS = "TODOS";
+type ValorTipo = ModoDiagnostico | typeof TODOS;
+const OPCIONES_TIPO: { valor: ValorTipo; label: string }[] = [
+  { valor: TODOS, label: "Todos" },
+  ...MODOS.map((m) => ({ valor: m.valor as ValorTipo, label: m.valor === "SIMPLE" ? "Simple" : m.nombre })),
+];
 
 /**
  * Filtros del listado del inicio (HU #13852): rango de fechas (días de Colombia, inclusivos), tipo, estado y nombre. El
  * nombre espera 300 ms sin teclear antes de consultar. «Sin lanzar» no es un estado filtrable: esos lotes salen sin filtro
  * de estado. Cada control tiene su etiqueta; el error del 400 va en aria-describedby del control que lo causó.
  */
-export function FiltrosListado({ valor, error, onCambiar }: FiltrosListadoProps) {
+export function FiltrosListado({ valor, error, onCambiar, onLimpiar }: FiltrosListadoProps) {
   const id = useId();
   const [nombre, setNombre] = useState(valor.nombre);
   const [nombreExterno, setNombreExterno] = useState(valor.nombre);
@@ -92,23 +102,17 @@ export function FiltrosListado({ valor, error, onCambiar }: FiltrosListadoProps)
         {mensaje("hasta")}
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${id}-modo`} className={ETIQUETA_CLS}>
+        <span id={`${id}-modo`} className={ETIQUETA_CLS}>
           Tipo
-        </label>
-        <select
-          id={`${id}-modo`}
-          value={valor.modo ?? ""}
-          onChange={(e) => onCambiar({ modo: (e.target.value || null) as ModoDiagnostico | null })}
-          className={clase("modo", "w-52")}
-          {...invalido("modo")}
-        >
-          <option value="">Todos</option>
-          {MODOS.map((m) => (
-            <option key={m.valor} value={m.valor}>
-              {m.nombre}
-            </option>
-          ))}
-        </select>
+        </span>
+        {/* HU #14562 · M10: nombre desde el rótulo visible y, con un 400 sobre `modo`, el mensaje como descripción. */}
+        <SelectorSegmentado<ValorTipo>
+          etiquetadoPor={`${id}-modo`}
+          describedBy={error?.campo === "modo" ? errorId("modo") : undefined}
+          opciones={OPCIONES_TIPO}
+          valor={valor.modo ?? TODOS}
+          onCambio={(v) => onCambiar({ modo: v === TODOS ? null : v })}
+        />
         {mensaje("modo")}
       </div>
       <div className="flex flex-col gap-1">
@@ -147,6 +151,13 @@ export function FiltrosListado({ valor, error, onCambiar }: FiltrosListadoProps)
         />
         {mensaje("nombre")}
       </div>
+      {onLimpiar && (
+        <div className="flex flex-col justify-end self-end">
+          <button type="button" onClick={onLimpiar} className={BOTON_SECUNDARIO_CLS}>
+            Limpiar
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,19 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SubidaArchivo } from "@/components/carga/SubidaArchivo";
 import { ID, archivo, llamadas, resumen, ruta, simularApi } from "./datos";
 
+/**
+ * La alerta con texto. Observación 8 del code review (HU #14562): la ZonaArrastre del kit deja su región role="alert"
+ * vacía desde el montaje, así que junto al InlineAlert del error de la API hay dos alertas; se busca la que tiene texto.
+ */
+const alertaConTexto = async () => {
+  let alerta: HTMLElement | undefined;
+  await waitFor(() => {
+    alerta = screen.getAllByRole("alert").find((a) => (a.textContent ?? "").trim() !== "");
+    expect(alerta).toBeDefined();
+  });
+  return alerta as HTMLElement;
+};
+
 // Uso de ejemplo: <SubidaArchivo diagnosticoId={id} onResumen={(r) => ...} /> ofrece la plantilla, acepta .xlsx y .csv y
 // sube el archivo a POST /diagnosticos/{id}/carga; con el resumen llama a onResumen, y con un rechazo muestra el motivo.
 
@@ -16,7 +29,11 @@ function montar(onResumen = vi.fn(), onAccesoNegado = vi.fn()) {
 }
 
 const selector = () => screen.getByLabelText(/archivo de vehículos/i) as HTMLInputElement;
-const subir = (f: File) => fireEvent.change(selector(), { target: { files: [f] } });
+const subir = (f: File) => {
+  fireEvent.change(selector(), { target: { files: [f] } });
+  const validar = screen.getByRole("button", { name: "Validar archivo" });
+  if (!(validar as HTMLButtonElement).disabled) fireEvent.click(validar);
+};
 
 describe("SubidaArchivo — selector y plantilla", () => {
   it("el selector filtra .xlsx y .csv y la plantilla se descarga por el BFF", () => {
@@ -49,14 +66,23 @@ describe("SubidaArchivo — selector y plantilla", () => {
 });
 
 describe("SubidaArchivo — archivo .xls (AC 1)", () => {
-  it("el 422 de un .xls muestra el mensaje de la API que pide guardarlo como .xlsx y no avanza", async () => {
-    simularApi({
+  it("AC10/AC20 (HU #14562): la ZonaArrastre rechaza el .xls en pantalla, con el error asociado y sin llamar a la API", async () => {
+    const api = simularApi({
       [`POST ${ruta("/carga")}`]: () => Response.json({ code: "FORMATO_XLS_NO_ADMITIDO", error: MENSAJE_XLS }, { status: 422 }),
     });
     const { onResumen } = montar();
     subir(archivo("flota.xls", "application/vnd.ms-excel"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(MENSAJE_XLS);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/formato no admitido.*\.xlsx.*\.csv/i);
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toHaveAccessibleDescription(/formato no admitido/i);
+    expect(llamadas(api, "POST", ruta("/carga"))).toHaveLength(0);
     expect(onResumen).not.toHaveBeenCalled();
+  });
+
+  it("AC20 (HU #14562): usa la ZonaArrastre del kit, con «Elegir archivo» operable por teclado", () => {
+    simularApi({});
+    montar();
+    expect(screen.getByTestId("zona-arrastre")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toBeInTheDocument();
   });
 });
 
@@ -76,7 +102,7 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     montar();
     subir(archivo("flota.xlsx"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("El archivo .xlsx está dañado.");
+    expect(await alertaConTexto()).toHaveTextContent("El archivo .xlsx está dañado.");
   });
 
   it("el 413 avisa que el archivo supera el tamaño máximo", async () => {
@@ -85,7 +111,7 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     montar();
     subir(archivo("flota.xlsx"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("El archivo supera 5 MB.");
+    expect(await alertaConTexto()).toHaveTextContent("El archivo supera 5 MB.");
   });
 
   it("un 500 se muestra como error genérico con Reintentar, que vuelve a subir el mismo archivo", async () => {
@@ -95,7 +121,7 @@ describe("SubidaArchivo — formato no admitido (AC 2)", () => {
     });
     const { onResumen } = montar();
     subir(archivo("flota.csv", "text/csv"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/intenta de nuevo/i);
+    expect(await alertaConTexto()).toHaveTextContent(/intenta de nuevo/i);
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(onResumen).toHaveBeenCalled());
     expect(llamadas(api, "POST", ruta("/carga"))).toHaveLength(2);

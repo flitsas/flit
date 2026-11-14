@@ -31,7 +31,8 @@ internal static class EndpointsTablero
         api.MapGet(RutaGrilla, Grilla).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerGrillaDiagnostico");
         api.MapPost(RutaCierrePanel, Cerrar).RequirePermiso(Permisos.DiagnosticosVer).WithName("CerrarPanelDiagnostico");
         api.MapGet(RutaHistorial, Historial).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerHistorialDiagnostico");
-        api.MapGet(RutaDetalleCelda, Detalle).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerDetalleCelda");
+        // HU #14563 M2: el detalle trae respuesta_proveedor, respuesta_fuente y personas; no se guarda en caché.
+        api.MapGet(RutaDetalleCelda, Detalle).RequirePermiso(Permisos.DiagnosticosVer).SinCacheEnRespuesta().WithName("ObtenerDetalleCelda");
     }
 
     public static IServiceCollection AddTablero(this IServiceCollection services)

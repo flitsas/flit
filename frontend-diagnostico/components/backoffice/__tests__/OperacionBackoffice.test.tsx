@@ -92,12 +92,12 @@ describe("P1 AC3 — sin backofficeOperacion no hay override del dictamen ni lle
     expect(botonesLlenar()).toHaveLength(0);
   });
 
-  it("SuperAdmin no FLIT: el dictamen se lee, pero sin «Nuevo veredicto» ni «Reemplazar veredicto»", async () => {
+  it("SuperAdmin no FLIT: el dictamen se lee, pero sin «Nuevo veredicto» ni «Aplicar»", async () => {
     montar(SUPERADMIN_NO_FLIT, "COMPANY");
     await tabla();
     await abrirDictamen();
     expect(screen.queryByRole("group", { name: "Nuevo veredicto" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Reemplazar veredicto" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aplicar" })).toBeNull();
   });
 
   it("back sin la clave backofficeOperacion: se trata como false (ni llenado ni override)", async () => {
@@ -105,7 +105,7 @@ describe("P1 AC3 — sin backofficeOperacion no hay override del dictamen ni lle
     await tabla();
     expect(botonesLlenar()).toHaveLength(0);
     await abrirDictamen();
-    expect(screen.queryByRole("button", { name: "Reemplazar veredicto" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Aplicar" })).toBeNull();
   });
 });
 
@@ -116,7 +116,7 @@ describe("P1 AC5 — FLIT conserva todo", () => {
     expect(botonesLlenar().length).toBeGreaterThan(0);
     await abrirDictamen();
     expect(screen.getByRole("group", { name: "Nuevo veredicto" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reemplazar veredicto" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aplicar" })).toBeInTheDocument();
   });
 });
 

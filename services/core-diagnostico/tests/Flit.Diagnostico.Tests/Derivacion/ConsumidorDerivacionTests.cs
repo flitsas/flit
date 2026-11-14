@@ -1,9 +1,13 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
+using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Derivacion;
 using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Trabajos;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Derivacion;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
@@ -12,6 +16,7 @@ using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
 
 namespace Flit.Diagnostico.Tests.Derivacion;
 
@@ -101,6 +106,73 @@ public sealed class ConsumidorDerivacionTests
         var item = (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single();
         (item.Estado, item.MotivoCodigo).Should().Be((EstadoItemDerivacion.Omitido, MotivoDerivacion.NoViable));
         falso.Llamadas.Should().BeEmpty();
+    }
+
+    // HU #14563 AC31 (ADR-0084 §4) — derivación en vuelo tras el ajuste: con crédito 1, un ítem queda ENVIADO y otro PENDIENTE. FLIT
+    // ajusta los dos dictámenes a BLOQUEADO por el PUT del backoffice antes de que el consumidor los procese. El consumidor revalida
+    // y deja cada ítem OMITIDO NO_VIABLE sin llamar a Trámites. La fila sube su versión con el ajuste y otra vez con el cierre del
+    // ítem, y en el sondeo listos_tramite queda en 0 (bajó desde 2 antes de encolar y el OMITIDO no lo devuelve a listo).
+    [Fact]
+    public async Task HU14563_AC31_ajuste_a_BLOQUEADO_con_items_en_vuelo_los_deja_OMITIDO_y_la_fila_sube()
+    {
+        var falso = new DerivacionTramitesFalso { Responder = _ => DerivacionTramitesFalso.Creado(Guid.NewGuid(), "TR-000931") };
+        await using var api = await DerivacionDePrueba.ApiAsync(falso, extra: new() { [$"{OpcionesDerivacion.Seccion}:CreditoPorCompania"] = "1" });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await DerivacionDePrueba.SembrarAsync(empresa, ct, vehiculos: [("TST931", true, "VIABLE"), ("TST932", true, "VIABLE")]);
+        using var compania = api.Cliente(DerivacionDePrueba.TokenDerivar(api, empresa));
+        var antes = await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: 0), ct), ct);
+        antes.GetProperty("conteos").GetProperty("listos_tramite").GetInt32().Should().Be(2);
+
+        var encolado = await compania.PostAsJsonAsync(DerivacionDePrueba.RutaMasivo(lote.Id), new { vehiculo_ids = lote.Vehiculos.Select(v => v.Id) }, ct);
+        (await encolado.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("encolados").GetInt32().Should().Be(2);
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Enviado);
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[1].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Pendiente);
+        var enVuelo = (await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: 0), ct), ct)).GetProperty("version").GetInt64();
+
+        using var soporte = api.Cliente(api.Token(
+            empresa: Guid.CreateVersion7(), permisos: [Permisos.BackofficeVer, Permisos.DictamenOverride], roles: ["backoffice_diagnostico"],
+            tipoEmpresa: UsuarioActual.TipoEmpresaFlit));
+        foreach (var vehiculo in lote.Vehiculos)
+        {
+            using var cuerpo = new StringContent(
+                """{"version_esperada":1,"veredicto":"BLOQUEADO","motivo":"Soporte confirmo el embargo con el organismo","alertamientos":[{"codigo":"AJUSTE_FLIT","texto":"Embargo confirmado por soporte","efecto":"BLOQUEA","fuente":"RUNT"}]}""",
+                Encoding.UTF8, "application/json");
+            var ajuste = await soporte.PutAsync(
+                $"{Program.Prefijo}/backoffice/diagnosticos/{lote.Id}/vehiculos/{vehiculo.Id}/dictamen?empresa={empresa.Id}", cuerpo, ct);
+            ajuste.StatusCode.Should().Be(HttpStatusCode.OK, await ajuste.Content.ReadAsStringAsync(ct));
+        }
+
+        var trasAjuste = await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: enVuelo), ct), ct);
+        var filasAjuste = trasAjuste.GetProperty("vehiculos").EnumerateArray().ToList();
+        filasAjuste.Should().HaveCount(2).And.OnlyContain(f => f.GetProperty("veredicto").GetString() == "BLOQUEADO" && f.GetProperty("version").GetInt64() > enVuelo);
+        var versionAjuste = trasAjuste.GetProperty("version").GetInt64();
+
+        // El consumidor procesa el ENVIADO; el cierre libera el PENDIENTE, que también llega al consumidor.
+        var consumidos = new HashSet<Guid>();
+        for (var vuelta = 0; vuelta < 3; vuelta++)
+        {
+            var pendientes = (await DerivacionDePrueba.MensajesAsync(empresa, ct)).Where(m => consumidos.Add(m.Data.ItemId)).ToList();
+            if (pendientes.Count == 0)
+                break;
+            foreach (var mensaje in pendientes)
+                await DerivacionDePrueba.ConsumirAsync(api, empresa.Id, mensaje.Data, ct);
+        }
+
+        foreach (var vehiculo in lote.Vehiculos)
+        {
+            var item = (await DerivacionDePrueba.ItemsAsync(empresa, vehiculo.Id, ct)).Single();
+            (item.Estado, item.MotivoCodigo).Should().Be((EstadoItemDerivacion.Omitido, MotivoDerivacion.NoViable), "revalida con el dictamen ajustado");
+        }
+
+        falso.Llamadas.Should().BeEmpty("ningún ítem llega a Trámites con el dictamen bloqueado");
+        var sondeo = await TableroAyudas.JsonAsync(await compania.GetAsync(TableroAyudas.RutaGrilla(lote.Id, desde: versionAjuste), ct), ct);
+        var filas = sondeo.GetProperty("vehiculos").EnumerateArray().ToList();
+        filas.Should().HaveCount(2).And.OnlyContain(f =>
+            f.GetProperty("version").GetInt64() > versionAjuste && f.GetProperty("derivacion").GetProperty("estado").GetString() == "OMITIDO");
+        sondeo.GetProperty("conteos").GetProperty("listos_tramite").GetInt32().Should().Be(0);
+        sondeo.GetProperty("conteos").GetProperty("bloqueados").GetInt32().Should().Be(2);
     }
 
     [Fact]
@@ -211,6 +283,97 @@ public sealed class ConsumidorDerivacionTests
 
         (vuelta.Republicados, vuelta.Fallidos, vuelta.Creados).Should().Be((0, 0, 0));
         (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Republicaciones.Should().Be(0);
+    }
+
+    // HU #14563 code review menor 7 — otro proceso confirma la misma DERIVACION_TERMINADA entre la comprobación del escritor y el
+    // INSERT del reconciliador: el choque real en ux_notificaciones_idempotencia (23505) pospone la empresa (como un xmin), no tumba
+    // la vuelta; la siguiente vuelta cierra el ítem y queda una sola notificación.
+    [Fact]
+    public async Task HU14563_menor7_choque_en_ux_notificaciones_idempotencia_pospone_la_empresa_y_la_siguiente_vuelta_cierra()
+    {
+        var falso = new DerivacionTramitesFalso();
+        await using var api = await DerivacionDePrueba.ApiAsync(falso);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, lote, _) = await EncolarAsync(api, ct, ("TST881", "VIABLE"));
+        falso.PorReferencia[lote.Vehiculos[0].Id.ToString()] = (Guid.NewGuid(), "TR-000881");
+        await ColgarAsync(empresa, ct);
+        OperacionDerivacion operacion;
+        await using (var db = empresa.Db())
+            operacion = await db.Set<OperacionDerivacion>().AsNoTracking().SingleAsync(ct);
+        var reconciliador = api.App.Services.GetRequiredService<ReconciliadorDerivacion>();
+
+        // La notificación del otro proceso queda sin confirmar: la comprobación del escritor no la ve y su INSERT espera el índice.
+        await using (var otro = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct))
+        {
+            await using var transaccion = await otro.BeginTransactionAsync(ct);
+            await Persistencia.EsquemaR8Tests.InsertarAsync(
+                otro, empresa.Id, lote.Id, Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion.DerivacionTerminada, "{}", ct,
+                usuario: operacion.UsuarioId, referencia: operacion.Id);
+            var vuelta = reconciliador.ReconciliarAsync(ct);
+            await EsperarInsertBloqueadoAsync(api, vuelta, ct);
+            await transaccion.CommitAsync(ct);
+
+            var primera = await vuelta;
+
+            primera.Creados.Should().Be(0, "la empresa quedó para la siguiente vuelta");
+        }
+
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Enviado, "se revirtió la transacción");
+        var segunda = await reconciliador.ReconciliarAsync(ct);
+        segunda.Creados.Should().Be(1);
+        (await DerivacionDePrueba.ItemsAsync(empresa, lote.Vehiculos[0].Id, ct)).Single().Estado.Should().Be(EstadoItemDerivacion.Creado);
+        await using var conexion = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct);
+        (await Persistencia.EsquemaR8Tests.ListarAsync(conexion,
+            $"SELECT referencia_id::text FROM diagnostico.notificaciones WHERE diagnostico_id = '{lote.Id}' AND tipo = 'DERIVACION_TERMINADA'", ct))
+            .Should().Equal(operacion.Id.ToString());
+    }
+
+    // HU #14563 code review menor 8 — orden de bloqueo determinista: el reconciliador recorre los ítems por lote y después por id,
+    // aunque la base los devuelva en otro orden. La tupla del ítem de menor id se mueve al final del heap y aun así su fila sube
+    // la versión primero.
+    [Fact]
+    public async Task HU14563_menor8_reconciliador_cierra_los_items_por_lote_y_por_id()
+    {
+        var falso = new DerivacionTramitesFalso();
+        await using var api = await DerivacionDePrueba.ApiAsync(falso, extra: Credito2);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, lote, _) = await EncolarAsync(api, ct, ("TST891", "VIABLE"), ("TST892", "VIABLE"));
+        falso.PorReferencia[lote.Vehiculos[0].Id.ToString()] = (Guid.NewGuid(), "TR-000891");
+        falso.PorReferencia[lote.Vehiculos[1].Id.ToString()] = (Guid.NewGuid(), "TR-000892");
+        await ColgarAsync(empresa, ct);
+        var items = new List<ItemDerivacion>();
+        foreach (var v in lote.Vehiculos)
+            items.AddRange(await DerivacionDePrueba.ItemsAsync(empresa, v.Id, ct));
+        var ordenados = items.OrderBy(i => i.Id).ToList();
+        await using (var conexion = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct))
+        {
+            await using var mover = new Npgsql.NpgsqlCommand("UPDATE diagnostico.derivaciones SET actualizado_en = actualizado_en WHERE id = @id", conexion);
+            mover.Parameters.AddWithValue("id", ordenados[0].Id);
+            (await mover.ExecuteNonQueryAsync(ct)).Should().Be(1);
+        }
+
+        (await api.App.Services.GetRequiredService<ReconciliadorDerivacion>().ReconciliarAsync(ct)).Creados.Should().Be(2);
+
+        var primero = await DerivacionDePrueba.VehiculoAsync(empresa, ordenados[0].VehiculoId, ct);
+        var segundo = await DerivacionDePrueba.VehiculoAsync(empresa, ordenados[1].VehiculoId, ct);
+        primero.VersionTablero.Should().BeLessThan(segundo.VersionTablero, "el ítem de menor id se cierra (y bloquea su fila) primero");
+    }
+
+    /// <summary>Espera a que la vuelta quede esperando un bloqueo (el INSERT en el índice único) o termine antes, sin pasar de 15 s.</summary>
+    private static async Task EsperarInsertBloqueadoAsync(ApiDePrueba api, Task vuelta, CancellationToken ct)
+    {
+        await using var conexion = await Persistencia.EsquemaR8Tests.AbrirAsync(api, ct);
+        var limite = DateTime.UtcNow.AddSeconds(15);
+        while (!vuelta.IsCompleted && DateTime.UtcNow < limite)
+        {
+            await using var comando = new Npgsql.NpgsqlCommand(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'", conexion);
+            if (Convert.ToInt64(await comando.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture) > 0)
+                return;
+            await Task.Delay(50, ct);
+        }
     }
 
     /// <summary>Siembra el lote, encola todos sus vehículos por el endpoint masivo y devuelve los eventos liberados.</summary>

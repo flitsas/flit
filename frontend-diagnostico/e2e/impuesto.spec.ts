@@ -14,16 +14,48 @@ import { lanzarExpress } from "./express";
  *   pnpm --dir frontend exec playwright test ../frontend-diagnostico/e2e/impuesto.spec.ts
  *
  * Las credenciales son de usuarios de prueba y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - checkbox «RUNT vehículo» (espera de carga del alcance)
+ *   - textbox «Placa o VIN»
+ *   - button «Diagnosticar en línea»
+ *   - checkbox «Impuesto departamental»
+ *   - table «/semáforo de consultas/i»
+ *   - link «new RegExp(`^Ver detalle de Impuesto departamental de ${PLACA}`)»
+ *   - heading «Impuesto departamental · ${PLACA}»
+ *   - group «Respuesta de la fuente»
+ *   - term (sin nombre)
+ *   - definition (sin nombre)
+ *   - table «Vigencias»
+ *   - columnheader «Pagada»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
+ *   - texto «/^(Sí|No)$/»
+ *   - texto «/proveedor/i»
+ *   - texto «/manual|a mano/i»
+ *   - texto «/^Monto total$/»
+ *   - texto «/^Vigencias$/»
+ *   Del helper express.ts (lanzarExpress):
+ *     - textbox «Placa o VIN»
+ *     - button «Diagnosticar en línea»
+ *     - textbox «Nombre del diagnóstico»
+ *     - button «/^(Continuar|Iniciar diagnóstico)$/»
+ *     - button «Lanzar diagnóstico»
+ *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
-/** Placa de prueba terminada en 1: RUNT e impuesto simulados responden con éxito. */
-const PLACA = process.env.E2E_PLACA_IMPUESTO ?? "TST201";
+/** Placa de prueba terminada en Z: el simulador de core-consultas responde RUNT con el fixture intempo-impuesto (departamento
+ * soportado) y el impuesto con éxito. Terminada en 1 el RUNT simulado queda en un departamento sin impuesto y el test se omite. */
+const PLACA = process.env.E2E_PLACA_IMPUESTO ?? "TST20Z";
 
 async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
@@ -36,8 +68,10 @@ test.describe("impuesto departamental en el tablero", () => {
 
     // El alta (pantalla única) ofrece el impuesto cuando la simulación lo declara disponible.
     await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
-    await page.getByRole("button", { name: "Diagnosticar" }).click();
+    await page.getByRole("button", { name: "Diagnosticar en línea" }).click();
     await page.waitForURL((url) => url.pathname === "/diagnosticos/nuevo" && url.searchParams.get("modo") === "express");
+    // count() no espera: primero que el alcance haya cargado la configuración (RUNT vehículo siempre se ofrece).
+    await expect(page.getByRole("checkbox", { name: "RUNT vehículo" })).toBeVisible();
     const casilla = page.getByRole("checkbox", { name: "Impuesto departamental" });
     test.skip((await casilla.count()) === 0, "La simulación no ofrece el impuesto: revisar la bandera y la réplica de departamentos");
     await expect(casilla).toBeVisible();
@@ -52,9 +86,10 @@ test.describe("impuesto departamental en el tablero", () => {
       "El Express no incluye el impuesto: revisar la bandera ImpuestoDisponible y el contrato de la compañía",
     );
 
-    // AC1: sin recargar, el semáforo del impuesto llega a verde (o a N/A si el RUNT simulado no deriva un departamento soportado).
+    // AC1: sin recargar, el semáforo del impuesto llega a «Ejecutado» o «Con deuda» (o a «Novedad» si el RUNT simulado no deriva un
+    // departamento soportado). HU #14562 AC11: el rótulo ya no lleva «(OK)».
     const semaforo = grilla.getByRole("link", { name: new RegExp(`^Ver detalle de Impuesto departamental de ${PLACA}`) });
-    await expect(semaforo).toHaveAccessibleName(/(Ejecutado \(OK\)|Novedad) \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
+    await expect(semaforo).toHaveAccessibleName(/(Ejecutado|Con deuda|Novedad) \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
     test.skip(/Novedad \(/.test((await semaforo.getAttribute("aria-label")) ?? ""), "El vehículo simulado quedó en un departamento no soportado");
 
     await semaforo.focus();
@@ -62,18 +97,21 @@ test.describe("impuesto departamental en el tablero", () => {
     await pestana.waitForLoadState();
     await expect(pestana.getByRole("heading", { level: 1, name: `Impuesto departamental · ${PLACA}` })).toBeVisible();
     // HU #14087: la respuesta de la fuente en español (monto total sin formato, vigencias con año/valor/pagada en Sí/No).
-    const respuesta = pestana.getByRole("table", { name: "Respuesta de la fuente" });
-    await expect(respuesta.getByRole("rowheader", { name: "Monto total" })).toBeVisible();
-    await expect(respuesta.getByRole("row", { name: /Monto total\s*\d+$/ })).toBeVisible();
+    // HU #14562 · AC39: el primer nivel de la respuesta es una lista de definición (group + dt/dd).
+    const respuesta = pestana.getByRole("group", { name: "Respuesta de la fuente" });
+    const montoTotal = respuesta.locator("div", { has: pestana.getByRole("term").filter({ hasText: /^Monto total$/ }) });
+    await expect(montoTotal.getByRole("term")).toBeVisible();
+    await expect(montoTotal.getByRole("definition")).toHaveText(/^\d+$/);
     const tabla = pestana.getByRole("table", { name: "Vigencias" });
     if (await tabla.count()) {
       await expect(tabla.getByRole("columnheader", { name: "Pagada" })).toBeVisible();
       await expect(tabla.getByText(/^(Sí|No)$/).first()).toBeVisible();
     } else {
-      await expect(respuesta.getByRole("row", { name: /Vigencias\s*Sin registros/ })).toBeVisible();
+      await expect(respuesta.locator("div", { has: pestana.getByRole("term").filter({ hasText: /^Vigencias$/ }) }).getByRole("definition")).toHaveText("Sin registros");
     }
     // Sin la auditoría del proveedor y nada delata un dato manual (R-20).
-    await expect(pestana.getByRole("region", { name: "Respuesta de la fuente" }).getByText(/proveedor/i)).toHaveCount(0);
+    // La vista curada (group) no nombra al proveedor; la respuesta cruda, si llega, va en su tarjeta plegable (D19).
+    await expect(respuesta.getByText(/proveedor/i)).toHaveCount(0);
     await expect(pestana.getByText(/manual|a mano/i)).toHaveCount(0);
     await pestana.close();
   });

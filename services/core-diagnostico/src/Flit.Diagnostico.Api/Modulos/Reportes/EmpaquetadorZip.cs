@@ -70,7 +70,7 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
         var dictamenes = await db.Set<DictamenVehiculo>().AsNoTracking()
             .Where(d => d.Vigente && db.Set<VehiculoDiagnostico>().Any(v => v.Id == d.VehiculoId && v.DiagnosticoId == cabecera.Id))
             .OrderBy(d => d.VehiculoId)
-            .Select(d => new { d.VehiculoId, d.Version, d.Veredicto })
+            .Select(d => new { d.VehiculoId, d.Version, d.Veredicto, Ajustado = d.AjusteMotivo != null })
             .ToListAsync(ct).ConfigureAwait(false);
 
         var encabezado = new Dictionary<string, string?>(lote.ParaHuella(), StringComparer.Ordinal)
@@ -78,7 +78,7 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
             ["lote/estado"] = CodigosDeEnum.Codigo(cabecera.Estado),
             ["zip/version_pdf"] = PdfVehiculo.VersionPlantilla.ToString(CultureInfo.InvariantCulture),
             ["zip/incluidos"] = string.Join(',', vehiculos.Where(v => v.Incluido).Select(v => v.Id.ToString("D"))),
-            ["zip/dictamenes"] = string.Join(',', dictamenes.Select(d => string.Create(CultureInfo.InvariantCulture, $"{d.VehiculoId:D}:{d.Version}:{d.Veredicto}"))),
+            ["zip/dictamenes"] = ClaveDictamenes(dictamenes.Select(d => (d.VehiculoId, d.Version, d.Veredicto, d.Ajustado))),
             // Punto 4: un borrador nuevo cambia la columna Trámite del índice, así que cambia la huella.
             [ClaveHuellaTramites] = ClaveTramites(tramites.Select(t => (t.Key, t.Value))),
         };
@@ -86,6 +86,14 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
             .ConfigureAwait(false);
         return new PlanZip(HuellaEvidencia.Calcular(entrada), vehiculos);
     }
+
+    /// <summary>
+    /// Valor de <c>zip/dictamenes</c>: <c>vehiculo:version:veredicto</c> de cada vigente; con ajuste FLIT (HU #14563 AC32) suma
+    /// <c>:AJUSTADO</c>, así que un ZIP de antes del ajuste no se reutiliza. Sin ajuste el valor es el de siempre.
+    /// </summary>
+    public static string ClaveDictamenes(IEnumerable<(Guid Vehiculo, int Version, string Veredicto, bool Ajustado)> dictamenes) =>
+        string.Join(',', dictamenes.Select(d => string.Create(
+            CultureInfo.InvariantCulture, $"{d.Vehiculo:D}:{d.Version}:{d.Veredicto}{(d.Ajustado ? ":AJUSTADO" : string.Empty)}")));
 
     /// <summary>Clave de la huella del ZIP con el trámite de cada vehículo.</summary>
     public const string ClaveHuellaTramites = "zip/tramites";
@@ -279,9 +287,9 @@ internal sealed partial class EmpaquetadorZip(
         var pagina = ids.ToArray();
         var filas = await db.Set<DictamenVehiculo>().AsNoTracking()
             .Where(d => d.Vigente && pagina.Contains(d.VehiculoId))
-            .Select(d => new { d.VehiculoId, d.Veredicto, d.Alertamientos })
+            .Select(d => new { d.VehiculoId, d.Veredicto, d.Alertamientos, Ajustado = d.AjusteMotivo != null })
             .ToListAsync(ct).ConfigureAwait(false);
-        return filas.ToDictionary(d => d.VehiculoId, d => new DictamenDelIndice(d.Veredicto, d.Alertamientos));
+        return filas.ToDictionary(d => d.VehiculoId, d => new DictamenDelIndice(d.Veredicto, d.Alertamientos, d.Ajustado));
     }
 
     /// <summary>
@@ -320,6 +328,7 @@ internal sealed partial class EmpaquetadorZip(
                     propia.Vigente = vigente;
                     propia.VehiculosIncluidos = plan.Incluidos.Count;
                     propia.VehiculosPendientes = plan.Pendientes;
+                    await Notificaciones.EscritorNotificaciones.AgregarAsync(db, propia.TenantId, propia.SolicitadoPor, Notificaciones.Notificacion.ZipEvidenciasListo, propia.DiagnosticoId, propia.Id, propia.GeneradoEn.Value, ct).ConfigureAwait(false);
                     await db.SaveChangesAsync(ct).ConfigureAwait(false);
                     await transaccion.CommitAsync(ct).ConfigureAwait(false);
                     return vigente;
@@ -366,6 +375,7 @@ internal sealed partial class EmpaquetadorZip(
             propia.TipoError = tipoError;
             propia.LeaseHasta = null;
             EnError(log, trabajo.Id, tipoError, propia.Intentos);
+            await Notificaciones.EscritorNotificaciones.AgregarAsync(db, propia.TenantId, propia.SolicitadoPor, Notificaciones.Notificacion.ZipEvidenciasFallido, propia.DiagnosticoId, propia.Id, reloj.GetUtcNow(), ct).ConfigureAwait(false);
         }
 
         try

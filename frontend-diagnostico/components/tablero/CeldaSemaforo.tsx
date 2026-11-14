@@ -1,33 +1,25 @@
 "use client";
 
-import type { ComponentType, ReactNode, SVGProps } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { TABLA_MOVIL_CELL_CLS } from "@flit/ui/table-styles";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import { rotular } from "@/lib/rotulos";
 import { BotonReprocesar, type BotonReprocesarProps } from "./BotonReprocesar";
+import { IconoDxDeuda } from "@/components/dx/iconos/IconoDxDeuda";
+import { IconoDxEjecutado } from "@/components/dx/iconos/IconoDxEjecutado";
+import { IconoDxEnCurso } from "@/components/dx/iconos/IconoDxEnCurso";
+import { IconoDxError } from "@/components/dx/iconos/IconoDxError";
+import { IconoDxNovedad } from "@/components/dx/iconos/IconoDxNovedad";
+import { IconoDxPendiente } from "@/components/dx/iconos/IconoDxPendiente";
 
-type Tono = "neutral" | "success" | "danger" | "warning" | "na";
+/** HU #14562 AC11: tono del semáforo = sufijo del token --dx-estado-<tono> (app/dx/tokens-dx.css). */
+type Tono = "ejecutado" | "deuda" | "error" | "en-curso" | "pendiente" | "novedad" | "sin-solicitar";
 
-type Icono = ComponentType<SVGProps<SVGSVGElement>>;
-
-/** Punto naranja del pendiente de la propuesta (`.badge.warn::before`), como SVG para que el chip siempre lleve icono. */
-function Punto(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 8 8" {...props}>
-      <circle cx="4" cy="4" r="3" fill="var(--di-alerta-punto)" />
-    </svg>
-  );
-}
-
-/** Marca de cada tono, como el `.badge::before` de la propuesta: check cielo, punto naranja, equis naranja. */
-const ICONO_CLS: Partial<Record<Tono, string>> = {
-  success: "h-3.5 w-3.5 text-[var(--di-success-dot)]",
-  danger: "h-3.5 w-3.5 text-[var(--di-alerta-punto)]",
-  warning: "h-2 w-2",
-};
+type Icono = ComponentType<{ className?: string; tamano?: 16 | 20 | 24 }>;
 
 /** Fuente que el lote no pidió (HU #14087): no hay consulta ni celda; solo se muestra en la tabla. */
 export const SIN_SOLICITAR = "SIN_SOLICITAR";
@@ -35,30 +27,31 @@ export const SIN_SOLICITAR = "SIN_SOLICITAR";
 /** Estado visible de una columna de la tabla: el de la celda o «Sin solicitar». */
 export type EstadoVisible = EstadoCelda | typeof SIN_SOLICITAR;
 
+/** «Sin solicitar» no tiene glifo IconoDx: el «menos» lineal del kit, al mismo tamaño. */
+const IconoSinSolicitar = iconoComo("menos");
+function IconoMenos({ className }: { className?: string }) {
+  return <IconoSinSolicitar className={className} aria-hidden="true" />;
+}
+
 /**
- * Semáforo por estado con los `--badge-*` de @flit/ui (tokens.css), con el aspecto de los estados de la propuesta
- * (homologación HU #14512): neutral «Sin ejecutar» para pendiente o en curso (el en curso conserva el icono animado), cielo
- * con check «Ejecutado (OK)», aro con equis naranja «Error», punto naranja (warning) «Novedad» para la N/A con su motivo, y
- * borde punteado «Sin solicitar» para la fuente que el lote no pidió. El texto del error usa la tinta `--badge-pending-fg`.
- * El estado nunca depende solo del color: cada chip lleva icono y texto.
+ * Semáforo del kit 2026 (HU #14562 AC11/AC12): etiqueta del kit con su IconoDx y el tono --dx-estado-*. Pendiente toma el
+ * amarillo del kit (D4(4)); «Sin solicitar» es el estado visual NA con rótulo y motivo propios, distintos de «Novedad», sin
+ * valor nuevo en EstadoCelda ni en MotivoNa (D4(3), O3). Ningún ícono gira dentro de la grilla (AC5). El estado nunca
+ * depende solo del color: cada chip lleva ícono y texto.
  */
-const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono; animado?: boolean }> = {
-  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("reloj") },
-  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("girador"), animado: true },
-  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: iconoComo("check") },
-  ERROR: { tono: "danger", texto: "Error", Icono: iconoComo("cerrar") },
-  NA: { tono: "warning", texto: "Novedad", Icono: Punto },
-  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: iconoComo("menos") },
+const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono }> = {
+  PENDIENTE: { tono: "pendiente", texto: "Sin ejecutar", Icono: IconoDxPendiente },
+  EN_CURSO: { tono: "en-curso", texto: "Sin ejecutar (en curso)", Icono: IconoDxEnCurso },
+  COMPLETADO: { tono: "ejecutado", texto: "Ejecutado", Icono: IconoDxEjecutado },
+  ERROR: { tono: "error", texto: "Error", Icono: IconoDxError },
+  NA: { tono: "novedad", texto: "Novedad", Icono: IconoDxNovedad },
+  SIN_SOLICITAR: { tono: "sin-solicitar", texto: "Sin solicitar", Icono: IconoMenos },
 };
 
-/** Color pleno (`--c`) y de texto (`--ct`) de la etiqueta del kit por tono; el rojo usa la tinta AA --badge-pending-fg. */
-const ESTILOS: Record<Tono, { c: string; ct: string }> = {
-  neutral: { c: "var(--badge-neutral-border)", ct: "var(--badge-neutral-fg)" },
-  success: { c: "var(--badge-success-border)", ct: "var(--badge-success-fg)" },
-  danger: { c: "var(--badge-danger-border)", ct: "var(--badge-pending-fg)" },
-  warning: { c: "var(--badge-warning-border)", ct: "var(--badge-warning-fg)" },
-  na: { c: "var(--border)", ct: "var(--muted-foreground)" },
-};
+/** Motivo propio de «Sin solicitar» (AC12), distinto de los motivos de la Novedad. */
+export const MOTIVO_SIN_SOLICITAR = "No se pidió en este lote";
+
+const estiloDe = (tono: Tono) => ({ c: `var(--dx-estado-${tono}-borde)`, ct: `var(--dx-estado-${tono})` });
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
   SERVICIO_PUBLICO: "Servicio público",
@@ -99,7 +92,7 @@ function detalle(celda: CeldaGrilla): string | null {
 /** Celda reprocesable: en ERROR y sin depender de un RUNT en error (esa la libera el reproceso del RUNT). */
 export const esReprocesable = (celda: CeldaGrilla) => celda.estado === "ERROR" && celda.tipo_error !== BLOQUEADA_POR_RUNT;
 
-/** Texto visible del estado de una celda («Ejecutado (OK)», «Novedad», «Sin solicitar»…). */
+/** Texto visible del estado de una celda («Ejecutado», «Novedad», «Sin solicitar»…). */
 export const textoEstadoCelda = (estado: EstadoVisible) => vistaDe(estado, false).texto;
 
 /** Motivo corto de una N/A («Servicio público»…), el que va bajo el chip «Novedad». Desconocido: «Novedad sin clasificar». */
@@ -109,12 +102,11 @@ export const motivoNaCorto = (motivo: MotivoNa | null, etiqueta?: string | null)
 /** Nota de la N/A de una celda: `motivo_na_etiqueta` de la API primero y el motivo corto local de respaldo. */
 const motivoNaDeCelda = (celda: CeldaGrilla) => motivoNaCorto(celda.motivo_na, celda.motivo_na_etiqueta);
 
-/** Impuesto completado con deuda: ámbar «Con deuda», no verde. El resto de estados no cambia. */
-function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto: string; Icono: Icono; animado?: boolean } {
-  if (conDeuda && estado === "COMPLETADO")
-    return { tono: "warning" as const, texto: "Con deuda", Icono: Punto, animado: false };
+/** Impuesto completado con deuda: «Con deuda» en el tono deuda, no verde. El resto de estados no cambia. */
+function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto: string; Icono: Icono } {
+  if (conDeuda && estado === "COMPLETADO") return { tono: "deuda", texto: "Con deuda", Icono: IconoDxDeuda };
   // Punto 5: un estado que el frontend no conoce no rompe el chip ni pinta el código.
-  return ESTADOS[estado] ?? { tono: "neutral", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: iconoComo("reloj") };
+  return ESTADOS[estado] ?? { tono: "novedad", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: IconoDxNovedad };
 }
 
 /**
@@ -122,14 +114,10 @@ function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto:
  * auditoría desde HU #14087) y la grilla de backoffice (F06-H5); nunca depende solo del color.
  */
 export function ChipEstadoCelda({ estado, conDeuda = false }: { estado: EstadoVisible; conDeuda?: boolean }) {
-  const { tono, texto, Icono, animado } = vistaDe(estado, conDeuda);
+  const { tono, texto, Icono } = vistaDe(estado, conDeuda);
   return (
-    <span data-tono={tono} {...etiquetaKit(ESTILOS[tono])}>
-      <Icono
-        className={`shrink-0 ${ICONO_CLS[tono] ?? "h-3.5 w-3.5"} ${animado ? "motion-safe:animate-spin" : ""}`}
-        aria-hidden="true"
-        strokeWidth={tono === "success" || tono === "danger" ? 3 : undefined}
-      />
+    <span data-tono={tono} {...etiquetaKit(estiloDe(tono))}>
+      <Icono className="h-3.5 w-3.5 shrink-0" tamano={16} />
       {texto}
     </span>
   );
@@ -156,7 +144,10 @@ export interface CeldaSemaforoProps extends Pick<BotonReprocesarProps, "onReproc
   accion?: ReactNode;
 }
 
-const TD_CLS = "px-3 py-2.5 align-top";
+/** Celda de la grilla; por debajo de 900 px, renglón de la tarjeta del vehículo con el nombre de la fuente (HU #14562 AC56). */
+const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
+/** Contenido de la celda: arriba a la izquierda en la tabla, a la derecha en la tarjeta. */
+const CONTENIDO_CLS = "flex flex-col items-start gap-1 max-[900px]:items-end";
 
 /** Aviso para lectores de pantalla del enlace al detalle (HU #14087): va en el nombre accesible y como texto sr-only. */
 const NUEVA_PESTANA = "(se abre en una pestaña nueva)";
@@ -179,10 +170,19 @@ export function CeldaSemaforo({
   marca,
   accion,
 }: CeldaSemaforoProps) {
-  if (!solicitada || !celda)
+  if (!solicitada)
     return (
-      <td data-fuente={fuente} data-estado={solicitada ? "SIN_CELDA" : SIN_SOLICITAR} className={TD_CLS}>
-        <ChipEstadoCelda estado={solicitada ? "PENDIENTE" : SIN_SOLICITAR} />
+      <td data-fuente={fuente} data-label={nombreFuente} data-estado="NA" data-motivo={SIN_SOLICITAR} className={TD_CLS}>
+        <div className={CONTENIDO_CLS}>
+          <ChipEstadoCelda estado={SIN_SOLICITAR} />
+          <span className="text-xs text-muted-foreground">{MOTIVO_SIN_SOLICITAR}</span>
+        </div>
+      </td>
+    );
+  if (!celda)
+    return (
+      <td data-fuente={fuente} data-label={nombreFuente} data-estado="SIN_CELDA" className={TD_CLS}>
+        <ChipEstadoCelda estado="PENDIENTE" />
       </td>
     );
 
@@ -190,15 +190,15 @@ export function CeldaSemaforo({
   const conDeuda = fuente === "IMPUESTO_DEPARTAMENTAL" && celda.estado === "COMPLETADO" && celda.tiene_deuda === true;
   const texto = vistaDe(celda.estado, conDeuda).texto;
   return (
-    <td data-fuente={fuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
-      <div className="flex flex-col items-start gap-1">
+    <td data-fuente={fuente} data-label={nombreFuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
+      <div className={CONTENIDO_CLS}>
         {hrefDetalle ? (
           <a
             href={hrefDetalle}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition hover:opacity-90 ${FOCO_CLS}`}
+            className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition duration-[var(--dx-motion-rapido)] hover:opacity-90 motion-reduce:transition-none ${FOCO_CLS}`}
           >
             <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
             <span className="sr-only">{NUEVA_PESTANA}</span>

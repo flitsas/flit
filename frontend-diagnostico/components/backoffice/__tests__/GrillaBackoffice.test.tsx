@@ -6,6 +6,7 @@ import PaginaConsultaBackoffice from "@/app/(app)/backoffice/diagnosticos/[id]/v
 import { sesion } from "@/__tests__/configuracion/datos";
 import type { GrillaBackoffice as TGrilla } from "@/lib/backoffice/api";
 import type { Grilla } from "@/lib/tablero/api";
+import { TABLA_MOVIL_TABLE_CLS } from "@flit/ui/table-styles";
 import { EMPRESA_A, LOTE, celdaBo, grillaBo, llamadas, respuestaLlenado, simularApi, vehiculoBo } from "@/lib/backoffice/__tests__/datos";
 
 // Uso de ejemplo: <GrillaBackoffice diagnosticoId={id} empresa={empresa} /> en /backoffice/diagnosticos/{id}?empresa= pide
@@ -142,7 +143,7 @@ describe("GrillaBackoffice — «Llenar a mano» solo en celdas en ERROR no bloq
 });
 
 describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en verde con la marca manual", () => {
-  it("al confirmar, la celda pasa a «Ejecutado (OK)» con «Manual» y el lote se vuelve a leer desde su versión", async () => {
+  it("al confirmar, la celda pasa a «Ejecutado» con «Manual» y el lote se vuelve a leer desde su versión", async () => {
     const llena = celdaBo(1, "SIMIT_VEHICULO", "COMPLETADO", { origen: "MANUAL", usuario_manual_id: "u", version: 21 });
     const cambios = grillaBo({ version: 21, estado: "EN_PROCESO", vehiculos: [vehiculoBo(1, [llena])] });
     let lecturas = 0;
@@ -161,7 +162,7 @@ describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en ver
 
     await waitFor(() => expect(td(container, "celda-1-simit_vehiculo")).toHaveAttribute("data-estado", "COMPLETADO"));
     const celda = td(container, "celda-1-simit_vehiculo");
-    expect(within(celda).getByText("Ejecutado (OK)")).toBeInTheDocument();
+    expect(within(celda).getByText("Ejecutado")).toBeInTheDocument();
     expect(within(celda).getByText("Manual")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /llenar a mano/i })).toBeNull();
     expect(screen.getByText(/se llenó a mano SIMIT vehículo de TST001/i)).toBeInTheDocument();
@@ -226,5 +227,47 @@ describe("Backoffice — HU #14087: página del detalle en pestaña nueva", () =
     simularApi({ [RUTA_GRILLA]: () => new Response(null, { status: 403 }) });
     render(await PaginaConsultaBackoffice({ params: Promise.resolve({ id: LOTE, vehiculoId: "vehiculo-1", fuente: "RUNT" }), searchParams: Promise.resolve({ empresa: EMPRESA_A }) }));
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/403?code=SIN_PERMISO_BACKOFFICE"));
+  });
+});
+
+describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
+  it("D6: el vehículo con dictamen ajustado lleva la marca «Ajustado por FLIT»", async () => {
+    const g = grillaBo();
+    g.vehiculos[0] = { ...g.vehiculos[0], dictamen_ajustado: true };
+    montar(g);
+    await tabla();
+    expect(screen.getAllByText("Ajustado por FLIT")).toHaveLength(1);
+  });
+
+  it("AC47: con verAuditoria, «Auditoría del dictamen de PLACA» abre el panel con las versiones", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    montar(grillaBo(), {
+      [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen/versiones`]: () => Response.json({ versiones: [] }),
+    });
+    await tabla();
+    fireEvent.click(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
+    const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
+    expect(await within(panel).findByText("Este vehículo aún no tiene dictamen.")).toBeInTheDocument();
+  });
+
+  it("AC47: sin verAuditoria no se ofrece la auditoría", async () => {
+    montar();
+    await tabla();
+    expect(screen.queryByRole("button", { name: /^Auditoría del dictamen/ })).toBeNull();
+  });
+});
+
+// HU #14562 AC56 (auditoría B2/M6): la grilla del backoffice es la misma GrillaSemaforos, así que pasa a tarjetas bajo 900 px
+// y no deja columnas fijas allí.
+describe("GrillaBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+  it("la tabla lleva las recetas TABLA_MOVIL_* y la placa no queda fija bajo 900 px", async () => {
+    montar();
+    const t = await tabla();
+    const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(t)).toContain(c);
+    for (const placa of within(t).getAllByRole("rowheader")) {
+      expect(clases(placa)).not.toContain("sticky");
+      expect(placa).toHaveAttribute("data-label", "Placa o VIN");
+    }
   });
 });

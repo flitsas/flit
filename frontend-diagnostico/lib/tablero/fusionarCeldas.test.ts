@@ -125,3 +125,32 @@ describe("fusionarCeldas — Punto 3: placas pegadas por tiempo (vehiculos_pegad
     expect(r.vehiculos.find((v) => v.id === V1.id)?.pegada).toBe(true);
   });
 });
+
+// HU #14562 AC29/AC30 (H1): la fila se fusiona por su versión de fila y la cabecera (conteos, lote) viaja en cada delta.
+describe("fusionarCeldas — HU #14562 campos de fila y cabecera", () => {
+  const lote = { modo: "CON_ANALISIS" as const, tipo_tramite: { codigo: "TRASPASO_STANDARD", nombre: "Traspaso" }, creado_en: "2026-11-12T14:42:00Z", es_express: false, usuario_creador: { id: "u1", nombre: "Usuaria Prueba" } };
+  const conteos = { vehiculos: 1, terminados: 1, con_error: 0, con_deuda: 0, bloqueados: 0, listos_tramite: 1 };
+
+  it("AC29: el veredicto y la marca de ajuste de la fila recibida reemplazan los anteriores, y los conteos son los del delta", () => {
+    const anterior = grilla({ vehiculos: [{ ...V1, veredicto: "VIABLE", version: 5 }], conteos, lote });
+    const delta = grilla({ version: 13, vehiculos: [{ ...V1, veredicto: "BLOQUEADO", dictamen_ajustado: true, version: 6 }], conteos: { ...conteos, bloqueados: 1, listos_tramite: 0 }, lote });
+    const vigente = fusionarCeldas(anterior, delta);
+    expect(vigente.vehiculos[0].veredicto).toBe("BLOQUEADO");
+    expect(vigente.vehiculos[0].dictamen_ajustado).toBe(true);
+    expect(vigente.conteos).toEqual({ ...conteos, bloqueados: 1, listos_tramite: 0 });
+  });
+
+  it("AC30: una fila con versión de fila menor que la vigente no pisa sus datos de fila", () => {
+    const anterior = grilla({ vehiculos: [{ ...V1, veredicto: "BLOQUEADO", version: 9 }] });
+    const atrasada = grilla({ vehiculos: [{ ...V1, veredicto: "VIABLE", version: 8 }] });
+    expect(fusionarCeldas(anterior, atrasada).vehiculos[0].veredicto).toBe("BLOQUEADO");
+  });
+
+  it("AC31: un delta sin `lote` ni `conteos` conserva los que ya se tenían", () => {
+    const anterior = grilla({ vehiculos: [V1], conteos, lote });
+    const delta = grilla({ vehiculos: [] });
+    const vigente = fusionarCeldas(anterior, delta);
+    expect(vigente.lote).toEqual(lote);
+    expect(vigente.conteos).toEqual(conteos);
+  });
+});

@@ -89,7 +89,7 @@ internal static class RecalculadorEstado
         ArgumentNullException.ThrowIfNull(transicion);
         cabecera.Estado = transicion.Nuevo;
         cabecera.CerradoEn = ahora;
-        db.Add(new HistorialEstadoDiagnostico
+        var historial = new HistorialEstadoDiagnostico
         {
             TenantId = cabecera.TenantId,
             DiagnosticoId = cabecera.Id,
@@ -98,8 +98,15 @@ internal static class RecalculadorEstado
             Disparador = transicion.Disparador,
             UsuarioId = usuarioId,
             En = ahora,
-        });
+        };
+        db.Add(historial);
         if (transicion.Nuevo is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto)
+        {
             await LoteTerminado.EncolarAsync(db, outbox, cabecera, celdas, vehiculos, versionTablero, ahora, ct).ConfigureAwait(false);
+            // HU #14563 B8: LOTE_TERMINADO para el creador con la fila de historial como referencia (uuid v7 asignado aquí, antes de
+            // guardar), así que un lote reabierto que vuelve a terminar notifica otra vez.
+            await Notificaciones.EscritorNotificaciones.AgregarAsync(
+                db, cabecera.TenantId, cabecera.UsuarioCreadorId, Notificaciones.Notificacion.LoteTerminado, cabecera.Id, historial.Id, ahora, ct).ConfigureAwait(false);
+        }
     }
 }

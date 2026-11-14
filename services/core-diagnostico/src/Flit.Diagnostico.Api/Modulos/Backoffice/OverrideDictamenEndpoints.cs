@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
@@ -13,19 +15,42 @@ using Npgsql;
 namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
-/// Lectura y reemplazo del dictamen vigente para el backoffice FLIT (corte 7). Cuelgan del grupo <c>/backoffice</c>
-/// (<see cref="PoliticaBackoffice"/> de configuración; empresa explícita en <c>?empresa=</c>, y el GET queda auditado antes
-/// de tocar la fila): el GET es el detalle y lo ve también el SuperAdmin de cualquier compañía. El <c>PUT</c> exige además la
-/// política de operación FLIT (<see cref="PoliticaBackoffice.NombreOperacion"/>, ajustes 2026-11-11 punto 1) y
-/// <c>diagnostico.dictamen.override</c>. La escritura de la otra compañía va por <see cref="EscrituraEntreEmpresas"/>.
-/// No vuelve a evaluar, no redacta, no genera PDF y no toca el Excel ni el ZIP.
+/// Lectura y ajuste FLIT del dictamen vigente para el backoffice (corte 7; HU #14563 B7, ADR-0086 D-2). Cuelgan del grupo
+/// <c>/backoffice</c> (<see cref="PoliticaBackoffice"/> de configuración; empresa explícita en <c>?empresa=</c>, y el GET queda
+/// auditado antes de tocar la fila): el GET es el detalle y lo ve también el SuperAdmin de cualquier compañía. El <c>PUT</c> exige
+/// además la política de operación FLIT (<see cref="PoliticaBackoffice.NombreOperacion"/>: el SuperAdmin de cualquier compañía o
+/// un usuario de FLIT con el permiso, decisión D23) y <c>diagnostico.dictamen.override</c>.
+/// La escritura de la otra compañía va por <see cref="EscrituraEntreEmpresas"/>.
+/// <para>
+/// El PUT recibe el estado deseado: veredicto, motivo (obligatorio desde B-PR6), <c>version_esperada</c> y, opcional, los
+/// alertamientos completos. Sin alertamientos reemplaza solo el veredicto (textos de plantilla, la cola los redacta); con ellos
+/// nace una versión <c>MANUAL</c>/<c>COMPLETADA</c> (<see cref="EmisorDictamen.FilaDeAjuste"/>). Orden de bloqueo: cabecera →
+/// vehículo (<see cref="EscritorCeldas.SubirVersionFilaAsync"/> con las filas de la empresa explícita)
+/// → dictamen. Toda carrera termina en 409, nunca en 500. No notifica (D8), no genera PDF y no toca el Excel ni el ZIP.
+/// </para>
+/// <para>
+/// <c>motivo</c> (<c>ajuste_motivo</c>, <c>@pii:low</c>) se valida solo en <see cref="LeerCuerpo"/> y se escribe solo en
+/// <see cref="DictamenVehiculo.AjusteMotivo"/>. Este archivo no tiene logger y ningún mensaje de error repite lo digitado.
+/// </para>
 /// </summary>
-internal static class OverrideDictamenEndpoints
+internal static partial class OverrideDictamenEndpoints
 {
     public const string Ruta = "/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen";
 
-    /// <summary>Lo único que el override escribe en la compañía del lote.</summary>
+    /// <summary>Lo único que el ajuste escribe con <c>SaveChanges</c> en la compañía del lote (la versión de fila va por ExecuteUpdate).</summary>
     private static readonly Type[] TiposDelOverride = [typeof(DictamenVehiculo)];
+
+    private const int LargoMinimoMotivo = 10;
+    private const int LargoMaximoMotivo = 500;
+    private const int LargoMaximoTexto = 500;
+    private const int MaximoAlertamientos = 50;
+
+    /// <summary>Las claves de <c>CuerpoOverrideDictamen</c> (OpenAPI, <c>additionalProperties: false</c>).</summary>
+    private static readonly HashSet<string> ClavesDelCuerpo =
+        new(["veredicto", "motivo", "version_esperada", "alertamientos", "confirmar_con_tramite", "confirmado"], StringComparer.Ordinal);
+
+    /// <summary>Las claves de <c>AlertamientoAjuste</c> (OpenAPI, <c>additionalProperties: false</c>).</summary>
+    private static readonly HashSet<string> ClavesDelAlertamiento = new(["codigo", "texto", "efecto", "fuente"], StringComparer.Ordinal);
 
     public static void Map(RouteGroupBuilder backoffice)
     {
@@ -38,7 +63,8 @@ internal static class OverrideDictamenEndpoints
     private static async Task<IResult> Obtener(Guid id, Guid vid, HttpContext http, DiagnosticoDb db, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
-        var fila = await VigenteAsync(db, empresa, id, vid, seguir: false, ct).ConfigureAwait(false);
+        await ExigirLoteYVehiculoAsync(db, empresa, id, vid, ct).ConfigureAwait(false);
+        var fila = await VigenteAsync(db, empresa, vid, seguir: false, ct).ConfigureAwait(false);
         return Results.Ok(ConsultaDictamen.Backoffice(fila));
     }
 
@@ -46,7 +72,7 @@ internal static class OverrideDictamenEndpoints
         Guid id, Guid vid, HttpContext http, JsonElement cuerpo, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj,
         IPlatformOutbox outbox, IProveedorRedactor proveedor, CancellationToken ct)
     {
-        var veredicto = ExigirCuerpo(cuerpo);
+        var pedido = LeerCuerpo(cuerpo);
         var empresa = EmpresaExplicita.De(http);
         var autor = usuario.Id != Guid.Empty
             ? usuario.Id
@@ -56,14 +82,27 @@ internal static class OverrideDictamenEndpoints
         {
             db.ChangeTracker.Clear();
             await using var transaccion = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-            var vigente = await VigenteAsync(db, empresa, id, vid, seguir: true, ct).ConfigureAwait(false);
+            await ExigirLoteYVehiculoAsync(db, empresa, id, vid, ct).ConfigureAwait(false);
+
+            // Orden de bloqueo canónico (ADR-0086 D-1): cabecera → vehículo con la versión de fila, y después el dictamen. Un PUT
+            // concurrente espera aquí y, al seguir, lee la vigente nueva: su version_esperada ya no coincide (409).
+            await EscritorCeldas.SubirVersionFilaAsync(
+                db, id, vid, ct, db.ParaEditarDeLaEmpresa<CabeceraDiagnostico>(empresa), db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(empresa))
+                .ConfigureAwait(false);
+            var tramite = await db.DeLaEmpresa<VehiculoDiagnostico>(empresa).Where(v => v.Id == vid)
+                .Select(v => v.TramiteId).SingleAsync(ct).ConfigureAwait(false);
+            var vigente = await VigenteAsync(db, empresa, vid, seguir: true, ct).ConfigureAwait(false);
+            ExigirFrenteAVigente(pedido, vigente);
+            if (tramite is not null && !pedido.ConfirmarConTramite)
+                throw ReglaException.Conflicto(
+                    CodigosDictamen.VehiculoConTramite, "El vehículo ya tiene un trámite creado; el ajuste no lo modifica. Confírmalo para continuar.");
+
             var cabecera = await db.DeLaEmpresa<CabeceraDiagnostico>(empresa).SingleAsync(c => c.Id == id, ct).ConfigureAwait(false);
-            var suspendida = await db.DeLaEmpresa<ConfiguracionEmpresa>(empresa)
-                .Select(c => (bool?)c.RedaccionIaSuspendida).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? false;
             var ahora = reloj.GetUtcNow();
-            var fila = EmisorDictamen.FilaDeOverride(
-                vigente, veredicto, confirmado: true, autor, cabecera.TipoTramiteCodigo, suspendida, proveedor.Configurado, ahora);
-            fila.TenantId = empresa;
+            // La configuración de redacción solo cuenta en el ajuste de solo veredicto (con alertamientos nace MANUAL/COMPLETADA).
+            var suspendida = pedido.Alertamientos is null && (await db.DeLaEmpresa<ConfiguracionEmpresa>(empresa)
+                .Select(c => (bool?)c.RedaccionIaSuspendida).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? false);
+            var fila = NuevaFila(pedido, vigente, cabecera, autor, empresa, conTramite: tramite is not null, suspendida, proveedor.Configurado, ahora);
             db.Add(fila);
             DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: true);
             try
@@ -82,13 +121,43 @@ internal static class OverrideDictamenEndpoints
     }
 
     /// <summary>
-    /// <c>confirmado</c> distinto de true no sigue. Un veredicto que no es VIABLE ni BLOQUEADO tampoco. No escribe.
+    /// La versión nueva que deja el PUT (code review menor 13: fuera de la lambda de <see cref="Reemplazar"/>, sin cambiar la
+    /// conducta). Mutador puro, sin contexto: la versión de fila la sube <see cref="Reemplazar"/> antes de llamarlo
+    /// (<c>EscritoresDeFilaTests</c>). Con alertamientos, <see cref="EmisorDictamen.FilaDeAjuste"/> (<c>MANUAL</c>/<c>COMPLETADA</c>);
+    /// sin ellos, <see cref="EmisorDictamen.FilaDeOverride"/> con el motivo y la redacción según <paramref name="redaccionSuspendida"/>.
+    /// La fila lleva la empresa explícita y, por AC23, si el vehículo ya tenía trámite. No la agrega al contexto.
+    /// </summary>
+    internal static DictamenVehiculo NuevaFila(
+        CuerpoAjusteDictamen pedido, DictamenVehiculo vigente, CabeceraDiagnostico cabecera, Guid autor, Guid empresa,
+        bool conTramite, bool redaccionSuspendida, bool proveedorConfigurado, DateTimeOffset ahora)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        ArgumentNullException.ThrowIfNull(cabecera);
+        DictamenVehiculo fila;
+        if (pedido.Alertamientos is { } alertamientos)
+        {
+            fila = EmisorDictamen.FilaDeAjuste(vigente, pedido.Veredicto, alertamientos, pedido.Motivo, autor, ahora);
+        }
+        else
+        {
+            fila = EmisorDictamen.FilaDeOverride(
+                vigente, pedido.Veredicto, confirmado: true, autor, cabecera.TipoTramiteCodigo, redaccionSuspendida, proveedorConfigurado, ahora);
+            fila.AjusteMotivo = pedido.Motivo;
+        }
+
+        fila.TenantId = empresa;
+        // AC23: la versión de auditoría registra que el ajuste se confirmó sobre un vehículo que ya tenía trámite.
+        fila.AjusteConTramite = conTramite;
+        return fila;
+    }
+
+    /// <summary>
+    /// <c>confirmado</c>, si viene, debe ser true. Un veredicto que no es VIABLE ni BLOQUEADO tampoco sigue. No escribe.
     /// </summary>
     internal static string ExigirCuerpo(JsonElement json)
     {
         if (json.ValueKind != JsonValueKind.Object
-            || !json.TryGetProperty("confirmado", out var confirmado)
-            || confirmado.ValueKind != JsonValueKind.True)
+            || (json.TryGetProperty("confirmado", out var confirmado) && confirmado.ValueKind != JsonValueKind.True))
             throw new ReglaException(CodigosDictamen.ConfirmadoRequerido, "Confirma el cambio de veredicto para reemplazarlo.");
         var veredicto = json.TryGetProperty("veredicto", out var valor) && valor.ValueKind == JsonValueKind.String
             ? valor.GetString()
@@ -98,10 +167,156 @@ internal static class OverrideDictamenEndpoints
         return veredicto;
     }
 
-    /// <summary>Choque de dos overrides en <c>ux_dictamen_version</c> o <c>ux_dictamen_vigente</c>.</summary>
+    /// <summary>
+    /// Lee y valida el cuerpo del PUT (B7). Aquí, y solo aquí, se valida <c>motivo</c> (<c>ajuste_motivo</c>, <c>@pii:low</c>):
+    /// obligatorio en todo PUT (D9 + B-PR6: el cuerpo legado sin motivo se retiró), recortado, 10 a 500 caracteres, sin filtro de
+    /// dígitos (P3 = b). Los mensajes de error son textos fijos: nunca repiten el motivo ni el texto digitado. Una clave fuera del
+    /// contrato, en el cuerpo o en un alertamiento, es 422 <c>VALOR_INVALIDO</c>. <c>version_esperada</c> es obligatoria en todo
+    /// PUT (422 <c>VERSION_ESPERADA_INVALIDA</c>). Los alertamientos, si vienen, llevan cada uno código, texto de 1 a 500 puntos de
+    /// código, efecto <c>BLOQUEA</c>/<c>ADVIERTE</c> y fuente; un <c>AJUSTE_FLIT</c> (lo ve la compañía) no admite 6 o más dígitos
+    /// seguidos (P3). Con alertamientos, el veredicto debe ser coherente: <c>VIABLE</c> sin ninguno que bloquee y <c>BLOQUEADO</c>
+    /// con al menos uno.
+    /// </summary>
+    internal static CuerpoAjusteDictamen LeerCuerpo(JsonElement json)
+    {
+        var veredicto = ExigirCuerpo(json);
+        ExigirClavesConocidas(json, ClavesDelCuerpo, prefijo: null);
+        int? versionEsperada = null;
+        if (json.TryGetProperty("version_esperada", out var version) && version.ValueKind != JsonValueKind.Null)
+        {
+            if (version.ValueKind != JsonValueKind.Number || !version.TryGetInt32(out var v) || v < 1)
+                throw new ReglaException(CodigosDictamen.VersionEsperadaInvalida, "version_esperada debe ser un entero mayor que cero.") { Campo = "version_esperada" };
+            versionEsperada = v;
+        }
+
+        var motivo = json.TryGetProperty("motivo", out var valorMotivo) && valorMotivo.ValueKind == JsonValueKind.String
+            ? valorMotivo.GetString()?.Trim()
+            : null;
+        // HU #14563 L3: el largo se cuenta en puntos de código, como char_length de ck_dictamenes_ajuste_motivo (no en UTF-16).
+        if (motivo is null || motivo.EnumerateRunes().Count() is < LargoMinimoMotivo or > LargoMaximoMotivo)
+            throw new ReglaException(CodigosDictamen.MotivoRequerido, "motivo: escribe entre 10 y 500 caracteres que expliquen el ajuste.") { Campo = "motivo" };
+
+        // Code review menor 2: B-PR6 retiró el cuerpo legado, así que version_esperada es obligatoria en todo PUT (el frontend la
+        // envía siempre). Se exige después del motivo: un cuerpo legado sigue respondiendo MOTIVO_REQUERIDO.
+        if (versionEsperada is null)
+            throw new ReglaException(CodigosDictamen.VersionEsperadaInvalida, "Todo ajuste exige version_esperada.") { Campo = "version_esperada" };
+
+        var alertamientos = LeerAlertamientos(json);
+        if (alertamientos is not null)
+        {
+            var bloquea = alertamientos.Exists(a => a.Efecto == "BLOQUEA");
+            if ((veredicto == "VIABLE" && bloquea) || (veredicto == "BLOQUEADO" && !bloquea))
+                throw new ReglaException(
+                    CodigosDictamen.DictamenIncoherente,
+                    "Un dictamen Viable no puede tener alertamientos que bloqueen, y uno Bloqueado necesita al menos uno.")
+                { Campo = "alertamientos" };
+        }
+
+        var conTramite = json.TryGetProperty("confirmar_con_tramite", out var tramite) && tramite.ValueKind == JsonValueKind.True;
+        return new CuerpoAjusteDictamen(veredicto, versionEsperada, motivo, conTramite, alertamientos);
+    }
+
+    /// <summary>
+    /// Contra la vigente ya bloqueada: <c>version_esperada</c> distinta, 409 <c>DICTAMEN_DESACTUALIZADO</c>. Cada alertamiento pedido
+    /// usa un código del catálogo (<see cref="RotulosDiagnostico.Alertas"/>), <c>AJUSTE_FLIT</c> o uno que ya estaba en la vigente,
+    /// y una fuente conocida (<see cref="RotulosDiagnostico.Fuentes"/>) o de la vigente; si no, 422 <c>ALERTAMIENTO_INVALIDO</c>.
+    /// </summary>
+    internal static void ExigirFrenteAVigente(CuerpoAjusteDictamen pedido, DictamenVehiculo vigente)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        ArgumentNullException.ThrowIfNull(vigente);
+        if (pedido.VersionEsperada is { } esperada && esperada != vigente.Version)
+            throw ReglaException.Conflicto(CodigosDictamen.DictamenDesactualizado, "El dictamen cambió desde que lo leíste. Vuelve a leerlo.");
+        if (pedido.Alertamientos is null)
+            return;
+
+        var guardadas = EmisorDictamen.AlertasGuardadas(vigente.Alertamientos);
+        foreach (var alerta in pedido.Alertamientos)
+        {
+            var codigoValido = alerta.Codigo == CodigosDictamen.AjusteFlit
+                || RotulosDiagnostico.Alertas.ContainsKey(alerta.Codigo)
+                || guardadas.Exists(g => g.Codigo == alerta.Codigo);
+            var fuenteValida = alerta.Fuente is { } fuente
+                && (RotulosDiagnostico.Fuentes.ContainsKey(fuente) || guardadas.Exists(g => g.Fuente == fuente));
+            if (!codigoValido || !fuenteValida)
+                throw AlertamientoInvalido("Un alertamiento usa un código o una fuente fuera del catálogo.");
+        }
+    }
+
+    private static ReglaException AlertamientoInvalido(string mensaje) =>
+        new(CodigosDictamen.AlertamientoInvalido, mensaje) { Campo = "alertamientos" };
+
+    private static List<AlertamientoAjuste>? LeerAlertamientos(JsonElement json)
+    {
+        if (!json.TryGetProperty("alertamientos", out var lista) || lista.ValueKind == JsonValueKind.Null)
+            return null;
+        if (lista.ValueKind != JsonValueKind.Array || lista.GetArrayLength() > MaximoAlertamientos)
+            throw AlertamientoInvalido($"alertamientos debe ser una lista de hasta {MaximoAlertamientos} elementos.");
+        var leidos = new List<AlertamientoAjuste>();
+        var indice = 0;
+        foreach (var item in lista.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Object)
+                ExigirClavesConocidas(item, ClavesDelAlertamiento, prefijo: $"alertamientos[{indice}]");
+            indice++;
+            var codigo = Campo(item, "codigo");
+            var texto = Campo(item, "texto")?.Trim();
+            var efecto = Campo(item, "efecto");
+            var fuente = Campo(item, "fuente");
+            // Code review menor 5: el largo se cuenta en puntos de código, como el motivo (L3), no en unidades UTF-16.
+            if (string.IsNullOrWhiteSpace(codigo) || string.IsNullOrEmpty(texto) || texto.EnumerateRunes().Count() > LargoMaximoTexto
+                || efecto is not ("BLOQUEA" or "ADVIERTE") || string.IsNullOrWhiteSpace(fuente))
+                throw AlertamientoInvalido("Cada alertamiento lleva código, texto de 1 a 500 caracteres, efecto BLOQUEA o ADVIERTE y fuente.");
+            if (codigo == CodigosDictamen.AjusteFlit && SeisOMasDigitos().IsMatch(texto))
+                throw new ReglaException(CodigosDictamen.AlertamientoConDigitos, "El texto de un alertamiento AJUSTE_FLIT no puede traer 6 o más dígitos seguidos.")
+                {
+                    Campo = "alertamientos",
+                };
+            leidos.Add(new AlertamientoAjuste(codigo, texto, efecto, fuente));
+        }
+
+        return leidos;
+    }
+
+    /// <summary>
+    /// Code review menor 4, coherente con <c>additionalProperties: false</c> del contrato: una clave fuera de
+    /// <paramref name="conocidas"/> es 422 <c>VALOR_INVALIDO</c> con el campo señalado. El nombre de la clave solo se repite si
+    /// parece un nombre de campo (minúsculas, dígitos y guion bajo, hasta 40); si no, el campo es el objeto que la trae, para no
+    /// devolver lo digitado.
+    /// </summary>
+    private static void ExigirClavesConocidas(JsonElement objeto, HashSet<string> conocidas, string? prefijo)
+    {
+        foreach (var propiedad in objeto.EnumerateObject())
+        {
+            if (conocidas.Contains(propiedad.Name))
+                continue;
+            var campo = NombreDeCampo().IsMatch(propiedad.Name)
+                ? (prefijo is null ? propiedad.Name : $"{prefijo}.{propiedad.Name}")
+                : prefijo ?? "cuerpo";
+            throw new ReglaException(ManejadorReglas.CodigoValorInvalido, "El cuerpo trae un campo que el contrato no admite.") { Campo = campo };
+        }
+    }
+
+    [GeneratedRegex("^[a-z][a-z0-9_]{0,39}$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex NombreDeCampo();
+
+    private static string? Campo(JsonElement item, string campo) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString()
+            : null;
+
+    [GeneratedRegex(@"\d{6,}", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex SeisOMasDigitos();
+
+    /// <summary>
+    /// Choque de dos ajustes en <c>ux_dictamen_version</c> o <c>ux_dictamen_vigente</c>, o el <c>xmin</c> de la vigente
+    /// (<see cref="DbUpdateConcurrencyException"/>): siempre 409, nunca 500.
+    /// </summary>
     internal static bool EsConflictoDeDictamen(DbUpdateException ex)
     {
         ArgumentNullException.ThrowIfNull(ex);
+        if (ex is DbUpdateConcurrencyException)
+            return true;
         if (ex.InnerException is not PostgresException pg || pg.SqlState != PostgresErrorCodes.UniqueViolation)
             return false;
         if (pg.ConstraintName is "ux_dictamen_version" or "ux_dictamen_vigente")
@@ -110,16 +325,27 @@ internal static class OverrideDictamenEndpoints
             || pg.MessageText.Contains("ux_dictamen_vigente", StringComparison.Ordinal);
     }
 
-    private static async Task<DictamenVehiculo> VigenteAsync(DiagnosticoDb db, Guid empresa, Guid id, Guid vid, bool seguir, CancellationToken ct)
+    /// <summary>404 <c>NO_ENCONTRADO</c> si el lote o el vehículo no son de <paramref name="empresa"/>. Lecturas sin bloqueo.</summary>
+    internal static async Task ExigirLoteYVehiculoAsync(DiagnosticoDb db, Guid empresa, Guid id, Guid vid, CancellationToken ct)
     {
         if (!await db.DeLaEmpresa<CabeceraDiagnostico>(empresa).AnyAsync(c => c.Id == id, ct).ConfigureAwait(false))
             throw ReglaException.NoEncontrado("El diagnóstico");
         if (!await db.DeLaEmpresa<VehiculoDiagnostico>(empresa).AnyAsync(v => v.Id == vid && v.DiagnosticoId == id, ct).ConfigureAwait(false))
             throw ReglaException.NoEncontrado("El vehículo");
+    }
 
+    private static async Task<DictamenVehiculo> VigenteAsync(DiagnosticoDb db, Guid empresa, Guid vid, bool seguir, CancellationToken ct)
+    {
         var consulta = seguir
             ? db.ParaEditarDeLaEmpresa<DictamenVehiculo>(empresa)
             : db.DeLaEmpresa<DictamenVehiculo>(empresa);
         return await consulta.SingleOrDefaultAsync(d => d.VehiculoId == vid && d.Vigente, ct).ConfigureAwait(false) ?? throw ConsultaDictamen.SinFila();
     }
 }
+
+/// <summary>
+/// Cuerpo del PUT del dictamen ya validado (B7). <see cref="Motivo"/> es <c>@pii:low</c>: no se loguea ni viaja a la compañía,
+/// a eventos ni a errores. <see cref="Alertamientos"/> null = solo veredicto.
+/// </summary>
+internal sealed record CuerpoAjusteDictamen(
+    string Veredicto, int? VersionEsperada, string Motivo, bool ConfirmarConTramite, IReadOnlyList<AlertamientoAjuste>? Alertamientos);

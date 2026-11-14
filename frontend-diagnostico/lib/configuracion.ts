@@ -21,6 +21,8 @@ export interface NivelContrato {
   fuentes_habilitadas: Fuente[];
   limite_vehiculos_lote: number;
   actualizado_en: string | null;
+  // HU #14562 AC42, decisión b: la compañía no ve `redaccion_ia_suspendida` (R-2). El interruptor vive solo en el contrato
+  // del backoffice (ContratoBackoffice).
 }
 
 export interface NivelOperacion {

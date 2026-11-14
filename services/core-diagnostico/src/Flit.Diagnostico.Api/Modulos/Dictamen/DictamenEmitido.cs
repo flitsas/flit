@@ -8,7 +8,8 @@ namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 /// <summary>
 /// <c>data</c> del evento <c>diagnostico.dictamen.emitido</c> v1 (<c>contracts/asyncapi/diagnostico-events.v1.yaml</c>).
 /// Sale cuando nace una versión: el cierre y el override. No lleva placa, VIN, documentos ni el texto de los alertamientos.
-/// La empresa va en el sobre. Los consumidores deduplican por <c>(vehiculoId, version)</c>.
+/// La empresa va en el sobre. Los consumidores deduplican por <c>(vehiculoId, version)</c>. <c>ajuste_alertamientos</c>
+/// (HU #14563, aditivo) solo sale en true cuando soporte FLIT ajustó los alertamientos; ausente en todo lo demás.
 /// </summary>
 public sealed record DictamenEmitido(
     Guid DiagnosticoId,
@@ -20,7 +21,8 @@ public sealed record DictamenEmitido(
     string Modo,
     string TipoTramiteCodigo,
     string EstadoRedaccion,
-    [property: JsonPropertyName("override")] bool EsOverride)
+    [property: JsonPropertyName("override")] bool EsOverride,
+    [property: JsonPropertyName("ajuste_alertamientos"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? AjusteAlertamientos = null)
 {
     /// <summary>Tipo (y llave de ruteo) del evento en <c>flit.diagnostico</c>.</summary>
     public const string Tipo = "diagnostico.dictamen.emitido";
@@ -43,7 +45,9 @@ public sealed record DictamenEmitido(
             CodigosDeEnum.Codigo(cabecera.Modo),
             cabecera.TipoTramiteCodigo ?? string.Empty,
             fila.EstadoRedaccion,
-            esOverride);
+            esOverride,
+            // HU #14563 AC33: solo un ajuste FLIT con alertamientos (redacción MANUAL) lo lleva; sin motivo ni texto libre.
+            fila.RedactadoPor == "MANUAL" ? true : null);
     }
 
     /// <summary>

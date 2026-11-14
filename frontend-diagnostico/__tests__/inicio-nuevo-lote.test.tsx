@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import Inicio from "@/app/(app)/page";
 import { sesion } from "@/__tests__/configuracion/datos";
@@ -37,41 +37,45 @@ function montarInicio(crearDiagnosticos: boolean) {
 const tarjetaTitulo = async () => (await screen.findByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).closest("section") as HTMLElement;
 
 describe("Inicio — entrada a la creación desde la tarjeta del título (AC6)", () => {
-  it("la tarjeta del título trae «Placa o VIN», «Diagnosticar» y «Carga masiva»", async () => {
+  it("AC13 (HU #14562): tarjeta Express con «Placa o VIN» y «Diagnosticar» y tarjeta Masivo con «Nuevo diagnóstico masivo» y la plantilla", async () => {
     montarInicio(true);
-    const tarjeta = await tarjetaTitulo();
-    expect(tarjeta).toContainElement(await screen.findByRole("textbox", { name: "Placa o VIN" }));
-    expect(tarjeta).toContainElement(screen.getByRole("button", { name: "Diagnosticar" }));
-    expect(tarjeta).toContainElement(screen.getByRole("link", { name: "Carga masiva" }));
+    await tarjetaTitulo();
+    const express = await screen.findByRole("region", { name: "Diagnóstico Express" });
+    expect(express).toContainElement(screen.getByRole("textbox", { name: "Placa o VIN" }));
+    expect(express).toContainElement(screen.getByRole("button", { name: "Diagnosticar en línea" }));
+    const masivo = screen.getByRole("region", { name: "Diagnóstico masivo" });
+    expect(within(masivo).getByRole("link", { name: "Nuevo diagnóstico masivo" })).toHaveAttribute("href", "/diagnosticos/nuevo?modo=masivo");
+    expect(within(masivo).getByRole("link", { name: /descargar plantilla/i })).toHaveAttribute("href", "/api/v1/diagnostico/plantilla");
   });
 
   it("con una placa válida, «Diagnosticar» abre /diagnosticos/nuevo en Express con la placa precargada", async () => {
     montarInicio(true);
     fireEvent.change(await screen.findByRole("textbox", { name: "Placa o VIN" }), { target: { value: "tst 123" } });
-    fireEvent.click(screen.getByRole("button", { name: "Diagnosticar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Diagnosticar en línea" }));
     expect(router.push).toHaveBeenCalledWith("/diagnosticos/nuevo?modo=express&placa=TST123");
   });
 
-  it("«Carga masiva» abre /diagnosticos/nuevo en Masivo, con foco visible", async () => {
+  it("«Nuevo diagnóstico masivo» abre /diagnosticos/nuevo en Masivo, con foco visible", async () => {
     montarInicio(true);
-    const enlace = await screen.findByRole("link", { name: "Carga masiva" });
+    const enlace = await screen.findByRole("link", { name: "Nuevo diagnóstico masivo" });
     expect(enlace).toHaveAttribute("href", "/diagnosticos/nuevo?modo=masivo");
     expect(enlace.className).toContain("focus-visible:outline");
   });
 
-  it("ya no hay tarjetas separadas «Diagnóstico Express» ni «Diagnóstico por lote»", async () => {
+  it("AC49 (HU #14562): sin diagnósticos y sin filtros, el vacío de primer uso ofrece sus 2 acciones", async () => {
     montarInicio(true);
-    await screen.findByRole("textbox", { name: "Placa o VIN" });
-    expect(screen.queryByRole("heading", { name: "Diagnóstico Express" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Diagnóstico por lote" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Aún no tienes diagnósticos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Diagnosticar un vehículo" })).toHaveAttribute("href", "/diagnosticos/nuevo?modo=express");
+    expect(screen.getByRole("link", { name: "Cargar archivo" })).toHaveAttribute("href", "/diagnosticos/nuevo?modo=masivo");
   });
 
-  it("sin crearDiagnosticos no aparecen la captura ni «Carga masiva»; el listado sigue debajo", async () => {
+  it("AC57: sin crearDiagnosticos no aparecen las tarjetas Express y Masivo ni las acciones del vacío; el listado sigue debajo", async () => {
     montarInicio(false);
     await tarjetaTitulo();
+    expect(await screen.findByRole("heading", { name: "Aún no tienes diagnósticos" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Placa o VIN" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Carga masiva" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Diagnóstico Express" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Diagnóstico masivo" })).not.toBeInTheDocument();
     expect(document.querySelector('a[href^="/diagnosticos/nuevo"]')).toBeNull();
-    expect(await screen.findByText("Todavía no hay diagnósticos")).toBeInTheDocument();
   });
 });

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.1.0"
+  version: "1.3.1"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -14,6 +14,18 @@ info:
     guard de suscripción (HU #13726): si la compañía del token no tiene Diagnóstico activo, o no se puede
     verificar con Identidad (fail-closed), responde 403 con code PRODUCTO_NO_HABILITADO. /health y
     /health/ready no pasan por el guard.
+
+    Versión 1.3.0 (HU #14563, rediseño de Diagnóstico): todos los cambios son aditivos salvo uno. RUPTURA en el
+    backoffice: PUT /api/v1/diagnostico/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen exige motivo y
+    version_esperada en todo cuerpo y rechaza las claves desconocidas (B-PR6, D9); el cuerpo legado {veredicto, confirmado}
+    sin motivo responde 422 MOTIVO_REQUERIDO. Su único
+    consumidor es el backoffice de FLIT, que sale con el cuerpo nuevo en el mismo despliegue. Las rutas de compañía no
+    cambian de forma incompatible.
+
+    Versión 1.3.1 (HU #14563, decisión D23): cambio de autorización sin cambio de forma. Se retira el rol por defecto
+    backoffice_diagnostico del manifiesto y sus capacidades quedan en el SuperAdmin, que pasa siempre la política de
+    operación FLIT (override, versiones del dictamen y llenado manual) sin mirar tenant_type. Los demás usuarios siguen
+    necesitando tenant_type=FLIT y diagnostico.backoffice.ver.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -68,13 +80,21 @@ tags:
       (HU #13849). Permiso
       diagnostico.reportes.descargar y la visibilidad de la grilla. Nunca origen, usuario manual, proveedor, transacción ni
       documentos completos (R-20).
+  - name: Notificaciones
+    description: >
+      Campana de Diagnóstico (HU #14563 B8, ADR-0086 D-3, D8): avisos persistentes del usuario del token por ZIP de evidencias
+      listo o fallido, derivación masiva terminada y lote terminado. Solo las del usuario, de su compañía y de lotes que ve
+      (visibilidad PROPIOS). Sin PII: título y mensaje se arman al leer con rótulos fijos y el nombre del lote. Se purgan a
+      los 90 días.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice (D-16, ADR-0073; ajustes 2026-11-11, punto 1). Dos políticas: la de
       configuración (diagnostico.backoffice: SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver y
       tenant_type=FLIT a la vez) para resumen, contrato, diagnósticos, intentos, fuentes obligatorias y empresas; y la de
-      operación FLIT (diagnostico.backoffice.operacion: compañía FLIT con el permiso o SuperAdmin de FLIT) para el
-      override del dictamen y el llenado manual. Empresa explícita y auditoría de cada lectura.
+      operación FLIT (diagnostico.backoffice.operacion: el SuperAdmin pasa siempre, de cualquier compañía y sin mirar
+      tenant_type; los demás, compañía FLIT con el permiso) para el override del dictamen, las versiones del dictamen y el
+      llenado manual (decisión D23, HU #14563: no hay rol por defecto de backoffice, sus capacidades son del SuperAdmin).
+      Empresa explícita y auditoría de cada lectura.
 
 paths:
   /api/v1/diagnostico/sesion:
@@ -89,7 +109,8 @@ paths:
         compañía, se ignora. `permisos` solo trae slugs diagnostico.* (el token también lleva los de
         plataforma). `capacidades.backoffice` sigue la política de configuración del backoffice (SuperAdmin de
         cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) y `capacidades.backofficeOperacion`, la de
-        operación FLIT (override del dictamen y llenado manual; ajustes 2026-11-11, punto 1).
+        operación FLIT (override del dictamen y llenado manual; ajustes 2026-11-11, punto 1; el SuperAdmin la tiene
+        siempre, decisión D23).
       responses:
         "200":
           description: Sesión de la compañía del token.
@@ -754,8 +775,10 @@ paths:
       description: >
         HU #13743 (F04-H1, F04-C1/C3/C8/C10/C11/C13, plan §6.1 fila 04). Permiso diagnostico.diagnosticos.ver.
         Devuelve la versión actual del tablero (`version`), el estado global, las columnas del alcance agrupadas y el
-        avance del lote, y SOLO las celdas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
-        `vehiculos` van solo los vehículos con alguna celda cambiada y, de cada uno, solo esas celdas; `terminado` se
+        avance del lote, y SOLO las celdas o filas con versión mayor que `desde` (con `desde=0`, o sin él, todo el lote). En
+        `vehiculos` van solo los vehículos con alguna celda cambiada o con versión de fila (`vehiculos[].version`, HU #14563:
+        dictamen nuevo o ajustado, trámite creado, omitido o fallido) mayor que `desde` y, de cada uno, solo las celdas
+        cambiadas (una fila que cambió sin celdas viaja con `celdas` vacío); `terminado` se
         calcula con todas sus celdas (COMPLETADO o NA, R-7). El cliente guarda `version`, la manda como `desde` en el
         siguiente sondeo y fusiona por `vehiculos[].id` y `celdas[].fuente`. DTO de cliente: nunca lleva el origen de
         la celda, el usuario que la llenó a mano, el payload ni documentos en claro (R-20); cada fila que viaja lleva
@@ -767,7 +790,9 @@ paths:
         - name: desde
           in: query
           required: false
-          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          description: >
+            Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo). Trae las celdas o filas con
+            versión mayor (HU #14563).
           schema:
             type: integer
             format: int64
@@ -919,7 +944,9 @@ paths:
       description: >
         HU #13798 (F06-H1, F06-C1..C4/C12). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la grilla. Devuelve
         el resultado normalizado de la celda en un DTO propio y cerrado: nunca origen, usuario manual, transacción ni payload
-        en campos propios; una celda llenada a mano y una consultada por API tienen las mismas claves. HU #14087 AC8
+        en campos propios; una celda llenada a mano y una consultada por API tienen las mismas claves (por eso el avalúo no trae
+        la referencia Fasecolda del llenado manual, hallazgo M1). Responde con Cache-Control no-store y Pragma no-cache: trae
+        respuesta_fuente, respuesta_proveedor y personas (hallazgo M2). HU #14087 AC8
         (decisión del usuario 2026-10-27, enmienda de ADR-0075 en Propuesto): `respuesta_fuente` (en la celda para las
         fuentes del vehículo y en cada persona para las de persona) trae la respuesta COMPLETA de la fuente en proto-JSON,
         con datos personales; null sin respuesta guardada.
@@ -2472,12 +2499,14 @@ paths:
       summary: Formulario del llenado manual de una celda (backoffice FLIT)
       description: >
         HU #13800 (F06-H3). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT), además
-        la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
+        la política de operación FLIT diagnostico.backoffice.operacion (el SuperAdmin de cualquier compañía, o compañía FLIT con diagnostico.backoffice.ver; decisión D23) y diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
         Devuelve la versión de la celda que se manda en el PUT, si admite el llenado (`admite_manual`) y, si no, el `motivo`
         (FUENTE_NO_ADMITE_MANUAL, CELDA_NO_EN_ERROR, CELDA_BLOQUEADA_POR_RUNT o SIN_PERSONAS_EN_ERROR). En las fuentes de persona
         (RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO) trae SOLO las personas en ERROR con su
         `persona_id` (el que va en el PUT), el documento enmascarado y la `consulta` que define el esquema de su resultado
         (RUNT_PERSONA, RUES o SIMIT); en las del vehículo, `personas` es null. Nunca el documento en claro ni el payload.
+        En el avalúo llenado con referencia Fasecolda trae `referencia` (HU #14563 B6, solo backoffice). Responde con
+        Cache-Control no-store y Pragma no-cache (hallazgo M2).
       responses:
         "200":
           description: Formulario de la celda.
@@ -2506,7 +2535,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de operación FLIT (usuario de otra compañía que no es SuperAdmin) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada."
           content:
@@ -2613,7 +2642,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          description: No cumple la política de operación FLIT (usuario de otra compañía que no es SuperAdmin) o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
         "404":
           description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada (nada cambia)."
           content:
@@ -2699,22 +2728,33 @@ paths:
     put:
       tags: [Backoffice]
       operationId: corregirDictamenVehiculoBackoffice
-      summary: Reemplazar el veredicto del dictamen vigente (backoffice FLIT)
+      summary: Ajuste FLIT del dictamen vigente (backoffice FLIT)
       description: >
-        Corte 7. La misma política del GET, además la política de operación FLIT diagnostico.backoffice.operacion (compañía FLIT con diagnostico.backoffice.ver o SuperAdmin de FLIT; un SuperAdmin de otra compañía recibe 403) y
-        diagnostico.dictamen.override. El admin de la compañía recibe 403.
-        No vuelve a evaluar ni redacta. El veredicto nuevo es el del cuerpo. Los alertamientos conservan codigo, efecto
-        y fuente, en el mismo orden; el texto vuelve a la plantilla del catálogo del tipo de trámite (si esa fila no está,
-        se conserva el texto guardado). Nace otra versión (la anterior queda vigente=false), con analisis_override, el sub
-        y la fecha del reloj. La redacción queda PENDIENTE para que la cola explique el veredicto nuevo. No genera PDF ni
-        toca el Excel o el ZIP. Publica diagnostico.dictamen.emitido con override=true en la misma transacción.
+        Corte 7; HU #14563 B7 (ADR-0086 D-2, D6, D7, D8, D9). La misma política del GET, además la política de operación FLIT
+        diagnostico.backoffice.operacion (el SuperAdmin de cualquier compañía, o compañía FLIT con diagnostico.backoffice.ver;
+        decisión D23) y diagnostico.dictamen.override. El admin de la compañía recibe 403.
+        El cuerpo es el estado deseado y el motivo es obligatorio en todo PUT (B-PR6: el cuerpo legado {veredicto, confirmado}
+        sin motivo se retiró). Sin alertamientos reemplaza solo el veredicto: los textos vuelven a la plantilla y la redacción
+        queda PENDIENTE. Con alertamientos nace una versión redactada a mano (redactado_por MANUAL, estado_redaccion
+        COMPLETADA, el LLM no la reescribe) y cada alertamiento lleva ajuste AGREGADO o EDITADO frente a la vigente (solo en
+        backoffice). En los dos casos la anterior queda vigente=false, la nueva guarda el autor, la fecha, el motivo y
+        ajustado_desde_version, y la fila del tablero sube su versión. Orden de bloqueo cabecera → vehículo → dictamen; toda
+        carrera responde 409, nunca 500. No notifica (D8). No genera PDF ni toca el Excel; el PDF y el ZIP siguientes llevan
+        la marca «Ajustado por FLIT» (su huella cambia). Publica diagnostico.dictamen.emitido con override=true (y
+        ajuste_alertamientos=true si hubo alertamientos) en la misma transacción. Un recálculo automático posterior gana (D7).
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/CuerpoOverrideDictamen"
-            example: { veredicto: BLOQUEADO, confirmado: true }
+            example:
+              version_esperada: 3
+              veredicto: VIABLE
+              alertamientos:
+                - { codigo: SOAT_NO_VIGENTE, texto: "Soporte verificó el SOAT vigente con la aseguradora.", efecto: ADVIERTE, fuente: RUNT }
+              motivo: "Soporte verificó el SOAT vigente con la aseguradora"
+              confirmar_con_tramite: false
       responses:
         "200":
           description: Dictamen nuevo, con los tres campos de override.
@@ -2731,7 +2771,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: No cumple la política de operación FLIT (también un SuperAdmin de otra compañía) o le falta diagnostico.dictamen.override. No se escribe.
+          description: No cumple la política de operación FLIT (usuario de otra compañía que no es SuperAdmin) o le falta diagnostico.dictamen.override. No se escribe.
         "404":
           description: "`code` = NO_ENCONTRADO o SIN_DICTAMEN. No se escribe."
           content:
@@ -2740,16 +2780,83 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
         "409":
           description: >
-            Nada cambia. `code` = VEREDICTO_SIN_CAMBIO si el veredicto pedido es el de la vigente.
-            `code` = DICTAMEN_EN_CONFLICTO si dos overrides chocan en ux_dictamen_version o ux_dictamen_vigente.
+            Nada cambia. `code` = VEREDICTO_SIN_CAMBIO si el veredicto y los alertamientos pedidos son los de la vigente.
+            `code` = DICTAMEN_DESACTUALIZADO si version_esperada no es la versión vigente (otro cambio llegó antes).
+            `code` = DICTAMEN_EN_CONFLICTO si dos ajustes chocan en ux_dictamen_version, ux_dictamen_vigente o en el xmin
+            de la vigente. `code` = VEHICULO_CON_TRAMITE si el vehículo ya tiene trámite y no llega confirmar_con_tramite=true
+            (con él, el ajuste se aplica y el trámite no se revierte ni se cancela).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
         "422":
           description: >
-            Nada cambia. `code` = CONFIRMADO_REQUERIDO si confirmado no es true. `code` = VEREDICTO_INVALIDO si el
-            veredicto no es VIABLE ni BLOQUEADO.
+            Nada cambia. `campo` señala el campo cuando aplica; el mensaje es fijo y nunca repite lo digitado.
+            `code` = MOTIVO_REQUERIDO (campo motivo) si falta o tiene menos de 10 o más de 500 caracteres tras recortar.
+            `code` = VERSION_ESPERADA_INVALIDA (campo version_esperada) si falta, es null o no es un entero mayor que cero,
+            en todo PUT. `code` = VALOR_INVALIDO (campo con el nombre de la clave, o el objeto que la trae si no parece un
+            nombre de campo) si el cuerpo o un alertamiento trae una clave desconocida (additionalProperties: false). `code` = DICTAMEN_INCOHERENTE (campo alertamientos) si un VIABLE
+            trae un alertamiento que bloquea o un BLOQUEADO no trae ninguno. `code` = ALERTAMIENTO_INVALIDO (campo
+            alertamientos) por un código fuera del catálogo (salvo AJUSTE_FLIT o uno de la vigente), un efecto distinto de
+            BLOQUEA/ADVIERTE, una fuente desconocida o un texto vacío o de más de 500 caracteres. `code` =
+            ALERTAMIENTO_CON_DIGITOS (campo alertamientos; supuesto aceptado, P3 = b) si un alertamiento AJUSTE_FLIT trae 6
+            o más dígitos seguidos (el motivo no se filtra). `code` = CONFIRMADO_REQUERIDO si confirmado viene y no es true.
+            `code` = VEREDICTO_INVALIDO si el veredicto no es VIABLE ni BLOQUEADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen/versiones:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote de la compañía indicada.
+        schema: { type: string, format: uuid }
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo de ese lote.
+        schema: { type: string, format: uuid }
+      - name: empresa
+        in: query
+        required: true
+        description: Id de la compañía dueña del lote (uuid distinto de cero, un solo valor).
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Backoffice]
+      operationId: listarVersionesDictamenBackoffice
+      summary: Auditoría de versiones del dictamen de un vehículo (backoffice FLIT)
+      description: >
+        HU #14563 B7 (D6, D7). Política diagnostico.backoffice de configuración, la de operación FLIT
+        diagnostico.backoffice.operacion (hallazgo M3: trae el motivo y el autor; un usuario de otra compañía recibe 403 aunque
+        tenga el permiso, el SuperAdmin pasa siempre, decisión D23) y
+        diagnostico.auditoria.ver; empresa
+        explícita en ?empresa= y la lectura queda en diagnostico.lecturas_backoffice. Todas las versiones en orden descendente:
+        veredicto, alertamientos con la marca ajuste (AGREGADO/EDITADO), eliminados frente a la versión anterior (por código
+        y fuente), origen (AUTOMATICO o AJUSTE_FLIT), usuario {id, nombre} (nombre resuelto por Identidad, no se guarda; null
+        si no responde), motivo, en y superado_por_recalculo (derivado: la versión es un ajuste y la siguiente es automática).
+        Es el único lugar donde sale el motivo del ajuste. La compañía nunca lo ve.
+      responses:
+        "200":
+          description: Versiones del dictamen, de la más nueva a la más vieja.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionesDictamen"
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA). No se audita.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No cumple la política de operación FLIT (usuario de otra compañía que no es SuperAdmin) o le falta diagnostico.auditoria.ver.
+        "404":
+          description: "`code` = NO_ENCONTRADO si el lote o el vehículo no son de la compañía indicada; SIN_DICTAMEN si no hay versiones."
           content:
             application/json:
               schema:
@@ -2762,7 +2869,8 @@ paths:
       summary: Lotes de una compañía para el backoffice FLIT
       description: >
         HU #13799 (F06-H2, F06-C6). Política diagnostico.backoffice de configuración (SuperAdmin de cualquier compañía, o diagnostico.backoffice.ver + tenant_type=FLIT):
-        el rol backoffice_diagnostico en una compañía que no es FLIT, o el admin de la compañía, reciben 403 sin cuerpo.
+        un usuario con diagnostico.backoffice.ver en una compañía que no es FLIT (sin SuperAdmin), o el admin de la compañía,
+        reciben 403 sin cuerpo.
         Empresa explícita en ?empresa= (nunca la del token); la lectura queda en diagnostico.lecturas_backoffice con el
         usuario, la empresa consultada, la ruta y la fecha, antes de leer. Solo lotes de esa compañía, del más reciente
         al más antiguo (creado_en, id), paginados. `celdas_en_error` = celdas del lote en estado ERROR.
@@ -2853,7 +2961,9 @@ paths:
         - name: desde
           in: query
           required: false
-          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          description: >
+            Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo). Trae las celdas o filas con
+            versión mayor (HU #14563).
           schema:
             type: integer
             format: int64
@@ -2966,7 +3076,7 @@ paths:
         Ruta mínima de D0 (HU #13728): si la compañía indicada tiene configuración y cuántos diagnósticos y
         vehículos tiene. Política diagnostico.backoffice de configuración: pasa un SuperAdmin de cualquier compañía
         (ajustes 2026-11-11, punto 1) o un usuario con el permiso diagnostico.backoffice.ver y el claim
-        tenant_type=FLIT del token; con el rol backoffice_diagnostico en una compañía que no es FLIT (sin SuperAdmin),
+        tenant_type=FLIT del token; con el permiso en una compañía que no es FLIT (sin SuperAdmin),
         o en la compañía FLIT sin el permiso, responde 403, igual que cualquier otra ruta
         /backoffice/* (también una que no existe). La compañía nunca sale del token: se indica en ?empresa=
         (o en el segmento {empresa} de las rutas que lo lleven; si llegan los dos deben coincidir). Cada
@@ -3000,6 +3110,127 @@ paths:
             No cumple la política de configuración del backoffice (sin SuperAdmin: falta el permiso o tenant_type no es FLIT; sin cuerpo); token sin compañía
             (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo
             (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/notificaciones:
+    get:
+      tags: [Notificaciones]
+      operationId: bandejaNotificaciones
+      summary: Bandeja de la campana del usuario
+      description: >
+        HU #14563 B8 (AC36, AC38). Permiso diagnostico.diagnosticos.ver. Lista las notificaciones del usuario del token (claim
+        sub), de su compañía y de lotes que puede ver con la misma regla del listado de diagnósticos (con visibilidad PROPIOS,
+        solo los lotes que creó, salvo el admin de la compañía). no_leidas usa la misma visibilidad. Orden: creada_en
+        descendente, luego id. Paginación por cursor: `antes` es el `siguiente` de la página anterior. Lleva ETag débil
+        W/"<no_leidas>-<total>-<max creada_en>-<max leida_en>-<antes>-<limite>-<hash de los nombres de los lotes>" (fechas
+        en milisegundos Unix; el cursor y el límite distinguen páginas; el hash cambia si se renombra un lote de la página)
+        y Cache-Control private, no-cache; con If-None-Match igual responde 304 sin cuerpo.
+        Los literales de titulo y mensaje son provisionales: pendientes de confirmar por el PO. accion.href es la ruta
+        del lote en el frontend (/diagnosticos/{diagnostico_id}).
+      parameters:
+        - name: limite
+          in: query
+          required: false
+          description: Tamaño de página (1 a 50; por defecto 20; fuera de rango se acota).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: antes
+          in: query
+          required: false
+          description: Cursor, el `siguiente` de la página anterior (id de la última notificación devuelta).
+          schema:
+            type: string
+            format: uuid
+        - name: If-None-Match
+          in: header
+          required: false
+          description: ETag de una respuesta anterior.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: La página de la bandeja.
+          headers:
+            ETag:
+              description: ETag débil de la bandeja visible para esta página.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BandejaNotificaciones"
+        "304":
+          description: Nada cambió desde el ETag de If-None-Match. Sin cuerpo.
+          headers:
+            ETag:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/notificaciones/{nid}/leida:
+    parameters:
+      - name: nid
+        in: path
+        required: true
+        description: Id de la notificación.
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Notificaciones]
+      operationId: marcarNotificacionLeida
+      summary: Marca una notificación como leída
+      description: >
+        HU #14563 B8 (AC37, AC38). Permiso diagnostico.diagnosticos.ver. Idempotente: la primera vez fija leida_en con la mayor
+        entre la hora del servidor y creada_en (nunca antes de creada_en); las siguientes no la cambian y también responden 204.
+      responses:
+        "204":
+          description: Leída (o ya lo estaba).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: no existe, es de otro usuario, de otra compañía o de un lote que el usuario ya no ve
+            (PROPIOS). Sin datos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/notificaciones/leer-todas:
+    post:
+      tags: [Notificaciones]
+      operationId: leerTodasNotificaciones
+      summary: Marca como leídas todas las notificaciones visibles del usuario
+      description: >
+        HU #14563 B8 (AC37). Permiso diagnostico.diagnosticos.ver. Solo las que GET /notificaciones lista (misma visibilidad);
+        leida_en con la misma regla que /leida. Después no_leidas es 0.
+      responses:
+        "204":
+          description: Hecho (también si no había ninguna sin leer).
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
           content:
             application/json:
               schema:
@@ -3068,8 +3299,9 @@ components:
         Ayuda para armar el menú; cada endpoint vuelve a exigir su permiso. Backoffice (ajustes 2026-11-11, punto 1):
         backoffice, editarContrato y verAuditoria siguen la política de configuración (SuperAdmin de cualquier
         compañía, o diagnostico.backoffice.ver + tenant_type=FLIT) junto con su permiso; backofficeOperacion,
-        llenarConsultas y corregirDictamen, la de operación FLIT (compañía FLIT con el permiso o SuperAdmin de FLIT);
-        verVolumetria exige tenant_type=FLIT.
+        llenarConsultas y corregirDictamen, la de operación FLIT (el SuperAdmin de cualquier compañía, o compañía FLIT con
+        el permiso); verVolumetria exige tenant_type=FLIT salvo al SuperAdmin. El SuperAdmin tiene todas las capacidades
+        (decisión D23, HU #14563).
       required:
         - crearDiagnosticos
         - verDiagnosticos
@@ -3115,8 +3347,9 @@ components:
         backofficeOperacion:
           type: boolean
           description: >
-            Override del dictamen y llenado manual del backoffice (política de operación FLIT). Un SuperAdmin de una
-            compañía que no es FLIT tiene backoffice=true y backofficeOperacion=false.
+            Override del dictamen, versiones del dictamen y llenado manual del backoffice (política de operación FLIT). El
+            SuperAdmin la tiene siempre (de cualquier compañía o sin tenant_type, decisión D23); un usuario de una compañía
+            que no es FLIT, aunque tenga el permiso, tiene backofficeOperacion=false.
 
     ResumenEmpresaBackoffice:
       type: object
@@ -3923,7 +4156,7 @@ components:
           $ref: "#/components/schemas/AvanceLote"
         vehiculos:
           type: array
-          description: Solo los vehículos con celdas cambiadas desde `desde` (todos con desde=0), en el orden del lote.
+          description: Solo los vehículos con celdas cambiadas desde `desde` (todos con desde=0), en el orden del lote. HU #14563: los conteos (`conteos`) se calculan siempre con todo el lote.
           items:
             $ref: "#/components/schemas/FilaVehiculo"
         estimado_consultas:
@@ -3945,6 +4178,69 @@ components:
           items:
             type: string
             format: uuid
+        conteos:
+          $ref: "#/components/schemas/ConteosGrilla"
+        lote:
+          $ref: "#/components/schemas/LoteGrilla"
+
+    ConteosGrilla:
+      type: object
+      description: >
+        HU #14563 (B1). Grilla de la compañía. Conteos calculados siempre con todo el lote, también en el sondeo incremental
+        (mismo criterio que total_pegadas). Opcional para los clientes actuales.
+      required: [vehiculos, terminados, con_error, con_deuda, bloqueados, listos_tramite]
+      properties:
+        vehiculos: { type: integer, minimum: 0, description: Vehículos del lote. }
+        terminados: { type: integer, minimum: 0, description: Vehículos con todas sus celdas en COMPLETADO o NA (R-7). }
+        con_error: { type: integer, minimum: 0, description: Vehículos con al menos una celda en ERROR. }
+        con_deuda: { type: integer, minimum: 0, description: Vehículos con deuda de impuesto confirmada (la misma definición que tiene_deuda del semáforo). }
+        bloqueados: { type: integer, minimum: 0, description: Vehículos con dictamen vigente BLOQUEADO (0 en SIMPLE). }
+        listos_tramite:
+          type: integer
+          minimum: 0
+          description: Terminados, VIABLE si el modo exige dictamen, sin trámite y sin ítem de derivación vivo (regla de DerivacionFila.elegible).
+
+    LoteGrilla:
+      type: object
+      description: HU #14563 (B2). Grilla de la compañía. Metadatos del lote; viaja siempre, con o sin desde. Opcional para los clientes actuales.
+      required: [modo, tipo_tramite, creado_en, es_express, usuario_creador]
+      properties:
+        modo:
+          type: string
+          enum: [SIMPLE, CON_ANALISIS]
+        tipo_tramite:
+          allOf:
+            - $ref: "#/components/schemas/TipoTramiteLote"
+          nullable: true
+          description: Null en SIMPLE. El nombre sale del catálogo de tipos de trámite; si el código ya no está publicado o el catálogo no responde, es el código.
+        creado_en:
+          type: string
+          format: date-time
+        es_express:
+          type: boolean
+        usuario_creador:
+          type: object
+          required: [id, nombre]
+          properties:
+            id:
+              type: string
+              format: uuid
+            nombre:
+              type: string
+              nullable: true
+              description: Nombre visible que da Identidad (caché de 10 min); null si no responde o no conoce al usuario (la grilla sigue en 200).
+
+    TipoTramiteLote:
+      type: object
+      description: HU #14563. Tipo de trámite del lote (código y nombre del catálogo; el código si ya no está publicado).
+      required: [codigo, nombre]
+      properties:
+        codigo:
+          type: string
+          example: TRASPASO_STANDARD
+        nombre:
+          type: string
+          example: TRASPASO
 
     AvanceLote:
       type: object
@@ -4010,6 +4306,25 @@ components:
             Ajuste 2026-11-11 (Punto 3). Grilla de la compañía (no la de backoffice): la placa tiene alguna consulta que
             «Reintentar placa» reencolaría. Solo viaja en las filas de la respuesta; para las que no viajan, usar
             vehiculos_pegados del lote.
+        veredicto:
+          type: string
+          nullable: true
+          enum: [VIABLE, BLOQUEADO, null]
+          description: >
+            HU #14563 (B1). Grilla de la compañía. Veredicto del dictamen vigente; null si está pendiente o el lote es SIMPLE.
+            Solo viaja en las filas de la respuesta.
+        dictamen_ajustado:
+          type: boolean
+          description: >
+            HU #14563 (B7, D6). true si el dictamen vigente es un ajuste de soporte FLIT (P1 = a); false sin dictamen, en SIMPLE
+            o tras un recálculo automático (D7).
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            HU #14563 (B1, ADR-0086 D-1). Versión de fila: la versión del tablero en el último cambio de la fila (dictamen
+            nuevo o ajustado, trámite creado, omitido o fallido); 0 = sin cambios de fila. Nunca supera `version` del lote.
         derivacion:
           allOf:
             - $ref: "#/components/schemas/DerivacionFila"
@@ -4600,6 +4915,18 @@ components:
         celdas_en_error:
           type: integer
           description: Celdas del lote en estado ERROR.
+        modo:
+          type: string
+          enum: [SIMPLE, CON_ANALISIS]
+          description: HU #14563 (B3).
+        tipo_tramite:
+          allOf:
+            - $ref: "#/components/schemas/TipoTramiteLote"
+          nullable: true
+          description: HU #14563 (B3). Null en SIMPLE; nombre del catálogo (una llamada por página) o el código si no responde.
+        es_express:
+          type: boolean
+          description: HU #14563 (B3).
 
     GrillaBackoffice:
       description: Grilla (schema Grilla) más la empresa consultada; las celdas llevan origen y usuario_manual_id (HU #13799).
@@ -4708,7 +5035,9 @@ components:
     DictamenVehiculo:
       type: object
       additionalProperties: false
-      description: Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa.
+      description: >
+        Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa. HU #14563 (D6, P1 = a): la marca
+        ajustado_por_flit y ajustado_en; nunca el autor, el motivo, la versión anterior ni la marca ajuste por alertamiento.
       required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en]
       properties:
         version: { type: integer, minimum: 1 }
@@ -4720,6 +5049,16 @@ components:
             $ref: "#/components/schemas/AlertaDictamen"
         catalogo_version: { type: integer }
         creado_en: { type: string, format: date-time }
+        ajustado_por_flit:
+          type: boolean
+          description: >
+            HU #14563. true si la vigente es un ajuste de soporte FLIT posterior al despliegue de B7 (ajuste_motivo no nulo;
+            P1 = a). Un recálculo automático la deja en false (D7).
+        ajustado_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: HU #14563. Fecha del ajuste FLIT; null sin ajuste.
 
     DictamenVehiculoBackoffice:
       type: object
@@ -4743,10 +5082,112 @@ components:
     CuerpoOverrideDictamen:
       type: object
       additionalProperties: false
-      required: [veredicto, confirmado]
+      description: >
+        HU #14563 B7. Estado deseado del dictamen. motivo y version_esperada son obligatorios en todo PUT (D9; B-PR6 retiró
+        el cuerpo legado, así que también el ajuste de solo veredicto lleva version_esperada). Una clave fuera de estas
+        propiedades responde 422 VALOR_INVALIDO. confirmado se mantiene opcional por compatibilidad.
+      required: [veredicto, motivo, version_esperada]
       properties:
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
-        confirmado: { type: boolean, description: Solo true escribe. Cualquier otro valor es 422 CONFIRMADO_REQUERIDO. }
+        motivo:
+          type: string
+          minLength: 10
+          maxLength: 500
+          description: >
+            Motivo del ajuste (10 a 500 caracteres tras recortar). @pii:low: texto libre de soporte, solo backoffice; no se
+            filtra (P3 = b) y nunca sale a la compañía, a eventos, a logs ni a mensajes de error.
+        version_esperada:
+          type: integer
+          minimum: 1
+          description: >
+            Versión vigente que leyó soporte (obligatoria). Distinta de la vigente → 409 DICTAMEN_DESACTUALIZADO; ausente o
+            null → 422 VERSION_ESPERADA_INVALIDA.
+        alertamientos:
+          type: array
+          maxItems: 50
+          description: Lista completa deseada (lo que no venga se elimina). Ausente = solo veredicto.
+          items:
+            $ref: "#/components/schemas/AlertamientoAjuste"
+        confirmar_con_tramite:
+          type: boolean
+          description: Necesario (true) si el vehículo ya tiene trámite; sin él, 409 VEHICULO_CON_TRAMITE.
+        confirmado: { type: boolean, description: Opcional. Si viene debe ser true; otro valor es 422 CONFIRMADO_REQUERIDO. }
+
+    AlertamientoAjuste:
+      type: object
+      additionalProperties: false
+      required: [codigo, texto, efecto, fuente]
+      properties:
+        codigo:
+          type: string
+          description: Código del catálogo de reglas, uno que ya estaba en la vigente, o AJUSTE_FLIT (redactado por soporte).
+        texto:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: >
+            Lo ve la compañía. El largo se cuenta en puntos de código, como el motivo. En AJUSTE_FLIT no admite 6 o más dígitos
+            seguidos (422 ALERTAMIENTO_CON_DIGITOS).
+        efecto: { type: string, enum: [BLOQUEA, ADVIERTE] }
+        fuente: { type: string, description: "Código de fuente (RUNT, RUNT_PROPIETARIO, SIMIT_VEHICULO…)." }
+
+    VersionesDictamen:
+      type: object
+      additionalProperties: false
+      required: [versiones]
+      properties:
+        versiones:
+          type: array
+          items:
+            $ref: "#/components/schemas/VersionDictamen"
+
+    VersionDictamen:
+      type: object
+      additionalProperties: false
+      required: [version, veredicto, vigente, alertamientos, eliminados, origen, usuario, motivo, en, superado_por_recalculo, ajuste_con_tramite]
+      properties:
+        version: { type: integer, minimum: 1 }
+        veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+        vigente: { type: boolean }
+        alertamientos:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertaVersionDictamen"
+        eliminados:
+          type: array
+          description: Alertamientos de la versión anterior que ya no están (por código y fuente). Vacío en la versión 1.
+          items:
+            $ref: "#/components/schemas/AlertaVersionDictamen"
+        origen: { type: string, enum: [AUTOMATICO, AJUSTE_FLIT] }
+        usuario:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [id, nombre]
+          description: Autor del ajuste; null en las automáticas.
+          properties:
+            id: { type: string, format: uuid }
+            nombre: { type: string, nullable: true, description: Resuelto por Identidad; null si no responde. }
+        motivo: { type: string, nullable: true, description: "@pii:low. Motivo del ajuste; null en las automáticas y en overrides históricos." }
+        en: { type: string, format: date-time, description: Instante del ajuste o de la emisión automática. }
+        superado_por_recalculo: { type: boolean, description: "D7: la versión es un ajuste y la siguiente es automática." }
+        ajuste_con_tramite:
+          type: boolean
+          description: >
+            HU #14563 AC23 (aditivo, 1.3.0). True si el ajuste se confirmó con confirmar_con_tramite sobre un vehículo que ya
+            tenía trámite (el trámite no se revierte ni se cancela). False en las automáticas y en los ajustes sin trámite.
+
+    AlertaVersionDictamen:
+      type: object
+      additionalProperties: false
+      required: [codigo, texto, efecto, fuente, ajuste, etiqueta]
+      properties:
+        codigo: { type: string }
+        texto: { type: string }
+        efecto: { type: string }
+        fuente: { type: string }
+        ajuste: { type: string, nullable: true, enum: [AGREGADO, EDITADO, null] }
+        etiqueta: { type: string, description: Rótulo de la regla (el mismo de AlertaDictamen). }
 
     DetalleCelda:
       type: object
@@ -4793,6 +5234,14 @@ components:
           description: >
             Solo impuesto en ERROR cuando la fuente marcó dato parcial. El detalle lo rotula y no muestra el monto.
             Ausente cuando es false. No sale en PDF, Excel ni dictamen.
+        auditoria:
+          nullable: true
+          description: >
+            HU #14563 B5: auditoría saneada de la consulta. Excluye los intentos MANUAL (llenado de soporte) de la lista y de
+            los agregados; `fin` es el del último intento no manual. Null si no hay intentos no manuales. Nunca trae
+            servicio, transacción, mensaje de error, usuario, identificador ni persona.
+          allOf:
+            - $ref: "#/components/schemas/AuditoriaConsulta"
         dato_obtenido_en:
           type: string
           format: date-time
@@ -4942,6 +5391,102 @@ components:
               estado: { type: string, nullable: true }
               organismo: { type: string, nullable: true }
         comparendos_truncados: { type: boolean, description: "true si había más de 100 comparendos." }
+        total_general: { type: string, nullable: true, description: "HU #14563 B4. Texto decimal en pesos. Se omite si la fuente no lo informó (nunca 0 inferido)." }
+        total_por_pagar: { type: string, nullable: true, description: "HU #14563 B4. Se omite si la fuente no lo informó (nunca 0 inferido)." }
+        paz_y_salvo: { type: boolean, nullable: true, description: "HU #14563 B4. Solo si la fuente lo afirma; nunca se deduce de 0 comparendos. Se omite si no vino." }
+        suspendida: { type: boolean, nullable: true, description: "HU #14563 B4. Se omite si la fuente no lo informó." }
+        cancelada: { type: boolean, nullable: true, description: "HU #14563 B4. Se omite si la fuente no lo informó." }
+        multas:
+          type: array
+          nullable: true
+          description: "HU #14563 B4. Multas del SIMIT, sin el infractor. Se omite si la fuente no trae."
+          items: { $ref: "#/components/schemas/MultaSimit" }
+        acuerdos_pago:
+          type: array
+          nullable: true
+          description: "HU #14563 B4. Acuerdos de pago, sin el infractor. Se omite si la fuente no trae."
+          items: { $ref: "#/components/schemas/AcuerdoPagoSimit" }
+        resoluciones:
+          type: array
+          nullable: true
+          description: "HU #14563 B4. Resoluciones, sin el infractor. Se omite (null) si la fuente no las informó; lista vacía si la fuente informó que no hay."
+          items: { $ref: "#/components/schemas/ResolucionSimit" }
+        cantidad_resoluciones: { type: integer, nullable: true, description: "HU #14563 B4. Se omite (null, no 0) si la fuente no informó resoluciones." }
+
+    AuditoriaConsulta:
+      type: object
+      description: "HU #14563 B5. Auditoría de la consulta visible a la compañía."
+      required: [inicio, fin, duracion_ms, intentos, intentos_detalle]
+      properties:
+        inicio: { type: string, format: date-time, description: "Inicio del primer intento no manual." }
+        fin: { type: string, format: date-time, description: "Fin del último intento no manual." }
+        duracion_ms: { type: integer, format: int64 }
+        intentos: { type: integer, description: "Cantidad de intentos no manuales." }
+        intentos_detalle:
+          type: array
+          items: { $ref: "#/components/schemas/IntentoConsultaCliente" }
+
+    IntentoConsultaCliente:
+      type: object
+      description: "HU #14563 B5. Un intento no manual, sin datos internos."
+      required: [n, inicio, fin, duracion_ms, resultado, disparador, desde_cache]
+      properties:
+        n: { type: integer, description: "Orden del intento, desde 1." }
+        inicio: { type: string, format: date-time }
+        fin: { type: string, format: date-time }
+        duracion_ms: { type: integer, format: int64 }
+        resultado: { type: string, enum: [EXITOSO, ERROR] }
+        disparador: { type: string, enum: [AUTOMATICO, REPROCESO] }
+        desde_cache: { type: boolean }
+        tipo_error:
+          type: string
+          nullable: true
+          example: TIMEOUT
+          description: "D15. Solo en ERROR: el mismo código de negocio que la grilla expone en la celda; nunca el mensaje técnico. null si el intento fue exitoso."
+
+    MultaSimit:
+      type: object
+      description: "HU #14563 B4. Una multa del SIMIT. Sin nombre ni documento del infractor."
+      properties:
+        numero: { type: string, nullable: true }
+        fecha: { type: string, nullable: true }
+        valor: { type: string, nullable: true, description: "Texto decimal en pesos." }
+        valor_pagar: { type: string, nullable: true }
+        estado_cartera: { type: string, nullable: true }
+        organismo: { type: string, nullable: true }
+        codigos: { type: string, nullable: true, description: "Códigos de infracción unidos por coma (compatibilidad)." }
+        infracciones:
+          type: array
+          nullable: true
+          items: { $ref: "#/components/schemas/InfraccionSimit" }
+
+    InfraccionSimit:
+      type: object
+      description: "HU #14563 B4. Infracción de una multa."
+      properties:
+        codigo: { type: string, nullable: true, example: C24 }
+        descripcion: { type: string, nullable: true, description: "null si la fuente no la trae." }
+
+    AcuerdoPagoSimit:
+      type: object
+      description: "HU #14563 B4. Acuerdo de pago del SIMIT, sin el infractor."
+      properties:
+        estado: { type: string, nullable: true }
+        cuotas_abonadas: { type: string, nullable: true }
+        cuotas_pendientes: { type: string, nullable: true }
+        pendiente: { type: string, nullable: true }
+        fecha: { type: string, nullable: true }
+        organismo: { type: string, nullable: true }
+
+    ResolucionSimit:
+      type: object
+      description: "HU #14563 B4. Resolución del SIMIT, sin el infractor."
+      properties:
+        numero: { type: string, nullable: true }
+        fecha: { type: string, nullable: true }
+        estado: { type: string, nullable: true }
+        valor: { type: string, nullable: true, description: "Texto decimal en pesos." }
+        organismo: { type: string, nullable: true }
 
     ResultadoAvaluoDetalle:
       type: object
@@ -5038,7 +5583,7 @@ components:
     FormularioLlenadoManual:
       type: object
       description: Formulario del llenado manual (HU #13800). Todas las claves van siempre.
-      required: [id, diagnostico_id, vehiculo_id, fuente, estado, tipo_error, version, admite_manual, motivo, personas]
+      required: [id, diagnostico_id, vehiculo_id, fuente, estado, tipo_error, version, admite_manual, motivo, personas, referencia]
       properties:
         id: { type: string, format: uuid }
         diagnostico_id: { type: string, format: uuid }
@@ -5055,6 +5600,19 @@ components:
           description: Solo en fuentes de persona (null en las del vehículo); solo las personas en ERROR, por orden.
           items:
             $ref: "#/components/schemas/PersonaEnErrorManual"
+        referencia:
+          type: object
+          nullable: true
+          description: >
+            HU #14563 B6 + hallazgo M1 de seguridad (R-20, opción a). Referencia Fasecolda del avalúo llenado a mano con ella;
+            null en cualquier otro caso. Solo la ve el backoffice: el detalle de la compañía, su PDF y el contenido del reporte no
+            la traen, porque revelaría el llenado manual.
+          required: [codigo_fasecolda, marca, linea, modelo]
+          properties:
+            codigo_fasecolda: { type: string, nullable: true, pattern: "^[0-9]{8}$", example: "01601234" }
+            marca: { type: string, nullable: true }
+            linea: { type: string, nullable: true }
+            modelo: { type: integer, nullable: true, example: 2020 }
 
     PersonaEnErrorManual:
       type: object
@@ -5133,7 +5691,10 @@ components:
       description: >
         AVALUO. Con `sin_valor_comercial=false`, `valor_sugerido` (mayor que 0) y `fuente_principal` (una fuente enviada con
         estado OK) son obligatorios; con `true` no van y ninguna fuente puede estar en OK. `valor` solo (y obligatorio) en
-        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia).
+        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia). HU #14563 B6: `referencia` opcional (aditiva).
+        Con ella `sin_valor_comercial` va en false, `valor_sugerido` (entero mayor que 0) es obligatorio y entra en `fuentes` como
+        `fasecolda` OK (si ya viene `fasecolda`, en OK y con el mismo valor) y `fuente_principal` es `fasecolda` (si se envía, debe
+        ser `fasecolda`). No se valida que el código exista en Fasecolda.
       additionalProperties: false
       required: [sin_valor_comercial, fuentes]
       properties:
@@ -5152,6 +5713,17 @@ components:
               estado: { type: string, enum: [OK, SIN_DATOS, ERROR] }
               valor: { type: integer, format: int64, minimum: 1, nullable: true }
               muestras: { type: integer, minimum: 1, nullable: true }
+        referencia:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [codigo_fasecolda, modelo]
+          description: "HU #14563 B6. Referencia Fasecolda; un campo desconocido responde 422 con su ruta en `campo`."
+          properties:
+            codigo_fasecolda: { type: string, pattern: "^[0-9]{8}$", example: "01601234", description: "Texto de 8 dígitos." }
+            marca: { type: string, nullable: true, maxLength: 120 }
+            linea: { type: string, nullable: true, maxLength: 120 }
+            modelo: { type: integer, minimum: 1950, description: "Año del modelo, hasta el año actual (Colombia) + 1.", example: 2020 }
 
     ResultadoManualRuntPersona:
       type: object
@@ -5242,6 +5814,66 @@ components:
           nullable: true
           enum: [ALMACEN_NO_DISPONIBLE, GENERACION_FALLIDA, GENERACION_INTERRUMPIDA, SIN_VEHICULOS_TERMINADOS, null]
           description: Solo con estado ERROR. Nunca la causa técnica de una fuente.
+    BandejaNotificaciones:
+      type: object
+      required: [no_leidas, items, siguiente]
+      properties:
+        no_leidas:
+          type: integer
+          minimum: 0
+          description: Sin leer en toda la bandeja visible (no solo en esta página).
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificacionCampana"
+        siguiente:
+          type: string
+          format: uuid
+          nullable: true
+          description: Cursor para `antes` de la página siguiente; null si no hay más.
+    NotificacionCampana:
+      type: object
+      required: [id, tipo, creada_en, leida_en, diagnostico_id, titulo, mensaje, accion]
+      description: Sin placa, VIN, documento, nombre de persona ni archivo (O2).
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO]
+        creada_en:
+          type: string
+          format: date-time
+        leida_en:
+          type: string
+          format: date-time
+          nullable: true
+        diagnostico_id:
+          type: string
+          format: uuid
+        titulo:
+          type: string
+          description: Rótulo fijo por tipo (provisional).
+          example: Diagnóstico terminado
+        mensaje:
+          type: string
+          description: Rótulo fijo por tipo con el nombre del lote (provisional).
+          example: "El lote «Flota norte» terminó sus consultas."
+        accion:
+          $ref: "#/components/schemas/AccionNotificacion"
+    AccionNotificacion:
+      type: object
+      required: [tipo, href]
+      properties:
+        tipo:
+          type: string
+          enum: [VER_EVIDENCIAS, VER_DERIVACION, VER_LOTE]
+          description: VER_EVIDENCIAS para los dos tipos de ZIP, VER_DERIVACION para DERIVACION_TERMINADA y VER_LOTE para LOTE_TERMINADO.
+        href:
+          type: string
+          description: Ruta relativa del frontend, /diagnosticos/{diagnostico_id} para todos los tipos (la página del lote).
+          example: /diagnosticos/01a1d385-0649-766f-a224-cf68b10c52a7
     ErrorRegla:
       type: object
       required: [code, error]

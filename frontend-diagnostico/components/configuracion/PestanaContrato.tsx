@@ -81,9 +81,12 @@ function ContratoSoloLectura({ contrato }: { contrato: NivelContrato }) {
           <h2 id="contrato-titulo" className="text-lg font-semibold text-flit-primary">
             Lo contratado por tu compañía
           </h2>
-          <p className={AYUDA_CLS}>Solo lectura: el contrato lo administra el backoffice FLIT.</p>
         </div>
+        <span {...etiquetaKit("neutral", { className: "ml-auto" })}>
+          Solo lectura
+        </span>
       </div>
+      <InlineAlert tone="info">FLIT administra tu contrato. Para cambiarlo, escribe a tu ejecutivo de cuenta</InlineAlert>
       <dl className="grid gap-4 sm:grid-cols-[auto_1fr] sm:gap-x-6">
         <dt className={ETIQUETA_CLS}>Fuentes habilitadas</dt>
         <dd>

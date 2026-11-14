@@ -3,13 +3,23 @@
 import { useEffect, useId, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
 import { TAMANO_DE_PAGINA_POR_DEFECTO } from "@flit/ui/usePaginacion";
 import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
+import {
   BOTON_REINTENTAR_CLS,
+  BOTON_SECUNDARIO_CLS,
   CAMPO_CLS,
   ETIQUETA_CLS,
   MARCA_CLS,
@@ -26,7 +36,7 @@ import {
   FILA_TABLA_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
-import { listarLotesBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
+import { listarLotesBackoffice, type DiagnosticoBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { SelectorEmpresaBackoffice } from "./SelectorEmpresaBackoffice";
@@ -45,6 +55,8 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: 
 const ESTADOS: EstadoDiagnostico[] = ["CREADO", "EN_PROCESO", "COMPLETADO", "INCOMPLETO"];
 /** El estándar de las tablas FLIT (HU #13916). Solo cambia desde el selector, que ofrece 10/20/30/50; no viaja si es este. */
 const TAMANO_INICIAL = TAMANO_DE_PAGINA_POR_DEFECTO;
+/** Celda de la tabla de lotes; por debajo de 900 px, renglón de la tarjeta del lote con su `data-label` (HU #14562 AC56). */
+const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 
 interface Filtros {
   empresa: string;
@@ -60,6 +72,31 @@ function consultaUrl(f: Filtros): string {
   if (f.conErrores) q.set("con_errores", "true");
   if (f.pagina > 1) q.set("pagina", String(f.pagina));
   return q.toString();
+}
+
+/** Banda de contexto del backoffice (AC43, maqueta BackofficeLotes): avisa que se opera como FLIT. */
+function BandaBackoffice() {
+  return (
+    <p
+      role="note"
+      aria-label="Contexto del backoffice"
+      className="inline-flex items-center gap-2 rounded-full border border-[color:var(--di-border)] bg-[var(--di-surface-sunken)] px-3 py-1 text-xs font-semibold text-[color:var(--di-text-secondary)]"
+    >
+      <Icono nombre="escudo" className="h-3.5 w-3.5" />
+      Backoffice FLIT · lo que haces aquí no lo ve la compañía como intervención manual
+    </p>
+  );
+}
+
+/** AC43 (B3): «ID · modo · trámite». Sin `modo` (API previo a B3) solo el ID; nada se infiere. */
+export function contextoLote(d: DiagnosticoBackoffice): string {
+  const partes = [d.id];
+  if (d.modo) {
+    partes.push(d.modo === "CON_ANALISIS" ? "Con análisis IA" : "Simple");
+    if (d.tipo_tramite) partes.push(d.tipo_tramite.nombre);
+    else if (d.es_express) partes.push("Express");
+  }
+  return partes.join(" · ");
 }
 
 /** Ícono del estado vacío: del kit (`iconoComo`) o de lucide cuando el kit no trae el glifo (SearchX). */
@@ -86,6 +123,7 @@ function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; chil
 export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   const router = useRouter();
   const id = useId();
+  const [nombreEmpresa, setNombreEmpresa] = useState<string | null>(null);
   const [filtros, setFiltros] = useState<Filtros>({
     empresa: esEmpresaValida(props.empresa) ? props.empresa : "",
     estado: props.estado,
@@ -122,6 +160,12 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
     setCarga({ tipo: "cargando" });
     if (siguiente.empresa) router.replace(`/backoffice/diagnosticos?${consultaUrl(siguiente)}`, { scroll: false });
   }
+
+  // AC43: «{compañía} · N lotes». El nombre solo se conoce si se eligió en el selector; con la compañía solo en la URL
+  // se muestra el total, sin inventar el nombre.
+  const total = carga.tipo === "listo" ? carga.lista.total : null;
+  const lotesTexto = total === null ? null : total === 1 ? "1 lote" : `${total} lotes`;
+  const resumen = hayEmpresa && lotesTexto ? (nombreEmpresa ? `${nombreEmpresa} · ${lotesTexto}` : lotesTexto) : null;
 
   let contenido: React.ReactNode;
   if (!hayEmpresa) {
@@ -164,8 +208,8 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
     contenido = (
       <div className="flex flex-col gap-3">
         <div className="overflow-x-auto rounded-xl border border-border">
-          <table aria-label="Lotes de la compañía" className="w-full min-w-[640px] border-collapse text-sm">
-            <thead>
+          <table aria-label="Lotes de la compañía" className={`w-full min-w-[640px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
                 {["Lote", "Estado", "Creado", "Vehículos", "Celdas en error"].map((t) => (
                   <th key={t} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
@@ -174,25 +218,30 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {lista.diagnosticos.map((d) => {
                 const estado = vistaEstadoLote(d.estado, d.estado_etiqueta);
                 return (
-                  <tr key={d.id} className={`${FILA_TABLA_CLS} bg-card`}>
-                    <td className={CELDA_TABLA_CLS}>
+                  <tr key={d.id} className={`${FILA_TABLA_CLS} bg-card ${TABLA_MOVIL_ROW_CLS}`}>
+                    <td data-label="Lote" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
                       <Link
                         href={`/backoffice/diagnosticos/${encodeURIComponent(d.id)}?empresa=${encodeURIComponent(filtros.empresa)}`}
                         className="text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       >
                         {d.nombre}
                       </Link>
+                      <p className="mt-0.5 break-all text-xs text-muted-foreground">{contextoLote(d)}</p>
                     </td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Estado" className={CELDA_CLS}>
                       <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
                     </td>
-                    <td className={`${CELDA_TABLA_CLS} tabular-nums`}>{fechaDelDato(d.creado_en)}</td>
-                    <td className={`${CELDA_TABLA_CLS} tabular-nums`}>{d.vehiculos}</td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Creado" className={`${CELDA_CLS} tabular-nums`}>
+                      {fechaDelDato(d.creado_en)}
+                    </td>
+                    <td data-label="Vehículos" className={`${CELDA_CLS} tabular-nums`}>
+                      {d.vehiculos}
+                    </td>
+                    <td data-label="Celdas en error" className={CELDA_CLS}>
                       {d.celdas_en_error > 0 ? <Etiqueta tono="danger">{`${d.celdas_en_error} con error`}</Etiqueta> : <Etiqueta tono="success">Sin errores</Etiqueta>}
                     </td>
                   </tr>
@@ -220,12 +269,26 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
         as="section"
         aria-labelledby="lotes-bo-titulo"
         tituloId="lotes-bo-titulo"
-        titulo="Backoffice de diagnósticos"
-        descripcion="Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error."
+        titulo="Lotes por compañía"
+        descripcion="Revisa lotes con errores, reprocesa consultas y llena datos a mano"
         icono="diagnostico"
+        encima={<BandaBackoffice />}
+        acciones={
+          // HU #14562 · m-13: acceso de navegación en secundario, no la píldora de 12 px de «Reintentar».
+          <Link href="/backoffice/fuentes-obligatorias" className={BOTON_SECUNDARIO_CLS}>
+            Fuentes obligatorias
+          </Link>
+        }
       />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-        <SelectorEmpresaBackoffice id={`${id}-empresa`} value={filtros.empresa} onChange={(empresa) => aplicar({ empresa: empresa.id, pagina: 1 })} />
+        <SelectorEmpresaBackoffice
+          id={`${id}-empresa`}
+          value={filtros.empresa}
+          onChange={(empresa) => {
+            setNombreEmpresa(empresa.nombre);
+            aplicar({ empresa: empresa.id, pagina: 1 });
+          }}
+        />
         {hayEmpresa && (
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1">
@@ -253,7 +316,13 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
           </div>
         )}
       </section>
-      <section aria-label="Lotes" className={TARJETA_CLS}>
+      <section aria-labelledby={`${id}-lotes`} className={`${TARJETA_CLS} flex flex-col gap-3`}>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id={`${id}-lotes`} className="text-base font-semibold text-[color:var(--di-heading)]">
+            Lotes
+          </h2>
+          {resumen && <p className="text-sm text-muted-foreground">{resumen}</p>}
+        </div>
         {contenido}
       </section>
     </>

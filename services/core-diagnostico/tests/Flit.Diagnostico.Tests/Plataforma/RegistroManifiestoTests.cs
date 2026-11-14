@@ -62,7 +62,7 @@ public sealed class RegistroManifiestoTests
             m.GetProperty("name").GetString().Should().NotBeNullOrWhiteSpace();
         });
         var roles = raiz.GetProperty("defaultRoles").EnumerateArray().ToList();
-        roles.Select(r => r.GetProperty("code").GetString()).Should().BeEquivalentTo("usuario_diagnostico", "admin_diagnostico", "backoffice_diagnostico");
+        roles.Select(r => r.GetProperty("code").GetString()).Should().BeEquivalentTo("usuario_diagnostico", "admin_diagnostico");
         roles.SelectMany(r => r.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())).Should().AllSatisfy(p => slugs.Should().Contain(p));
     }
 

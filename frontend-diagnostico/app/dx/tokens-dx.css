@@ -1,0 +1,93 @@
+/*
+ * Tokens propios de Diagnóstico Vehicular · UI Kit FLIT 2026 (HU #14562 · UI-3, D2 = c).
+ * Solo viven en frontend-diagnostico: la prueba __tests__/dx/aislamientoDx.test.ts falla si aparecen fuera.
+ * Inventario (token — valor del kit — por qué no sirve el de @flit/ui):
+ *   --dx-estado-pendiente — #f9ac00 amarillo (manual p. 32, D4(4)) — @flit/ui solo tiene --badge-pending en naranja.
+ *   --dx-estado-en-curso — azul acción #1d53ff — alias semántico del semáforo: --badge-info es genérico y cambia con la marca.
+ *   --dx-estado-ejecutado — verde #8cc63f / texto #4f7121 — fija el tono del semáforo sin depender del mapeo genérico success.
+ *   --dx-estado-deuda — naranja #ff4e00 / texto #bd3a00 — «con deuda» es un estado propio del semáforo, no un warning genérico.
+ *   --dx-estado-error — rojo #c10000 — error de consulta del semáforo, separado del danger general de la suite.
+ *   --dx-estado-novedad — gris disco #5e6a7b — NA con motivo (O3): rótulo propio, distinto de «Sin solicitar».
+ *   --dx-estado-sin-solicitar — línea #a9c9fc / texto #546b7d — neutral claro que el kit no define (D4(3), O3).
+ *   --dx-radio — 9px — radio de contenedores del kit 2026 fijado para Diagnóstico aunque --radius cambie en la suite.
+ *   --dx-sombra-dock — 3px 3px 3px #557eff4d — solo dock y menús de Diagnóstico; --kit-sombra es de toda la suite.
+ *   --dx-motion-rapido — 120ms — CF-04 pide que todo motion de Diagnóstico caiga a 0ms con menos movimiento; --di-motion-fast no.
+ *   --dx-motion-base — 180ms — ídem para paneles y diálogos que aparecen por opacidad.
+ *   --dx-icono-acento — #557eff — acento de los íconos bicolor IconoDx (Iconografía); no existe en @flit/ui.
+ * Cada estado trae -borde (color pleno); el token base es el color de texto (AA sobre la superficie).
+ * HU #14562 · m-1 (auditoría de UI): se retiraron los tokens sin consumidor. Los -fondo (el chip del kit calcula su
+ * relleno al 10 % del -borde), --dx-panel-lateral-ancho (PanelLateral ya mide 640 px por defecto) y --dx-icono-tinte (el
+ * visto de IconoDxDictamen se traza con la superficie, m-10). --dx-radio, --dx-sombra-dock y --dx-motion-base los usa
+ * el panel de la campana; --dx-motion-rapido, las filas y los enlaces del semáforo.
+ */
+
+@theme inline {
+  --color-dx-estado-pendiente: var(--dx-estado-pendiente);
+  --color-dx-estado-pendiente-borde: var(--dx-estado-pendiente-borde);
+  --color-dx-estado-en-curso: var(--dx-estado-en-curso);
+  --color-dx-estado-en-curso-borde: var(--dx-estado-en-curso-borde);
+  --color-dx-estado-ejecutado: var(--dx-estado-ejecutado);
+  --color-dx-estado-ejecutado-borde: var(--dx-estado-ejecutado-borde);
+  --color-dx-estado-deuda: var(--dx-estado-deuda);
+  --color-dx-estado-deuda-borde: var(--dx-estado-deuda-borde);
+  --color-dx-estado-error: var(--dx-estado-error);
+  --color-dx-estado-error-borde: var(--dx-estado-error-borde);
+  --color-dx-estado-novedad: var(--dx-estado-novedad);
+  --color-dx-estado-novedad-borde: var(--dx-estado-novedad-borde);
+  --color-dx-estado-sin-solicitar: var(--dx-estado-sin-solicitar);
+  --color-dx-estado-sin-solicitar-borde: var(--dx-estado-sin-solicitar-borde);
+  --color-dx-icono-acento: var(--dx-icono-acento);
+}
+
+:root {
+  --dx-estado-pendiente: #8b6000;
+  --dx-estado-pendiente-borde: #f9ac00;
+  --dx-estado-en-curso: #1d53ff;
+  --dx-estado-en-curso-borde: #1d53ff;
+  --dx-estado-ejecutado: #4f7121;
+  --dx-estado-ejecutado-borde: #8cc63f;
+  --dx-estado-deuda: #bd3a00;
+  --dx-estado-deuda-borde: #ff4e00;
+  --dx-estado-error: #c10000;
+  --dx-estado-error-borde: #c10000;
+  --dx-estado-novedad: #5e6a7b;
+  --dx-estado-novedad-borde: #5e6a7b;
+  --dx-estado-sin-solicitar: #546b7d;
+  --dx-estado-sin-solicitar-borde: #a9c9fc;
+  --dx-radio: 9px;
+  --dx-sombra-dock: 3px 3px 3px #557eff4d;
+  --dx-motion-rapido: 120ms;
+  --dx-motion-base: 180ms;
+  --dx-icono-acento: #557eff;
+}
+
+.dark {
+  --dx-estado-pendiente: #f9ac00;
+  --dx-estado-pendiente-borde: #f9ac00;
+  --dx-estado-en-curso: #8fb0ff;
+  --dx-estado-en-curso-borde: #8fb0ff;
+  --dx-estado-ejecutado: #a6d95f;
+  --dx-estado-ejecutado-borde: #a6d95f;
+  --dx-estado-deuda: #ff7a40;
+  --dx-estado-deuda-borde: #ff7a40;
+  --dx-estado-error: #ff6b6b;
+  --dx-estado-error-borde: #ff6b6b;
+  --dx-estado-novedad: #a9b8d4;
+  --dx-estado-novedad-borde: #a9b8d4;
+  --dx-estado-sin-solicitar: #a9b8d4;
+  --dx-estado-sin-solicitar-borde: #3a5688;
+  --dx-radio: 9px;
+  --dx-sombra-dock: 3px 3px 3px #00000059;
+  --dx-motion-rapido: 120ms;
+  --dx-motion-base: 180ms;
+  --dx-icono-acento: #8fb0ff;
+}
+
+/* CF-04: con «menos movimiento» todo motion de Diagnóstico queda quieto. */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  .dark {
+    --dx-motion-rapido: 0ms;
+    --dx-motion-base: 0ms;
+  }
+}

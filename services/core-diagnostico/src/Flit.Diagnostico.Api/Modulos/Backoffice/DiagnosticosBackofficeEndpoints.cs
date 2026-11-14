@@ -16,7 +16,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Lotes de UNA compañía para el backoffice FLIT (HU #13799, F06-H2, F06-C5/C6/C7). Cuelgan del grupo <c>/backoffice</c>:
-/// <see cref="PoliticaBackoffice"/> (<c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>) y la empresa explícita en
+/// la política de configuración de <see cref="PoliticaBackoffice"/> (<see cref="PoliticaBackoffice.CumpleConfiguracion"/>: SuperAdmin
+/// de cualquier compañía, o <c>tenant_type=FLIT</c> con <c>diagnostico.backoffice.ver</c>) y la empresa explícita en
 /// <c>?empresa=</c> (sin ella, 400 <c>EMPRESA_REQUERIDA</c>; con ella, la lectura queda en <c>lecturas_backoffice</c> antes de leer).
 /// Toda lectura va por <see cref="LecturaEntreEmpresas"/> con esa empresa: un lote de otra compañía responde 404.
 /// <list type="bullet">
@@ -52,6 +53,7 @@ internal static class DiagnosticosBackofficeEndpoints
         int? tamano,
         HttpContext http,
         DiagnosticoDb db,
+        Flit.Diagnostico.Domain.Catalogos.ICatalogoTiposTramite catalogo,
         CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
@@ -85,12 +87,33 @@ internal static class DiagnosticosBackofficeEndpoints
                 c.Nombre,
                 c.Estado,
                 c.CreadoEn,
+                c.Modo,
+                c.TipoTramiteCodigo,
+                c.EsExpress,
                 Vehiculos = vehiculos.Count(v => v.DiagnosticoId == c.Id),
                 Errores = errores.Count(e => e.DiagnosticoId == c.Id),
             })
             .ToListAsync(ct).ConfigureAwait(false);
+        // HU #14563 B3: los nombres de trámite con UNA llamada al catálogo por página (caché de 5 min); si no responde, el código.
+        IReadOnlyDictionary<string, string> tipos = new Dictionary<string, string>();
+        if (lotes.Any(l => l.TipoTramiteCodigo is not null))
+        {
+            try
+            {
+                tipos = (await catalogo.ListarAsync(ct).ConfigureAwait(false))
+                    .GroupBy(t => t.Codigo, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.Ordinal);
+            }
+            catch (Flit.Diagnostico.Domain.Catalogos.CatalogoTiposTramiteNoDisponibleException)
+            {
+                // El nombre queda en el código.
+            }
+        }
+
         return Results.Ok(new ListaDiagnosticosBackofficeDto(empresa, numero, porPagina, total,
-            [.. lotes.Select(l => new DiagnosticoBackofficeDto(l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores))]));
+            [.. lotes.Select(l => new DiagnosticoBackofficeDto(
+                l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores, CodigosDeEnum.Codigo(l.Modo),
+                l.TipoTramiteCodigo is { } codigo ? new TipoTramiteListadoDto(codigo, tipos.GetValueOrDefault(codigo, codigo)) : null,
+                l.EsExpress))]));
     }
 
     private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, IProtectorDocumentoPersona protector, CancellationToken ct)

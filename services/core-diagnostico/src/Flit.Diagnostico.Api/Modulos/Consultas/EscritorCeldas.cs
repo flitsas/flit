@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Microsoft.EntityFrameworkCore;
@@ -51,10 +52,15 @@ internal static class EscritorCeldas
     /// Sube la versión del tablero del lote en <paramref name="contexto"/> (con la empresa de la celda) y la devuelve. El UPDATE
     /// bloquea la fila de la cabecera hasta el fin de la transacción, así que dos celdas del mismo lote nunca leen la misma versión.
     /// </summary>
-    public static async Task<long> SubirVersionTableroAsync(DiagnosticoDb contexto, Guid diagnosticoId, CancellationToken ct)
+    public static Task<long> SubirVersionTableroAsync(DiagnosticoDb contexto, Guid diagnosticoId, CancellationToken ct) =>
+        SubirVersionTableroAsync(contexto, diagnosticoId, null, ct);
+
+    private static async Task<long> SubirVersionTableroAsync(
+        DiagnosticoDb contexto, Guid diagnosticoId, IQueryable<CabeceraDiagnostico>? cabeceras, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
-        var filas = await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId)
+        var origen = cabeceras ?? contexto.Set<CabeceraDiagnostico>();
+        var filas = await origen.Where(c => c.Id == diagnosticoId)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.VersionTablero, c => c.VersionTablero + 1), ct).ConfigureAwait(false);
         if (filas != 1)
             throw new InvalidOperationException("La celda no tiene su cabecera en la empresa del contexto.");
@@ -64,6 +70,68 @@ internal static class EscritorCeldas
         if (seguida is not null)
             await seguida.ReloadAsync(ct).ConfigureAwait(false);
         return seguida?.Entity.VersionTablero
-            ?? await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
+            ?? await origen.Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sube la versión de fila del tablero (HU #14563, ADR-0086 D-1) en la transacción del escritor: primero la cabecera
+    /// (<see cref="SubirVersionTableroAsync(DiagnosticoDb, Guid, CancellationToken)"/>, que la bloquea hasta el commit) y después el
+    /// vehículo con ese valor. Orden de bloqueo canónico: cabecera → vehículo → dictamen o ítem; llámala antes de apagar el dictamen
+    /// vigente o de tocar el ítem. Si el vehículo está seguido, se asigna la propiedad y sale en el <c>SaveChanges</c> del escritor con
+    /// su <c>xmin</c>; si no, va un <c>ExecuteUpdate</c>. Devuelve la versión nueva. No guarda. El backoffice (contexto sin empresa)
+    /// pasa en <paramref name="cabeceras"/> y <paramref name="vehiculos"/> las filas de la empresa del lote
+    /// (<c>db.ParaEditarDeLaEmpresa&lt;T&gt;(empresa)</c>); sin ellas se usa el filtro de la empresa del contexto.
+    /// </summary>
+    public static async Task<long> SubirVersionFilaAsync(
+        DiagnosticoDb contexto, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct,
+        IQueryable<CabeceraDiagnostico>? cabeceras = null, IQueryable<VehiculoDiagnostico>? vehiculos = null)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        var version = await SubirVersionTableroAsync(contexto, diagnosticoId, cabeceras, ct).ConfigureAwait(false);
+        var seguido = contexto.ChangeTracker.Entries<VehiculoDiagnostico>().FirstOrDefault(e => e.Entity.Id == vehiculoId);
+        if (seguido is not null)
+        {
+            MarcarFila(seguido.Entity, version);
+            return version;
+        }
+
+        var filas = await (vehiculos ?? contexto.Set<VehiculoDiagnostico>()).Where(v => v.Id == vehiculoId && v.DiagnosticoId == diagnosticoId)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.VersionTablero, version), ct).ConfigureAwait(false);
+        if (filas != 1)
+            throw new InvalidOperationException("El vehículo no pertenece al lote en la empresa del contexto.");
+        return version;
+    }
+
+    /// <summary>
+    /// Deja la fila con la versión que ya obtuvo la celda que cierra y emite el dictamen (HU #14563 AC7): sin segundo UPDATE de la
+    /// cabecera. Vehículo seguido: asigna la propiedad (sale en el <c>SaveChanges</c> del cierre). No seguido: <c>ExecuteUpdate</c>
+    /// solo si la fila tenía una versión menor, sin cargar la entidad (no suma una comprobación de <c>xmin</c> al cierre).
+    /// <paramref name="vehiculos"/>: las filas de la empresa de la celda (el llenado manual corre en el contexto del backoffice).
+    /// </summary>
+    public static async Task MarcarFilaAsync(
+        DiagnosticoDb contexto, Guid vehiculoId, long versionTablero, CancellationToken ct, IQueryable<VehiculoDiagnostico>? vehiculos = null)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        var seguido = contexto.ChangeTracker.Entries<VehiculoDiagnostico>().FirstOrDefault(e => e.Entity.Id == vehiculoId);
+        if (seguido is not null)
+        {
+            MarcarFila(seguido.Entity, versionTablero);
+            return;
+        }
+
+        await (vehiculos ?? contexto.Set<VehiculoDiagnostico>()).Where(v => v.Id == vehiculoId && v.VersionTablero < versionTablero)
+            .ExecuteUpdateAsync(s => s.SetProperty(v => v.VersionTablero, versionTablero), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Deja la fila con una versión ya obtenida en esta transacción (la de la celda que cierra y emite el dictamen, HU #14563 AC7):
+    /// no sube la cabecera otra vez. La versión de fila es monótona.
+    /// </summary>
+    public static void MarcarFila(VehiculoDiagnostico vehiculo, long versionTablero)
+    {
+        ArgumentNullException.ThrowIfNull(vehiculo);
+        if (versionTablero < vehiculo.VersionTablero)
+            throw new InvalidOperationException("La versión de fila del tablero no baja.");
+        vehiculo.VersionTablero = versionTablero;
     }
 }

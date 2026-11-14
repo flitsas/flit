@@ -49,7 +49,12 @@ public sealed record DetalleCeldaDto(
     /// </summary>
     [property: JsonPropertyName("dato_parcial")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    bool DatoParcial = false);
+    bool DatoParcial = false,
+    /// <summary>
+    /// HU #14563 B5: auditoría saneada de la consulta (<see cref="AuditoriaConsultaCliente"/>), sin intentos manuales ni datos
+    /// internos. Null si la celda no tiene intentos no manuales.
+    /// </summary>
+    [property: JsonPropertyName("auditoria")] AuditoriaConsulta? Auditoria = null);
 
 /// <summary>
 /// Una persona de una celda de persona: su posición y rol, el tipo de documento, el documento enmascarado (<c>****</c> más
@@ -136,7 +141,15 @@ public sealed record ResultadoSimitDetalle(
     IReadOnlyList<MultaSimitDetalle>? Multas = null,
     [property: JsonPropertyName("acuerdos_pago")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<AcuerdoSimitDetalle>? Acuerdos = null) : ResultadoDetalleDto;
+    IReadOnlyList<AcuerdoSimitDetalle>? Acuerdos = null,
+    /// <summary>HU #14563 B4: resoluciones del SIMIT. Null si la fuente no las informó (nunca una lista vacía inferida).</summary>
+    [property: JsonPropertyName("resoluciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<ResolucionSimitDetalle>? Resoluciones = null,
+    /// <summary>HU #14563 B4: cuántas resoluciones informó la fuente. Null (no 0) si no las informó.</summary>
+    [property: JsonPropertyName("cantidad_resoluciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? CantidadResoluciones = null) : ResultadoDetalleDto;
 
 /// <summary>Una multa del SIMIT. Sin el infractor: el nombre y el documento no salen.</summary>
 public sealed record MultaSimitDetalle(
@@ -146,7 +159,24 @@ public sealed record MultaSimitDetalle(
     [property: JsonPropertyName("valor_pagar")] string? ValorPagar,
     [property: JsonPropertyName("estado_cartera")] string? EstadoCartera,
     [property: JsonPropertyName("organismo")] string? Organismo,
-    [property: JsonPropertyName("codigos")] string? Codigos);
+    [property: JsonPropertyName("codigos")] string? Codigos,
+    /// <summary>HU #14563 B4: las infracciones de la multa con código y descripción (null si la fuente no trae).</summary>
+    [property: JsonPropertyName("infracciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<InfraccionSimitDetalle>? Infracciones = null);
+
+/// <summary>Una infracción de una multa del SIMIT (HU #14563 B4): código y descripción; la descripción es null si la fuente no la trae.</summary>
+public sealed record InfraccionSimitDetalle(
+    [property: JsonPropertyName("codigo")] string? Codigo,
+    [property: JsonPropertyName("descripcion")] string? Descripcion);
+
+/// <summary>Una resolución del SIMIT (HU #14563 B4), sin el infractor.</summary>
+public sealed record ResolucionSimitDetalle(
+    [property: JsonPropertyName("numero")] string? Numero,
+    [property: JsonPropertyName("fecha")] string? Fecha,
+    [property: JsonPropertyName("estado")] string? Estado,
+    [property: JsonPropertyName("valor")] string? Valor,
+    [property: JsonPropertyName("organismo")] string? Organismo);
 
 /// <summary>Un acuerdo de pago del SIMIT, sin el infractor.</summary>
 public sealed record AcuerdoSimitDetalle(
@@ -165,12 +195,27 @@ public sealed record ComparendoDetalle(
     [property: JsonPropertyName("estado")] string? Estado,
     [property: JsonPropertyName("organismo")] string? Organismo);
 
-/// <summary>Avalúo comercial: «sin valor comercial» (Q4 = b) o el valor sugerido con su fuente principal, y el valor de cada fuente.</summary>
+/// <summary>
+/// Avalúo comercial: «sin valor comercial» (Q4 = b) o el valor sugerido con su fuente principal, y el valor de cada fuente. La
+/// referencia Fasecolda del llenado manual (HU #14563 B6) NO viaja aquí: revelaría el llenado manual (R-20, hallazgo M1 de
+/// seguridad, opción a) y una celda llenada a mano debe tener las mismas claves que una consultada por API. Solo la ve el backoffice
+/// (<see cref="ReferenciaAvaluoDetalle"/> en el formulario del llenado manual).
+/// </summary>
 public sealed record ResultadoAvaluoDetalle(
     [property: JsonPropertyName("sin_valor_comercial")] bool SinValorComercial,
     [property: JsonPropertyName("valor_sugerido")] long? ValorSugerido,
     [property: JsonPropertyName("fuente_principal")] string? FuentePrincipal,
     [property: JsonPropertyName("fuentes")] IReadOnlyList<FuenteAvaluoDetalle>? Fuentes) : ResultadoDetalleDto;
+
+/// <summary>
+/// Referencia Fasecolda del avalúo llenado a mano (HU #14563 B6): código de 8 dígitos, marca, línea y modelo (año). Solo backoffice
+/// (hallazgo M1): nunca en un DTO de compañía, el PDF ni el contenido del reporte.
+/// </summary>
+public sealed record ReferenciaAvaluoDetalle(
+    [property: JsonPropertyName("codigo_fasecolda")] string? CodigoFasecolda,
+    [property: JsonPropertyName("marca")] string? Marca,
+    [property: JsonPropertyName("linea")] string? Linea,
+    [property: JsonPropertyName("modelo")] int? Modelo);
 
 /// <summary>Valor de una fuente del avalúo (<c>fasecolda</c>, <c>mercado_libre</c>, <c>base_gravable</c>): estado, valor, muestras y fecha.</summary>
 public sealed record FuenteAvaluoDetalle(

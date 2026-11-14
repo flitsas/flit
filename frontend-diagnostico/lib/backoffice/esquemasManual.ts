@@ -29,12 +29,20 @@ export interface FuenteAvaluoBorrador {
   valor: string;
   muestras: string;
 }
+/** HU #14562 · AC44 (B6): referencia Fasecolda del avalúo llenado a mano. Código y modelo obligatorios con valor. */
+export interface ReferenciaFasecoldaBorrador {
+  codigo_fasecolda: string;
+  modelo: string;
+  marca: string;
+  linea: string;
+}
 export interface AvaluoBorrador {
   tipo: "AVALUO";
   sin_valor_comercial: boolean;
   valor_sugerido: string;
   fuente_principal: "" | FuenteAvaluoCodigo;
   fuentes: FuenteAvaluoBorrador[];
+  referencia: ReferenciaFasecoldaBorrador;
 }
 export interface LicenciaBorrador {
   categoria: string;
@@ -74,7 +82,14 @@ export function borradorVacio(tipo: TipoEsquema): Borrador {
     case "SIMIT":
       return { tipo, semaforo: "", comparendos: [] };
     case "AVALUO":
-      return { tipo, sin_valor_comercial: false, valor_sugerido: "", fuente_principal: "", fuentes: [fuenteAvaluoVacia()] };
+      return {
+        tipo,
+        sin_valor_comercial: false,
+        valor_sugerido: "",
+        fuente_principal: "",
+        fuentes: [fuenteAvaluoVacia()],
+        referencia: { codigo_fasecolda: "", modelo: "", marca: "", linea: "" },
+      };
     case "RUNT_PERSONA":
       return { tipo, inscrito: false, estado_conductor: "", licencias: [] };
     case "RUES":
@@ -92,6 +107,11 @@ export const MAX_LICENCIAS = 30;
 const PESOS = /^\d{1,15}(\.\d{1,2})?$/;
 const ENTERO = /^\d{1,15}$/;
 const ANIO = /^\d{4}$/;
+/** B6: el código Fasecolda es texto de 8 dígitos. */
+const CODIGO_FASECOLDA = /^\d{8}$/;
+const MODELO_MINIMO = 1950;
+/** Tope del modelo: el año actual + 1 (el servidor usa la hora de Colombia). */
+const modeloMaximo = () => new Date().getFullYear() + 1;
 
 /** AAAA-MM-DD de una fecha real del calendario. */
 function esFecha(valor: string): boolean {
@@ -201,6 +221,25 @@ function avaluo(b: AvaluoBorrador, raiz: string, val: Validador): Record<string,
     else r.fuente_principal = b.fuente_principal;
   }
   r.fuentes = fuentes;
+  if (!b.sin_valor_comercial) r.referencia = referenciaFasecolda(b.referencia, `${raiz}.referencia`, val);
+  return r;
+}
+
+/** AC44 (B6): código Fasecolda de 8 dígitos y modelo de 1950 al año actual + 1, obligatorios; marca y línea opcionales. */
+function referenciaFasecolda(ref: ReferenciaFasecoldaBorrador, raiz: string, val: Validador): Record<string, unknown> {
+  const r: Record<string, unknown> = {};
+  const codigo = ref.codigo_fasecolda.trim();
+  if (!codigo) val.error(`${raiz}.codigo_fasecolda`, "Este campo es obligatorio.");
+  else if (!CODIGO_FASECOLDA.test(codigo)) val.error(`${raiz}.codigo_fasecolda`, "El código Fasecolda tiene 8 dígitos.");
+  else r.codigo_fasecolda = codigo;
+  const modelo = ref.modelo.trim();
+  const tope = modeloMaximo();
+  if (!modelo) val.error(`${raiz}.modelo`, "Este campo es obligatorio.");
+  else if (!ANIO.test(modelo) || Number(modelo) < MODELO_MINIMO || Number(modelo) > tope)
+    val.error(`${raiz}.modelo`, `Escribe un año entre ${MODELO_MINIMO} y ${tope}.`);
+  else r.modelo = Number(modelo);
+  val.texto(r, "marca", ref.marca, `${raiz}.marca`, 120);
+  val.texto(r, "linea", ref.linea, `${raiz}.linea`, 120);
   return r;
 }
 

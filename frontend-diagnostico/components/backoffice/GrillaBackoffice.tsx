@@ -7,6 +7,8 @@ import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
+import { PanelLateral } from "@flit/ui/PanelLateral";
+import { AuditoriaDictamen } from "@/components/backoffice/AuditoriaDictamen";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { EstadoGlobal, EstimadoVsConsumido } from "@/components/tablero/EstadoGlobal";
@@ -28,6 +30,7 @@ import { puedeOperarBackoffice } from "@/lib/sesion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
+import { IconoDxManual } from "@/components/dx/iconos/IconoDxManual";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 export interface GrillaBackofficeProps {
@@ -51,11 +54,14 @@ const BOTON_LLENAR_CLS = BOTON_PRIMARIO_CLS.replace("px-5 py-2 text-sm", "px-3 p
 /** Ruta de la lista de lotes de la compañía elegida. */
 const rutaLista = (empresa: string) => `/backoffice/diagnosticos?empresa=${encodeURIComponent(empresa)}`;
 
-/** Marca de origen manual (texto e icono, nunca solo color). Solo existe en el backoffice (Q5). */
+/**
+ * Marca de origen manual (texto e icono, nunca solo color). Solo existe en el backoffice (Q5). HU #14562 · M7: el glifo es
+ * IconoDxManual, decorativo junto al texto, a 12 px como el ícono anterior.
+ */
 export function MarcaManual() {
   return (
     <Etiqueta tono="info">
-      <Icono nombre="lapiz" className="h-3 w-3" />
+      <IconoDxManual tamano={16} className="h-3 w-3" />
       Manual
     </Etiqueta>
   );
@@ -94,6 +100,9 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   const opera = puedeOperarBackoffice(sesion?.capacidades);
   const puedeLlenar = opera && (sesion?.capacidades.llenarConsultas ?? false);
   const puedeCorregir = opera && (sesion?.capacidades.corregirDictamen ?? false);
+  // AC47: la auditoría de versiones del dictamen (autor, motivo, versiones) es solo de backoffice y exige verAuditoria.
+  const puedeAuditar = sesion?.capacidades.verAuditoria ?? false;
+  const [auditoria, setAuditoria] = useState<FilaVehiculo | null>(null);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
   const [llenado, setLlenado] = useState<Llenado | null>(null);
@@ -245,10 +254,23 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
                 accionCelda={accionCelda}
                 marcaCelda={(celda) => (origenDe(celda) === "MANUAL" ? <MarcaManual /> : null)}
                 accionEncabezado={(v) => (
-                  <BotonAbrirDictamen
-                    identificador={v.placa || v.vin || v.identificador}
-                    onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
-                  />
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <BotonAbrirDictamen
+                      identificador={v.placa || v.vin || v.identificador}
+                      onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
+                    />
+                    {v.dictamen_ajustado && <Etiqueta tono="info">Ajustado por FLIT</Etiqueta>}
+                    {puedeAuditar && (
+                      <button
+                        type="button"
+                        onClick={() => setAuditoria(v)}
+                        className="rounded-full px-2 py-1 text-xs font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
+                      >
+                        <span aria-hidden="true">Auditoría</span>
+                        <span className="sr-only">{`Auditoría del dictamen de ${v.placa || v.vin || v.identificador}`}</span>
+                      </button>
+                    )}
+                  </span>
                 )}
               />
             </div>
@@ -294,6 +316,11 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
           onCeldaCambiada={() => void releer()}
           devolverFocoA={llenado.disparador}
         />
+      )}
+      {auditoria && (
+        <PanelLateral abierto onCerrar={() => setAuditoria(null)} titulo={`Auditoría del dictamen · ${auditoria.placa || auditoria.vin || auditoria.identificador}`}>
+          <AuditoriaDictamen diagnosticoId={diagnosticoId} vehiculoId={auditoria.id} empresa={empresa} />
+        </PanelLateral>
       )}
       {dictamen && (
         <PanelDictamen

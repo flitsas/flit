@@ -10,6 +10,7 @@
 **Registro de cambios**:
 - 2026-11-03 — versión inicial. Propuesto.
 - 2026-11-03 — corte 6. `ix_redaccion_pendiente` ya existe (migración `D6_ColaRedaccion`). La excepción A11 está en ADR-0072. Este ADR sigue en Propuesto.
+- 2026-11-13 — HU #14563 (B7). Enmendado por [ADR-0086](ADR-0086-diagnostico-ajuste-flit-dictamen-y-notificaciones.md) (Propuesto): el ajuste FLIT del dictamen es una versión nueva con el mecanismo de este ADR (se apaga la vigente y se inserta N+1). La migración `R7_AjusteDictamen` admite `redactado_por = 'MANUAL'`, añade `ajuste_motivo` (`@pii:low`, 10..500) y `ajustado_desde_version` (= `version - 1`) con `ck_dictamenes_override`, `ck_dictamenes_ajuste`, `ck_dictamenes_ajuste_motivo`, `ck_dictamenes_manual` y `ck_dictamenes_version`, y reemplaza `ck_dictamenes_redactado_por` y `ck_redaccion`. Un recálculo automático posterior gana sobre el ajuste (D7). El evaluador y el catálogo no cambian. Este ADR sigue en Propuesto.
 
 ## Contexto
 

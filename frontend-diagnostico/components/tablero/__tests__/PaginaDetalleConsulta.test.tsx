@@ -34,13 +34,14 @@ import { simitProveedorPersona, simitProveedorVehiculo } from "@/lib/tablero/__t
 // «Respuesta de la fuente» (RespuestaFuente: solo datos de la consulta, en español). Cuatro estados: cargando, error (404 no
 // disponible, 403 a la página 403, otro con Reintentar), vacío y lleno; sin la capacidad verDiagnosticos no se pide nada.
 
-const h = vi.hoisted(() => ({ capacidades: { verDiagnosticos: true } as Record<string, boolean>, replace: vi.fn() }));
+const h = vi.hoisted(() => ({ capacidades: { verDiagnosticos: true } as Record<string, boolean>, replace: vi.fn(), notFound: vi.fn() }));
 vi.mock("@/components/DiagnosticoShell", () => ({ useSesion: () => ({ sesion: sesion(h.capacidades), cargando: false, error: null, recargar: () => {} }) }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/diagnosticos/x", useRouter: () => ({ replace: h.replace, push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/diagnosticos/x", useRouter: () => ({ replace: h.replace, push: vi.fn(), refresh: vi.fn() }), notFound: h.notFound }));
 
 beforeEach(() => {
   h.capacidades = { verDiagnosticos: true };
   h.replace.mockReset();
+  h.notFound.mockReset();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -73,13 +74,20 @@ const region = (pagina: HTMLElement, nombre: string | RegExp) => within(pagina).
 const auditoria = (pagina: HTMLElement) => region(pagina, "Auditoría de consulta");
 const respuesta = (pagina: HTMLElement) => region(pagina, "Respuesta de la fuente");
 /** Valor de la fila «campo» de una tabla campo/valor de RespuestaFuente. */
+// HU #14562 · AC39: el primer nivel de la respuesta es una lista de definición (role="group", dt/dd); lo anidado sigue en tabla.
 const valorDe = (tabla: HTMLElement, campo: string) => {
+  if (tabla.getAttribute("role") === "group") {
+    const dt = Array.from(tabla.querySelectorAll("dt")).find((t) => t.textContent === campo);
+    if (!dt) throw new Error(`Sin campo ${campo}`);
+    return dt.nextElementSibling?.textContent;
+  }
   const fila = within(tabla)
     .getAllByRole("row")
     .find((r) => r.querySelector("th[scope='row']")?.textContent === campo);
   if (!fila) throw new Error(`Sin campo ${campo}`);
   return within(fila).getByRole("cell").textContent;
 };
+const terminos = (lista: HTMLElement) => Array.from(lista.querySelectorAll("dt")).map((t) => t.textContent);
 
 describe("PaginaDetalleConsulta — la ruta, el título, las migas y el volver", () => {
   it("la ruta pide el detalle por vehículo y fuente al BFF", async () => {
@@ -93,14 +101,14 @@ describe("PaginaDetalleConsulta — la ruta, el título, las migas y el volver",
     expect(screen.getByRole("heading", { level: 1, name: "RUNT vehículo · 9ZZPRUEBA00000482" })).toBeInTheDocument();
   });
 
-  it("migas «Diagnósticos › {nombre_diagnostico} › {fuente} · {identificador}», el último con aria-current", async () => {
+  it("migas de 4 niveles «Diagnósticos › {nombre_diagnostico} › {identificador} › {fuente}», el último con aria-current", async () => {
     await pintarDetalle(simitVehiculo());
     const migas = screen.getByRole("navigation", { name: "Migas de pan" });
     const items = within(migas).getAllByRole("listitem");
-    expect(items.map((i) => i.textContent?.replace("›", "").trim())).toEqual(["Diagnósticos", "Lote de prueba", "SIMIT vehículo · TST001"]);
+    expect(items.map((i) => i.textContent?.replace("›", "").trim())).toEqual(["Diagnósticos", "Lote de prueba", "TST001", "SIMIT vehículo"]);
     expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/");
     expect(within(migas).getByRole("link", { name: "Lote de prueba" })).toHaveAttribute("href", `/diagnosticos/${ID}`);
-    expect(within(items[2]).getByText("SIMIT vehículo · TST001")).toHaveAttribute("aria-current", "page");
+    expect(within(items[3]).getByText("SIMIT vehículo")).toHaveAttribute("aria-current", "page");
   });
 
   it("«Volver al diagnóstico» lleva al tablero del lote", async () => {
@@ -131,12 +139,29 @@ describe("PaginaDetalleConsulta — los otros estados de carga", () => {
     expect(screen.getByRole("heading", { level: 1, name: "RUNT vehículo" })).toBeInTheDocument();
   });
 
-  it("404: dice que no está disponible y no muestra datos", async () => {
+  it("HU #14562 AC49/AC57 404 (no existe o el lote es de otro usuario con PROPIOS): la página 404 de la app, sin datos", async () => {
     const { pagina } = await abrir("SIMIT_VEHICULO", Response.json({ code: "NO_ENCONTRADO", error: "No existe" }, { status: 404 }));
-    expect(await within(pagina).findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+    await waitFor(() => expect(h.notFound).toHaveBeenCalled());
     expect(within(pagina).queryByRole("table")).not.toBeInTheDocument();
     expect(within(pagina).queryByRole("region", { name: "Respuesta de la fuente" })).not.toBeInTheDocument();
-    expect(within(pagina).queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("una fuente desconocida en la ruta sigue siendo «no disponible» en la tarjeta, sin pedir nada ni ir a la 404", async () => {
+    const cargar = vi.fn();
+    render(<PaginaDetalleConsulta loteId={ID} vehiculoId="vehiculo-1" fuente="NO_EXISTE" cargar={cargar} />);
+    expect(await screen.findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+    expect(cargar).not.toHaveBeenCalled();
+    expect(h.notFound).not.toHaveBeenCalled();
+  });
+
+  it("backoffice: el 404 del lote en la compañía elegida se queda en la tarjeta («no disponible»), sin ir a la 404", async () => {
+    const { ApiError } = await import("@/lib/api");
+    render(
+      <PaginaDetalleConsulta loteId={ID} vehiculoId="vehiculo-1" fuente="RUNT" backoffice cargar={() => Promise.reject(new ApiError(404, "No existe", "NO_ENCONTRADO"))} />,
+    );
+    expect(await screen.findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+    expect(h.notFound).not.toHaveBeenCalled();
   });
 
   it("403 de sesión (SIN_EMPRESA): a la página 403, como el tablero", async () => {
@@ -178,7 +203,7 @@ describe("PaginaDetalleConsulta — HU #14087 AC7: auditoría de consulta (se qu
     const a = await within(pagina).findByRole("region", { name: "Auditoría de consulta" });
     expect(a).toHaveTextContent("Fecha y hora de la consulta");
     expect(a).toHaveTextContent("22/10/2026 10:00");
-    expect(within(a).getByText("Ejecutado (OK)").closest("[data-tono]")).toHaveAttribute("data-tono", "success");
+    expect(within(a).getByText("Ejecutado").closest("[data-tono]")).toHaveAttribute("data-tono", "ejecutado");
     expect(a).not.toHaveTextContent(/dato original/i);
   });
 
@@ -214,7 +239,7 @@ describe("PaginaDetalleConsulta — HU #14087 AC7: auditoría de consulta (se qu
     expect(p1).toHaveTextContent("Propietario");
     expect(p1).toHaveTextContent("C ****1222");
     expect(p1).toHaveTextContent("22/10/2026 10:00");
-    expect(p1).toHaveTextContent("Ejecutado (OK)");
+    expect(p1).toHaveTextContent("Ejecutado");
     expect(p2).toHaveTextContent("NIT ****4567");
     expect(p2).toHaveTextContent("Sin resultado");
     expect(p3.textContent).not.toMatch(/\*{4}\d/);
@@ -234,8 +259,8 @@ describe("PaginaDetalleConsulta — respuesta de la fuente: solo la consulta y e
   it("SIMIT vehículo: sin semáforo del proveedor; cantidad, recorte y comparendos traducidos", async () => {
     const { pagina } = await abrir("SIMIT_VEHICULO", simitVehiculo([comparendo(1), comparendo(2, { valor: "1250000", estado: "PAGADO" })]));
     const r = await within(pagina).findByRole("region", { name: "Respuesta de la fuente" });
-    const tabla = within(r).getByRole("table", { name: "Respuesta de la fuente" });
-    expect(within(tabla).getAllByRole("rowheader").map((c) => c.textContent)).toEqual(["Cantidad de comparendos", "Comparendos recortados"]);
+    const tabla = within(r).getByRole("group", { name: "Respuesta de la fuente" });
+    expect(terminos(tabla)).toEqual(["Cantidad de comparendos", "Comparendos recortados"]);
     expect(valorDe(tabla, "Cantidad de comparendos")).toBe("2");
     expect(valorDe(tabla, "Comparendos recortados")).toBe("No");
     const comparendos = within(r).getByRole("table", { name: "Comparendos" });
@@ -249,20 +274,20 @@ describe("PaginaDetalleConsulta — respuesta de la fuente: solo la consulta y e
     const lista = Array.from({ length: 100 }, (_, i) => comparendo(i + 1));
     const { pagina } = await pintarDetalle(simitVehiculo(lista, true, 250));
     expect(within(within(pagina).getByRole("table", { name: "Comparendos" })).getAllByRole("row").slice(1)).toHaveLength(100);
-    const tabla = within(pagina).getByRole("table", { name: "Respuesta de la fuente" });
+    const tabla = within(pagina).getByRole("group", { name: "Respuesta de la fuente" });
     expect(valorDe(tabla, "Cantidad de comparendos")).toBe("250");
     expect(valorDe(tabla, "Comparendos recortados")).toBe("Sí");
   });
 
   it("sin comparendos: «Sin registros»", async () => {
     const { pagina } = await pintarDetalle(simitVehiculo([]));
-    expect(valorDe(within(pagina).getByRole("table", { name: "Respuesta de la fuente" }), "Comparendos")).toBe("Sin registros");
+    expect(valorDe(within(pagina).getByRole("group", { name: "Respuesta de la fuente" }), "Comparendos")).toBe("Sin registros");
   });
 
   it("RUNT del vehículo: sus campos traducidos y la tabla de propietarios", async () => {
     const { pagina } = await pintarDetalle(runtVehiculo());
-    const tabla = within(respuesta(pagina)).getByRole("table", { name: "Respuesta de la fuente" });
-    expect(within(tabla).getAllByRole("rowheader").map((c) => c.textContent)).toEqual(["Placa", "VIN", "Servicio", "Clase", "Organismo", "Locatarios"]);
+    const tabla = within(respuesta(pagina)).getByRole("group", { name: "Respuesta de la fuente" });
+    expect(terminos(tabla)).toEqual(["Placa", "VIN", "Servicio", "Clase", "Organismo", "Locatarios"]);
     expect(valorDe(tabla, "VIN")).toBe("9ZZPRUEBA00000001");
     const propietarios = within(respuesta(pagina)).getByRole("table", { name: "Propietarios" });
     expect(within(propietarios).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Tipo de documento", "Tipo de propiedad"]);
@@ -271,7 +296,7 @@ describe("PaginaDetalleConsulta — respuesta de la fuente: solo la consulta y e
 
   it("avalúo: números sin formato, null como «—» y las fuentes de avalúo", async () => {
     const { pagina } = await pintarDetalle(avaluoConValor());
-    const tabla = within(respuesta(pagina)).getByRole("table", { name: "Respuesta de la fuente" });
+    const tabla = within(respuesta(pagina)).getByRole("group", { name: "Respuesta de la fuente" });
     expect(valorDe(tabla, "Sin valor comercial")).toBe("No");
     expect(valorDe(tabla, "Valor sugerido")).toBe("45000000");
     expect(valorDe(tabla, "Fuente principal")).toBe("fasecolda");
@@ -281,14 +306,14 @@ describe("PaginaDetalleConsulta — respuesta de la fuente: solo la consulta y e
 
   it("avalúo sin valor comercial: «Sí» y «—»", async () => {
     const { pagina } = await pintarDetalle(avaluoSinValor());
-    const tabla = within(pagina).getByRole("table", { name: "Respuesta de la fuente" });
+    const tabla = within(pagina).getByRole("group", { name: "Respuesta de la fuente" });
     expect(valorDe(tabla, "Sin valor comercial")).toBe("Sí");
     expect(valorDe(tabla, "Valor sugerido")).toBe("—");
   });
 
   it("impuesto: monto total y vigencias con año, valor y pagada", async () => {
     const { pagina } = await pintarDetalle(impuestoConVigencias());
-    expect(valorDe(within(pagina).getByRole("table", { name: "Respuesta de la fuente" }), "Monto total")).toBe("350000");
+    expect(valorDe(within(pagina).getByRole("group", { name: "Respuesta de la fuente" }), "Monto total")).toBe("350000");
     const vigencias = within(pagina).getByRole("table", { name: "Vigencias" });
     expect(within(vigencias).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Año", "Valor", "Pagada"]);
     expect(within(vigencias).getAllByRole("row").slice(1).map((f) => within(f).getAllByRole("cell").map((c) => c.textContent))).toEqual([
@@ -319,21 +344,21 @@ describe("PaginaDetalleConsulta — respuesta de la fuente: solo la consulta y e
 
   it("impuesto sin vigencias: «Sin registros»", async () => {
     const { pagina } = await pintarDetalle(impuestoSinVigencias());
-    expect(valorDe(within(pagina).getByRole("table", { name: "Respuesta de la fuente" }), "Vigencias")).toBe("Sin registros");
+    expect(valorDe(within(pagina).getByRole("group", { name: "Respuesta de la fuente" }), "Vigencias")).toBe("Sin registros");
   });
 
   it("fuentes de persona: una subsección por persona con su resultado traducido", async () => {
     const { pagina } = await pintarDetalle(runtTresPropietarios());
     const secciones = within(respuesta(pagina)).getAllByRole("region", { name: /^propietario \d/i });
     expect(secciones).toHaveLength(3);
-    const t1 = within(secciones[0]).getByRole("table", { name: "Respuesta de la fuente · Propietario 1" });
+    const t1 = within(secciones[0]).getByRole("group", { name: "Respuesta de la fuente · Propietario 1" });
     expect(valorDe(t1, "Inscrito")).toBe("Sí");
     expect(valorDe(t1, "Estado del conductor")).toBe("ACTIVO");
     expect(within(within(secciones[0]).getByRole("table", { name: "Licencias" })).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Categoría", "Estado", "Vigente hasta"]);
-    const t2 = within(secciones[1]).getByRole("table", { name: "Respuesta de la fuente · Propietario 2" });
+    const t2 = within(secciones[1]).getByRole("group", { name: "Respuesta de la fuente · Propietario 2" });
     expect(valorDe(t2, "Estado del conductor")).toBe("—");
     expect(valorDe(t2, "Licencias")).toBe("Sin registros");
-    const t3 = within(secciones[2]).getByRole("table", { name: "Respuesta de la fuente · Propietario 3" });
+    const t3 = within(secciones[2]).getByRole("group", { name: "Respuesta de la fuente · Propietario 3" });
     expect(valorDe(t3, "Encontrada")).toBe("Sí");
     expect(valorDe(t3, "Estado de la matrícula")).toBe("ACTIVA");
     expect(valorDe(t3, "Última renovación")).toBe("2026");
@@ -387,7 +412,7 @@ describe("PaginaDetalleConsulta — sin resultado no hay campos", () => {
     const { pagina } = await pintarDetalle(runtPropietarioConError());
     expect(within(pagina).getByRole("alert")).toHaveTextContent(/personas no se pudieron consultar/i);
     const [ok, fallida] = within(respuesta(pagina)).getAllByRole("region", { name: /^propietario \d/i });
-    expect(valorDe(within(ok).getByRole("table", { name: /Propietario 1$/ }), "Inscrito")).toBe("Sí");
+    expect(valorDe(within(ok).getByRole("group", { name: /^Respuesta de la fuente · Propietario 1$/ }), "Inscrito")).toBe("Sí");
     expect(within(fallida).queryByRole("table")).not.toBeInTheDocument();
     expect(fallida).toHaveTextContent(/sin respuesta de la fuente/i);
   });
@@ -439,7 +464,7 @@ describe("PaginaDetalleConsulta — respuesta completa de la fuente (respuesta_f
       const { pagina, unmount } = await pintarDetalle(d);
       expect(within(respuesta(pagina)).getByRole("status")).toHaveTextContent(AVISO_RESUMIDO);
       expect(within(pagina).queryByRole("alert")).not.toBeInTheDocument();
-      expect(valorDe(within(respuesta(pagina)).getByRole("table", { name: "Respuesta de la fuente" }), "VIN")).toBe("9ZZPRUEBA00000001");
+      expect(valorDe(within(respuesta(pagina)).getByRole("group", { name: "Respuesta de la fuente" }), "VIN")).toBe("9ZZPRUEBA00000001");
       unmount();
     }
   });
@@ -481,7 +506,7 @@ describe("PaginaDetalleConsulta — HU #13866: impuesto departamental", () => {
     const { api, pagina } = await abrir("IMPUESTO_DEPARTAMENTAL", impuestoConVigencias());
     expect(await screen.findByRole("heading", { level: 1, name: `${NOMBRES.IMPUESTO_DEPARTAMENTAL} · TST001` })).toBeInTheDocument();
     expect(llamadas(api, "GET", `/diagnosticos/${ID}/vehiculos/vehiculo-1/consultas/IMPUESTO_DEPARTAMENTAL`)).toHaveLength(1);
-    expect(valorDe(within(pagina).getByRole("table", { name: "Respuesta de la fuente" }), "Monto total")).toBe("350000");
+    expect(valorDe(within(pagina).getByRole("group", { name: "Respuesta de la fuente" }), "Monto total")).toBe("350000");
   });
 
   it("la «Novedad» por departamento no soportado muestra el motivo, sin error ni reintento", async () => {
@@ -491,13 +516,30 @@ describe("PaginaDetalleConsulta — HU #13866: impuesto departamental", () => {
     expect(within(pagina).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
   });
 });
-const sinIntegrador = (pagina: HTMLElement) => {
-  expect(within(pagina).queryByRole("region", { name: /^Respuesta del proveedor/ })).not.toBeInTheDocument();
-  expect(pagina).not.toHaveTextContent(/verifik|intempo|kyverum|certified by/i);
+/**
+ * D19 = b (2026-11-13): la respuesta cruda del proveedor se muestra íntegra dentro de una TarjetaPlegable «Respuesta del
+ * proveedor», cerrada por defecto, en la celda y en cada persona. La vista curada («Respuesta de la fuente») sigue filtrada.
+ * jsdom no sintetiza el clic de Enter/Espacio sobre un <button>: se verifica que el control es un botón nativo enfocable
+ * (el navegador lo activa con el teclado) y que, enfocado, al activarlo se expande.
+ */
+const crudoCerrado = (boton: HTMLElement) => {
+  expect(boton.tagName).toBe("BUTTON");
+  expect(boton).toHaveAttribute("type", "button");
+  expect(boton).toHaveAttribute("aria-expanded", "false");
+  const panel = document.getElementById(boton.getAttribute("aria-controls") ?? "");
+  expect(panel).not.toBeNull();
+  expect(panel).not.toBeVisible();
+  return panel as HTMLElement;
+};
+const expandirConTeclado = (boton: HTMLElement) => {
+  boton.focus();
+  expect(boton).toHaveFocus();
+  fireEvent.click(boton);
+  expect(boton).toHaveAttribute("aria-expanded", "true");
 };
 
-describe("visualización de respuestas sin integrador", () => {
-  it("muestra las licencias del conductor y no el cuerpo del integrador", async () => {
+describe("respuesta cruda del proveedor en tarjeta plegable (D19)", () => {
+  it("cada persona trae su respuesta cruda plegada; la vista curada sigue sin el cuerpo del integrador", async () => {
     const { pagina } = await pintarDetalle(
       detalle("RUNT_PROPIETARIO", {
         personas: [
@@ -513,40 +555,63 @@ describe("visualización de respuestas sin integrador", () => {
         ],
       } as Partial<Detalle>),
     );
-    sinIntegrador(pagina);
     expect(pagina).toHaveTextContent("9999901222");
     expect(pagina).not.toHaveTextContent("****1222");
     const licencias = within(respuesta(pagina)).getByRole("table", { name: "Licencias" });
     expect(licencias).toHaveTextContent("LIC-FICT-0001");
-    expect(licencias).toHaveTextContent("B1");
     expect(licencias).toHaveTextContent("VENCIDA");
-    expect(licencias).toHaveTextContent("SUSPENDIDA");
     expect(respuesta(pagina)).toHaveTextContent("PERSONA FILTRADA");
-    expect(respuesta(pagina)).not.toHaveTextContent("REPRESENTANTE FICTICIO");
-    expect(respuesta(pagina)).not.toHaveTextContent("CONS-FICT-0001");
+    // El cuerpo del integrador solo aparece dentro de las tarjetas plegables, nunca en la vista curada.
+    const paneles = within(respuesta(pagina))
+      .getAllByRole("button", { name: /^Respuesta del proveedor/ })
+      .map((b) => document.getElementById(b.getAttribute("aria-controls") ?? ""));
+    const crudos = within(respuesta(pagina)).queryAllByText(/certified by|CONS-FICT-0001|REPRESENTANTE FICTICIO/i);
+    expect(crudos.length).toBeGreaterThan(0);
+    for (const texto of crudos) expect(paneles.some((p) => p?.contains(texto))).toBe(true);
+
+    const boton1 = within(respuesta(pagina)).getByRole("button", { name: "Respuesta del proveedor · Propietario 1" });
+    const panel1 = crudoCerrado(boton1);
+    expect(panel1).toHaveTextContent("CONS-FICT-0001");
+    expandirConTeclado(boton1);
+    expect(panel1).toBeVisible();
+    expect(within(panel1).getByRole("table", { name: "Respuesta del proveedor · Propietario 1" })).toBeInTheDocument();
+    expect(panel1).toHaveTextContent(/Certified by PROVEEDOR-FICTICIO/);
+
+    const panel2 = crudoCerrado(within(respuesta(pagina)).getByRole("button", { name: "Respuesta del proveedor · Propietario 2" }));
+    expect(panel2).toHaveTextContent("EMPRESA FICTICIA S.A.S.");
   });
 
-  it("SIMIT muestra el resultado de la consulta y no la firma del integrador", async () => {
+  it("SIMIT vehículo: la celda trae su respuesta cruda plegada, con las claves nuevas del proveedor", async () => {
     const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
     const { pagina } = await pintarDetalle(
       detalle("SIMIT_VEHICULO", { resultado: simit, respuesta_proveedor: { ...simitProveedorVehiculo, claveNuevaProveedor: "se-ve" } } as Partial<Detalle>),
     );
-    sinIntegrador(pagina);
     expect(within(respuesta(pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
-    expect(respuesta(pagina)).not.toHaveTextContent("se-ve");
-    expect(respuesta(pagina)).not.toHaveTextContent("EJEMPLO-VEHICULO");
+    const boton = screen.getByRole("button", { name: "Respuesta del proveedor" });
+    const panel = crudoCerrado(boton);
+    expandirConTeclado(boton);
+    expect(panel).toHaveTextContent("se-ve");
+    expect(panel).toHaveTextContent(/Certified by Verifik/);
   });
 
-  it.each(["SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"] as const)("%s no pinta el cuerpo del integrador", async (fuente) => {
+  it.each(["SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"] as const)("%s: la persona trae su respuesta cruda plegada", async (fuente) => {
     const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
     const rol = fuente === "SIMIT_PROPIETARIO" ? "PROPIETARIO" : "LOCATARIO";
+    const nombre = fuente === "SIMIT_PROPIETARIO" ? "Propietario 1" : "Locatario 1";
     const { pagina } = await pintarDetalle(
       detalle(fuente, {
         personas: [{ ...persona(1, { rol, consulta: "SIMIT", resultado: simit, documento_enmascarado: "****0016" }), respuesta_proveedor: simitProveedorPersona }],
       } as Partial<Detalle>),
     );
-    sinIntegrador(pagina);
     expect(within(respuesta(pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
-    expect(respuesta(pagina)).not.toHaveTextContent("9999900016");
+    const boton = within(respuesta(pagina)).getByRole("button", { name: `Respuesta del proveedor · ${nombre}` });
+    const panel = crudoCerrado(boton);
+    expandirConTeclado(boton);
+    expect(panel).toHaveTextContent("9999900016");
+  });
+
+  it("sin respuesta del proveedor no aparece la tarjeta", async () => {
+    await pintarDetalle(simitVehiculo());
+    expect(screen.queryByRole("button", { name: /^Respuesta del proveedor/ })).not.toBeInTheDocument();
   });
 });

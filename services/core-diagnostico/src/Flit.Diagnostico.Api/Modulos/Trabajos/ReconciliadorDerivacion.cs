@@ -32,8 +32,10 @@ public sealed record VueltaReconciliadorDerivacion(int Revisados, int Creados, i
 /// (<c>ObtenerTramitesPorReferencia</c>); sin respuesta, no decide nada en esta vuelta.</item>
 /// <item>Si Trámites tiene el borrador: CREADO (<see cref="CierreItemDerivacion"/>). Si no y no se re-publicó: re-publica el mismo
 /// evento (nuevo <c>eventId</c>) con <c>enviado_en</c> = ahora. Si ya se re-publicó: FALLIDO TRAMITES_NO_DISPONIBLE (reintentable a
-/// mano). Al final libera el crédito de la compañía.</item>
+/// mano). Al final libera el crédito de la compañía. Los ítems se recorren por lote y por id (orden de bloqueo determinista).</item>
 /// </list>
+/// Un conflicto con otro escritor (el <c>xmin</c> de un ítem o la misma notificación en <c>ux_notificaciones_idempotencia</c>)
+/// revierte la transacción de esa empresa y la deja para la siguiente vuelta.
 /// Solo se registra con el consumidor. Una vuelta que falla (base caída) se reintenta en la siguiente. Logs: ids y conteos.
 /// </summary>
 internal sealed partial class ReconciliadorDerivacion(
@@ -64,6 +66,12 @@ internal sealed partial class ReconciliadorDerivacion(
             catch (DbUpdateConcurrencyException)
             {
                 // Otro (el consumidor) tocó un ítem mientras tanto: queda para la siguiente vuelta.
+                EmpresaPospuesta(log, grupo.Key);
+            }
+            catch (DbUpdateException ex) when (EsNotificacionDuplicada(ex))
+            {
+                // Code review menor 7: otro proceso confirmó la misma DERIVACION_TERMINADA entre la comprobación del escritor y el
+                // INSERT. La transacción se revirtió entera; la siguiente vuelta relee los ítems y el escritor ya ve la notificación.
                 EmpresaPospuesta(log, grupo.Key);
             }
         }
@@ -98,7 +106,13 @@ internal sealed partial class ReconciliadorDerivacion(
             await using var transaccion = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             int creados = 0, republicados = 0, fallidos = 0;
             var ahora = reloj.GetUtcNow();
-            var items = await db.Set<ItemDerivacion>().Where(i => ids.Contains(i.Id)).ToListAsync(ct).ConfigureAwait(false);
+            // Code review menor 8: orden de bloqueo determinista (cabecera del lote y luego fila, ítem por ítem) por lote y por id,
+            // sea cual sea el orden en que la base devuelva las filas.
+            var items = await db.Set<ItemDerivacion>().Where(i => ids.Contains(i.Id))
+                .Join(db.Set<OperacionDerivacion>(), i => i.OperacionId, o => o.Id, (i, o) => new { Item = i, o.DiagnosticoId })
+                .OrderBy(x => x.DiagnosticoId).ThenBy(x => x.Item.Id)
+                .Select(x => x.Item)
+                .ToListAsync(ct).ConfigureAwait(false);
             foreach (var item in items.Where(i => i.Estado == EstadoItemDerivacion.Enviado && i.EnviadoEn < limite && (i.DisponibleDesde is null || i.DisponibleDesde <= ahora)))
             {
                 if (existentes.TryGetValue(item.VehiculoId, out var existente))
@@ -128,11 +142,26 @@ internal sealed partial class ReconciliadorDerivacion(
         }).ConfigureAwait(false);
     }
 
+    private const string IndiceIdempotenciaNotificaciones = "ux_notificaciones_idempotencia";
+
+    /// <summary>
+    /// Choque en <c>ux_notificaciones_idempotencia</c> (23505): otro proceso escribió la misma notificación. Es un reintento, no un
+    /// fallo de la vuelta.
+    /// </summary>
+    internal static bool EsNotificacionDuplicada(DbUpdateException ex)
+    {
+        ArgumentNullException.ThrowIfNull(ex);
+        return ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation } pg
+            && (pg.ConstraintName == IndiceIdempotenciaNotificaciones
+                || pg.MessageText.Contains(IndiceIdempotenciaNotificaciones, StringComparison.Ordinal));
+    }
+
     private static async Task CerrarAsync(DiagnosticoDb db, ItemDerivacion item, ResultadoBorrador resultado, DateTimeOffset ahora, CancellationToken ct)
     {
         var operacion = await db.Set<OperacionDerivacion>().SingleAsync(o => o.Id == item.OperacionId, ct).ConfigureAwait(false);
         var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == item.VehiculoId, ct).ConfigureAwait(false);
-        CierreItemDerivacion.Cerrar(operacion, item, vehiculo, resultado, ahora);
+        await CierreItemDerivacion.CerrarAsync(db, operacion, item, vehiculo, resultado, ahora, ct).ConfigureAwait(false);
+        await Notificaciones.EscritorNotificaciones.SiTerminoDerivacionMasivaAsync(db, operacion, ahora, ct).ConfigureAwait(false);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

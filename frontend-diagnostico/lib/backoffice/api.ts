@@ -35,6 +35,12 @@ export interface DiagnosticoBackoffice {
   creado_en: string;
   vehiculos: number;
   celdas_en_error: number;
+  /** HU #14563 (B3): modo del lote. */
+  modo?: "SIMPLE" | "CON_ANALISIS";
+  /** HU #14563 (B3): null en SIMPLE; nombre del catálogo o el código. */
+  tipo_tramite?: { codigo: string; nombre: string } | null;
+  /** HU #14563 (B3). */
+  es_express?: boolean;
 }
 
 export interface ListaDiagnosticosBackoffice {
@@ -134,9 +140,15 @@ export async function listarLotesBackoffice(empresa: string, filtros: FiltrosLot
 }
 
 /** GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde=: misma semántica incremental que la grilla de la compañía. */
-export async function obtenerGrillaBackoffice(id: string, empresa: string, desde: number, signal?: AbortSignal): Promise<GrillaBackoffice> {
+export async function obtenerGrillaBackoffice(
+  id: string,
+  empresa: string,
+  desde: number,
+  signal?: AbortSignal,
+  cache?: RequestCache,
+): Promise<GrillaBackoffice> {
   const q = consulta(empresa, { desde });
-  return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal });
+  return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal, cache });
 }
 
 /** Detalle de una celda del backoffice con su origen (solo el backoffice lo muestra, Q5). */
@@ -154,7 +166,8 @@ export function rutaDetalleBackoffice(id: string, vehiculoId: string, fuente: Fu
  */
 export function cargadorDetalleBackoffice(empresa: string): CargadorDetalle {
   return async (loteId, vehiculoId, fuente, signal): Promise<DetalleCeldaBackoffice> => {
-    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal);
+    // HU #14562 (seguridad M2, D19): la lectura del detalle no se guarda en la caché del navegador.
+    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal, "no-store");
     const v = grilla.vehiculos.find((x) => x.id === vehiculoId);
     const c = v?.celdas.find((x) => x.fuente === fuente);
     if (!v || !c) throw new ApiError(404, "No se encontró la celda.", "NO_ENCONTRADO");
@@ -263,4 +276,43 @@ export function aplicarLlenado(grilla: GrillaBackoffice, respuesta: RespuestaLle
     vehiculos,
     avance: { ...grilla.avance, terminados: vehiculos.filter((v) => v.terminado).length },
   };
+}
+
+/**
+ * Versión del dictamen en la auditoría del backoffice (HU #14562 · AC47, B7, D6/D7). Tipada contra diseno.md §B7 y
+ * ADR-0086 mientras el OpenAPI no publica `…/dictamen/versiones`; lo que puede no llegar va opcional o nulo.
+ */
+export interface AlertamientoVersion {
+  codigo: string;
+  texto: string;
+  efecto: string;
+  fuente: string;
+  /** Lo que hizo el ajuste con este alertamiento; null en los heredados o automáticos. */
+  ajuste?: "AGREGADO" | "EDITADO" | null;
+}
+
+export interface VersionDictamen {
+  version: number;
+  veredicto: "VIABLE" | "BLOQUEADO";
+  origen: "AUTOMATICO" | "AJUSTE_FLIT";
+  /** Quién ajustó (el nombre lo resuelve Identidad); null en las automáticas o si Identidad no respondió. */
+  usuario?: { id: string; nombre: string | null } | null;
+  motivo?: string | null;
+  en: string;
+  /** D7: el ajuste quedó superado por un recálculo automático posterior. */
+  superado_por_recalculo?: boolean;
+  alertamientos: AlertamientoVersion[];
+  /** Calculados contra la versión anterior. */
+  eliminados?: AlertamientoVersion[];
+}
+
+/** GET /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen/versiones?empresa= (solo backoffice). Acepta lista o `{ versiones }`. */
+export async function obtenerVersionesDictamen(id: string, vehiculoId: string, empresa: string, signal?: AbortSignal): Promise<VersionDictamen[]> {
+  const q = consulta(empresa, {});
+  const r = await apiFetch<VersionDictamen[] | { versiones: VersionDictamen[] }>(
+    `${BASE}/diagnosticos/${seg(id)}/vehiculos/${seg(vehiculoId)}/dictamen/versiones?${q}`,
+    { signal },
+  );
+  const lista = Array.isArray(r) ? r : (r?.versiones ?? []);
+  return [...lista].sort((a, b) => b.version - a.version);
 }

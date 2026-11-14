@@ -12,6 +12,24 @@ import { expect, test, type Page } from "@playwright/test";
  *
  * E2E_USUARIO es un usuario de la compañía con diagnosticos.crear y diagnosticos.ver. Las credenciales son de usuarios de
  * prueba del ambiente DEV y entran solo por variables de entorno. Las placas son ficticias (TST…).
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - textbox «Placa o VIN»
+ *   - button «Diagnosticar en línea»
+ *   - region «Vehículos»
+ *   - region «Parámetros»
+ *   - textbox «Nombre del diagnóstico»
+ *   - button «Validar archivo»
+ *   - radio «Express»
+ *   - radio «Masivo»
+ *   - region «Resumen de validación»
+ *   - radiogroup «Tipo de diagnóstico»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
+ *   - etiqueta «/archivo de vehículos/i»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_EXPRESS ?? "TST101";
@@ -20,7 +38,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
@@ -38,10 +56,10 @@ test.describe("pantalla única de creación", () => {
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
   });
 
-  test("AC1/AC6: desde el inicio, Diagnosticar abre Express con la placa; en 1280 px dos columnas con Parámetros sticky", async ({ page }) => {
+  test("AC1/AC6: desde el inicio, Diagnosticar en línea abre Express con la placa; en 1280 px dos columnas con Parámetros sticky", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
-    await page.getByRole("button", { name: "Diagnosticar" }).click();
+    await page.getByRole("button", { name: "Diagnosticar en línea" }).click();
     await page.waitForURL((url) => url.pathname === "/diagnosticos/nuevo" && url.searchParams.get("modo") === "express");
 
     const vehiculos = page.getByRole("region", { name: "Vehículos" });

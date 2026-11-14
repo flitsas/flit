@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { INTERVALO_SONDEO_MS, useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
+import { FALLOS_ANTES_DE_DETENER, INTERVALO_REPOSO_MS, INTERVALO_SONDEO_MS, useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
 import { ID, V1, celda, desdesPedidos, grilla, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import type { Grilla } from "@/lib/tablero/api";
 
@@ -124,16 +124,19 @@ describe("useGrillaIncremental — HU #13748 AC2", () => {
     expect(result.current.grilla?.vehiculos).toHaveLength(1);
   });
 
-  it("error en un sondeo: conserva la grilla, expone errorSondeo y se detiene", async () => {
+  it("error en un sondeo: conserva la grilla y, tras fallos repetidos, expone errorSondeo y se detiene (HU #14562 AC26)", async () => {
     let n = 0;
     const api = simularApi({ [RUTA]: () => (n++ === 0 ? Response.json(grilla()) : Response.json({ error: "x" }, { status: 503 })) });
     const { result } = renderHook(() => useGrillaIncremental(ID));
     await avanzar(0);
     await avanzar(INTERVALO_SONDEO_MS);
+    // Un fallo aislado no detiene: se reintenta al intervalo normal.
+    expect(result.current.errorSondeo).toBeNull();
+    await avanzar(INTERVALO_SONDEO_MS * (FALLOS_ANTES_DE_DETENER - 1));
     expect(result.current.grilla?.vehiculos).toHaveLength(3);
     expect(result.current.errorSondeo).toBeTruthy();
     await avanzar(INTERVALO_SONDEO_MS * 3);
-    expect(desdesPedidos(api)).toEqual([0, 12]);
+    expect(desdesPedidos(api)).toEqual([0, ...Array(FALLOS_ANTES_DE_DETENER).fill(12)]);
   });
 
   it("deshabilitado (sin permiso de ver) no consulta", async () => {
@@ -150,5 +153,71 @@ describe("useGrillaIncremental — HU #13748 AC2", () => {
     unmount();
     await avanzar(INTERVALO_SONDEO_MS * 3);
     expect(desdesPedidos(api)).toEqual([0]);
+  });
+});
+
+// HU #14562 AC26 y AC29 (H3): reposo de 30 s sin pendientes, pausa con la pestaña oculta y hora de la última lectura buena.
+describe("useGrillaIncremental — HU #14562 sondeo de reposo y datos desactualizados", () => {
+  let visibilidad: DocumentVisibilityState = "visible";
+  beforeEach(() => {
+    visibilidad = "visible";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibilidad);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const cambiarVisibilidad = (v: DocumentVisibilityState) =>
+    act(async () => {
+      visibilidad = v;
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+  it("AC29: un lote sin pendientes sondea en reposo cada 30 s con ?desde= (nunca desde=0) y sin marcar «sondeando»", async () => {
+    expect(INTERVALO_REPOSO_MS).toBe(30000);
+    const api = respuestas(grilla({ vehiculos: [V1], version: 20 }), grilla({ version: 21, desde: 20, vehiculos: [] }));
+    const { result } = renderHook(() => useGrillaIncremental(ID));
+    await avanzar(0);
+    expect(result.current.sondeando).toBe(false);
+    await avanzar(INTERVALO_REPOSO_MS - 1);
+    expect(desdesPedidos(api)).toEqual([0]);
+    await avanzar(1);
+    expect(desdesPedidos(api)).toEqual([0, 20]);
+    await avanzar(INTERVALO_REPOSO_MS);
+    expect(desdesPedidos(api)).toEqual([0, 20, 21]);
+  });
+
+  it("AC29: con la pestaña oculta el sondeo se pausa y al volver a estar visible se reanuda de inmediato", async () => {
+    const api = respuestas(grilla({ vehiculos: [V1], version: 20 }));
+    renderHook(() => useGrillaIncremental(ID));
+    await avanzar(0);
+    await cambiarVisibilidad("hidden");
+    await avanzar(INTERVALO_REPOSO_MS * 3);
+    expect(desdesPedidos(api)).toEqual([0]);
+    await cambiarVisibilidad("visible");
+    expect(desdesPedidos(api)).toEqual([0, 20]);
+  });
+
+  it("AC26: expone la hora de la última lectura buena; tras detenerse, refrescar() la renueva y reanuda", async () => {
+    vi.setSystemTime(new Date("2026-11-13T14:05:00Z"));
+    let falla = false;
+    const api = simularApi({ [RUTA]: () => (falla ? Response.json({ error: "x" }, { status: 503 }) : Response.json(grilla())) });
+    const { result } = renderHook(() => useGrillaIncremental(ID));
+    await avanzar(0);
+    const primera = result.current.actualizadoEn;
+    expect(primera?.toISOString()).toBe("2026-11-13T14:05:00.000Z");
+    falla = true;
+    await avanzar(INTERVALO_SONDEO_MS * FALLOS_ANTES_DE_DETENER);
+    expect(result.current.errorSondeo).toBeTruthy();
+    expect(result.current.actualizadoEn).toEqual(primera);
+
+    falla = false;
+    act(() => result.current.refrescar());
+    await avanzar(0);
+    expect(result.current.errorSondeo).toBeNull();
+    expect(result.current.actualizadoEn!.getTime()).toBeGreaterThan(primera!.getTime());
+    expect(result.current.sondeando).toBe(true);
+    const antes = desdesPedidos(api).length;
+    await avanzar(INTERVALO_SONDEO_MS);
+    expect(desdesPedidos(api).length).toBe(antes + 1);
   });
 });

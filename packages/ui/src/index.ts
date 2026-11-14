@@ -28,3 +28,20 @@ export * from "./statusTones";
 export * from "./table-styles";
 export * from "./TarjetaMetrica";
 export * from "./UiStateBoundary";
+// HU #14562 (UI-1/UI-2): componentes genéricos del UI Kit 2026, con los tokens que ya existen.
+export * from "./EstadoVacio";
+export * from "./PanelLateral";
+export * from "./BarraSeleccion";
+export * from "./PaginaExcepcion";
+export * from "./PantallaResultado";
+export * from "./BarraProgreso";
+export * from "./ListaDefinicion";
+export * from "./TarjetaPlegable";
+export * from "./EtiquetaEnProceso";
+export * from "./TablaEditable";
+export * from "./SelectorSegmentado";
+export * from "./ZonaArrastre";
+export * from "./NotificacionPersistente";
+// HU #14562 · M2 y M11 (auditoría de la oleada): trampa de foco de capas y regiones vivas diferidas.
+export * from "./useTrampaFoco";
+export * from "./useRegionViva";

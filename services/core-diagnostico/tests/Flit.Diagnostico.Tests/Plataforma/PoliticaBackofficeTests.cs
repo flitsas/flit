@@ -10,9 +10,10 @@ namespace Flit.Diagnostico.Tests.Plataforma;
 
 /// <summary>
 /// HU #13728 (F00.1-H5), escenarios 1 y 2 — fuera del SuperAdmin, <c>PoliticaBackoffice</c> exige a la vez el permiso
-/// <c>diagnostico.backoffice.ver</c> y el claim <c>tenant_type=FLIT</c> (D-16). Con el rol de backoffice en una compañía que
+/// <c>diagnostico.backoffice.ver</c> y el claim <c>tenant_type=FLIT</c> (D-16). Con el permiso de backoffice en una compañía que
 /// no es FLIT, o en la compañía FLIT sin el permiso, toda ruta <c>/backoffice/*</c> responde 403. Desde los ajustes del
-/// 2026-11-11 (punto 1) el SuperAdmin de cualquier compañía entra a la configuración.
+/// 2026-11-11 (punto 1) el SuperAdmin de cualquier compañía entra a la configuración, y desde la decisión D23 (2026-11-13)
+/// también a la operación FLIT; el rol <c>backoffice_diagnostico</c> ya no existe (aquí solo es un código de rol del token).
 /// </summary>
 /// <example>
 /// <code>

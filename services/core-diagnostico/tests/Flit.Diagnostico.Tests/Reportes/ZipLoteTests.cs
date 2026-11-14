@@ -541,7 +541,7 @@ public sealed class ZipLoteTests
     private static string Runt(string placa) => PayloadRunt.Replace("TST501", placa, StringComparison.Ordinal);
 
     /// <summary>Lote EN_PROCESO con los vehículos dados terminados (RUNT y SIMIT_VEHICULO COMPLETADO).</summary>
-    private static async Task<Tablero.LoteSembrado> LoteTerminadoAsync(
+    internal static async Task<Tablero.LoteSembrado> LoteTerminadoAsync(
         EmpresaDePrueba empresa, string placa, CancellationToken ct, string? otra = null, string nombre = "Lote del ZIP", Guid? creador = null)
     {
         string[] placas = otra is null ? [placa] : [placa, otra];
@@ -591,7 +591,7 @@ public sealed class ZipLoteTests
             .OrderBy(e => e.CreadoEn).ThenBy(e => e.Id).ToListAsync(ct);
     }
 
-    private static async Task<Evidencia> EvidenciaAsync(EmpresaDePrueba empresa, Guid id, CancellationToken ct)
+    internal static async Task<Evidencia> EvidenciaAsync(EmpresaDePrueba empresa, Guid id, CancellationToken ct)
     {
         await using var db = empresa.Db();
         return await db.Set<Evidencia>().AsNoTracking().SingleAsync(e => e.Id == id, ct);

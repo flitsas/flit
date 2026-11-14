@@ -130,6 +130,38 @@ public sealed class ContenidoReporteTests
         Texto(aMano).Should().NotContainAny(["MANUAL", "\"API\"", manual.UsuarioManualId!.Value.ToString()]);
     }
 
+    // HU #14563 B6 AC18 (CF-23) + hallazgo M1 (R-20, opción a) — avalúo llenado a mano con referencia Fasecolda: la referencia
+    // revela el llenado manual, así que no sale en el contenido del reporte de la compañía ni en su PDF; el valor sí.
+    [Fact]
+    public async Task B6_AC18_Referencia_Fasecolda_no_sale_en_el_contenido_ni_en_el_PDF()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.Avaluo], vehiculos:
+            [new("TST921", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST921", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST921", Fuente.Avaluo),
+            """{"sin_valor_comercial":false,"valor_sugerido":52000000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":52000000,"fecha":"2026-11-13"}],"referencia":{"codigo_fasecolda":"01601234","marca":"MARCA PRUEBA","linea":"LINEA PRUEBA","modelo":2020}}""",
+            ct, manual: true);
+
+        await using var db = empresa.Db();
+        var contenido = await Lector(api, db, new UsuariosIdentidadDePrueba())
+            .VehiculoAsync(Usuario(empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
+
+        var avaluo = contenido.Secciones.Single(s => s.Fuente == "AVALUO").Resultado;
+        var json = JsonSerializer.Serialize(avaluo, avaluo!.GetType());
+        json.Should().NotContain("referencia").And.NotContain("codigo_fasecolda").And.NotContain("01601234");
+        json.Should().Contain("\"valor_sugerido\":52000000");
+
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, Dato));
+        PdfDePrueba.Tiene(texto, "Código Fasecolda").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "01601234").Should().BeFalse();
+        PdfDePrueba.Tiene(texto, "MARCA PRUEBA").Should().BeFalse();
+        PdfDePrueba.Tiene(texto, "LINEA PRUEBA").Should().BeFalse();
+    }
+
     // AC3 (F07-C10) — RUNT_LOCATARIO con un locatario declarado: tipo de documento, «****» y los cuatro últimos, rótulo de
     // declarado y sin nombre; RUNT_PROPIETARIO en ERROR por una persona: esa persona y la sección «consulta no disponible», sin
     // TIMEOUT. Nada del documento completo ni del id interno de la persona en el contenido; la máscara entra en la huella.

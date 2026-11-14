@@ -90,6 +90,8 @@ internal static partial class RotulosDiagnostico
         ["INFRACCION_RUNT"] = "Infracciones registradas en el RUNT",
         ["IMPUESTO"] = "Impuesto vehicular pendiente",
         ["FUENTE_PENDIENTE"] = PrefijoFuentePendiente,
+        // Alertamiento redactado por soporte en un ajuste FLIT (HU #14563 B7); no es una regla del catálogo.
+        ["AJUSTE_FLIT"] = "Ajuste FLIT",
     };
 
     /// <summary>Nombre de cada fuente de consulta (pantalla, encabezados del Excel, hoja «Consultas»).</summary>

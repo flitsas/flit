@@ -35,11 +35,11 @@ public sealed class DerivacionSinBaseTests
         await using var api = await ApiDePrueba.SinBaseAsync(configurar: Encendida());
         var ct = TestContext.Current.CancellationToken;
         var empresa = Guid.NewGuid();
-        var backoffice = Permisos.RolesPorDefecto.Single(r => r.Codigo == "backoffice_diagnostico").Permisos;
+        var backoffice = OperadorBackofficeDePrueba.Slugs;
 
         (await api.Cliente(api.Token(empresa: empresa, permisos: [Permisos.DiagnosticosVer, Permisos.DiagnosticosCrear])).PostAsync(Ruta, null, ct))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await api.Cliente(api.Token(empresa: empresa, permisos: backoffice, roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT")).PostAsync(Ruta, null, ct))
+        (await api.Cliente(api.Token(empresa: empresa, permisos: backoffice, roles: ["admin_diagnostico"], tipoEmpresa: "FLIT")).PostAsync(Ruta, null, ct))
             .StatusCode.Should().Be(HttpStatusCode.Forbidden, "el rol de backoffice no tiene diagnostico.derivacion.crear (R-6)");
     }
 

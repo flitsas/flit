@@ -3,11 +3,14 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { FOCO_CLS } from "./estilos";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
 
 export interface Pestana {
   id: string;
   etiqueta: string;
   contenido: ReactNode;
+  /** HU #14562 · F-07: glifo decorativo de la pestaña (maqueta del UI Kit 2026). Opcional. */
+  icono?: NombreIcono;
 }
 
 /**
@@ -55,8 +58,9 @@ export function ConfiguracionTabs({ etiqueta, pestanas }: { etiqueta: string; pe
               tabIndex={activo ? 0 : -1}
               onClick={() => setActiva(i)}
               onKeyDown={(e) => alPulsar(e, i)}
-              className={pestanaClass(activo, FOCO_CLS)}
+              className={`${pestanaClass(activo, FOCO_CLS)} inline-flex items-center gap-2`}
             >
+              {p.icono && <Icono nombre={p.icono} className="h-4 w-4 shrink-0" />}
               {p.etiqueta}
             </button>
           );
