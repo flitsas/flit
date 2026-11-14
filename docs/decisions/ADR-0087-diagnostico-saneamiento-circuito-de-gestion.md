@@ -15,8 +15,9 @@
 **Diseño detallado**: `docs/diagnosticos/plan-saneamiento-oleada-unica.md` (§3 reglas, §4 modelo, §5 permisos, §6 contrato, §8 estructura). Es el contrato técnico; este ADR registra solo las decisiones que sientan precedente.
 **Registro de cambios**:
 - 2026-11-14: versión inicial. Propuesto.
-- 2026-11-14: sincronizado con el DDL final (`.claude/state/saneamiento/schema.md`) y el brief de Fase 0 (C1–C21): renglón con `Remove` físico y FK `RESTRICT` (no `CASCADE`), excepciones a ADR-0072 reordenadas (A11 de la bandeja, `renglon_id` sin FK, `Remove` del renglón, evidencias huérfanas) y filas añadidas a la tabla de aplicabilidad de ADR-0072; `ReferenciaId` de las notificaciones = id del evento del historial (C18); modo `CON_ANALISIS` como en el contrato. Sigue en Propuesto.
+- 2026-11-14: sincronizado con el DDL final (`.claude/state/saneamiento/schema.md`) y el brief de Fase 0 (C1–C21): FK `RESTRICT` (no `CASCADE`), excepciones a ADR-0072 reordenadas (A11 de la bandeja, `renglon_id` sin FK, quitar un renglón, evidencias huérfanas; la entrada siguiente cambia quitar un renglón a borrado lógico) y filas añadidas a la tabla de aplicabilidad de ADR-0072; `ReferenciaId` de las notificaciones = id del evento del historial (C18); modo `CON_ANALISIS` como en el contrato. Sigue en Propuesto.
 - 2026-11-14: se incorporan los requisitos de security-previa: renglón con borrado lógico (SP-2), excepción de «tomar varios» (SP-1), clasificación y retención (SP-14, escalada al LT) y riesgos aceptados de la evidencia (SP-19). El usuario decide que el SuperAdmin sí marca (SP-8) y que los textos libres no se filtran por dígitos (SP-13). Sigue en Propuesto.
+- 2026-11-14: correcciones de security-fase3. SF-5: tipo `PDF` en el almacén, firma `%PDF-`/`%%EOF` y el historial del borrado lógico. SF-1: el contexto fijado a la empresa queda como excepción acotada. Sigue en Propuesto.
 
 ## Decisiones de producto que este ADR asume
 
@@ -110,7 +111,7 @@ stateDiagram-v2
 
 La concurrencia de escritura usa `version` = `xmin` del saneamiento o del renglón, con el mismo mecanismo del ajuste del dictamen (`409 VERSION_DESACTUALIZADA`).
 
-**D-6 (evidencia en PDF).** Un PDF opcional por renglón, 10 MB como máximo (config `Diagnostico:Saneamiento:EvidenciaMaximoBytes`). Se valida `Content-Type` **y** la firma `%PDF` (reutilizando `FirmaPdf`); no se abre ni se analiza en el servidor; se sirve como adjunto con nombre `evidencia-{placa}-{fuente}.pdf`, nunca el original. Se guarda con `IFabricaAlmacen.Para(db).GuardarAsync(empresaId, "saneamiento-evidencia", …)`; la respuesta nunca expone la referencia del almacén ni el sha.
+**D-6 (evidencia en PDF).** Un PDF opcional por renglón, 10 MB como máximo (config `Diagnostico:Saneamiento:EvidenciaMaximoBytes`). Se valida `Content-Type` **y** la firma: `%PDF-` en el byte 0 y `%%EOF` al final (`Modulos/Comun/FirmasArchivo.cs`); no se abre ni se analiza en el servidor; se sirve como adjunto con nombre `evidencia-{placa}-{fuente}.pdf`, nunca el original. Se guarda con `IFabricaAlmacen.Para(db).GuardarAsync(empresaId, "PDF", …)` (el tipo es `PDF` porque `ck_archivo_local_tipo` solo admite PDF, XLSX y ZIP; D-84 de la ejecución); la respuesta nunca expone la referencia del almacén ni el sha.
 
 **D-7 (permisos y capacidades).** Dos permisos nuevos en el manifiesto: `diagnostico.saneamiento.solicitar` (por defecto a `usuario_diagnostico` y `admin_diagnostico`) y `diagnostico.saneamiento.gestionar` (ningún rol por defecto; el SuperAdmin pasa siempre y una compañía FLIT lo recibe si el hub se lo asigna). Marcar, desmarcar y el masivo llevan además el filtro `SinBackoffice`: el backoffice no marca. El SuperAdmin, sea de la compañía que sea, también pasa `saneamiento.solicitar` y marca o desmarca en la empresa de su sesión, igual que con el resto de los permisos de Diagnóstico (decisión del usuario E3, que reemplaza la propuesta restrictiva SP-8 de la revisión de seguridad). Capacidades de sesión `sanear` y `gestionarSaneamiento`, opcionales en el tipo del front.
 
@@ -149,8 +150,8 @@ sequenceDiagram
     ES->>DB: UPDATE EN_GESTION + INSERT renglones + historial + columna + versión de fila + notificación
     F->>FE: Sube el PDF de un renglón
     FE->>API: PUT …/renglones/{rid}/evidencia (multipart)
-    API->>API: Tamaño ≤ 10 MB, Content-Type y firma %PDF
-    API->>AL: GuardarAsync(empresa, "saneamiento-evidencia", …)
+    API->>API: Tamaño ≤ 10 MB, Content-Type, firma %PDF- y %%EOF
+    API->>AL: GuardarAsync(empresa, "PDF", …)
     API->>ES: Registrar evidencia
     ES->>DB: UPDATE renglón + historial
     F->>FE: Cerrar como saneado
@@ -256,6 +257,7 @@ Datos personales: `solicitado_por`, `tomado_por`, `cerrado_por`, `anulado_por`, 
 - **Riesgos aceptados de la evidencia (SP-19).** Responsable: el Líder Técnico al aceptar este ADR.
   - Sin antivirus: FLIT sube comprobantes de pago de terceros y el cliente los descarga. Se mitiga con la firma `%PDF-`/`%%EOF`, con `nosniff`, `CSP sandbox` y `Content-Disposition: attachment`.
   - Huérfanos por reemplazo: se acotan con un tope de 20 reemplazos por renglón (`409 DEMASIADOS_REEMPLAZOS`) y un log estructurado `EvidenciaReemplazada {SaneamientoId, RenglonId, Tamano}`, sin el nombre del archivo.
+- **Contexto fijado a la empresa en una petición HTTP (security-fase3 SF-1, D-81 de la ejecución).** La deuda del backoffice y el almacén de la evidencia se leen y se guardan en un scope fijado a la empresa explícita (`AmbitoDeLaEmpresa.Abrir` sobre `EmpresaDelTrabajo.Fijar`, el mismo mecanismo que usa el trabajador del ZIP). Ese scope se abre solo después de validar la empresa y el saneamiento, nunca escribe saneamientos y solo lo pueden llamar `EvidenciaSaneamiento` y la deuda del backoffice. Una prueba de arquitectura vigila esa lista.
 - **Contenido de la evidencia.** Nunca se registra en logs ni se abre en el servidor. El nombre del archivo lo genera el servidor; el nombre original solo se muestra en la UI.
 
 ### Lo que se pierde
@@ -309,7 +311,7 @@ Datos personales: `solicitado_por`, `tomado_por`, `cerrado_por`, `anulado_por`, 
   - Una fila de auditoría por empresa en la bandeja.
 - **Security Agent**:
   - Grupo A: operación FLIT + permiso, consulta solo en `Modulos/Backoffice`, auditoría por empresa, fila sin PII.
-  - Subida: firma `%PDF`, tipo, tope, nombre saneado, descarga como adjunto, contenido sin procesar.
+  - Subida: firma `%PDF-` + `%%EOF`, tipo, tope, nombre saneado, descarga como adjunto, contenido sin procesar.
   - Exportaciones (Ley 1581): los mismos datos que ya ve el usuario, bajo `diagnostico.reportes.descargar` (S18).
   - `datos` de las notificaciones nuevas cumple `ck_notificaciones_datos`.
 - **Infra Agent**: sin servicios ni colas nuevas. Solo la variable opcional `Diagnostico:Saneamiento:EvidenciaMaximoBytes` y el espacio del almacén, que crece con las evidencias huérfanas.
