@@ -109,6 +109,18 @@ public sealed class OpenApiDiagnosticoContratoTests
         Bloque("Capacidades:", sangria: 4).Should().Contain("sanear:").And.Contain("gestionarSaneamiento:");
     }
 
+    // HU #14576 H-9 (AC51, aditivo) — la campana declara los cuatro tipos del saneamiento y `datos` (solo contadores y códigos),
+    // sin quitar los tipos v1.
+    [Fact]
+    public void HU14576_H9_NotificacionCampana_con_tipos_del_saneamiento_y_datos()
+    {
+        var campana = Bloque("NotificacionCampana:", sangria: 4);
+        campana.Should().Contain("enum: [ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO, SANEAMIENTO_TOMADO, SANEAMIENTO_CERRADO, SANEAMIENTO_REABIERTO, SANEAMIENTO_ANULADO]");
+        var datos = campana[campana.IndexOf("        datos:", StringComparison.Ordinal)..];
+        datos.Should().Contain("type: object").And.Contain("nullable: true").And.Contain("additionalProperties:")
+            .And.Contain("solo contadores y códigos, sin PII");
+    }
+
     /// <summary>Las rutas nuevas que reciben JSON y llevan el tope de 64 KiB (CR-11); la subida de la evidencia tiene el suyo.</summary>
     private static readonly string[] OperacionesConCuerpoAcotado =
     [
