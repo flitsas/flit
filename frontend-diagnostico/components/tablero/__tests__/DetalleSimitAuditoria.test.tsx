@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { VistaDetalleCelda } from "@/components/tablero/DetalleCelda";
 import type { AuditoriaConsulta, DetalleCelda, ResultadoSimitDetalle } from "@/lib/tablero/detalle";
+import { persona } from "@/lib/tablero/__tests__/datosDetalle";
 
 // Uso de ejemplo: <VistaDetalleCelda detalle={detalleSimit({ paz_y_salvo: true })} /> pinta el resumen SIMIT tipado (B4)
 // y, si llega `auditoria` (B5), la auditoría con la lista de intentos. Datos sintéticos.
@@ -101,6 +102,27 @@ describe("HU14562 AC41 — Auditoría de la consulta visible", () => {
     expect(within(filas[1]).getByText("Automático")).toBeInTheDocument();
     expect(within(filas[2]).getByText("Exitoso")).toBeInTheDocument();
     expect(within(filas[2]).getByText("Reproceso")).toBeInTheDocument();
+  });
+
+  // HU #14562 · D2 (axe scrollable-region-focusable): cada tabla con scroll horizontal vive en una región enfocable con
+  // nombre, para que el teclado pueda desplazarla.
+  it("D2: los contenedores con scroll de las tablas son regiones enfocables con nombre y foco visible", () => {
+    const conTodo: DetalleCelda = {
+      ...detalleSimit(
+        simit({ multas: [{ numero: "M-1", infracciones: [{ codigo: "C24", descripcion: "Estacionar en sitio prohibido" }] }] }),
+        auditoria,
+      ),
+      personas: [persona(1)],
+    };
+    render(<VistaDetalleCelda detalle={conTodo} />);
+
+    for (const nombre of ["Intentos de la consulta", "Infracciones", "Personas consultadas"]) {
+      const region = screen.getByRole("region", { name: `${nombre}, desplazable` });
+      expect(region).toHaveAttribute("tabindex", "0");
+      expect(region).toHaveClass("overflow-x-auto");
+      expect(region.className).toMatch(/focus-visible:outline-\[var\(--di-action\)\]/);
+      expect(within(region).getByRole("table", { name: nombre })).toBeInTheDocument();
+    }
   });
 
   it("sin auditoria (API anterior) la lista de intentos no aparece y el detalle funciona", () => {
