@@ -40,7 +40,10 @@ internal sealed record EventoBackofficeDto(
     [property: JsonPropertyName("estado_anterior")] string? EstadoAnterior,
     [property: JsonPropertyName("estado_nuevo")] string? EstadoNuevo);
 
-/// <summary>Una fila de la bandeja entre compañías (plan §6.2): sin datos personales.</summary>
+/// <summary>
+/// Una fila de la bandeja entre compañías (plan §6.2): sin datos personales. AP-1 (UA-10, D-131): <c>vin</c> e <c>identificador</c> (el
+/// valor cargado), siempre presentes y nullables como en <c>FilaPlacaDto</c>, para nombrar una fila sin placa.
+/// </summary>
 internal sealed record FilaBandejaDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("empresa")] Guid Empresa,
@@ -55,7 +58,9 @@ internal sealed record FilaBandejaDto(
     [property: JsonPropertyName("tomado_en")] DateTimeOffset? TomadoEn,
     [property: JsonPropertyName("cerrado_en")] DateTimeOffset? CerradoEn,
     [property: JsonPropertyName("renglones_total")] int RenglonesTotal,
-    [property: JsonPropertyName("renglones_pendientes")] int RenglonesPendientes);
+    [property: JsonPropertyName("renglones_pendientes")] int RenglonesPendientes,
+    [property: JsonPropertyName("vin")] string? Vin,
+    [property: JsonPropertyName("identificador")] string? Identificador);
 
 /// <summary>Página de la bandeja (D-19: la lista se llama <c>saneamientos</c>).</summary>
 internal sealed record ListaBandejaDto(
