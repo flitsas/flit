@@ -291,3 +291,54 @@ describe("Contrato visual y de props (spec-ui §1.3)", () => {
     expect(fuente).not.toMatch(/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/);
   });
 });
+
+// Uso de ejemplo (HU #14577 FE-C, cableado-fe-c.md §1): en la cabecera de PS-2 la bandera avisa al panel solo cuando la
+// API confirmó, para que el panel recargue GET …/saneamiento sin correr contra el PUT o el DELETE en vuelo:
+//   <BotonSanear variante="cabecera" … onCambio={ctx.onCambio} onConfirmado={(estado) => ctx.onCambioSaneamiento(estado)} />
+describe("FE-C — onConfirmado: aviso cuando la API confirma", () => {
+  it("PUT 201: onConfirmado llega después de la respuesta, no en el clic optimista", async () => {
+    let soltar: (r: Response) => void = () => {};
+    simularApi({ [PUT]: () => new Promise<Response>((r) => (soltar = r)) });
+    const onConfirmado = vi.fn();
+    montar(SIN, { onConfirmado });
+    fireEvent.click(screen.getByRole("button", { name: NOMBRE }));
+    expect(onConfirmado).not.toHaveBeenCalled();
+    await act(async () => {
+      soltar(Response.json(SANEAMIENTO_API, { status: 201 }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(onConfirmado).toHaveBeenCalledTimes(1);
+    expect(onConfirmado).toHaveBeenCalledWith("SOLICITADO", SOLICITADO);
+  });
+
+  it.each([
+    ["204", () => new Response(null, { status: 204 })],
+    ["404 SIN_SANEAMIENTO", conError(404, "SIN_SANEAMIENTO")],
+  ])("DELETE %s: onConfirmado(null) con la fila sin saneamiento", async (_caso, respuesta) => {
+    simularApi({ [DELETE]: respuesta });
+    const onConfirmado = vi.fn();
+    montar(SOLICITADO, { onConfirmado });
+    fireEvent.click(screen.getByRole("button", { name: NOMBRE }));
+    await esperar();
+    expect(onConfirmado).toHaveBeenCalledWith(null, { estado: null, elegible: true, motivo_no_elegible: null });
+  });
+
+  it("si la API falla (409 o red) no se llama onConfirmado; solo la reversión por onCambio", async () => {
+    simularApi({ [PUT]: conError(409, "VEHICULO_NO_TERMINADO") });
+    const onConfirmado = vi.fn();
+    const onCambio = vi.fn();
+    montar(SIN, { onConfirmado, onCambio });
+    fireEvent.click(screen.getByRole("button", { name: NOMBRE }));
+    await esperar();
+    expect(onConfirmado).not.toHaveBeenCalled();
+    expect(onCambio).toHaveBeenLastCalledWith(null, SIN);
+  });
+
+  it("sin onConfirmado el botón sigue funcionando como antes (opcional)", async () => {
+    simularApi({ [PUT]: () => Response.json(SANEAMIENTO_API, { status: 201 }) });
+    montar(SIN);
+    fireEvent.click(screen.getByRole("button", { name: NOMBRE }));
+    await esperar();
+    expect(screen.getByRole("button", { name: NOMBRE })).toHaveAttribute("aria-pressed", "true");
+  });
+});

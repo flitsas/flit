@@ -75,6 +75,8 @@ describe("sin formulario propio", () => {
         join("components", "tablero", "BarraSeleccionTablero.tsx"),
         // HU #14562 AC28: búsqueda por placa o VIN del tablero, no de credenciales.
         join("components", "tablero", "BuscadorGrilla.tsx"),
+        // HU #14577 PS-3: filtros (placa, fechas) y casillas de selección de la grilla de placas del inicio, no de credenciales.
+        join("components", "vehiculos"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);

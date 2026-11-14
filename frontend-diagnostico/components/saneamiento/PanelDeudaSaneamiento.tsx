@@ -18,6 +18,7 @@ import {
 } from "@flit/ui/table-styles";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
+import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { EtiquetaTono, SeccionesDeuda } from "@/components/saneamiento/SeccionesDeuda";
 import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
@@ -35,7 +36,7 @@ import {
   type Saneamiento,
   type SaneamientoFila,
 } from "@/lib/saneamiento/api";
-import { ROTULO_HALLAZGO, ROTULO_RESULTADO, etiquetaSaneamiento, rotuloConcepto } from "@/lib/saneamiento/estados";
+import { ROTULO_HALLAZGO, ROTULO_RESULTADO, rotuloConcepto } from "@/lib/saneamiento/estados";
 import { useDescarga } from "@/lib/reportes/useDescarga";
 
 // PS-2 «Deuda y saneamiento» (spec-ui §3; plan §7.3; HU #14577 AC13–AC19). PanelLateral de 640 px: foco atrapado, Escape
@@ -356,7 +357,6 @@ export function PanelDeudaSaneamiento({
   };
 
   const evidenciaDe = puedeDescargar ? (r: RenglonSaneamiento) => urlEvidencia(diagnosticoId, vehiculoId, r.id) : null;
-  const etiqueta = etiquetaSaneamiento(estado);
 
   let contenido: ReactNode;
   if (deuda.tipo === "cargando") {
@@ -398,7 +398,8 @@ export function PanelDeudaSaneamiento({
         <section aria-label="Estado" className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3">
             {placa ? <Placa placa={placa} /> : <span className="text-base font-semibold text-flit-primary">{identificador}</span>}
-            {etiqueta && <EtiquetaTono tono={etiqueta.tono}>{etiqueta.texto}</EtiquetaTono>}
+            {/* cableado-fe-c.md §3: la etiqueta común de la suite (texto y tono de lib/saneamiento/estados.ts). */}
+            <EtiquetaSaneamiento estado={estado} />
           </div>
           {estado === null && puedeSanear && <p className={AYUDA_CLS}>Marca la bandera para pedir a FLIT que gestione el saneamiento.</p>}
         </section>
