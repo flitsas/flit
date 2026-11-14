@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Icono } from "@flit/ui/Icono";
-import type { DockEntry, DockGroup } from "../nav";
-import { DockEntryLink } from "./Dock";
+import { formatoInsignia, type DockEntry, type DockGroup } from "../nav";
+import { DockEntryLink, Insignia } from "./Dock";
 import { DockGlyph } from "./DockGlyph";
 import { useDockHomeMark } from "./DockHomeMark";
 
@@ -27,6 +27,9 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
   const launcherRef = useRef<HTMLButtonElement>(null);
   const position = scrollRef ? "absolute" : "fixed";
   const home = useDockHomeMark(homeIconSrc);
+  // Insignia del lanzador (spec-ui §1.4): la suma de todos los grupos; la hoja repite la de cada entrada.
+  const pendientes = groups.reduce((total, g) => total + (g.badge ?? 0), 0);
+  const insignia = formatoInsignia(pendientes);
 
   const close = () => {
     setOpen(false);
@@ -54,11 +57,12 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
         type="button"
         onClick={() => setOpen(true)}
         className={`dock-fab dock-fab--lanzador pointer-events-auto ${position} bottom-5 left-1/2 z-40 -translate-x-1/2 ${home.shape === "pill" ? "dock-fab--pastilla" : ""}`}
-        aria-label="Abrir menú de navegación"
+        aria-label={insignia ? `Abrir menú de navegación, ${pendientes} pendientes` : "Abrir menú de navegación"}
         aria-expanded={open}
         aria-controls="dock-mobile-sheet"
       >
         {home.content}
+        {insignia && <Insignia texto={insignia} flotante />}
       </button>
 
       {open && (
