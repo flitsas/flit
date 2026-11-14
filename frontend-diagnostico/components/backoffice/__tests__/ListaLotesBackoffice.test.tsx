@@ -280,3 +280,17 @@ describe("ListaLotesBackoffice — HU #14562 m-13", () => {
     expect(enlace.className).toBe(BOTON_SECUNDARIO_CLS);
   });
 });
+
+// AP-8 (security-fase3 SF-6): el aviso de error de los lotes no muestra el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("ListaLotesBackoffice — AP-8: texto fijo en el error", () => {
+  it("400 con mensaje del servidor: aviso con texto fijo y Reintentar", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    montar({ empresa: EMPRESA_A });
+    const reintentar = await screen.findByRole("button", { name: "Reintentar" });
+    const aviso = reintentar.closest('[role="alert"]') as HTMLElement;
+    expect(aviso).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(document.body).not.toHaveTextContent(SECRETO_AP8);
+  });
+});

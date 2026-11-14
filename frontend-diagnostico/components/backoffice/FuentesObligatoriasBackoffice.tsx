@@ -8,6 +8,7 @@ import { TablaEditable, type ColumnaEditable } from "@flit/ui/TablaEditable";
 import { BOTON_REINTENTAR_CLS, MARCA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { TOOLTIP_CLS } from "@/components/parametrizacion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
+import { mensajeErrorBackoffice } from "@/lib/backoffice/api";
 import {
   FUENTES_CONFIGURABLES,
   guardarFuentesObligatorias,
@@ -24,8 +25,8 @@ import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
  * No resuelve herencia y no llama GET /tipos-tramite. RUNT no tiene casilla.
  * El piso SIMIT_PROPIETARIO y los tres SIMIT del unilateral van bloqueados, enfocables, con el motivo en texto.
  * HU #14562 · AC48: una TablaEditable de definición (familia o tipo de trámite) × fuentes. Cada fila guarda por su cuenta:
- * «Sin cambios», «Editado» con Descartar y Guardar, o «Error de guardado» con Reintentar y el motivo del API debajo de la
- * tabla. RUNT vehículo es una columna fija con candado: no es casilla ni viaja en el PUT.
+ * «Sin cambios», «Editado» con Descartar y Guardar, o «Error de guardado» con Reintentar y el motivo debajo de la
+ * tabla (texto fijo por `code`, nunca el mensaje del API: AP-8, SF-6). RUNT vehículo es una columna fija con candado: no es casilla ni viaja en el PUT.
  */
 
 const ALCANCES_PISO = new Set(["TRASPASO", "TRASPASO_STANDARD", "TRASPASO_TRANSFERENCIA_DE_DOMINIO"]);
@@ -34,6 +35,14 @@ const UNILATERAL = "TRASPASO_UNILATERAL";
 
 const MOTIVO_PISO = "El paz y salvo del propietario es obligatorio en este alcance y no se puede quitar.";
 const MOTIVO_UNILATERAL = "En el traspaso unilateral no se exige el SIMIT y no se puede marcar.";
+
+/** AP-8 (SF-6): textos fijos de los 422 del PUT (contrato `diagnostico.v1.yaml`); el resto cae en el respaldo fijo. */
+const ERRORES_GUARDADO: Readonly<Record<string, string>> = {
+  FUENTE_DESCONOCIDA: "Una de las fuentes no existe en el catálogo.",
+  FUENTE_RUNT_NO_CONFIGURABLE: "El RUNT del vehículo es fijo: no se configura.",
+  SIMIT_PROHIBIDO_EN_UNILATERAL: "El traspaso unilateral no lleva consultas SIMIT.",
+  PISO_NO_DISPENSABLE: "SIMIT propietario es obligatorio en este traspaso y no se puede quitar.",
+};
 
 /** Casilla de una fuente en la fila: marcada y, si está bloqueada, el motivo en texto. */
 interface Casilla {
@@ -211,7 +220,7 @@ export function FuentesObligatoriasBackoffice() {
         actual.tipo === "listo" ? { tipo: "listo", filas: actual.filas.map((f) => (f.titulo === fila.titulo ? nueva : f)) } : actual,
       );
     } catch (error: unknown) {
-      fijarError(fila.titulo, error instanceof Error ? error.message : "No se pudo guardar esta definición.");
+      fijarError(fila.titulo, mensajeErrorBackoffice(error, "No se pudo guardar esta definición.", ERRORES_GUARDADO));
       throw error;
     }
   }
@@ -242,7 +251,7 @@ export function FuentesObligatoriasBackoffice() {
             </button>
           }
         >
-          {carga.error instanceof Error ? carga.error.message : "Intenta de nuevo en un momento."}
+          {mensajeErrorBackoffice(carga.error, "Intenta de nuevo en un momento.")}
         </InlineAlert>
       </section>
     );

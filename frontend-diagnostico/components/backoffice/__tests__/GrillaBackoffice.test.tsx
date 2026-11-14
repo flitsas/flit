@@ -303,3 +303,28 @@ describe("GrillaBackoffice — HU #14577 AC38: etiqueta del saneamiento con enla
     expect(screen.queryByRole("button", { name: /Solicitar saneamiento|Sanear/ })).toBeNull();
   });
 });
+
+// AP-8 (security-fase3 SF-6): ni la carga ni la relectura muestran el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("GrillaBackoffice — AP-8: textos fijos", () => {
+  it("400 al cargar: aviso con texto fijo, sin el mensaje de la API", async () => {
+    simularApi({ [RUTA_GRILLA]: () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    render(<GrillaBackoffice diagnosticoId={LOTE} empresa={EMPRESA_A} />);
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(aviso).not.toHaveTextContent(SECRETO_AP8);
+  });
+
+  it("falla al volver a leer con «Actualizar»: aviso con texto fijo, sin el mensaje de la API", async () => {
+    let n = 0;
+    simularApi({
+      [RUTA_GRILLA]: () => (++n === 1 ? Response.json(grillaBo()) : Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 })),
+    });
+    render(<GrillaBackoffice diagnosticoId={LOTE} empresa={EMPRESA_A} />);
+    await tabla();
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(await screen.findByText("No se pudo volver a leer la grilla. Intenta de nuevo en un momento.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(SECRETO_AP8);
+  });
+});

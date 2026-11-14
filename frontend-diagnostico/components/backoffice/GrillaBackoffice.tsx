@@ -19,6 +19,7 @@ import { ApiError } from "@/lib/api";
 import {
   aplicarLlenado,
   esLlenable,
+  mensajeErrorBackoffice,
   obtenerGrillaBackoffice,
   rutaDetalleBackoffice,
   type CeldaGrillaBackoffice,
@@ -174,7 +175,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
       const vigente = grillaRef.current ?? actual;
       poner(fusionarCeldas(vigente as unknown as Grilla, cambios as unknown as Grilla) as unknown as TGrillaBackoffice);
     } catch (e) {
-      setAvisoLectura(e instanceof Error ? e.message : "No se pudo volver a leer la grilla.");
+      setAvisoLectura(mensajeErrorBackoffice(e, "No se pudo volver a leer la grilla. Intenta de nuevo en un momento."));
     } finally {
       setLeyendo(false);
     }
@@ -242,7 +243,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
             </button>
           }
         >
-          {error instanceof Error ? error.message : "Intenta de nuevo en un momento."}
+          {mensajeErrorBackoffice(error, "Intenta de nuevo en un momento.")}
         </InlineAlert>
       );
   } else {

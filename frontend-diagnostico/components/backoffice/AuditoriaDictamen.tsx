@@ -6,7 +6,7 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { BOTON_REINTENTAR_CLS } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS } from "@/components/tablero/vistasDetalle/comun";
-import { obtenerVersionesDictamen, type AlertamientoVersion, type VersionDictamen } from "@/lib/backoffice/api";
+import { mensajeErrorBackoffice, obtenerVersionesDictamen, type AlertamientoVersion, type VersionDictamen } from "@/lib/backoffice/api";
 import { CODIGO_AJUSTE_FLIT } from "@/lib/backoffice/ajusteDictamen";
 import { rotuloAlerta } from "@/lib/dictamen/api";
 import { EFECTOS_DICTAMEN } from "@/lib/rotulos";
@@ -83,7 +83,7 @@ export function AuditoriaDictamen({ diagnosticoId, vehiculoId, empresa }: Audito
           </button>
         }
       >
-        {carga.error instanceof Error ? carga.error.message : "Intenta de nuevo en un momento."}
+        {mensajeErrorBackoffice(carga.error, "Intenta de nuevo en un momento.")}
       </InlineAlert>
     );
   if (carga.versiones.length === 0) return <p className={TEXTO_SECUNDARIO_CLS}>Este vehículo aún no tiene dictamen.</p>;
