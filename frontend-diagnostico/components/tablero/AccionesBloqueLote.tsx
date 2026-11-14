@@ -1,20 +1,24 @@
 "use client";
 
 import { reintentarPegadas, type ResultadoReintento } from "@/lib/tablero/api";
-import { BarraSeleccionDerivacion } from "./BarraSeleccionDerivacion";
+import { BarraSeleccionTablero, type AccionCrearTramites, type AccionSanear } from "./BarraSeleccionTablero";
 import { BotonReintentar } from "./BotonReintentar";
 
 export interface AccionesBloqueLoteProps {
   diagnosticoId: string;
-  /** Hay derivación (capacidad `derivar` y filas con datos de derivación): selección y «Crear trámites». */
-  hayDerivacion: boolean;
+  /**
+   * Hay selección: capacidad `derivar` con filas con datos de derivación, o capacidad `sanear` con filas con datos de
+   * saneamiento (HU #14577 AC10).
+   */
+  haySeleccion: boolean;
   elegibles: number;
   seleccionadas: number;
-  encolando: boolean;
-  errorMasivo: string | null;
   onSeleccionarTodas: () => void;
   onQuitar: () => void;
-  onCrear: () => void;
+  /** «Crear trámites (N)»; ausente sin la capacidad `derivar`. */
+  crear?: AccionCrearTramites;
+  /** «Sanear (N)»; ausente sin la capacidad `sanear`. */
+  sanear?: AccionSanear;
   /** Placas pegadas del lote; el reintento en bloque solo se ofrece con `puedeReprocesar` y más de 0 (D4(5)). */
   totalPegadas: number;
   puedeReprocesar: boolean;
@@ -22,35 +26,36 @@ export interface AccionesBloqueLoteProps {
   onErrorReintento: (mensaje: string, volverALeer: boolean) => void;
 }
 
-/** Acciones en bloque del tablero (HU #14562 AC32): selección para crear trámites y reintento de las consultas pegadas. */
+/**
+ * Acciones en bloque del tablero (HU #14562 AC32; HU #14577 AC10): selección para crear trámites y para sanear, y reintento
+ * de las consultas pegadas.
+ */
 export function AccionesBloqueLote({
   diagnosticoId,
-  hayDerivacion,
+  haySeleccion,
   elegibles,
   seleccionadas,
-  encolando,
-  errorMasivo,
   onSeleccionarTodas,
   onQuitar,
-  onCrear,
+  crear,
+  sanear,
   totalPegadas,
   puedeReprocesar,
   onReintentado,
   onErrorReintento,
 }: AccionesBloqueLoteProps) {
   const hayPegadas = puedeReprocesar && totalPegadas > 0;
-  if (!hayDerivacion && !hayPegadas) return null;
+  if (!haySeleccion && !hayPegadas) return null;
   return (
     <div className="flex flex-col gap-3">
-      {hayDerivacion && (
-        <BarraSeleccionDerivacion
+      {haySeleccion && (
+        <BarraSeleccionTablero
           elegibles={elegibles}
           seleccionadas={seleccionadas}
-          enviando={encolando}
           onSeleccionarTodas={onSeleccionarTodas}
           onQuitar={onQuitar}
-          onCrear={onCrear}
-          error={errorMasivo}
+          crear={crear}
+          sanear={sanear}
         />
       )}
       {hayPegadas && (

@@ -239,3 +239,46 @@ describe("HU #14562 F-05 — «Crear trámite» desde el pie del panel del dicta
     expect(within(panel).queryByRole("button", { name: /crear trámite/i })).toBeNull();
   });
 });
+
+// Uso de ejemplo (HU #14577 AC12, spec-ui §2.5): si la fila tiene saneamiento SOLICITADO o EN_GESTION, la confirmación de
+// «Crear trámite» lleva arriba el aviso «Saneamiento en curso»; no bloquea y el foco inicial del modal no cambia.
+describe("HU #14577 AC12 — aviso de saneamiento en curso en «Crear trámite» (individual)", () => {
+  const conSaneamiento = (g: Grilla, estado: "SOLICITADO" | "EN_GESTION" | "SANEADO" | "NO_PROCEDE" | null): Grilla => ({
+    ...g,
+    vehiculos: g.vehiculos.map((v) => ({ ...v, saneamiento: { estado, elegible: estado === null, motivo_no_elegible: estado ? "YA_SOLICITADO" : null } })),
+  });
+  const AVISO = "Este vehículo tiene un saneamiento en curso. Puedes crear el trámite igual.";
+
+  it.each(["SOLICITADO", "EN_GESTION"] as const)("lote IA, %s: el aviso arriba del cuerpo y «Crear traspaso» sigue con el foco y confirma", async (estado) => {
+    pestanaFalsa();
+    const api = await montar({ [GRILLA]: () => Response.json(conSaneamiento(loteIa(), estado)), [CREAR]: creado("59") });
+    fireEvent.click(botonFila());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" });
+    const aviso = within(dialogo).getByRole("alert");
+    expect(aviso).toHaveTextContent("Saneamiento en curso");
+    expect(aviso).toHaveTextContent(AVISO);
+    const confirmar = within(dialogo).getByRole("button", { name: "Crear traspaso" });
+    expect(confirmar).toHaveFocus();
+    fireEvent.click(confirmar);
+    await avanzar();
+    expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(1);
+  });
+
+  it("lote Simple, EN_GESTION: el modal del tipo también lleva el aviso", async () => {
+    await montar({ [GRILLA]: () => Response.json(conSaneamiento(loteSimple(), "EN_GESTION")), "GET /tipos-tramite": () => Response.json(TIPOS) });
+    fireEvent.click(botonFila());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: "Crear trámite para TST001" });
+    expect(dialogo).toHaveTextContent(AVISO);
+    expect(within(dialogo).getByLabelText("Tipo de trámite")).toHaveFocus();
+  });
+
+  it.each(["SANEADO", "NO_PROCEDE", null] as const)("con %s la confirmación no muestra el aviso", async (estado) => {
+    await montar({ [GRILLA]: () => Response.json(conSaneamiento(loteIa(), estado)) });
+    fireEvent.click(botonFila());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" });
+    expect(dialogo).not.toHaveTextContent(/saneamiento en curso/i);
+  });
+});

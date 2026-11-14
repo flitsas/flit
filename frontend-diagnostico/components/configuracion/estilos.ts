@@ -24,3 +24,9 @@ export const OPCION_CLS =
   "flex items-center gap-2 rounded-[9px] border border-border px-3 py-2 text-sm text-flit-primary has-[:checked]:border-[color:var(--di-action)] has-[:checked]:bg-[var(--kit-hover)] has-[:disabled]:opacity-60";
 
 export const MARCA_CLS = `h-4 w-4 accent-[var(--flit-brand-ink)] ${FOCO_CLS}`;
+
+/**
+ * Pastilla compacta de las acciones de una fila del tablero («Crear trámite», «Reintentar placa», la bandera de
+ * saneamiento). HU #14577 (spec-ui §1.3): sale de `BotonCrearTramite.tsx` para compartirla con `BotonSanear`.
+ */
+export const ACCION_FILA_CLS = `inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-0.5 text-xs font-semibold text-[var(--flit-brand-ink)] transition disabled:cursor-not-allowed disabled:opacity-60 ${FOCO_CLS}`;

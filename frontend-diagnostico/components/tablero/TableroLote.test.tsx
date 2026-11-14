@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import TableroDiagnostico from "@/app/(app)/diagnosticos/[id]/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
-import type { Grilla } from "@/lib/tablero/api";
+import type { FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { FALLOS_ANTES_DE_DETENER, INTERVALO_REPOSO_MS, INTERVALO_SONDEO_MS } from "@/lib/tablero/useGrillaIncremental";
 import { ID, V1, celda, desdesPedidos, grilla, llamadas, loteTerminadoConErrores, sesion, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 
@@ -551,5 +551,255 @@ describe("/diagnosticos/{id} — HU #14562 AC33/AC34: estimado plegable y enmasc
     await montar({ [GRILLA]: () => Response.json(grilla({ vehiculos: [v] })) });
     expect(within(tablaLote()).getByText(/CC .*7710/)).toBeInTheDocument();
     expect(tablaLote().textContent).not.toMatch(/\d{6,}/);
+  });
+});
+
+// Uso de ejemplo (HU #14577 AC5–AC11, spec-ui §2): en el tablero, con la capacidad `sanear`, cada fila lleva la bandera
+// BotonSanear antes de «Crear trámite»; la celda Dictamen suma la etiqueta del saneamiento; los chips «Con / Sin
+// saneamiento» filtran (y quedan en ?saneamiento=); la barra de selección ofrece «Crear trámites (N)» y «Sanear (N)».
+describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () => {
+  type EstadoSan = "SOLICITADO" | "EN_GESTION" | "SANEADO" | "NO_PROCEDE" | null;
+  const SANEA: Partial<CapacidadesDiagnostico> = { verDiagnosticos: true, sanear: true };
+  const SANEA_DERIVA: Partial<CapacidadesDiagnostico> = { verDiagnosticos: true, sanear: true, derivar: true };
+  const RUTA_MASIVO = "/saneamientos/solicitudes";
+  const terminadas = (n: number) => V1.celdas.map((c) => ({ ...c, id: `${c.id}-${n}` }));
+  const san = (estado: EstadoSan, motivo: "NO_TERMINADO" | "YA_SOLICITADO" | null = estado ? "YA_SOLICITADO" : null) => ({
+    estado,
+    elegible: estado === null && motivo === null,
+    motivo_no_elegible: motivo,
+  });
+  const deriva = (elegible: boolean) => ({ derivacion: { elegible, motivo_no_elegible: elegible ? null : "NO_VIABLE", estado: null, tramite: null } });
+
+  /**
+   * TST001 saneable y derivable; TST002 SOLICITADO; TST003 EN_GESTION; TST004 no terminado; TST005 saneable y no derivable.
+   * Lote COMPLETADO (sin sondeo cada 3 s).
+   */
+  function loteSan(cambios: Record<string, Partial<FilaVehiculo>> = {}): Grilla {
+    const filas: FilaVehiculo[] = [
+      { ...V1, ...deriva(true), saneamiento: san(null) },
+      { ...vehiculo(2, terminadas(2)), ...deriva(false), saneamiento: san("SOLICITADO") },
+      { ...vehiculo(3, terminadas(3)), ...deriva(false), saneamiento: san("EN_GESTION") },
+      { ...vehiculo(4, [celda(4, "RUNT", "EN_CURSO")]), ...deriva(false), saneamiento: san(null, "NO_TERMINADO") },
+      { ...vehiculo(5, terminadas(5)), ...deriva(false), saneamiento: san(null) },
+    ].map((v) => ({ ...v, ...cambios[v.id] }));
+    return grilla({ estado: "COMPLETADO", vehiculos: filas });
+  }
+
+  async function montarSan(rutas: Rutas, capacidades: Partial<CapacidadesDiagnostico> = SANEA, saneamiento?: string) {
+    const api = simularApi({ "GET /sesion": () => Response.json(sesion(capacidades)), ...rutas });
+    render(
+      <DiagnosticoShell user={{ email: "ana@empresa-prueba.co", permissions: [], roles: [], isSuperAdmin: false }} tramitesUrl="">
+        {await TableroDiagnostico({ params: Promise.resolve({ id: ID }), searchParams: Promise.resolve(saneamiento ? { saneamiento } : {}) })}
+      </DiagnosticoShell>,
+    );
+    await avanzar();
+    await avanzar();
+    return api;
+  }
+
+  const fila = (placa: string) => within(tablaLote()).getByRole("rowheader", { name: new RegExp(placa) }).closest("tr")!;
+  const placasVisibles = () => filas().map((tr) => within(tr).getByRole("rowheader").textContent!.match(/TST\d{3}/)![0]);
+  const chip = (nombre: string) => within(screen.getByRole("group", { name: "Filtrar por saneamiento" })).getByRole("button", { name: nombre });
+  const consulta = () => new URLSearchParams(window.location.search).get("saneamiento");
+  const bandera = (placa: string) => within(fila(placa)).getByRole("button", { name: `Solicitar saneamiento de la placa ${placa}` });
+
+  beforeEach(() => window.history.replaceState(null, "", "/diagnosticos/x"));
+
+  it("AC5: la bandera va antes de «Crear trámite», apagada; un clic la enciende, llama PUT y la fila muestra la etiqueta", async () => {
+    const ruta = `/diagnosticos/${ID}/vehiculos/vehiculo-1/saneamiento`;
+    const api = await montarSan(
+      { [GRILLA]: () => Response.json(loteSan()), [`PUT ${ruta}`]: () => Response.json({ id: "s1", estado: "SOLICITADO" }, { status: 201 }) },
+      SANEA_DERIVA,
+    );
+    const celdaAcciones = bandera("TST001").closest("td")!;
+    const botones = within(celdaAcciones).getAllByRole("button");
+    expect(botones[0]).toBe(bandera("TST001"));
+    expect(botones[1]).toHaveAccessibleName("Crear trámite para la placa TST001");
+    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "false");
+    expect(within(fila("TST001")).queryByText("Saneamiento solicitado")).toBeNull();
+    fireEvent.click(bandera("TST001"));
+    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "true");
+    expect(within(fila("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    await avanzar();
+    expect(llamadas(api, "PUT", ruta)).toHaveLength(1);
+    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "true");
+    // Región viva única de la pantalla (spec §1.6).
+    expect(screen.getByText("Saneamiento solicitado para TST001.").closest("[role='status']")).toHaveClass("sr-only");
+  });
+
+  it("AC6: si el PUT falla, la fila vuelve a «sin saneamiento» y la etiqueta desaparece", async () => {
+    const ruta = `/diagnosticos/${ID}/vehiculos/vehiculo-1/saneamiento`;
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()), [`PUT ${ruta}`]: () => Response.json({ code: "VEHICULO_NO_TERMINADO", error: "x" }, { status: 409 }) });
+    fireEvent.click(bandera("TST001"));
+    await avanzar();
+    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "false");
+    expect(within(fila("TST001")).queryByText("Saneamiento solicitado")).toBeNull();
+    expect(within(fila("TST001")).getByRole("alert")).toHaveTextContent("Este vehículo aún tiene consultas por terminar.");
+  });
+
+  it("AC7: EN_GESTION es «Ver saneamiento» con el estado en el nombre y el clic abre el panel del vehículo", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
+    const ver = within(fila("TST003")).getByRole("button", { name: "Ver saneamiento de la placa TST003: En saneamiento" });
+    expect(ver).not.toHaveAttribute("aria-pressed");
+    fireEvent.click(ver);
+    await avanzar();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("AC8: no terminado: bandera aria-disabled con «Faltan consultas por terminar»", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
+    expect(bandera("TST004")).toHaveAttribute("aria-disabled", "true");
+    expect(bandera("TST004")).toHaveAccessibleDescription("Faltan consultas por terminar");
+  });
+
+  it("AC8 (negativo): sin la capacidad sanear no hay bandera en las filas sin saneamiento; las que tienen, solo «Ver saneamiento»", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) }, { verDiagnosticos: true });
+    expect(screen.queryAllByRole("button", { name: /^Solicitar saneamiento/ })).toHaveLength(0);
+    expect(within(fila("TST002")).getByRole("button", { name: "Ver saneamiento de la placa TST002: Saneamiento solicitado" })).toBeInTheDocument();
+    expect(within(tablaLote()).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+  });
+
+  it("AC9: la etiqueta va en la celda Dictamen, debajo del veredicto; sin saneamiento no hay etiqueta", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
+    const dictamen = within(fila("TST002")).getByRole("button", { name: "Ver dictamen de TST002" }).closest("td")!;
+    expect(within(dictamen).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(within(fila("TST003")).getByRole("button", { name: "Ver dictamen de TST003" }).closest("td")).toHaveTextContent("En saneamiento");
+    const sin = within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")!;
+    expect(sin).not.toHaveTextContent(/saneamiento/i);
+  });
+
+  it("AC9: «Con» y «Sin saneamiento» filtran en el cliente, son excluyentes, se apagan con otro clic y quedan en la URL", async () => {
+    const api = await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
+    const pedidas = desdesPedidos(api).length;
+    expect(chip("Con saneamiento")).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(chip("Con saneamiento"));
+    expect(placasVisibles()).toEqual(["TST002", "TST003"]);
+    expect(consulta()).toBe("con");
+    fireEvent.click(chip("Sin saneamiento"));
+    expect(chip("Sin saneamiento")).toHaveAttribute("aria-pressed", "true");
+    expect(chip("Con saneamiento")).toHaveAttribute("aria-pressed", "false");
+    expect(placasVisibles()).toEqual(["TST001", "TST004", "TST005"]);
+    expect(consulta()).toBe("sin");
+    fireEvent.click(chip("Sin saneamiento"));
+    expect(placasVisibles()).toHaveLength(5);
+    expect(consulta()).toBeNull();
+    expect(window.location.pathname).toBe("/diagnosticos/x");
+    expect(desdesPedidos(api).length).toBe(pedidas);
+  });
+
+  it("AC9: con ?saneamiento=con el chip nace activo y la grilla ya viene filtrada; se combina con la búsqueda", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) }, SANEA, "con");
+    expect(chip("Con saneamiento")).toHaveAttribute("aria-pressed", "true");
+    expect(placasVisibles()).toEqual(["TST002", "TST003"]);
+    fireEvent.change(screen.getByRole("searchbox", { name: /buscar por placa o vin/i }), { target: { value: "tst003" } });
+    expect(placasVisibles()).toEqual(["TST003"]);
+  });
+
+  it("AC9: vacío por el filtro: «Ningún vehículo coincide» y «Limpiar filtros» quita chip y búsqueda", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) }, SANEA, "con");
+    fireEvent.change(screen.getByRole("searchbox", { name: /buscar por placa o vin/i }), { target: { value: "tst001" } });
+    // EstadoVacio con `anunciar` nace vacío y recibe el contenido pasado REGION_VIVA_RETARDO_MS (HU #14562 · M11).
+    await avanzar(100);
+    expect(screen.getByRole("heading", { name: "Ningún vehículo coincide" })).toBeInTheDocument();
+    expect(screen.getByText("Quita el filtro de saneamiento o prueba con otra búsqueda.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    expect(placasVisibles()).toHaveLength(5);
+    expect(chip("Con saneamiento")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("searchbox", { name: /buscar por placa o vin/i })).toHaveValue("");
+    expect(consulta()).toBeNull();
+  });
+
+  it("§2.6: filas sin la clave saneamiento (backend previo): sin chips, sin bandera y sin etiqueta", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO" })) });
+    expect(screen.queryByRole("group", { name: "Filtrar por saneamiento" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: /saneamiento/i })).toHaveLength(0);
+  });
+
+  it("AC10: casilla habilitada si es elegible para alguna acción; «Crear trámites (N)» y «Sanear (N)» cuentan cada una lo suyo", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) }, SANEA_DERIVA);
+    const casilla = (placa: string) => within(fila(placa)).getByRole("checkbox", { name: `Seleccionar la placa ${placa}` });
+    expect(casilla("TST001")).toBeEnabled();
+    expect(casilla("TST005")).toBeEnabled();
+    expect(casilla("TST002")).toBeDisabled();
+    expect(casilla("TST004")).toBeDisabled();
+    expect(casilla("TST004")).toHaveAccessibleDescription(/ · Faltan consultas por terminar$/);
+    fireEvent.click(casilla("TST005"));
+    const region = screen.getByRole("region", { name: "Selección" });
+    expect(within(region).getByRole("button", { name: "Crear trámites (0)" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(region).getByRole("button", { name: "Sanear (1)" })).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }));
+    expect(within(region).getByRole("button", { name: "Crear trámites (1)" })).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Sanear (2)" })).toBeInTheDocument();
+  });
+
+  it("AC10: con solo la capacidad sanear la barra no ofrece «Crear trámites»", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()) }, SANEA);
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }));
+    const region = screen.getByRole("region", { name: "Selección" });
+    expect(within(region).queryByRole("button", { name: /crear trámites/i })).toBeNull();
+    expect(within(region).getByRole("button", { name: "Sanear (2)" })).toBeInTheDocument();
+  });
+
+  it("AC11: «Sanear (N)» con omitidos: mensaje con los motivos, las solicitadas con su etiqueta sin recargar y las omitidas siguen marcadas", async () => {
+    let solicitado = false;
+    const api = await montarSan(
+      {
+        [GRILLA]: () => Response.json(solicitado ? loteSan({ "vehiculo-1": { saneamiento: san("SOLICITADO") } }) : loteSan()),
+        [`POST ${RUTA_MASIVO}`]: () => {
+          solicitado = true;
+          return Response.json({ solicitados: 1, omitidos: [{ vehiculo_id: "vehiculo-5", motivo: "NO_TERMINADO" }] });
+        },
+      },
+      SANEA_DERIVA,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }));
+    const sanear = screen.getByRole("button", { name: "Sanear (2)" });
+    sanear.focus();
+    fireEvent.click(sanear);
+    await avanzar();
+    await avanzar();
+    const [, init] = llamadas(api, "POST", RUTA_MASIVO)[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ vehiculo_ids: ["vehiculo-1", "vehiculo-5"] });
+    const texto = "Se solicitó el saneamiento de 1 vehículo. 1 se omitió: 1 con consultas por terminar.";
+    const aviso = screen.getAllByText(texto).map((n) => n.closest("[role='alert']")).find(Boolean)!;
+    expect(aviso).toHaveTextContent("Saneamiento solicitado");
+    expect(within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")).toHaveTextContent("Saneamiento solicitado");
+    expect(within(fila("TST005")).getByRole("checkbox")).toBeChecked();
+    expect(within(fila("TST001")).getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("region", { name: "Selección" })).toHaveTextContent("1 vehículo seleccionado");
+    expect(screen.getByRole("button", { name: /^Sanear \(/ })).toHaveFocus();
+    // El mismo texto en la región viva de la pantalla.
+    expect(screen.getAllByText(texto).some((n) => n.closest(".sr-only"))).toBe(true);
+    expect(desdesPedidos(api).length).toBeGreaterThan(1);
+  });
+
+  it("AC11: 400 LISTA_INVALIDA: mensaje de error y la selección se conserva", async () => {
+    await montarSan(
+      { [GRILLA]: () => Response.json(loteSan()), [`POST ${RUTA_MASIVO}`]: () => Response.json({ code: "LISTA_INVALIDA", error: "x" }, { status: 400 }) },
+      SANEA,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sanear (2)" }));
+    await avanzar();
+    expect(screen.getByRole("alert")).toHaveTextContent("No pudimos solicitar el saneamiento. Intenta de nuevo.");
+    expect(screen.getByRole("region", { name: "Selección" })).toHaveTextContent("2 vehículos seleccionados");
+    expect(within(fila("TST001")).getByRole("checkbox")).toBeChecked();
+  });
+
+  it("AC11: error de red: mensaje de error y la selección se conserva", async () => {
+    await montarSan(
+      {
+        [GRILLA]: () => Response.json(loteSan()),
+        [`POST ${RUTA_MASIVO}`]: () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+      SANEA,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sanear (2)" }));
+    await avanzar();
+    expect(screen.getByRole("alert")).toHaveTextContent("No pudimos solicitar el saneamiento. Intenta de nuevo.");
+    expect(within(fila("TST005")).getByRole("checkbox")).toBeChecked();
   });
 });

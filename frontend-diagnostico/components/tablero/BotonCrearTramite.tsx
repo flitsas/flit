@@ -6,6 +6,7 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import {
+  ACCION_FILA_CLS,
   AYUDA_CLS,
   BOTON_PRIMARIO_CLS,
   BOTON_REINTENTAR_CLS,
@@ -28,11 +29,31 @@ import {
   urlTramite,
 } from "@/lib/tablero/derivacion";
 
-/** Pastilla compacta de la fila, como «Reintentar placa». */
-const FILA_CLS = `inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-0.5 text-xs font-semibold text-[var(--flit-brand-ink)] transition disabled:cursor-not-allowed disabled:opacity-60 ${FOCO_CLS}`;
+/** Pastilla compacta de la fila, como «Reintentar placa» (compartida con la bandera de saneamiento, HU #14577). */
+const FILA_CLS = ACCION_FILA_CLS;
 const ENLACE_CLS = `inline-flex items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
 
 type EstadoTipos = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; tipos: TipoTramite[] };
+
+/** Saneamiento en curso (SOLICITADO o EN_GESTION): la confirmación de crear trámite lo avisa (spec-ui §2.5, HU #14577 AC12). */
+export const saneamientoEnCurso = (v: Pick<FilaVehiculo, "saneamiento">): boolean =>
+  v.saneamiento?.estado === "SOLICITADO" || v.saneamiento?.estado === "EN_GESTION";
+
+/**
+ * Aviso «Saneamiento en curso» arriba del cuerpo de la confirmación (spec-ui §2.5, HU #14577 AC12). No bloquea ni mueve el
+ * foco inicial del modal. Sin `cantidad`, el de una placa; con `cantidad`, el de la creación masiva.
+ */
+export function AvisoSaneamientoEnCurso({ cantidad }: { cantidad?: number }) {
+  const texto =
+    cantidad === undefined
+      ? "Este vehículo tiene un saneamiento en curso. Puedes crear el trámite igual."
+      : `${cantidad} de los vehículos seleccionados ${cantidad === 1 ? "tiene" : "tienen"} un saneamiento en curso. Puedes crear los trámites igual.`;
+  return (
+    <InlineAlert tone="warning" title="Saneamiento en curso">
+      {texto}
+    </InlineAlert>
+  );
+}
 
 export interface ModalTipoTramiteProps {
   identificador: string;
@@ -48,6 +69,8 @@ export interface ModalTipoTramiteProps {
   ayuda?: string;
   /** El borrador se abre en una pestaña nueva al confirmar: el botón lleva el ícono de enlace externo. */
   abreEnPestana?: boolean;
+  /** HU #14577 AC12: aviso arriba del cuerpo (p. ej. `<AvisoSaneamientoEnCurso />`). No bloquea. */
+  aviso?: React.ReactNode;
 }
 
 /**
@@ -63,6 +86,7 @@ export function ModalTipoTramite({
   titulo = "Tipo de trámite",
   ayuda = "El borrador queda en Trámites para que lo completes allí.",
   abreEnPestana = false,
+  aviso,
 }: ModalTipoTramiteProps) {
   const id = useId();
   const [intento, setIntento] = useState(0);
@@ -166,7 +190,14 @@ export function ModalTipoTramite({
         </div>
       }
     >
-      {cuerpo}
+      {aviso ? (
+        <div className="flex flex-col gap-3">
+          {aviso}
+          {cuerpo}
+        </div>
+      ) : (
+        cuerpo
+      )}
     </Modal>
   );
 }
@@ -177,6 +208,8 @@ export interface ModalConfirmarTramiteProps {
   tramite?: string | null;
   onClose: () => void;
   onConfirmar: () => void;
+  /** HU #14577 AC12: aviso arriba del cuerpo (p. ej. `<AvisoSaneamientoEnCurso />`). No bloquea ni cambia el foco inicial. */
+  aviso?: React.ReactNode;
 }
 
 /** «traspaso» para el título y el botón («¿Crear el traspaso…?», «Crear traspaso»); otro nombre o ninguno, «trámite». */
@@ -190,7 +223,7 @@ function sustantivoTramite(tramite?: string | null): string {
  * de {placa}?», la etiqueta Viable «para {trámite}» y el aviso de que se abre en una pestaña nueva. El tipo es el del lote,
  * así que no se pide.
  */
-export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfirmar }: ModalConfirmarTramiteProps) {
+export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfirmar, aviso }: ModalConfirmarTramiteProps) {
   const sustantivo = sustantivoTramite(tramite);
   const confirmarRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -216,6 +249,7 @@ export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfi
       }
     >
       <div className="flex flex-col gap-3">
+        {aviso}
         <p className="flex flex-wrap items-center gap-2 text-sm text-flit-primary">
           <span {...etiquetaKit("success")}>Viable</span>
           {tramite && <span>{`para ${tramite}`}</span>}
@@ -436,12 +470,19 @@ export function AccionTramiteFila({
           ayuda="Abriremos el wizard de Trámites en una pestaña nueva con el borrador, para que lo completes allí."
           textoConfirmar="Ir al wizard"
           abreEnPestana
+          aviso={saneamientoEnCurso(vehiculo) ? <AvisoSaneamientoEnCurso /> : undefined}
           onClose={cerrarModal}
           onConfirmar={confirmarTipo}
         />
       )}
       {confirmando && (
-        <ModalConfirmarTramite identificador={identificador} tramite={tramiteAnalizado} onClose={cerrarModal} onConfirmar={confirmarTramite} />
+        <ModalConfirmarTramite
+          identificador={identificador}
+          tramite={tramiteAnalizado}
+          aviso={saneamientoEnCurso(vehiculo) ? <AvisoSaneamientoEnCurso /> : undefined}
+          onClose={cerrarModal}
+          onConfirmar={confirmarTramite}
+        />
       )}
     </div>
   );
