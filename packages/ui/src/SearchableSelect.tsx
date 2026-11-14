@@ -283,7 +283,8 @@ export function SearchableSelect({
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-flit-primary dark:text-foreground">{o.label}</span>
-                    {o.hint && <span className="block truncate text-[10px] opacity-60">{o.hint}</span>}
+                    {/* HU #14562 · O-6: como la etiqueta (D3), el token terciario en vez de opacity-60 (AA con la lista abierta). */}
+                    {o.hint && <span className="block truncate text-[10px] text-[color:var(--di-text-tertiary)]">{o.hint}</span>}
                   </span>
                   {elegida && (
                     <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} />

@@ -137,3 +137,17 @@ describe("SelectorEmpresaBackoffice — D3: contraste de la etiqueta del combobo
     expect(etiqueta.className).not.toMatch(/\bopacity-/);
   });
 });
+
+// HU #14562 · O-6 (auditoría D1–D3): el `hint` de cada opción (el NIT) tenía el mismo patrón que la etiqueta de D3
+// (`opacity-60` sobre tinta). Va con --di-text-tertiary, sin opacidad. axe no lo vio porque la lista estaba cerrada.
+describe("SelectorEmpresaBackoffice — O-6: contraste del hint de las opciones", () => {
+  it("el NIT bajo cada empresa usa el token de texto terciario y no se apaga con opacidad", async () => {
+    empresasOk();
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("combobox", { name: "Empresa" }));
+    const hint = within(screen.getByRole("listbox")).getByText("NIT 900000001");
+    expect(hint).toHaveClass("text-[color:var(--di-text-tertiary)]");
+    expect(hint.className).not.toMatch(/\bopacity-/);
+  });
+});
