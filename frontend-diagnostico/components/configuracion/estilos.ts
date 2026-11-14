@@ -30,3 +30,10 @@ export const MARCA_CLS = `h-4 w-4 accent-[var(--flit-brand-ink)] ${FOCO_CLS}`;
  * saneamiento). HU #14577 (spec-ui §1.3): sale de `BotonCrearTramite.tsx` para compartirla con `BotonSanear`.
  */
 export const ACCION_FILA_CLS = `inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-0.5 text-xs font-semibold text-[var(--flit-brand-ink)] transition disabled:cursor-not-allowed disabled:opacity-60 ${FOCO_CLS}`;
+
+/**
+ * Enlace de texto de las acciones de celda y de barra («Abrir diagnóstico», «Cargar evidencia», «Todas las compañías»).
+ * HU #14577 (UA-12, hueco H-10): una sola definición para los cinco archivos que la copiaban, con el alto mínimo de 36 px
+ * de las barras densas (H-6).
+ */
+export const ENLACE_ACCION_CLS = `inline-flex min-h-9 items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;

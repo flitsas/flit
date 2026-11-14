@@ -83,7 +83,7 @@ export function HistorialSaneamiento({ historial }: { historial: readonly Evento
                   </span>
                 )}
                 {fuente && e.evento !== "RENGLON_ACTUALIZADO" && <span className={AYUDA_CLS}>{`Concepto: ${fuente}`}</span>}
-                <span className={AYUDA_CLS}>{e.actor === "FLIT" ? `FLIT · usuario ${(e.usuario_id ?? "").slice(0, 8)}` : "Compañía"}</span>
+                <span className={AYUDA_CLS}>{e.actor !== "FLIT" ? "Compañía" : e.usuario_id ? `FLIT · usuario ${e.usuario_id.slice(0, 8)}` : "FLIT"}</span>
                 {e.motivo?.trim() && <span className="whitespace-pre-line break-words">{`Motivo: ${e.motivo}`}</span>}
               </li>
             );

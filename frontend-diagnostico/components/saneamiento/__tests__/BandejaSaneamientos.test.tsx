@@ -217,7 +217,7 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja(filas())) });
     montar("estado=");
     await tabla();
-    const casillaGestion = screen.getByRole("checkbox", { name: "Seleccionar TST003" });
+    const casillaGestion = screen.getByRole("checkbox", { name: "Seleccionar la placa TST003" });
     expect(casillaGestion).toBeDisabled();
     expect(casillaGestion).toHaveAccessibleDescription("Solo se toman las solicitudes sin tomar");
     fireEvent.click(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" }));
@@ -234,8 +234,8 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
     const refrescar = vi.fn();
     montar("estado=", refrescar);
     await tabla();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar TST001" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar TST002" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST002" }));
     fireEvent.click(screen.getByRole("button", { name: "Tomar (2)" }));
     const aviso = await screen.findByText("Se tomó 1 saneamiento. 1 no se pudo tomar porque cambió de estado.", { ignore: SIN_REGION });
     const [, init] = llamadas(api, "POST", `${BASE}/tomar`)[0] as [string, RequestInit];
@@ -296,6 +296,82 @@ describe("AC27 — «Tomar (N)» y Excel", () => {
   });
 });
 
+describe("Auditoría UI (UA-1, UA-2, UA-10, UA-13)", () => {
+  it("UA-1: el <thead> no lleva controles; «Seleccionar las solicitudes sin tomar» es un botón visible antes de la barra", async () => {
+    conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1), filaBandeja(2), filaBandeja(3, { estado: "EN_GESTION" })])) });
+    montar("estado=");
+    const t = await tabla();
+    const thead = t.querySelector("thead") as HTMLElement;
+    expect(within(thead).queryByRole("checkbox")).toBeNull();
+    expect(within(thead).queryAllByRole("button")).toHaveLength(0);
+    expect(within(thead).getByText("Selección")).toHaveClass("sr-only");
+    const todas = screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" });
+    expect(todas).toBeEnabled();
+    fireEvent.click(todas);
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa TST002" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa TST003" })).not.toBeChecked();
+  });
+
+  it("UA-1: sin solicitudes sin tomar en la página, el botón queda deshabilitado", async () => {
+    conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1, { estado: "EN_GESTION" })])) });
+    montar("estado=");
+    await tabla();
+    expect(screen.getByRole("button", { name: "Seleccionar las solicitudes sin tomar" })).toBeDisabled();
+  });
+
+  it("UA-2: «Filas por página» del kit con 10/20/30/50; el cambio vuelve a la página 1 con el tamaño nuevo", async () => {
+    const api = conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)], { total: 60, pagina: 2 })) });
+    montar("pagina=2");
+    await tabla();
+    const selector = screen.getByRole("combobox", { name: "Filas por página" });
+    expect(within(selector).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "30", "50"]);
+    fireEvent.change(selector, { target: { value: "20" } });
+    await waitFor(() => expect(consultas(api).at(-1)).toBe("estado=SOLICITADO&pagina=1&tamano=20"));
+    expect(h.replace).toHaveBeenLastCalledWith("/backoffice/saneamientos?tamano=20", { scroll: false });
+  });
+
+  it("UA-10: sin placa muestra el VIN o el identificador, o «Sin placa»; nunca el vehiculo_id", async () => {
+    conEmpresas({
+      [`GET ${BASE}`]: () =>
+        json(
+          listaBandeja([
+            filaBandeja(1, { placa: null, vin: "VINPRUEBA0000001" }),
+            filaBandeja(2, { placa: null, identificador: "MOTOR-PRUEBA-2" }),
+            filaBandeja(3, { placa: null }),
+          ]),
+        ),
+    });
+    montar();
+    const t = await tabla();
+    expect(t).not.toHaveTextContent(/vehiculo-\d/);
+    expect(within(t).getByRole("link", { name: "VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(within(t).getByRole("link", { name: "MOTOR-PRUEBA-2" })).toBeInTheDocument();
+    expect(within(t).getByRole("link", { name: "Sin placa" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar la placa VINPRUEBA0000001" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Seleccionar el vehículo sin placa" })).toBeInTheDocument();
+  });
+
+  it("UA-13: «Tomar (N)» es el Button del kit: en vuelo queda aria-busy con el girador y conserva el foco", async () => {
+    let soltar: (r: Response) => void = () => {};
+    conEmpresas({
+      [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])),
+      [`POST ${BASE}/tomar`]: () => new Promise<Response>((r) => (soltar = r)),
+    });
+    montar();
+    await tabla();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
+    const boton = screen.getByRole("button", { name: "Tomar (1)" });
+    fireEvent.click(boton);
+    const enVuelo = await screen.findByRole("button", { name: /Tomando…/ });
+    expect(enVuelo).toHaveAttribute("aria-busy", "true");
+    expect(enVuelo).toHaveAttribute("aria-disabled", "true");
+    expect(enVuelo).not.toBeDisabled();
+    soltar(json({ tomados: 1, omitidos: [] }));
+    expect(await screen.findByText("Se tomó 1 saneamiento.", { ignore: SIN_REGION })).toBeInTheDocument();
+  });
+});
+
 describe("AC28 — ir a la gestión", () => {
   it("la placa es un enlace a /backoffice/saneamientos/{sid}?empresa= y el clic en la fila navega allí", async () => {
     const fila = filaBandeja(1);
@@ -312,7 +388,7 @@ describe("AC28 — ir a la gestión", () => {
     conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])) });
     montar();
     await tabla();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar TST001" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
     expect(h.push).not.toHaveBeenCalled();
     expect(LOTE_BO).toBeTruthy();
   });

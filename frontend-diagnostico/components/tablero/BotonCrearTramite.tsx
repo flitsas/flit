@@ -13,7 +13,7 @@ import {
   BOTON_SECUNDARIO_CLS,
   CAMPO_CLS,
   ETIQUETA_CLS,
-  FOCO_CLS,
+  ENLACE_ACCION_CLS,
 } from "@/components/configuracion/estilos";
 import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite";
 import { ApiError } from "@/lib/api";
@@ -31,7 +31,6 @@ import {
 
 /** Pastilla compacta de la fila, como «Reintentar placa» (compartida con la bandera de saneamiento, HU #14577). */
 const FILA_CLS = ACCION_FILA_CLS;
-const ENLACE_CLS = `inline-flex items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
 
 type EstadoTipos = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; tipos: TipoTramite[] };
 
@@ -417,7 +416,7 @@ export function AccionTramiteFila({
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`${unir("Ver trámite", numero)} de la placa ${identificador} (se abre en una pestaña nueva)`}
-        className={ENLACE_CLS}
+        className={ENLACE_ACCION_CLS}
       >
         <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
         {unir("Ver trámite", numero)}

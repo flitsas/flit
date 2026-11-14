@@ -12,7 +12,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
 } from "@flit/ui/table-styles";
-import { AYUDA_CLS, CAMPO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, CAMPO_CLS, ENLACE_ACCION_CLS } from "@/components/configuracion/estilos";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { EtiquetaTono } from "@/components/saneamiento/SeccionesDeuda";
 import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
@@ -25,8 +25,6 @@ import { LIMITES_TEXTO } from "@/lib/saneamiento/textoLibre";
 // sola, con su versión, y conserva lo digitado si falla. La evidencia no pasa por el borrador: se sube en el acto (D-05).
 // En SANEADO y NO_PROCEDE, la misma información en solo lectura.
 
-/** Enlace de texto de las acciones de celda (ENLACE_CLS de la spec). */
-export const ENLACE_CLS = `inline-flex min-h-9 items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
 
 const OPCIONES_RESULTADO: { valor: ResultadoRenglon; label: string }[] = [
   { valor: "PENDIENTE", label: ROTULO_RESULTADO.PENDIENTE },
@@ -79,7 +77,7 @@ function CeldaEvidencia({ r, acciones, descarga }: { r: RenglonSaneamiento; acci
   const concepto = rotuloConcepto(r);
   if (!r.evidencia) {
     return (
-      <button type="button" aria-label={`Cargar evidencia de ${concepto}`} onClick={() => acciones.cargarEvidencia(r)} className={ENLACE_CLS}>
+      <button type="button" aria-label={`Cargar evidencia de ${concepto}`} onClick={() => acciones.cargarEvidencia(r)} className={ENLACE_ACCION_CLS}>
         Cargar PDF
       </button>
     );
@@ -99,14 +97,14 @@ function CeldaEvidencia({ r, acciones, descarga }: { r: RenglonSaneamiento; acci
           aria-label={`Ver evidencia de ${concepto}`}
           aria-busy={descarga === "descargando" || undefined}
           onClick={() => acciones.verEvidencia(r)}
-          className={ENLACE_CLS}
+          className={ENLACE_ACCION_CLS}
         >
           {descarga === "descargando" ? "Descargando…" : "Ver"}
         </button>
-        <button type="button" aria-label={`Reemplazar evidencia de ${concepto}`} onClick={() => acciones.cargarEvidencia(r)} className={ENLACE_CLS}>
+        <button type="button" aria-label={`Reemplazar evidencia de ${concepto}`} onClick={() => acciones.cargarEvidencia(r)} className={ENLACE_ACCION_CLS}>
           Reemplazar
         </button>
-        <button type="button" aria-label={`Quitar evidencia de ${concepto}`} onClick={() => acciones.quitarEvidencia(r)} className={ENLACE_CLS}>
+        <button type="button" aria-label={`Quitar evidencia de ${concepto}`} onClick={() => acciones.quitarEvidencia(r)} className={ENLACE_ACCION_CLS}>
           Quitar
         </button>
       </span>
@@ -198,7 +196,7 @@ export function RenglonesEditables({ renglones, acciones, errores, descargas }: 
       campo: "quitar",
       titulo: "Quitar",
       mostrar: (f) => (
-        <button type="button" aria-label={`Quitar concepto ${rotuloConcepto(f)}`} onClick={() => acciones.quitarRenglon(f)} className={ENLACE_CLS}>
+        <button type="button" aria-label={`Quitar concepto ${rotuloConcepto(f)}`} onClick={() => acciones.quitarRenglon(f)} className={ENLACE_ACCION_CLS}>
           Quitar concepto
         </button>
       ),
@@ -270,7 +268,7 @@ export function RenglonesLectura({
                     aria-label={`Ver evidencia de ${concepto}`}
                     aria-busy={descarga === "descargando" || undefined}
                     onClick={() => verEvidencia(r)}
-                    className={ENLACE_CLS}
+                    className={ENLACE_ACCION_CLS}
                   >
                     Ver evidencia
                   </button>

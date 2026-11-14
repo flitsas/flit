@@ -16,7 +16,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
 } from "@flit/ui/table-styles";
-import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ENLACE_ACCION_CLS } from "@/components/configuracion/estilos";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { EtiquetaTono, SeccionesDeuda } from "@/components/saneamiento/SeccionesDeuda";
@@ -29,6 +29,7 @@ import {
   urlDeudaPdf,
   urlEvidencia,
   type EstadoSaneamientoActivo,
+  type EventoHistorial,
   type EventoSaneamiento,
   type PanelDeuda,
   type RenglonSaneamiento,
@@ -96,7 +97,16 @@ const TEXTO_EVENTO: Partial<Record<EventoSaneamiento, string>> = {
 
 const TONO_RESULTADO: Record<ResultadoRenglon, StatusTone> = { PENDIENTE: "neutral", SANEADO: "success", NO_PROCEDE: "neutral" };
 
-const ENLACE_CLS = `inline-flex items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
+/**
+ * Actor de un evento del historial reducido (AC16; UA-8): FLIT; el SOLICITADO lo hizo quien dice `solicitado_por_mi` («Tú» u
+ * «Otro usuario de la compañía»); el resto de la compañía (p. ej. DESMARCADO) queda «Tu compañía», sin saber quién (SP-15).
+ */
+function actorEvento(e: EventoHistorial, solicitadoPorMi: boolean): string {
+  if (e.actor === "FLIT") return "FLIT";
+  if (e.evento === "SOLICITADO") return solicitadoPorMi ? "Tú" : "Otro usuario de la compañía";
+  return "Tu compañía";
+}
+
 const ERROR_CLS = "text-xs font-semibold text-[color:var(--di-danger)]";
 const ERROR_DESCARGA = "No pudimos generar el archivo. Intenta de nuevo.";
 
@@ -118,7 +128,7 @@ function EnlaceEvidencia({ href, concepto }: { href: string; concepto: string })
   const { descargando, error, alHacerClic } = useDescarga("evidencia.pdf");
   return (
     <span className="inline-flex flex-col items-end gap-1 min-[901px]:items-start">
-      <a href={href} download onClick={alHacerClic} aria-label={`Descargar evidencia de ${concepto}`} aria-busy={descargando || undefined} className={ENLACE_CLS}>
+      <a href={href} download onClick={alHacerClic} aria-label={`Descargar evidencia de ${concepto}`} aria-busy={descargando || undefined} className={ENLACE_ACCION_CLS}>
         {descargando ? "Descargando…" : "Descargar evidencia"}
       </a>
       {error && (
@@ -237,7 +247,7 @@ function SeccionSaneamiento({
                 {" · "}
                 {TEXTO_EVENTO[e.evento]}
               </span>
-              <span className={AYUDA_CLS}>{e.actor === "FLIT" ? "FLIT" : "Tu compañía"}</span>
+              <span className={AYUDA_CLS}>{actorEvento(e, saneamiento.solicitado_por_mi)}</span>
               {e.motivo?.trim() && <span className="whitespace-pre-line break-words">{`Motivo: ${e.motivo}`}</span>}
             </li>
           ))}

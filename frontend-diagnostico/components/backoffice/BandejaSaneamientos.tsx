@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent } f
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BarraSeleccion } from "@flit/ui/BarraSeleccion";
-import { buttonClass } from "@flit/ui/Button";
+import { Button } from "@flit/ui/Button";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 import { ChipFiltro, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { EstadoVacio } from "@flit/ui/EstadoVacio";
@@ -22,7 +22,17 @@ import {
 } from "@flit/ui/table-styles";
 import { SIN_PERMISO_SANEAMIENTO } from "@/components/backoffice/AccesoSaneamientos";
 import { SelectorEmpresaBackoffice } from "@/components/backoffice/SelectorEmpresaBackoffice";
-import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS, FOCO_CLS, MARCA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import {
+  AYUDA_CLS,
+  BOTON_REINTENTAR_CLS,
+  BOTON_SECUNDARIO_CLS,
+  CAMPO_CLS,
+  ENLACE_ACCION_CLS,
+  ETIQUETA_CLS,
+  FOCO_CLS,
+  MARCA_CLS,
+  TARJETA_CLS,
+} from "@/components/configuracion/estilos";
 import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { useRegionVivaPantalla } from "@/components/saneamiento/RegionVivaPantalla";
 import { EtiquetaTono } from "@/components/saneamiento/SeccionesDeuda";
@@ -47,7 +57,7 @@ import { rotuloEmpresa, useNombresEmpresas } from "@/lib/backoffice/useNombresEm
 import { useResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
 import { descargarArchivo } from "@/lib/reportes/api";
 import { mensajeErrorSaneamiento, type EstadoSaneamiento } from "@/lib/saneamiento/api";
-import { ESTADOS_SANEAMIENTO, etiquetaSaneamiento } from "@/lib/saneamiento/estados";
+import { ESTADOS_SANEAMIENTO, etiquetaSaneamiento, laPlaca } from "@/lib/saneamiento/estados";
 
 // PS-4, bandeja «Saneamientos» del backoffice (spec-ui §5; plan §7.5; HU #14577 AC26–AC28). Filtros en la URL (estado
 // multiselección, compañía, placa y fechas de solicitud), tabla paginada en el servidor que pasa a tarjetas por debajo de
@@ -66,8 +76,6 @@ const ERROR_DESCARGA = "No pudimos generar el archivo. Intenta de nuevo.";
 const MOTIVO_NO_SELECCIONABLE = "Solo se toman las solicitudes sin tomar";
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 const COLUMNAS = ["Placa", "Compañía", "Diagnóstico", "Modo", "Dictamen", "Estado", "Solicitado", "Tomado", "Cerrado", "Pendientes"] as const;
-const BOTON_TOMAR_CLS = buttonClass({ size: "sm", className: "gap-1.5 text-sm" });
-const ENLACE_CLS = `self-start text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
 
 const plural = (n: number, singular: string, varios: string) => (n === 1 ? singular : varios);
 
@@ -269,10 +277,17 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
           textoSeleccion={(n) => `${n} ${plural(n, "saneamiento elegido", "saneamientos elegidos")}`}
           onQuitar={() => setSeleccion(new Set())}
           acciones={
-            <button type="button" onClick={() => void tomar()} aria-busy={tomando || undefined} aria-disabled={tomando || undefined} className={BOTON_TOMAR_CLS}>
-              <Icono nombre="check" className="h-4 w-4" />
-              {tomando ? "Tomando…" : `Tomar (${elegidas.length})`}
-            </button>
+            // UA-13: el Button del kit, con su girador y aria-busy mientras toma.
+            <Button size="sm" className="gap-1.5 text-sm" cargando={tomando} onClick={() => void tomar()}>
+              {tomando ? (
+                "Tomando…"
+              ) : (
+                <>
+                  <Icono nombre="check" className="h-4 w-4" />
+                  {`Tomar (${elegidas.length})`}
+                </>
+              )}
+            </Button>
           }
         />
         {errorTomar && (
@@ -296,7 +311,8 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
             </thead>
             <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {lista.saneamientos.map((f) => {
-                const identificador = f.placa || f.vehiculo_id;
+                // UA-10: la placa, o el VIN, o el identificador; sin ninguno, «Sin placa». Nunca el vehiculo_id.
+                const identificador = f.placa || f.vin || f.identificador || "";
                 const seleccionable = f.estado === "SOLICITADO";
                 const motivoId = `${id}-${f.id}-motivo`;
                 return (
@@ -313,7 +329,7 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
                       <input
                         type="checkbox"
                         className={MARCA_CLS}
-                        aria-label={`Seleccionar ${identificador}`}
+                        aria-label={`Seleccionar ${laPlaca(identificador)}`}
                         checked={seleccion.has(f.id)}
                         disabled={!seleccionable}
                         aria-describedby={seleccionable ? undefined : motivoId}
@@ -327,7 +343,7 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
                     </td>
                     <th scope="row" data-label="Placa" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} text-left`}>
                       <Link href={irA(f)} className={`font-semibold uppercase tracking-wider text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`}>
-                        {identificador}
+                        {identificador || "Sin placa"}
                       </Link>
                     </th>
                     <td data-label="Compañía" className={CELDA_CLS}>
@@ -417,7 +433,7 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
         <div className="flex flex-col gap-1">
           <SelectorEmpresaBackoffice id={`${id}-empresa`} value={filtros.empresa} onChange={(empresa) => aplicar({ empresa: empresa.id })} className="w-full max-w-xl" />
           {filtros.empresa && (
-            <button type="button" onClick={() => aplicar({ empresa: "" })} className={ENLACE_CLS}>
+            <button type="button" onClick={() => aplicar({ empresa: "" })} className={`self-start ${ENLACE_ACCION_CLS}`}>
               Todas las compañías
             </button>
           )}

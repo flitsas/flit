@@ -25,6 +25,7 @@ import {
   BOTON_PRIMARIO_CLS,
   BOTON_REINTENTAR_CLS,
   BOTON_SECUNDARIO_CLS,
+  ENLACE_ACCION_CLS,
   FOCO_CLS,
   MARCA_CLS,
   TARJETA_CLS,
@@ -81,8 +82,6 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorVehiculos } | {
 const COLUMNAS = ["Placa", "Diagnóstico", "Fecha", "Modo", "Estado", "Dictamen", "Saneamiento", "Trámite", "Acciones"] as const;
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 const ERROR_CLS = "text-xs font-semibold text-[color:var(--di-danger)]";
-const ENLACE_CLS = `inline-flex items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
-const SELECT_TAMANO_CLS = `h-9 rounded-[9px] border border-input bg-card px-2 text-sm text-flit-primary ${FOCO_CLS}`;
 
 const ERROR_DESCARGA = "No pudimos generar el archivo. Intenta de nuevo.";
 const ERROR_SANEAR = "No pudimos solicitar el saneamiento. Intenta de nuevo.";
@@ -590,7 +589,7 @@ export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: Li
                           onRefrescar={refrescar}
                           onAnunciar={anunciar}
                         />
-                        <Link href={`/diagnosticos/${encodeURIComponent(f.diagnostico_id)}`} aria-label={`Abrir el diagnóstico ${f.diagnostico_nombre}`} className={ENLACE_CLS}>
+                        <Link href={`/diagnosticos/${encodeURIComponent(f.diagnostico_id)}`} aria-label={`Abrir el diagnóstico ${f.diagnostico_nombre}`} className={ENLACE_ACCION_CLS}>
                           Abrir diagnóstico
                         </Link>
                         {terminado(f) && (

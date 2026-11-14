@@ -33,6 +33,9 @@ export interface FilaBandeja {
   diagnostico_nombre: string;
   vehiculo_id: string;
   placa: string | null;
+  /** UA-10: VIN y otro identificador del vehículo sin placa; opcionales hasta que BE-B los agregue a la bandeja. */
+  vin?: string | null;
+  identificador?: string | null;
   modo: ModoDiagnostico;
   veredicto: "VIABLE" | "BLOQUEADO" | null;
   estado: EstadoSaneamiento;
@@ -52,7 +55,8 @@ export interface ListaBandeja {
 
 /** Evento del historial completo de FLIT: con quién lo hizo. */
 export interface EventoHistorialBackoffice extends EventoHistorial {
-  usuario_id: string;
+  /** UA-11: puede llegar nulo (evento de sistema); entonces el historial dice solo «FLIT». */
+  usuario_id: string | null;
 }
 
 /** Saneamiento que ve FLIT (SP-15): mismo cuerpo que el de la compañía, con el historial completo y su usuario. */
