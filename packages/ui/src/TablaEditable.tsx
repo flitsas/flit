@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import { cn } from "./cn";
 import {
   TABLA_MOVIL_CELL_CLS,
@@ -40,6 +40,13 @@ import {
  *
  * Observación 3 del code review: mientras la fila guarda, la tabla ignora los cambios de sus campos y le pasa
  * `guardando` al `editor` (quinto argumento) para que el control propio quede de solo lectura.
+ *
+ * Saneamiento (spec-ui §8, FE-0): `guardado="automatico"` es aditivo; sin la prop, todo es como antes. En automático no hay
+ * Guardar ni Descartar: cada celda editable guarda al salir de ella (si la fila tiene cambios) y las columnas con
+ * `guardarAlCambiarMs` guardan ese tiempo después del último cambio (salir de la celda adelanta el guardado). Un cambio que
+ * llega mientras guarda se conserva y se envía al terminar, sobre la fila nueva que mande el padre (versión al día). Tras
+ * un guardado la celda de estado dice `rotuloGuardado` (por defecto «Guardado») en tono success hasta el siguiente
+ * cambio, el foco no se mueve y la columna «Acciones» solo muestra «Reintentar» en error.
  */
 export type EstadoFilaEditable = "sin_cambios" | "editado" | "guardando" | "error";
 
@@ -69,7 +76,12 @@ export interface ColumnaEditable<F> {
   ) => ReactNode;
   /** Presentación de una celda no editable. */
   mostrar?: (fila: F) => ReactNode;
+  /** Solo en guardado automático: guarda N ms después del último cambio (selectores). Sin ella, guarda al salir del campo. */
+  guardarAlCambiarMs?: number;
 }
+
+/** "boton" (por defecto): Guardar y Descartar por fila. "automatico": guarda al salir del campo o tras `guardarAlCambiarMs`. */
+export type ModoGuardado = "boton" | "automatico";
 
 export interface TablaEditableProps<F> {
   etiqueta: string;
@@ -89,6 +101,10 @@ export interface TablaEditableProps<F> {
   errorFila?: (fila: F) => string | null | undefined;
   vacio?: ReactNode;
   className?: string;
+  /** Por defecto "boton" (el de siempre). */
+  guardado?: ModoGuardado;
+  /** Solo en guardado automático: rótulo visible tras guardar con éxito (tono success). Por defecto «Guardado». */
+  rotuloGuardado?: string;
 }
 
 const TEXTO_ESTADO: Record<EstadoFilaEditable, string> = {
@@ -137,9 +153,23 @@ interface FilaEditableProps<F> {
   rotulos?: Partial<Record<EstadoFilaEditable, string>>;
   error: string | null | undefined;
   anunciar: (texto: string) => void;
+  automatico: boolean;
+  rotuloGuardado: string;
 }
 
-function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlado, rotulos, error, anunciar }: FilaEditableProps<F>) {
+function FilaEditable<F>({
+  fila,
+  id,
+  columnas,
+  onGuardar,
+  onDescartar,
+  controlado,
+  rotulos,
+  error,
+  anunciar,
+  automatico,
+  rotuloGuardado,
+}: FilaEditableProps<F>) {
   const [borrador, setBorrador] = useState<F>(fila);
   const [estado, setEstado] = useState<EstadoFilaEditable>("sin_cambios");
   const [filaPrevia, setFilaPrevia] = useState<F>(fila);
@@ -154,23 +184,41 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
   // Fallos de guardado: un segundo fallo seguido cambia la firma del anuncio aunque el texto sea el mismo.
   const [fallos, setFallos] = useState(0);
   const errorId = useId();
+  // Guardado automático: el último borrador (el temporizador lo lee después del render), los campos cambiados desde que
+  // empezó el último guardado, si hay un cambio esperando a que termine el guardado en curso y el temporizador.
+  const borradorRef = useRef<F>(borrador);
+  const cambios = useRef<Partial<F>>({});
+  const pendiente = useRef(false);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const estadoActual = useRef<EstadoFilaEditable>(estado);
+  const [guardarPronto, setGuardarPronto] = useState(false);
+  const [guardadaVisible, setGuardadaVisible] = useState(false);
 
-  // M12: si el padre cambia la fila y no hay edición pendiente, el borrador toma el valor nuevo.
+  // M12: si el padre cambia la fila y no hay edición pendiente, el borrador toma el valor nuevo. En automático, además, lo
+  // que el usuario cambió después del último guardado se conserva sobre la fila nueva (p. ej. con su versión al día).
   if (fila !== filaPrevia) {
     setFilaPrevia(fila);
-    if (estado === "sin_cambios") setBorrador(fila);
+    if (automatico) setBorrador({ ...fila, ...cambios.current });
+    else if (estado === "sin_cambios") setBorrador(fila);
   }
 
   const control = controlado == null ? null : typeof controlado === "string" ? { estado: controlado } : controlado;
   const visible = control?.estado ?? estado;
-  const texto = control?.texto ?? rotulos?.[visible] ?? TEXTO_ESTADO[visible];
-  const tono = control?.tono ?? TONO_ESTADO[visible];
+  const recienGuardadaVisible = automatico && guardadaVisible && !control && visible === "sin_cambios";
+  const texto = recienGuardadaVisible ? rotuloGuardado : (control?.texto ?? rotulos?.[visible] ?? TEXTO_ESTADO[visible]);
+  const tono = recienGuardadaVisible ? "success" : (control?.tono ?? TONO_ESTADO[visible]);
   const guardando = visible === "guardando" || estado === "guardando";
+
+  useEffect(() => {
+    borradorRef.current = borrador;
+    estadoActual.current = estado;
+  });
 
   useEffect(() => {
     montada.current = true;
     return () => {
       montada.current = false;
+      if (temporizador.current) clearTimeout(temporizador.current);
     };
   }, []);
 
@@ -193,35 +241,95 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
     }
     if (anuncioPrevio.current === firma) return;
     anuncioPrevio.current = firma;
-    const rotulo = recienGuardada.current && !controladaFila && visible === "sin_cambios" ? TEXTO_GUARDADO : texto;
+    const rotulo = recienGuardada.current && !controladaFila && visible === "sin_cambios" ? (automatico ? rotuloGuardado : TEXTO_GUARDADO) : texto;
     recienGuardada.current = false;
     anunciar(`${id}: ${rotulo}${error && visible === "error" ? `. ${error}` : ""}`);
-  }, [firma, controladaFila, visible, texto, error, id, anunciar]);
+  }, [firma, controladaFila, visible, texto, error, id, anunciar, automatico, rotuloGuardado]);
 
-  const cambiar = (campo: keyof F & string, valor: F[keyof F & string]) => {
-    // Observación 3: lo que llegue mientras guarda no entra al borrador (no viajaría en el guardado en curso).
-    if (guardando) return;
-    setBorrador((b) => ({ ...b, [campo]: valor }));
-    setEstado("editado");
+  const cancelarTemporizador = () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    temporizador.current = null;
   };
 
   const guardar = useCallback(async (reintento = false) => {
-    if (estado === "guardando") return;
+    if (estadoActual.current === "guardando") return;
+    cancelarTemporizador();
+    const enviado = borradorRef.current;
+    cambios.current = {};
+    pendiente.current = false;
+    estadoActual.current = "guardando";
     setDesdeReintentar(reintento);
+    setGuardadaVisible(false);
     setEstado("guardando");
     try {
-      await onGuardar(borrador);
+      await onGuardar(enviado);
       if (!montada.current) return;
-      if (focoEnFila(filaRef.current)) enfocar.current = "estado";
+      if (automatico && pendiente.current) {
+        // Llegó un cambio mientras guardaba: sale en cuanto el padre pinte la fila nueva (efecto de abajo).
+        pendiente.current = false;
+        estadoActual.current = "editado";
+        setEstado("editado");
+        setGuardarPronto(true);
+        return;
+      }
+      // Automático: el usuario ya está en otro campo; el foco no se mueve.
+      if (!automatico && focoEnFila(filaRef.current)) enfocar.current = "estado";
       recienGuardada.current = true;
+      if (automatico) setGuardadaVisible(true);
+      estadoActual.current = "sin_cambios";
       setEstado("sin_cambios");
     } catch {
       if (!montada.current) return;
       if (focoEnFila(filaRef.current)) enfocar.current = "reintentar";
       setFallos((n) => n + 1);
+      estadoActual.current = "error";
       setEstado("error");
     }
-  }, [borrador, estado, onGuardar]);
+  }, [automatico, onGuardar]);
+
+  // Automático: el cambio que esperaba al guardado anterior sale después del render, ya con la fila nueva del padre.
+  useEffect(() => {
+    if (!guardarPronto) return;
+    setGuardarPronto(false);
+    void guardar();
+  }, [guardarPronto, guardar]);
+
+  const cambiar = (columna: ColumnaEditable<F>, valor: F[keyof F & string]) => {
+    const campo = columna.campo;
+    if (guardando) {
+      // Observación 3: en el modo de botón, lo que llegue mientras guarda no entra al borrador (no viajaría en el
+      // guardado en curso). En automático se conserva y se envía al terminar el guardado propio de la fila.
+      if (!automatico || estadoActual.current !== "guardando") return;
+      cambios.current = { ...cambios.current, [campo]: valor };
+      pendiente.current = true;
+      const siguiente = { ...borradorRef.current, [campo]: valor };
+      borradorRef.current = siguiente;
+      setBorrador(siguiente);
+      return;
+    }
+    if (automatico) cambios.current = { ...cambios.current, [campo]: valor };
+    const siguiente = { ...borradorRef.current, [campo]: valor };
+    borradorRef.current = siguiente;
+    estadoActual.current = "editado";
+    setBorrador(siguiente);
+    setGuardadaVisible(false);
+    setEstado("editado");
+    if (automatico && columna.guardarAlCambiarMs !== undefined) {
+      cancelarTemporizador();
+      temporizador.current = setTimeout(() => {
+        temporizador.current = null;
+        void guardar();
+      }, columna.guardarAlCambiarMs);
+    }
+  };
+
+  /** Automático: salir de la celda (a otro lado, no dentro de ella) guarda si hay cambios y adelanta el temporizador. */
+  const alSalirDeCelda = (e: FocusEvent<HTMLTableCellElement>) => {
+    const destino = e.relatedTarget as Node | null;
+    if (destino && e.currentTarget.contains(destino)) return;
+    if (estadoActual.current !== "editado") return;
+    void guardar();
+  };
 
   const descartar = () => {
     if (guardando) return;
@@ -241,7 +349,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
         let contenido: ReactNode;
         if (c.editable) {
           contenido = c.editor ? (
-            c.editor(valor, (v) => cambiar(c.campo, v), etiquetaCampo, borrador, guardando)
+            c.editor(valor, (v) => cambiar(c, v), etiquetaCampo, borrador, guardando)
           ) : (
             <input
               type="text"
@@ -249,7 +357,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
               value={valor == null ? "" : String(valor)}
               readOnly={guardando}
               aria-readonly={guardando ? "true" : undefined}
-              onChange={(e) => cambiar(c.campo, e.target.value as F[keyof F & string])}
+              onChange={(e) => cambiar(c, e.target.value as F[keyof F & string])}
               className="min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
             />
           );
@@ -266,7 +374,12 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
             {contenido}
           </th>
         ) : (
-          <td key={c.campo} data-label={c.titulo} className={`px-3 py-2 text-sm text-[color:var(--di-text-primary)] ${celdaMovil}`}>
+          <td
+            key={c.campo}
+            data-label={c.titulo}
+            className={`px-3 py-2 text-sm text-[color:var(--di-text-primary)] ${celdaMovil}`}
+            onBlur={automatico && c.editable ? alSalirDeCelda : undefined}
+          >
             {contenido}
           </td>
         );
@@ -288,7 +401,8 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
       </td>
       <td data-label="Acciones" className={`px-3 py-2 ${TABLA_MOVIL_CELL_CLS}`}>
         <div className="flex flex-wrap items-center gap-2">
-          {(controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
+          {!automatico &&
+          (controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
           visible !== "error" ? (
             <>
               <button
@@ -348,6 +462,8 @@ export function TablaEditable<F>({
   errorFila,
   vacio = "Sin filas",
   className,
+  guardado = "boton",
+  rotuloGuardado = TEXTO_GUARDADO,
 }: TablaEditableProps<F>) {
   // N3: cada anuncio lleva su número; el nodo se vuelve a montar y el lector lo lee aunque el texto se repita.
   const [anuncio, setAnuncio] = useState<{ texto: string; n: number }>({ texto: "", n: 0 });
@@ -399,6 +515,8 @@ export function TablaEditable<F>({
                 rotulos={rotulosEstado}
                 error={errorFila?.(f)}
                 anunciar={anunciar}
+                automatico={guardado === "automatico"}
+                rotuloGuardado={rotuloGuardado}
               />
             ))
           )}
