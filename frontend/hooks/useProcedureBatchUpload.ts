@@ -15,6 +15,7 @@ import {
   type OcrEvaluation,
 } from './useProcedureDocuments';
 import type {
+  AttachmentOcrVerdict,
   BatchOcrFileError,
   BatchOcrPiece,
   BatchOcrUnrecognized,
@@ -180,6 +181,22 @@ export function buildReviewItems(
         !conflicto && !duplicado && !evaluation.rechazado ? 'accept' : 'skip',
     };
   });
+}
+
+/**
+ * Veredicto OCR que se declara al registrar una pieza del lote (Bug #14559, ADR-0085). Solo códigos
+ * cerrados: nunca el motivo libre del modelo ni el VIN. Informativo, no es compuerta.
+ */
+export function veredictoDeLote(item: BatchReviewItem): AttachmentOcrVerdict {
+  if (!item.piece.data) {
+    return item.piece.analisisError
+      ? { status: 'skipped', reason: 'analisis_fallido' }
+      : { status: 'rejected', reason: 'ilegible' };
+  }
+  if (!item.evaluation.rechazado) return { status: 'verified' };
+  return item.evaluation.codigo
+    ? { status: 'rejected', reason: item.evaluation.codigo }
+    : { status: 'rejected' };
 }
 
 export interface UseProcedureBatchUploadOptions {
@@ -364,11 +381,13 @@ export function useProcedureBatchUpload(
           await tramitesClient.deleteAttachment(instanceId, item.conflicto.id, tenantId);
         }
 
+        // Bug #14559: el veredicto viaja con el registro para que el checklist lo rehidrate.
         await tramitesClient.uploadAttachment(
           instanceId,
           piece.tipo,
           base64ToFile(piece.contentBase64, piece.filename, piece.mimetype),
           tenantId,
+          veredictoDeLote(item),
         );
         subidas.push(item.id);
 
