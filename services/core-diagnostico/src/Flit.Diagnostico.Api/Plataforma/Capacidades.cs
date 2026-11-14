@@ -7,7 +7,9 @@ namespace Flit.Diagnostico.Api.Plataforma;
 /// de cualquier compañía o FLIT con <c>diagnostico.backoffice.ver</c>); <see cref="BackofficeOperacion"/>,
 /// <see cref="LlenarConsultas"/> y <see cref="CorregirDictamen"/>, la de operación FLIT; <see cref="VerVolumetria"/> exige
 /// <c>tenant_type=FLIT</c> (§6.2, D-16) salvo al SuperAdmin, que tiene todas las capacidades sin mirar la compañía (decisión
-/// D23 de la HU #14563). Es una ayuda para la interfaz; cada endpoint vuelve a exigir su permiso.
+/// D23 de la HU #14563). <see cref="Sanear"/> sigue <c>diagnostico.saneamiento.solicitar</c> y <see cref="GestionarSaneamiento"/> la
+/// operación FLIT con <c>diagnostico.saneamiento.gestionar</c> (HU #14576). Es una ayuda para la interfaz; cada endpoint vuelve a
+/// exigir su permiso.
 /// </summary>
 public sealed record Capacidades(
     bool CrearDiagnosticos,
@@ -23,7 +25,9 @@ public sealed record Capacidades(
     bool CorregirDictamen,
     bool VerAuditoria,
     bool VerVolumetria,
-    bool BackofficeOperacion)
+    bool BackofficeOperacion,
+    bool Sanear,
+    bool GestionarSaneamiento)
 {
     public static Capacidades De(UsuarioActual usuario)
     {
@@ -43,6 +47,9 @@ public sealed record Capacidades(
             CorregirDictamen: usuario.BackofficeOperacion && usuario.Tiene(Permisos.DictamenOverride),
             VerAuditoria: usuario.BackofficeConfiguracion && usuario.Tiene(Permisos.AuditoriaVer),
             VerVolumetria: DeFlit(Permisos.VolumetriaVer),
-            BackofficeOperacion: usuario.BackofficeOperacion);
+            BackofficeOperacion: usuario.BackofficeOperacion,
+            // HU #14576 (plan saneamiento §5.3; SP-8 con la decisión E3: el SuperAdmin pasa la regla general del permiso).
+            Sanear: usuario.Tiene(Permisos.SaneamientoSolicitar),
+            GestionarSaneamiento: usuario.BackofficeOperacion && usuario.Tiene(Permisos.SaneamientoGestionar));
     }
 }
