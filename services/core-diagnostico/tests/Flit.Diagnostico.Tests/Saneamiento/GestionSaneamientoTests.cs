@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Backoffice;
+using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Saneamiento;
@@ -670,6 +671,118 @@ public sealed class GestionSaneamientoTests
         filas[lote.Vehiculos[0].Id].TryGetProperty("elegible", out _).Should().BeFalse("el backoffice no marca la bandera");
         foreach (var vid in new[] { lote.Vehiculos[1].Id, lote.Vehiculos[2].Id })
             filas[vid].ValueKind.Should().Be(JsonValueKind.Null, "FE-D: saneamiento {estado, id} | null; el anulado no cuenta");
+    }
+
+    // AC24 + CR-4 (S14, S15) — con un vehículo BLOQUEADO y su saneamiento EN_GESTION: cerrar como SANEADO no cambia el dictamen
+    // vigente ni su versión; la reemisión del dictamen (ajuste FLIT, versión 2) y un reproceso real de su consulta en ERROR (202, la
+    // celda vuelve a PENDIENTE y el vehículo queda no terminado) dejan igual el saneamiento, sus renglones, su historial y
+    // vehiculos.saneamiento_estado.
+    [Fact]
+    public async Task HU14576_AC24_CR4_reemision_y_reproceso_real_no_tocan_el_saneamiento()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await SaneamientoDePrueba.LoteAsync(empresa, ["SBO129"], ct, abiertas: ["SBO129"]);
+        var vehiculo = lote.Vehiculos[0].Id;
+        var celdaEnError = lote.Celda("SBO129", Fuente.SimitVehiculo);
+        celdaEnError.Estado.Should().Be(EstadoCelda.Error, "la siembra deja la SIMIT en ERROR para reprocesarla");
+        var s = await SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, vehiculo, EstadoSaneamiento.EnGestion, ct);
+        await SaneamientoDePrueba.DictamenAsync(empresa, vehiculo, "BLOQUEADO", ct);
+        await GestionDePrueba.RenglonAsync(empresa, s.Id, FuenteSaneamiento.SimitVehiculo, ResultadoRenglonSaneamiento.Saneado, ct);
+
+        var cierre = await Accion(api.Cliente(GestionDePrueba.TokenFlit(api)), empresa, s.Id, "cerrar_saneado", await GestionDePrueba.VersionAsync(empresa, s.Id, ct), ct);
+        cierre.StatusCode.Should().Be(HttpStatusCode.OK, await cierre.Content.ReadAsStringAsync(ct));
+        var tras = await DictamenesAsync(empresa, vehiculo, ct);
+        tras.Should().ContainSingle("cerrar no emite dictamen").Which.Should().Be((1, true, "BLOQUEADO"), "cerrar no cambia el dictamen vigente ni su versión");
+        var foto = await FotoSaneamientoAsync(empresa, s.Id, ct);
+        foto.Should().StartWith("Saneado|");
+
+        using var soporte = api.Cliente(api.Token(
+            empresa: Guid.CreateVersion7(), permisos: [Permisos.BackofficeVer, Permisos.DictamenOverride], roles: ["backoffice_diagnostico"],
+            tipoEmpresa: UsuarioActual.TipoEmpresaFlit));
+        using var cuerpoAjuste = new StringContent(
+            """{"version_esperada":1,"veredicto":"BLOQUEADO","motivo":"Soporte confirmo el embargo con el organismo","alertamientos":[{"codigo":"AJUSTE_FLIT","texto":"Embargo confirmado por soporte","efecto":"BLOQUEA","fuente":"RUNT"}]}""",
+            System.Text.Encoding.UTF8, "application/json");
+        var reemision = await soporte.PutAsync(
+            $"{Flit.Diagnostico.Api.Program.Prefijo}/backoffice/diagnosticos/{lote.Id}/vehiculos/{vehiculo}/dictamen?empresa={empresa.Id}", cuerpoAjuste, ct);
+        var trasReemision = await FotoSaneamientoAsync(empresa, s.Id, ct);
+        var reproceso = await api.Cliente(api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConsultasReprocesar], roles: ["admin_diagnostico"]))
+            .PostAsync($"{Flit.Diagnostico.Api.Program.Prefijo}/consultas/{celdaEnError.Id}/reprocesar", null, ct);
+
+        reemision.StatusCode.Should().Be(HttpStatusCode.OK, await reemision.Content.ReadAsStringAsync(ct));
+        (await DictamenesAsync(empresa, vehiculo, ct)).Should().Contain((2, true, "BLOQUEADO"), "el ajuste reemitió el dictamen en la versión 2");
+        trasReemision.Should().Be(foto, "reemitir el dictamen no toca el saneamiento ni la columna del vehículo");
+        reproceso.StatusCode.Should().Be(HttpStatusCode.Accepted, await reproceso.Content.ReadAsStringAsync(ct));
+        // El reproceso vuelve la celda a PENDIENTE y, en la misma transacción, el publicador la deja EN_CURSO con su trabajo nuevo.
+        (await GestionDePrueba.JsonAsync(reproceso, ct)).GetProperty("estado").GetString().Should().BeOneOf(["PENDIENTE", "EN_CURSO"], "el reproceso ocurrió de verdad");
+        await using (var db = empresa.Db())
+            (await db.Set<CeldaConsulta>().AsNoTracking().SingleAsync(c => c.Id == celdaEnError.Id, ct)).Estado
+                .Should().BeOneOf([EstadoCelda.Pendiente, EstadoCelda.EnCurso], "la celda salió de ERROR: el vehículo quedó no terminado");
+        (await FotoSaneamientoAsync(empresa, s.Id, ct)).Should().Be(foto, "reprocesar no toca el estado, los renglones, el historial ni saneamiento_estado (S15)");
+    }
+
+    // CR-12 — «tomar varios» no marca ni escribe nada en las filas omitidas: el saneamiento EN_GESTION que sale TRANSICION_INVALIDA
+    // conserva su xmin, su historial, la versión de su fila y la del tablero de su lote; el SOLICITADO de otro lote sí se toma.
+    [Fact]
+    public async Task HU14576_CR12_tomar_varios_no_escribe_en_las_filas_omitidas()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var (loteOmitido, omitido) = await GestionDePrueba.SaneamientoAsync(empresa, "SBO130", EstadoSaneamiento.EnGestion, ct, nombreLote: "Lote omitido");
+        var (loteTomado, tomado) = await GestionDePrueba.SaneamientoAsync(empresa, "SBO131", EstadoSaneamiento.Solicitado, ct, nombreLote: "Lote tomado");
+        var antesOmitido = await FilaAsync(empresa, loteOmitido.Id, loteOmitido.Vehiculos[0].Id, omitido.Id, ct);
+        var antesTomado = await FilaAsync(empresa, loteTomado.Id, loteTomado.Vehiculos[0].Id, tomado.Id, ct);
+
+        var respuesta = await GestionDePrueba.PostAsync(api.Cliente(GestionDePrueba.TokenFlit(api)), GestionDePrueba.Base + "/tomar", new
+        {
+            items = new object[] { new { empresa = empresa.Id, id = omitido.Id }, new { empresa = empresa.Id, id = tomado.Id } },
+        }, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+        var json = await GestionDePrueba.JsonAsync(respuesta, ct);
+        json.GetProperty("tomados").GetInt32().Should().Be(1);
+        json.GetProperty("omitidos").EnumerateArray().Should().ContainSingle()
+            .Which.GetProperty("motivo").GetString().Should().Be("TRANSICION_INVALIDA");
+        (await FilaAsync(empresa, loteOmitido.Id, loteOmitido.Vehiculos[0].Id, omitido.Id, ct))
+            .Should().Be(antesOmitido, "la fila omitida no se marca: ni su versión, ni la del tablero, ni el saneamiento ni su historial");
+        var despuesTomado = await FilaAsync(empresa, loteTomado.Id, loteTomado.Vehiculos[0].Id, tomado.Id, ct);
+        despuesTomado.VersionFila.Should().BeGreaterThan(antesTomado.VersionFila, "la fila tomada sí se marca para el sondeo");
+        despuesTomado.Estado.Should().Be(EstadoSaneamiento.EnGestion);
+    }
+
+    private static async Task<List<(int Version, bool Vigente, string Veredicto)>> DictamenesAsync(EmpresaDePrueba empresa, Guid vehiculo, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        return [.. (await db.Set<DictamenVehiculo>().AsNoTracking().Where(d => d.VehiculoId == vehiculo).OrderBy(d => d.Version).ToListAsync(ct))
+            .Select(d => (d.Version, d.Vigente, d.Veredicto))];
+    }
+
+    /// <summary>Estado, xmin, renglones (resultado y versión), eventos y la copia del estado en el vehículo.</summary>
+    private static async Task<string> FotoSaneamientoAsync(EmpresaDePrueba empresa, Guid sid, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        var s = await db.Set<SaneamientoEntidad>().AsNoTracking().SingleAsync(x => x.Id == sid, ct);
+        var renglones = await db.Set<RenglonSaneamiento>().AsNoTracking().Where(r => r.SaneamientoId == sid).OrderBy(r => r.Id)
+            .Select(r => new { r.Id, r.Resultado, r.Xmin, r.QuitadoEn }).ToListAsync(ct);
+        var eventos = await db.Set<EventoSaneamiento>().AsNoTracking().CountAsync(e => e.SaneamientoId == sid, ct);
+        var columna = await db.Set<VehiculoDiagnostico>().AsNoTracking().Where(v => v.Id == s.VehiculoId).Select(v => v.SaneamientoEstado).SingleAsync(ct);
+        return $"{s.Estado}|xmin={s.Xmin}|renglones={string.Join(';', renglones.Select(r => $"{r.Id}:{r.Resultado}:{r.Xmin}:{r.QuitadoEn:O}"))}|eventos={eventos}|columna={columna}|cerrado={s.CerradoEn:O}";
+    }
+
+    private sealed record FilaTomar(long VersionTablero, long VersionFila, uint XminVehiculo, uint XminSaneamiento, int Eventos, EstadoSaneamiento Estado);
+
+    private static async Task<FilaTomar> FilaAsync(EmpresaDePrueba empresa, Guid lote, Guid vehiculo, Guid sid, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        var cabecera = await db.Set<CabeceraDiagnostico>().AsNoTracking().SingleAsync(c => c.Id == lote, ct);
+        var fila = await db.Set<VehiculoDiagnostico>().AsNoTracking().SingleAsync(v => v.Id == vehiculo, ct);
+        var s = await db.Set<SaneamientoEntidad>().AsNoTracking().SingleAsync(x => x.Id == sid, ct);
+        var eventos = await db.Set<EventoSaneamiento>().AsNoTracking().CountAsync(e => e.SaneamientoId == sid, ct);
+        return new FilaTomar(cabecera.VersionTablero, fila.VersionTablero, fila.Version, s.Xmin, eventos, s.Estado);
     }
 
     internal static EstadoSaneamiento Estado(string codigo) => codigo switch

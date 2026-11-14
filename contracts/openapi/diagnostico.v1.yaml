@@ -3311,6 +3311,7 @@ paths:
       responses:
         "200": { description: Resultado., content: { application/json: { schema: { $ref: "#/components/schemas/SolicitudesSaneamiento" } } } }
         "400": { description: LISTA_INVALIDA (campo vehiculo_ids)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
 
   /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/deuda:
     get:
@@ -3368,6 +3369,7 @@ paths:
       responses:
         "200": { description: El xlsx., content: { application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } } } }
         "400": { description: LISTA_INVALIDA (campo vehiculo_ids)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
 
   /api/v1/diagnostico/vehiculos:
     get:
@@ -3459,6 +3461,7 @@ paths:
         "200": { description: Resultado., content: { application/json: { schema: { $ref: "#/components/schemas/ResultadoTomarSaneamientos" } } } }
         "400": { description: LISTA_INVALIDA (campo items)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "409": { description: VERSION_DESACTUALIZADA si otro cambio se guardó al mismo tiempo., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
 
   /api/v1/diagnostico/backoffice/saneamientos/{sid}:
     parameters:
@@ -3513,6 +3516,7 @@ paths:
       responses:
         "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
         "409": { description: NO_EDITABLE o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
         "422": { description: "VERSION_INVALIDA, VALOR_INVALIDO o TEXTO_INVALIDO (campo observacion).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
 
   /api/v1/diagnostico/backoffice/saneamientos/{sid}/renglones:
@@ -3529,6 +3533,7 @@ paths:
       responses:
         "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
         "409": { description: NO_EDITABLE., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
         "422": { description: VALOR_INVALIDO o TEXTO_INVALIDO (campo descripcion)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
 
   /api/v1/diagnostico/backoffice/saneamientos/{sid}/renglones/{rid}:
@@ -3547,6 +3552,7 @@ paths:
         "200": { description: El renglón., content: { application/json: { schema: { $ref: "#/components/schemas/RenglonSaneamiento" } } } }
         "404": { description: NO_ENCONTRADO (el renglón no es de ese saneamiento o está quitado)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "409": { description: NO_EDITABLE o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
         "422": { description: "VERSION_INVALIDA, VALOR_INVALIDO (resultado o nota) o TEXTO_INVALIDO (nota).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
     delete:
       tags: [Backoffice]
@@ -3618,6 +3624,7 @@ paths:
       responses:
         "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
         "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
         "422": { description: "CIERRE_INCOMPLETO, MOTIVO_REQUERIDO, TEXTO_INVALIDO, VERSION_INVALIDA o VALOR_INVALIDO (resultado).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
 
   /api/v1/diagnostico/backoffice/saneamientos/{sid}/reabrir:
@@ -3634,6 +3641,7 @@ paths:
       responses:
         "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
         "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
         "422": { description: "MOTIVO_REQUERIDO, TEXTO_INVALIDO o VERSION_INVALIDA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
 
   /api/v1/diagnostico/backoffice/saneamientos/{sid}/anular:
@@ -3650,6 +3658,7 @@ paths:
       responses:
         "200": { description: El saneamiento., content: { application/json: { schema: { $ref: "#/components/schemas/SaneamientoBackoffice" } } } }
         "409": { description: TRANSICION_INVALIDA o VERSION_DESACTUALIZADA., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "413": { $ref: "#/components/responses/CuerpoMuyGrande" }
         "422": { description: "MOTIVO_REQUERIDO, TEXTO_INVALIDO o VERSION_INVALIDA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
 
 components:
@@ -3662,6 +3671,11 @@ components:
   responses:
     Unauthorized:
       description: Sin sesión, token inválido o de otro producto.
+    CuerpoMuyGrande:
+      description: >
+        CUERPO_MUY_GRANDE. El cuerpo JSON de las rutas nuevas del saneamiento admite hasta 65536 bytes (64 KiB, CR-11). Se
+        rechaza sin parsearlo, con Content-Length mayor o al pasar el tope si llega por trozos.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
 
   parameters:
     SaneamientoId:
@@ -6589,8 +6603,10 @@ components:
 
     FilaBandejaSaneamiento:
       type: object
-      description: Fila de la bandeja entre compañías, sin datos personales (ADR-0087 D-5).
-      required: [id, empresa, diagnostico_id, diagnostico_nombre, vehiculo_id, placa, modo, veredicto, estado, solicitado_en, tomado_en, cerrado_en, renglones_total, renglones_pendientes]
+      description: >
+        Fila de la bandeja entre compañías, sin datos personales (ADR-0087 D-5). AP-1: vin e identificador (el valor cargado),
+        nullables, para nombrar una fila sin placa, como en FilaPlaca.
+      required: [id, empresa, diagnostico_id, diagnostico_nombre, vehiculo_id, placa, modo, veredicto, estado, solicitado_en, tomado_en, cerrado_en, renglones_total, renglones_pendientes, vin, identificador]
       properties:
         id: { type: string, format: uuid }
         empresa: { type: string, format: uuid }
@@ -6606,6 +6622,8 @@ components:
         cerrado_en: { type: string, format: date-time, nullable: true }
         renglones_total: { type: integer, minimum: 0 }
         renglones_pendientes: { type: integer, minimum: 0 }
+        vin: { type: string, nullable: true }
+        identificador: { type: string, nullable: true }
 
     ListaBandejaSaneamientos:
       type: object

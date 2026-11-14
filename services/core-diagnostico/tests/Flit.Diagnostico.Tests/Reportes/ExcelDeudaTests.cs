@@ -45,6 +45,21 @@ public sealed partial class ExcelDeudaTests
         ],
     };
 
+    // AP-3 — sin placa (vacía, nula o sin letras ni dígitos) el libro se llama deuda-sin-placa.xlsx, sin espacios; con placa, la placa
+    // reducida a [A-Z0-9].
+    [Theory]
+    [InlineData(null, "deuda-sin-placa.xlsx")]
+    [InlineData("", "deuda-sin-placa.xlsx")]
+    [InlineData("  --  ", "deuda-sin-placa.xlsx")]
+    [InlineData("tst 751", "deuda-TST751.xlsx")]
+    public void HU14576_AP3_nombre_del_Excel_sin_placa(string? placa, string esperado)
+    {
+        var nombre = ExcelDeuda.NombreArchivo(placa!);
+
+        nombre.Should().Be(esperado);
+        nombre.Should().NotContain(" ");
+    }
+
     // AC38 — una placa: las cinco hojas en orden, sin columna Placa; SIMIT como texto, impuesto como número; documento enmascarado.
     [Fact]
     public void Libro_de_una_placa_trae_las_cinco_hojas_con_tipos_correctos()

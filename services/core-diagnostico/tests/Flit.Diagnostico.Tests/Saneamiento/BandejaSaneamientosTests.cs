@@ -30,7 +30,48 @@ public sealed class BandejaSaneamientosTests
     [
         "id", "empresa", "diagnostico_id", "diagnostico_nombre", "vehiculo_id", "placa", "modo", "veredicto", "estado", "solicitado_en",
         "tomado_en", "cerrado_en", "renglones_total", "renglones_pendientes",
+        // AP-1 (UA-10, D-131): vin e identificador para nombrar una fila sin placa.
+        "vin", "identificador",
     ];
+
+    // AP-1 — la fila de la bandeja trae vin e identificador (el valor cargado) para nombrar el vehículo sin placa; con placa, el
+    // vin es null si el vehículo no lo tiene y el identificador es el cargado.
+    [Fact]
+    public async Task HU14576_AP1_fila_de_la_bandeja_trae_vin_e_identificador()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var (conPlacaLote, conPlaca) = await GestionDePrueba.SaneamientoAsync(empresa, "SBA110", EstadoSaneamiento.Solicitado, ct);
+        // Se siembra con placa (la columna placa admite hasta 10) y se convierte en un vehículo identificado por VIN.
+        var (sinPlacaLote, sinPlaca) = await GestionDePrueba.SaneamientoAsync(empresa, "SBA111", EstadoSaneamiento.Solicitado, ct);
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.Id == sinPlacaLote.Vehiculos[0].Id, ct);
+            vehiculo.Placa = null;
+            vehiculo.IdentificadorNorm = "9ZZPRUEBA00000110";
+            vehiculo.Vin = "9ZZPRUEBA00000110";
+            vehiculo.IdentificadorOriginal = "9zzprueba00000110";
+            vehiculo.TipoIdentificador = Flit.Diagnostico.Domain.Vehiculos.TipoIdentificador.Vin;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var respuesta = await api.Cliente(GestionDePrueba.TokenFlit(api)).GetAsync($"{GestionDePrueba.Base}?empresa={empresa.Id}&tamano=100", ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+        var filas = (await GestionDePrueba.JsonAsync(respuesta, ct)).GetProperty("saneamientos").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("id").GetGuid());
+        var sin = filas[sinPlaca.Id];
+        sin.GetProperty("placa").ValueKind.Should().Be(JsonValueKind.Null);
+        sin.GetProperty("vin").GetString().Should().Be("9ZZPRUEBA00000110");
+        sin.GetProperty("identificador").GetString().Should().Be("9zzprueba00000110", "el valor tal como se cargó");
+        var con = filas[conPlaca.Id];
+        con.GetProperty("placa").GetString().Should().Be("SBA110");
+        con.GetProperty("vin").ValueKind.Should().Be(JsonValueKind.Null);
+        con.GetProperty("identificador").GetString().Should().Be("SBA110");
+        conPlacaLote.Vehiculos.Should().ContainSingle();
+    }
 
     // AC40 — tres compañías, filtro estado repetible, orden ascendente por solicitado_en, total y la forma de la fila.
     [Fact]

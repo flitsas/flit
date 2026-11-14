@@ -174,6 +174,8 @@ internal sealed class BandejaSaneamientos(DiagnosticoDb db, AuditoriaLecturaBack
                    DiagnosticoNombre = c.Nombre,
                    VehiculoId = s.VehiculoId,
                    Placa = v.Placa,
+                   Vin = v.Vin,
+                   Identificador = v.IdentificadorOriginal,
                    Modo = c.Modo,
                    Veredicto = dictamenes.Where(d => d.TenantId == s.TenantId && d.VehiculoId == s.VehiculoId).Select(d => d.Veredicto).FirstOrDefault(),
                    Estado = s.Estado,
@@ -197,6 +199,8 @@ internal sealed class BandejaSaneamientos(DiagnosticoDb db, AuditoriaLecturaBack
         public string DiagnosticoNombre { get; init; } = string.Empty;
         public Guid VehiculoId { get; init; }
         public string? Placa { get; init; }
+        public string? Vin { get; init; }
+        public string? Identificador { get; init; }
         public Domain.Diagnosticos.ModoDiagnostico Modo { get; init; }
         public string? Veredicto { get; init; }
         public EstadoSaneamiento Estado { get; init; }
@@ -208,6 +212,6 @@ internal sealed class BandejaSaneamientos(DiagnosticoDb db, AuditoriaLecturaBack
 
         public FilaBandejaDto Dto() => new(
             Id, Empresa, DiagnosticoId, DiagnosticoNombre, VehiculoId, Placa, CodigosDeEnum.Codigo(Modo), Veredicto, CodigosDeEnum.Codigo(Estado),
-            SolicitadoEn, TomadoEn, CerradoEn, RenglonesTotal, RenglonesPendientes);
+            SolicitadoEn, TomadoEn, CerradoEn, RenglonesTotal, RenglonesPendientes, Vin, Identificador);
     }
 }

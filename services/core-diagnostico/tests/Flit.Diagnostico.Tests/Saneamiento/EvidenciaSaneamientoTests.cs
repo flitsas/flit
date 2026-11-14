@@ -215,6 +215,100 @@ public sealed class EvidenciaSaneamientoTests
         (await api.Cliente(descarga).GetAsync(RutaCliente(conEvidencia.Id), ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // SP-19 + CR-3 — quitar la evidencia no reinicia el tope: cada carga después de la primera suma, también la que llega a un
+    // renglón sin evidencia porque se quitó. Tras la primera carga, 20 ciclos DELETE + PUT llegan al tope (CHECK 0..20) y la carga
+    // número 22 responde 409 DEMASIADOS_REEMPLAZOS sin tocar el renglón.
+    [Fact]
+    public async Task HU14576_SP19_CR3_DELETE_y_PUT_alternados_tambien_cuentan_hasta_el_tope()
+    {
+        var almacen = new FabricaQueRegistra();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: Con(almacen));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var (_, s) = await GestionDePrueba.SaneamientoAsync(empresa, "SBE105", EstadoSaneamiento.EnGestion, ct);
+        var renglon = await GestionDePrueba.RenglonAsync(empresa, s.Id, FuenteSaneamiento.Soat, ResultadoRenglonSaneamiento.Saneado, ct);
+        using var cliente = api.Cliente(GestionDePrueba.TokenFlit(api));
+        var ruta = GestionDePrueba.RutaRenglon(s.Id, renglon.Id, empresa.Id, "/evidencia");
+        (await cliente.PutAsync(ruta, GestionDePrueba.Archivo(GestionDePrueba.PdfValido), ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await LeerRenglonAsync(empresa, renglon.Id, ct)).EvidenciaReemplazos.Should().Be(0, "la primera carga no es un reemplazo");
+
+        var cuentas = new List<short>();
+        for (var ciclo = 1; ciclo <= EvidenciaTope; ciclo++)
+        {
+            (await cliente.DeleteAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.OK, $"quitar en el ciclo {ciclo}");
+            var carga = await cliente.PutAsync(ruta, GestionDePrueba.Archivo(GestionDePrueba.PdfValido, $"ciclo-{ciclo}.pdf"), ct);
+            carga.StatusCode.Should().Be(HttpStatusCode.OK, $"la carga del ciclo {ciclo}: {await carga.Content.ReadAsStringAsync(ct)}");
+            cuentas.Add((await LeerRenglonAsync(empresa, renglon.Id, ct)).EvidenciaReemplazos);
+        }
+
+        (await cliente.DeleteAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.OK, "quitar sigue permitido en el tope");
+        var guardadosAntes = almacen.Llamadas.Count;
+        var antes = await LeerRenglonAsync(empresa, renglon.Id, ct);
+        var excedida = await cliente.PutAsync(ruta, GestionDePrueba.Archivo(GestionDePrueba.PdfValido, "excedida.pdf"), ct);
+
+        cuentas.Should().Equal(Enumerable.Range(1, EvidenciaTope).Select(n => (short)n), "cada carga después de la primera suma uno");
+        excedida.StatusCode.Should().Be(HttpStatusCode.Conflict, await excedida.Content.ReadAsStringAsync(ct));
+        (await SaneamientoDePrueba.CodigoAsync(excedida, ct)).Should().Be("DEMASIADOS_REEMPLAZOS");
+        almacen.Llamadas.Count.Should().Be(guardadosAntes, "el tope actúa antes de guardar el archivo: no deja otro huérfano");
+        var despues = await LeerRenglonAsync(empresa, renglon.Id, ct);
+        (despues.EvidenciaReferencia, despues.EvidenciaReemplazos, despues.Xmin).Should().Be((antes.EvidenciaReferencia, antes.EvidenciaReemplazos, antes.Xmin));
+        despues.EvidenciaReemplazos.Should().Be(EvidenciaTope);
+    }
+
+    // AC47 + CR-10 — las dos descargas (cliente y FLIT) salen en stream desde IAlmacenArchivos.AbrirAsync, nunca con LeerAsync (que
+    // arma el archivo entero en memoria); el flujo se libera al terminar la respuesta y se conservan las cabeceras de DescargaSegura.
+    [Fact]
+    public async Task HU14576_AC47_CR10_las_descargas_salen_en_stream_desde_el_almacen()
+    {
+        var almacen = new FabricaQueRegistra();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: Con(almacen));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var (lote, s) = await GestionDePrueba.SaneamientoAsync(empresa, "SBE106", EstadoSaneamiento.EnGestion, ct);
+        var renglon = await GestionDePrueba.RenglonAsync(empresa, s.Id, FuenteSaneamiento.Impuesto, ResultadoRenglonSaneamiento.Saneado, ct);
+        using var flit = api.Cliente(GestionDePrueba.TokenFlit(api));
+        var rutaFlit = GestionDePrueba.RutaRenglon(s.Id, renglon.Id, empresa.Id, "/evidencia");
+        (await flit.PutAsync(rutaFlit, GestionDePrueba.Archivo(GestionDePrueba.PdfValido), ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var descarga = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer, Permisos.ReportesDescargar], roles: ["usuario_diagnostico"]);
+        var rutaCliente = $"{SaneamientoDePrueba.Ruta(lote.Id, lote.Vehiculos[0].Id)}/renglones/{renglon.Id}/evidencia";
+
+        var delCliente = await api.Cliente(descarga).GetAsync(rutaCliente, ct);
+        var deFlit = await flit.GetAsync(rutaFlit, ct);
+
+        foreach (var respuesta in new[] { delCliente, deFlit })
+        {
+            respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+            respuesta.Content.Headers.ContentType!.MediaType.Should().Be("application/pdf");
+            DeudaDePrueba.CabecerasSeguras(respuesta);
+            respuesta.Content.Headers.ContentDisposition!.DispositionType.Should().Be("attachment");
+            respuesta.Content.Headers.ContentDisposition.FileNameStar.Should().Be("evidencia-SBE106-IMPUESTO.pdf");
+            (await respuesta.Content.ReadAsByteArrayAsync(ct)).Should().Equal(GestionDePrueba.PdfValido);
+        }
+
+        almacen.Lecturas.Should().Be(0, "ninguna descarga arma el PDF entero en memoria con LeerAsync");
+        almacen.Aperturas.Should().HaveCount(2, "cliente y FLIT abren el archivo como flujo");
+        almacen.Aperturas.Should().OnlyContain(f => f.Liberado, "el flujo se libera al terminar la respuesta");
+    }
+
+    // AP-3 — sin placa ni identificador, el nombre es evidencia-sin-placa-{fuente}.pdf, sin espacios.
+    [Theory]
+    [InlineData(null, FuenteSaneamiento.Impuesto, "evidencia-sin-placa-IMPUESTO.pdf")]
+    [InlineData("", FuenteSaneamiento.Soat, "evidencia-sin-placa-SOAT.pdf")]
+    [InlineData("  -- ", FuenteSaneamiento.Rtm, "evidencia-sin-placa-RTM.pdf")]
+    [InlineData("Sin placa", FuenteSaneamiento.Impuesto, "evidencia-SINPLACA-IMPUESTO.pdf")]
+    [InlineData("abc 123", FuenteSaneamiento.Impuesto, "evidencia-ABC123-IMPUESTO.pdf")]
+    public void HU14576_AP3_nombre_de_la_evidencia_sin_placa(string? placa, FuenteSaneamiento fuente, string esperado)
+    {
+        var nombre = Flit.Diagnostico.Api.Modulos.Backoffice.EvidenciaSaneamiento.NombreDescarga(placa, fuente);
+
+        nombre.Should().Be(esperado);
+        nombre.Should().NotContain(" ");
+    }
+
+    private const int EvidenciaTope = 20;
+
     private static void Guardado(RenglonSaneamiento fila, out string referencia)
     {
         fila.EvidenciaReferencia.Should().NotBeNullOrEmpty();
@@ -253,22 +347,57 @@ public sealed class EvidenciaSaneamientoTests
 
     private static Action<WebApplicationBuilder> Con(FabricaQueRegistra fabrica) => b => b.Services.AddSingleton<IFabricaAlmacen>(fabrica);
 
-    /// <summary>El almacén en la base, que además registra cada guardado (empresa, nombre y tamaño), sin el contenido.</summary>
+    /// <summary>
+    /// El almacén en la base, que además registra cada guardado (empresa, nombre y tamaño, sin el contenido), cuántas veces se leyó
+    /// el archivo entero (<see cref="IAlmacenArchivos.LeerAsync"/>) y cada flujo abierto (<see cref="IAlmacenArchivos.AbrirAsync"/>) con
+    /// si se liberó.
+    /// </summary>
     private sealed class FabricaQueRegistra : IFabricaAlmacen
     {
+        private int _lecturas;
+
         public ConcurrentQueue<(Guid Empresa, string Nombre, long Tamano)> Llamadas { get; } = new();
 
-        public IAlmacenArchivos Para(DiagnosticoDb db) => new Almacen(new AlmacenEnBase(db), Llamadas);
+        public ConcurrentQueue<FlujoRegistrado> Aperturas { get; } = new();
 
-        private sealed class Almacen(IAlmacenArchivos real, ConcurrentQueue<(Guid, string, long)> llamadas) : IAlmacenArchivos
+        public int Lecturas => Volatile.Read(ref _lecturas);
+
+        public IAlmacenArchivos Para(DiagnosticoDb db) => new Almacen(new AlmacenEnBase(db), this);
+
+        private sealed class Almacen(IAlmacenArchivos real, FabricaQueRegistra registro) : IAlmacenArchivos
         {
             public Task<ArchivoGuardado> GuardarAsync(Guid empresaId, string tipo, string nombre, string contentType, byte[] contenido, CancellationToken ct)
             {
-                llamadas.Enqueue((empresaId, nombre, contenido.LongLength));
+                registro.Llamadas.Enqueue((empresaId, nombre, contenido.LongLength));
                 return real.GuardarAsync(empresaId, tipo, nombre, contentType, contenido, ct);
             }
 
-            public Task<byte[]?> LeerAsync(string referencia, CancellationToken ct) => real.LeerAsync(referencia, ct);
+            public Task<byte[]?> LeerAsync(string referencia, CancellationToken ct)
+            {
+                Interlocked.Increment(ref registro._lecturas);
+                return real.LeerAsync(referencia, ct);
+            }
+
+            public async Task<Stream?> AbrirAsync(string referencia, CancellationToken ct)
+            {
+                if (await real.LeerAsync(referencia, ct) is not { } bytes)
+                    return null;
+                var flujo = new FlujoRegistrado(bytes);
+                registro.Aperturas.Enqueue(flujo);
+                return flujo;
+            }
+        }
+    }
+
+    /// <summary>Un flujo de solo lectura que recuerda si se liberó.</summary>
+    private sealed class FlujoRegistrado(byte[] bytes) : MemoryStream(bytes, writable: false)
+    {
+        public bool Liberado { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            Liberado = true;
+            base.Dispose(disposing);
         }
     }
 }

@@ -66,13 +66,28 @@ public sealed class PdfDeudaTests
         PdfTextExtractor.Contains(texto, "En gestión").Should().BeTrue();
     }
 
-    // SP-18 — el nombre del archivo solo lleva [A-Z0-9] de la placa.
+    // SP-18 — el nombre del archivo solo lleva [A-Z0-9] de la placa. AP-3: si no queda nada, deuda-sin-placa.pdf (antes
+    // deuda-vehiculo.pdf), nunca con espacios.
     [Theory]
     [InlineData("TST731", "deuda-TST731.pdf")]
     [InlineData("ab\"c;1\r\n", "deuda-ABC1.pdf")]
-    [InlineData("--", "deuda-vehiculo.pdf")]
+    [InlineData("--", "deuda-sin-placa.pdf")]
     public void Nombre_del_archivo_reduce_la_placa(string placa, string esperado) =>
         PdfDeuda.NombreArchivo(placa).Should().Be(esperado);
+
+    // AP-3 — placa vacía, nula o solo con espacios: deuda-sin-placa.pdf, sin espacios.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(" - / ")]
+    public void HU14576_AP3_sin_placa_el_PDF_se_llama_deuda_sin_placa(string? placa)
+    {
+        var nombre = PdfDeuda.NombreArchivo(placa!);
+
+        nombre.Should().Be("deuda-sin-placa.pdf");
+        nombre.Should().NotContain(" ");
+    }
 
     // AC38/SP-18/SP-11 por HTTP — 200 application/pdf, adjunto deuda-{placa}.pdf, cuatro cabeceras de descarga segura; sin el
     // nombre de la persona que traía el payload; sin reportes.descargar 403; otra compañía 404.
