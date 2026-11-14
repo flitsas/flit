@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -6,6 +8,7 @@ import {
   type ContextoBandera,
   type PanelDeudaSaneamientoProps,
 } from "@/components/saneamiento/PanelDeudaSaneamiento";
+import { banderaPanelDeuda } from "@/components/saneamiento/BanderaPanelDeuda";
 import type { EstadoSaneamientoActivo } from "@/lib/saneamiento/api";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 import { LOTE, PLACA, RUTA_DEUDA, RUTA_SANEAMIENTO, VEHICULO, deudaCompleta, deudaSinPendientes, saneamientoEnGestion } from "./datosDeuda";
@@ -454,5 +457,109 @@ describe("PanelDeudaSaneamiento — §3.7: tras marcar o desmarcar", () => {
     expect(await screen.findByRole("region", { name: "Saneamiento" })).toBeInTheDocument();
     await waitFor(() => expect(region()).toHaveTextContent("Saneamiento solicitado para TST001."));
     expect(onCambioEstado).toHaveBeenCalledWith("SOLICITADO");
+  });
+});
+
+// Uso de ejemplo (HU #14577 FE-C, cableado-fe-c.md §1 y §3): quien pinta el panel monta la bandera real de la cabecera con
+//   accionBandera={banderaPanelDeuda(diagnosticoId, { id: vehiculoId, placa })}
+// que es BotonSanear variante «cabecera»: el optimista va por ctx.onCambio y la recarga por ctx.onCambioSaneamiento solo
+// cuando la API confirma. La etiqueta de la sección «Estado» es EtiquetaSaneamiento.
+describe("PanelDeudaSaneamiento — FE-C: bandera real en la cabecera y etiqueta común", () => {
+  const PUT_SAN = `PUT ${RUTA_SANEAMIENTO}`;
+  const DELETE_SAN = `DELETE ${RUTA_SANEAMIENTO}`;
+  const solicitadoApi = () => json(saneamientoEnGestion({ estado: "SOLICITADO", tomado_en: null, renglones: [], historial: [], observacion_flit: null }));
+  const bandera = () => screen.getByRole("button", { name: `Solicitar saneamiento de la placa ${PLACA}` });
+
+  it("marcar: optimista al clic, sin releer el detalle mientras el PUT está en vuelo; al confirmar relee una vez y anuncia una sola vez", async () => {
+    let soltar: (r: Response) => void = () => {};
+    let marcado = false;
+    const fetchMock = simularApi({
+      [`GET ${RUTA_DEUDA}`]: () => json(deudaSinPendientes()),
+      [`GET ${RUTA_SANEAMIENTO}`]: () => (marcado ? solicitadoApi() : sinSaneamiento()),
+      [PUT_SAN]: () => new Promise<Response>((r) => (soltar = r)),
+    });
+    const onCambioEstado = vi.fn();
+    pintar({ accionBandera: banderaPanelDeuda(LOTE, { id: VEHICULO, placa: PLACA }), onCambioEstado });
+    await screen.findByRole("heading", { name: "Deuda por fuente" });
+    expect(bandera()).toHaveAttribute("aria-pressed", "false");
+    expect(bandera().className).toContain("var(--kit-tinta)");
+    bandera().focus();
+    fireEvent.click(bandera());
+    expect(bandera()).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getByRole("region", { name: "Estado" })).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(onCambioEstado).toHaveBeenCalledWith("SOLICITADO");
+    expect(llamadas(fetchMock, "GET", RUTA_SANEAMIENTO)).toHaveLength(1);
+    await act(async () => {
+      marcado = true;
+      soltar(json({ id: "san-1", estado: "SOLICITADO" }, 201));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await waitFor(() => expect(llamadas(fetchMock, "GET", RUTA_SANEAMIENTO)).toHaveLength(2));
+    expect(llamadas(fetchMock, "GET", RUTA_DEUDA)).toHaveLength(1);
+    await waitFor(() => expect(region()).toHaveTextContent("Saneamiento solicitado para TST001."));
+    expect(region().querySelectorAll("span")).toHaveLength(1);
+    expect(bandera()).toHaveFocus();
+    expect(await screen.findByRole("region", { name: "Saneamiento" })).toBeInTheDocument();
+  });
+
+  it("desmarcar con DELETE 204: la sección se va, se relee el detalle y se anuncia; el foco sigue en la bandera", async () => {
+    let marcado = true;
+    const fetchMock = simularApi({
+      [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta({ saneamiento: { estado: "SOLICITADO" } })),
+      [`GET ${RUTA_SANEAMIENTO}`]: () => (marcado ? solicitadoApi() : sinSaneamiento()),
+      [DELETE_SAN]: () => {
+        marcado = false;
+        return new Response(null, { status: 204 });
+      },
+    });
+    pintar({ accionBandera: banderaPanelDeuda(LOTE, { id: VEHICULO, placa: PLACA }) });
+    await screen.findByRole("region", { name: "Saneamiento" });
+    expect(bandera()).toHaveAttribute("aria-pressed", "true");
+    bandera().focus();
+    fireEvent.click(bandera());
+    await waitFor(() => expect(region()).toHaveTextContent("Se quitó la solicitud de saneamiento de TST001."));
+    expect(seccionSaneamiento()).not.toBeInTheDocument();
+    expect(llamadas(fetchMock, "DELETE", RUTA_SANEAMIENTO)).toHaveLength(1);
+    expect(llamadas(fetchMock, "GET", RUTA_SANEAMIENTO)).toHaveLength(2);
+    expect(bandera()).toHaveFocus();
+  });
+
+  it("si el PUT falla: revierte la etiqueta, el error va junto a la bandera, no relee ni anuncia", async () => {
+    const fetchMock = simularApi({
+      [`GET ${RUTA_DEUDA}`]: () => json(deudaSinPendientes()),
+      [`GET ${RUTA_SANEAMIENTO}`]: sinSaneamiento,
+      [PUT_SAN]: () => json({ code: "VEHICULO_NO_TERMINADO", error: "x" }, 409),
+    });
+    pintar({ accionBandera: banderaPanelDeuda(LOTE, { id: VEHICULO, placa: PLACA }) });
+    await screen.findByRole("heading", { name: "Deuda por fuente" });
+    fireEvent.click(bandera());
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Este vehículo aún tiene consultas por terminar."));
+    expect(bandera()).toHaveAttribute("aria-pressed", "false");
+    expect(within(screen.getByRole("region", { name: "Estado" })).queryByText("Saneamiento solicitado")).toBeNull();
+    expect(llamadas(fetchMock, "GET", RUTA_SANEAMIENTO)).toHaveLength(1);
+    expect(region()).toHaveTextContent("");
+  });
+
+  it("D-101: con EN_GESTION (o sin la capacidad) la cabecera no repite «Ver saneamiento»: el estado ya está en la sección «Estado»", async () => {
+    simularApi({ [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta()), [`GET ${RUTA_SANEAMIENTO}`]: () => json(saneamientoEnGestion()) });
+    const { unmount } = pintar({ accionBandera: banderaPanelDeuda(LOTE, { id: VEHICULO, placa: PLACA }) });
+    await screen.findByRole("region", { name: "Saneamiento" });
+    expect(screen.queryByRole("button", { name: /saneamiento de la placa/ })).toBeNull();
+    unmount();
+    simularApi({ [`GET ${RUTA_DEUDA}`]: () => json(deudaSinPendientes()), [`GET ${RUTA_SANEAMIENTO}`]: sinSaneamiento });
+    pintar({ puedeSanear: false, accionBandera: banderaPanelDeuda(LOTE, { id: VEHICULO, placa: PLACA }) });
+    await screen.findByRole("heading", { name: "Deuda por fuente" });
+    expect(screen.queryByRole("button", { name: /saneamiento de la placa/ })).toBeNull();
+  });
+
+  it("la sección «Estado» pinta la etiqueta con EtiquetaSaneamiento (fuente única de texto y tono)", async () => {
+    simularApi({ [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta()), [`GET ${RUTA_SANEAMIENTO}`]: () => json(saneamientoEnGestion()) });
+    pintar();
+    const estado = await screen.findByRole("region", { name: "Estado" });
+    const etiqueta = within(estado).getByText("En saneamiento");
+    expect(etiqueta.style.getPropertyValue("--ct")).toBe("var(--badge-warning-fg)");
+    const fuente = readFileSync(join(__dirname, "..", "PanelDeudaSaneamiento.tsx"), "utf8");
+    expect(fuente).toMatch(/<EtiquetaSaneamiento estado=\{estado\} \/>/);
+    expect(fuente).not.toMatch(/etiqueta && <EtiquetaTono/);
   });
 });

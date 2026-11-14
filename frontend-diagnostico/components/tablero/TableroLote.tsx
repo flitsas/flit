@@ -7,7 +7,8 @@ import { iconoComo } from "@flit/ui/iconoComo";
 import { INLINE_ALERT_TONES, InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { ACCION_FILA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { IconoDxDeuda } from "@/components/dx/iconos/IconoDxDeuda";
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
 import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
@@ -29,6 +30,8 @@ import { BotonReintentar } from "./BotonReintentar";
 import { AccionTramiteFila, AvisoSaneamientoEnCurso, ModalTipoTramite, saneamientoEnCurso } from "./BotonCrearTramite";
 import { CasillaTablero, mensajeSolicitudSaneamiento, seleccionDeFila, type ResultadoSanearVisible } from "./BarraSeleccionTablero";
 import { BotonSanear, SANEAMIENTO_SOLICITADO } from "@/components/saneamiento/BotonSanear";
+import { banderaPanelDeuda, filaDeEstado } from "@/components/saneamiento/BanderaPanelDeuda";
+import { PanelDeudaSaneamiento } from "@/components/saneamiento/PanelDeudaSaneamiento";
 import { useRegionVivaPantalla } from "@/components/saneamiento/RegionVivaPantalla";
 import { mensajeErrorSaneamiento, solicitarSaneamientos } from "@/lib/saneamiento/api";
 import { puedeSanear as tieneSanear } from "@/lib/sesion";
@@ -144,6 +147,8 @@ export function TableroLote({
   // HU #14562 AC24 (D4): «Cerrar lote» pide confirmación antes de llamar a cerrar-panel.
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  // HU #14577 AC13 (PS-2): panel «Deuda y saneamiento» del vehículo; `disparador` recibe el foco al cerrarlo.
+  const [deuda, setDeuda] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   // HU #14562 F-05: «Crear trámite» desde el pie del panel del dictamen; el número cambia en cada pedido.
   const [solicitudTramite, setSolicitudTramite] = useState<{ vehiculoId: string; n: number } | null>(null);
   const volver = urlVolverAlListado(desde);
@@ -179,6 +184,8 @@ export function TableroLote({
   const conDatosSaneamiento = hayDatosSaneamiento(grilla?.vehiculos ?? []);
   const haySaneamiento = puedeSanear && conDatosSaneamiento;
   const hayAlgunSaneamiento = (grilla?.vehiculos ?? []).some((v) => v.saneamiento?.estado != null);
+  // HU #14577 AC13: «Ver deuda» de la fila (solo terminados) con un backend que ya expone el saneamiento (D-102).
+  const hayVerDeuda = conDatosSaneamiento && (grilla?.vehiculos ?? []).some((v) => v.terminado);
   // HU #14577 AC10: la casilla se habilita si la fila es elegible para alguna acción que el usuario tiene.
   const haySeleccion = hayDerivacion || haySaneamiento;
   const selecciones = useMemo(
@@ -315,8 +322,11 @@ export function TableroLote({
     if (reenviadas) reenviadasRef.current?.focus();
   }, [reenviadas]);
 
+  const actualizarSaneamientoFila = (vehiculoId: string, saneamientoFila: FilaVehiculo["saneamiento"]) =>
+    actualizar((g) => ({ ...g, vehiculos: g.vehiculos.map((f) => (f.id === vehiculoId ? { ...f, saneamiento: saneamientoFila } : f)) }));
+
   const accionVehiculo =
-    puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento
+    puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda
       ? (v: FilaVehiculo) => (
           <div className="flex flex-col items-start gap-2">
             {/* HU #14577 §2.1: la bandera va antes de «Crear trámite». Sin la capacidad, solo indicador si hay saneamiento. */}
@@ -326,11 +336,9 @@ export function TableroLote({
                 vehiculo={v}
                 saneamiento={v.saneamiento}
                 puedeSanear={puedeSanear}
-                onCambio={(_estado, saneamiento) =>
-                  actualizar((g) => ({ ...g, vehiculos: g.vehiculos.map((f) => (f.id === v.id ? { ...f, saneamiento } : f)) }))
-                }
-                // D-29: hasta que FE-B integre PanelDeudaSaneamiento (PS-2), «Ver saneamiento» abre el panel del vehículo.
-                onAbrirPanel={(disparador) => setDictamen({ vehiculo: v, disparador })}
+                onCambio={(_estado, saneamiento) => actualizarSaneamientoFila(v.id, saneamiento)}
+                // D-29 (cerrada en FE-C): «Ver saneamiento» abre PS-2, el panel de deuda y saneamiento del vehículo.
+                onAbrirPanel={(disparador) => setDeuda({ vehiculo: v, disparador })}
                 onRefrescar={refrescar}
                 onAnunciar={anunciar}
               />
@@ -347,6 +355,19 @@ export function TableroLote({
                 onRefrescar={refrescar}
                 solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
               />
+            )}
+            {/* HU #14577 AC13 (spec-ui §3.1): «Ver deuda» abre PS-2; solo en vehículos terminados, después de «Crear trámite» (D-103). */}
+            {conDatosSaneamiento && v.terminado && (
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-label={`Ver deuda de la placa ${placaDe(v)}`}
+                onClick={(e) => setDeuda({ vehiculo: v, disparador: e.currentTarget })}
+                className={`${ACCION_FILA_CLS} whitespace-nowrap`}
+              >
+                <IconoDxDeuda tamano={16} className="h-3.5 w-3.5" />
+                Ver deuda
+              </button>
             )}
             {puedeDescargar && grilla && <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} />}
             {puedeReprocesar && v.pegada && (
@@ -494,7 +515,7 @@ export function TableroLote({
             onReprocesada={alReprocesar}
             onErrorReproceso={alFallarReproceso}
             accionVehiculo={accionVehiculo}
-            tituloAccionVehiculo={puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento ? "Acciones" : "Reporte"}
+            tituloAccionVehiculo={puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda ? "Acciones" : "Reporte"}
             casillaVehiculo={
               haySeleccion
                 ? (v) => (
@@ -558,6 +579,16 @@ export function TableroLote({
           devolverFocoA={dictamen.disparador}
           tramiteAnalizado={grilla?.lote?.tipo_tramite?.nombre ?? null}
           consultas={(grilla?.vehiculos.find((v) => v.id === dictamen.vehiculo.id) ?? dictamen.vehiculo).celdas.map((c) => ({ fuente: c.fuente, estado: c.estado }))}
+          // HU #14577 AC13 / D-15: «Ver deuda y sanear» cierra el dictamen y abre PS-2; al cerrar, el foco vuelve a la fila.
+          onVerDeuda={
+            conDatosSaneamiento
+              ? () => {
+                  const { vehiculo, disparador } = dictamen;
+                  setDictamen(null);
+                  setDeuda({ vehiculo, disparador });
+                }
+              : undefined
+          }
           onCrearTramite={
             puedeDerivar && derivaciones.get(dictamen.vehiculo.id)?.elegible
               ? () => {
@@ -567,6 +598,21 @@ export function TableroLote({
                 }
               : undefined
           }
+        />
+      )}
+      {deuda && grilla && (
+        <PanelDeudaSaneamiento
+          key={deuda.vehiculo.id}
+          diagnosticoId={grilla.id}
+          vehiculoId={deuda.vehiculo.id}
+          identificador={placaDe(deuda.vehiculo)}
+          puedeSanear={puedeSanear}
+          puedeDescargar={puedeDescargar}
+          devolverFocoA={deuda.disparador}
+          onClose={() => setDeuda(null)}
+          // La fila del tablero sigue al panel (optimista y confirmado); el sondeo trae luego el valor del servidor.
+          onCambioEstado={(estado) => actualizarSaneamientoFila(deuda.vehiculo.id, filaDeEstado(estado))}
+          accionBandera={banderaPanelDeuda(grilla.id, deuda.vehiculo)}
         />
       )}
     </>

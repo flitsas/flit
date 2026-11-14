@@ -37,6 +37,11 @@ export interface BotonSanearProps {
   onCambio: (estado: EstadoSaneamientoActivo | null, saneamiento: SaneamientoFila) => void;
   /** «Ver saneamiento»: abre el panel PS-2 del vehículo; recibe el botón para devolverle el foco al cerrar. */
   onAbrirPanel: (disparador: HTMLElement) => void;
+  /**
+   * La API confirmó el cambio (PUT 200/201 → SOLICITADO; DELETE 204 o 404 SIN_SANEAMIENTO → null). Se llama después de la
+   * respuesta, nunca en el optimista: el panel PS-2 recarga aquí su detalle sin correr contra la petición en vuelo.
+   */
+  onConfirmado?: (estado: EstadoSaneamientoActivo | null, saneamiento: SaneamientoFila) => void;
   /** El estado cambió en el servidor (409 YA_SOLICITADO o SANEAMIENTO_EN_GESTION): conviene volver a leer la fila. */
   onRefrescar?: () => void;
   /** Escribe el resultado en la región viva de la pantalla (§1.6). */
@@ -69,6 +74,7 @@ export function BotonSanear({
   puedeSanear,
   onCambio,
   onAbrirPanel,
+  onConfirmado,
   onRefrescar,
   onAnunciar,
   variante = "fila",
@@ -131,6 +137,7 @@ export function BotonSanear({
       if (encendida) await desmarcarSaneamiento(diagnosticoId, vehiculo.id);
       else await marcarSaneamiento(diagnosticoId, vehiculo.id);
       onAnunciar?.(encendida ? `Se quitó la solicitud de saneamiento de ${identificador}.` : `Saneamiento solicitado para ${identificador}.`);
+      onConfirmado?.(siguiente.estado, siguiente);
     } catch (e) {
       onCambio(previo.estado, previo);
       if (e instanceof ApiError && e.status === 403) {

@@ -6,6 +6,7 @@ import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { FALLOS_ANTES_DE_DETENER, INTERVALO_REPOSO_MS, INTERVALO_SONDEO_MS } from "@/lib/tablero/useGrillaIncremental";
 import { ID, V1, celda, desdesPedidos, grilla, llamadas, loteTerminadoConErrores, sesion, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
+import { deudaSinPendientes, saneamientoEnGestion } from "@/components/saneamiento/__tests__/datosDeuda";
 
 // Uso de ejemplo: /diagnosticos/{id} (a donde navegan la confirmación de la carga y el Express) abre el tablero del lote:
 // tarjeta título con el nombre, estado global y avance, la grilla de semáforos con sondeo cada 3 s y «Cerrar panel»
@@ -801,5 +802,121 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await avanzar();
     expect(screen.getByRole("alert")).toHaveTextContent("No pudimos solicitar el saneamiento. Intenta de nuevo.");
     expect(within(fila("TST005")).getByRole("checkbox")).toBeChecked();
+  });
+  // ---------- HU #14577 FE-C: PS-2 desde el tablero (cableado-fe-c.md, D-29) ----------
+  // Uso de ejemplo: «Ver saneamiento» de la fila, «Ver deuda» de la fila y «Ver deuda y sanear» del dictamen bloqueado abren
+  // PanelDeudaSaneamiento (PS-2), no el panel del dictamen; al cerrarlo el foco vuelve al control que lo abrió.
+  const rutaVeh = (n: number, final: string) => `/diagnosticos/${ID}/vehiculos/vehiculo-${n}/${final}`;
+  const sinSan = () => Response.json({ code: "SIN_SANEAMIENTO", error: "x" }, { status: 404 });
+  const rutasPanel = (n: number, saneamiento: () => Response = sinSan) => ({
+    [`GET ${rutaVeh(n, "deuda")}`]: () =>
+      Response.json(deudaSinPendientes({ vehiculo: { id: `vehiculo-${n}`, placa: `TST00${n}` } })),
+    [`GET ${rutaVeh(n, "saneamiento")}`]: saneamiento,
+  });
+  const panelDeuda = () => screen.getByRole("dialog", { name: "Deuda y saneamiento" });
+
+  it("AC13/D-29: «Ver saneamiento» abre PS-2 «Deuda y saneamiento» del vehículo (no el dictamen) y al cerrar el foco vuelve a la bandera", async () => {
+    const api = await montarSan({ [GRILLA]: () => Response.json(loteSan()), ...rutasPanel(3, () => Response.json(saneamientoEnGestion())) });
+    const ver = within(fila("TST003")).getByRole("button", { name: "Ver saneamiento de la placa TST003: En saneamiento" });
+    ver.focus();
+    fireEvent.click(ver);
+    await avanzar();
+    await avanzar();
+    expect(panelDeuda()).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(llamadas(api, "GET", rutaVeh(3, "deuda"))).toHaveLength(1);
+    expect(llamadas(api, "GET", rutaVeh(3, "dictamen"))).toHaveLength(0);
+    fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
+    await avanzar();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(fila("TST003")).getByRole("button", { name: "Ver saneamiento de la placa TST003: En saneamiento" })).toHaveFocus();
+  });
+
+  it("AC13: «Ver deuda» de la fila solo en vehículos terminados; abre PS-2 y devuelve el foco al cerrar", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()), ...rutasPanel(1) });
+    expect(within(fila("TST004")).queryByRole("button", { name: /^Ver deuda/ })).toBeNull();
+    const ver = within(fila("TST001")).getByRole("button", { name: "Ver deuda de la placa TST001" });
+    expect(ver).toHaveAttribute("aria-haspopup", "dialog");
+    expect(ver).toHaveTextContent("Ver deuda");
+    ver.focus();
+    fireEvent.click(ver);
+    await avanzar();
+    await avanzar();
+    expect(within(panelDeuda()).getByRole("heading", { name: "Deuda por fuente" })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? panelDeuda(), { key: "Escape" });
+    await avanzar();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(fila("TST001")).getByRole("button", { name: "Ver deuda de la placa TST001" })).toHaveFocus();
+  });
+
+  it("AC13: «Ver deuda» también sin la capacidad sanear (solo lectura) y sin la bandera en la cabecera", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(loteSan()), ...rutasPanel(1) }, { verDiagnosticos: true });
+    fireEvent.click(within(fila("TST001")).getByRole("button", { name: "Ver deuda de la placa TST001" }));
+    await avanzar();
+    await avanzar();
+    expect(within(panelDeuda()).getByRole("heading", { name: "Deuda por fuente" })).toBeInTheDocument();
+    expect(within(panelDeuda()).queryByRole("button", { name: /saneamiento de la placa/ })).toBeNull();
+  });
+
+  it("AC13: «Ver deuda y sanear» del dictamen bloqueado reemplaza el panel del dictamen por PS-2 y al cerrar el foco vuelve a «Ver dictamen»", async () => {
+    const dictamen = { version: 1, veredicto: "BLOQUEADO", estado_redaccion: "PENDIENTE", alertamientos: [], catalogo_version: 1, creado_en: "2026-11-03T15:00:00+00:00" };
+    await montarSan({
+      [GRILLA]: () => Response.json(loteSan({ "vehiculo-1": { veredicto: "BLOQUEADO" } })),
+      [`GET ${rutaVeh(1, "dictamen")}`]: () => Response.json(dictamen),
+      ...rutasPanel(1),
+    });
+    const abrir = within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" });
+    abrir.focus();
+    fireEvent.click(abrir);
+    await avanzar();
+    await avanzar();
+    fireEvent.click(screen.getByRole("button", { name: "Ver deuda y sanear" }));
+    await avanzar();
+    await avanzar();
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(panelDeuda()).toBeInTheDocument();
+    fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
+    await avanzar();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" })).toHaveFocus();
+  });
+
+  it("cableado §1: la bandera de la cabecera de PS-2 marca con PUT, la fila del tablero toma la etiqueta y el detalle se relee solo tras la confirmación", async () => {
+    let soltar: (r: Response) => void = () => {};
+    let solicitado = false;
+    const api = await montarSan({
+      [GRILLA]: () => Response.json(loteSan()),
+      ...rutasPanel(5, () =>
+        solicitado ? Response.json(saneamientoEnGestion({ estado: "SOLICITADO", tomado_en: null, renglones: [], historial: [], observacion_flit: null })) : sinSan(),
+      ),
+      [`PUT ${rutaVeh(5, "saneamiento")}`]: () => new Promise<Response>((r) => (soltar = r)),
+    });
+    fireEvent.click(within(fila("TST005")).getByRole("button", { name: "Ver deuda de la placa TST005" }));
+    await avanzar();
+    await avanzar();
+    const cabecera = within(panelDeuda()).getByRole("button", { name: "Solicitar saneamiento de la placa TST005" });
+    expect(cabecera.className).toContain("var(--kit-tinta)");
+    expect(cabecera).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(cabecera);
+    expect(cabecera).toHaveAttribute("aria-pressed", "true");
+    expect(llamadas(api, "GET", rutaVeh(5, "saneamiento"))).toHaveLength(1);
+    await act(async () => {
+      solicitado = true;
+      soltar(Response.json({ id: "s5", estado: "SOLICITADO" }, { status: 201 }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await avanzar();
+    expect(llamadas(api, "PUT", rutaVeh(5, "saneamiento"))).toHaveLength(1);
+    expect(llamadas(api, "GET", rutaVeh(5, "saneamiento"))).toHaveLength(2);
+    expect(within(panelDeuda()).getByText("Saneamiento solicitado para TST005.")).toBeInTheDocument();
+    fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
+    await avanzar();
+    expect(within(fila("TST005")).getByRole("button", { name: "Ver dictamen de TST005" }).closest("td")).toHaveTextContent("Saneamiento solicitado");
+    expect(within(fila("TST005")).getByRole("button", { name: "Solicitar saneamiento de la placa TST005" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("§2.6: filas sin la clave saneamiento (backend previo): sin «Ver deuda»", async () => {
+    await montarSan({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO" })) });
+    expect(screen.queryAllByRole("button", { name: /^Ver deuda/ })).toHaveLength(0);
   });
 });
