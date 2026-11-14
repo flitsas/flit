@@ -7,6 +7,7 @@ import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
 import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { nombreFuente } from "@/lib/configuracion";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
+import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import type { EstadoCelda } from "@/lib/tablero/api";
 import {
   FUENTES_PERSONA,
@@ -125,14 +126,9 @@ function EstadoDePersona({ persona }: { persona: PersonaDetalle }) {
 }
 
 /** Auditoría por persona: rol, documento enmascarado, consultado_en y estado mapeado (HU #14087 AC7). */
-// HU #14562 · D2 (axe scrollable-region-focusable, WCAG 2.1.1): una tabla más ancha que la pantalla se desplaza en su
-// contenedor; con tabIndex, rol y nombre el teclado puede enfocarlo y moverlo con las flechas. Foco con --di-action.
-const FOCO_DESPLAZABLE = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]";
-const desplazable = (nombre: string) => ({ tabIndex: 0, role: "region", "aria-label": `${nombre}, desplazable` }) as const;
-
 function TablaPersonas({ personas }: { personas: PersonaDetalle[] }) {
   return (
-    <div {...desplazable("Personas consultadas")} className={`overflow-x-auto rounded-xl border border-border ${FOCO_DESPLAZABLE}`}>
+    <RegionDesplazable nombre="Personas consultadas" className="rounded-xl border border-border">
       <table aria-label="Personas consultadas" className="w-full border-collapse text-xs">
         <thead>
           <tr>
@@ -159,7 +155,7 @@ function TablaPersonas({ personas }: { personas: PersonaDetalle[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </RegionDesplazable>
   );
 }
 
@@ -211,7 +207,7 @@ function AuditoriaIntentos({ fuente, auditoria }: { fuente: string; auditoria: A
           { termino: "Intentos", valor: String(auditoria.intentos) },
         ]}
       />
-      <div {...desplazable("Intentos de la consulta")} className={`overflow-x-auto ${FOCO_DESPLAZABLE}`}>
+      <RegionDesplazable nombre="Intentos de la consulta">
         <table aria-label="Intentos de la consulta" className="w-full text-sm">
           <thead className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
             <tr>
@@ -237,14 +233,14 @@ function AuditoriaIntentos({ fuente, auditoria }: { fuente: string; auditoria: A
             ))}
           </tbody>
         </table>
-      </div>
+      </RegionDesplazable>
     </>
   );
 }
 
 function TablaSimple({ etiqueta, columnas, filas }: { etiqueta: string; columnas: string[]; filas: (string | null | undefined)[][] }) {
   return (
-    <div {...desplazable(etiqueta)} className={`overflow-x-auto ${FOCO_DESPLAZABLE}`}>
+    <RegionDesplazable nombre={etiqueta}>
       <table aria-label={etiqueta} className="w-full text-sm">
         <thead className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
           <tr>
@@ -263,7 +259,7 @@ function TablaSimple({ etiqueta, columnas, filas }: { etiqueta: string; columnas
           ))}
         </tbody>
       </table>
-    </div>
+    </RegionDesplazable>
   );
 }
 

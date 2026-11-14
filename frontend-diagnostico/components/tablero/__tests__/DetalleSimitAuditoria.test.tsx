@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
 import { VistaDetalleCelda } from "@/components/tablero/DetalleCelda";
 import type { AuditoriaConsulta, DetalleCelda, ResultadoSimitDetalle } from "@/lib/tablero/detalle";
 import { persona } from "@/lib/tablero/__tests__/datosDetalle";
@@ -104,25 +104,83 @@ describe("HU14562 AC41 — Auditoría de la consulta visible", () => {
     expect(within(filas[2]).getByText("Reproceso")).toBeInTheDocument();
   });
 
-  // HU #14562 · D2 (axe scrollable-region-focusable): cada tabla con scroll horizontal vive en una región enfocable con
-  // nombre, para que el teclado pueda desplazarla.
-  it("D2: los contenedores con scroll de las tablas son regiones enfocables con nombre y foco visible", () => {
-    const conTodo: DetalleCelda = {
+  // HU #14562 · D2 (axe scrollable-region-focusable): cada tabla con scroll horizontal vive en una región con nombre y
+  // foco visible. O-4 (auditoría D1–D3): solo es parada de Tab cuando de verdad desborda (scrollWidth > clientWidth);
+  // si la tabla cabe, no suma una parada vacía. jsdom no mide: se simulan los anchos y el ResizeObserver.
+  describe("D2 / O-4: regiones desplazables", () => {
+    const TABLAS = ["Intentos de la consulta", "Infracciones", "Personas consultadas"];
+    const conTodo = (): DetalleCelda => ({
       ...detalleSimit(
         simit({ multas: [{ numero: "M-1", infracciones: [{ codigo: "C24", descripcion: "Estacionar en sitio prohibido" }] }] }),
         auditoria,
       ),
       personas: [persona(1)],
-    };
-    render(<VistaDetalleCelda detalle={conTodo} />);
+    });
 
-    for (const nombre of ["Intentos de la consulta", "Infracciones", "Personas consultadas"]) {
-      const region = screen.getByRole("region", { name: `${nombre}, desplazable` });
-      expect(region).toHaveAttribute("tabindex", "0");
-      expect(region).toHaveClass("overflow-x-auto");
-      expect(region.className).toMatch(/focus-visible:outline-\[var\(--di-action\)\]/);
-      expect(within(region).getByRole("table", { name: nombre })).toBeInTheDocument();
-    }
+    let anchoContenido = 300;
+    const observadores: Array<() => void> = [];
+    beforeEach(() => {
+      anchoContenido = 300;
+      observadores.length = 0;
+      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("overflow-x-auto") ? 300 : 0;
+      });
+      vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("overflow-x-auto") ? anchoContenido : 0;
+      });
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(private cb: ResizeObserverCallback) {
+            observadores.push(() => this.cb([], this as unknown as ResizeObserver));
+          }
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it("con la tabla más ancha que su contenedor, la región es enfocable, con nombre y foco --di-action", () => {
+      anchoContenido = 720;
+      render(<VistaDetalleCelda detalle={conTodo()} />);
+      for (const nombre of TABLAS) {
+        const region = screen.getByRole("region", { name: `${nombre}, desplazable` });
+        expect(region).toHaveAttribute("tabindex", "0");
+        expect(region).toHaveClass("overflow-x-auto");
+        expect(region.className).toMatch(/focus-visible:outline-\[var\(--di-action\)\]/);
+        expect(within(region).getByRole("table", { name: nombre })).toBeInTheDocument();
+      }
+    });
+
+    it("negativo: si la tabla cabe, la región conserva rol y nombre pero no es parada de Tab", () => {
+      anchoContenido = 300;
+      render(<VistaDetalleCelda detalle={conTodo()} />);
+      for (const nombre of TABLAS) {
+        const region = screen.getByRole("region", { name: `${nombre}, desplazable` });
+        expect(region).not.toHaveAttribute("tabindex");
+        expect(within(region).getByRole("table", { name: nombre })).toBeInTheDocument();
+      }
+    });
+
+    it("al cambiar el ancho (ResizeObserver), la parada de Tab aparece y desaparece", () => {
+      anchoContenido = 300;
+      render(<VistaDetalleCelda detalle={conTodo()} />);
+      const region = () => screen.getByRole("region", { name: "Personas consultadas, desplazable" });
+      expect(region()).not.toHaveAttribute("tabindex");
+
+      anchoContenido = 720;
+      act(() => observadores.forEach((avisar) => avisar()));
+      expect(region()).toHaveAttribute("tabindex", "0");
+
+      anchoContenido = 300;
+      act(() => observadores.forEach((avisar) => avisar()));
+      expect(region()).not.toHaveAttribute("tabindex");
+    });
   });
 
   it("sin auditoria (API anterior) la lista de intentos no aparece y el detalle funciona", () => {
