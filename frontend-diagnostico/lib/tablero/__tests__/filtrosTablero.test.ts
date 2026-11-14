@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { FILTROS_TABLERO, filtrarVehiculos, tarjetasVisibles, buscarVehiculos, veredictoDeFila } from "@/lib/tablero/filtrosTablero";
+import {
+  FILTROS_SANEAMIENTO,
+  FILTROS_TABLERO,
+  buscarVehiculos,
+  filtrarPorSaneamiento,
+  filtrarVehiculos,
+  hayDatosSaneamiento,
+  leerFiltroSaneamiento,
+  tarjetasVisibles,
+  veredictoDeFila,
+} from "@/lib/tablero/filtrosTablero";
 import { V1, V2, V3, celda, grilla, vehiculo } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: filtrarVehiculos(grilla.vehiculos, "bloqueados") → solo las filas con veredicto BLOQUEADO; tarjetasVisibles(grilla)
@@ -47,5 +57,59 @@ describe("filtrosTablero — HU #14562 AC27, AC28 y AC31", () => {
     expect(veredictoDeFila({ ...V1, veredicto: "BLOQUEADO" }).texto).toBe("Bloqueado");
     expect(veredictoDeFila({ ...V1, veredicto: null }).texto).toBe("Pendiente");
     expect(veredictoDeFila(V1).texto).toBe("Pendiente");
+  });
+});
+
+// Uso de ejemplo (HU #14577 AC9): filtrarPorSaneamiento(filas, "con") → solo las filas con saneamiento (cualquier estado no
+// anulado); "sin" → las que no lo tienen; null → todas. leerFiltroSaneamiento("con") → "con" (el valor de ?saneamiento=).
+describe("filtrosTablero — saneamiento (HU #14577 AC9)", () => {
+  const sin = { estado: null, elegible: true, motivo_no_elegible: null } as const;
+  const conEstado = (n: number, estado: "SOLICITADO" | "EN_GESTION" | "SANEADO" | "NO_PROCEDE") =>
+    vehiculo(n, [], { saneamiento: { estado, elegible: false, motivo_no_elegible: "YA_SOLICITADO" } });
+  const filas = [
+    conEstado(10, "SOLICITADO"),
+    conEstado(11, "EN_GESTION"),
+    conEstado(12, "SANEADO"),
+    conEstado(13, "NO_PROCEDE"),
+    vehiculo(14, [], { saneamiento: sin }),
+    vehiculo(15, []),
+  ];
+
+  it("«con» deja pasar los cuatro estados no anulados; «sin», las filas sin saneamiento o sin la clave", () => {
+    expect(filtrarPorSaneamiento(filas, "con").map((v) => v.id)).toEqual(["vehiculo-10", "vehiculo-11", "vehiculo-12", "vehiculo-13"]);
+    expect(filtrarPorSaneamiento(filas, "sin").map((v) => v.id)).toEqual(["vehiculo-14", "vehiculo-15"]);
+  });
+
+  it("sin filtro (null) devuelve todas las filas, en el mismo orden", () => {
+    expect(filtrarPorSaneamiento(filas, null)).toEqual(filas);
+  });
+
+  it("un ANULADO que llegue por error cuenta como sin saneamiento (la compañía no ve anulados)", () => {
+    const anulado = vehiculo(16, [], { saneamiento: { estado: "ANULADO" as never, elegible: true, motivo_no_elegible: null } });
+    expect(filtrarPorSaneamiento([anulado], "con")).toEqual([]);
+    expect(filtrarPorSaneamiento([anulado], "sin")).toEqual([anulado]);
+  });
+
+  it("lee ?saneamiento=con|sin de la URL; cualquier otro valor, vacío o repetido toma el primero o nada", () => {
+    expect(leerFiltroSaneamiento("con")).toBe("con");
+    expect(leerFiltroSaneamiento("sin")).toBe("sin");
+    expect(leerFiltroSaneamiento(["sin", "con"])).toBe("sin");
+    expect(leerFiltroSaneamiento("todos")).toBeNull();
+    expect(leerFiltroSaneamiento("")).toBeNull();
+    expect(leerFiltroSaneamiento(undefined)).toBeNull();
+    expect(leerFiltroSaneamiento(null)).toBeNull();
+  });
+
+  it("los dos chips en orden, con su texto", () => {
+    expect(FILTROS_SANEAMIENTO).toEqual([
+      { clave: "con", etiqueta: "Con saneamiento" },
+      { clave: "sin", etiqueta: "Sin saneamiento" },
+    ]);
+  });
+
+  it("hayDatosSaneamiento: solo si alguna fila trae la clave (backend previo: sin chips)", () => {
+    expect(hayDatosSaneamiento([vehiculo(15, [])])).toBe(false);
+    expect(hayDatosSaneamiento(filas)).toBe(true);
+    expect(hayDatosSaneamiento([])).toBe(false);
   });
 });

@@ -66,3 +66,36 @@ export function veredictoDeFila(v: FilaVehiculo): { texto: string; tono: TonoVer
   if (v.veredicto === "BLOQUEADO") return { texto: "Bloqueado", tono: "danger" };
   return { texto: "Pendiente", tono: "neutral" };
 }
+
+// ---------- Saneamiento (HU #14577 AC9, spec-ui §2.3) ----------
+
+/** Chip «Con / Sin saneamiento» del tablero; va en la URL como `?saneamiento=con|sin` (D-09). */
+export type FiltroSaneamiento = "con" | "sin";
+
+export const FILTROS_SANEAMIENTO: readonly { clave: FiltroSaneamiento; etiqueta: string }[] = [
+  { clave: "con", etiqueta: "Con saneamiento" },
+  { clave: "sin", etiqueta: "Sin saneamiento" },
+];
+
+/** Valor de `?saneamiento=` (repetido: el primero). Cualquier otro valor es «sin filtro». */
+export function leerFiltroSaneamiento(valor: string | string[] | null | undefined): FiltroSaneamiento | null {
+  const v = Array.isArray(valor) ? valor[0] : valor;
+  return v === "con" || v === "sin" ? v : null;
+}
+
+/** Con saneamiento = estado no nulo y no anulado (la compañía no ve anulados). Sin la clave cuenta como sin saneamiento. */
+const conSaneamiento = (v: FilaVehiculo) => {
+  const estado = v.saneamiento?.estado as string | null | undefined;
+  return estado != null && estado !== "ANULADO";
+};
+
+/** Filas que deja pasar el chip activo (null = todas). Se combina (Y) con la tarjeta y la búsqueda. */
+export function filtrarPorSaneamiento(vehiculos: FilaVehiculo[], filtro: FiltroSaneamiento | null): FilaVehiculo[] {
+  if (!filtro) return vehiculos;
+  return vehiculos.filter((v) => conSaneamiento(v) === (filtro === "con"));
+}
+
+/** Alguna fila trae la clave `saneamiento` (backend con saneamiento): solo entonces hay chips (spec-ui §2.6). */
+export function hayDatosSaneamiento(vehiculos: readonly FilaVehiculo[]): boolean {
+  return vehiculos.some((v) => v.saneamiento !== undefined);
+}
