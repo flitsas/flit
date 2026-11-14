@@ -71,7 +71,10 @@ internal static class PdfDeuda
     /// <summary><c>deuda-{placa}.pdf</c> con la placa reducida a <c>[A-Z0-9]</c> (SP-18); sin nada utilizable, <c>deuda-vehiculo.pdf</c>.</summary>
     public static string NombreArchivo(string placa) => $"deuda-{PlacaSegura(placa)}.pdf";
 
-    /// <summary>La placa en mayúsculas con solo <c>[A-Z0-9]</c>; «vehiculo» si no queda nada.</summary>
+    /// <summary>Lo que va en un nombre de archivo cuando no queda placa (AP-3): sin espacios ni mayúsculas.</summary>
+    internal const string SinPlaca = "sin-placa";
+
+    /// <summary>La placa en mayúsculas con solo <c>[A-Z0-9]</c>; <see cref="SinPlaca"/> si no queda nada (AP-3, nunca con espacios).</summary>
     internal static string PlacaSegura(string? placa)
     {
         var limpia = new StringBuilder();
@@ -81,7 +84,7 @@ internal static class PdfDeuda
                 limpia.Append(c);
         }
 
-        return limpia.Length > 0 ? limpia.ToString() : "vehiculo";
+        return limpia.Length > 0 ? limpia.ToString() : SinPlaca;
     }
 
     public static byte[] Generar(PanelDeudaDto panel, DateTimeOffset generadoEn)
