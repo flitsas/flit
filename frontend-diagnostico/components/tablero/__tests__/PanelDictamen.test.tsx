@@ -486,3 +486,35 @@ describe("PanelDictamen — HU #14562 m-11: validación del motivo", () => {
     expect(motivo).toHaveAccessibleDescription(/El motivo es obligatorio\./);
   });
 });
+
+// HU #14577 AC13 (spec-ui §3.1): el aviso «Vehículo bloqueado» ofrece «Ver deuda y sanear», que abre PS-2 en lugar del
+// dictamen (quien pinta el panel lo reemplaza; no se apilan dos paneles). Solo en la compañía y con el callback.
+describe("PanelDictamen — HU #14577 AC13: «Ver deuda y sanear» en el aviso de bloqueado", () => {
+  it("dictamen BLOQUEADO con onVerDeuda: el aviso trae el botón y al pulsarlo llama al callback", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(LLENO) });
+    const onVerDeuda = vi.fn();
+    pintar({ onVerDeuda });
+    const aviso = (await screen.findByText("Vehículo bloqueado")).closest("[role='alert']") as HTMLElement;
+    const boton = within(aviso).getByRole("button", { name: "Ver deuda y sanear" });
+    fireEvent.click(boton);
+    expect(onVerDeuda).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin onVerDeuda, con dictamen VIABLE o en el backoffice, el botón no aparece", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(LLENO), [`GET ${RUTA_BO}`]: () => Response.json(LLENO) });
+    const { unmount } = pintar();
+    await screen.findByText("Vehículo bloqueado");
+    expect(screen.queryByRole("button", { name: "Ver deuda y sanear" })).toBeNull();
+    unmount();
+
+    const otra = pintar({ modo: "backoffice", empresa: EMPRESA_A, onVerDeuda: vi.fn() });
+    await screen.findByText("Vehículo bloqueado");
+    expect(screen.queryByRole("button", { name: "Ver deuda y sanear" })).toBeNull();
+    otra.unmount();
+
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, veredicto: "VIABLE" }) });
+    pintar({ onVerDeuda: vi.fn() });
+    await screen.findByText("Viable");
+    expect(screen.queryByRole("button", { name: "Ver deuda y sanear" })).toBeNull();
+  });
+});

@@ -52,6 +52,12 @@ export interface PanelDictamenProps {
    * apilar un modal sobre el panel.
    */
   onCrearTramite?: () => void;
+  /**
+   * HU #14577 AC13 (spec-ui §3.1): «Ver deuda y sanear» en el aviso «Vehículo bloqueado», solo en la compañía. Quien pinta
+   * el panel cierra este y abre `PanelDeudaSaneamiento` en su lugar (no se apilan dos paneles, D-15), con el foco de vuelta
+   * al botón de la fila que abrió el dictamen.
+   */
+  onVerDeuda?: () => void;
 }
 
 /** dd/mm/aaaa en la hora de Colombia. Fecha ilegible: el texto crudo. */
@@ -150,6 +156,7 @@ export function PanelDictamen({
   tramiteAnalizado,
   consultas,
   onCrearTramite,
+  onVerDeuda,
 }: PanelDictamenProps) {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -260,7 +267,17 @@ export function PanelDictamen({
           <Etiqueta tono={dictamen.veredicto === "BLOQUEADO" ? "danger" : "success"}>{nombreVeredicto(dictamen.veredicto)}</Etiqueta>
         </p>
         {dictamen.veredicto === "BLOQUEADO" && (
-          <InlineAlert tone="error" title="Vehículo bloqueado">
+          <InlineAlert
+            tone="error"
+            title="Vehículo bloqueado"
+            action={
+              modo === "compania" && onVerDeuda ? (
+                <button type="button" onClick={onVerDeuda} className={BOTON_SECUNDARIO_CLS}>
+                  Ver deuda y sanear
+                </button>
+              ) : undefined
+            }
+          >
             El vehículo está bloqueado: no se puede crear el trámite hasta resolver los impedimentos que bloquean.
           </InlineAlert>
         )}
