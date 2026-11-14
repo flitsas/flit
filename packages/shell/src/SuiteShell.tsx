@@ -169,7 +169,7 @@ export function SuiteShell({
               páginas (`.app-bg`) se apaga aquí para que se vea el de la propuesta. */}
           <div
             ref={scrollRef}
-            className="absolute inset-0 overflow-y-auto pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
+            className="absolute inset-0 overflow-y-auto pb-28 scroll-pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
             data-shell-scroll
           >
             {/* Sin contenedor centrado: cada página conserva su propio ancho y relleno (decisión de producto, HU #14479). */}
