@@ -94,6 +94,12 @@ public sealed class VehiculoDiagnostico : IEntidadDeEmpresa
     /// </summary>
     public long VersionTablero { get; set; }
 
+    /// <summary>
+    /// Estado del saneamiento no anulado del vehículo (HU #14576, ADR-0087), copia para las grillas; null si no hay. Lo escribe solo
+    /// <c>EscritorSaneamiento</c>, con <c>ExecuteUpdate</c> junto con <see cref="VersionTablero"/> y sin cargar la fila (C19).
+    /// </summary>
+    public Flit.Diagnostico.Domain.Saneamiento.EstadoSaneamiento? SaneamientoEstado { get; set; }
+
     /// <summary>Token de concurrencia (columna de sistema <c>xmin</c>): el procesador y el usuario no se pisan.</summary>
     public uint Version { get; set; }
 }

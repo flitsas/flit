@@ -2638,7 +2638,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.Property<Guid>("ReferenciaId")
                         .HasColumnType("uuid")
                         .HasColumnName("referencia_id")
-                        .HasComment("Id del hecho según tipo: evidencias.id (ZIP_*), derivacion_operaciones.id (DERIVACION_TERMINADA), historial_estado_diagnostico.id (LOTE_TERMINADO). Sin FK (polimórfica, ADR-0086).");
+                        .HasComment("Id del hecho según tipo: evidencias.id (ZIP_*), derivacion_operaciones.id (DERIVACION_TERMINADA), historial_estado_diagnostico.id (LOTE_TERMINADO), saneamiento_historial.id (SANEAMIENTO_*, ADR-0087). Sin FK (polimórfica, ADR-0086).");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -2650,7 +2650,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("tipo")
-                        .HasComment("ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA o LOTE_TERMINADO (D8: sin DICTAMEN_AJUSTADO).");
+                        .HasComment("ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA, LOTE_TERMINADO o SANEAMIENTO_TOMADO/CERRADO/REABIERTO/ANULADO (D8: sin DICTAMEN_AJUSTADO; ADR-0087).");
 
                     b.Property<Guid>("UsuarioId")
                         .HasColumnType("uuid")
@@ -2694,7 +2694,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_notificaciones_leida", "leida_en IS NULL OR leida_en >= creada_en");
 
-                            t.HasCheckConstraint("ck_notificaciones_tipo", "tipo IN ('ZIP_EVIDENCIAS_LISTO', 'ZIP_EVIDENCIAS_FALLIDO', 'DERIVACION_TERMINADA', 'LOTE_TERMINADO')");
+                            t.HasCheckConstraint("ck_notificaciones_tipo", "tipo IN ('ZIP_EVIDENCIAS_LISTO', 'ZIP_EVIDENCIAS_FALLIDO', 'DERIVACION_TERMINADA', 'LOTE_TERMINADO', 'SANEAMIENTO_TOMADO', 'SANEAMIENTO_CERRADO', 'SANEAMIENTO_REABIERTO', 'SANEAMIENTO_ANULADO')");
                         });
                 });
 
@@ -2864,6 +2864,402 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Saneamiento.EventoSaneamiento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación; referencia_id de los avisos SANEAMIENTO_*.");
+
+                    b.Property<bool>("EsFlit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("es_flit")
+                        .HasComment("True si actuó por operación FLIT.");
+
+                    b.Property<string>("EstadoAnterior")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado_anterior")
+                        .HasComment("Estado de partida en las transiciones; null en SOLICITADO y en los eventos de edición.");
+
+                    b.Property<string>("EstadoNuevo")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado_nuevo")
+                        .HasComment("Estado de llegada en las transiciones; null en los eventos de edición.");
+
+                    b.Property<string>("Evento")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("evento")
+                        .HasComment("SOLICITADO, DESMARCADO, TOMADO, RENGLON_*, EVIDENCIA_*, OBSERVACION_EDITADA, CERRADO_*, REABIERTO o ANULADO_FLIT.");
+
+                    b.Property<string>("Fuente")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("fuente")
+                        .HasComment("Copia de la fuente del renglón, legible aunque el renglón ya no esté.");
+
+                    b.Property<string>("Motivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("motivo")
+                        .HasComment("@pii:low Motivo de NO_PROCEDE, reapertura o anulación FLIT (10..500); nunca en logs ni avisos.");
+
+                    b.Property<DateTimeOffset>("OcurridoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ocurrido_en")
+                        .HasComment("Instante del evento (timestamptz).");
+
+                    b.Property<Guid?>("RenglonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("renglon_id")
+                        .HasComment("Renglón del evento; sin FK porque el renglón se puede quitar (ADR-0087).");
+
+                    b.Property<Guid>("SaneamientoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("saneamiento_id")
+                        .HasComment("Saneamiento del evento.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del saneamiento (también cuando actúa FLIT).");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Actor (claim sub, seudónimo). Al cliente solo se le muestra COMPANIA o FLIT.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_saneamiento_historial");
+
+                    b.HasIndex("TenantId", "SaneamientoId", "OcurridoEn", "Id")
+                        .HasDatabaseName("ix_saneamiento_historial_saneamiento");
+
+                    b.ToTable("saneamiento_historial", "diagnostico", t =>
+                        {
+                            t.HasComment("Eventos del circuito de saneamiento (clase (b) de ADR-0072, ADR-0087): auditoría con actor e instante; renglon_id sin FK. Solo inserción.");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_estado_anterior", "estado_anterior IS NULL OR estado_anterior IN ('SOLICITADO', 'EN_GESTION', 'SANEADO', 'NO_PROCEDE', 'ANULADO')");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_estado_nuevo", "estado_nuevo IS NULL OR estado_nuevo IN ('SOLICITADO', 'EN_GESTION', 'SANEADO', 'NO_PROCEDE', 'ANULADO')");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_evento", "evento IN ('SOLICITADO', 'DESMARCADO', 'TOMADO', 'RENGLON_AGREGADO', 'RENGLON_QUITADO', 'RENGLON_ACTUALIZADO', 'EVIDENCIA_CARGADA', 'EVIDENCIA_QUITADA', 'OBSERVACION_EDITADA', 'CERRADO_SANEADO', 'CERRADO_NO_PROCEDE', 'REABIERTO', 'ANULADO_FLIT')");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_fuente", "fuente IS NULL OR fuente IN ('SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'IMPUESTO', 'SOAT', 'RTM', 'OTRO')");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_motivo", "(evento IN ('CERRADO_NO_PROCEDE', 'REABIERTO', 'ANULADO_FLIT')) = (motivo IS NOT NULL) AND (motivo IS NULL OR char_length(btrim(motivo)) BETWEEN 10 AND 500)");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_renglon", "(evento IN ('RENGLON_AGREGADO', 'RENGLON_QUITADO', 'RENGLON_ACTUALIZADO', 'EVIDENCIA_CARGADA', 'EVIDENCIA_QUITADA')) = (renglon_id IS NOT NULL) AND (renglon_id IS NULL) = (fuente IS NULL)");
+
+                            t.HasCheckConstraint("ck_saneamiento_historial_transicion", "(evento IN ('SOLICITADO', 'DESMARCADO', 'TOMADO', 'CERRADO_SANEADO', 'CERRADO_NO_PROCEDE', 'REABIERTO', 'ANULADO_FLIT')) = (estado_nuevo IS NOT NULL) AND (estado_anterior IS NULL) = (evento = 'SOLICITADO' OR estado_nuevo IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Saneamiento.RenglonSaneamiento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en")
+                        .HasComment("Instante del último cambio; null si nunca cambió.");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por")
+                        .HasComment("@pii:low Último usuario FLIT que cambió resultado, nota o evidencia.");
+
+                    b.Property<bool>("Automatico")
+                        .HasColumnType("boolean")
+                        .HasColumnName("automatico")
+                        .HasComment("True si lo generó el sistema al tomar; false en OTRO.");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasComment("Instante de creación del renglón (timestamptz).");
+
+                    b.Property<Guid>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por")
+                        .HasComment("@pii:low Usuario FLIT que tomó (automáticos) o agregó (OTRO).");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("descripcion")
+                        .HasComment("@pii:low Descripción de un renglón OTRO (texto de FLIT, 3..200).");
+
+                    b.Property<string>("EvidenciaNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("evidencia_nombre")
+                        .HasComment("@pii:low Nombre original del PDF, saneado (puede traer un nombre de persona); nunca en logs.");
+
+                    b.Property<short>("EvidenciaReemplazos")
+                        .HasColumnType("smallint")
+                        .HasColumnName("evidencia_reemplazos")
+                        .HasDefaultValueSql("0")
+                        .HasComment("@pii:none Veces que se reemplazó el PDF del renglón (0..20, SP-19).");
+
+                    b.Property<string>("EvidenciaReferencia")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("evidencia_referencia")
+                        .HasComment("@pii:none Referencia del archivo en el almacén (el PDF puede traer datos de terceros, C21); nunca se expone ni se loguea.");
+
+                    b.Property<string>("EvidenciaSha256")
+                        .HasColumnType("char(64)")
+                        .HasColumnName("evidencia_sha256")
+                        .HasComment("@pii:none SHA-256 hex del PDF; nunca se expone.");
+
+                    b.Property<DateTimeOffset?>("EvidenciaSubidaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("evidencia_subida_en")
+                        .HasComment("@pii:none Instante de carga del PDF vigente.");
+
+                    b.Property<Guid?>("EvidenciaSubidaPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("evidencia_subida_por")
+                        .HasComment("@pii:low Usuario FLIT que cargó el PDF vigente.");
+
+                    b.Property<long?>("EvidenciaTamano")
+                        .HasColumnType("bigint")
+                        .HasColumnName("evidencia_tamano")
+                        .HasComment("@pii:none Tamaño del PDF en bytes.");
+
+                    b.Property<string>("Fuente")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("fuente")
+                        .HasComment("SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, IMPUESTO, SOAT, RTM u OTRO. Una sola no quitada por fuente salvo OTRO.");
+
+                    b.Property<string>("Hallazgo")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("hallazgo")
+                        .HasComment("DEUDA, NO_VIGENTE o SIN_VERIFICAR; foto al tomar (no se regenera). Null en OTRO.");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("nota")
+                        .HasComment("@pii:low Nota de FLIT, visible al cliente; nunca en logs.");
+
+                    b.Property<DateTimeOffset?>("QuitadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("quitado_en")
+                        .HasComment("Borrado lógico (SP-2): instante en que FLIT quitó el renglón; null si sigue. Las lecturas filtran quitado_en IS NULL; quién lo quitó queda en saneamiento_historial.");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("resultado")
+                        .HasDefaultValueSql("'PENDIENTE'")
+                        .HasComment("PENDIENTE, SANEADO o NO_PROCEDE.");
+
+                    b.Property<Guid>("SaneamientoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("saneamiento_id")
+                        .HasComment("Saneamiento al que pertenece.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del saneamiento.");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_saneamiento_renglones");
+
+                    b.HasIndex("TenantId", "SaneamientoId")
+                        .HasDatabaseName("ix_saneamiento_renglones_saneamiento");
+
+                    b.HasIndex("TenantId", "SaneamientoId", "Fuente")
+                        .IsUnique()
+                        .HasDatabaseName("ux_saneamiento_renglones_fuente")
+                        .HasFilter("fuente <> 'OTRO' AND quitado_en IS NULL");
+
+                    b.ToTable("saneamiento_renglones", "diagnostico", t =>
+                        {
+                            t.HasComment("Renglón de un saneamiento por fuente (clase (a) de ADR-0072, ADR-0087): hallazgo, resultado, nota y PDF opcional de evidencia. OTRO lo agrega FLIT. Se quita con borrado lógico (quitado_en).");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_actualizado", "(actualizado_por IS NULL) = (actualizado_en IS NULL)");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_evidencia", "(evidencia_referencia IS NULL) = (evidencia_nombre IS NULL) AND (evidencia_referencia IS NULL) = (evidencia_sha256 IS NULL) AND (evidencia_referencia IS NULL) = (evidencia_tamano IS NULL) AND (evidencia_referencia IS NULL) = (evidencia_subida_por IS NULL) AND (evidencia_referencia IS NULL) = (evidencia_subida_en IS NULL)");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_evidencia_sha256", "evidencia_sha256 IS NULL OR evidencia_sha256 ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_evidencia_tamano", "evidencia_tamano IS NULL OR evidencia_tamano > 0");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_fuente", "fuente IN ('SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'IMPUESTO', 'SOAT', 'RTM', 'OTRO')");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_hallazgo", "hallazgo IS NULL OR hallazgo IN ('DEUDA', 'NO_VIGENTE', 'SIN_VERIFICAR')");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_hallazgo_fuente", "hallazgo IS NULL OR (hallazgo = 'DEUDA' AND fuente IN ('SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'IMPUESTO')) OR (hallazgo = 'SIN_VERIFICAR' AND fuente = 'SIMIT_LOCATARIO') OR (hallazgo = 'NO_VIGENTE' AND fuente IN ('SOAT', 'RTM'))");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_nota", "nota IS NULL OR btrim(nota) <> ''");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_otro", "(fuente = 'OTRO') = (hallazgo IS NULL) AND (fuente = 'OTRO') = (descripcion IS NOT NULL) AND automatico = (fuente <> 'OTRO') AND (descripcion IS NULL OR char_length(btrim(descripcion)) BETWEEN 3 AND 200)");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_reemplazos", "evidencia_reemplazos BETWEEN 0 AND 20");
+
+                            t.HasCheckConstraint("ck_saneamiento_renglones_resultado", "resultado IN ('PENDIENTE', 'SANEADO', 'NO_PROCEDE')");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Saneamiento.Saneamiento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset?>("AnuladoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("anulado_en")
+                        .HasComment("Instante de la anulación.");
+
+                    b.Property<Guid?>("AnuladoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("anulado_por")
+                        .HasComment("@pii:low Quien anuló: el cliente (desmarcar) o FLIT.");
+
+                    b.Property<bool>("AnuladoPorFlit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("anulado_por_flit")
+                        .HasDefaultValueSql("false")
+                        .HasComment("True si anuló FLIT (exige motivo); false si desmarcó el cliente o no está anulado.");
+
+                    b.Property<DateTimeOffset?>("CerradoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cerrado_en")
+                        .HasComment("Instante del cierre (SANEADO o NO_PROCEDE); se limpia al reabrir.");
+
+                    b.Property<Guid?>("CerradoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cerrado_por")
+                        .HasComment("@pii:low Usuario FLIT que cerró; se limpia al reabrir.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Lote del vehículo.");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado")
+                        .HasComment("SOLICITADO, EN_GESTION, SANEADO, NO_PROCEDE o ANULADO (final).");
+
+                    b.Property<string>("MotivoAnulacion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("motivo_anulacion")
+                        .HasComment("@pii:low Motivo de la anulación de FLIT (10..500); visible al cliente; nunca en logs ni avisos.");
+
+                    b.Property<string>("MotivoCierre")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("motivo_cierre")
+                        .HasComment("@pii:low Motivo de NO_PROCEDE (texto de FLIT, 10..500); visible al cliente; nunca en logs ni avisos.");
+
+                    b.Property<string>("ObservacionFlit")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("observacion_flit")
+                        .HasComment("@pii:low Observación general de FLIT, visible al cliente; editable en EN_GESTION.");
+
+                    b.Property<DateTimeOffset>("SolicitadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("solicitado_en")
+                        .HasComment("Instante de la solicitud (timestamptz). Orden de la bandeja.");
+
+                    b.Property<Guid>("SolicitadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitado_por")
+                        .HasComment("@pii:low Usuario de la compañía que marcó (claim sub, seudónimo).");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote y del vehículo.");
+
+                    b.Property<DateTimeOffset?>("TomadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tomado_en")
+                        .HasComment("Instante de la primera toma; no cambia al reabrir.");
+
+                    b.Property<Guid?>("TomadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tomado_por")
+                        .HasComment("@pii:low Usuario FLIT que lo tomó por primera vez; no cambia al reabrir.");
+
+                    b.Property<Guid>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo a sanear.");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_saneamientos");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_saneamientos_tenant_id");
+
+                    b.HasIndex("TenantId", "DiagnosticoId")
+                        .HasDatabaseName("ix_saneamientos_diagnostico");
+
+                    b.HasIndex("Estado", "SolicitadoEn", "Id")
+                        .HasDatabaseName("ix_saneamientos_bandeja");
+
+                    b.HasIndex(new[] { "TenantId", "VehiculoId" }, "ix_saneamientos_vehiculo")
+                        .HasDatabaseName("ix_saneamientos_vehiculo");
+
+                    b.HasIndex(new[] { "TenantId", "VehiculoId" }, "ux_saneamiento_vigente")
+                        .IsUnique()
+                        .HasDatabaseName("ux_saneamiento_vigente")
+                        .HasFilter("estado <> 'ANULADO'");
+
+                    b.ToTable("saneamientos", "diagnostico", t =>
+                        {
+                            t.HasComment("Saneamiento de un vehículo (clase (a) de ADR-0072, ADR-0087): solicitud del cliente y gestión de FLIT, sin dinero. Un solo no anulado por vehículo. Sin borrado: ANULADO es un estado.");
+
+                            t.HasCheckConstraint("ck_saneamientos_anulacion", "(anulado_por IS NULL) = (anulado_en IS NULL) AND (estado = 'ANULADO') = (anulado_en IS NOT NULL) AND anulado_por_flit = (motivo_anulacion IS NOT NULL) AND (NOT anulado_por_flit OR anulado_en IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_saneamientos_cierre", "(cerrado_por IS NULL) = (cerrado_en IS NULL) AND (estado IN ('SANEADO', 'NO_PROCEDE')) = (cerrado_en IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_saneamientos_estado", "estado IN ('SOLICITADO', 'EN_GESTION', 'SANEADO', 'NO_PROCEDE', 'ANULADO')");
+
+                            t.HasCheckConstraint("ck_saneamientos_motivo_anulacion", "motivo_anulacion IS NULL OR char_length(btrim(motivo_anulacion)) BETWEEN 10 AND 500");
+
+                            t.HasCheckConstraint("ck_saneamientos_motivo_cierre", "(estado = 'NO_PROCEDE') = (motivo_cierre IS NOT NULL) AND (motivo_cierre IS NULL OR char_length(btrim(motivo_cierre)) BETWEEN 10 AND 500)");
+
+                            t.HasCheckConstraint("ck_saneamientos_observacion", "observacion_flit IS NULL OR btrim(observacion_flit) <> ''");
+
+                            t.HasCheckConstraint("ck_saneamientos_tomado", "(tomado_por IS NULL) = (tomado_en IS NULL) AND (estado <> 'SOLICITADO' OR tomado_en IS NULL) AND (estado NOT IN ('EN_GESTION', 'SANEADO', 'NO_PROCEDE') OR tomado_en IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2972,6 +3368,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("runt_consultado_en")
                         .HasComment("Instante de la última consulta al RUNT; reutilización en Trámites (R-14).");
 
+                    b.Property<string>("SaneamientoEstado")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("saneamiento_estado")
+                        .HasComment("Estado del saneamiento no anulado del vehículo (copia); null si no hay. Lo escribe solo EscritorSaneamiento, en la transacción de la transición. [ADR-0087]");
+
                     b.Property<string>("Servicio")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
@@ -3033,12 +3435,21 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.HasIndex("TenantId", "Placa")
                         .HasDatabaseName("ix_vehiculos_tenant_placa");
 
+                    b.HasIndex("TenantId", "SaneamientoEstado")
+                        .HasDatabaseName("ix_vehiculos_saneamiento")
+                        .HasFilter("saneamiento_estado IS NOT NULL");
+
                     b.HasIndex("TenantId", "DiagnosticoId", "IdentificadorNorm")
                         .IsUnique()
                         .HasDatabaseName("ux_vehiculo_por_lote");
 
                     b.HasIndex("TenantId", "DiagnosticoId", "VersionTablero")
                         .HasDatabaseName("ix_vehiculos_tablero");
+
+                    b.HasIndex(new[] { "TenantId", "IdentificadorNorm" }, "ix_vehiculos_identificador_prefijo")
+                        .HasDatabaseName("ix_vehiculos_identificador_prefijo");
+
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex(new[] { "TenantId", "IdentificadorNorm" }, "ix_vehiculos_identificador_prefijo"), new[] { "uuid_ops", "varchar_pattern_ops" });
 
                     b.ToTable("vehiculos", "diagnostico", t =>
                         {
@@ -3055,6 +3466,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_vehiculos_locatario_declarado_con_proveedor", "locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = 'PROVEEDOR'");
 
                             t.HasCheckConstraint("ck_vehiculos_locatario_doc_origen", "locatario_doc_origen IS NULL OR locatario_doc_origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
+
+                            t.HasCheckConstraint("ck_vehiculos_saneamiento_estado", "saneamiento_estado IS NULL OR saneamiento_estado IN ('SOLICITADO', 'EN_GESTION', 'SANEADO', 'NO_PROCEDE')");
 
                             t.HasCheckConstraint("ck_vehiculos_tipo_identificador", "tipo_identificador IN ('PLACA_CARRO', 'PLACA_MOTO', 'PLACA_REMOLQUE', 'PLACA_MAQUINARIA', 'PLACA_MOTOCARRO', 'VIN')");
 
@@ -3335,6 +3748,47 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_evidencias_vehiculos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Saneamiento.EventoSaneamiento", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Saneamiento.Saneamiento", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SaneamientoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_saneamiento_historial_saneamientos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Saneamiento.RenglonSaneamiento", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Saneamiento.Saneamiento", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SaneamientoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_saneamiento_renglones_saneamientos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Saneamiento.Saneamiento", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_saneamientos_diagnosticos");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_saneamientos_vehiculos");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", b =>

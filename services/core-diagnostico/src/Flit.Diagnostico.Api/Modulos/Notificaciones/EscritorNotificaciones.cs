@@ -12,7 +12,7 @@ namespace Flit.Diagnostico.Api.Modulos.Notificaciones;
 /// así que si el hecho se revierte no queda notificación.
 /// <list type="bullet">
 /// <item>Sin destinatario (<see cref="Guid.Empty"/>) no inserta.</item>
-/// <item>Solo los cuatro tipos de <see cref="Notificacion.Tipos"/> (D8: no hay DICTAMEN_AJUSTADO); otro lanza <see cref="ArgumentException"/>.</item>
+/// <item>Solo los tipos de <see cref="Notificacion.Tipos"/> (D8: no hay DICTAMEN_AJUSTADO; HU #14576 suma los SANEAMIENTO_*); otro lanza <see cref="ArgumentException"/>.</item>
 /// <item>El <c>tenant_id</c> es explícito, el de la fila del hecho, nunca el implícito del contexto.</item>
 /// <item>Idempotente: no agrega si ya existe <c>(tenant, usuario, tipo, referencia)</c> en la base ni si la misma unidad de trabajo
 /// ya tiene una con esa misma clave (para <c>LOTE_TERMINADO</c>, una del mismo lote). El índice único

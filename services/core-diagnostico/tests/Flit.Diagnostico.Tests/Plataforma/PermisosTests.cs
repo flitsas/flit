@@ -23,13 +23,13 @@ public sealed partial class PermisosTests
         ["usuario_diagnostico"] =
         [
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
-            "diagnostico.derivacion.crear", "diagnostico.configuracion.ver",
+            "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.saneamiento.solicitar",
         ],
         ["admin_diagnostico"] =
         [
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
             "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.configuracion.editar",
-            "diagnostico.consultas.reprocesar",
+            "diagnostico.consultas.reprocesar", "diagnostico.saneamiento.solicitar",
         ],
     };
 
@@ -39,6 +39,8 @@ public sealed partial class PermisosTests
         "diagnostico.reportes.descargar", "diagnostico.derivacion.crear", "diagnostico.configuracion.ver",
         "diagnostico.configuracion.editar", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.reprocesar",
         "diagnostico.consultas.llenar", "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+        // HU #14576 AC31 (plan saneamiento §5.1): solicitar va a los dos roles; gestionar a ninguno.
+        "diagnostico.saneamiento.solicitar", "diagnostico.saneamiento.gestionar",
     ];
 
     private static List<string> Slugs => Permisos.Modulos.SelectMany(m => m.Permisos).Select(p => p.Slug).ToList();
@@ -49,7 +51,7 @@ public sealed partial class PermisosTests
     {
         var slugs = Slugs;
 
-        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2");
+        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2 y los 2 del saneamiento");
         slugs.Should().AllSatisfy(s => FormatoSlug().IsMatch(s).Should().BeTrue($"«{s}» sigue diagnostico.<modulo>.<accion>"));
         Permisos.Modulos.Should().AllSatisfy(m =>
         {
@@ -82,7 +84,7 @@ public sealed partial class PermisosTests
         string[] backoffice =
         [
             "diagnostico.backoffice.ver", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.llenar",
-            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver", "diagnostico.saneamiento.gestionar",
         ];
 
         Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().NotContain("backoffice_diagnostico");
