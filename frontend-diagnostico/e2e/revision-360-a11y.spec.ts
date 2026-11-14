@@ -142,7 +142,16 @@ test.describe("revisión 360 + axe (usuario de compañía)", () => {
 
     await test.step("listado", async () => {
       await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
+      // HU #14577 AC20: «Diagnósticos» es ahora una pestaña y comparte nombre con el h2 de su panel; se distinguen por rol.
+      const pestanas = page.getByRole("tablist", { name: "Vista del inicio" });
+      await expect(pestanas.getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("tabpanel", { name: "Diagnósticos" }).getByRole("heading", { level: 2, name: "Diagnósticos" })).toBeVisible();
       await revisarPantalla(page, "01-listado");
+      await pestanas.getByRole("tab", { name: "Vehículos" }).click();
+      await expect(page.getByRole("tabpanel", { name: "Vehículos" }).getByRole("heading", { level: 2, name: "Vehículos" })).toBeVisible();
+      await revisarPantalla(page, "01b-listado-vehiculos");
+      await pestanas.getByRole("tab", { name: "Diagnósticos" }).click();
+      await expect(pestanas.getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
     });
     await test.step("campana de avisos", async () => {
       const campana = page.getByRole("button", { name: /^Avisos/ });
@@ -239,6 +248,8 @@ test.describe("teclado en escritorio (1280)", () => {
     test.setTimeout(240_000);
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
     await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
+    // HU #14577 AC20: el orden de tab del inicio cruza la lista de pestañas; se arranca en «Diagnósticos».
+    await expect(page.getByRole("tablist", { name: "Vista del inicio" }).getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
     const resultado: Revision = {};
     resultado.listado = await ordenDeTab(page);
     await page.goto(`${APP}/diagnosticos/nuevo?modo=masivo`);
