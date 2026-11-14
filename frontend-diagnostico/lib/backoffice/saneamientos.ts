@@ -68,6 +68,14 @@ export interface SaneamientoBackoffice {
   observacion_flit: string | null;
   renglones: RenglonSaneamiento[];
   historial: EventoHistorialBackoffice[];
+  // D-60: contexto del encabezado de PS-5 (plan §7.6: empresa, diagnóstico enlazado, placa, estado y veredicto). §6.3 no lo
+  // trae; BE-B debe agregarlo al detalle del backoffice. Opcional: sin él, la placa y el veredicto salen de la deuda y el
+  // diagnóstico no se enlaza.
+  diagnostico_id?: string;
+  diagnostico_nombre?: string;
+  vehiculo_id?: string;
+  placa?: string | null;
+  veredicto?: "VIABLE" | "BLOQUEADO" | null;
 }
 
 export interface ItemTomar {
