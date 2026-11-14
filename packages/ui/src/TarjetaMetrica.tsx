@@ -53,8 +53,10 @@ const BASE_CLS =
   "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-[9px] border p-4 text-left " +
   "text-inherit no-underline border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-none";
 
+// Foco (H-6, WCAG 2.4.7): sin `focus:outline-none`. En Tailwind 4 deja `--tw-outline-style: none` y el
+// `focus-visible:outline-2` hereda ese estilo, así que el contorno de foco no se pintaba.
 const FOCO_CLS =
-  "focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--kit-azul-texto)]";
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--kit-azul-texto)]";
 
 const ACCIONABLE_CLS = `cursor-pointer transition-colors duration-150 hover:border-[color:var(--kit-azul-texto)] ${FOCO_CLS}`;
 
