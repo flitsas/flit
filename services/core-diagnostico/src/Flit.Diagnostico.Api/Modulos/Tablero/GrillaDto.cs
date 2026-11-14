@@ -80,7 +80,8 @@ public sealed record UsuarioCreadorGrillaDto(
 /// <summary>
 /// Una fila de la grilla: el vehículo, sus celdas (solo las cambiadas desde <c>desde</c>) y sus documentos actuales (HU #14087):
 /// el declarado por el cliente (null si no hay) y los propietarios del RUNT en su orden (vacío si aún no hay), enmascarados.
-/// <c>pegada</c> (Punto 3, 2026-11-11): la placa tiene alguna celda que «Reintentar placa» reencolaría.
+/// <c>pegada</c> (Punto 3, 2026-11-11): la placa tiene alguna celda que «Reintentar placa» reencolaría. <c>saneamiento</c> (HU #14576):
+/// estado del saneamiento no anulado, si se puede marcar y por qué no; la grilla del backoffice no lo lleva.
 /// </summary>
 public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -97,7 +98,8 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("derivacion")] Derivacion.DerivacionFilaDto? Derivacion = null,
     [property: JsonPropertyName("veredicto")] string? Veredicto = null,
     [property: JsonPropertyName("dictamen_ajustado")] bool DictamenAjustado = false,
-    [property: JsonPropertyName("version")] long Version = 0)
+    [property: JsonPropertyName("version")] long Version = 0,
+    [property: JsonPropertyName("saneamiento")] Saneamiento.SaneamientoFilaDto? Saneamiento = null)
 {
     /// <summary>Rótulo del tipo de identificador (punto 5): «Placa de carro», «Placa de motocarro», «VIN»…</summary>
     [JsonPropertyName("tipo_identificador_etiqueta")]

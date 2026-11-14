@@ -200,6 +200,7 @@ public static class Modulos
         Reportes.EvidenciasEndpoints.Map(api);
         Saneamiento.DeudaEndpoints.Map(api);
         Notificaciones.NotificacionesEndpoints.Map(api);
+        Saneamiento.SaneamientoEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }
