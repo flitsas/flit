@@ -44,6 +44,16 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
     public async Task<PanelDeudaDto> ObtenerAsync(Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
     {
         var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, diagnosticoId, seguir: false, ct).ConfigureAwait(false);
+        return await DeLoteAsync(cabecera, vehiculoId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// El panel de un vehículo de una cabecera que ya pasó el control de acceso de quien llama: el backoffice (SP-7, HU #14576) la lee
+    /// con un contexto fijado a la empresa explícita. 404 si el vehículo no es de ese lote; 409 si no está terminado.
+    /// </summary>
+    internal async Task<PanelDeudaDto> DeLoteAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(cabecera);
         var tenant = cabecera.TenantId;
         if (!await db.Set<VehiculoDiagnostico>().AsNoTracking()
                 .AnyAsync(v => v.Id == vehiculoId && v.DiagnosticoId == cabecera.Id && v.TenantId == tenant, ct).ConfigureAwait(false))

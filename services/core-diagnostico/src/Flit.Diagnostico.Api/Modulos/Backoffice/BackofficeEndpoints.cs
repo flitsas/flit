@@ -48,6 +48,9 @@ public static class BackofficeEndpoints
         // no pide ?empresa=, no audita lecturas_backoffice y no abre AutorizarEscrituraDe.
         FuentesObligatoriasBackofficeEndpoints.Map(api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre));
 
+        // HU #14576 (ADR-0087 D-5): la gestión FLIT del saneamiento, en sus dos grupos (A sin empresa explícita y B con ella).
+        SaneamientosBackofficeEndpoints.Map(api);
+
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }
 

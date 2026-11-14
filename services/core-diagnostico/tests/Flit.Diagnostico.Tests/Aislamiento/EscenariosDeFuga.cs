@@ -183,6 +183,26 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaSaneamiento = Program.Prefijo + DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/saneamiento";
 
+    /// <summary>
+    /// Evidencia de un renglón para el cliente (HU #14576 AC47): cada empresa siembra un saneamiento con un renglón cuya evidencia es un
+    /// PDF con un texto exclusivo de la empresa; con el token de A la evidencia de B responde 404 sin ese texto.
+    /// </summary>
+    public const string RutaEvidenciaSaneamiento = RutaSaneamiento + "/renglones/{rid:guid}/evidencia";
+
+    /// <summary>
+    /// Panel de deuda (HU #14576 AC36, BE-C): cada empresa siembra un vehículo terminado; el panel devuelve su id y con el token de A el
+    /// de B responde 404 sin él. El PDF y el Excel del panel siguen el mismo patrón: el PDF lleva la placa exclusiva de la empresa; el
+    /// Excel de un vehículo no lleva placa, así que lo que no cruza es el id de la empresa (como la plantilla).
+    /// </summary>
+    public const string RutaDeuda = Program.Prefijo + DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/deuda";
+
+    public const string RutaDeudaPdf = RutaDeuda + "/pdf";
+
+    public const string RutaDeudaExcel = RutaDeuda + "/excel";
+
+    /// <summary>Grilla de placas (HU #14576 AC39, BE-C): devuelve el id del vehículo de la empresa y nada de la otra.</summary>
+    public const string RutaVehiculos = Program.Prefijo + "/vehiculos";
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -286,6 +306,50 @@ public static class EscenariosDeFuga
             var saneamiento = await Saneamiento.SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, vehiculo, global::Flit.Diagnostico.Domain.Saneamiento.EstadoSaneamiento.Solicitado, ct);
             return new Sembrado(Saneamiento.SaneamientoDePrueba.Ruta(lote.Id, vehiculo), [saneamiento.Id.ToString()]);
         }),
+        new EscenarioDeFuga(RutaEvidenciaSaneamiento, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST914", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var vehiculo = lote.Vehiculos.Single().Id;
+            var saneamiento = await Saneamiento.SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, vehiculo, global::Flit.Diagnostico.Domain.Saneamiento.EstadoSaneamiento.EnGestion, ct);
+            var exclusivo = $"EVID-{empresa.Id:N}";
+            await using var db = empresa.Db();
+            var archivo = new global::Flit.Diagnostico.Api.Infraestructura.Archivos.ArchivoLocal
+            {
+                Tipo = "PDF", Nombre = "evidencia.pdf", ContentType = "application/pdf",
+                Contenido = System.Text.Encoding.ASCII.GetBytes($"%PDF-1.7\n{exclusivo}\n%%EOF\n"), CreadoEn = DateTimeOffset.UtcNow,
+            };
+            db.Add(archivo);
+            var renglon = new global::Flit.Diagnostico.Api.Modulos.Saneamiento.RenglonSaneamiento
+            {
+                SaneamientoId = saneamiento.Id, Fuente = global::Flit.Diagnostico.Domain.Saneamiento.FuenteSaneamiento.Impuesto,
+                Hallazgo = global::Flit.Diagnostico.Domain.Saneamiento.HallazgoSaneamiento.Deuda, Automatico = true, CreadoPor = Guid.NewGuid(),
+                CreadoEn = DateTimeOffset.UtcNow, EvidenciaReferencia = $"db:{archivo.Id:D}", EvidenciaNombre = "pago.pdf",
+                EvidenciaSha256 = new string('a', 64), EvidenciaTamano = 10, EvidenciaSubidaPor = Guid.NewGuid(), EvidenciaSubidaEn = DateTimeOffset.UtcNow,
+            };
+            db.Add(renglon);
+            await db.SaveChangesAsync(ct);
+            return new Sembrado($"{Saneamiento.SaneamientoDePrueba.Ruta(lote.Id, vehiculo)}/renglones/{renglon.Id}/evidencia", [exclusivo]);
+        }),
+        new EscenarioDeFuga(RutaDeuda, async (empresa, ct) =>
+        {
+            var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(Saneamiento.DeudaDePrueba.RutaPanel(lote, vehiculo), [vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaDeudaPdf, async (empresa, ct) =>
+        {
+            var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(Saneamiento.DeudaDePrueba.RutaPdf(lote, vehiculo), [PlacaDe(empresa)]);
+        }, Reportes.PdfDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaDeudaExcel, async (empresa, ct) =>
+        {
+            var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(Saneamiento.DeudaDePrueba.RutaExcel(lote, vehiculo), ["xl/worksheets/sheet1.xml"], Exclusivos: [empresa.Id.ToString(), vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaVehiculos, async (empresa, ct) =>
+        {
+            var (_, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(RutaVehiculos, [vehiculo.ToString()]);
+        }),
         new EscenarioDeFuga(RutaOperacionesDerivacion, async (empresa, ct) =>
         {
             var (lote, operacion, vehiculo) = await OperacionSembradaAsync(empresa, "TST910", ct);
@@ -298,6 +362,17 @@ public static class EscenariosDeFuga
             return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote}/tramites/operaciones/{operacion}", [operacion.ToString(), vehiculo.ToString()]);
         }),
     ];
+
+    /// <summary>Placa ficticia exclusiva de la empresa (para los escenarios cuyo cuerpo no trae ids).</summary>
+    private static string PlacaDe(EmpresaDePrueba empresa) => "D" + empresa.Id.ToString("N")[..5].ToUpperInvariant();
+
+    /// <summary>Lote con un vehículo terminado (RUNT y SIMIT del vehículo completados) con la placa exclusiva de la empresa.</summary>
+    private static async Task<(Guid Lote, Guid Vehiculo)> TerminadoAsync(EmpresaDePrueba empresa, CancellationToken ct)
+    {
+        var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote de deuda", vehiculos:
+            [new(PlacaDe(empresa), [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Completado, 1)])]);
+        return (lote.Id, lote.Vehiculos.Single().Id);
+    }
 
     /// <summary>Lote con un vehículo y una operación MASIVA con su ítem PENDIENTE, sembrados por el contexto de la empresa.</summary>
     private static async Task<(Guid Lote, Guid Operacion, Guid Vehiculo)> OperacionSembradaAsync(EmpresaDePrueba empresa, string placa, CancellationToken ct)
