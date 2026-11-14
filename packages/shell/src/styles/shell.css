@@ -681,8 +681,8 @@
     font-size: 0.875rem;
   }
 
+  /* H-3 (WCAG 1.4.3): sin opacidad. Blanco al 85 % sobre --kit-azul-relleno daba 4,49:1; opaco, 5,6:1. */
   .dock-menu__cabeza-texto small {
-    opacity: 0.85;
     font-size: 0.75rem;
   }
 
