@@ -394,11 +394,12 @@ function FilaEditable<F>({
         );
       })}
       <td data-label="Estado" className={`px-3 py-2 text-xs font-semibold ${TABLA_MOVIL_CELL_CLS}`}>
+        {/* Foco (H-6, WCAG 2.4.7): sin `focus:outline-none`, que en Tailwind 4 anula el contorno de focus-visible. */}
         <span
           ref={estadoRef}
           tabIndex={-1}
           data-tono={tono}
-          className={cn(CLASE_TONO[tono], "focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--di-action)]")}
+          className={cn(CLASE_TONO[tono], "focus-visible:outline-2 focus-visible:outline-[var(--di-action)]")}
         >
           {texto}
         </span>
