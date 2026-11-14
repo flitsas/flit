@@ -406,9 +406,10 @@ describe("AC33 — otro concepto, quitar renglón y observación", () => {
     const nuevo = renglon({ id: "00000000-0000-7000-8000-00000000r009", fuente: "OTRO", hallazgo: null, descripcion: "Embargo judicial", automatico: false, version: 1 });
     let actual = saneamientoBo();
     const f = api(() => json(actual), {
+      // Contrato (D-65): el POST devuelve el saneamiento completo, no el renglón.
       [`POST ${RUTA_DETALLE}/renglones`]: () => {
         actual = saneamientoBo({ renglones: [renglon(), renglonSoat(), nuevo], version: 124 });
-        return json(nuevo, 201);
+        return json(actual);
       },
     });
     montar();
@@ -428,6 +429,12 @@ describe("AC33 — otro concepto, quitar renglón y observación", () => {
     expect(cuerpoDe(llamadas(f, "POST", `${RUTA_DETALLE}/renglones`)[0])).toEqual({ descripcion: "Embargo judicial" });
     await waitFor(() => expect(within(resultado("Otro: Embargo judicial")).getByRole("radio", { name: "Pendiente" })).toHaveFocus());
     expect(region()).toHaveTextContent("Se agregó el concepto Embargo judicial.");
+    // H-1 (E2E): el foco no se pierde cuando la tabla se asienta; solo quedan los tres conceptos del servidor.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(within(resultado("Otro: Embargo judicial")).getByRole("radio", { name: "Pendiente" })).toHaveFocus();
+    expect(screen.getAllByRole("radiogroup", { name: /^Resultado de / })).toHaveLength(3);
   });
 
   it("«Quitar concepto» con confirmación: el renglón desaparece y el foco pasa al siguiente", async () => {
