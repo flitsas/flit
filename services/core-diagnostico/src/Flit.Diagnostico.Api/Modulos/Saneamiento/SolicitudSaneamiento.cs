@@ -167,9 +167,10 @@ internal sealed partial class SolicitudSaneamiento(
             .SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La evidencia");
         var placa = await db.Set<VehiculoDiagnostico>().AsNoTracking().Where(v => v.TenantId == tenant && v.Id == vid)
             .Select(v => v.Placa ?? v.IdentificadorNorm).SingleAsync(ct).ConfigureAwait(false);
-        var bytes = await almacenes.Para(db).LeerAsync(renglon.EvidenciaReferencia!, ct).ConfigureAwait(false)
+        // CR-10: en stream desde el almacén, sin armar el PDF en memoria; Results.Stream libera el flujo al terminar.
+        var flujo = await almacenes.Para(db).AbrirAsync(renglon.EvidenciaReferencia!, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("La evidencia");
-        return Results.File(bytes, Backoffice.EvidenciaSaneamiento.ContentTypePdf, Backoffice.EvidenciaSaneamiento.NombreDescarga(placa, renglon.Fuente));
+        return Results.Stream(flujo, Backoffice.EvidenciaSaneamiento.ContentTypePdf, Backoffice.EvidenciaSaneamiento.NombreDescarga(placa, renglon.Fuente));
     }
 
     private async Task<SaneamientoClienteDto> DetalleDeAsync(Guid tenant, Guid vid, CancellationToken ct)
@@ -235,14 +236,16 @@ internal sealed partial class SolicitudSaneamiento(
 
     /// <summary>
     /// <c>{"vehiculo_ids": [uuid…]}</c> con 1 a <see cref="MaximoMasivo"/> distintos, en el orden pedido. Cuerpo vacío, JSON inválido, sin
-    /// lista o con un elemento que no es un uuid: 400 <see cref="CodigoListaInvalida"/> (mensaje fijo, no repite lo enviado).
+    /// lista o con un elemento que no es un uuid: 400 <see cref="CodigoListaInvalida"/> (mensaje fijo, no repite lo enviado). Más de
+    /// 64 KiB: 413 <c>CUERPO_MUY_GRANDE</c> sin leer el resto (CR-11).
     /// </summary>
     private static async Task<List<Guid>> LeerListaAsync(HttpRequest request, CancellationToken ct)
     {
         JsonElement raiz;
+        await using var cuerpo = await CuerpoAcotadoFiltro.LeerAsync(request, ct).ConfigureAwait(false);
         try
         {
-            raiz = await JsonSerializer.DeserializeAsync<JsonElement>(request.Body, cancellationToken: ct).ConfigureAwait(false);
+            raiz = await JsonSerializer.DeserializeAsync<JsonElement>(cuerpo, cancellationToken: ct).ConfigureAwait(false);
         }
         catch (JsonException)
         {

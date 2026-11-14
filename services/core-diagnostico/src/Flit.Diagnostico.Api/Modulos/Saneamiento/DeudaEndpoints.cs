@@ -34,7 +34,7 @@ internal static class DeudaEndpoints
         api.MapGet(RutaPanel, PanelAsync).RequirePermiso(Permisos.DiagnosticosVer).SinCacheEnRespuesta().WithName("ObtenerDeudaVehiculo");
         api.MapGet(RutaPdf, PdfAsync).RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().WithName("DescargarPdfDeuda");
         api.MapGet(RutaExcel, ExcelAsync).RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().WithName("DescargarExcelDeuda");
-        api.MapPost(RutaExcelVarios, ExcelVariosAsync).RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().WithName("DescargarExcelDeudaVarios");
+        api.MapPost(RutaExcelVarios, ExcelVariosAsync).RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().CuerpoAcotado().WithName("DescargarExcelDeudaVarios");
     }
 
     private static async Task<IResult> PanelAsync(Guid id, Guid vid, ConsultaDeuda consulta, CancellationToken ct) =>
@@ -64,9 +64,11 @@ internal static class DeudaEndpoints
     {
         ArgumentNullException.ThrowIfNull(peticion);
         JsonDocument documento;
+        // CR-11: más de 64 KiB es 413 CUERPO_MUY_GRANDE sin leer el resto ni parsear.
+        await using var cuerpo = await CuerpoAcotadoFiltro.LeerAsync(peticion, ct).ConfigureAwait(false);
         try
         {
-            documento = await JsonDocument.ParseAsync(peticion.Body, cancellationToken: ct).ConfigureAwait(false);
+            documento = await JsonDocument.ParseAsync(cuerpo, cancellationToken: ct).ConfigureAwait(false);
         }
         catch (JsonException)
         {

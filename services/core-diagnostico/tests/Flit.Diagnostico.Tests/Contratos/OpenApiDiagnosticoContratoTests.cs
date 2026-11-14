@@ -109,6 +109,48 @@ public sealed class OpenApiDiagnosticoContratoTests
         Bloque("Capacidades:", sangria: 4).Should().Contain("sanear:").And.Contain("gestionarSaneamiento:");
     }
 
+    /// <summary>Las rutas nuevas que reciben JSON y llevan el tope de 64 KiB (CR-11); la subida de la evidencia tiene el suyo.</summary>
+    private static readonly string[] OperacionesConCuerpoAcotado =
+    [
+        "operationId: solicitarSaneamientosMasivo",
+        "operationId: descargarExcelDeudaVarios",
+        "operationId: tomarSaneamientosBackoffice",
+        "operationId: editarObservacionSaneamientoBackoffice",
+        "operationId: agregarRenglonSaneamientoBackoffice",
+        "operationId: editarRenglonSaneamientoBackoffice",
+        "operationId: cerrarSaneamientoBackoffice",
+        "operationId: reabrirSaneamientoBackoffice",
+        "operationId: anularSaneamientoBackoffice",
+    ];
+
+    // HU #14576 AP-1 y CR-11 — la fila de la bandeja declara vin e identificador (nullables y siempre presentes, como FilaPlaca) y
+    // cada ruta JSON nueva declara el 413 CUERPO_MUY_GRANDE de la respuesta común.
+    [Fact]
+    public void HU14576_AP1_CR11_bandeja_con_vin_e_identificador_y_413_del_cuerpo_JSON()
+    {
+        var fila = Bloque("FilaBandejaSaneamiento:", sangria: 4);
+        fila.Should().Contain("vin: { type: string, nullable: true }").And.Contain("identificador: { type: string, nullable: true }");
+        fila.Split('\n').Single(l => l.TrimStart().StartsWith("required:", StringComparison.Ordinal)).Should().Contain("vin").And.Contain("identificador");
+        Bloque("CuerpoMuyGrande:", sangria: 4).Should().Contain("CUERPO_MUY_GRANDE").And.Contain("65536");
+        foreach (var operacion in OperacionesConCuerpoAcotado)
+            Respuestas(operacion).Should().Contain("\"413\": { $ref: \"#/components/responses/CuerpoMuyGrande\" }", operacion);
+        Respuestas("operationId: subirEvidenciaSaneamientoBackoffice").Should().Contain("ARCHIVO_MUY_GRANDE").And.NotContain("CuerpoMuyGrande");
+    }
+
+    /// <summary>El bloque <c>responses:</c> de la operación cuya línea contiene <paramref name="operacion"/> (el primero después de ella).</summary>
+    private static string Respuestas(string operacion)
+    {
+        var lineas = Yaml.Value.Split('\n');
+        var ancla = Array.FindIndex(lineas, l => l.Contains(operacion, StringComparison.Ordinal));
+        ancla.Should().BeGreaterThanOrEqualTo(0, $"el contrato declara {operacion}");
+        var inicio = Array.FindIndex(lineas, ancla, l => l == "      responses:");
+        inicio.Should().BeGreaterThan(ancla, $"{operacion} declara sus respuestas");
+        var fin = inicio + 1;
+        while (fin < lineas.Length && lineas[fin].StartsWith("        ", StringComparison.Ordinal))
+            fin++;
+        return string.Join('\n', lineas[inicio..fin]);
+    }
+
     /// <summary>Desde la línea <paramref name="cabecera"/> con esa sangría hasta la siguiente clave del mismo nivel.</summary>
     /// <param name="desde">Si viene, la cabecera es la última anterior a la primera línea que contiene este texto.</param>
     private static string Bloque(string cabecera, int sangria, string? desde = null)

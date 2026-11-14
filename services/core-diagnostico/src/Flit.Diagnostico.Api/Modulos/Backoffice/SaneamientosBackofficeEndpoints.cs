@@ -22,7 +22,9 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// del grupo A o un id que no es uuid nunca entra al grupo B.</item>
 /// </list>
 /// Respuestas (D-20 con D-65): las transiciones, la observación, agregar un OTRO, quitar un renglón y quitar la evidencia devuelven el
-/// saneamiento completo; editar un renglón y subir la evidencia, el renglón. Las descargas llevan <c>DescargaSegura</c> (SP-18).
+/// saneamiento completo; editar un renglón y subir la evidencia, el renglón. Las descargas llevan <c>DescargaSegura</c> (SP-18) y la
+/// evidencia sale en stream (CR-10). Las rutas que reciben JSON llevan el tope de <see cref="CuerpoAcotadoFiltro"/> (64 KiB, CR-11); la
+/// subida de la evidencia, el suyo.
 /// </summary>
 internal static class SaneamientosBackofficeEndpoints
 {
@@ -45,7 +47,7 @@ internal static class SaneamientosBackofficeEndpoints
                 Results.File(await bandeja.ExcelAsync(request, ct).ConfigureAwait(false), ExcelBandejaSaneamientos.ContentType, ExcelBandejaSaneamientos.NombreArchivo))
             .DescargaSegura().WithName("DescargarExcelSaneamientosBackoffice");
         a.MapPost(Saneamientos + "/tomar", (HttpRequest request, GestionSaneamientoBackoffice gestion, CancellationToken ct) => gestion.TomarVariosAsync(request, ct))
-            .WithName("TomarSaneamientosBackoffice");
+            .CuerpoAcotado().WithName("TomarSaneamientosBackoffice");
 
         var b = api.MapGroup(Ruta).RequireAuthorization(PoliticaBackoffice.Nombre).RequiereOperacionFlit().RequirePermiso(Permisos.SaneamientoGestionar)
             .ConEmpresaExplicita();
@@ -55,18 +57,18 @@ internal static class SaneamientosBackofficeEndpoints
         b.MapPost("/{sid:guid}/tomar", (Guid sid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) => g.TomarAsync(EmpresaExplicita.De(http), sid, ct))
             .WithName("TomarSaneamientoBackoffice");
         b.MapPost("/{sid:guid}/anular", (Guid sid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) => g.AnularAsync(EmpresaExplicita.De(http), sid, http.Request, ct))
-            .WithName("AnularSaneamientoBackoffice");
+            .CuerpoAcotado().WithName("AnularSaneamientoBackoffice");
         b.MapPost("/{sid:guid}/cerrar", (Guid sid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) => g.CerrarAsync(EmpresaExplicita.De(http), sid, http.Request, ct))
-            .WithName("CerrarSaneamientoBackoffice");
+            .CuerpoAcotado().WithName("CerrarSaneamientoBackoffice");
         b.MapPost("/{sid:guid}/reabrir", (Guid sid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) => g.ReabrirAsync(EmpresaExplicita.De(http), sid, http.Request, ct))
-            .WithName("ReabrirSaneamientoBackoffice");
+            .CuerpoAcotado().WithName("ReabrirSaneamientoBackoffice");
         b.MapPut("/{sid:guid}/observacion", (Guid sid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) => g.ObservacionAsync(EmpresaExplicita.De(http), sid, http.Request, ct))
-            .WithName("EditarObservacionSaneamientoBackoffice");
+            .CuerpoAcotado().WithName("EditarObservacionSaneamientoBackoffice");
         b.MapPost("/{sid:guid}/renglones", (Guid sid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) => g.AgregarRenglonAsync(EmpresaExplicita.De(http), sid, http.Request, ct))
-            .WithName("AgregarRenglonSaneamientoBackoffice");
+            .CuerpoAcotado().WithName("AgregarRenglonSaneamientoBackoffice");
         b.MapPut("/{sid:guid}/renglones/{rid:guid}", (Guid sid, Guid rid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) =>
                 g.EditarRenglonAsync(EmpresaExplicita.De(http), sid, rid, http.Request, ct))
-            .WithName("EditarRenglonSaneamientoBackoffice");
+            .CuerpoAcotado().WithName("EditarRenglonSaneamientoBackoffice");
         b.MapDelete("/{sid:guid}/renglones/{rid:guid}", (Guid sid, Guid rid, HttpContext http, GestionSaneamientoBackoffice g, CancellationToken ct) =>
                 g.QuitarRenglonAsync(EmpresaExplicita.De(http), sid, rid, ct))
             .WithName("QuitarRenglonSaneamientoBackoffice");
@@ -80,7 +82,7 @@ internal static class SaneamientosBackofficeEndpoints
                 g.QuitarEvidenciaAsync(EmpresaExplicita.De(http), sid, rid, ct))
             .WithName("QuitarEvidenciaSaneamientoBackoffice");
         b.MapGet("/{sid:guid}/renglones/{rid:guid}/evidencia", (Guid sid, Guid rid, HttpContext http, EvidenciaSaneamiento e, CancellationToken ct) =>
-                e.DescargarAsync(EmpresaExplicita.De(http), sid, rid, ct))
+                e.DescargarAsync(EmpresaExplicita.De(http), sid, rid, http.Response, ct))
             .DescargaSegura().WithName("DescargarEvidenciaSaneamientoBackoffice");
     }
 

@@ -10,9 +10,10 @@ namespace Flit.Diagnostico.Api.Modulos.Saneamiento;
 /// <list type="bullet">
 /// <item><c>PUT /diagnosticos/{id}/vehiculos/{vid}/saneamiento</c>: marca (201, o 200 si ya estaba SOLICITADO).</item>
 /// <item><c>DELETE …/saneamiento</c>: desmarca en SOLICITADO (204).</item>
-/// <item><c>POST /saneamientos/solicitudes</c>: masivo de 1 a 500.</item>
+/// <item><c>POST /saneamientos/solicitudes</c>: masivo de 1 a 500, con el cuerpo acotado a 64 KiB (CR-11).</item>
 /// <item><c>GET …/saneamiento</c>: detalle para la compañía (§6.3), con <c>diagnostico.diagnosticos.ver</c>.</item>
-/// <item><c>GET …/saneamiento/renglones/{rid}/evidencia</c>: el PDF del renglón, con <c>diagnostico.reportes.descargar</c> (BE-B, AC47).</item>
+/// <item><c>GET …/saneamiento/renglones/{rid}/evidencia</c>: el PDF del renglón en stream, con <c>diagnostico.reportes.descargar</c> (BE-B,
+/// AC47, CR-10).</item>
 /// </list>
 /// Marcar, desmarcar y el masivo exigen <c>diagnostico.saneamiento.solicitar</c> (el SuperAdmin pasa por la regla general, decisión
 /// E3, y opera en la empresa de su sesión) y responden 403 <see cref="CodigoDesdeBackoffice"/> con <c>?empresa=</c>: desde el
@@ -56,6 +57,7 @@ internal static class SaneamientoEndpoints
         api.MapPost(RutaSolicitudes, (HttpRequest request, SolicitudSaneamiento solicitud, CancellationToken ct) => solicitud.SolicitarMasivoAsync(request, ct))
             .RequirePermiso(Permisos.SaneamientoSolicitar)
             .SinBackoffice(CodigoDesdeBackoffice, MensajeDesdeBackoffice)
+            .CuerpoAcotado()
             .WithName("SolicitarSaneamientosMasivo");
         api.MapGet(Ruta, async (Guid id, Guid vid, SolicitudSaneamiento solicitud, CancellationToken ct) =>
                 Results.Ok(await solicitud.DetalleAsync(id, vid, ct).ConfigureAwait(false)))

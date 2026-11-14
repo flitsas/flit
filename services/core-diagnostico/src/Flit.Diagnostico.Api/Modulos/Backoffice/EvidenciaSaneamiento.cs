@@ -80,7 +80,7 @@ internal sealed partial class EvidenciaSaneamiento(
         {
             var renglon = await gestion.RenglonParaEditarAsync(empresa, sid, rid, ct).ConfigureAwait(false);
             GestionSaneamientoBackoffice.ExigirEditable(s);
-            var reemplazo = renglon.EvidenciaReferencia is not null;
+            var reemplazo = renglon.EvidenciaReferencia is not null || await YaTuvoEvidenciaAsync(empresa, sid, rid, ct).ConfigureAwait(false);
             if (reemplazo)
             {
                 if (renglon.EvidenciaReemplazos >= TopeReemplazos)
@@ -103,9 +103,14 @@ internal sealed partial class EvidenciaSaneamiento(
         return await gestion.RenglonDtoAsync(empresa, sid, rid, ct).ConfigureAwait(false);
     }
 
-    /// <summary>GET de FLIT: el PDF con el nombre <c>evidencia-{placa}-{fuente}.pdf</c>; 404 si el renglón no tiene evidencia.</summary>
-    public async Task<IResult> DescargarAsync(Guid empresa, Guid sid, Guid rid, CancellationToken ct)
+    /// <summary>
+    /// GET de FLIT: el PDF con el nombre <c>evidencia-{placa}-{fuente}.pdf</c>, en stream desde el almacén (AC47, CR-10); 404 si el
+    /// renglón no tiene evidencia. El ámbito de la empresa se libera al terminar la respuesta, no al volver de aquí: el flujo del
+    /// almacén puede depender de él mientras se envía.
+    /// </summary>
+    public async Task<IResult> DescargarAsync(Guid empresa, Guid sid, Guid rid, HttpResponse respuesta, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(respuesta);
         var renglon = await db.DeLaEmpresa<RenglonSaneamiento>(empresa)
             .Where(r => r.Id == rid && r.SaneamientoId == sid && r.QuitadoEn == null && r.EvidenciaReferencia != null)
             .Select(r => new { r.EvidenciaReferencia, r.Fuente })
@@ -116,20 +121,19 @@ internal sealed partial class EvidenciaSaneamiento(
                 where s.Id == sid
                 select v.Placa ?? v.IdentificadorNorm)
             .SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? throw GestionSaneamientoBackoffice.NoEncontrado();
-        byte[]? bytes;
-        await using (var ambito = AmbitoDeLaEmpresa.Abrir(scopes, empresa))
-        {
-            var dbEmpresa = ambito.ServiceProvider.GetRequiredService<DiagnosticoDb>();
-            bytes = await ambito.ServiceProvider.GetRequiredService<IFabricaAlmacen>().Para(dbEmpresa)
-                .LeerAsync(renglon.EvidenciaReferencia!, ct).ConfigureAwait(false);
-        }
-
-        return bytes is null
-            ? throw GestionSaneamientoBackoffice.NoEncontrado()
-            : Results.File(bytes, ContentTypePdf, NombreDescarga(placa, renglon.Fuente));
+        var ambito = AmbitoDeLaEmpresa.Abrir(scopes, empresa);
+        respuesta.RegisterForDisposeAsync(ambito);
+        var dbEmpresa = ambito.ServiceProvider.GetRequiredService<DiagnosticoDb>();
+        var flujo = await ambito.ServiceProvider.GetRequiredService<IFabricaAlmacen>().Para(dbEmpresa)
+            .AbrirAsync(renglon.EvidenciaReferencia!, ct).ConfigureAwait(false)
+            ?? throw GestionSaneamientoBackoffice.NoEncontrado();
+        return Results.Stream(flujo, ContentTypePdf, NombreDescarga(placa, renglon.Fuente));
     }
 
-    /// <summary><c>evidencia-{placa}-{fuente}.pdf</c>: la placa reducida a <c>[A-Z0-9]</c> (SP-18) y la fuente del enum; nunca el original.</summary>
+    /// <summary>
+    /// <c>evidencia-{placa}-{fuente}.pdf</c>: la placa reducida a <c>[A-Z0-9]</c> (SP-18) y la fuente del enum; nunca el original. Sin
+    /// placa ni identificador, <c>evidencia-sin-placa-{fuente}.pdf</c> (AP-3).
+    /// </summary>
     public static string NombreDescarga(string? placa, FuenteSaneamiento fuente) =>
         $"evidencia-{PdfDeuda.PlacaSegura(placa ?? string.Empty)}-{CodigosDeEnum.Codigo(fuente)}.pdf";
 
@@ -166,9 +170,19 @@ internal sealed partial class EvidenciaSaneamiento(
             .SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? throw GestionSaneamientoBackoffice.NoEncontrado();
         if (estado != EstadoSaneamiento.EnGestion)
             throw ReglaException.Conflicto(GestionSaneamientoBackoffice.CodigoNoEditable, "El saneamiento solo se edita mientras está en gestión.");
-        if (renglon.ConEvidencia && renglon.EvidenciaReemplazos >= TopeReemplazos)
+        if (renglon.EvidenciaReemplazos >= TopeReemplazos
+            && (renglon.ConEvidencia || await YaTuvoEvidenciaAsync(empresa, sid, rid, ct).ConfigureAwait(false)))
             throw DemasiadosReemplazos();
     }
+
+    /// <summary>
+    /// CR-3 (SP-19): si el renglón ya recibió una evidencia alguna vez (hay un <c>EVIDENCIA_CARGADA</c> suyo en el historial). Así toda
+    /// carga después de la primera cuenta como reemplazo, también la que llega a un renglón sin evidencia porque se quitó: alternar
+    /// DELETE y PUT no esquiva el tope ni deja huérfanos sin cota (ADR-0087).
+    /// </summary>
+    private Task<bool> YaTuvoEvidenciaAsync(Guid empresa, Guid sid, Guid rid, CancellationToken ct) =>
+        db.DeLaEmpresa<EventoSaneamiento>(empresa)
+            .AnyAsync(e => e.SaneamientoId == sid && e.RenglonId == rid && e.Evento == TipoEventoSaneamiento.EvidenciaCargada, ct);
 
     private static async Task<(string Nombre, byte[] Contenido)> LeerArchivoAsync(HttpRequest request, long maximo, CancellationToken ct)
     {

@@ -242,12 +242,20 @@ internal sealed partial class GestionSaneamientoBackoffice(
                     var empresa = grupo.Key;
                     var ids = grupo.Select(i => i.Id).ToList();
                     var encontrados = await db.DeLaEmpresa<SaneamientoEntidad>(empresa).Where(s => ids.Contains(s.Id))
-                        .Select(s => new { s.Id, s.DiagnosticoId, s.VehiculoId }).ToListAsync(ct).ConfigureAwait(false);
+                        .Select(s => new { s.Id, s.DiagnosticoId, s.VehiculoId, s.Estado }).ToListAsync(ct).ConfigureAwait(false);
                     foreach (var id in ids.Except(encontrados.Select(e => e.Id)))
                         omitidos[(empresa, id)] = MotivoNoEncontrado;
                     var aplicadas = new List<TransicionAplicada>();
                     foreach (var e in encontrados.OrderBy(x => x.DiagnosticoId).ThenBy(x => x.Id))
                     {
+                        // CR-12: el que ya no se puede tomar sale omitido sin bloquear ni marcar su fila (sin escritura ni sondeo de más).
+                        // Si cambió entre esta lectura y el bloqueo, la relectura de abajo lo omite igual.
+                        if (TransicionesSaneamiento.Resolver(e.Estado, AccionSaneamiento.Tomar, ActorSaneamiento.Flit) is null)
+                        {
+                            omitidos[(empresa, e.Id)] = EscritorSaneamiento.CodigoTransicionInvalida;
+                            continue;
+                        }
+
                         await BloquearAsync(empresa, e.DiagnosticoId, e.VehiculoId, ct).ConfigureAwait(false);
                         var s = await db.ParaEditarDeLaEmpresa<SaneamientoEntidad>(empresa).SingleAsync(x => x.Id == e.Id, ct).ConfigureAwait(false);
                         if (TransicionesSaneamiento.Resolver(s.Estado, AccionSaneamiento.Tomar, ActorSaneamiento.Flit) is null)
@@ -397,7 +405,7 @@ internal sealed partial class GestionSaneamientoBackoffice(
         {
             raiz = await CuerpoSaneamiento.LeerAsync(request, ct).ConfigureAwait(false);
         }
-        catch (ReglaException)
+        catch (ReglaException ex) when (ex.Codigo != CuerpoAcotadoFiltro.CodigoMuyGrande)
         {
             throw ListaInvalida();
         }
@@ -448,11 +456,15 @@ internal sealed partial class GestionSaneamientoBackoffice(
 /// </summary>
 internal static class CuerpoSaneamiento
 {
-    /// <summary>El cuerpo como JSON; vacío es un objeto sin claves; JSON mal formado es 400 <c>CUERPO_INVALIDO</c>.</summary>
+    /// <summary>
+    /// El cuerpo como JSON; vacío es un objeto sin claves; JSON mal formado es 400 <c>CUERPO_INVALIDO</c>; más de 64 KiB es 413
+    /// <c>CUERPO_MUY_GRANDE</c> sin leer el resto (<see cref="CuerpoAcotadoFiltro"/>, CR-11).
+    /// </summary>
     public static async Task<JsonElement> LeerAsync(HttpRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        using var lector = new StreamReader(request.Body);
+        await using var cuerpo = await CuerpoAcotadoFiltro.LeerAsync(request, ct).ConfigureAwait(false);
+        using var lector = new StreamReader(cuerpo);
         var texto = await lector.ReadToEndAsync(ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(texto))
             return JsonDocument.Parse("{}").RootElement.Clone();
