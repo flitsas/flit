@@ -18,6 +18,8 @@ import { lanzarExpress } from "./express";
  * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
  *   - button «/ingresar|iniciar sesión/i»
  *   - heading «Diagnóstico vehicular»
+ *   - tablist «Vista del inicio» · tab «Diagnósticos» · tabpanel «Diagnósticos» (HU #14577 AC20: la pestaña, su panel y el
+ *     h2 del listado se llaman igual; se distinguen por rol)
  *   - searchbox «Nombre»
  *   - table «Diagnósticos de la compañía»
  *   - row (sin nombre)
@@ -61,10 +63,14 @@ test.describe("listado de diagnósticos del inicio", () => {
     const tablero = page.url();
 
     // AC2: el filtro por nombre se refleja en la URL y la tabla solo muestra lo que cumple.
+    // HU #14577 AC20: el listado vive en la pestaña «Diagnósticos» (activa sin ?vista=); se busca dentro de su panel.
     await page.goto(`${APP}/`);
-    await page.getByRole("searchbox", { name: "Nombre" }).fill(nombre);
+    const pestana = page.getByRole("tablist", { name: "Vista del inicio" }).getByRole("tab", { name: "Diagnósticos" });
+    await expect(pestana).toHaveAttribute("aria-selected", "true");
+    const panel = page.getByRole("tabpanel", { name: "Diagnósticos" });
+    await panel.getByRole("searchbox", { name: "Nombre" }).fill(nombre);
     await page.waitForURL((url) => url.searchParams.get("nombre") === nombre);
-    const tabla = page.getByRole("table", { name: "Diagnósticos de la compañía" });
+    const tabla = panel.getByRole("table", { name: "Diagnósticos de la compañía" });
     await expect(tabla.getByRole("row")).toHaveCount(2);
     const fila = tabla.getByRole("row", { name: new RegExp(nombre) });
     await expect(fila).toBeVisible();
@@ -76,8 +82,9 @@ test.describe("listado de diagnósticos del inicio", () => {
     await page.waitForURL((url) => url.pathname === new URL(tablero).pathname);
     await expect(page.getByRole("table", { name: /semáforo de consultas/i })).toBeVisible();
 
-    // Volver atrás conserva el filtro en la URL y en el campo.
+    // Volver atrás conserva el filtro en la URL y en el campo, en la pestaña «Diagnósticos».
     await page.goBack();
-    await expect(page.getByRole("searchbox", { name: "Nombre" })).toHaveValue(nombre);
+    await expect(pestana).toHaveAttribute("aria-selected", "true");
+    await expect(panel.getByRole("searchbox", { name: "Nombre" })).toHaveValue(nombre);
   });
 });
