@@ -163,7 +163,10 @@ internal sealed record ListadoVehiculosDto(
     [property: JsonPropertyName("total")] int Total,
     [property: JsonPropertyName("vehiculos")] IReadOnlyList<FilaPlacaDto> Vehiculos);
 
-/// <summary>Una fila de la grilla de placas (plan §6.6).</summary>
+/// <summary>
+/// Una fila de la grilla de placas (plan §6.6). UA-5 (HU #14576): también <c>vin</c> y <c>identificador</c> (el valor que se cargó),
+/// los dos nullables, para nombrar una fila sin placa.
+/// </summary>
 internal sealed record FilaPlacaDto(
     [property: JsonPropertyName("vehiculo_id")] Guid VehiculoId,
     [property: JsonPropertyName("placa")] string Placa,
@@ -174,7 +177,9 @@ internal sealed record FilaPlacaDto(
     [property: JsonPropertyName("estado")] string Estado,
     [property: JsonPropertyName("veredicto")] string? Veredicto,
     [property: JsonPropertyName("saneamiento")] SaneamientoFilaPlacaDto Saneamiento,
-    [property: JsonPropertyName("tramite")] TramiteFilaPlacaDto? Tramite);
+    [property: JsonPropertyName("tramite")] TramiteFilaPlacaDto? Tramite,
+    [property: JsonPropertyName("vin")] string? Vin = null,
+    [property: JsonPropertyName("identificador")] string? Identificador = null);
 
 /// <summary>Saneamiento de la fila: estado no anulado (o null), si se puede solicitar y por qué no.</summary>
 internal sealed record SaneamientoFilaPlacaDto(
@@ -263,6 +268,8 @@ internal sealed class ListadoVehiculos(DiagnosticoDb db, UsuarioActual usuario)
             {
                 f.Vehiculo.Id,
                 Placa = f.Vehiculo.Placa ?? f.Vehiculo.Vin ?? f.Vehiculo.IdentificadorNorm,
+                f.Vehiculo.Vin,
+                Identificador = f.Vehiculo.IdentificadorOriginal,
                 DiagnosticoId = f.Cabecera.Id,
                 f.Cabecera.Nombre,
                 f.Cabecera.CreadoEn,
@@ -283,7 +290,8 @@ internal sealed class ListadoVehiculos(DiagnosticoDb db, UsuarioActual usuario)
                 f.Id, f.Placa, f.DiagnosticoId, f.Nombre, f.CreadoEn, CodigosDeEnum.Codigo(f.Modo),
                 f.Terminado ? FiltroVehiculos.EstadoTerminado : FiltroVehiculos.EstadoEnProceso, f.Veredicto,
                 new SaneamientoFilaPlacaDto(vigente is { } e ? CodigosDeEnum.Codigo(e) : null, motivo is null, motivo),
-                f.TramiteId is { } tramite ? new TramiteFilaPlacaDto(tramite, f.TramiteNumero) : null);
+                f.TramiteId is { } tramite ? new TramiteFilaPlacaDto(tramite, f.TramiteNumero) : null,
+                f.Vin, f.Identificador);
         })]);
     }
 }

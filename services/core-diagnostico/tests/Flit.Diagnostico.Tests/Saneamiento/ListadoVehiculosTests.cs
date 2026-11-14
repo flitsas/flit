@@ -161,6 +161,36 @@ public sealed class ListadoVehiculosTests
     /// Lote viejo (Simple, 2026-11-01): TST801 terminado y TST802 en proceso. Lote nuevo (Con Análisis, 2026-11-10): TST811 terminado,
     /// BLOQUEADO, saneamiento EN_GESTION y trámite; TST812 terminado y VIABLE.
     /// </summary>
+    // UA-5 (auditoría visual, HU #14576) — cada fila trae vin e identificador (el valor cargado), nullables, para nombrar una fila sin
+    // placa; UA-2 — los tamaños del selector del kit (10, 20, 30, 50) se aceptan.
+    [Fact]
+    public async Task UA5_la_fila_trae_vin_e_identificador_y_UA2_acepta_los_tamanos_del_kit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos:
+            [new VehiculoSembrado("TST821", [new(Fuente.Runt, EstadoCelda.Completado, 1)]), new VehiculoSembrado("TST822", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var sinPlaca = lote.Vehiculos[1].Id;
+        await using (var db = empresa.Db())
+            await db.Set<VehiculoDiagnostico>().Where(v => v.Id == sinPlaca)
+                .ExecuteUpdateAsync(x => x.SetProperty(v => v.Placa, (string?)null).SetProperty(v => v.Vin, "9BWZZZ377VT004251")
+                    .SetProperty(v => v.IdentificadorOriginal, "9BWZZZ377VT004251").SetProperty(v => v.IdentificadorNorm, "9BWZZZ377VT004251"), ct);
+        var cliente = api.Cliente(DeudaDePrueba.TokenVer(api, empresa.Id));
+
+        var todo = await JsonAsync(cliente, string.Empty, ct);
+
+        var conPlaca = Fila(todo, "TST821");
+        conPlaca.GetProperty("identificador").GetString().Should().Be("TST821");
+        conPlaca.GetProperty("vin").ValueKind.Should().Be(JsonValueKind.Null);
+        var porVin = todo.GetProperty("vehiculos").EnumerateArray().Single(f => f.GetProperty("vehiculo_id").GetGuid() == sinPlaca);
+        porVin.GetProperty("vin").GetString().Should().Be("9BWZZZ377VT004251");
+        porVin.GetProperty("identificador").GetString().Should().Be("9BWZZZ377VT004251");
+        foreach (var tamano in new[] { 10, 20, 30, 50 })
+            (await cliente.GetAsync($"{Ruta}?tamano={tamano}", ct)).StatusCode.Should().Be(HttpStatusCode.OK, $"tamano={tamano}");
+    }
+
     private static async Task<(CabeceraDiagnostico Nuevo, CabeceraDiagnostico Viejo)> SembrarAsync(EmpresaDePrueba empresa, CancellationToken ct)
     {
         var viejo = await TableroAyudas.SembrarAsync(empresa, ct, nombre: "Lote viejo", vehiculos:
