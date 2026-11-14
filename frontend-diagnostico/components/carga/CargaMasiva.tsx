@@ -8,6 +8,7 @@ import { PasosHorizontal, type EstadoPaso } from "@flit/ui/PasosHorizontal";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { ApiError } from "@/lib/api";
 import {
+  ERRORES_CARGA,
   accesoNegado,
   confirmarVehiculos,
   esDocumentoEnmascarado,
@@ -16,6 +17,7 @@ import {
   type FilaResumen,
   type ResumenValidacion as Resumen,
 } from "@/lib/carga/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
@@ -134,7 +136,8 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
       const code = accesoNegado(e);
       if (code) return irA403(code);
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setConfirmacion({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudieron confirmar los vehículos.", reintentable });
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      setConfirmacion({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudieron confirmar los vehículos.", ERRORES_CARGA), reintentable });
     }
   }
 

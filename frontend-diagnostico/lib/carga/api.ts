@@ -130,6 +130,26 @@ export function extensionDe(nombre: string): string {
   return punto < 0 ? "" : nombre.slice(punto).toLowerCase();
 }
 
+/**
+ * AP-9 (SF-6): texto fijo por `code` de POST …/carga, …/carga/validar-filas y …/vehiculos (contrato
+ * diagnostico.v1.yaml). Equivale al motivo que da el servidor, sin sus números ni nombres: la UI nunca pinta su `message`.
+ */
+export const ERRORES_CARGA: Readonly<Record<string, string>> = {
+  NO_ENCONTRADO: "No encontramos este diagnóstico en tu compañía.",
+  DIAGNOSTICO_NO_EDITABLE: "El diagnóstico ya se lanzó: ya no admite cambios en la carga.",
+  ARCHIVO_DEMASIADO_GRANDE: "El archivo supera el tamaño máximo permitido: divídelo en varios archivos y vuelve a subirlos.",
+  FORMATO_NO_ADMITIDO: "Formato de archivo no admitido: sube la plantilla en .xlsx o un .csv en UTF-8 separado por coma o punto y coma.",
+  ARCHIVO_ILEGIBLE:
+    "No se pudo leer el archivo: si es .xlsx, ábrelo en Excel y guárdalo de nuevo como .xlsx; si es .csv, guárdalo como «CSV UTF-8». Luego vuelve a subirlo.",
+  FORMATO_XLS_NO_ADMITIDO: "El formato .xls no se admite: guarda el archivo como .xlsx y vuelve a subirlo.",
+  ARCHIVO_REQUERIDO: "Adjunta el archivo de carga (.xlsx o .csv).",
+  COLUMNA_REQUERIDA: "El archivo no tiene la columna Identificador_Vehiculo en la primera fila: usa la plantilla.",
+  SIN_VALIDOS: "No hay ningún vehículo válido para confirmar: corrige los identificadores o carga otro archivo.",
+  LIMITE_SUPERADO: "Los vehículos válidos superan el límite por lote de tu contrato: divide el lote o retira vehículos.",
+  CORRECCIONES_INVALIDAS: "No se pudieron aplicar las correcciones de las filas: revisa las filas corregidas y confirma de nuevo.",
+  VEHICULOS_YA_CONFIRMADOS: "El diagnóstico ya tiene sus vehículos confirmados.",
+};
+
 /** Códigos de 403 que niegan el acceso al producto (como GET /sesion, HU #13732): llevan a la página 403. */
 export const CODIGOS_ACCESO_NEGADO: ReadonlySet<string> = new Set(["SIN_EMPRESA", "PRODUCTO_NO_HABILITADO"]);
 

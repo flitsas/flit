@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ApiError } from "@/lib/api";
-import { accesoNegado, analizarCarga, confirmarVehiculos, type FilaCapturada, type FilaResumen, type ResumenValidacion as Resumen } from "@/lib/carga/api";
-import { crearDiagnostico, editarDiagnostico, type Diagnostico } from "@/lib/diagnosticos/api";
+import { ERRORES_CARGA, accesoNegado, analizarCarga, confirmarVehiculos, type FilaCapturada, type FilaResumen, type ResumenValidacion as Resumen } from "@/lib/carga/api";
+import { ERRORES_CABECERA, crearDiagnostico, editarDiagnostico, type Diagnostico } from "@/lib/diagnosticos/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { correccionesAConfirmar, resumenVigente, type Analisis } from "@/components/carga/CargaMasiva";
 import { EstimadoConsultas } from "@/components/carga/EstimadoConsultas";
 import { ResumenValidacion } from "@/components/carga/ResumenValidacion";
@@ -98,7 +99,8 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera,
     } catch (e) {
       setFase("editando");
       if (p.aplicarErrorApi(e)) setEnfocar((n) => n + 1);
-      else setErrorCabecera(e instanceof Error ? e.message : "No se pudo guardar el diagnóstico.");
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor.
+      else setErrorCabecera(mensajeErrorFijo(e, "No se pudo guardar el diagnóstico.", ERRORES_CABECERA));
       return;
     }
     setCabeceraId(guardado.id);
@@ -111,7 +113,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera,
       const code = accesoNegado(e);
       if (code) return irA403(code);
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setErrorArchivo({ mensaje: e instanceof Error ? e.message : "No se pudo analizar el archivo.", reintentable });
+      setErrorArchivo({ mensaje: mensajeErrorFijo(e, "No se pudo analizar el archivo.", ERRORES_CARGA), reintentable });
     } finally {
       setFase("editando");
     }
@@ -158,7 +160,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera,
       const code = accesoNegado(e);
       if (code) return irA403(code);
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setConfirmacion({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudieron confirmar los vehículos.", reintentable });
+      setConfirmacion({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudieron confirmar los vehículos.", ERRORES_CARGA), reintentable });
     }
   }
 

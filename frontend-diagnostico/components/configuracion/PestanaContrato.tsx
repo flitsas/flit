@@ -9,6 +9,7 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import {
   AVISO_FUENTE_YA_NO_DISPONIBLE,
+  ERRORES_CONTRATO,
   AYUDA_FUENTE_NO_DISPONIBLE,
   FUENTES,
   estaDisponible,
@@ -22,6 +23,7 @@ import {
   type Fuente,
   type NivelContrato,
 } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import {
   AYUDA_CLS,
   BOTON_PRIMARIO_CLS,
@@ -142,7 +144,8 @@ function EditorContratoBackoffice() {
       setCarga({ tipo: "listo", contrato });
     } catch (e) {
       if (controller.signal.aborted) return;
-      setCarga({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo cargar el contrato." });
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo cargar el contrato.", ERRORES_CONTRATO) });
     }
   }
 
@@ -174,12 +177,12 @@ function EditorContratoBackoffice() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 422 && e.code === CODIGO_FUENTE_NO_DISPONIBLE) {
         // El error es del campo Fuentes habilitadas (el 422 del contrato no trae `campo`): se muestra sobre él.
-        setErrorFuentes(e.message);
+        setErrorFuentes(ERRORES_CONTRATO[CODIGO_FUENTE_NO_DISPONIBLE]);
         setGuardado({ tipo: "inactivo" });
         return;
       }
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setGuardado({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo guardar el contrato.", reintentable });
+      setGuardado({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo guardar el contrato.", ERRORES_CONTRATO), reintentable });
     }
   }
 

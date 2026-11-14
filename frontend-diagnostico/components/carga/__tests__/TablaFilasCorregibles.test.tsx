@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TablaFilasCorregibles } from "@/components/carga/TablaFilasCorregibles";
-import type { FilaResumen } from "@/lib/carga/api";
+import { ERRORES_CARGA, type FilaResumen } from "@/lib/carga/api";
 import { FILA_ERRONEA, ID, cuerpoDe, fila, llamadas, resumen, ruta, simularApi } from "./datos";
+
+const SECRETO = "mensaje del servidor que no debe verse";
 
 // Uso de ejemplo: <TablaFilasCorregibles diagnosticoId={id} filas={erroneas} onFilaRevalidada={(f, capturada) => ...} />
 // deja editar cada fila errónea; 300 ms después de la última tecla la valida en pantalla con fieldRules y, si pasa, la
@@ -188,6 +190,20 @@ describe("TablaFilasCorregibles sobre TablaEditable (HU #14562 · M12)", () => {
     expect(within(filaDe()).getByText("Inválido")).toBeInTheDocument();
     expect(campo).toHaveFocus();
     expect(campo).toHaveValue("TST124");
+  });
+
+  it.each([
+    ["409 DIAGNOSTICO_NO_EDITABLE", 409, "DIAGNOSTICO_NO_EDITABLE"],
+    ["404 NO_ENCONTRADO", 404, "NO_ENCONTRADO"],
+    ["422 con un code fuera del contrato", 422, "OTRO"],
+  ] as const)("AP-9: el %s da un motivo fijo, nunca el mensaje del servidor", async (_n, status, code) => {
+    const texto = code === "OTRO" ? "No se pudo revalidar la fila." : ERRORES_CARGA[code];
+    simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json({ code, error: SECRETO }, { status }) });
+    montar();
+    fireEvent.change(identificador(), { target: { value: "TST124" } });
+    const reintentar = await within(filaDe()).findByRole("button", { name: "Reintentar Fila 3" });
+    expect(reintentar).toHaveAccessibleDescription(texto);
+    expect(document.body).not.toHaveTextContent(SECRETO);
   });
 });
 

@@ -10,11 +10,13 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import type { Configuracion } from "@/lib/configuracion";
 import { nombreExpress } from "@/lib/diagnosticos/nombreExpress";
+import { mensajeErrorFijo } from "@/lib/errores";
 import {
   accesoNegadoExpress,
   campoVehiculo,
   crearExpress,
   entradaExpress,
+  ERRORES_EXPRESS,
   errorIdentificador,
   estimarExpress,
   type EstimadoFuente,
@@ -101,7 +103,8 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
       router.replace(`/403?code=${encodeURIComponent(code)}`);
       return;
     }
-    const mensaje = e instanceof Error ? e.message : "No se pudo completar la acción.";
+    // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+    const mensaje = mensajeErrorFijo(e, "No se pudo completar la acción.", ERRORES_EXPRESS);
     const campo = campoVehiculo(e);
     // Un 422 de un campo (del vehículo o de la cabecera) se pinta en ese campo y el foco va a él.
     if (campo || p.aplicarErrorApi(e)) {

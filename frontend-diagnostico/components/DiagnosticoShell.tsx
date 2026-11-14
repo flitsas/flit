@@ -10,6 +10,7 @@ import { rutaKit } from "@flit/ui/iconos-mapas";
 import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
 import { ResumenSaneamientosContext, useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { puedeGestionarSaneamiento, type SesionDiagnostico } from "@/lib/sesion";
 
 export interface UsuarioShell extends ShellUser {
@@ -125,7 +126,8 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
           irA403(e.code || SIN_PERMISOS);
           return;
         }
-        setEstado({ sesion: null, cargando: false, error: e instanceof Error ? e.message : "No se pudo abrir Diagnóstico." });
+        // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+        setEstado({ sesion: null, cargando: false, error: mensajeErrorFijo(e, "No se pudo abrir Diagnóstico.") });
       });
     return () => controller.abort();
   }, [intento]);

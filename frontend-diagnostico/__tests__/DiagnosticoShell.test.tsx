@@ -94,6 +94,19 @@ describe("DiagnosticoShell", () => {
     expect(screen.queryByText("pantalla base")).toBeNull();
   });
 
+  it.each([
+    ["un 4xx con el mensaje del servidor en el cuerpo", () => Response.json({ code: "OTRO", error: "mensaje del servidor que no debe verse" }, { status: 422 })],
+    ["un error de red", () => Promise.reject(new TypeError("mensaje del servidor que no debe verse"))],
+  ])("AP-9: %s muestra el respaldo fijo, nunca el mensaje", async (_n, respuesta) => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(respuesta));
+
+    montar();
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se pudo abrir Diagnóstico.");
+    expect(alerta).not.toHaveTextContent("mensaje del servidor que no debe verse");
+  });
+
   it("si la API falla muestra el error con Reintentar y, al reintentar, abre la pantalla", async () => {
     const fetchMock = vi
       .fn()
@@ -103,7 +116,8 @@ describe("DiagnosticoShell", () => {
 
     montar();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Diagnóstico no respondió");
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo abrir Diagnóstico.");
     expect(screen.queryByText("pantalla base")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("pantalla base")).toBeInTheDocument();
