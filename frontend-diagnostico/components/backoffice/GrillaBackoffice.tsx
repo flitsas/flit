@@ -22,15 +22,18 @@ import {
   obtenerGrillaBackoffice,
   rutaDetalleBackoffice,
   type CeldaGrillaBackoffice,
+  type FilaVehiculoBackoffice,
   type GrillaBackoffice as TGrillaBackoffice,
   type RespuestaLlenado,
 } from "@/lib/backoffice/api";
 import { nombreFuente } from "@/lib/configuracion";
-import { puedeOperarBackoffice } from "@/lib/sesion";
+import { etiquetaSaneamiento } from "@/lib/saneamiento/estados";
+import { puedeGestionarSaneamiento, puedeOperarBackoffice } from "@/lib/sesion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
 import { IconoDxManual } from "@/components/dx/iconos/IconoDxManual";
+import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 export interface GrillaBackofficeProps {
@@ -64,6 +67,28 @@ export function MarcaManual() {
       <IconoDxManual tamano={16} className="h-3 w-3" />
       Manual
     </Etiqueta>
+  );
+}
+
+/**
+ * Etiqueta del saneamiento de la fila (HU #14577 AC38, spec-ui §7.1). Con gestionarSaneamiento va envuelta en un enlace a la
+ * gestión (PS-5) con ?empresa=; sin ella, la etiqueta sola. Un ANULADO no se pinta (D-06: solo PS-4 y PS-5 lo rotulan).
+ * El backoffice nunca ofrece la bandera para marcar (C7).
+ */
+function SaneamientoFila({ vehiculo, empresa, gestionar }: { vehiculo: FilaVehiculo; empresa: string; gestionar: boolean }) {
+  const saneamiento = (vehiculo as unknown as FilaVehiculoBackoffice).saneamiento;
+  const etiqueta = etiquetaSaneamiento(saneamiento?.estado);
+  if (!saneamiento || !etiqueta) return null;
+  if (!gestionar || !saneamiento.id) return <EtiquetaSaneamiento estado={saneamiento.estado} />;
+  const identificador = vehiculo.placa || vehiculo.vin || vehiculo.identificador;
+  return (
+    <Link
+      href={`/backoffice/saneamientos/${encodeURIComponent(saneamiento.id)}?empresa=${encodeURIComponent(empresa)}`}
+      aria-label={`Gestionar saneamiento de ${identificador}: ${etiqueta.texto}`}
+      className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
+    >
+      <EtiquetaSaneamiento estado={saneamiento.estado} />
+    </Link>
   );
 }
 
@@ -102,6 +127,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   const puedeCorregir = opera && (sesion?.capacidades.corregirDictamen ?? false);
   // AC47: la auditoría de versiones del dictamen (autor, motivo, versiones) es solo de backoffice y exige verAuditoria.
   const puedeAuditar = sesion?.capacidades.verAuditoria ?? false;
+  const gestionaSaneamiento = puedeGestionarSaneamiento(sesion?.capacidades);
   const [auditoria, setAuditoria] = useState<FilaVehiculo | null>(null);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -260,6 +286,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
                       onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
                     />
                     {v.dictamen_ajustado && <Etiqueta tono="info">Ajustado por FLIT</Etiqueta>}
+                    <SaneamientoFila vehiculo={v} empresa={empresa} gestionar={gestionaSaneamiento} />
                     {puedeAuditar && (
                       <button
                         type="button"

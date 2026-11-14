@@ -56,6 +56,37 @@ function textoCliente(n: NotificacionDiagnostico): TextoNotificacion | null {
       const prefijo = nombre ? `Lote «${nombre}»` : "Tu lote";
       return { titulo: "Creación de trámites terminada", mensaje: `${prefijo}: ${cuerpo}.` };
     }
+    case "SANEAMIENTO_TOMADO":
+    case "SANEAMIENTO_CERRADO":
+    case "SANEAMIENTO_REABIERTO":
+    case "SANEAMIENTO_ANULADO":
+      return textoSaneamiento(n, delLote);
+    default:
+      return null;
+  }
+}
+
+/**
+ * Avisos del saneamiento (HU #14577 AC39, spec-ui §7.2, SP-23): solo `tipo`, `datos.cantidad` (entero, mínimo 1) y, en
+ * el cierre, `datos.resultado`; sin cantidad válida o con un resultado desconocido no se pinta. Singular y plural reales
+ * (D-08) en vez de «vehículo(s)». Nunca placa ni otro texto de `datos`.
+ */
+function textoSaneamiento(n: NotificacionDiagnostico, delLote: string): TextoNotificacion | null {
+  const cantidad = numero(n.datos, "cantidad");
+  if (cantidad === null || cantidad < 1) return null;
+  const vehiculos = `${contar(cantidad, "vehículo", "vehículos")} ${delLote}`;
+  switch (n.tipo) {
+    case "SANEAMIENTO_TOMADO":
+      return { titulo: "Saneamiento en gestión", mensaje: `FLIT empezó el saneamiento de ${vehiculos}.` };
+    case "SANEAMIENTO_CERRADO":
+      if (n.datos?.resultado === "SANEADO")
+        return { titulo: "Saneamiento terminado", mensaje: `${vehiculos} ${cantidad === 1 ? "quedó saneado" : "quedaron saneados"}.` };
+      if (n.datos?.resultado === "NO_PROCEDE") return { titulo: "Saneamiento no procede", mensaje: `El saneamiento de ${vehiculos} no procede.` };
+      return null;
+    case "SANEAMIENTO_REABIERTO":
+      return { titulo: "Saneamiento reabierto", mensaje: `FLIT reabrió el saneamiento de un vehículo ${delLote}.` };
+    case "SANEAMIENTO_ANULADO":
+      return { titulo: "Saneamiento anulado", mensaje: `FLIT anuló el saneamiento de un vehículo ${delLote}.` };
     default:
       return null;
   }

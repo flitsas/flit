@@ -271,3 +271,35 @@ describe("GrillaBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", (
     }
   });
 });
+
+describe("GrillaBackoffice — HU #14577 AC38: etiqueta del saneamiento con enlace a la gestión", () => {
+  const conSaneamiento = (estado: string) => {
+    const g = grillaBo();
+    const [v1, v2] = g.vehiculos;
+    return grillaBo({ vehiculos: [{ ...v1, saneamiento: { estado: estado as never, id: "00000000-0000-7000-8000-00000000d001" } }, { ...v2, saneamiento: null }] });
+  };
+
+  it("con gestionarSaneamiento, la fila con saneamiento muestra la etiqueta enlazada a PS-5 con ?empresa=", async () => {
+    h.capacidades = { ...h.capacidades, gestionarSaneamiento: true };
+    montar(conSaneamiento("EN_GESTION"));
+    await tabla();
+    const enlace = screen.getByRole("link", { name: "Gestionar saneamiento de TST001: En saneamiento" });
+    expect(enlace).toHaveAttribute("href", `/backoffice/saneamientos/00000000-0000-7000-8000-00000000d001?empresa=${EMPRESA_A}`);
+    expect(enlace).toHaveTextContent("En saneamiento");
+    expect(screen.queryAllByRole("link", { name: /^Gestionar saneamiento de TST002/ })).toHaveLength(0);
+  });
+
+  it("sin gestionarSaneamiento, la etiqueta sin enlace", async () => {
+    montar(conSaneamiento("SOLICITADO"));
+    await tabla();
+    expect(screen.getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Gestionar saneamiento/ })).toBeNull();
+  });
+
+  it("el backoffice no ofrece la bandera para marcar", async () => {
+    h.capacidades = { ...h.capacidades, gestionarSaneamiento: true, sanear: true };
+    montar(conSaneamiento("SANEADO"));
+    await tabla();
+    expect(screen.queryByRole("button", { name: /Solicitar saneamiento|Sanear/ })).toBeNull();
+  });
+});
