@@ -61,7 +61,9 @@ test.describe("entrada desde el hub", () => {
     await iniciarSesionEnElHub(page, process.env.E2E_USUARIO_SUSPENDIDO!, process.env.E2E_CLAVE_SUSPENDIDO!);
 
     // Escenario 4: la compañía tiene Diagnóstico suspendido → la 403, nunca la pantalla base, y sin volver al login.
-    await page.waitForURL(`${APP}/403?code=PRODUCTO_NO_HABILITADO`);
+    // Lo normal es que el hub niegue el token (OidcPrincipalFactory, PRODUCT_NOT_ENABLED); el guard de la API
+    // (PRODUCTO_NO_HABILITADO) solo responde si el token se emitió antes de la suspensión. Las dos son la misma 403.
+    await page.waitForURL(new RegExp(`^${APP.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/403\\?code=(PRODUCT_NOT_ENABLED|PRODUCTO_NO_HABILITADO)$`));
     await expect(page.getByRole("heading", { level: 1, name: "No tienes acceso" })).toBeVisible();
     await expect(page.getByText(/Diagnóstico no está habilitado/)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Diagnóstico vehicular" })).toHaveCount(0);
