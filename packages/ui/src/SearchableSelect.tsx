@@ -184,7 +184,8 @@ export function SearchableSelect({
         className={
           hideLabel
             ? "sr-only"
-            : "text-[10px] font-semibold uppercase opacity-60 text-flit-primary dark:text-foreground"
+            : // HU #14562 · D3: con opacity-60 daba 4,15:1; --di-text-tertiary da 5,56:1 en claro y 7,45:1 en oscuro.
+              "text-[10px] font-semibold uppercase text-[color:var(--di-text-tertiary)]"
         }
       >
         {label}

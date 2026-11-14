@@ -123,3 +123,17 @@ describe("SelectorEmpresaBackoffice — AC2: empresa ya elegida (de la URL)", ()
     expect(screen.queryByText("Todavía no has elegido una empresa.")).toBeNull();
   });
 });
+
+// HU #14562 · D3 (axe color-contrast): la etiqueta «Empresa» del SearchableSelect daba 4,15:1 (#162744 al 60 % sobre
+// blanco). Va con --di-text-tertiary (#546b7d: 5,56:1 sobre blanco; #a9b8d4 en oscuro: 7,45:1 sobre #162744), sin opacidad.
+describe("SelectorEmpresaBackoffice — D3: contraste de la etiqueta del combobox", () => {
+  it("la etiqueta visible usa el token de texto terciario y no se apaga con opacidad", async () => {
+    empresasOk();
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+
+    await screen.findByRole("combobox", { name: "Empresa" });
+    const etiqueta = screen.getByText("Empresa", { selector: "label" });
+    expect(etiqueta).toHaveClass("text-[color:var(--di-text-tertiary)]");
+    expect(etiqueta.className).not.toMatch(/\bopacity-/);
+  });
+});
