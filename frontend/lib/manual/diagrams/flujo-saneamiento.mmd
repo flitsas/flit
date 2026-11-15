@@ -1,7 +1,7 @@
 flowchart TD
-    A["Vehículo terminado"] --> B["La compañía marca la bandera «Sanear»"]
+    A["Vehículo terminado"] --> B["La compañía elige «Solicitar saneamiento»\nen el menú «Acciones»"]
     B --> C["Saneamiento solicitado"]
-    C -- "La compañía quita la bandera\no FLIT anula con motivo" --> X["Anulado: se puede volver a pedir"]
+    C -- "La compañía quita la solicitud\no FLIT anula con motivo" --> X["Anulado: se puede volver a pedir"]
     C -- "FLIT lo toma" --> D["En saneamiento: un concepto por fuente\ncon hallazgo (SIMIT, impuesto, SOAT, RTM)"]
     D --> E["FLIT marca cada concepto y puede\nadjuntar un PDF de evidencia"]
     E --> F{"Cierre de FLIT"}
