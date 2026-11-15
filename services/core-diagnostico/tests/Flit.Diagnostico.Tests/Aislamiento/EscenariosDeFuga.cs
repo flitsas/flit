@@ -203,6 +203,12 @@ public static class EscenariosDeFuga
     /// <summary>Grilla de placas (HU #14576 AC39, BE-C): devuelve el id del vehículo de la empresa y nada de la otra.</summary>
     public const string RutaVehiculos = Program.Prefijo + "/vehiculos";
 
+    /// <summary>
+    /// Estadísticas de la compañía (HU #14579, BE-1, E1): solo conteos; el ámbito lleva el id de la empresa del token y nunca el de
+    /// la otra (la URL es la misma para las dos: la compañía sale del token).
+    /// </summary>
+    public const string RutaEstadisticas = Estadisticas.EstadisticasDePrueba.RutaCompania;
+
     /// <summary>Catálogo de reportes de la compañía (HU #14579, BE-2): no lee datos de ninguna compañía.</summary>
     public const string RutaCatalogoReportes = Program.Prefijo + "/reportes";
 
@@ -255,6 +261,12 @@ public static class EscenariosDeFuga
             var celda = await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
                 """{"placa":"TST903","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
             return new Sembrado(Tablero.Tablero.RutaDetalle(lote.Id, celda.VehiculoId, "RUNT"), [celda.Id.ToString(), celda.VehiculoId.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaEstadisticas, async (empresa, ct) =>
+        {
+            await Estadisticas.EstadisticasDePrueba.LoteAsync(empresa, Estadisticas.EstadisticasDePrueba.Dia(0), ct, placas: ["TST9E1"]);
+            var hoy = Estadisticas.EstadisticasDePrueba.Hoy;
+            return new Sembrado(Estadisticas.EstadisticasDePrueba.Ruta(hoy, hoy), [empresa.Id.ToString()]);
         }),
         new EscenarioDeFuga(RutaListado, async (empresa, ct) =>
         {

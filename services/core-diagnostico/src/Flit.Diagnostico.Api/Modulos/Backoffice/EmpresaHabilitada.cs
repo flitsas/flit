@@ -43,7 +43,16 @@ public static partial class EmpresaHabilitada
             : throw new InvalidOperationException("La ruta no pasó por el filtro de empresa habilitada (SoloEmpresaHabilitada).");
     }
 
-    private sealed record Validada(Guid Id, string? Nombre);
+    /// <summary>NIT de la empresa validada según Identidad (columna <c>empresa_nit</c> del reporte de consumo en B4); null sin Identidad o sin NIT.</summary>
+    public static string? Nit(HttpContext http)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        return http.Items.TryGetValue(ClaveItems, out var valor) && valor is Validada validada
+            ? validada.Nit
+            : throw new InvalidOperationException("La ruta no pasó por el filtro de empresa habilitada (SoloEmpresaHabilitada).");
+    }
+
+    private sealed record Validada(Guid Id, string? Nombre, string? Nit = null);
 
     private sealed class Filtro : IEndpointFilter
     {
@@ -83,7 +92,7 @@ public static partial class EmpresaHabilitada
         }
 
         if (lista is not null)
-            return lista.FirstOrDefault(e => e.Id == empresa) is { } encontrada ? new Validada(encontrada.Id, encontrada.Nombre) : null;
+            return lista.FirstOrDefault(e => e.Id == empresa) is { } encontrada ? new Validada(encontrada.Id, encontrada.Nombre, encontrada.Nit) : null;
 
         // Sin Identidad configurada no hay lista: decide la suscripción, que falla cerrada.
         return await servicios.GetRequiredService<IProductosHabilitados>().DiagnosticoHabilitadoAsync(empresa, ct).ConfigureAwait(false)
