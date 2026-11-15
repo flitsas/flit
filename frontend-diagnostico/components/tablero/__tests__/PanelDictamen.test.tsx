@@ -229,15 +229,15 @@ function Harness() {
   );
 }
 
-// HU #14562 F-05 (AC35, AC36): el dictamen se lee en un PanelLateral de 640 px, con trámite analizado, fecha de emisión,
+// HU #14562 F-05 (AC35, AC36): el dictamen se lee en 640 px (FE-1: PanelModal sobre Modal size="panel"), con trámite analizado, fecha de emisión,
 // versión del catálogo, marca «Ajustado por FLIT» (D6, sin autor ni motivo) y aviso de bloqueo.
 describe("PanelDictamen — F-05 panel lateral (HU 14562)", () => {
-  it("AC35: se abre como panel lateral de 640 px con «Cerrar», trámite, fecha de emisión y catálogo", async () => {
+  it("AC35 / FE-1: se abre como modal de 640 px con «Cerrar», trámite, fecha de emisión y catálogo", async () => {
     simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, veredicto: "VIABLE" }) });
     pintar({ tramiteAnalizado: "Traspaso" });
     const panel = await screen.findByRole("dialog", { name: /dictamen · TST001/i });
     expect(panel).toHaveAttribute("aria-modal", "true");
-    expect(panel.querySelector('[style*="max-width: 640px"]')).not.toBeNull();
+    expect(panel.firstElementChild?.className).toContain("max-w-[640px]");
     expect(screen.getByRole("button", { name: "Cerrar" })).toBeInTheDocument();
     expect(await screen.findByText("Viable")).toBeInTheDocument();
     expect(screen.getByText(/trámite analizado/i).nextElementSibling).toHaveTextContent("Traspaso");
@@ -516,5 +516,58 @@ describe("PanelDictamen — HU #14577 AC13: «Ver deuda y sanear» en el aviso d
     pintar({ onVerDeuda: vi.fn() });
     await screen.findByText("Viable");
     expect(screen.queryByRole("button", { name: "Ver deuda y sanear" })).toBeNull();
+  });
+});
+
+// Ola Diagnóstico UX 2026-11-15 · FE-1 (spec-ui §1.6): sin override el velo cierra, como el panel; con el override
+// editable no, para no perder lo escrito (Escape y «Cerrar» sí, salvo mientras envía).
+describe("PanelDictamen — FE-1 modal: velo y ocupado", () => {
+  it("compañía (sin override): clic en el velo cierra", async () => {
+    const onClose = vi.fn();
+    simularApi({ [`GET ${RUTA}`]: () => Response.json(LLENO) });
+    pintar({ onClose });
+    await screen.findByText(/Veredicto:/);
+    fireEvent.mouseDown(screen.getByRole("dialog"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("backoffice con override: el velo no cierra; Escape sí", async () => {
+    const onClose = vi.fn();
+    simularApi({ [`GET ${RUTA_BO}`]: () => Response.json(LLENO) });
+    pintar({ modo: "backoffice", empresa: EMPRESA_A, puedeCorregir: true, onClose });
+    await screen.findByText(/Veredicto:/);
+    escribirMotivo(MOTIVO);
+    fireEvent.mouseDown(screen.getByRole("dialog"));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Motivo del ajuste" })).toHaveValue(MOTIVO);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("mientras aplica el ajuste (ocupado), ni Escape, ni el velo, ni «Cerrar» cierran", async () => {
+    const onClose = vi.fn();
+    simularApi({ [`GET ${RUTA_BO}`]: () => Response.json(LLENO), [`PUT ${RUTA_BO}`]: () => new Promise<Response>(() => {}) });
+    render(
+      <PanelDictamen
+        diagnosticoId={LOTE}
+        vehiculoId={VEHICULO}
+        identificador="TST001"
+        modo="backoffice"
+        empresa={EMPRESA_A}
+        puedeCorregir
+        onClose={onClose}
+      />,
+    );
+    expect(await screen.findByText(/Veredicto:/)).toHaveTextContent("Bloqueado");
+    fireEvent.click(screen.getByRole("radio", { name: "Bloqueado" }));
+    escribirMotivo(MOTIVO);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Confirmo el cambio de veredicto" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    fireEvent.mouseDown(screen.getByRole("dialog"));
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -598,3 +598,20 @@ describe("PanelDeudaSaneamiento — FE-C: bandera real en la cabecera y etiqueta
     expect(fuente).not.toMatch(/etiqueta && <EtiquetaTono/);
   });
 });
+
+// Ola Diagnóstico UX 2026-11-15 · FE-1 (spec-ui §1.6): «Deuda y saneamiento» es un modal de 640 px con campos editables;
+// el clic en el velo no lo cierra, para no perder lo escrito. Escape y «Cerrar» sí.
+describe("PanelDeudaSaneamiento — FE-1 modal de 640 px", () => {
+  it("se abre en el modal de la suite de 640 px; el velo no cierra y Escape sí", async () => {
+    const onClose = vi.fn();
+    simularApi({ [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta()), [`GET ${RUTA_SANEAMIENTO}`]: () => json(saneamientoEnGestion()) });
+    pintar({ onClose });
+    const dialogo = screen.getByRole("dialog", { name: "Deuda y saneamiento" });
+    expect(dialogo.firstElementChild?.className).toContain("max-w-[640px]");
+    await screen.findByRole("heading", { name: "Deuda por fuente" });
+    fireEvent.mouseDown(dialogo);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});

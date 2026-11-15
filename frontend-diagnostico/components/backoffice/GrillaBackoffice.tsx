@@ -7,7 +7,7 @@ import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
-import { PanelLateral } from "@flit/ui/PanelLateral";
+import { PanelModal } from "@flit/ui/PanelModal";
 import { AuditoriaDictamen } from "@/components/backoffice/AuditoriaDictamen";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
@@ -346,9 +346,9 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
         />
       )}
       {auditoria && (
-        <PanelLateral abierto onCerrar={() => setAuditoria(null)} titulo={`Auditoría del dictamen · ${auditoria.placa || auditoria.vin || auditoria.identificador}`}>
+        <PanelModal abierto onCerrar={() => setAuditoria(null)} titulo={`Auditoría del dictamen · ${auditoria.placa || auditoria.vin || auditoria.identificador}`}>
           <AuditoriaDictamen diagnosticoId={diagnosticoId} vehiculoId={auditoria.id} empresa={empresa} />
-        </PanelLateral>
+        </PanelModal>
       )}
       {dictamen && (
         <PanelDictamen
