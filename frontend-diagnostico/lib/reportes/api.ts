@@ -6,6 +6,7 @@
 import { isReauthenticating, reauthenticate } from "@flit/auth/client";
 import { API_PREFIX, ApiError, apiFetch } from "@/lib/api";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
+import { MENSAJE_RANGO_GENERICO } from "@/lib/estadisticas/periodo";
 import type { EstadoCelda, FilaVehiculo } from "@/lib/tablero/api";
 import type { CatalogoReportesDto, FormatoExportacion, PaginaReporteDto, TipoReporte } from "./tipos";
 
@@ -213,7 +214,8 @@ export class ErrorDescargaReporte extends ApiError {
  * Content-Disposition (nunca uno armado con datos de la fila) y la URL del blob liberada. Un error HTTP no descarga nada.
  */
 export async function descargarReporte(ambito: AmbitoReporte, tipo: TipoReporte, consulta: ConsultaReporte, formato: FormatoExportacion): Promise<string> {
-  if (isReauthenticating()) return new Promise<string>(() => {});
+  // Con la sesión renovándose no se pide nada; se rechaza (no una promesa colgada) para que el botón salga de «Generando…».
+  if (isReauthenticating()) throw new ErrorDescargaReporte(401, "Sesión en renovación.", "SESION_RENOVANDO");
   const url = `${API_PREFIX}${rutaReporte(ambito, tipo, formato)}?${consultaComoQuery(ambito, consulta, false)}`;
   const respuesta = await fetch(url, { method: "GET", cache: "no-store" });
   if (!respuesta.ok) {
@@ -251,8 +253,9 @@ export function mensajeDescargaReporte(error: unknown, formato: FormatoExportaci
         ? `Ya hay una exportación en curso. Espera ${error.retryAfter} segundos e intenta de nuevo.`
         : "Ya hay una exportación en curso. Espera unos segundos e intenta de nuevo.";
     }
+    if (error.code === "SESION_RENOVANDO") return "Tu sesión se está renovando. Intenta de nuevo en unos segundos.";
     if (error.status === 403) return "No tienes permiso para descargar reportes.";
-    if (error.code === "RANGO_INVALIDO") return "El rango no puede superar un año";
+    if (error.code === "RANGO_INVALIDO") return MENSAJE_RANGO_GENERICO;
     if (error.code === "EMPRESA_NO_ENCONTRADA") return "Esa compañía no tiene Diagnóstico activo.";
   }
   return "No se pudo exportar el reporte. Intenta de nuevo en un momento.";
@@ -260,7 +263,8 @@ export function mensajeDescargaReporte(error: unknown, formato: FormatoExportaci
 
 /** AP-9: textos fijos por `code` del reporte en pantalla. */
 export const ERRORES_REPORTE: Readonly<Record<string, string>> = {
-  RANGO_INVALIDO: "El rango no puede superar un año",
+  // Sin la causa en el cuerpo; con el rango a mano, `mensajeRangoInvalido` (periodo.ts) la nombra.
+  RANGO_INVALIDO: MENSAJE_RANGO_GENERICO,
   FILTRO_INVALIDO: "Revisa los filtros del reporte.",
   PAGINACION_INVALIDA: "Acota el filtro para ver más registros.",
   REPORTE_NO_ENCONTRADO: "Este reporte no está disponible.",

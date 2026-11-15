@@ -5,7 +5,7 @@
 // La API vuelve a exigir cada permiso; el front solo elige la ruta.
 import { ApiError, apiFetch } from "@/lib/api";
 import { mensajeErrorFijo } from "@/lib/errores";
-import { MENSAJE_RANGO_MAXIMO } from "./periodo";
+import { MENSAJE_RANGO_GENERICO } from "./periodo";
 import type { EstadisticasDto, Rango } from "./tipos";
 
 export type AmbitoConsulta = { tipo: "COMPANIA" } | { tipo: "GLOBAL" } | { tipo: "EMPRESA"; empresa: string };
@@ -30,7 +30,8 @@ export function obtenerEstadisticas(ambito: AmbitoConsulta, rango: Rango, signal
 
 /** AP-9: textos fijos por `code` (nunca el mensaje del servidor). */
 export const ERRORES_ESTADISTICAS: Readonly<Record<string, string>> = {
-  RANGO_INVALIDO: MENSAJE_RANGO_MAXIMO,
+  // Sin la causa en el cuerpo; con el rango a mano, `mensajeRangoInvalido` (periodo.ts) la nombra.
+  RANGO_INVALIDO: MENSAJE_RANGO_GENERICO,
   FILTRO_INVALIDO: "Revisa las fechas del periodo.",
   EMPRESA_NO_ENCONTRADA: "Esa compañía no tiene Diagnóstico activo.",
   EMPRESA_REQUERIDA: "Elige una compañía.",

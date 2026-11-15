@@ -76,4 +76,15 @@ describe("BotonesExportar — AC descargas", () => {
     fireEvent.click(excel());
     expect(await screen.findByRole("alert")).toHaveTextContent("No tienes permiso para descargar reportes.");
   });
+
+  it("CR-FE-5: el error se limpia cuando cambia la consulta (claveConsulta) y no con un rerender de la misma", async () => {
+    const onDescargar = vi.fn().mockRejectedValue(new ErrorDescargaReporte(429, "x", "EXPORTACION_EN_CURSO", undefined, undefined, 10));
+    const { rerender } = render(<BotonesExportar {...props} total={500} claveConsulta="a" onDescargar={onDescargar} />);
+    fireEvent.click(excel());
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    rerender(<BotonesExportar {...props} total={500} claveConsulta="a" onDescargar={onDescargar} />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    rerender(<BotonesExportar {...props} total={480} claveConsulta="b" onDescargar={onDescargar} />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

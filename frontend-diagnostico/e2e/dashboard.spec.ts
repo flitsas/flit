@@ -164,7 +164,7 @@ test.describe("FE-5 Dashboard de la compañía", () => {
     await ancho(page, 1280);
   });
 
-  test("filtros de fecha: más de 366 días no se envía y explica el límite; un 400 RANGO_INVALIDO muestra el mismo texto", async ({ page }) => {
+  test("filtros de fecha: más de 366 días no se envía y explica el límite; un 400 RANGO_INVALIDO muestra el texto genérico", async ({ page }) => {
     exigirCliente();
     await entrar(page, CLIENTE.usuario!, CLIENTE.clave!, "/");
     await abrirDashboard(page, RUTA.estadisticas);
@@ -183,10 +183,11 @@ test.describe("FE-5 Dashboard de la compañía", () => {
     expect((await valido).status()).toBe(200);
     await expect(page.getByText("El rango no puede superar un año")).toHaveCount(0);
 
-    // El servidor también lo rechaza (contrato §0): mismo texto, sin el mensaje del servidor.
+    // El servidor también lo rechaza (contrato §0) sin decir la causa: con el rango válido en el cliente, el texto
+    // genérico (CR-FE-4), sin el mensaje del servidor.
     const fallo = await responder(page, RUTA.estadisticas, 400, { code: "RANGO_INVALIDO", error: "Mensaje del servidor de prueba." });
     await desde(page).fill(sumarDias(hoy, -10));
-    await expect(page.getByText("El rango no puede superar un año")).toBeVisible();
+    await expect(page.getByText(/^Revisa el periodo: como máximo un año/)).toBeVisible();
     await expect(page.getByText("Mensaje del servidor de prueba.")).toHaveCount(0);
     await fallo.quitar();
   });

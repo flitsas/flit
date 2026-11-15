@@ -13,9 +13,10 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { BOTON_PRIMARIO_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { nombreFuente } from "@/lib/configuracion";
-import { ambitoDe, esErrorDeRango, mensajeErrorEstadisticas } from "@/lib/estadisticas/api";
+import { ERRORES_ESTADISTICAS, ambitoDe, esErrorDeRango, mensajeErrorEstadisticas } from "@/lib/estadisticas/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { formatoEntero, formatoPorcentaje, formatoSegundos, rotuloCubeta, TEXTO_GRANULARIDAD } from "@/lib/estadisticas/formato";
-import { hoyColombia, leerRango, rangoPorDefecto } from "@/lib/estadisticas/periodo";
+import { hoyColombia, leerRango, mensajeRangoInvalido, rangoPorDefecto } from "@/lib/estadisticas/periodo";
 import type { EstadisticaFuente, EstadisticasDto, Rango } from "@/lib/estadisticas/tipos";
 import { FiltrosDashboard } from "./FiltrosDashboard";
 import { SelectorCompania } from "./SelectorCompania";
@@ -264,7 +265,14 @@ export function Dashboard({ vistaGlobal, puedeCrear, empresaNombre }: { vistaGlo
   useEffect(() => {
     if (codigo403) router.replace(`/403?code=${encodeURIComponent(codigo403)}`);
   }, [codigo403, router]);
-  const errorDeRango = estado === "error" && esErrorDeRango(error) ? mensajeErrorEstadisticas(error) : null;
+  const errorDeRango =
+    estado === "error" && esErrorDeRango(error)
+      ? (error as ApiError).code === "RANGO_INVALIDO"
+        ? mensajeRangoInvalido(vista.rango, hoy)
+        : mensajeErrorEstadisticas(error)
+      : null;
+  // 404 de un ?empresa= viejo o de una compañía apagada (contrato §1): reintentar no sirve; se vuelve a «Todas».
+  const empresaNoEncontrada = estado === "error" && error instanceof ApiError && error.code === "EMPRESA_NO_ENCONTRADA";
 
   const nombreAmbito = !vistaGlobal
     ? empresaNombre || "tu compañía"
@@ -287,12 +295,18 @@ export function Dashboard({ vistaGlobal, puedeCrear, empresaNombre }: { vistaGlo
         <InlineAlert
           tone="error"
           action={
-            <Button variant="secondary" size="sm" onClick={reintentar}>
-              Reintentar
-            </Button>
+            empresaNoEncontrada ? (
+              <Button variant="secondary" size="sm" onClick={() => aplicar({ ...vista, empresa: "" })}>
+                Ver todas las compañías
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={reintentar}>
+                Reintentar
+              </Button>
+            )
           }
         >
-          No se pudo cargar el resumen
+          {mensajeErrorFijo(error, "No se pudo cargar el resumen", ERRORES_ESTADISTICAS)}
         </InlineAlert>
       );
   } else if (datos && (datos.resumen?.diagnosticos ?? 0) === 0) {

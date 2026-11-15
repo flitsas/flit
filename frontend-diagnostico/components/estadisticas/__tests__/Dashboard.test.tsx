@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Dashboard } from "@/components/estadisticas/Dashboard";
 import { AHORA, estadisticas } from "@/lib/estadisticas/__tests__/datos";
+import { MENSAJE_RANGO_GENERICO } from "@/lib/estadisticas/periodo";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: <Dashboard vistaGlobal={capacidades.verEstadisticasGlobales} puedeCrear={capacidades.crearDiagnosticos}
@@ -131,10 +132,11 @@ describe("Dashboard — AC filtros de fecha", () => {
     expect(llamadas(fetchMock, "GET", "/estadisticas")).toHaveLength(1);
   });
 
-  it("si el servidor responde 400 RANGO_INVALIDO muestra el mensaje junto a «Hasta»", async () => {
+  it("si el servidor responde 400 RANGO_INVALIDO con un rango válido en el cliente, muestra el texto genérico junto a «Hasta» (CR-FE-4)", async () => {
     simularApi({ "GET /estadisticas": () => Response.json({ code: "RANGO_INVALIDO", error: "x" }, { status: 400 }) });
     render(<Dashboard vistaGlobal={false} puedeCrear={false} />);
-    expect(await screen.findByText("El rango no puede superar un año")).toBeInTheDocument();
+    expect(await screen.findByText(MENSAJE_RANGO_GENERICO)).toBeInTheDocument();
+    expect(screen.queryByText("El rango no puede superar un año")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Hasta")).toHaveAttribute("aria-invalid", "true");
   });
 });
@@ -203,14 +205,38 @@ describe("Dashboard — AC estados", () => {
       "GET /backoffice/empresas": empresas,
     });
     render(<Dashboard vistaGlobal puedeCrear={false} />);
-    const alerta = await screen.findByText("No se pudo cargar el resumen");
+    const alerta = await screen.findByText("El directorio de compañías no responde. Intenta de nuevo en unos segundos.");
     expect(alerta).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo cargar el resumen")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Error al cargar/).length).toBeGreaterThan(0);
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     });
     expect(await screen.findByText("1.702 únicos")).toBeInTheDocument();
     expect(llamadas(fetchMock, "GET", "/backoffice/estadisticas/global")).toHaveLength(2);
+  });
+});
+
+describe("Dashboard — 404 EMPRESA_NO_ENCONTRADA (CR-FE-2)", () => {
+  it("con un ?empresa= que ya no está habilitada explica el motivo y ofrece «Ver todas las compañías», no «Reintentar»", async () => {
+    h.params = new URLSearchParams(`desde=2026-11-01&hasta=2026-11-10&empresa=${E1}`);
+    const fetchMock = simularApi({
+      "GET /backoffice/estadisticas": () => Response.json({ code: "EMPRESA_NO_ENCONTRADA", error: "detalle interno" }, { status: 404 }),
+      "GET /backoffice/estadisticas/global": () => Response.json(estadisticas()),
+      "GET /backoffice/empresas": empresas,
+    });
+    render(<Dashboard vistaGlobal puedeCrear={false} />);
+    expect(await screen.findByText("Esa compañía no tiene Diagnóstico activo.")).toBeInTheDocument();
+    expect(screen.queryByText("detalle interno")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ver todas las compañías" }));
+    await waitFor(() => expect(query(fetchMock, "/backoffice/estadisticas/global")).toEqual([{ desde: "2026-11-01", hasta: "2026-11-10" }]));
+    const url = String(h.replace.mock.calls.at(-1)?.[0]);
+    expect(url).not.toContain("empresa=");
+    expect(url).toContain("desde=2026-11-01");
+    expect(await screen.findByText("1.702 únicos")).toBeInTheDocument();
+    expect(llamadas(fetchMock, "GET", "/backoffice/estadisticas")).toHaveLength(1);
   });
 });
 

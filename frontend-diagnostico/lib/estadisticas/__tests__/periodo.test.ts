@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  MENSAJE_HASTA_ANTERIOR,
+  MENSAJE_HASTA_FUTURO,
+  MENSAJE_RANGO_GENERICO,
   MENSAJE_RANGO_MAXIMO,
   diasDelRango,
   hoyColombia,
   leerRango,
+  mensajeRangoInvalido,
   rangoPorDefecto,
   sumarDias,
   validarRango,
@@ -64,5 +68,22 @@ describe("periodo — leerRango de la URL", () => {
     expect(leerRango(new URLSearchParams(), "2026-11-15")).toEqual({ desde: "2026-10-17", hasta: "2026-11-15" });
     expect(leerRango(new URLSearchParams("desde=ayer&hasta=hoy"), "2026-11-15")).toEqual({ desde: "2026-10-17", hasta: "2026-11-15" });
     expect(leerRango(new URLSearchParams("desde=2020-01-01&hasta=2026-11-15"), "2026-11-15")).toEqual({ desde: "2026-10-17", hasta: "2026-11-15" });
+  });
+});
+
+describe("periodo — mensajeRangoInvalido (CR-FE-4: el 400 RANGO_INVALIDO no trae la causa)", () => {
+  const hoy = "2026-11-15";
+
+  it("nombra la causa que encuentra la validación local: más de un año, fecha futura o «Hasta» anterior a «Desde»", () => {
+    expect(mensajeRangoInvalido({ desde: sumarDias(hoy, -366), hasta: hoy }, hoy)).toBe(MENSAJE_RANGO_MAXIMO);
+    expect(mensajeRangoInvalido({ desde: "2026-11-01", hasta: "2026-11-16" }, hoy)).toBe(MENSAJE_HASTA_FUTURO);
+    expect(mensajeRangoInvalido({ desde: "2026-11-10", hasta: "2026-11-01" }, hoy)).toBe(MENSAJE_HASTA_ANTERIOR);
+  });
+
+  it("si el rango es válido en el cliente (p. ej. relojes desfasados), usa el texto genérico que cubre las tres causas", () => {
+    expect(mensajeRangoInvalido({ desde: "2026-10-17", hasta: hoy }, hoy)).toBe(MENSAJE_RANGO_GENERICO);
+    expect(MENSAJE_RANGO_GENERICO).toMatch(/un año/);
+    expect(MENSAJE_RANGO_GENERICO).toMatch(/futuras/);
+    expect(MENSAJE_RANGO_GENERICO).toMatch(/inicial/);
   });
 });

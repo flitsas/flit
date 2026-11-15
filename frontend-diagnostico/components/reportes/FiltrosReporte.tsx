@@ -5,7 +5,7 @@ import { Button } from "@flit/ui/Button";
 import { ChipFiltro, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 import { FiltrosDashboard } from "@/components/estadisticas/FiltrosDashboard";
-import { SelectorCompania } from "@/components/estadisticas/SelectorCompania";
+import { SelectorCompania, type ListaEmpresas } from "@/components/estadisticas/SelectorCompania";
 import { normalizarPlaca } from "@/lib/reportes/api";
 import { admitePlaca, filtrosEnum, filtrosPorDefecto, hayFiltros } from "@/lib/reportes/catalogo";
 import { etiquetaFiltro, etiquetaValor } from "@/lib/reportes/formato";
@@ -24,6 +24,7 @@ export function FiltrosReporte({
   vistaGlobal,
   onCambiar,
   errorRango = null,
+  empresas,
 }: {
   reporte: ReporteCatalogo;
   valor: FiltrosReporteValor;
@@ -31,6 +32,8 @@ export function FiltrosReporte({
   vistaGlobal: boolean;
   onCambiar: (valor: FiltrosReporteValor) => void;
   errorRango?: string | null;
+  /** Lista de compañías ya pedida por el módulo (CR-FE-11); sin ella, el selector pide la suya. */
+  empresas?: ListaEmpresas;
 }) {
   const id = useId();
   const [placa, setPlaca] = useState(valor.placa);
@@ -53,7 +56,7 @@ export function FiltrosReporte({
   return (
     <div role="group" aria-label="Filtros del reporte" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">
       <FiltrosDashboard valor={valor.rango} hoy={hoy} onAplicar={(rango) => onCambiar({ ...valor, rango })} errorServidor={errorRango} />
-      {vistaGlobal ? <SelectorCompania value={valor.empresa} onChange={(empresa) => onCambiar({ ...valor, empresa })} /> : null}
+      {vistaGlobal ? <SelectorCompania value={valor.empresa} lista={empresas} onChange={(empresa) => onCambiar({ ...valor, empresa })} /> : null}
       {filtrosEnum(reporte).map((f) => (
         <div key={f.clave} role="group" aria-labelledby={`${id}-${f.clave}`} className="flex flex-col gap-1">
           <span id={`${id}-${f.clave}`} className={ETIQUETA_CLS}>

@@ -81,10 +81,11 @@ describe("manual/diagnostico (HU #14580) — artículos nuevos y actualizados", 
     expect(t).toMatch(/no incluye(n)? (el )?nombre/i);
   });
 
-  it("Reportes: exportar Excel y PDF, límites 5 000 / 1 000 y los mensajes de error en lenguaje de usuario", () => {
+  it("Reportes: exportar Excel y PDF, límites 5.000 / 1.000 (como los pinta la UI, CR-FE-9) y los mensajes de error en lenguaje de usuario", () => {
     const t = textoDe("6-diagnostico/14-reportes");
-    for (const frase of ["«Exportar Excel»", "«Exportar PDF»", "5 000", "1 000", "Acota el filtro", "Ya hay una exportación en curso", "25, 50 o 100"])
+    for (const frase of ["«Exportar Excel»", "«Exportar PDF»", "5.000", "1.000", "«Acota el filtro: máximo 5.000 registros en Excel»", "Ya hay una exportación en curso", "25, 50 o 100"])
       expect(t, frase).toContain(frase);
+    expect(t).not.toMatch(/\b\d{1,3} 000\b/);
     expect(t).toMatch(/todo el filtro|todos los registros del filtro/i);
     // Nada de jerga interna de seguridad ni códigos HTTP en el texto del usuario.
     expect(t).not.toMatch(/\b(422|429|accesos_reporte|SP-\d+|tenant)\b/);

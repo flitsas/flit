@@ -17,12 +17,6 @@ export interface BotonPdfVehiculoProps {
   vehiculo: FilaVehiculo;
 }
 
-/**
- * «PDF» de una fila de la grilla (HU #13851, F07-C4/C13): enlace con `download` al PDF del vehículo por el BFF cuando el
- * backend lo emitiría (`puedeEmitirPdf`, la regla de EmisionPdf.Puede); si no, botón deshabilitado con la ayuda «Disponible
- * cuando terminen…». En un lote INCOMPLETO con celdas en error avisa que saldrán como «consulta no disponible». Un 409 del
- * servidor se muestra en texto, sin romper la fila. Nunca distingue celdas manuales (R-20).
- */
 /** Lógica del PDF del vehículo, sin presentación (FE-2: la usan este botón y el menú «Acciones» del tablero). */
 export function useAccionPdf({ diagnosticoId, estadoLote, vehiculo }: BotonPdfVehiculoProps) {
   const { descargando, error, alHacerClic } = useDescarga(`diagnostico-${vehiculo.identificador}.pdf`);
@@ -33,6 +27,12 @@ export function useAccionPdf({ diagnosticoId, estadoLote, vehiculo }: BotonPdfVe
   return { url: urlPdfVehiculo(diagnosticoId, vehiculo.id), nombre, habilitado, ayuda, descargando, error, alHacerClic };
 }
 
+/**
+ * «PDF» de una fila de la grilla (HU #13851, F07-C4/C13): enlace con `download` al PDF del vehículo por el BFF cuando el
+ * backend lo emitiría (`puedeEmitirPdf`, la regla de EmisionPdf.Puede); si no, botón deshabilitado con la ayuda «Disponible
+ * cuando terminen…». En un lote INCOMPLETO con celdas en error avisa que saldrán como «consulta no disponible». Un 409 del
+ * servidor se muestra en texto, sin romper la fila. Nunca distingue celdas manuales (R-20).
+ */
 export function BotonPdfVehiculo(props: BotonPdfVehiculoProps) {
   const idAyuda = useId();
   const { url, nombre, habilitado, ayuda, descargando, error, alHacerClic } = useAccionPdf(props);
