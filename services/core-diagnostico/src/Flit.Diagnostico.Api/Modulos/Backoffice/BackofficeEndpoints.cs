@@ -51,6 +51,11 @@ public static class BackofficeEndpoints
         // HU #14576 (ADR-0087 D-5): la gestión FLIT del saneamiento, en sus dos grupos (A sin empresa explícita y B con ella).
         SaneamientosBackofficeEndpoints.Map(api);
 
+        // HU #14579, BE-0 (ADR-0088): estadísticas (E2, E3) y reportes (B0–B6) del backoffice, cada uno con sus grupos; E3 y B4–B6 llevan
+        // .SoloEmpresaHabilitada() antes de ConEmpresaExplicita (SP-3). Los llenan BE-1 y BE-4.
+        Estadisticas.EstadisticasRegistro.MapEstadisticasBackoffice(api);
+        Reportes.Catalogo.ReportesRegistro.MapReportesBackoffice(api);
+
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }
 

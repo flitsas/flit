@@ -2698,6 +2698,109 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.AccesoReporte", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación; se imprime en el PDF y en la hoja Aviso del Excel.");
+
+                    b.Property<string>("Alcance")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("alcance")
+                        .HasComment("COMPANIA, BACKOFFICE_EMPRESA o BACKOFFICE_GLOBAL.");
+
+                    b.Property<DateOnly>("Desde")
+                        .HasColumnType("date")
+                        .HasColumnName("desde")
+                        .HasComment("Inicio del rango pedido (día de Colombia, inclusive).");
+
+                    b.Property<Guid?>("EmpresaConsultada")
+                        .HasColumnType("uuid")
+                        .HasColumnName("empresa_consultada")
+                        .HasComment("Compañía consultada; solo en BACKOFFICE_EMPRESA.");
+
+                    b.Property<int>("Empresas")
+                        .HasColumnType("integer")
+                        .HasColumnName("empresas")
+                        .HasComment("Compañías distintas entregadas.");
+
+                    b.Property<DateTimeOffset>("Fecha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha")
+                        .HasDefaultValueSql("now()")
+                        .HasComment("Momento del acceso.");
+
+                    b.Property<int>("Filas")
+                        .HasColumnType("integer")
+                        .HasColumnName("filas")
+                        .HasComment("Filas entregadas (la página o el archivo).");
+
+                    b.Property<string>("Filtros")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("filtros")
+                        .HasComment("Filtros de la lista blanca con valores de enum; la placa se guarda como placa_filtrada: true, nunca su valor.");
+
+                    b.Property<string>("Formato")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("formato")
+                        .HasComment("PANTALLA, XLSX o PDF.");
+
+                    b.Property<DateOnly>("Hasta")
+                        .HasColumnType("date")
+                        .HasColumnName("hasta")
+                        .HasComment("Fin del rango pedido (día de Colombia, inclusive).");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Compañía del lector (la del token), también en el backoffice.");
+
+                    b.Property<string>("TipoReporte")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("tipo_reporte")
+                        .HasComment("vehiculos, consultas, saneamientos, derivaciones o consumo.");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Usuario que vio o descargó (claim sub, seudónimo).");
+
+                    b.HasKey("Id")
+                        .HasName("pk_accesos_reporte");
+
+                    b.HasIndex("TenantId", "Fecha")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_accesos_reporte_tenant_fecha");
+
+                    b.ToTable("accesos_reporte", "diagnostico", t =>
+                        {
+                            t.HasComment("Registro de cada visualización y descarga del módulo de reportes (ADR-0088, Ley 1581 art. 17 lit. d). Sin PII. Retención: la de lecturas_backoffice (pendiente LT). Solo inserción.");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_alcance", "alcance IN ('COMPANIA', 'BACKOFFICE_EMPRESA', 'BACKOFFICE_GLOBAL')");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_empresa_consultada", "(alcance = 'BACKOFFICE_EMPRESA') = (empresa_consultada IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_empresas", "empresas >= 0");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_filas", "filas >= 0");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_formato", "formato IN ('PANTALLA', 'XLSX', 'PDF')");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_rango", "desde <= hasta");
+
+                            t.HasCheckConstraint("ck_accesos_reporte_tipo", "tipo_reporte IN ('vehiculos', 'consultas', 'saneamientos', 'derivaciones', 'consumo')");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>
                 {
                     b.Property<Guid>("Id")

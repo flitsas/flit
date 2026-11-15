@@ -202,6 +202,9 @@ public static class Modulos
         Saneamiento.DeudaEndpoints.Map(api);
         Notificaciones.NotificacionesEndpoints.Map(api);
         Saneamiento.SaneamientoEndpoints.Map(api);
+        // HU #14579, BE-0 (ADR-0088): E1 y R0–R3 (los llenan BE-1..BE-3).
+        Estadisticas.EstadisticasRegistro.MapEstadisticas(api);
+        Reportes.Catalogo.ReportesRegistro.MapReportesCatalogo(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

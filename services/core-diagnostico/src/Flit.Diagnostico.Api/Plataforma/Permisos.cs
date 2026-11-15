@@ -11,6 +11,9 @@ public static class Permisos
     public const string DiagnosticosVer = "diagnostico.diagnosticos.ver";
     public const string BackofficeVer = "diagnostico.backoffice.ver";
     public const string ReportesDescargar = "diagnostico.reportes.descargar";
+
+    /// <summary>Ver en pantalla los reportes de la compañía, con datos personales (HU #14579, BE-0, O8 = D-1, ADR-0088). Los dos roles por defecto.</summary>
+    public const string ReportesVer = "diagnostico.reportes.ver";
     public const string DerivacionCrear = "diagnostico.derivacion.crear";
     public const string ConfiguracionVer = "diagnostico.configuracion.ver";
     public const string ConfiguracionEditar = "diagnostico.configuracion.editar";
@@ -36,7 +39,8 @@ public static class Permisos
         ("diagnostico_diagnosticos", "Diagnóstico · Diagnósticos",
         [
             (DiagnosticosCrear, "Crear diagnósticos y cargar vehículos"), (DiagnosticosVer, "Ver diagnósticos y el detalle de cada celda"),
-            (ReportesDescargar, "Descargar reportes y evidencias"), (DerivacionCrear, "Derivar un vehículo a un trámite"),
+            (ReportesDescargar, "Descargar reportes, exportaciones y evidencias"), (DerivacionCrear, "Derivar un vehículo a un trámite"),
+            (ReportesVer, "Ver reportes de la compañía (con datos personales)"),
         ]),
         ("diagnostico_consultas", "Diagnóstico · Consultas",
         [
@@ -59,7 +63,9 @@ public static class Permisos
         ]),
     ];
 
-    private static readonly string[] Usuario = [DiagnosticosCrear, DiagnosticosVer, ReportesDescargar, DerivacionCrear, ConfiguracionVer, SaneamientoSolicitar];
+    // HU #14579, BE-0 (O8 = D-1, ADR-0088): reportes.ver va a los dos roles por defecto. Un rol ya asignado en Identidad lo recibe solo si la
+    // plataforma propaga el manifiesto a los roles existentes (riesgo S12 de la ola, se verifica en BE-2).
+    private static readonly string[] Usuario = [DiagnosticosCrear, DiagnosticosVer, ReportesDescargar, DerivacionCrear, ConfiguracionVer, SaneamientoSolicitar, ReportesVer];
 
     /// <summary>
     /// Roles por defecto (§6.2). <c>admin_diagnostico</c> es el rol de sistema que la plataforma ya asigna a todo
