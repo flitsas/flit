@@ -12,9 +12,14 @@ export interface SerieBarras {
 /** Rótulos del eje como máximo: con más cubetas se rotula una de cada N para que no se encimen. */
 const ROTULOS_MAXIMOS = 8;
 
+/** Desplegable «Ver datos» (auditoría UI UA-3): enlace de texto del kit con foco visible. */
+const RESUMEN_CLS =
+  "w-fit cursor-pointer rounded-sm font-semibold text-[color:var(--kit-azul-texto)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--di-action)]";
+
 /**
  * Columnas agrupadas por cubeta (spec-ui §4.3 `serie.temporal`, opción A de §4.6: CSS sin dependencias). Las barras son
- * decorativas (`aria-hidden`) con su valor en `title`; los datos van en texto en la leyenda y en la tabla alternativa.
+ * decorativas (`aria-hidden`) con su valor en `title`; los datos van en texto en la leyenda y en la tabla de «Ver datos»,
+ * visible al desplegarla (auditoría UI UA-3).
  */
 export function BarrasSerie({
   titulo,
@@ -62,11 +67,17 @@ export function BarrasSerie({
           ))}
         </div>
       </div>
-      <TablaAlternativa
-        titulo={titulo}
-        encabezados={["Periodo", ...series.map((s) => s.nombre)]}
-        filas={etiquetas.map((etiqueta, i) => ({ encabezado: etiqueta, celdas: series.map((s) => formatoEntero(s.valores[i] ?? 0)) }))}
-      />
+      <details className="group text-xs">
+        <summary className={RESUMEN_CLS}>Ver datos</summary>
+        <div className="mt-2 max-h-64 overflow-auto">
+          <TablaAlternativa
+            visible
+            titulo={titulo}
+            encabezados={["Periodo", ...series.map((s) => s.nombre)]}
+            filas={etiquetas.map((etiqueta, i) => ({ encabezado: etiqueta, celdas: series.map((s) => formatoEntero(s.valores[i] ?? 0)) }))}
+          />
+        </div>
+      </details>
     </Figura>
   );
 }

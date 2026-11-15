@@ -9,7 +9,7 @@ import { IconoDxDeuda } from "@/components/dx/iconos/IconoDxDeuda";
 import { useAccionSanear } from "@/components/saneamiento/BotonSanear";
 import type { ModoDiagnostico, EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import type { SaneamientoFila } from "@/lib/saneamiento/api";
-import { deLaPlaca, etiquetaSaneamiento } from "@/lib/saneamiento/estados";
+import { deLaPlaca } from "@/lib/saneamiento/estados";
 import type { FilaVehiculo, ResultadoReintento, TramiteFila } from "@/lib/tablero/api";
 import { MensajeTramite, useAccionTramite } from "./BotonCrearTramite";
 import { useAccionPdf } from "./BotonPdfVehiculo";
@@ -40,7 +40,6 @@ export interface AccionesVehiculoProps {
   onErrorReintento: (mensaje: string, refrescar: boolean) => void;
 }
 
-const ICONO_CLS = "h-3.5 w-3.5";
 type IconoItem = NonNullable<ActionsMenuItem["icon"]>;
 const BanderaApagada: IconoItem = ({ className }) => <IconoDxBandera tamano={16} className={className} />;
 const BanderaEncendida: IconoItem = ({ className }) => <IconoDxBandera tamano={16} encendida className={className} />;
@@ -51,12 +50,10 @@ const NubeBajar = iconoComo("nube-bajar") as IconoItem;
 const Reintento = iconoComo("reintento") as IconoItem;
 
 const MENSAJE_CLS = "max-w-[12rem] text-xs font-semibold";
-const CHIP_CLS =
-  "inline-flex items-center gap-1 rounded-full bg-[var(--di-accent-soft)] px-2 py-0.5 text-xs font-semibold text-[color:var(--di-action)]";
 
 /**
- * Columna «Acciones» de una fila del tablero (ola Diagnóstico UX 2026-11-15 · FE-2, spec-ui §2.3–§2.5): el chip del
- * saneamiento (solo lectura), el menú «Acciones» del Kit 2026 con los ítems en el orden D-103 (saneamiento · trámite ·
+ * Columna «Acciones» de una fila del tablero (ola Diagnóstico UX 2026-11-15 · FE-2, spec-ui §2.3–§2.5): el menú
+ * «Acciones» del Kit 2026 (el estado del saneamiento lo informa la columna Dictamen, auditoría UI UA-1) con los ítems en el orden D-103 (saneamiento · trámite ·
  * deuda · PDF · reintento) y, debajo del disparador, los mensajes de resultado. Sin la capacidad el ítem no existe; si la
  * acción no aplica ahora, sale deshabilitado con su motivo visible. Los modales de crear trámite van fuera del menú.
  * La lógica de cada acción vive en su hook (`useAccionSanear`, `useAccionTramite`, `useAccionPdf`, `useReintento`).
@@ -190,19 +187,10 @@ export function AccionesVehiculo({
     });
   }
 
-  const etiqueta = v.saneamiento?.estado ? etiquetaSaneamiento(v.saneamiento.estado)?.texto : undefined;
   const ocupado = tramite.enviando || reintento.enviando || (sanear.tipo === "alternar" && sanear.enVuelo);
 
   return (
     <div id={celdaId} className="flex flex-col items-start gap-1.5">
-      {/* spec-ui §2.4: el estado del saneamiento es información, no se esconde tras el desplegable. */}
-      {etiqueta && (
-        <span data-parte="chip-saneamiento" className={CHIP_CLS}>
-          <IconoDxBandera tamano={16} encendida className={ICONO_CLS} />
-          <span className="sr-only">Saneamiento: </span>
-          {etiqueta}
-        </span>
-      )}
       {items.length > 0 ? (
         <ActionsMenu variante="kit" ariaLabel={`Acciones de la placa ${placa}`} triggerLabel="Acciones" items={items} ocupado={ocupado} />
       ) : (

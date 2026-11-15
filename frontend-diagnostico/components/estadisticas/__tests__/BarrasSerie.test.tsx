@@ -28,6 +28,20 @@ describe("BarrasSerie — columnas agrupadas accesibles", () => {
     expect(within(figura).getByText("por día")).toBeInTheDocument();
   });
 
+  it("la tabla de valores es visible en un desplegable «Ver datos» (UA-3, quien ve la pantalla también lee las cifras)", () => {
+    render(<BarrasSerie titulo="Uso en el tiempo" etiquetas={["14/11", "15/11"]} series={SERIES} />);
+    const figura = screen.getByRole("figure", { name: "Uso en el tiempo" });
+    const resumen = within(figura).getByText("Ver datos");
+    expect(resumen.tagName).toBe("SUMMARY");
+    const desplegable = resumen.closest("details") as HTMLDetailsElement;
+    expect(desplegable.open).toBe(false);
+    fireEvent.click(resumen);
+    expect(desplegable.open).toBe(true);
+    const tabla = within(desplegable).getByRole("table", { name: /Uso en el tiempo/ });
+    expect(tabla).not.toHaveClass("sr-only");
+    expect(within(tabla).getByText("1.080")).toBeInTheDocument();
+  });
+
   it("las barras son decorativas (aria-hidden) y cada una lleva su valor en title", () => {
     const { container } = render(<BarrasSerie titulo="Uso" etiquetas={["14/11"]} series={SERIES} />);
     const grafico = container.querySelector("[data-parte='barras']");

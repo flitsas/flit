@@ -5,8 +5,9 @@ import type { FilaVehiculo } from "@/lib/tablero/api";
 import { ID, celda, llamadas, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: en la columna «Acciones» del tablero, <AccionesVehiculo vehiculo={v} capacidades={{ sanear, derivar,
-//   descargar, reprocesar }} onAbrirDeuda={(disparador) => setDeuda({ vehiculo: v, disparador })} … /> pinta el chip del
-//   saneamiento (solo lectura), el disparador «Acciones» con los ítems en orden D-103 y los mensajes de resultado debajo.
+//   descargar, reprocesar }} onAbrirDeuda={(disparador) => setDeuda({ vehiculo: v, disparador })} … /> pinta el disparador
+//   «Acciones» con los ítems en orden D-103 y los mensajes de resultado debajo. El estado del saneamiento lo informa la
+//   columna Dictamen (EtiquetaSaneamiento), no esta celda (auditoría UI UA-1).
 // Ola Diagnóstico UX 2026-11-15 · FE-2 (spec-ui §2.3–§2.5).
 
 const navegacion = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
@@ -123,16 +124,15 @@ describe("AccionesVehiculo — orden y visibilidad (FE-2, spec-ui §2.3)", () =>
 });
 
 describe("AccionesVehiculo — saneamiento (spec-ui §2.4)", () => {
-  it("con saneamiento en gestión: chip de solo lectura sobre el disparador y el ítem «Ver saneamiento» abre la deuda con el disparador", () => {
+  it("con saneamiento en gestión: sin chip duplicado de la columna Dictamen (UA-1) y el ítem «Ver saneamiento» abre la deuda con el disparador", () => {
     const onAbrirDeuda = vi.fn();
-    pintar({
+    const { container } = pintar({
       onAbrirDeuda,
       vehiculo: TERMINADO({ saneamiento: { estado: "EN_GESTION", elegible: false, motivo_no_elegible: "YA_SOLICITADO" } }),
     });
-    const chip = screen.getByText("Saneamiento:", { exact: false }).closest("[data-parte='chip-saneamiento']") as HTMLElement;
-    expect(chip).not.toBeNull();
-    expect(chip.tagName).not.toBe("BUTTON");
-    expect(chip).toHaveTextContent("En saneamiento");
+    expect(container.querySelector("[data-parte='chip-saneamiento']")).toBeNull();
+    expect(screen.queryByText("Saneamiento:", { exact: false })).toBeNull();
+    expect(screen.queryByText("En saneamiento")).toBeNull();
     abrir();
     fireEvent.click(screen.getByRole("menuitem", { name: "Ver saneamiento de la placa TST001: En saneamiento" }));
     expect(onAbrirDeuda).toHaveBeenCalledWith(disparador());

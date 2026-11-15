@@ -59,8 +59,8 @@ const KPIS: Kpi[] = [
 ];
 
 /**
- * Rejilla de KPIs del dashboard (spec-ui §4.5): `TarjetaMetrica` con cifra es-CO. Cargando: `—` y la tarjeta en espera
- * (aria-busy en la rejilla). Error: `—` con el ícono de alerta y «Error al cargar {etiqueta}» para lectores de pantalla.
+ * Rejilla de KPIs del dashboard (spec-ui §4.5): `TarjetaMetrica` con cifra es-CO. Cargando: `—` y aria-busy en la rejilla (sin
+ * `pendiente`, que es «algo espera atención», auditoría UI UA-2). Error: `—` con el ícono de alerta y «Error al cargar {etiqueta}» para lectores de pantalla.
  */
 export function TarjetasResumen({ resumen, estado, enlaces = {} }: { resumen: ResumenEstadisticas | null; estado: EstadoCarga; enlaces?: EnlacesResumen }) {
   return (
@@ -87,7 +87,6 @@ export function TarjetasResumen({ resumen, estado, enlaces = {} }: { resumen: Re
             cifra={cifra}
             icono={k.icono}
             pie={listo && k.pie ? k.pie(resumen) : undefined}
-            pendiente={estado === "cargando"}
             href={href}
             enlace={href ? Link : undefined}
           />
