@@ -1,4 +1,5 @@
 import { ADMIN_COMPANY_ARTICLES } from "./admin-company";
+import { DIAGNOSTICO_ARTICLES } from "./diagnostico";
 import { GESTOR_ARTICLES } from "./gestor";
 import { INTRO_ARTICLES } from "./intro";
 import { NORMATIVA_ARTICLES } from "./normativa";
@@ -13,4 +14,5 @@ export const MANUAL_ARTICLES: readonly ManualArticle[] = [
   ...OT_ARTICLES,
   ...ADMIN_COMPANY_ARTICLES,
   ...SUPERADMIN_ARTICLES,
+  ...DIAGNOSTICO_ARTICLES,
 ];

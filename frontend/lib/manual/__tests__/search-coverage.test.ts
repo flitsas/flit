@@ -90,6 +90,29 @@ const CASOS: { pregunta: string; perfil: ManualProfile; slug: string }[] = [
   { pregunta: "buscar en todas las compañías", perfil: "superadmin", slug: "4-superadmin/6-dr-flit-global" },
   // El Super Admin también ve la documentación de los demás perfiles (soporte)
   { pregunta: "liberar placa", perfil: "superadmin", slug: "2-ot/1-tramites-bandeja" },
+  // HU #14577 — Diagnóstico vehicular y saneamiento
+  { pregunta: "qué es diagnóstico vehicular", perfil: "gestor", slug: "6-diagnostico/1-que-es" },
+  { pregunta: "cómo entro a diagnóstico desde el hub", perfil: "gestor", slug: "6-diagnostico/1-que-es" },
+  { pregunta: "pestaña vehículos todas las placas", perfil: "gestor", slug: "6-diagnostico/2-inicio-y-vehiculos" },
+  { pregunta: "diagnóstico express placa o vin", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
+  { pregunta: "diagnóstico masivo con archivo de vehículos", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
+  { pregunta: "modo simple o con análisis ia", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
+  { pregunta: "semáforo de consultas del tablero", perfil: "gestor", slug: "6-diagnostico/4-tablero-y-dictamen" },
+  { pregunta: "dictamen viable o bloqueado", perfil: "gestor", slug: "6-diagnostico/4-tablero-y-dictamen" },
+  { pregunta: "impuesto departamental vigencias pagada", perfil: "gestor", slug: "6-diagnostico/5-impuesto-departamental" },
+  { pregunta: "departamento no soportado", perfil: "gestor", slug: "6-diagnostico/5-impuesto-departamental" },
+  { pregunta: "descargar zip de evidencias del lote", perfil: "gestor", slug: "6-diagnostico/6-evidencias-y-avisos" },
+  { pregunta: "avisos de la campana de diagnóstico", perfil: "gestor", slug: "6-diagnostico/6-evidencias-y-avisos" },
+  { pregunta: "crear trámite desde el diagnóstico", perfil: "gestor", slug: "6-diagnostico/7-crear-tramite" },
+  { pregunta: "fuentes habilitadas del contrato de diagnóstico", perfil: "admin_company", slug: "6-diagnostico/8-configuracion" },
+  { pregunta: "quién ve los diagnósticos", perfil: "admin_company", slug: "6-diagnostico/8-configuracion" },
+  { pregunta: "llenar a mano una consulta en error", perfil: "superadmin", slug: "6-diagnostico/9-backoffice-flit" },
+  { pregunta: "ajuste flit del dictamen", perfil: "superadmin", slug: "6-diagnostico/9-backoffice-flit" },
+  { pregunta: "solicitar saneamiento de un vehículo", perfil: "gestor", slug: "6-diagnostico/10-saneamiento" },
+  { pregunta: "deuda y saneamiento", perfil: "gestor", slug: "6-diagnostico/10-saneamiento" },
+  { pregunta: "bandeja de saneamientos tomar", perfil: "superadmin", slug: "6-diagnostico/11-saneamiento-gestion-flit" },
+  { pregunta: "cerrar como saneado o no procede", perfil: "superadmin", slug: "6-diagnostico/11-saneamiento-gestion-flit" },
+  { pregunta: "qué significa novedad en el semáforo", perfil: "gestor", slug: "6-diagnostico/12-estados-y-preguntas" },
 ];
 
 describe("manual/search-coverage (HU-H)", () => {

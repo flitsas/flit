@@ -10,13 +10,18 @@ export const MANUAL_NAV_SECTIONS: readonly ManualNavSection[] = [
   { id: "ot", label: COPY.A05, order: 3 },
   { id: "admin-company", label: "Administración de compañía", order: 4 },
   { id: "superadmin", label: "Super Admin", order: 5 },
+  // HU #14577 — producto de la Suite con aplicación propia; sus artículos llevan la audiencia de cada perfil.
+  { id: "diagnostico", label: "Diagnóstico vehicular", order: 6 },
 ] as const;
 
 export const MANUAL_HOME_SLUG = "0-introduccion/1-bienvenida";
 
-/** Manual v2.1 (DR-FLIT v3): 4 perfiles + Normativa (fuente principal), 46 artículos, sugerencia contextual y filtro por rol. */
-export const MANUAL_VERSION = "2.1.0";
-export const MANUAL_VERSION_DATE = "Septiembre 2026";
+/**
+ * Manual v2.2 (DR-FLIT v3): 4 perfiles + Normativa (fuente principal) + Diagnóstico vehicular y saneamiento (HU #14577),
+ * 63 artículos, sugerencia contextual y filtro por rol.
+ */
+export const MANUAL_VERSION = "2.2.0";
+export const MANUAL_VERSION_DATE = "Noviembre 2026";
 
 /**
  * HU-G — artículo que DR. FLIT sugiere según el módulo en el que está el usuario.
