@@ -29,6 +29,12 @@ import { nombreRol } from "@/lib/rotulos";
 
 /** Cabecera de tabla del UI Kit 2026 (auditoría m-4): 13 px en negrita sobre la barra --table-header-*. */
 const CABECERA_CLS = TABLA_HEADER_CELL_CLS;
+/**
+ * Cabecera agrupada (RUNT, SIMIT) centrada: se **sustituye** el text-left del kit. Añadir text-center detrás no basta,
+ * porque con las dos utilidades en la misma celda gana la que Tailwind emite después en el CSS (text-left), no la del
+ * final del string (E2E acciones-detalle:68, spec-ui §2.6).
+ */
+const CABECERA_GRUPO_CLS = TABLA_HEADER_CELL_CLS.replace(/\btext-left\b/, "text-center");
 const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" } as const;
 /** Separador vertical entre columnas de la cabecera. */
 const SEPARADOR_CLS = "border-l border-card/60";
@@ -257,8 +263,8 @@ export function GrillaSemaforos({
             </th>
             {PILARES.map((p) =>
               p.fuentes.length > 1 ? (
-                // FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas (text-center después de text-left).
-                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_CLS} ${SEPARADOR_CLS} text-center`} style={CABECERA_ESTILO}>
+                // FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas (sin el text-left del kit).
+                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_GRUPO_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
                   <RotuloConIcono Icono={ICONO_PILAR[p.nombre]} centrado>
                     {p.nombre}
                   </RotuloConIcono>

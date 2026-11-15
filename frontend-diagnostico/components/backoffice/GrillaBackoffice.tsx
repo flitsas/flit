@@ -129,7 +129,9 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   // AC47: la auditoría de versiones del dictamen (autor, motivo, versiones) es solo de backoffice y exige verAuditoria.
   const puedeAuditar = sesion?.capacidades.verAuditoria ?? false;
   const gestionaSaneamiento = puedeGestionarSaneamiento(sesion?.capacidades);
-  const [auditoria, setAuditoria] = useState<FilaVehiculo | null>(null);
+  // El disparador viaja con la fila: el retorno de foco por defecto del Modal no sobrevive al doble montaje de StrictMode
+  // (next dev captura como «previo» el título del propio modal), así que se devuelve aquí, como en PanelDictamen.
+  const [auditoria, setAuditoria] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
   const [llenado, setLlenado] = useState<Llenado | null>(null);
@@ -291,7 +293,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
                     {puedeAuditar && (
                       <button
                         type="button"
-                        onClick={() => setAuditoria(v)}
+                        onClick={(e) => setAuditoria({ vehiculo: v, disparador: e.currentTarget })}
                         className="rounded-full px-2 py-1 text-xs font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
                       >
                         <span aria-hidden="true">Auditoría</span>
@@ -346,8 +348,16 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
         />
       )}
       {auditoria && (
-        <PanelModal abierto onCerrar={() => setAuditoria(null)} titulo={`Auditoría del dictamen · ${auditoria.placa || auditoria.vin || auditoria.identificador}`}>
-          <AuditoriaDictamen diagnosticoId={diagnosticoId} vehiculoId={auditoria.id} empresa={empresa} />
+        <PanelModal
+          abierto
+          onCerrar={() => {
+            const { disparador } = auditoria;
+            setAuditoria(null);
+            if (disparador?.isConnected) disparador.focus();
+          }}
+          titulo={`Auditoría del dictamen · ${auditoria.vehiculo.placa || auditoria.vehiculo.vin || auditoria.vehiculo.identificador}`}
+        >
+          <AuditoriaDictamen diagnosticoId={diagnosticoId} vehiculoId={auditoria.vehiculo.id} empresa={empresa} />
         </PanelModal>
       )}
       {dictamen && (

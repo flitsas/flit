@@ -528,7 +528,9 @@ describe("GrillaSemaforos — FE-2 encabezados RUNT/SIMIT agrupados", () => {
       const th = within(tabla).getByRole("columnheader", { name: grupo });
       const clases = th.className.split(/\s+/);
       expect(clases).toContain("text-center");
-      expect(clases.lastIndexOf("text-center")).toBeGreaterThan(clases.lastIndexOf("text-left"));
+      // Con text-left y text-center en la misma celda gana la que Tailwind emite después (text-left), no la del final
+      // del string: la cabecera agrupada no debe arrastrar el text-left de TABLA_HEADER_CELL_CLS (E2E acciones-detalle:68).
+      expect(clases, `${grupo}: sin text-left`).not.toContain("text-left");
       expect((th.firstElementChild as HTMLElement).className).toContain("justify-center");
     }
   });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GrillaBackoffice } from "@/components/backoffice/GrillaBackoffice";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
@@ -252,6 +253,29 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
     expect(panel.firstElementChild?.className).toContain("max-w-[640px]");
     fireEvent.mouseDown(panel);
     expect(screen.queryByRole("dialog", { name: "Auditoría del dictamen · TST001" })).toBeNull();
+  });
+
+  it("FE-1: Escape en «Auditoría del dictamen» devuelve el foco a su botón también con StrictMode (next dev)", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    simularApi({
+      [RUTA_GRILLA]: () => Response.json(grillaBo()),
+      [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen/versiones`]: () => Response.json({ versiones: [] }),
+    });
+    render(
+      <StrictMode>
+        <GrillaBackoffice diagnosticoId={LOTE} empresa={EMPRESA_A} />
+      </StrictMode>,
+    );
+    await tabla();
+    const boton = screen.getByRole("button", { name: "Auditoría del dictamen de TST001" });
+    boton.focus();
+    fireEvent.click(boton);
+    const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
+    await within(panel).findByText("Este vehículo aún no tiene dictamen.");
+    expect(panel.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
   });
 
   it("AC47: sin verAuditoria no se ofrece la auditoría", async () => {
