@@ -23,11 +23,9 @@ import { TarjetasResumen } from "./TarjetasResumen";
 import { useEstadisticas } from "./useEstadisticas";
 import { BarraApilada } from "./graficas/BarraApilada";
 import { BarrasSerie } from "./graficas/BarrasSerie";
-import { TITULO_SECCION_CLS } from "./graficas/Figura";
+import { SECCION_CLS, TITULO_SECCION_CLS } from "./graficas/Figura";
 import { ListaBarras } from "./graficas/ListaBarras";
 
-/** Tarjeta de sección del kit (spec-ui §4.2). */
-export const SECCION_CLS = "flex flex-col gap-4 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-4";
 
 const CHIP_GLOBAL_CLS =
   "inline-flex w-fit items-center gap-1 rounded-full bg-[var(--di-accent-soft)] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--kit-azul-texto)]";

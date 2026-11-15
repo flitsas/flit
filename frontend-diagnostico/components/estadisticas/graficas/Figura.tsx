@@ -2,6 +2,8 @@ import { useId, type ReactNode } from "react";
 
 /** Título de sección del dashboard (spec-ui §4.2): `text-base font-semibold text-flit-primary`. */
 export const TITULO_SECCION_CLS = "text-base font-semibold text-flit-primary";
+/** Tarjeta de sección del kit (spec-ui §4.2), compartida por el dashboard y los reportes. */
+export const SECCION_CLS = "flex flex-col gap-4 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-4";
 export const SUBTITULO_CLS = "text-xs text-[color:var(--di-text-secondary)]";
 
 /**
