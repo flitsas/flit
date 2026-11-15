@@ -51,7 +51,7 @@ import {
  *   - link o button «Nuevo diagnóstico» · heading (h2) «Uso en el tiempo», «Resultado», «Salud de las fuentes»,
  *     «Saneamientos», «Trámites», «Compañías con más uso» · figure (con figcaption) · table (datos alternativos)
  *   - texto «Aún no hay diagnósticos en este periodo» · button o link «Ver los últimos 90 días»
- *   - texto «/^No se pudo cargar/» · button «Reintentar» · texto «Cargando…» (role=status, aria-busy)
+ *   - texto «/^No se pudo cargar/» · button «Reintentar» · status «Cargando el resumen…» (VehicleLoader, auditoría UI UA-4)
  *   - dock: link «Diagnósticos» (/diagnosticos) · link «Reportes» (/reportes) · link «Inicio Diagnóstico» (/)
  *   - heading (h1) «Diagnóstico vehicular» (el listado, ahora en /diagnosticos)
  */
@@ -203,11 +203,12 @@ test.describe("FE-5 Dashboard de la compañía", () => {
       const espera = await retener(page, RUTA.estadisticas);
       await page.goto(`${APP}/`);
       await expect(H1(page)).toBeVisible();
-      const cargando = page.locator('[role="status"][aria-busy="true"]').first();
+      // Auditoría UI UA-4: la carga usa VehicleLoader (role=status con nombre, sin aria-busy), patrón de carga de la suite.
+      const cargando = page.getByRole("status", { name: "Cargando el resumen…" });
       await expect(cargando).toBeVisible();
       await revisarTemasOla(page, "dashboard-cargando-1280", { captura: "D-3", axe: false });
       await espera.soltar();
-      await expect(page.locator('[role="status"][aria-busy="true"]')).toHaveCount(0);
+      await expect(cargando).toHaveCount(0);
     });
 
     await test.step("vacío (EstadisticasDto del contrato con ceros)", async () => {
@@ -336,14 +337,16 @@ test.describe("FE-5 Dashboard del super admin", () => {
     await expect(selectorCompania(page)).toBeEnabled();
   });
 
-  test("503 de la vista global: «No se pudo cargar…» con «Reintentar» (sin el mensaje del servidor)", async ({ page }) => {
+  test("503 de la vista global: texto fijo por código con «Reintentar» (sin el mensaje del servidor)", async ({ page }) => {
     exigirBackoffice();
     await entrar(page, BACKOFFICE.usuario!, BACKOFFICE.clave!, "/");
     const sesion = await leerSesion(page);
     test.skip(!tieneVistaGlobal(sesion), "El usuario de backoffice no tiene verEstadisticasGlobales");
     const caida = await responder(page, RUTA.estadisticasGlobal, 503, { code: "IDENTIDAD_NO_DISPONIBLE", error: "Identidad caída (prueba)." }, { "Retry-After": "30" });
     await page.goto(`${APP}/`);
-    await expect(page.getByText(/^No se pudo cargar/).first()).toBeVisible();
+    // AP-9: con un `code` conocido sale su texto fijo (ERRORES_ESTADISTICAS, como en Dashboard.test.tsx); «No se pudo
+    // cargar el resumen» es el respaldo sin código. Nunca el mensaje del servidor.
+    await expect(page.getByRole("alert").filter({ hasText: "El directorio de compañías no responde. Intenta de nuevo en unos segundos." })).toBeVisible();
     await expect(page.getByText("Identidad caída (prueba).")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Reintentar" }).first()).toBeVisible();
     await caida.quitar();

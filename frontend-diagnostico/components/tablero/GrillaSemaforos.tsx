@@ -20,6 +20,7 @@ import { IconoDxRuntPersona } from "@/components/dx/iconos/IconoDxRuntPersona";
 import { IconoDxSimit } from "@/components/dx/iconos/IconoDxSimit";
 import { IconoDxSimitPersona } from "@/components/dx/iconos/IconoDxSimitPersona";
 import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
+import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { nombreFuente, nombreSubfuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
@@ -233,7 +234,8 @@ export function GrillaSemaforos({
   const izquierdaPlaca = casillaVehiculo ? "min-[900px]:left-10" : "min-[900px]:left-0";
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
+    // Ronda 2 de E2E: mismo patrón que el resto de contenedores desplazables de la ola (región enfocable solo con desborde).
+    <RegionDesplazable nombre="Semáforo de consultas del lote" className="rounded-xl border border-border">
       <table aria-label="Semáforo de consultas del lote" className={`w-full min-w-[1280px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
@@ -345,6 +347,6 @@ export function GrillaSemaforos({
           })}
         </tbody>
       </table>
-    </div>
+    </RegionDesplazable>
   );
 }

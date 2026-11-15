@@ -265,7 +265,11 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
   return (
     <>
       {cabecera}
-      <AvisoDatosPersonales reporte={activo} />
+      {/* Ronda 2 de E2E (axe color-contrast): el fondo warning del kit es translúcido; sobre el lienzo azulado el texto
+          bajaba a 4,31:1. Base opaca de tarjeta con el mismo radio del InlineAlert (9 px). */}
+      <div className="rounded-[9px] bg-[var(--di-surface-elevated)]">
+        <AvisoDatosPersonales reporte={activo} />
+      </div>
       <SelectorReporte
         reportes={reportes}
         activo={activo.tipo}

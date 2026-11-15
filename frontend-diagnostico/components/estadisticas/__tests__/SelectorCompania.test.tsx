@@ -44,3 +44,17 @@ describe("SelectorCompania — selector de la vista global", () => {
     expect(llamadas(fetchMock, "GET", "/backoffice/empresas")).toHaveLength(2);
   });
 });
+
+// Ronda 2 de E2E (dashboard.spec.ts:290 y reportes.spec.ts:406, axe target-size WCAG 2.2 · 2.5.8): con una compañía
+// elegida, el botón «Quitar selección» del SearchableSelect del kit mide 22 px de ancho. El kit queda fuera del alcance
+// U10: Diagnóstico pasa por `className` un ancho mínimo de 24 px solo para ese botón (reportado como hueco del kit).
+describe("SelectorCompania — tamaño del objetivo «Quitar selección»", () => {
+  it("con una compañía elegida, el SearchableSelect lleva el ancho mínimo de 24 px para «Quitar selección»", async () => {
+    simularApi({ "GET /backoffice/empresas": empresas });
+    render(<SelectorCompania value={E1} onChange={() => {}} />);
+    const quitar = await screen.findByRole("button", { name: "Quitar selección" });
+    const raiz = quitar.closest("[class*='Quitar']") as HTMLElement | null;
+    expect(raiz?.className).toContain("[&_button[aria-label^='Quitar']]:min-w-6");
+    expect(raiz?.className).toContain("[&_button[aria-label^='Quitar']]:min-h-6");
+  });
+});

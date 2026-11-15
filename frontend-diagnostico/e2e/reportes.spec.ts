@@ -66,7 +66,9 @@ const pestanas = (page: Page) => page.getByRole("tablist", { name: "Reportes dis
 const excel = (page: Page) => page.getByRole("button", { name: /^(Exportar Excel|Generando…)/ }).first();
 const pdf = (page: Page) => page.getByRole("button", { name: /^(Exportar PDF|Generando…)/ }).last();
 const selectorCompania = (page: Page) => page.getByRole("combobox", { name: "Compañía" });
-const filtroPlaca = (page: Page) => page.getByRole("textbox", { name: "Placa", exact: true });
+// El nombre accesible es la etiqueta visible del componente («Placa (inicio)», FiltrosReporte y su unit test); la spec-ui
+// §5.3 no fija otro texto. Ronda 2 de E2E: el test buscaba «Placa» exacto, que el componente nunca pintó.
+const filtroPlaca = (page: Page) => page.getByRole("textbox", { name: "Placa (inicio)", exact: true });
 
 interface Catalogo {
   reportes: { tipo: string; nombre: string; contiene_pii: boolean; maximo_excel: number; maximo_pdf: number }[];
@@ -175,10 +177,17 @@ test.describe("FE-6 reportes de la compañía", () => {
       const filas = page.getByRole("combobox", { name: "Filas por página" });
       await expect(filas).toBeVisible();
       const opciones = await filas.locator("option").allTextContents();
-      const menor = opciones.map(Number).filter((n) => n > 0).sort((a, b) => a - b)[0];
-      test.skip(!menor, "Sin opciones en «Filas por página»");
-      // Con un tamaño de 1 fila no cabe en el componente; se reescribe la respuesta real para tener dos páginas.
-      const dos = await reescribir<PaginaReporte>(page, RUTA.reporte, (real) => ({ ...real, total: Math.max(real.total, menor * 2 + 1) }));
+      // El tamaño por defecto (25) ya es la opción menor: elegirla no cambia nada ni pide la API. Se elige otra opción.
+      const actual = await filas.inputValue();
+      const menor = opciones.map(Number).filter((n) => n > 0 && String(n) !== actual).sort((a, b) => a - b)[0];
+      test.skip(!menor, "Sin otra opción en «Filas por página»");
+      // Se reescribe la respuesta real para tener dos páginas: el total y, si la página real llega vacía (la semilla no
+      // da para dos páginas), sus filas con las de la primera respuesta, para que la tabla y el paginador sigan pintados.
+      let filasReales: PaginaReporte["filas"] = [];
+      const dos = await reescribir<PaginaReporte>(page, RUTA.reporte, (real) => {
+        if (real.filas.length) filasReales = real.filas;
+        return { ...real, total: Math.max(real.total, menor * 2 + 1), filas: real.filas.length ? real.filas : filasReales };
+      });
       const cambio = page.waitForResponse((r) => RUTA.reporte.test(r.url()) && new URL(r.url()).searchParams.get("tamano") === String(menor));
       await filas.selectOption(String(menor));
       await cambio;

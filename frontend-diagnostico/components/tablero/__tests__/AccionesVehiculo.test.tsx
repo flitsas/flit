@@ -166,6 +166,47 @@ describe("AccionesVehiculo — saneamiento (spec-ui §2.4)", () => {
     expect(alerta.textContent).toBeTruthy();
     expect(disparador().compareDocumentPosition(alerta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  // Ronda 2 de E2E (acciones-detalle.spec.ts:239): el éxito solo iba a la región viva de la pantalla; §2.5 lo pide
+  // también bajo el disparador, en role=status, con el foco quieto en «Acciones».
+  it("al confirmarse el PUT, el resultado va bajo el disparador en role=status y el foco no se mueve (§2.5)", async () => {
+    simularApi({
+      [`PUT /diagnosticos/${ID}/vehiculos/vehiculo-1/saneamiento`]: () =>
+        Response.json({ id: "s1", version: 1, estado: "SOLICITADO", solicitado_en: "2026-11-14T15:00:00Z", solicitado_por_mi: true, renglones: [], historial: [] }, { status: 201 }),
+    });
+    pintar();
+    abrir();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Solicitar saneamiento de la placa TST001" }));
+    });
+    const estado = screen.getByRole("status");
+    expect(estado).toHaveTextContent("Saneamiento solicitado para TST001.");
+    expect(estado).toHaveStyle({ color: "var(--badge-success-fg)" });
+    expect(disparador().compareDocumentPosition(estado) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(disparador()).toHaveFocus();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("al quitar la solicitud, el status dice que se quitó; si luego falla, el status desaparece y queda solo el alert", async () => {
+    let falla = false;
+    simularApi({
+      [`DELETE /diagnosticos/${ID}/vehiculos/vehiculo-1/saneamiento`]: () =>
+        falla ? Response.json({ code: "X", error: "x" }, { status: 500 }) : new Response(null, { status: 204 }),
+    });
+    pintar({ vehiculo: TERMINADO({ saneamiento: { estado: "SOLICITADO", elegible: false, motivo_no_elegible: "YA_SOLICITADO" } }) });
+    abrir();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Quitar solicitud de saneamiento de la placa TST001" }));
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Se quitó la solicitud de saneamiento de TST001.");
+    falla = true;
+    abrir();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Quitar solicitud de saneamiento de la placa TST001" }));
+    });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert").textContent).toBeTruthy();
+  });
 });
 
 describe("AccionesVehiculo — resultados (spec-ui §2.5)", () => {

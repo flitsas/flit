@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { Placa } from "@flit/ui/Placa";
+import { RegionDesplazableTabla } from "@/components/comun/RegionDesplazable";
 import { formatoEntero } from "@/lib/estadisticas/formato";
 import { TAMANOS_REPORTE, TOPE_DESPLAZAMIENTO } from "@/lib/reportes/catalogo";
 import { NOMBRE_REPORTE, VACIO, formatoCelda } from "@/lib/reportes/formato";
@@ -64,23 +65,26 @@ export function TablaReporte({
 
   return (
     <div className="flex flex-col gap-2">
-      <DataTable<Fila>
-        ariaLabel={NOMBRE_REPORTE[tipo]}
-        columns={columnas}
-        rows={filas}
-        getRowKey={(f) => f.__clave}
-        status={cargando ? "loading" : "ready"}
-        minWidth={Math.max(720, columnas.length * 140)}
-        tarjeta={false}
-        pagination={{
-          page: pagina?.pagina ?? 1,
-          pageSize: tamano,
-          totalCount: total,
-          onPageChange: (p) => onPagina(Math.min(p, paginaMaxima)),
-          onPageSizeChange: onTamano,
-          pageSizeOptions: TAMANOS_REPORTE,
-        }}
-      />
+      {/* Ronda 2 de E2E: el contenedor con scroll del kit es enfocable cuando las columnas no caben (axe scrollable-region-focusable). */}
+      <RegionDesplazableTabla nombre={NOMBRE_REPORTE[tipo]}>
+        <DataTable<Fila>
+          ariaLabel={NOMBRE_REPORTE[tipo]}
+          columns={columnas}
+          rows={filas}
+          getRowKey={(f) => f.__clave}
+          status={cargando ? "loading" : "ready"}
+          minWidth={Math.max(720, columnas.length * 140)}
+          tarjeta={false}
+          pagination={{
+            page: pagina?.pagina ?? 1,
+            pageSize: tamano,
+            totalCount: total,
+            onPageChange: (p) => onPagina(Math.min(p, paginaMaxima)),
+            onPageSizeChange: onTamano,
+            pageSizeOptions: TAMANOS_REPORTE,
+          }}
+        />
+      </RegionDesplazableTabla>
       {!cargando && total > alcanzable ? (
         <p className="text-xs text-[color:var(--di-text-secondary)]">
           Se muestran los primeros {formatoEntero(alcanzable)} de {formatoEntero(total)} registros. Acota el filtro para ver más.

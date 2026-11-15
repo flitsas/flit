@@ -47,6 +47,11 @@ export function useEmpresasBackoffice(activo: boolean = true): ListaEmpresas {
   return { empresas, fallo, reintentar };
 }
 
+// Ronda 2 de E2E (axe target-size, WCAG 2.2 · 2.5.8): el botón «Quitar selección» del SearchableSelect del kit mide
+// 22 px de ancho (p-1 + icono de 14 px). El kit queda fuera del alcance U10; se le da un mínimo de 24 × 24 px desde aquí,
+// por la prop `className`, y se reporta como hueco del kit.
+const QUITAR_24PX_CLS = "[&_button[aria-label^='Quitar']]:min-w-6 [&_button[aria-label^='Quitar']]:min-h-6";
+
 /**
  * Selector de compañía de la vista global (spec-ui §4.4, contrato §6): `SearchableSelect` sobre GET /backoffice/empresas
  * (solo compañías con Diagnóstico activo), con «Todas las compañías» (valor "") por defecto. Se monta solo con la
@@ -73,6 +78,7 @@ export function SelectorCompania({
   return (
     <div className={`flex w-full flex-col gap-1 sm:w-72 ${className}`}>
       <SearchableSelect
+        className={QUITAR_24PX_CLS}
         label="Compañía"
         defaultLabel={TODAS_LAS_COMPANIAS}
         options={opciones}

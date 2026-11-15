@@ -285,3 +285,19 @@ describe("ModuloReportes — correcciones de la revisión de código (CR-FE-2, 4
     expect(llamadas(fetchMock, "GET", "/backoffice/empresas")).toHaveLength(1);
   });
 });
+
+// Ronda 2 de E2E (reportes.spec.ts, axe color-contrast 4,31:1 en claro): el fondo del tono warning del kit es translúcido
+// (#ff4e001a) y sobre el lienzo azulado de la página el texto #bd3a00 baja de 4,5:1. El aviso va sobre una base opaca
+// --di-surface-elevated (blanca en claro, la de las tarjetas en oscuro) con el mismo radio del InlineAlert.
+describe("ModuloReportes — contraste del aviso de datos personales", () => {
+  it("el aviso persistente se pinta sobre una base opaca --di-surface-elevated con el radio del InlineAlert", async () => {
+    simularApi({
+      "GET /reportes": () => Response.json(catalogoCompania()),
+      "GET /reportes/vehiculos": () => Response.json(paginaVehiculos()),
+    });
+    render(<ModuloReportes vistaGlobal={false} puedeDescargar />);
+    const texto = await screen.findByText(/contiene datos personales \(números de documento de identidad\)/);
+    const aviso = texto.closest("[id]") as HTMLElement;
+    expect(aviso.parentElement).toHaveClass("rounded-[9px]", "bg-[var(--di-surface-elevated)]");
+  });
+});

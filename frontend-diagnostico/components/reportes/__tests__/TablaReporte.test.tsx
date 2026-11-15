@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { TablaReporte } from "@/components/reportes/TablaReporte";
 import { paginaVehiculos } from "@/lib/reportes/__tests__/datosReportes";
+import { simularDesborde } from "@/components/comun/__tests__/desborde";
 
 // Uso de ejemplo: <TablaReporte tipo="vehiculos" pagina={pagina} cargando={false} tamano={25} onPagina={…} onTamano={…} />
 // pinta las columnas y filas que manda la API (claves = columnas[].clave) con el formato por tipo, y la paginación del
@@ -50,5 +51,22 @@ describe("TablaReporte — tabla genérica por columnas del contrato", () => {
     render(<TablaReporte tipo="vehiculos" pagina={null} cargando tamano={25} onPagina={() => {}} onTamano={() => {}} />);
     expect(screen.getAllByRole("status").length).toBeGreaterThan(0);
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+});
+
+// Ronda 2 de E2E (axe scrollable-region-focusable): el contenedor `overflow-x-auto` del DataTable del kit, con desborde,
+// es región enfocable con el nombre del reporte (RegionDesplazableTabla).
+describe("TablaReporte — desplazable con teclado", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("con más columnas de las que caben, el contenedor de la tabla es región con nombre y parada de Tab", async () => {
+    simularDesborde({ ancho: 900 });
+    render(<TablaReporte tipo="vehiculos" pagina={paginaVehiculos()} cargando={false} tamano={25} onPagina={() => {}} onTamano={() => {}} />);
+    const region = await screen.findByRole("region", { name: "Vehículos diagnosticados, desplazable" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(within(region).getByRole("table", { name: "Vehículos diagnosticados" })).toBeInTheDocument();
   });
 });

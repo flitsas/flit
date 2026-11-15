@@ -4,6 +4,7 @@ import { Dashboard } from "@/components/estadisticas/Dashboard";
 import { AHORA, estadisticas } from "@/lib/estadisticas/__tests__/datos";
 import { MENSAJE_RANGO_GENERICO } from "@/lib/estadisticas/periodo";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
+import { simularDesborde } from "@/components/comun/__tests__/desborde";
 
 // Uso de ejemplo: <Dashboard vistaGlobal={capacidades.verEstadisticasGlobales} puedeCrear={capacidades.crearDiagnosticos}
 // empresaNombre={sesion.empresa.nombre} /> en la raíz. Lee desde/hasta/empresa de la URL (por defecto los últimos 30
@@ -246,5 +247,21 @@ describe("Dashboard — sin PII (spec-ui §4.8.3)", () => {
     const { container } = render(<Dashboard vistaGlobal={false} puedeCrear={false} />);
     await screen.findByText("1.702 únicos");
     expect(container.textContent).not.toMatch(/\b[A-Z]{3}\d{3}\b/);
+  });
+});
+
+// Ronda 2 de E2E (dashboard.spec.ts:111 y la campana de saneamiento-backoffice.spec.ts:230, ambas sobre `/`): axe
+// scrollable-region-focusable en el `.overflow-x-auto` del DataTable del kit. Con desborde, el contenedor es región
+// enfocable con nombre (RegionDesplazableTabla, mismo patrón que RegionDesplazable).
+describe("Dashboard — tabla de fuentes desplazable con teclado", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("con la tabla «Salud de las fuentes» más ancha que su sección, el contenedor es región enfocable con nombre", async () => {
+    simularApi({ "GET /estadisticas": () => Response.json(estadisticas()) });
+    simularDesborde({ ancho: 720 });
+    render(<Dashboard vistaGlobal={false} puedeCrear empresaNombre="Compañía Demo" />);
+    const region = await screen.findByRole("region", { name: "Salud de las fuentes, desplazable" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(within(region).getByRole("table", { name: "Salud de las fuentes" })).toBeInTheDocument();
   });
 });
