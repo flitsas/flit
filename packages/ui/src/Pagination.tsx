@@ -13,7 +13,8 @@ export interface PaginationProps {
   /**
    * Cambio de «Filas por página». Con este manejador se muestra el selector (el estándar: todas las
    * tablas lo llevan, Bug #13055); el cambio debe volver a la página 1 — `usePaginacion` ya lo hace.
-   * Las opciones son SIEMPRE {@link TAMANOS_DE_PAGINA} (HU #13916): ninguna tabla elige las suyas.
+   * Las opciones son {@link TAMANOS_DE_PAGINA} (HU #13916), salvo que la tabla pase `pageSizeOptions` porque su contrato
+   * fija otros tamaños (excepción Q3 de la ola Diagnóstico UX).
    */
   onPageSizeChange?: (pageSize: number) => void;
   /**

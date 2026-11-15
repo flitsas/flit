@@ -8,6 +8,8 @@ export const DIAS_POR_DEFECTO = 30;
 export const MENSAJE_RANGO_MAXIMO = "El rango no puede superar un año";
 export const MENSAJE_HASTA_FUTURO = "La fecha final no puede ser posterior a hoy";
 export const MENSAJE_HASTA_ANTERIOR = "La fecha final no puede ser anterior a la inicial";
+/** 400 RANGO_INVALIDO sin causa identificable en el cliente (p. ej. relojes desfasados): cubre las tres reglas del §0. */
+export const MENSAJE_RANGO_GENERICO = "Revisa el periodo: como máximo un año, sin fechas futuras y con la fecha final igual o posterior a la inicial";
 
 export interface ErrorRango {
   campo: "desde" | "hasta";
@@ -58,6 +60,14 @@ export function validarRango({ desde, hasta }: Rango, hoy: string): ErrorRango |
   if (aMs(hasta) < aMs(desde)) return { campo: "hasta", mensaje: MENSAJE_HASTA_ANTERIOR };
   if (diasDelRango({ desde, hasta }) > RANGO_MAXIMO_DIAS) return { campo: "hasta", mensaje: MENSAJE_RANGO_MAXIMO };
   return null;
+}
+
+/**
+ * Texto de un 400 RANGO_INVALIDO del servidor, que no dice la causa: la que encuentre `validarRango` en el cliente (más
+ * de un año, fecha futura o «Hasta» anterior a «Desde») o, si el rango es válido aquí, el genérico.
+ */
+export function mensajeRangoInvalido(rango: Rango, hoy: string): string {
+  return validarRango(rango, hoy)?.mensaje ?? MENSAJE_RANGO_GENERICO;
 }
 
 /** Rango de la URL (?desde=&hasta=) si es válido; si no, el de por defecto. */

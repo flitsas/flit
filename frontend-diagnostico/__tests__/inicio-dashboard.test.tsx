@@ -57,11 +57,37 @@ describe("FE-4 · raíz: el Dashboard", () => {
     await waitFor(() => expect(llamadas(f, "GET", "/backoffice/estadisticas/global")).toHaveLength(1));
   });
 
-  it("sin verDiagnosticos ni vista global va a la 403", async () => {
+  it("sin ninguna capacidad de Diagnóstico va a la 403", async () => {
     simularApi({});
     render(<Raiz />);
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/403?code=SIN_PERMISOS_DIAGNOSTICO"));
     expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+  });
+
+  it("CR-FE-3: con solo crearDiagnosticos va a /diagnosticos (tarjetas Express y Masivo), no a la 403", async () => {
+    h.capacidades = { crearDiagnosticos: true };
+    const f = simularApi({});
+    render(<Raiz />);
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/diagnosticos"));
+    expect(h.replace).not.toHaveBeenCalledWith(expect.stringContaining("/403"));
+    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(llamadas(f, "GET", "/estadisticas")).toHaveLength(0);
+  });
+
+  it("CR-FE-3: con solo verReportes va a /reportes, no a la 403", async () => {
+    h.capacidades = { verReportes: true, descargarReportes: true };
+    simularApi({});
+    render(<Raiz />);
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/reportes"));
+    expect(h.replace).not.toHaveBeenCalledWith(expect.stringContaining("/403"));
+  });
+
+  it("CR-FE-3: con crearDiagnosticos y verReportes, /diagnosticos va primero", async () => {
+    h.capacidades = { crearDiagnosticos: true, verReportes: true };
+    simularApi({});
+    render(<Raiz />);
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/diagnosticos"));
+    expect(h.replace).toHaveBeenCalledTimes(1);
   });
 });
 

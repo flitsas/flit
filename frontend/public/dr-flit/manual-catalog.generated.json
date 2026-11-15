@@ -4149,7 +4149,7 @@
           "bullets": [
             "Mientras carga verás «Cargando el resumen…».",
             "Sin diagnósticos en el periodo: «Aún no hay diagnósticos en este periodo», con «Nuevo diagnóstico» (si puedes crear) y «Ver los últimos 90 días».",
-            "Si no se pudo cargar: «No se pudo cargar el resumen» con «Reintentar». Si tu rol no permite ver el Dashboard, verás «No tienes acceso»."
+            "Si no se pudo cargar: «No se pudo cargar el resumen» con «Reintentar». Si la compañía elegida ya no tiene Diagnóstico activo: «Esa compañía no tiene Diagnóstico activo.» con «Ver todas las compañías». Si tu rol no permite ver el Dashboard, entras directamente a «Diagnósticos» o a «Reportes»; sin ninguno de los dos, verás «No tienes acceso»."
           ],
           "callouts": []
         }
@@ -4230,14 +4230,14 @@
           "title": "5. Exportar a Excel o PDF",
           "paragraphs": [
             "Los botones «Exportar Excel» y «Exportar PDF» exportan todo el filtro, no solo la página que ves: lo dice la ayuda «Se exportan los N registros del filtro». Mientras se genera, el botón dice «Generando…» y aparece «Puede tardar unos segundos»; el otro formato sigue disponible. El archivo baja con un nombre del estilo diagnostico-reporte-vehiculos-AAAAMMDD-AAAAMMDD.",
-            "Cada formato tiene un máximo de registros: 5 000 en Excel y 1 000 en PDF. Si el filtro los supera, ese botón queda atenuado con el motivo «Acota el filtro: máximo 5 000 registros en Excel» (o el de PDF). Nunca se exporta un archivo recortado en silencio."
+            "Cada formato tiene un máximo de registros: 5.000 en Excel y 1.000 en PDF. Si el filtro los supera, ese botón queda atenuado con el motivo «Acota el filtro: máximo 5.000 registros en Excel» (o el de PDF). Nunca se exporta un archivo recortado en silencio."
           ],
           "bullets": [
             "Botones atenuados con «No hay registros para exportar» o «Espera a que cargue el reporte»: la tabla está vacía o todavía cargando.",
-            "«El reporte tiene N registros y el Excel admite 5 000. Acota el rango o los filtros.»: los datos crecieron entre que cargó la tabla y pediste el archivo.",
+            "«El reporte tiene N registros y el Excel admite 5.000. Acota el rango o los filtros.»: los datos crecieron entre que cargó la tabla y pediste el archivo.",
             "«Ya hay una exportación en curso. Espera unos segundos e intenta de nuevo.»: solo se genera un archivo a la vez por usuario, y la plataforma limita las exportaciones simultáneas.",
             "«No tienes permiso para descargar reportes.»: tu rol ve los reportes pero no los descarga.",
-            "«El rango no puede superar un año» o «Revisa los filtros del reporte.»: corrige el periodo o los filtros."
+            "«Revisa el periodo: como máximo un año, sin fechas futuras y con la fecha final igual o posterior a la inicial» o «Revisa los filtros del reporte.»: corrige el periodo o los filtros."
           ],
           "callouts": []
         }

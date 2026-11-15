@@ -11,7 +11,8 @@ import { SECCION_CLS } from "@/components/estadisticas/graficas/Figura";
 import { ApiError } from "@/lib/api";
 import { mensajeErrorFijo } from "@/lib/errores";
 import { formatoEntero } from "@/lib/estadisticas/formato";
-import { hoyColombia } from "@/lib/estadisticas/periodo";
+import { useEmpresasBackoffice } from "@/components/estadisticas/SelectorCompania";
+import { hoyColombia, mensajeRangoInvalido } from "@/lib/estadisticas/periodo";
 import { ERRORES_REPORTE, ambitoReporte, descargarReporte, type ConsultaReporte } from "@/lib/reportes/api";
 import { TAMANO_REPORTE, filtrosPorDefecto, hayFiltrosPropios, leerFiltrosDeUrl, urlPantalla } from "@/lib/reportes/catalogo";
 import { ordenarCatalogo } from "@/lib/reportes/formato";
@@ -67,6 +68,8 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
   const catalogo = useCatalogoReportes(vistaGlobal);
   const reportes = useMemo(() => ordenarCatalogo(catalogo.datos?.reportes ?? []), [catalogo.datos]);
   const filtrosRef = useRef<HTMLDivElement>(null);
+  // Una sola petición de compañías por montaje: el panel de filtros se remonta en cada cambio de pestaña (CR-FE-11).
+  const empresas = useEmpresasBackoffice(vistaGlobal);
 
   const [sel, setSel] = useState<Seleccion | null>(null);
   // Con el catálogo listo, la primera selección sale de la URL (?reporte= y sus filtros) o del primer reporte.
@@ -150,8 +153,12 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
 
   const errorRango =
     reporte.estado === "error" && reporte.error instanceof ApiError && reporte.error.status === 400 && reporte.error.code === "RANGO_INVALIDO"
-      ? ERRORES_REPORTE.RANGO_INVALIDO
+      ? mensajeRangoInvalido(valor.rango, hoy)
       : null;
+  // 404 de un ?empresa= viejo o de una compañía apagada (contrato §3): reintentar no sirve; se vuelve a «Todas».
+  const empresaNoEncontrada = reporte.estado === "error" && reporte.error instanceof ApiError && reporte.error.code === "EMPRESA_NO_ENCONTRADA";
+  // Lo que exporta el botón (sin página ni tamaño, que la exportación no usa): si cambia, se borra su último error (CR-FE-5).
+  const claveExportacion = JSON.stringify([activo.tipo, valor.rango, valor.empresa, valor.filtros, valor.placa]);
   const pagina = reporte.estado === "listo" ? reporte.datos : null;
   const total = pagina?.total ?? null;
 
@@ -162,9 +169,15 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
         <InlineAlert
           tone="error"
           action={
-            <Button variant="secondary" size="sm" onClick={reporte.reintentar}>
-              Reintentar
-            </Button>
+            empresaNoEncontrada ? (
+              <Button variant="secondary" size="sm" onClick={() => seleccionar({ ...sel, valor: { ...valor, empresa: "" }, pagina: 1 })}>
+                Ver todas las compañías
+              </Button>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={reporte.reintentar}>
+                Reintentar
+              </Button>
+            )
           }
         >
           {mensajeErrorFijo(reporte.error, "No se pudo cargar el reporte.", ERRORES_REPORTE)}
@@ -214,6 +227,7 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
           hoy={hoy}
           vistaGlobal={vistaGlobal}
           errorRango={errorRango}
+          empresas={vistaGlobal ? empresas : undefined}
           onCambiar={(v) => seleccionar({ ...sel, valor: v, pagina: 1 })}
         />
       </section>
@@ -228,6 +242,7 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
               total={total}
               cargando={reporte.estado === "cargando"}
               avisoId={AVISO_ID}
+              claveConsulta={claveExportacion}
               onDescargar={(formato) => descargarReporte(ambito, activo.tipo, consulta, formato)}
             />
           ) : null}
