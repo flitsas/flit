@@ -64,6 +64,8 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento/renglones/{rid:guid}/evidencia => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/notificaciones => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/plantilla => diagnostico.diagnosticos.crear",
+        "GET /api/v1/diagnostico/reportes => diagnostico.reportes.ver",
+        "GET /api/v1/diagnostico/reportes/{tipo} => diagnostico.reportes.ver",
         "GET /api/v1/diagnostico/sesion => -",
         "GET /api/v1/diagnostico/tipos-tramite => diagnostico.diagnosticos.crear",
         "GET /api/v1/diagnostico/vehiculos => diagnostico.diagnosticos.ver",

@@ -17,11 +17,27 @@ internal static class ReportesRegistro
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         services.AddScoped<RegistroAccesosReporte>();
+        // BE-2: motor genérico, los cuatro reportes de la compañía y el descifrado en memoria (reutilizables por el backoffice, BE-4).
+        services.AddOptions<OpcionesReportes>()
+            .Bind(configuration.GetSection(OpcionesReportes.Seccion))
+            .Validate(o => o.Validos(), $"{OpcionesReportes.Seccion}: los máximos, las exportaciones simultáneas y el tiempo de comando deben ser positivos.")
+            .ValidateOnStart();
+        services.AddScoped<NombresTramite>();
+        services.AddScoped<IReporte, ReporteVehiculos>();
+        services.AddScoped<IReporte, ReporteConsultas>();
+        services.AddScoped<IReporte, ReporteSaneamientos>();
+        services.AddScoped<IReporte, ReporteDerivaciones>();
+        services.AddScoped<DescifradoDocumentos>();
+        services.AddScoped<MotorReportes>();
         return services;
     }
 
     /// <summary>R0–R3 bajo el grupo de la compañía (BE-2, BE-3).</summary>
-    public static void MapReportesCatalogo(RouteGroupBuilder api) => ArgumentNullException.ThrowIfNull(api);
+    public static void MapReportesCatalogo(RouteGroupBuilder api)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+        ReportesCatalogoEndpoints.Map(api);
+    }
 
     /// <summary>B0–B6 bajo <c>/backoffice</c> (BE-4); recibe el grupo raíz de la API, no el de <c>ConEmpresaExplicita</c>.</summary>
     public static void MapReportesBackoffice(RouteGroupBuilder api) => ArgumentNullException.ThrowIfNull(api);
