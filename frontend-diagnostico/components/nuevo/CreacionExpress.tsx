@@ -212,7 +212,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
               </section>
             ) : (
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <Link href="/" className={BOTON_SECUNDARIO_CLS}>
+                <Link href="/diagnosticos" className={BOTON_SECUNDARIO_CLS}>
                   Cancelar
                 </Link>
                 <Button type="submit" size="sm" cargando={fase.tipo === "enviando"} disabled={ocupado} className="gap-1.5 text-sm">

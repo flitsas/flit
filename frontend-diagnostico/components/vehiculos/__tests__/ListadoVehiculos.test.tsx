@@ -23,7 +23,7 @@ import { deudaSinPendientes, saneamientoEnGestion } from "@/components/saneamien
 
 const h = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), params: new URLSearchParams("vista=vehiculos") }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => "/diagnosticos",
   useSearchParams: () => h.params,
   useRouter: () => ({ replace: h.replace, push: h.push, refresh: vi.fn() }),
 }));
@@ -135,7 +135,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     pintar();
     await tabla();
     fireEvent.change(screen.getByRole("combobox", { name: "Dictamen" }), { target: { value: "VIABLE" } });
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&veredicto=VIABLE", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?vista=vehiculos&veredicto=VIABLE", { scroll: false });
     await waitFor(() => expect(screen.getByText("1 vehículo")).toBeInTheDocument());
     expect(consultas(api).at(-1)).toEqual({ veredicto: "VIABLE", pagina: "1", tamano: "10" });
   });
@@ -163,7 +163,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     await tabla();
     const nav = screen.getByRole("navigation", { name: "Paginación de vehículos" });
     fireEvent.click(within(nav).getByRole("button", { name: "Página 2" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&pagina=2", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?vista=vehiculos&pagina=2", { scroll: false });
     await waitFor(() => expect(screen.getByRole("rowheader", { name: /TST002/ })).toBeInTheDocument());
     expect(consultas(api).at(-1)).toMatchObject({ pagina: "2" });
     await waitFor(() => expect(screen.getByRole("table", { name: "Vehículos de la compañía" })).toHaveFocus());
@@ -180,7 +180,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     expect(tamano.closest(".kit-paginacion")).not.toBeNull();
     expect(within(tamano).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "30", "50"]);
     fireEvent.change(tamano, { target: { value: "30" } });
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos&tamano=30", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?vista=vehiculos&tamano=30", { scroll: false });
     await waitFor(() => expect(consultas(api).at(-1)).toEqual({ pagina: "1", tamano: "30" }));
   });
 });
@@ -243,7 +243,7 @@ describe("ListadoVehiculos — AC40/AC43: cuatro estados", () => {
     expect(screen.getByText("Prueba con otros filtros.")).toBeInTheDocument();
     const limpiar = screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!;
     fireEvent.click(limpiar);
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?vista=vehiculos", { scroll: false });
   });
 });
 

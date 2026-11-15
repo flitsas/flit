@@ -348,19 +348,19 @@ describe("/diagnosticos/{id} — HU #14087: migas y «Volver a diagnósticos» c
     const migas = screen.getByRole("navigation", { name: "Migas de pan" });
     const items = within(migas).getAllByRole("listitem");
     expect(items.map((i) => i.textContent?.replace("›", "").trim())).toEqual(["Diagnósticos", grilla().nombre]);
-    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/");
+    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/diagnosticos");
     expect(within(items[1]).getByText(grilla().nombre)).toHaveAttribute("aria-current", "page");
   });
 
-  it("sin ?desde= vuelve a /", async () => {
+  it("sin ?desde= vuelve a /diagnosticos", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla()) });
-    expect(volver()).toHaveAttribute("href", "/");
+    expect(volver()).toHaveAttribute("href", "/diagnosticos");
   });
 
   it("con ?desde= vuelve al listado con sus filtros como search params de /", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla()) }, USUARIO, ID, "desde=2026-10-01&estado=EN_PROCESO&nombre=Flota+prueba&pagina=2");
     const href = volver().getAttribute("href")!;
-    expect(href.startsWith("/?")).toBe(true);
+    expect(href.startsWith("/diagnosticos?")).toBe(true);
     const q = new URL(href, "http://localhost").searchParams;
     expect(q.get("desde")).toBe("2026-10-01");
     expect(q.get("estado")).toBe("EN_PROCESO");
@@ -372,14 +372,14 @@ describe("/diagnosticos/{id} — HU #14087: migas y «Volver a diagnósticos» c
   it.each(["https://malicioso.example/robo", "//malicioso.example", "javascript:alert(1)", "/\malicioso.example"])("sin open redirect: ?desde=%s nunca sale de /", async (malo) => {
     await montar({ [GRILLA]: () => Response.json(grilla()) }, USUARIO, ID, malo);
     const href = volver().getAttribute("href")!;
-    expect(href === "/" || href.startsWith("/?")).toBe(true);
+    expect(href === "/diagnosticos" || href.startsWith("/diagnosticos?")).toBe(true);
     expect(new URL(href, "http://localhost").origin).toBe("http://localhost");
     expect(href).not.toMatch(/malicioso|javascript/);
   });
 
   it("también en los estados de error: el botón de volver está siempre", async () => {
     await montar({ [GRILLA]: () => Response.json({ error: "x" }, { status: 500 }) });
-    expect(volver()).toHaveAttribute("href", "/");
+    expect(volver()).toHaveAttribute("href", "/diagnosticos");
   });
 });
 

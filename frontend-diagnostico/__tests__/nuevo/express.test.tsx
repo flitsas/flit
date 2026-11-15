@@ -302,7 +302,7 @@ describe("Express — resultado «Diagnóstico iniciado» con redirección de 5 
     await continuar();
     expect(await iniciado()).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ver tablero" })).toHaveAttribute("href", `/diagnosticos/${ID_EXPRESS}`);
-    expect(screen.getByRole("link", { name: "Volver" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Volver" })).toHaveAttribute("href", "/diagnosticos");
     expect(screen.getByRole("button", { name: "Quedarme aquí" })).toBeInTheDocument();
     expect(nav.push).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(5000);
@@ -326,7 +326,7 @@ describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () =>
     let soltar: (r: Response) => void = () => {};
     montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => new Promise<Response>((r) => (soltar = r)) } });
     await nombre();
-    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
+    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/diagnosticos");
     await continuar();
     await waitFor(() => expect(screen.getByRole("button", { name: PRINCIPAL })).toHaveAttribute("aria-busy", "true"));
     soltar(creadoOk());
