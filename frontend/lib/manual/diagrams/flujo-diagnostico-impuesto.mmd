@@ -1,0 +1,11 @@
+flowchart TD
+    A["RUNT del vehículo terminado"] --> B{"¿Vehículo de servicio público?"}
+    B -- "Sí" --> N1["Novedad: Servicio público"]
+    B -- "No" --> C{"¿El departamento del organismo\ntiene consulta automatizada?"}
+    C -- "No" --> N2["Novedad: Departamento no soportado"]
+    C -- "Sí" --> D["Se consulta el impuesto con el\nprimer propietario que reporta el RUNT"]
+    D --> E{"Resultado"}
+    E -- "Sin deuda confirmada" --> F["Ejecutado"]
+    E -- "Deuda confirmada" --> G["Con deuda: monto total y vigencias\n(o «Deuda sin valor informado»)"]
+    E -- "No confirmado" --> H["Error con el motivo;\nnunca se muestra como sin deuda"]
+    G --> I["En Con Análisis IA el dictamen\nlo anota como advertencia"]
