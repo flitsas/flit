@@ -74,7 +74,11 @@ internal static class TabularWorkbookWriter
 
     public sealed record Column(string Header, int Width = 16);
 
-    public sealed record Sheet(string Name, IReadOnlyList<Column> Columns, IReadOnlyList<IReadOnlyList<Cell>> Rows)
+    /// <summary>
+    /// Una hoja: columnas, filas de datos y, opcionalmente, <paramref name="Previas"/> filas arriba del encabezado (HU #14579: el aviso de
+    /// datos personales en la fila 1). El panel congelado y el autofiltro arrancan en el encabezado.
+    /// </summary>
+    public sealed record Sheet(string Name, IReadOnlyList<Column> Columns, IReadOnlyList<IReadOnlyList<Cell>> Rows, IReadOnlyList<IReadOnlyList<Cell>>? Previas = null)
     {
         /// <summary>Atajo para hojas de puro texto (Uso del aplicativo, OT): sin números ni fechas
         /// tipadas que aprovechar, cada valor ya viene formateado a la unidad que le corresponde.</summary>
@@ -133,10 +137,12 @@ internal static class TabularWorkbookWriter
         // obliga a subir cada vez para recordar qué columna se está mirando.
         writer.WriteStartElement(new SheetViews());
         writer.WriteStartElement(new SheetView { WorkbookViewId = 0U });
+        var previas = sheet.Previas ?? [];
+        var filaEncabezado = previas.Count + 1;
         writer.WriteElement(new Pane
         {
-            VerticalSplit = 1D,
-            TopLeftCell = "A2",
+            VerticalSplit = filaEncabezado,
+            TopLeftCell = $"A{filaEncabezado + 1}",
             ActivePane = PaneValues.BottomLeft,
             State = PaneStateValues.Frozen,
         });
@@ -158,24 +164,26 @@ internal static class TabularWorkbookWriter
         writer.WriteEndElement(); // Columns
 
         writer.WriteStartElement(new SheetData());
-        WriteHeaderRow(writer, sheet.Columns);
+        for (var p = 0; p < previas.Count; p++)
+            WriteRow(writer, previas[p], p + 1);
+        WriteHeaderRow(writer, sheet.Columns, filaEncabezado);
         for (var r = 0; r < sheet.Rows.Count; r++)
-            WriteRow(writer, sheet.Rows[r], r + 2);
+            WriteRow(writer, sheet.Rows[r], r + filaEncabezado + 1);
         writer.WriteEndElement(); // SheetData
 
         // El filtro estándar de columna: sin esto, cada quien que abre el archivo tiene que
         // armarlo a mano antes de poder ordenar o filtrar una sola columna.
         var lastCol = ColumnName(Math.Max(0, sheet.Columns.Count - 1));
-        var lastRow = sheet.Rows.Count + 1;
-        writer.WriteElement(new AutoFilter { Reference = $"A1:{lastCol}{lastRow}" });
+        var lastRow = sheet.Rows.Count + filaEncabezado;
+        writer.WriteElement(new AutoFilter { Reference = $"A{filaEncabezado}:{lastCol}{lastRow}" });
 
         writer.WriteEndElement(); // Worksheet
         writer.Close();
     }
 
-    private static void WriteHeaderRow(OpenXmlWriter writer, IReadOnlyList<Column> columns)
+    private static void WriteHeaderRow(OpenXmlWriter writer, IReadOnlyList<Column> columns, int rowNumber)
     {
-        writer.WriteStartElement(new Row());
+        writer.WriteStartElement(new Row { RowIndex = (uint)rowNumber });
         foreach (var column in columns)
         {
             var cell = new DocumentFormat.OpenXml.Spreadsheet.Cell
