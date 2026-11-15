@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
@@ -30,17 +31,14 @@ internal sealed record FiltroReporte(
     public const int DesplazamientoMaximo = 10_000;
     public const int PlacaMaxima = 20;
 
-    /// <summary>Días del rango, contando los dos extremos (igual que el front).</summary>
-    public const int DiasMaximos = 366;
-
-    /// <summary>Parámetros que ninguna ruta de reportes acepta (SP-9): la PII no viaja en la URL.</summary>
-    private static readonly string[] Prohibidos = ["documento", "nombre"];
+    /// <summary>Días del rango, contando los dos extremos (igual que el front; <see cref="RangoDias"/>, CR-BE-10).</summary>
+    public const int DiasMaximos = RangoDias.DiasMaximos;
 
     /// <summary>00:00 de <see cref="Desde"/> en Colombia (inclusive).</summary>
-    public DateTimeOffset DesdeInstante => Inicio(Desde);
+    public DateTimeOffset DesdeInstante => new RangoDias(Desde, Hasta).Inicio;
 
     /// <summary>00:00 del día siguiente a <see cref="Hasta"/> en Colombia (exclusive).</summary>
-    public DateTimeOffset HastaInstante => Inicio(Hasta.AddDays(1));
+    public DateTimeOffset HastaInstante => new RangoDias(Desde, Hasta).Fin;
 
     public IReadOnlyList<string> Valores(string clave) => Enums.TryGetValue(clave, out var v) ? v : [];
 
@@ -62,23 +60,11 @@ internal sealed record FiltroReporte(
     public static FiltroReporte Leer(TipoReporte tipo, IQueryCollection query, DateOnly hoy, bool rechazarEmpresa, bool paginar)
     {
         ArgumentNullException.ThrowIfNull(query);
-        foreach (var prohibido in Prohibidos)
-        {
-            if (query.ContainsKey(prohibido))
-                throw Invalido(FiltroListado.CodigoFiltroInvalido, "Los reportes no se filtran por documento ni por nombre.", prohibido);
-        }
-
+        RangoDias.RechazarProhibidos(query, _ => "Los reportes no se filtran por documento ni por nombre.");
         if (rechazarEmpresa && query.ContainsKey("empresa"))
             throw Invalido(FiltroListado.CodigoFiltroInvalido, "Esta ruta no recibe empresa.", "empresa");
 
-        var desde = Dia(Unico(query, "desde"), "desde");
-        var hasta = Dia(Unico(query, "hasta"), "hasta");
-        if (hasta < desde)
-            throw Invalido(FiltroListado.CodigoRangoInvalido, "hasta no puede ser anterior a desde.", "hasta");
-        if (hasta > hoy)
-            throw Invalido(FiltroListado.CodigoRangoInvalido, "hasta no puede ser posterior a hoy.", "hasta");
-        if (hasta.DayNumber - desde.DayNumber + 1 > DiasMaximos)
-            throw Invalido(FiltroListado.CodigoRangoInvalido, $"El rango admite hasta {DiasMaximos} días.", "desde");
+        var (desde, hasta) = RangoDias.Leer(query, hoy);
 
         var descriptor = CatalogoReportes.De(tipo);
         var enums = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
@@ -118,11 +104,7 @@ internal sealed record FiltroReporte(
     }
 
     /// <summary>Hoy en Colombia según el reloj.</summary>
-    public static DateOnly Hoy(TimeProvider reloj)
-    {
-        ArgumentNullException.ThrowIfNull(reloj);
-        return DateOnly.FromDateTime(reloj.GetUtcNow().ToOffset(VigenciaDelDia.OffsetColombia).DateTime);
-    }
+    public static DateOnly Hoy(TimeProvider reloj) => RangoDias.Hoy(reloj);
 
     /// <summary>Fuentes del filtro <c>fuente</c> como enum.</summary>
     public IReadOnlyList<Fuente> Fuentes() => [.. Valores(CatalogoReportes.FiltroFuente).Select(Leer<Fuente>)];
@@ -153,15 +135,6 @@ internal sealed record FiltroReporte(
         return valores.Count == 0 ? null : valores[0];
     }
 
-    private static DateOnly Dia(string? valor, string campo)
-    {
-        if (string.IsNullOrEmpty(valor))
-            throw Invalido(FiltroListado.CodigoFiltroInvalido, $"{campo} es obligatorio (AAAA-MM-DD).", campo);
-        return DateOnly.TryParseExact(valor, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dia)
-            ? dia
-            : throw Invalido(FiltroListado.CodigoFiltroInvalido, $"{campo} es una fecha AAAA-MM-DD.", campo);
-    }
-
     private static int Entero(string? valor, string campo, int porDefecto)
     {
         if (string.IsNullOrEmpty(valor))
@@ -171,9 +144,5 @@ internal sealed record FiltroReporte(
             : throw Invalido(FiltroListado.CodigoPaginacionInvalida, $"{campo} es un número entero.", campo);
     }
 
-    private static DateTimeOffset Inicio(DateOnly dia) =>
-        new DateTimeOffset(dia.ToDateTime(TimeOnly.MinValue), VigenciaDelDia.OffsetColombia).ToUniversalTime();
-
-    private static ReglaException Invalido(string codigo, string mensaje, string campo) =>
-        new(codigo, mensaje, StatusCodes.Status400BadRequest) { Campo = campo };
+    private static ReglaException Invalido(string codigo, string mensaje, string campo) => RangoDias.Invalido(codigo, mensaje, campo);
 }

@@ -215,6 +215,42 @@ public sealed class OpenApiDiagnosticoContratoTests
         Respuestas("operationId: reporteCompania").Should().Contain("\"404\"").And.Contain("REPORTE_NO_ENCONTRADO");
     }
 
+    /// <summary>Claves de la lista blanca por tipo (SP-16), que el contrato publica en <c>PaginaReporteDto.x-columnas</c>.</summary>
+    private static readonly string[] ColumnasDeLaListaBlanca =
+    [
+        "fecha_diagnostico", "diagnostico_nombre", "modalidad", "tipo_analisis", "tipo_tramite", "placa", "vin", "servicio", "organismo",
+        "departamento", "propietarios_documentos", "locatario_documento", "locatario_origen", "veredicto", "estado_consultas",
+        "saneamiento_estado", "tramite_numero", "fuente", "estado", "motivo_na", "tipo_error", "intentos", "duracion_ms", "dato_obtenido_en",
+        "reutilizada", "origen", "solicitado_en", "tomado_en", "cerrado_en", "dias_hasta_cierre", "motivo_cierre", "renglones_total",
+        "renglones_pendientes", "fecha", "tipo_operacion", "motivo", "empresa_nombre", "empresa_nit", "diagnosticos", "vehiculos",
+        "consultas_exitosas", "consultas_con_error", "tasa_exito", "consultas_runt", "consultas_simit", "consultas_avaluo",
+        "consultas_impuesto", "saneamientos", "tramites_creados",
+    ];
+
+    // HU #14579, corrección del code review y de seguridad (CR-BE-2, CR-BE-3, CR-BE-4, CR-BE-6, CR-BE-12; SEC-6, SEC-7): el contrato es
+    // autocontenido (no remite a archivos no versionados), E2 y B1–B3 declaran los dos 503 de Identidad, consumo dice qué cuenta, el
+    // documento ilegible sale «<tipo> No disponible» y B5/B6 no prometen «no audita» cuando lecturas_backoffice registra el intento.
+    [Fact]
+    public void BE4_correccion_contrato_autocontenido_503_global_consumo_y_registro_del_intento()
+    {
+        Yaml.Value.Should().NotContain(".claude/").And.NotContain("contrato-api", "el contrato público no remite a archivos no versionados");
+
+        foreach (var operacion in new[] { "estadisticasGlobalesBackoffice", "reporteGlobalBackoffice", "exportarReporteGlobalExcelBackoffice", "exportarReporteGlobalPdfBackoffice" })
+            Respuestas("operationId: " + operacion).Should().Contain("\"503\": { $ref: \"#/components/responses/IdentidadListaNoDisponible\" }", operacion);
+        Bloque("IdentidadListaNoDisponible:", sangria: 4).Should().ContainAll(
+            "IDENTIDAD_NO_CONFIGURADA", "IDENTIDAD_NO_DISPONIBLE", "Retry-After", "solo con IDENTIDAD_NO_DISPONIBLE");
+
+        var pagina = Bloque("PaginaReporteDto:", sangria: 4);
+        pagina.Should().Contain("x-columnas:").And.Contain("CC No disponible").And.Contain("COMPLETADO y ERROR no reutilizadas");
+        pagina.Should().ContainAll(ColumnasDeLaListaBlanca);
+        Bloque("TipoReporte:", sangria: 4).Should().Contain("404");
+
+        foreach (var respuesta in new[] { "ReporteDemasiadoGrande:", "ExportacionEnCurso:" })
+            Bloque(respuesta, sangria: 4).Should().Contain("lecturas_backoffice").And.NotContain("No audita").And.NotContain("no audita", respuesta);
+        foreach (var operacion in new[] { "reporteEmpresaBackoffice", "exportarReporteEmpresaExcelBackoffice", "exportarReporteEmpresaPdfBackoffice" })
+            Bloque("get:", sangria: 4, desde: "operationId: " + operacion).Should().Contain("intento", operacion);
+    }
+
     /// <summary>El bloque <c>responses:</c> de la operación cuya línea contiene <paramref name="operacion"/> (el primero después de ella).</summary>
     private static string Respuestas(string operacion)
     {

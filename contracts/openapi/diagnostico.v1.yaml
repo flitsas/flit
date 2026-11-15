@@ -41,8 +41,9 @@ info:
     /backoffice/reportes/{tipo}?empresa= con /excel y /pdf). Permiso nuevo diagnostico.reportes.ver (usuario_diagnostico y
     admin_diagnostico); exportar exige además diagnostico.reportes.descargar. En contratos existentes solo se agregan las
     capacidades opcionales verReportes y verEstadisticasGlobales. Códigos nuevos: REPORTE_NO_ENCONTRADO y EMPRESA_NO_ENCONTRADA
-    (404), REPORTE_DEMASIADO_GRANDE (422, con filas y maximo) y EXPORTACION_EN_CURSO (429, con Retry-After). Las descargas
-    existentes del lote siguen enmascaradas.
+    (404), REPORTE_DEMASIADO_GRANDE (422, con filas y maximo) y EXPORTACION_EN_CURSO (429, con Retry-After). Las vistas globales
+    reutilizan los 503 IDENTIDAD_NO_CONFIGURADA e IDENTIDAD_NO_DISPONIBLE de /backoffice/empresas. Las descargas existentes del
+    lote siguen enmascaradas.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -3718,7 +3719,7 @@ paths:
       summary: Reporte en pantalla de la compañía, paginado y con PII completa (R1)
       description: >
         diagnostico.reportes.ver y la visibilidad del lote (AccesoLote). Filtro de tenant normal: el SuperAdmin ve solo su compañía.
-        Columnas de la lista blanca del tipo (SP-16, contrato-api §4); cada fila tiene exactamente las claves de columnas. Orden por la
+        Columnas de la lista blanca del tipo (SP-16, PaginaReporteDto.x-columnas); cada fila tiene exactamente las claves de columnas. Orden por la
         fecha de referencia descendente y luego id. Antes de responder deja una fila en accesos_reporte (formato PANTALLA, filas = las
         de la página; fail-closed): su id sale en acceso_id. Ningún filtro documento ni nombre (400 FILTRO_INVALIDO); ?empresa= da 400
         FILTRO_INVALIDO. Cache-Control no-store.
@@ -3817,7 +3818,7 @@ paths:
         "400": { description: "FILTRO_INVALIDO o RANGO_INVALIDO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { description: Sin la política del backoffice o sin diagnostico.volumetria.ver., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
-        "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
+        "503": { $ref: "#/components/responses/IdentidadListaNoDisponible" }
 
   /api/v1/diagnostico/backoffice/estadisticas:
     get:
@@ -3880,7 +3881,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { description: Sin la política del backoffice., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "404": { description: "REPORTE_NO_ENCONTRADO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
-        "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
+        "503": { $ref: "#/components/responses/IdentidadListaNoDisponible" }
 
   /api/v1/diagnostico/backoffice/reportes/{tipo}/global/excel:
     parameters:
@@ -3910,7 +3911,7 @@ paths:
         "404": { description: "REPORTE_NO_ENCONTRADO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "422": { $ref: "#/components/responses/ReporteDemasiadoGrande" }
         "429": { $ref: "#/components/responses/ExportacionEnCurso" }
-        "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
+        "503": { $ref: "#/components/responses/IdentidadListaNoDisponible" }
 
   /api/v1/diagnostico/backoffice/reportes/{tipo}/global/pdf:
     parameters:
@@ -3940,7 +3941,7 @@ paths:
         "404": { description: "REPORTE_NO_ENCONTRADO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "422": { $ref: "#/components/responses/ReporteDemasiadoGrande" }
         "429": { $ref: "#/components/responses/ExportacionEnCurso" }
-        "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
+        "503": { $ref: "#/components/responses/IdentidadListaNoDisponible" }
 
   /api/v1/diagnostico/backoffice/reportes/{tipo}:
     parameters:
@@ -3950,9 +3951,11 @@ paths:
       operationId: reporteEmpresaBackoffice
       summary: Reporte en pantalla de una compañía desde el backoffice (B4)
       description: >
-        Política de configuración del backoffice. La empresa se valida antes de leer y de auditar (SP-3: 404 EMPRESA_NO_ENCONTRADA sin
-        auditoría); luego la empresa explícita audita en lecturas_backoffice y la ruta deja su fila en accesos_reporte
-        (BACKOFFICE_EMPRESA, PANTALLA, empresa_consultada). consumo devuelve solo la fila de esa compañía.
+        Política de configuración del backoffice. tipo es restricción de ruta: un código fuera del enum responde 404 sin cuerpo, sin
+        auditoría y sin consultar a Identidad. La empresa se valida antes de leer y de auditar (SP-3: 404 EMPRESA_NO_ENCONTRADA sin
+        auditoría). Luego la empresa explícita registra el intento autorizado en lecturas_backoffice, antes de validar el filtro (un
+        400, 422 o 429 posterior deja esa fila), y la ruta deja la entrega en accesos_reporte (BACKOFFICE_EMPRESA, PANTALLA,
+        empresa_consultada) solo si responde datos. consumo devuelve solo la fila de esa compañía.
       parameters:
         - { $ref: "#/components/parameters/EmpresaReporte" }
         - { $ref: "#/components/parameters/DesdeReporte" }
@@ -3970,7 +3973,7 @@ paths:
         "400": { description: "EMPRESA_REQUERIDA, FILTRO_INVALIDO, RANGO_INVALIDO o PAGINACION_INVALIDA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { description: Sin la política del backoffice., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
-        "404": { description: "REPORTE_NO_ENCONTRADO o EMPRESA_NO_ENCONTRADA (mismo cuerpo si la compañía no existe o está apagada).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "404": { description: "EMPRESA_NO_ENCONTRADA (mismo cuerpo si la compañía no existe o está apagada), o tipo fuera del enum (sin cuerpo).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
 
   /api/v1/diagnostico/backoffice/reportes/{tipo}/excel:
@@ -3981,8 +3984,9 @@ paths:
       operationId: exportarReporteEmpresaExcelBackoffice
       summary: Exportación a Excel de una compañía desde el backoffice (B5)
       description: >
-        Política de configuración del backoffice y diagnostico.reportes.descargar. Empresa validada (SP-3) y explícita, como B4. Nombre
-        diagnostico-reporte-{tipo}-{AAAAMMDD}-{AAAAMMDD}.xlsx (sin datos de la compañía). accesos_reporte (XLSX) antes de generar.
+        Política de configuración del backoffice y diagnostico.reportes.descargar. tipo restringido en la ruta y empresa validada (SP-3)
+        y explícita, como B4: lecturas_backoffice registra el intento y accesos_reporte (XLSX) la entrega, antes de generar. Nombre
+        diagnostico-reporte-{tipo}-{AAAAMMDD}-{AAAAMMDD}.xlsx (sin datos de la compañía).
       parameters:
         - { $ref: "#/components/parameters/EmpresaReporte" }
         - { $ref: "#/components/parameters/DesdeReporte" }
@@ -3998,7 +4002,7 @@ paths:
         "400": { description: "EMPRESA_REQUERIDA, FILTRO_INVALIDO o RANGO_INVALIDO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { description: Sin la política del backoffice o sin diagnostico.reportes.descargar., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
-        "404": { description: "REPORTE_NO_ENCONTRADO o EMPRESA_NO_ENCONTRADA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "404": { description: "EMPRESA_NO_ENCONTRADA, o tipo fuera del enum (sin cuerpo).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "422": { $ref: "#/components/responses/ReporteDemasiadoGrande" }
         "429": { $ref: "#/components/responses/ExportacionEnCurso" }
         "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
@@ -4011,8 +4015,9 @@ paths:
       operationId: exportarReporteEmpresaPdfBackoffice
       summary: Exportación a PDF de una compañía desde el backoffice (B6)
       description: >
-        Política de configuración del backoffice y diagnostico.reportes.descargar. Empresa validada (SP-3) y explícita, como B4. Nombre
-        diagnostico-reporte-{tipo}-{AAAAMMDD}-{AAAAMMDD}.pdf. accesos_reporte (PDF) antes de generar.
+        Política de configuración del backoffice y diagnostico.reportes.descargar. tipo restringido en la ruta y empresa validada (SP-3)
+        y explícita, como B4: lecturas_backoffice registra el intento y accesos_reporte (PDF) la entrega, antes de generar. Nombre
+        diagnostico-reporte-{tipo}-{AAAAMMDD}-{AAAAMMDD}.pdf.
       parameters:
         - { $ref: "#/components/parameters/EmpresaReporte" }
         - { $ref: "#/components/parameters/DesdeReporte" }
@@ -4028,7 +4033,7 @@ paths:
         "400": { description: "EMPRESA_REQUERIDA, FILTRO_INVALIDO o RANGO_INVALIDO.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { description: Sin la política del backoffice o sin diagnostico.reportes.descargar., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
-        "404": { description: "REPORTE_NO_ENCONTRADO o EMPRESA_NO_ENCONTRADA.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
+        "404": { description: "EMPRESA_NO_ENCONTRADA, o tipo fuera del enum (sin cuerpo).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } } }
         "422": { $ref: "#/components/responses/ReporteDemasiadoGrande" }
         "429": { $ref: "#/components/responses/ExportacionEnCurso" }
         "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
@@ -4051,20 +4056,31 @@ components:
     ReporteDemasiadoGrande:
       description: >
         REPORTE_DEMASIADO_GRANDE. El conteo previo supera el máximo del formato (5 000 filas en Excel y 1 000 en PDF por defecto). No
-        genera el archivo, no descifra nada y no audita.
+        genera el archivo, no descifra nada y no escribe accesos_reporte. En B5/B6 el intento ya quedó en lecturas_backoffice (lo
+        registra la empresa explícita antes del conteo); en R2/R3 y B2/B3 no queda fila.
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorReporteDemasiadoGrande" } } }
     ExportacionEnCurso:
       description: >
-        EXPORTACION_EN_CURSO. El usuario ya tiene una exportación en curso, o el proceso ya tiene 4. No audita; al log va sin PII.
+        EXPORTACION_EN_CURSO. El usuario ya tiene una exportación en curso, o el proceso ya tiene 4. No escribe accesos_reporte; en
+        B5/B6 el intento ya quedó en lecturas_backoffice (lo registra la empresa explícita antes del freno). Al log va sin PII.
       headers:
         Retry-After: { schema: { type: integer, example: 10 }, description: Segundos para reintentar (10). }
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
     IdentidadNoDisponible:
       description: >
-        IDENTIDAD_NO_DISPONIBLE. No se pudo verificar la lista de compañías con Diagnóstico activo con Identidad; nunca se lee sin
-        verificar.
+        IDENTIDAD_NO_DISPONIBLE (E3, B4–B6). No se pudo verificar con Identidad la compañía pedida; nunca se lee sin verificar. Si el
+        servicio no tiene Identidad configurada, estas rutas no responden 503: decide la suscripción de la compañía, que falla
+        cerrada (404 EMPRESA_NO_ENCONTRADA si no se puede confirmar).
       headers:
         Retry-After: { schema: { type: integer, example: 30 }, description: Segundos para reintentar (30). }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    IdentidadListaNoDisponible:
+      description: >
+        Vistas globales (E2, B1–B3): sin la lista de compañías con Diagnóstico activo de Identidad no se lee nada, ni con una lista
+        vacía que parezca real. `code` = IDENTIDAD_NO_CONFIGURADA: el servicio no tiene Diagnostico:Identidad:Address (sin
+        Retry-After). `code` = IDENTIDAD_NO_DISPONIBLE: Identidad no respondió o rechazó al cliente de servicio (con Retry-After).
+      headers:
+        Retry-After: { schema: { type: integer, example: 30 }, description: "Segundos para reintentar (30); solo con IDENTIDAD_NO_DISPONIBLE." }
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
 
   parameters:
@@ -4116,7 +4132,7 @@ components:
       name: tipo
       in: path
       required: true
-      description: Tipo de reporte; otro valor responde 404 REPORTE_NO_ENCONTRADO.
+      description: Tipo de reporte; otro valor responde 404 (REPORTE_NO_ENCONTRADO en B1–B3; sin cuerpo en B4–B6, ver TipoReporte).
       schema: { $ref: "#/components/schemas/TipoReporte" }
     ModalidadReporte:
       name: modalidad
@@ -7343,7 +7359,9 @@ components:
     TipoReporte:
       type: string
       enum: [vehiculos, consultas, saneamientos, derivaciones, consumo]
-      description: Enum cerrado (restricción de ruta); consumo solo existe en el backoffice.
+      description: >
+        Enum cerrado; consumo solo existe en el backoffice. En R1–R3 y B1–B3 otro valor responde 404 REPORTE_NO_ENCONTRADO. En B4–B6
+        es restricción de ruta: otro valor responde 404 sin cuerpo, sin auditoría y sin consultar a Identidad.
 
     CatalogoReportesDto:
       type: object
@@ -7384,8 +7402,19 @@ components:
       required: [tipo, ambito, pagina, tamano, total, acceso_id, columnas, filas]
       description: >
         Reporte en pantalla (R1, B1, B4). Cada fila es un objeto cuyas claves son exactamente las columnas[].clave (valor o null), en
-        el orden de la lista blanca del tipo (contrato-api §4). Nunca usuario_*, persona_id, consulta_id, tenant_id ni nombre de persona.
-        En BACKOFFICE_GLOBAL las columnas empiezan con empresa_nombre.
+        el orden de la lista blanca cerrada del tipo (SP-16), que publica x-columnas. Nunca usuario_*, persona_id, consulta_id,
+        tenant_id ni nombre de persona. En BACKOFFICE_GLOBAL las columnas empiezan con empresa_nombre (salvo consumo, que ya la trae
+        primero); origen de consultas solo sale en BACKOFFICE_*. Los documentos salen «<tipo> <número>» separados por «; » en orden;
+        un documento que no se pudo descifrar sale como «<tipo> No disponible» (por ejemplo «CC No disponible»), sin el número. En
+        consumo, consultas_exitosas, consultas_con_error y consultas_runt|simit|avaluo|impuesto cuentan solo lo que consume: celdas
+        COMPLETADO y ERROR no reutilizadas (sin NA, PENDIENTE, EN_CURSO ni reutilizadas del mismo día, D-10); las tres fuentes RUNT y
+        las tres SIMIT se suman.
+      x-columnas:
+        vehiculos: [fecha_diagnostico, diagnostico_nombre, modalidad, tipo_analisis, tipo_tramite, placa, vin, servicio, organismo, departamento, propietarios_documentos, locatario_documento, locatario_origen, veredicto, estado_consultas, saneamiento_estado, tramite_numero]
+        consultas: [fecha_diagnostico, diagnostico_nombre, placa, fuente, estado, motivo_na, tipo_error, intentos, duracion_ms, dato_obtenido_en, reutilizada, origen]
+        saneamientos: [solicitado_en, placa, diagnostico_nombre, estado, tomado_en, cerrado_en, dias_hasta_cierre, motivo_cierre, renglones_total, renglones_pendientes]
+        derivaciones: [fecha, placa, diagnostico_nombre, tipo_operacion, tipo_tramite, estado, motivo, tramite_numero]
+        consumo: [empresa_nombre, empresa_nit, diagnosticos, vehiculos, consultas_exitosas, consultas_con_error, tasa_exito, consultas_runt, consultas_simit, consultas_avaluo, consultas_impuesto, saneamientos, tramites_creados]
       properties:
         tipo: { $ref: "#/components/schemas/TipoReporte" }
         ambito: { type: string, enum: [COMPANIA, BACKOFFICE_EMPRESA, BACKOFFICE_GLOBAL] }

@@ -112,6 +112,28 @@ public sealed class BackofficeReportesEmpresaTests
         fila.GetProperty("vehiculos").GetInt32().Should().Be(2);
     }
 
+    // SEC-6 / CR-BE-6 — un {tipo} fuera de los 5 códigos no llega al grupo de B4–B6: 404 sin fila en lecturas_backoffice ni en
+    // accesos_reporte y sin preguntar a Identidad (restricción de ruta antes de SoloEmpresaHabilitada y ConEmpresaExplicita).
+    [Fact]
+    public async Task BE4_SEC6_tipo_desconocido_404_sin_auditar_ni_preguntar_a_Identidad()
+    {
+        var a = Guid.NewGuid();
+        var identidad = new EmpresasDePrueba([new(a, "Alfa", null)]);
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: ConIdentidad(identidad));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var flit = Guid.NewGuid();
+        using var cliente = api.Cliente(TokenFlit(api, flit));
+        var rango = ReportesDePrueba.Rango();
+
+        foreach (var ruta in new[] { PorEmpresa("otro", a), $"{Base}/otro/excel?{rango}&empresa={a}", $"{Base}/otro/pdf?{rango}&empresa={a}" })
+            (await cliente.GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.NotFound, ruta);
+
+        (await LecturasAsync(api, flit, ct)).Should().BeEmpty("un tipo desconocido no deja fila de intento");
+        (await AccesosAsync(api, flit, ct)).Should().BeEmpty();
+        identidad.Llamadas.Should().Be(0);
+    }
+
     // SP-1 — sin la política del backoffice (operador FLIT sin backoffice.ver): 403 sin preguntar a Identidad.
     [Fact]
     public async Task BE4_AC6_sin_backoffice_ver_403()
