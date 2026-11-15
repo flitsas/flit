@@ -46,10 +46,32 @@ internal sealed class ExportadorReportes(MotorReportes motor, FrenoExportaciones
                 statusCode: StatusCodes.Status422UnprocessableEntity);
         }
 
-        var (bytes, tipoContenido) = formato == FormatoReporte.Xlsx
-            ? (ExcelReporte.Generar(archivo), ExcelReporte.ContentType)
-            : (PdfReporte.Generar(archivo), PdfReporte.ContentType);
+        var (bytes, tipoContenido) = Generar(archivo, formato, tipo, codigoFormato, cronometro, ct);
         LogReportes.Entregado(logger, tipo, codigoFormato, archivo.Filas.Count, archivo.Empresas, cronometro.ElapsedMilliseconds, archivo.AccesoId);
         return Results.File(bytes, tipoContenido, NombreArchivoReporte.De(filtro, formato, global));
+    }
+
+    /// <summary>
+    /// Genera el archivo en el hilo de la petición, cancelable por bloques (CR-BE-5): si el cliente se va, o si pasan
+    /// <see cref="OpcionesReportes.TimeoutSegundos"/> generando, se corta en el siguiente bloque o página. El tiempo límite agotado es
+    /// un <see cref="TimeoutException"/> (500, como cualquier fallo); el registro del acceso ya quedó escrito.
+    /// </summary>
+    private (byte[] Bytes, string TipoContenido) Generar(
+        ArchivoReporte archivo, FormatoReporte formato, string tipo, string codigoFormato, Stopwatch cronometro, CancellationToken ct)
+    {
+        var limite = motor.Opciones.TimeoutSegundos;
+        using var tiempo = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        tiempo.CancelAfter(TimeSpan.FromSeconds(limite));
+        try
+        {
+            return formato == FormatoReporte.Xlsx
+                ? (ExcelReporte.Generar(archivo, tiempo.Token), ExcelReporte.ContentType)
+                : (PdfReporte.Generar(archivo, tiempo.Token), PdfReporte.ContentType);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            LogReportes.TiempoAgotado(logger, tipo, codigoFormato, archivo.Filas.Count, limite, cronometro.ElapsedMilliseconds, archivo.AccesoId);
+            throw new TimeoutException("La generación del archivo superó el tiempo límite.");
+        }
     }
 }

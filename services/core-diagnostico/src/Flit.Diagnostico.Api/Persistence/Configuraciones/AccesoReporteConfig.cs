@@ -13,6 +13,15 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// </summary>
 internal sealed class AccesoReporteConfig : IEntityTypeConfiguration<AccesoReporte>
 {
+    /// <summary>
+    /// CHECK de <c>filtros</c> (CR-BE-1, ADR-0072 §(d) criterio 7, al estilo de <see cref="NotificacionConfig.CheckDatos"/>): objeto plano
+    /// de hasta 1 024 bytes, claves <c>^[a-z_]{1,32}$</c>, <c>placa_filtrada</c> solo como <c>true</c> y el resto arrays de códigos
+    /// <c>^[A-Z0-9_]{1,32}$</c>. La base impide guardar el valor de una placa, un documento o un texto libre aunque la aplicación
+    /// cambie. <c>silent</c> en <c>jsonb_path_exists</c>: con un no-objeto el primer término ya es falso y el CHECK falla.
+    /// </summary>
+    internal const string CheckFiltros =
+        "jsonb_typeof(filtros) = 'object' AND octet_length(filtros::text) <= 1024 AND NOT jsonb_path_exists(filtros, 'strict $.keyvalue() ? (!(@.key like_regex \"^[a-z_]{1,32}$\"))', '{}', true) AND NOT jsonb_path_exists(filtros, 'strict $.keyvalue() ? (@.key == \"placa_filtrada\" && !(@.value.type() == \"boolean\" && @.value == true))', '{}', true) AND NOT jsonb_path_exists(filtros, 'strict $.keyvalue() ? (@.key != \"placa_filtrada\" && @.value.type() != \"array\")', '{}', true) AND NOT jsonb_path_exists(filtros, 'strict $.* ? (@.type() == \"array\")[*] ? (@.type() != \"string\" || !(@ like_regex \"^[A-Z0-9_]{1,32}$\"))', '{}', true)";
+
     public void Configure(EntityTypeBuilder<AccesoReporte> builder)
     {
         var tipos = string.Join(", ", Enum.GetValues<TipoReporte>().Select(t => $"'{TiposDeReporte.Codigo(t)}'"));
@@ -26,6 +35,7 @@ internal sealed class AccesoReporteConfig : IEntityTypeConfiguration<AccesoRepor
             t.HasCheckConstraint("ck_accesos_reporte_rango", "desde <= hasta");
             t.HasCheckConstraint("ck_accesos_reporte_filas", "filas >= 0");
             t.HasCheckConstraint("ck_accesos_reporte_empresas", "empresas >= 0");
+            t.HasCheckConstraint("ck_accesos_reporte_filtros", CheckFiltros);
             t.HasCheckConstraint("ck_accesos_reporte_empresa_consultada", $"(alcance = '{empresa}') = (empresa_consultada IS NOT NULL)");
         });
         builder.HasKey(x => x.Id).HasName("pk_accesos_reporte");

@@ -34,19 +34,31 @@ internal static class ExcelReporte
 {
     public const string ContentType = TabularWorkbookWriter.ContentType;
 
-    public static byte[] Generar(ArchivoReporte archivo)
+    /// <summary>Filas entre dos comprobaciones de cancelación al armar la hoja «Reporte» (CR-BE-5).</summary>
+    public const int Bloque = 500;
+
+    public static byte[] Generar(ArchivoReporte archivo, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(archivo);
+        ct.ThrowIfCancellationRequested();
         var registro = AvisoDatosPersonales.Registro(archivo.GeneradoEn, archivo.AccesoId);
         var aviso = new Sheet("Aviso", [new Column("Aviso de datos personales", 120)],
             [[Cell.Of(AvisoDatosPersonales.Texto)], [Cell.Of(registro)], [Cell.Of($"Reporte: {archivo.NombreTipo}")]]);
         var reporte = new Sheet(
             "Reporte",
             [.. archivo.Columnas.Select(c => new Column(c.Titulo, Ancho(c)))],
-            [.. archivo.Filas.Select(f => (IReadOnlyList<Cell>)[.. archivo.Columnas.Select(c => Celda(f.GetValueOrDefault(c.Clave)))])],
+            [.. archivo.Filas.Select((f, i) =>
+            {
+                if (i % Bloque == 0)
+                    ct.ThrowIfCancellationRequested();
+                return (IReadOnlyList<Cell>)[.. archivo.Columnas.Select(c => Celda(f.GetValueOrDefault(c.Clave)))];
+            })],
             Previas: [[Cell.Of($"{AvisoDatosPersonales.Texto} {registro}")]]);
         var filtros = new Sheet("Filtros", [new Column("Filtro", 24), new Column("Valor", 60)], [.. Filtros(archivo).Select(p => (IReadOnlyList<Cell>)[Cell.Of(p.Clave), Cell.Of(p.Valor)])]);
-        return TabularWorkbookWriter.Write([aviso, reporte, filtros]);
+        ct.ThrowIfCancellationRequested();
+        var bytes = TabularWorkbookWriter.Write([aviso, reporte, filtros]);
+        ct.ThrowIfCancellationRequested();
+        return bytes;
     }
 
     /// <summary>Pares filtro → valor del archivo (Excel y PDF). La placa nunca con su valor.</summary>

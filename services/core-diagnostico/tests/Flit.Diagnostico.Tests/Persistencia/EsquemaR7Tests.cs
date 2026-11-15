@@ -202,7 +202,7 @@ public sealed class EsquemaR7Tests
             .Should().Be(1, "la fila incoherente sigue ahí para revisarla");
     }
 
-    // AC45 (code review B-1) — guarda del Down: con un ajuste FLIT (MANUAL con motivo), bajar a P4d deshace R9, R1 y R8 (cada una
+    // AC45 (code review B-1) — guarda del Down: con un ajuste FLIT (MANUAL con motivo), bajar a P4d deshace las posteriores (cada una
     // en su transacción) y se detiene en R7 con el mensaje de guarda, sin borrar la fila ni las columnas de auditoría.
     [Fact]
     public async Task Down_de_R7_se_bloquea_si_hay_ajustes_FLIT_y_no_borra_auditoria()
@@ -222,9 +222,7 @@ public sealed class EsquemaR7Tests
             .Should().ThrowAsync<PostgresException>()).Which;
 
         error.MessageText.Should().Contain("Rollback de R7_AjusteDictamen bloqueado");
-        (await db.Database.GetAppliedMigrationsAsync(ct)).Last().Should().Be("20261113050619_R7_AjusteDictamen");
-        (await db.Database.GetPendingMigrationsAsync(ct)).Should().Equal(
-            "20261113051720_R8_Notificaciones", "20261113054446_R1_VersionFilaTablero", "20261113070402_R9_AjusteConTramite");
+        await RollbackBloqueado.DebeDetenerseEnAsync(db, "20261113050619_R7_AjusteDictamen", ct);
         (await ColumnasAsync(conexion, ct)).Should().HaveCount(2, "el rollback fallido no quitó ajuste_motivo ni ajustado_desde_version");
         (await ContarAsync(conexion, vehiculo, "redactado_por = 'MANUAL' AND ajuste_motivo = @m", MotivoValido, ct))
             .Should().Be(1, "el ajuste FLIT sigue en la auditoría");

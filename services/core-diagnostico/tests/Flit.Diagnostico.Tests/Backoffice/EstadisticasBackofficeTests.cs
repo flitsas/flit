@@ -30,7 +30,7 @@ public sealed class EstadisticasBackofficeTests
 {
     // AC «global solo de compañías habilitadas y auditado» — A y B habilitadas, C apagada.
     [Fact]
-    public async Task BE1_AC6_global_solo_de_companias_habilitadas_y_auditado_en_un_guardado()
+    public async Task BE1_AC5_global_solo_de_companias_habilitadas_y_auditado_en_un_guardado()
     {
         var (a, b, c) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         var identidad = new EmpresasFijas([new(a, "Alfa Renting S.A.S.", "900000001"), new(b, "Beta Leasing S.A.", "900000002")]);
@@ -69,7 +69,7 @@ public sealed class EstadisticasBackofficeTests
 
     // SP-7 — sin datos en el rango se auditan las habilitadas consultadas.
     [Fact]
-    public async Task BE1_AC6_global_sin_datos_audita_las_habilitadas()
+    public async Task BE1_AC5_global_sin_datos_audita_las_habilitadas()
     {
         var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
         var identidad = new EmpresasFijas([new(a, "Alfa", null), new(b, "Beta", null)]);
@@ -86,7 +86,7 @@ public sealed class EstadisticasBackofficeTests
 
     // SP-7 (b) — si la auditoría falla, la respuesta no trae datos.
     [Fact]
-    public async Task BE1_AC6_global_sin_auditoria_no_hay_datos()
+    public async Task BE1_AC5_global_sin_auditoria_no_hay_datos()
     {
         var a = Guid.NewGuid();
         var identidad = new EmpresasFijas([new(a, "Alfa", null)]);
@@ -105,7 +105,7 @@ public sealed class EstadisticasBackofficeTests
 
     // E3 — empresa habilitada: ámbito EMPRESA con el nombre de Identidad, solo sus datos y una fila de auditoría.
     [Fact]
-    public async Task BE1_AC6_E3_por_compania_habilitada_con_nombre_y_una_lectura()
+    public async Task BE1_AC5_E3_por_compania_habilitada_con_nombre_y_una_lectura()
     {
         var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
         var identidad = new EmpresasFijas([new(a, "Alfa Renting S.A.S.", null), new(b, "Beta", null)]);
@@ -130,7 +130,7 @@ public sealed class EstadisticasBackofficeTests
 
     // SP-3 — E3 con una compañía apagada o un uuid aleatorio: el mismo 404 EMPRESA_NO_ENCONTRADA sin auditar; sin empresa, 400.
     [Fact]
-    public async Task BE1_AC6_E3_empresa_apagada_o_inexistente_404_sin_auditoria()
+    public async Task BE1_AC5_E3_empresa_apagada_o_inexistente_404_sin_auditoria()
     {
         var identidad = new EmpresasFijas([new(Guid.NewGuid(), "Alfa", null)]);
         await using var api = await ApiDePrueba.ConBaseAsync(configurar: x => x.Services.AddScoped<IEmpresasPlataforma>(_ => identidad));
@@ -156,7 +156,7 @@ public sealed class EstadisticasBackofficeTests
     [InlineData(RutaGlobal, "&empresa=0192f1a2-0000-7000-8000-000000000001", "FILTRO_INVALIDO")]
     [InlineData(RutaGlobal, "&nombre=x", "FILTRO_INVALIDO")]
     [InlineData(RutaGlobal, "&hasta=2020-01-01", "FILTRO_INVALIDO")]
-    public async Task BE1_AC5_E2_parametros_invalidos_400_sin_Identidad(string ruta, string extra, string codigo)
+    public async Task BE1_AC6_E2_parametros_invalidos_400_sin_Identidad(string ruta, string extra, string codigo)
     {
         var identidad = new EmpresasFijas([]);
         await using var api = await ApiDePrueba.SinBaseAsync(configurar: x => x.Services.AddScoped<IEmpresasPlataforma>(_ => identidad));
@@ -171,7 +171,7 @@ public sealed class EstadisticasBackofficeTests
 
     // SP-1 — un cliente con los claims del backoffice armados a mano recibe 403 en E2 y E3; sin volumetria.ver, también.
     [Fact]
-    public async Task BE1_AC6_autorizacion_de_E2_y_E3()
+    public async Task BE1_AC5_autorizacion_de_E2_y_E3()
     {
         var identidad = new EmpresasFijas([]);
         await using var api = await ApiDePrueba.SinBaseAsync(configurar: x => x.Services.AddScoped<IEmpresasPlataforma>(_ => identidad));
@@ -190,7 +190,7 @@ public sealed class EstadisticasBackofficeTests
 
     // SP-4 — Identidad caída: 503 IDENTIDAD_NO_DISPONIBLE con Retry-After, sin leer.
     [Fact]
-    public async Task BE1_AC6_global_con_Identidad_caida_503()
+    public async Task BE1_AC5_global_con_Identidad_caida_503()
     {
         var identidad = new EmpresasFijas([]) { Falla = new RpcException(new Status(StatusCode.Unavailable, "falla de prueba")) };
         await using var api = await ApiDePrueba.SinBaseAsync(configurar: x => x.Services.AddScoped<IEmpresasPlataforma>(_ => identidad));

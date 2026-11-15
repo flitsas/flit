@@ -60,8 +60,15 @@ internal static class ReportesDePrueba
 {
     public const string Base = Program.Prefijo + "/reportes";
 
-    /// <summary>Hoy en Colombia (UTC−5 fijo).</summary>
-    public static DateOnly Hoy => DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).DateTime);
+    /// <summary>Instante en que arrancó la API de la prueba (<see cref="ArrancarAsync"/>); su reloj queda fijo en él.</summary>
+    private static readonly AsyncLocal<DateTimeOffset?> Arranque = new();
+
+    /// <summary>
+    /// Hoy en Colombia (UTC−5 fijo), del mismo reloj que el servidor (CR-BE-11): con <see cref="ArrancarAsync"/> la API usa un
+    /// <see cref="TimeProvider"/> fijo en su arranque y <c>Hoy</c> sale de ese instante, así que la prueba y la ruta no pueden caer en días
+    /// distintos cerca de la medianoche. Sin esa API (otros arranques), el reloj del sistema.
+    /// </summary>
+    public static DateOnly Hoy => DateOnly.FromDateTime((Arranque.Value ?? DateTimeOffset.UtcNow).ToOffset(TimeSpan.FromHours(-5)).DateTime);
 
     public static string Rango(int dias = 30) => $"desde={Hoy.AddDays(-dias):yyyy-MM-dd}&hasta={Hoy:yyyy-MM-dd}";
 
@@ -69,10 +76,18 @@ internal static class ReportesDePrueba
     public static string Ruta(string tipo, string? consulta = null, string sufijo = "") =>
         $"{Base}/{tipo}{sufijo}?{Rango()}" + (string.IsNullOrEmpty(consulta) ? string.Empty : "&" + consulta);
 
-    /// <summary>Arranca la API con <see cref="ProtectorDePrueba"/>, <see cref="CapturaLogs"/> y la configuración extra dada.</summary>
-    public static Task<ApiDePrueba> ArrancarAsync(IDictionary<string, string?>? configuracion = null, CapturaLogs? logs = null) =>
-        ApiDePrueba.ConBaseAsync(configurar: b =>
+    /// <summary>
+    /// Arranca la API con <see cref="ProtectorDePrueba"/>, <see cref="CapturaLogs"/>, la configuración extra dada y el reloj fijo en este
+    /// instante. Es síncrono a propósito hasta devolver la tarea: el <see cref="AsyncLocal{T}"/> de <see cref="Hoy"/> queda visible para la
+    /// prueba que llama.
+    /// </summary>
+    public static Task<ApiDePrueba> ArrancarAsync(IDictionary<string, string?>? configuracion = null, CapturaLogs? logs = null)
+    {
+        var arranque = DateTimeOffset.UtcNow;
+        Arranque.Value = arranque;
+        return ApiDePrueba.ConBaseAsync(configurar: b =>
         {
+            b.Services.AddSingleton<TimeProvider>(new RelojFijo(arranque));
             b.Services.AddSingleton<IProtectorDocumentoPersona>(sp =>
                 new ProtectorDePrueba(new ProtectorDocumentoPersona(sp.GetRequiredService<IDataProtectionProvider>())));
             if (configuracion is not null)
@@ -84,8 +99,15 @@ internal static class ReportesDePrueba
                 b.Logging.AddProvider(logs);
             }
         });
+    }
 
     public static ProtectorDePrueba Protector(ApiDePrueba api) => (ProtectorDePrueba)api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+
+    /// <summary>Reloj del servidor fijo en el arranque de la prueba (como <c>RelojFijo</c> de <c>FiltroEstadisticasTests</c>).</summary>
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
 
     /// <summary>
     /// Usuario de la compañía: <c>diagnosticos.ver</c> y, según los indicadores, <c>reportes.ver</c>, <c>reportes.descargar</c> y
