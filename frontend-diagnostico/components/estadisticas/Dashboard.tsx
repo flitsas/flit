@@ -10,6 +10,7 @@ import { EstadoVacio } from "@flit/ui/EstadoVacio";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
+import { RegionDesplazableTabla } from "@/components/comun/RegionDesplazable";
 import { BOTON_PRIMARIO_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { nombreFuente } from "@/lib/configuracion";
@@ -166,15 +167,18 @@ function Secciones({ datos, vistaGlobal, onElegirEmpresa }: { datos: Estadistica
           <h2 id="dashboard-fuentes" className={TITULO_SECCION_CLS}>
             Salud de las fuentes
           </h2>
-          <DataTable
-            ariaLabel="Salud de las fuentes"
-            columns={COLUMNAS_FUENTES}
-            rows={datos.fuentes ?? []}
-            getRowKey={(f) => f.fuente}
-            emptyMessage="No hubo consultas a fuentes en este periodo."
-            minWidth={720}
-            tarjeta={false}
-          />
+          {/* Ronda 2 de E2E: el contenedor con scroll del kit es enfocable cuando la tabla no cabe (axe scrollable-region-focusable). */}
+          <RegionDesplazableTabla nombre="Salud de las fuentes">
+            <DataTable
+              ariaLabel="Salud de las fuentes"
+              columns={COLUMNAS_FUENTES}
+              rows={datos.fuentes ?? []}
+              getRowKey={(f) => f.fuente}
+              emptyMessage="No hubo consultas a fuentes en este periodo."
+              minWidth={720}
+              tarjeta={false}
+            />
+          </RegionDesplazableTabla>
         </section>
         <div className="flex flex-col gap-4">
           <section className={SECCION_CLS}>

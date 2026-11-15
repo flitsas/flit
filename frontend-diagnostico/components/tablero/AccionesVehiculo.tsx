@@ -204,6 +204,11 @@ export function AccionesVehiculo({
           {sanear.error}
         </p>
       )}
+      {sanear.tipo === "alternar" && sanear.exito && (
+        <p role="status" className={MENSAJE_CLS} style={{ color: "var(--badge-success-fg)" }}>
+          {sanear.exito}
+        </p>
+      )}
       <MensajeTramite mensaje={tramite.mensaje} identificador={tramite.identificador} />
       {pdf.error && (
         <p role="alert" className={MENSAJE_CLS} style={{ color: "var(--badge-danger-fg)" }}>

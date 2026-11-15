@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { BarrasSerie } from "@/components/estadisticas/graficas/BarrasSerie";
 import { BarraApilada } from "@/components/estadisticas/graficas/BarraApilada";
 import { ListaBarras } from "@/components/estadisticas/graficas/ListaBarras";
+import { simularDesborde } from "@/components/comun/__tests__/desborde";
 
 // Uso de ejemplo: <BarrasSerie titulo="Uso en el tiempo" subtitulo="por día" etiquetas={["14/11","15/11"]}
 // series={[{ nombre: "Diagnósticos", color: "var(--chart-1)", valores: [2, 0] }]} /> pinta columnas aria-hidden y una
@@ -106,5 +107,24 @@ describe("BarraApilada y ListaBarras — valores en texto y tabla alternativa", 
     );
     fireEvent.click(screen.getByRole("button", { name: "Ver Compañía Demo" }));
     expect(elegidos).toEqual(["e1"]);
+  });
+});
+
+// Ronda 2 de E2E: «Ver datos» tiene alto máximo (max-h-64) y una tabla sin controles; con 30 días desborda en vertical
+// y axe pide que sea alcanzable con teclado (scrollable-region-focusable). Mismo patrón: RegionDesplazable.
+describe("BarrasSerie — «Ver datos» desplazable con teclado", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("si la tabla supera el alto del desplegable, su contenedor es región «Datos de …, desplazable» enfocable", () => {
+    simularDesborde({ ancho: 300, alto: 720 });
+    render(<BarrasSerie titulo="Uso en el tiempo" etiquetas={["14/11", "15/11"]} series={SERIES} />);
+    fireEvent.click(screen.getByText("Ver datos"));
+    const region = screen.getByRole("region", { name: "Datos de Uso en el tiempo, desplazable" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region).toHaveClass("max-h-64");
+    expect(within(region).getByRole("table", { name: /Uso en el tiempo/ })).toBeInTheDocument();
   });
 });

@@ -95,7 +95,8 @@ test.describe("PS-1 tablero del lote", () => {
       expect([200, 201]).toContain((await put).status());
       await expect(menu).toHaveCount(0);
       await expect(acciones(page, A)).toBeFocused();
-      await expect(page.getByText(`Saneamiento solicitado para ${A}.`)).toBeAttached();
+      // §2.5: el resultado sale bajo el disparador (role=status de la fila) y además en la región viva de la pantalla.
+      await expect(page.getByRole("status").filter({ hasText: `Saneamiento solicitado para ${A}.` }).first()).toBeAttached();
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await esperarBandera(page, A, "encendida");
     });
@@ -120,7 +121,7 @@ test.describe("PS-1 tablero del lote", () => {
 
     await test.step("AC6: desmarcar de verdad", async () => {
       await pulsarBandera(page, A);
-      await expect(page.getByText(`Se quitó la solicitud de saneamiento de ${A}.`)).toBeAttached();
+      await expect(page.getByText(`Se quitó la solicitud de saneamiento de ${A}.`).first()).toBeAttached();
       await esperarBandera(page, A, "apagada");
     });
 

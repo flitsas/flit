@@ -1,3 +1,4 @@
+import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { formatoEntero } from "@/lib/estadisticas/formato";
 import { Figura, Leyenda } from "./Figura";
 import { TablaAlternativa } from "./TablaAlternativa";
@@ -69,14 +70,15 @@ export function BarrasSerie({
       </div>
       <details className="group text-xs">
         <summary className={RESUMEN_CLS}>Ver datos</summary>
-        <div className="mt-2 max-h-64 overflow-auto">
+        {/* Ronda 2 de E2E: con alto máximo y sin controles dentro, el desplazamiento tiene que ser alcanzable con teclado. */}
+        <RegionDesplazable nombre={`Datos de ${titulo}`} className="mt-2 max-h-64 overflow-auto">
           <TablaAlternativa
             visible
             titulo={titulo}
             encabezados={["Periodo", ...series.map((s) => s.nombre)]}
             filas={etiquetas.map((etiqueta, i) => ({ encabezado: etiqueta, celdas: series.map((s) => formatoEntero(s.valores[i] ?? 0)) }))}
           />
-        </div>
+        </RegionDesplazable>
       </details>
     </Figura>
   );

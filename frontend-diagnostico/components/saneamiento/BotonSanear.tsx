@@ -65,6 +65,8 @@ export type AccionSanear =
       identificador: string;
       error: string | null;
       encendida: boolean;
+      /** Resultado confirmado por la API (spec-ui §2.5: `role="status"` bajo el disparador del menú). `null` en vuelo o tras un error. */
+      exito: string | null;
       noElegible: boolean;
       motivo: string | undefined;
       enVuelo: boolean;
@@ -91,6 +93,7 @@ export function useAccionSanear({
   const [enVuelo, setEnVuelo] = useState(false);
   const enVueloRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [exito, setExito] = useState<string | null>(null);
 
   const identificador = vehiculo.placa || vehiculo.vin || vehiculo.identificador || "";
   if (!saneamiento) return { tipo: "ninguna", identificador, error };
@@ -115,17 +118,18 @@ export function useAccionSanear({
     const previo = actual;
     const siguiente = encendida ? SIN_SANEAMIENTO : SANEAMIENTO_SOLICITADO;
     setError(null);
+    setExito(null);
     enVueloRef.current = true;
     setEnVuelo(true);
     onCambio(siguiente.estado, siguiente);
     try {
       if (encendida) await desmarcarSaneamiento(diagnosticoId, vehiculo.id);
       else await marcarSaneamiento(diagnosticoId, vehiculo.id);
-      onAnunciar?.(
-        encendida
-          ? `Se quitó la solicitud de saneamiento de ${identificador || "el vehículo sin placa"}.`
-          : `Saneamiento solicitado para ${identificador || "el vehículo sin placa"}.`,
-      );
+      const resultado = encendida
+        ? `Se quitó la solicitud de saneamiento de ${identificador || "el vehículo sin placa"}.`
+        : `Saneamiento solicitado para ${identificador || "el vehículo sin placa"}.`;
+      setExito(resultado);
+      onAnunciar?.(resultado);
       onConfirmado?.(siguiente.estado, siguiente);
     } catch (e) {
       onCambio(previo.estado, previo);
@@ -141,7 +145,7 @@ export function useAccionSanear({
     }
   }
 
-  return { tipo: "alternar", identificador, error, encendida, noElegible, motivo, enVuelo, alternar };
+  return { tipo: "alternar", identificador, error, encendida, exito, noElegible, motivo, enVuelo, alternar };
 }
 
 /**

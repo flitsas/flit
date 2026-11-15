@@ -4,6 +4,7 @@ import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
 import { FUENTES, nombreFuente, nombreSubfuente } from "@/lib/configuracion";
 import { V1, V2, V3, celda, grilla, llamadas, loteTerminadoConErrores, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import type { Grilla } from "@/lib/tablero/api";
+import { simularDesborde } from "@/components/comun/__tests__/desborde";
 import { createElement, type ComponentType } from "react";
 import { join, resolve } from "node:path";
 import {
@@ -567,5 +568,30 @@ describe("GrillaSemaforos — FE-2 encabezados RUNT/SIMIT agrupados", () => {
     const td = container.querySelector('td[data-label="Acciones"]') as HTMLElement;
     expect(td.className).toContain("w-[10rem]");
     expect(td.className).toContain("min-[900px]:right-0");
+  });
+});
+
+// Ronda 2 de E2E: un único patrón para los contenedores con scroll horizontal de la ola (RegionDesplazable). La grilla
+// mide 1280 px como mínimo: con desborde es región con nombre y parada de Tab; sin él, div plano.
+describe("GrillaSemaforos — región desplazable (ronda 2 de E2E)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("con desborde, el contenedor de la grilla es región «Semáforo de consultas del lote, desplazable» enfocable", () => {
+    simularDesborde({ ancho: 1280 });
+    pintar();
+    const region = screen.getByRole("region", { name: "Semáforo de consultas del lote, desplazable" });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region).toHaveClass("overflow-x-auto", "rounded-xl", "border");
+    expect(within(region).getByRole("table", { name: "Semáforo de consultas del lote" })).toBeInTheDocument();
+  });
+
+  it("sin desborde no hay región ni parada de Tab", () => {
+    simularDesborde({ ancho: 300 });
+    pintar();
+    expect(screen.queryByRole("region", { name: /desplazable/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("table").parentElement).not.toHaveAttribute("tabindex");
   });
 });
