@@ -628,8 +628,11 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await avanzar();
     expect(llamadas(api, "PUT", ruta)).toHaveLength(1);
     expect(quitar("TST001")).not.toBeNull();
-    // Región viva única de la pantalla (spec §1.6).
-    expect(screen.getByText("Saneamiento solicitado para TST001.").closest("[role='status']")).toHaveClass("sr-only");
+    // Región viva de la pantalla (spec §1.6) y, desde la ronda 2 de E2E, también el status visible bajo «Acciones» (spec §2.5).
+    const avisos = screen.getAllByText("Saneamiento solicitado para TST001.").map((n) => n.closest("[role='status']"));
+    expect(avisos).toHaveLength(2);
+    expect(avisos.filter((a) => a?.classList.contains("sr-only"))).toHaveLength(1);
+    expect(within(fila("TST001")).getByRole("status")).toHaveTextContent("Saneamiento solicitado para TST001.");
   });
 
   it("AC6: si el PUT falla, la fila vuelve a «sin saneamiento» y la etiqueta desaparece", async () => {
