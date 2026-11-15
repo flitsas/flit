@@ -25,7 +25,7 @@ import {
   sinDesbordeHorizontal,
   tomarPorApi,
 } from "./saneamiento-comun";
-import { abrirAcciones } from "./ola-ux-comun";
+import { abrirAcciones, esperarBandera, pulsarBandera } from "./ola-ux-comun";
 
 /**
  * HU #14577 — backoffice FLIT: PS-4 bandeja «Saneamientos» (AC24–AC28) y PS-5 gestión de un saneamiento (AC29–AC38), más el
@@ -58,7 +58,7 @@ import { abrirAcciones } from "./ola-ux-comun";
  *   - button «Quitar concepto <concepto>» · dialog «¿Quitar el concepto?» · button «Cancelar» · button «Quitar»
  *   - textbox «Observación para la compañía» · button «Cerrar como saneado» · dialog «¿Cerrar como saneado?»
  *   - button «Cerrar como no procede» · button «Reabrir» · button «Anular» · textbox «Motivo» · heading «Historial»
- *   - Cliente (ola 2026-11-15, FE-2): button «Acciones de la placa <placa>» · menuitem «Ver saneamiento de la placa <placa>: Saneado» · dialog «Deuda y saneamiento» · table «Conceptos del saneamiento»
+ *   - Cliente (ola 2026-11-15, FE-2): button «Acciones de la placa <placa>» · menuitem «Solicitar saneamiento de la placa <placa>» / «Quitar solicitud de saneamiento de la placa <placa>» · menuitem «Ver saneamiento de la placa <placa>: Saneado» · dialog «Deuda y saneamiento» · table «Conceptos del saneamiento»
  *     · link «Descargar evidencia de <concepto>» · button «/^Avisos/» · region «Avisos» · link «/^Ver lote: /»
  */
 
@@ -240,9 +240,10 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
     await esperarTerminados(page, lote, [P]);
     await page.reload();
     await test.step("AC45 (compañía): marca con la bandera", async () => {
-      const b = page.getByRole("button", { name: `Solicitar saneamiento de la placa ${P}` });
-      await b.click();
-      await expect(b).toHaveAttribute("aria-pressed", "true");
+      // Ola 2026-11-15 (FE-2): la bandera es un menuitem de «Acciones de la placa P»; su nombre dice el estado.
+      await esperarBandera(page, P, "apagada");
+      await pulsarBandera(page, P);
+      await esperarBandera(page, P, "encendida");
     });
 
     // ---------- FLIT: entra por la grilla del backoffice ----------
@@ -251,7 +252,9 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
       await bo.goto(`${APP}/backoffice/diagnosticos/${lote}?empresa=${encodeURIComponent(EMPRESA!)}`);
       const enlace = bo.getByRole("link", { name: `Gestionar saneamiento de ${P}: Saneamiento solicitado` });
       await expect(enlace).toBeVisible();
+      // La bandera no existe en el backoffice: ni como botón ni como ítem del menú «Acciones» de la compañía.
       await expect(bo.getByRole("button", { name: `Solicitar saneamiento de la placa ${P}` })).toHaveCount(0);
+      await expect(bo.getByRole("menuitem", { name: new RegExp(`^(Solicitar saneamiento|Quitar solicitud de saneamiento) de la placa ${P}$`) })).toHaveCount(0);
       await enlace.focus();
       await revisarTemas(bo, "grilla-backoffice-1280", { captura: "C-13" });
       await enlace.click();

@@ -136,9 +136,9 @@ test.describe("FE-5 Dashboard de la compañía", () => {
     await expect(page.getByText("Vista global · todas las compañías")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Compañías con más uso" })).toHaveCount(0);
     for (const s of SECCIONES) await expect(page.getByRole("heading", { level: 2, name: s }), `sección «${s}»`).toBeVisible();
-    // La URL lleva el periodo (FE-5 «vista global y selector»: desde y hasta; empresa solo en el backoffice).
-    await expect(page).toHaveURL(new RegExp(`[?&]desde=${url.searchParams.get("desde")}`));
-    await expect(page).toHaveURL(new RegExp(`[?&]hasta=${hoy}`));
+    // FE-5: la URL lleva desde/hasta/empresa cuando se ELIGE un rango o una compañía (escenario «vista global y selector»;
+    // spec-ui §4.4 no pide escribir el rango por defecto). Al abrir, la compañía nunca llega a la URL.
+    expect(new URL(page.url()).searchParams.has("empresa"), "sin ?empresa= en la vista de compañía").toBe(false);
     // La cifra del KPI de diagnósticos se pinta con separador es-CO.
     const cifra = new Intl.NumberFormat("es-CO").format(cuerpo.resumen.diagnosticos);
     await expect(page.getByText(cifra, { exact: true }).first()).toBeVisible();

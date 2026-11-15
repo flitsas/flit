@@ -69,6 +69,34 @@ describe("ModuloReportes — AC catálogo y tabla genérica", () => {
     expect(screen.queryByRole("combobox", { name: "Compañía" })).not.toBeInTheDocument();
   });
 
+  it("sin ?reporte= en la URL, al cargar el catálogo escribe en ella la pestaña activa y el periodo, una sola vez (spec-ui §5 criterio 4)", async () => {
+    simularApi({
+      "GET /reportes": () => Response.json(catalogoCompania()),
+      "GET /reportes/vehiculos": () => Response.json(paginaVehiculos()),
+    });
+    render(<ModuloReportes vistaGlobal={false} puedeDescargar={false} />);
+    await screen.findByRole("table", { name: "Vehículos diagnosticados" });
+    await waitFor(() => expect(h.replace).toHaveBeenCalledTimes(1));
+    const [url, opciones] = h.replace.mock.calls[0];
+    const q = new URL(String(url), "http://localhost").searchParams;
+    expect(q.get("reporte")).toBe("vehiculos");
+    expect(q.get("desde")).toBe("2026-10-17");
+    expect(q.get("hasta")).toBe("2026-11-15");
+    expect(q.has("placa")).toBe(false);
+    expect(opciones).toEqual({ scroll: false });
+  });
+
+  it("con ?reporte= ya en la URL no la reescribe al cargar", async () => {
+    h.params = new URLSearchParams("reporte=vehiculos&desde=2026-10-17&hasta=2026-11-15");
+    simularApi({
+      "GET /reportes": () => Response.json(catalogoCompania()),
+      "GET /reportes/vehiculos": () => Response.json(paginaVehiculos()),
+    });
+    render(<ModuloReportes vistaGlobal={false} puedeDescargar={false} />);
+    await screen.findByRole("table", { name: "Vehículos diagnosticados" });
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
   it("la pestaña de ?reporte= es la activa y cambiar de pestaña escribe ?reporte en la URL", async () => {
     h.params = new URLSearchParams("reporte=consultas");
     simularApi({

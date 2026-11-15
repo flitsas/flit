@@ -100,6 +100,16 @@ export function ModuloReportes({ vistaGlobal, puedeDescargar }: { vistaGlobal: b
     if (codigo403) router.replace(`/403?code=${encodeURIComponent(codigo403)}`);
   }, [codigo403, router]);
 
+  // spec-ui §5 criterio 4: la pestaña activa está en la URL también cuando sale por defecto (primer reporte del catálogo).
+  // Se escribe una sola vez, y solo si la URL no la trae ya: replace no relanza la lectura inicial, así que no hay bucle.
+  const urlInicialFijada = useRef(false);
+  const reporteEnUrl = params.get("reporte");
+  useEffect(() => {
+    if (!sel || urlInicialFijada.current) return;
+    urlInicialFijada.current = true;
+    if (reporteEnUrl !== sel.tipo) router.replace(urlPantalla(pathname, sel.tipo, sel.valor, vistaGlobal), { scroll: false });
+  }, [sel, reporteEnUrl, pathname, router, vistaGlobal]);
+
   function seleccionar(siguiente: Seleccion) {
     setSel(siguiente);
     router.replace(urlPantalla(pathname, siguiente.tipo, siguiente.valor, vistaGlobal), { scroll: false });

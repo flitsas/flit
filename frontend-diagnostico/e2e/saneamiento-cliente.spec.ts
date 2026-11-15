@@ -24,7 +24,7 @@ import {
   sinDesbordeHorizontal,
   tomarPorApi,
 } from "./saneamiento-comun";
-import { abrirAcciones, cerrarAcciones, disparadorAcciones, esperarDeshabilitadoConMotivo } from "./ola-ux-comun";
+import { abrirAcciones, bandera, cerrarAcciones, disparadorAcciones, esperarBandera, esperarDeshabilitadoConMotivo, estadoBandera, pulsarBandera } from "./ola-ux-comun";
 
 /**
  * HU #14577 — saneamiento del lado de la compañía: PS-1 (tablero del lote) y PS-2 (panel «Deuda y saneamiento»).
@@ -64,28 +64,8 @@ import { abrirAcciones, cerrarAcciones, disparadorAcciones, esperarDeshabilitado
 test.describe.configure({ mode: "serial" });
 
 const ruta = (diagnosticoId: string, vehiculoId: string) => new RegExp(`/diagnosticos/${diagnosticoId}/vehiculos/${vehiculoId}/saneamiento$`);
-// Ola 2026-11-15 (FE-2): la bandera de la fila es un menuitem del menú «Acciones»; el nombre dice el estado.
-const bandera = (page: Page, placa: string) =>
-  page.getByRole("menu").getByRole("menuitem", { name: new RegExp(`^(Solicitar saneamiento|Quitar solicitud de saneamiento) de la placa ${placa}$`) });
 const acciones = disparadorAcciones;
 
-/** Estado de la bandera leído del nombre del ítem («Quitar solicitud…» = encendida). Deja el menú cerrado. */
-async function estadoBandera(page: Page, placa: string): Promise<"apagada" | "encendida"> {
-  await abrirAcciones(page, placa);
-  const nombre = (await bandera(page, placa).getAttribute("aria-label")) ?? "";
-  await cerrarAcciones(page, placa);
-  return nombre.startsWith("Quitar") ? "encendida" : "apagada";
-}
-
-async function esperarBandera(page: Page, placa: string, estado: "apagada" | "encendida", timeout = 15_000) {
-  await expect(async () => expect(await estadoBandera(page, placa)).toBe(estado)).toPass({ timeout, intervals: [1_000] });
-}
-
-/** Abre el menú de la fila y elige la bandera (el menú se cierra y el foco vuelve a «Acciones»). */
-async function pulsarBandera(page: Page, placa: string) {
-  await abrirAcciones(page, placa);
-  await bandera(page, placa).click();
-}
 const grilla = (page: Page) => page.getByRole("table", { name: /semáforo de consultas/i });
 const fila = (page: Page, placa: string) => grilla(page).getByRole("row").filter({ has: page.getByRole("rowheader", { name: new RegExp(placa) }) });
 const panelDeuda = (page: Page) => page.getByRole("dialog", { name: "Deuda y saneamiento" });

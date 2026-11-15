@@ -229,6 +229,28 @@ export async function cerrarAcciones(page: Page, placa: string) {
   await expect(page.getByRole("menu")).toHaveCount(0);
 }
 
+// Ola 2026-11-15 (FE-2): la bandera de la fila es un menuitem del menú «Acciones»; el nombre dice el estado.
+export const bandera = (page: Page, placa: string) =>
+  page.getByRole("menu").getByRole("menuitem", { name: new RegExp(`^(Solicitar saneamiento|Quitar solicitud de saneamiento) de la placa ${placa}$`) });
+
+/** Estado de la bandera leído del nombre del ítem («Quitar solicitud…» = encendida). Deja el menú cerrado. */
+export async function estadoBandera(page: Page, placa: string): Promise<"apagada" | "encendida"> {
+  await abrirAcciones(page, placa);
+  const nombre = (await bandera(page, placa).getAttribute("aria-label")) ?? "";
+  await cerrarAcciones(page, placa);
+  return nombre.startsWith("Quitar") ? "encendida" : "apagada";
+}
+
+export async function esperarBandera(page: Page, placa: string, estado: "apagada" | "encendida", timeout = 15_000) {
+  await expect(async () => expect(await estadoBandera(page, placa)).toBe(estado)).toPass({ timeout, intervals: [1_000] });
+}
+
+/** Abre el menú de la fila y elige la bandera (el menú se cierra y el foco vuelve a «Acciones»). */
+export async function pulsarBandera(page: Page, placa: string) {
+  await abrirAcciones(page, placa);
+  await bandera(page, placa).click();
+}
+
 /** Orden de los ítems (spec-ui §2.3 con V2 adoptado en decisiones-usuario.md). */
 export const ORDEN_ITEMS: readonly RegExp[] = [
   /^(Solicitar saneamiento|Quitar solicitud de saneamiento|Ver saneamiento)/,
