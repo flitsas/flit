@@ -29,6 +29,9 @@ internal static class ReportesRegistro
         services.AddScoped<IReporte, ReporteDerivaciones>();
         services.AddScoped<DescifradoDocumentos>();
         services.AddScoped<MotorReportes>();
+        // BE-3: exportación a Excel y PDF con el freno de concurrencia del proceso (singleton, compartido con el backoffice).
+        services.AddSingleton<FrenoExportaciones>();
+        services.AddScoped<ExportadorReportes>();
         return services;
     }
 

@@ -206,9 +206,14 @@ internal static class ReportesDePrueba
         return new LoteSembrado(cabecera, filas, celdas);
     }
 
-    /// <summary>Muchos vehículos sin personas en un lote (topes de exportación): placas RPT00001…</summary>
-    public static async Task<Guid> LoteGrandeAsync(EmpresaDePrueba empresa, int vehiculos, CancellationToken ct, Guid? creador = null)
+    /// <summary>
+    /// Muchos vehículos en un lote (topes y tiempo de exportación): placas {prefijo}00000…, cada uno con un propietario cifrado si
+    /// <paramref name="conPropietario"/> (documento ficticio 70000000nn).
+    /// </summary>
+    public static async Task<Guid> LoteGrandeAsync(
+        EmpresaDePrueba empresa, int vehiculos, CancellationToken ct, Guid? creador = null, bool conPropietario = false, string prefijo = "RPT", int desde = 0)
     {
+        var protector = empresa.Api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var ahora = DateTimeOffset.UtcNow.AddMinutes(-10);
         var cabecera = new CabeceraDiagnostico
         {
@@ -222,10 +227,10 @@ internal static class ReportesDePrueba
         };
         await using var db = empresa.Db();
         db.Add(cabecera);
-        for (var i = 0; i < vehiculos; i++)
+        for (var i = desde; i < desde + vehiculos; i++)
         {
-            var placa = $"RPT{i:D5}";
-            db.Add(new VehiculoDiagnostico
+            var placa = $"{prefijo}{i:D5}";
+            var vehiculo = new VehiculoDiagnostico
             {
                 DiagnosticoId = cabecera.Id,
                 IdentificadorOriginal = placa,
@@ -233,7 +238,10 @@ internal static class ReportesDePrueba
                 TipoIdentificador = TipoIdentificador.PlacaCarro,
                 Placa = placa,
                 Orden = i + 1,
-            });
+            };
+            db.Add(vehiculo);
+            if (conPropietario)
+                db.Add(Persona(vehiculo, RolPersona.Propietario, 1, "CC", protector.Proteger($"70{i:D8}"), OrigenDocumento.Proveedor, ahora));
         }
 
         await db.SaveChangesAsync(ct);

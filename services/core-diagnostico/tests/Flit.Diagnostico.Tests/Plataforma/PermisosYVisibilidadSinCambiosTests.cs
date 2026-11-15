@@ -66,6 +66,8 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         "GET /api/v1/diagnostico/plantilla => diagnostico.diagnosticos.crear",
         "GET /api/v1/diagnostico/reportes => diagnostico.reportes.ver",
         "GET /api/v1/diagnostico/reportes/{tipo} => diagnostico.reportes.ver",
+        "GET /api/v1/diagnostico/reportes/{tipo}/excel => diagnostico.reportes.descargar,diagnostico.reportes.ver",
+        "GET /api/v1/diagnostico/reportes/{tipo}/pdf => diagnostico.reportes.descargar,diagnostico.reportes.ver",
         "GET /api/v1/diagnostico/sesion => -",
         "GET /api/v1/diagnostico/tipos-tramite => diagnostico.diagnosticos.crear",
         "GET /api/v1/diagnostico/vehiculos => diagnostico.diagnosticos.ver",

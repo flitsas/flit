@@ -47,6 +47,32 @@ internal sealed class MotorReportes(
             [.. filas.Select(f => Fila(columnas, f, contexto))]);
     }
 
+    /// <summary>
+    /// El archivo del reporte (R2/R3, B2/B3, B5/B6), sin paginar: cuenta primero y, si pasa el máximo del formato, lanza
+    /// <see cref="ReporteDemasiadoGrandeException"/> sin leer, descifrar ni registrar nada (SP-11); si no, lee todas las filas, registra el
+    /// acceso (filas y empresas del archivo, fail-closed) y solo entonces descifra, por lotes de 500.
+    /// </summary>
+    public async Task<ArchivoReporte> ArchivoAsync(
+        ContextoReporte contexto, FiltroReporte filtro, FormatoReporte formato, AuditorReporte auditar, DateTimeOffset generadoEn, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(filtro);
+        ArgumentNullException.ThrowIfNull(auditar);
+        var reporte = Reporte(filtro.Tipo);
+        AcotarTiempo();
+        var total = await reporte.ContarAsync(contexto, filtro, ct).ConfigureAwait(false);
+        var maximo = Opciones.Maximo(formato);
+        if (total > maximo)
+            throw new ReporteDemasiadoGrandeException(total, maximo);
+        var filas = await reporte.LeerAsync(contexto, filtro, 0, null, ct).ConfigureAwait(false);
+        if (filas.Count > maximo)
+            throw new ReporteDemasiadoGrandeException(filas.Count, maximo);
+        var (accesoId, empresas) = await AuditarAsync(contexto, filtro, formato, filas, auditar, ct).ConfigureAwait(false);
+        descifrado.Aplicar(filtro.Tipo, filas);
+        var columnas = DefinicionReporte.Columnas(filtro.Tipo, contexto.Alcance);
+        return new ArchivoReporte(filtro, contexto.Alcance, columnas, [.. filas.Select(f => Fila(columnas, f, contexto))], accesoId, generadoEn, empresas);
+    }
+
     public IReporte Reporte(TipoReporte tipo) =>
         _reportes.TryGetValue(tipo, out var reporte)
             ? reporte
@@ -78,4 +104,15 @@ internal sealed class MotorReportes(
         var id = await auditar(solicitud, empresas, ct).ConfigureAwait(false);
         return (id, empresas.Count);
     }
+}
+
+/// <summary>El conteo previo pasa el máximo del formato (422 <c>REPORTE_DEMASIADO_GRANDE</c>, contrato-api §5).</summary>
+internal sealed class ReporteDemasiadoGrandeException(int filas, int maximo)
+    : Exception("El reporte tiene más filas de las que admite el formato. Acota el rango o los filtros.")
+{
+    public const string Codigo = "REPORTE_DEMASIADO_GRANDE";
+
+    public int Filas { get; } = filas;
+
+    public int Maximo { get; } = maximo;
 }
