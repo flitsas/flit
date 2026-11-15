@@ -7,6 +7,7 @@ import type { FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { FALLOS_ANTES_DE_DETENER, INTERVALO_REPOSO_MS, INTERVALO_SONDEO_MS } from "@/lib/tablero/useGrillaIncremental";
 import { ID, V1, celda, desdesPedidos, grilla, llamadas, loteTerminadoConErrores, sesion, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import { deudaSinPendientes, saneamientoEnGestion } from "@/components/saneamiento/__tests__/datosDeuda";
+import { accionFila, accionesDeFila, accionesEnTodas, disparadorDe, quizaAccionFila } from "@/components/tablero/__tests__/menuFila";
 
 // Uso de ejemplo: /diagnosticos/{id} (a donde navegan la confirmación de la carga y el Express) abre el tablero del lote:
 // tarjeta título con el nombre, estado global y avance, la grilla de semáforos con sondeo cada 3 s y «Cerrar panel»
@@ -312,12 +313,15 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
   it("AC1: lote EN_PROCESO, el PDF del vehículo terminado está habilitado y el del que sigue en curso deshabilitado con su ayuda", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla()) }, DESCARGA);
     const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
-    expect(within(tabla).getByRole("columnheader", { name: "Reporte" })).toBeInTheDocument();
-    const pdf1 = within(tabla).getByRole("link", { name: "Descargar PDF de TST001" });
+    // FE-2 (spec-ui §2.3): la columna se titula siempre «Acciones» y el PDF es un ítem del menú de la fila.
+    expect(within(tabla).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    expect(within(tabla).queryByRole("columnheader", { name: "Reporte" })).toBeNull();
+    const pdf1 = accionFila("TST001", "Descargar PDF de TST001");
+    expect(pdf1.tagName).toBe("A");
     expect(pdf1).toHaveAttribute("href", `/api/v1/diagnostico/diagnosticos/${ID}/vehiculos/vehiculo-1/pdf`);
     expect(pdf1).toHaveAttribute("download");
-    const pdf2 = within(tabla).getByRole("button", { name: "Descargar PDF de TST002" });
-    expect(pdf2).toBeDisabled();
+    const pdf2 = accionFila("TST002", "Descargar PDF de TST002");
+    expect(pdf2).toHaveAttribute("aria-disabled", "true");
     expect(pdf2).toHaveAccessibleDescription("Disponible cuando terminen las consultas de este vehículo");
     const barra = screen.getByRole("region", { name: "Descargas del lote" });
     expect(within(barra).getByRole("link", { name: "Excel del lote" })).toBeInTheDocument();
@@ -326,7 +330,7 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
 
   it("AC6: lote INCOMPLETO, el PDF del vehículo con celdas en error está habilitado con la ayuda de «no disponible»", async () => {
     await montar({ [GRILLA]: () => Response.json(loteTerminadoConErrores({ estado: "INCOMPLETO" })) }, DESCARGA);
-    const pdf4 = screen.getByRole("link", { name: "Descargar PDF de TST004" });
+    const pdf4 = accionFila("TST004", "Descargar PDF de TST004");
     expect(pdf4).toHaveAccessibleDescription("Las consultas no disponibles aparecerán así en el PDF");
   });
 
@@ -335,6 +339,7 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
     expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Descargas del lote" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Reporte" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /descargar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /descargar/i })).not.toBeInTheDocument();
   });
@@ -602,7 +607,10 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
   const placasVisibles = () => filas().map((tr) => within(tr).getByRole("rowheader").textContent!.match(/TST\d{3}/)![0]);
   const chip = (nombre: string) => within(screen.getByRole("group", { name: "Filtrar por saneamiento" })).getByRole("button", { name: nombre });
   const consulta = () => new URLSearchParams(window.location.search).get("saneamiento");
-  const bandera = (placa: string) => within(fila(placa)).getByRole("button", { name: `Solicitar saneamiento de la placa ${placa}` });
+  // FE-2: la bandera es el ítem «Solicitar / Quitar solicitud de saneamiento» del menú «Acciones» de la fila.
+  const bandera = (placa: string) => accionFila(placa, `Solicitar saneamiento de la placa ${placa}`);
+  const quitar = (placa: string) => quizaAccionFila(placa, `Quitar solicitud de saneamiento de la placa ${placa}`);
+  const celdaDictamen = (placa: string) => within(fila(placa)).getByRole("button", { name: `Ver dictamen de ${placa}` }).closest("td")!;
 
   beforeEach(() => window.history.replaceState(null, "", "/diagnosticos/x"));
 
@@ -612,18 +620,14 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
       { [GRILLA]: () => Response.json(loteSan()), [`PUT ${ruta}`]: () => Response.json({ id: "s1", estado: "SOLICITADO" }, { status: 201 }) },
       SANEA_DERIVA,
     );
-    const celdaAcciones = bandera("TST001").closest("td")!;
-    const botones = within(celdaAcciones).getAllByRole("button");
-    expect(botones[0]).toBe(bandera("TST001"));
-    expect(botones[1]).toHaveAccessibleName("Crear trámite para la placa TST001");
-    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "false");
+    expect(accionesDeFila("TST001").slice(0, 2)).toEqual(["Solicitar saneamiento de la placa TST001", "Crear trámite para la placa TST001"]);
     expect(within(fila("TST001")).queryByText("Saneamiento solicitado")).toBeNull();
     fireEvent.click(bandera("TST001"));
-    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "true");
-    expect(within(fila("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(within(celdaDictamen("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(quitar("TST001")).not.toBeNull();
     await avanzar();
     expect(llamadas(api, "PUT", ruta)).toHaveLength(1);
-    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "true");
+    expect(quitar("TST001")).not.toBeNull();
     // Región viva única de la pantalla (spec §1.6).
     expect(screen.getByText("Saneamiento solicitado para TST001.").closest("[role='status']")).toHaveClass("sr-only");
   });
@@ -633,14 +637,15 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await montarSan({ [GRILLA]: () => Response.json(loteSan()), [`PUT ${ruta}`]: () => Response.json({ code: "VEHICULO_NO_TERMINADO", error: "x" }, { status: 409 }) });
     fireEvent.click(bandera("TST001"));
     await avanzar();
-    expect(bandera("TST001")).toHaveAttribute("aria-pressed", "false");
+    expect(bandera("TST001")).not.toHaveAttribute("aria-disabled");
+    expect(quitar("TST001")).toBeNull();
     expect(within(fila("TST001")).queryByText("Saneamiento solicitado")).toBeNull();
     expect(within(fila("TST001")).getByRole("alert")).toHaveTextContent("Este vehículo aún tiene consultas por terminar.");
   });
 
   it("AC7: EN_GESTION es «Ver saneamiento» con el estado en el nombre y el clic abre el panel del vehículo", async () => {
     await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
-    const ver = within(fila("TST003")).getByRole("button", { name: "Ver saneamiento de la placa TST003: En saneamiento" });
+    const ver = accionFila("TST003", "Ver saneamiento de la placa TST003: En saneamiento");
     expect(ver).not.toHaveAttribute("aria-pressed");
     fireEvent.click(ver);
     await avanzar();
@@ -655,8 +660,8 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
 
   it("AC8 (negativo): sin la capacidad sanear no hay bandera en las filas sin saneamiento; las que tienen, solo «Ver saneamiento»", async () => {
     await montarSan({ [GRILLA]: () => Response.json(loteSan()) }, { verDiagnosticos: true });
-    expect(screen.queryAllByRole("button", { name: /^Solicitar saneamiento/ })).toHaveLength(0);
-    expect(within(fila("TST002")).getByRole("button", { name: "Ver saneamiento de la placa TST002: Saneamiento solicitado" })).toBeInTheDocument();
+    expect(accionesEnTodas(/^(Solicitar|Quitar solicitud de) saneamiento/)).toHaveLength(0);
+    expect(quizaAccionFila("TST002", "Ver saneamiento de la placa TST002: Saneamiento solicitado")).not.toBeNull();
     expect(within(tablaLote()).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
   });
 
@@ -664,6 +669,9 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
     const dictamen = within(fila("TST002")).getByRole("button", { name: "Ver dictamen de TST002" }).closest("td")!;
     expect(within(dictamen).getByText("Saneamiento solicitado")).toBeInTheDocument();
+    // FE-2 (spec-ui §2.4): el estado también va como chip de solo lectura sobre el disparador «Acciones», no como botón.
+    const acciones = disparadorDe("TST002")!.closest("td")!;
+    expect(within(acciones).getByText(/Saneamiento:/).closest("[data-parte='chip-saneamiento']")).toHaveTextContent("Saneamiento solicitado");
     expect(within(fila("TST003")).getByRole("button", { name: "Ver dictamen de TST003" }).closest("td")).toHaveTextContent("En saneamiento");
     const sin = within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")!;
     expect(sin).not.toHaveTextContent(/saneamiento/i);
@@ -714,6 +722,7 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await montarSan({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO" })) });
     expect(screen.queryByRole("group", { name: "Filtrar por saneamiento" })).toBeNull();
     expect(screen.queryAllByRole("button", { name: /saneamiento/i })).toHaveLength(0);
+    expect(accionesEnTodas(/saneamiento/i)).toHaveLength(0);
   });
 
   it("AC10: casilla habilitada si es elegible para alguna acción; «Crear trámites (N)» y «Sanear (N)» cuentan cada una lo suyo", async () => {
@@ -844,9 +853,7 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
 
   it("AC13/D-29: «Ver saneamiento» abre PS-2 «Deuda y saneamiento» del vehículo (no el dictamen) y al cerrar el foco vuelve a la bandera", async () => {
     const api = await montarSan({ [GRILLA]: () => Response.json(loteSan()), ...rutasPanel(3, () => Response.json(saneamientoEnGestion())) });
-    const ver = within(fila("TST003")).getByRole("button", { name: "Ver saneamiento de la placa TST003: En saneamiento" });
-    ver.focus();
-    fireEvent.click(ver);
+    fireEvent.click(accionFila("TST003", "Ver saneamiento de la placa TST003: En saneamiento"));
     await avanzar();
     await avanzar();
     expect(panelDeuda()).toBeInTheDocument();
@@ -856,16 +863,15 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
     await avanzar();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(within(fila("TST003")).getByRole("button", { name: "Ver saneamiento de la placa TST003: En saneamiento" })).toHaveFocus();
+    // FE-2 (spec-ui §2.7.4): el foco vuelve al disparador «Acciones» de la fila.
+    expect(disparadorDe("TST003")).toHaveFocus();
   });
 
   it("AC13: «Ver deuda» de la fila solo en vehículos terminados; abre PS-2 y devuelve el foco al cerrar", async () => {
     await montarSan({ [GRILLA]: () => Response.json(loteSan()), ...rutasPanel(1) });
-    expect(within(fila("TST004")).queryByRole("button", { name: /^Ver deuda/ })).toBeNull();
-    const ver = within(fila("TST001")).getByRole("button", { name: "Ver deuda de la placa TST001" });
-    expect(ver).toHaveAttribute("aria-haspopup", "dialog");
+    expect(quizaAccionFila("TST004", /^Ver deuda/)).toBeNull();
+    const ver = accionFila("TST001", "Ver deuda de la placa TST001");
     expect(ver).toHaveTextContent("Ver deuda");
-    ver.focus();
     fireEvent.click(ver);
     await avanzar();
     await avanzar();
@@ -873,12 +879,12 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     fireEvent.keyDown(document.activeElement ?? panelDeuda(), { key: "Escape" });
     await avanzar();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(within(fila("TST001")).getByRole("button", { name: "Ver deuda de la placa TST001" })).toHaveFocus();
+    expect(disparadorDe("TST001")).toHaveFocus();
   });
 
   it("AC13: «Ver deuda» también sin la capacidad sanear (solo lectura) y sin la bandera en la cabecera", async () => {
     await montarSan({ [GRILLA]: () => Response.json(loteSan()), ...rutasPanel(1) }, { verDiagnosticos: true });
-    fireEvent.click(within(fila("TST001")).getByRole("button", { name: "Ver deuda de la placa TST001" }));
+    fireEvent.click(accionFila("TST001", "Ver deuda de la placa TST001"));
     await avanzar();
     await avanzar();
     expect(within(panelDeuda()).getByRole("heading", { name: "Deuda por fuente" })).toBeInTheDocument();
@@ -918,7 +924,7 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
       ),
       [`PUT ${rutaVeh(5, "saneamiento")}`]: () => new Promise<Response>((r) => (soltar = r)),
     });
-    fireEvent.click(within(fila("TST005")).getByRole("button", { name: "Ver deuda de la placa TST005" }));
+    fireEvent.click(accionFila("TST005", "Ver deuda de la placa TST005"));
     await avanzar();
     await avanzar();
     const cabecera = within(panelDeuda()).getByRole("button", { name: "Solicitar saneamiento de la placa TST005" });
@@ -939,11 +945,11 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
     await avanzar();
     expect(within(fila("TST005")).getByRole("button", { name: "Ver dictamen de TST005" }).closest("td")).toHaveTextContent("Saneamiento solicitado");
-    expect(within(fila("TST005")).getByRole("button", { name: "Solicitar saneamiento de la placa TST005" })).toHaveAttribute("aria-pressed", "true");
+    expect(quizaAccionFila("TST005", "Quitar solicitud de saneamiento de la placa TST005")).not.toBeNull();
   });
 
   it("§2.6: filas sin la clave saneamiento (backend previo): sin «Ver deuda»", async () => {
     await montarSan({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO" })) });
-    expect(screen.queryAllByRole("button", { name: /^Ver deuda/ })).toHaveLength(0);
+    expect(accionesEnTodas(/^Ver deuda/)).toHaveLength(0);
   });
 });

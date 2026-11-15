@@ -20,7 +20,7 @@ import { IconoDxRuntPersona } from "@/components/dx/iconos/IconoDxRuntPersona";
 import { IconoDxSimit } from "@/components/dx/iconos/IconoDxSimit";
 import { IconoDxSimitPersona } from "@/components/dx/iconos/IconoDxSimitPersona";
 import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
-import { nombreFuente, type Fuente } from "@/lib/configuracion";
+import { nombreFuente, nombreSubfuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
@@ -58,9 +58,9 @@ const ICONO_FUENTE: Readonly<Record<Fuente, IconoFuente>> = {
 };
 
 /** Rótulo de cabecera con su ícono decorativo de 16 px: el nombre accesible sigue siendo el texto. */
-function RotuloConIcono({ Icono: IconoCabecera, children }: { Icono?: IconoFuente; children: ReactNode }) {
+function RotuloConIcono({ Icono: IconoCabecera, centrado = false, children }: { Icono?: IconoFuente; centrado?: boolean; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className={`inline-flex items-center gap-1.5${centrado ? " justify-center" : ""}`}>
       {IconoCabecera ? <IconoCabecera tamano={16} className="shrink-0" /> : null}
       {children}
     </span>
@@ -115,6 +115,8 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
  */
 const FIJA_IZQ_CLS = "min-[900px]:sticky z-10";
 const FIJA_DER_CLS = "min-[900px]:sticky min-[900px]:right-0 z-10";
+/** FE-2 (spec-ui §2.3): la columna de acciones (chip + disparador «Acciones» + mensaje) mide 10rem en th y td. */
+const ANCHO_ACCIONES_CLS = "w-[10rem] min-w-[10rem]";
 
 /** «—» con nombre accesible cuando el dato no existe. */
 function SinDato({ etiqueta }: { etiqueta: string }) {
@@ -255,8 +257,11 @@ export function GrillaSemaforos({
             </th>
             {PILARES.map((p) =>
               p.fuentes.length > 1 ? (
-                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
-                  <RotuloConIcono Icono={ICONO_PILAR[p.nombre]}>{p.nombre}</RotuloConIcono>
+                // FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas (text-center después de text-left).
+                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_CLS} ${SEPARADOR_CLS} text-center`} style={CABECERA_ESTILO}>
+                  <RotuloConIcono Icono={ICONO_PILAR[p.nombre]} centrado>
+                    {p.nombre}
+                  </RotuloConIcono>
                 </th>
               ) : (
                 // Pilar de una sola fuente con su mismo nombre: una cabecera que ocupa los dos niveles, sin repetir el rótulo.
@@ -266,15 +271,22 @@ export function GrillaSemaforos({
               ),
             )}
             {accionVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_DER_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_DER_CLS} ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS} align-bottom`} style={CABECERA_ESTILO}>
                 {tituloAccionVehiculo}
               </th>
             )}
           </tr>
           <tr>
             {PILARES_AGRUPADOS.flatMap((p) => p.fuentes).map((f) => (
-              <th key={f} scope="col" className={`${CABECERA_CLS} ${SEPARADOR_CLS} normal-case tracking-normal`} style={CABECERA_ESTILO}>
-                <RotuloConIcono Icono={ICONO_FUENTE[f]}>{nombreFuente(f)}</RotuloConIcono>
+              // aria-label: el nombre completo («RUNT propietario»); el cálculo del nombre recorta el espacio del sr-only.
+              <th key={f} scope="col" aria-label={nombreFuente(f)} className={`${CABECERA_CLS} ${SEPARADOR_CLS} normal-case tracking-normal`} style={CABECERA_ESTILO}>
+                {/* Texto visible sin el prefijo del grupo; el nombre completo para lectores (scope=colgroup se anuncia desigual). */}
+                <RotuloConIcono Icono={ICONO_FUENTE[f]}>
+                  <span>
+                    <span className="sr-only">{nombreFuente(f).slice(0, -nombreSubfuente(f).length)}</span>
+                    {nombreSubfuente(f)}
+                  </span>
+                </RotuloConIcono>
               </th>
             ))}
           </tr>
@@ -318,7 +330,7 @@ export function GrillaSemaforos({
                   );
                 })}
                 {accionVehiculo && (
-                  <td data-label={tituloAccionVehiculo} className={`${TD_CLS} ${FIJA_DER_CLS} bg-card`}>
+                  <td data-label={tituloAccionVehiculo} className={`${TD_CLS} ${FIJA_DER_CLS} ${ANCHO_ACCIONES_CLS} bg-card`}>
                     {accionVehiculo(v)}
                   </td>
                 )}

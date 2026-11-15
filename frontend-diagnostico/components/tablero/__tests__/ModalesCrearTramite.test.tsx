@@ -6,6 +6,7 @@ import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { EMPRESA } from "@/__tests__/configuracion/datos";
 import { ID, V1, grilla, llamadas, sesion, simularApi } from "@/lib/tablero/__tests__/datos";
+import { accionFila, disparadorDe } from "./menuFila";
 
 // Uso de ejemplo: en el tablero /diagnosticos/{id}, la fila elegible ofrece «Crear trámite» (HU #14562 AC37, spec 05).
 // En un lote Simple, el modal «Crear trámite para {placa}» pide el tipo y continúa con «Ir al wizard». En un lote Con
@@ -77,7 +78,8 @@ function loteIa(): Grilla {
 
 const creado = (numero = "57") => () => Response.json({ tramite: { id: TRAMITE_ID, numero }, ya_existia: false }, { status: 201 });
 const tabla = () => screen.getByRole("table", { name: /semáforo de consultas/i });
-const botonFila = () => within(tabla()).getByRole("button", { name: "Crear trámite para la placa TST001" });
+// FE-2: «Crear trámite» es un ítem del menú «Acciones» de la fila; al cancelar, el foco vuelve a su disparador.
+const botonFila = () => accionFila("TST001", "Crear trámite para la placa TST001");
 
 /** Pestaña que abre el navegador: la URL del borrador se le asigna cuando el POST responde. */
 function pestanaFalsa() {
@@ -126,7 +128,7 @@ describe("HU #14562 AC37 — lote Simple: «Crear trámite para {placa}» pide e
     expect(JSON.parse(String(init.body))).toEqual({ tipo_tramite_codigo: "UNILATERAL" });
     expect(pestana.location.href).toBe(URL_TRAMITE);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #58 de la placa TST001/i })).toHaveAttribute("href", URL_TRAMITE);
+    expect(accionFila("TST001", /ver trámite #58 de la placa TST001/i)).toHaveAttribute("href", URL_TRAMITE);
   });
 
   it("Cancelar cierra el modal sin crear nada ni abrir pestañas y devuelve el foco al botón de la fila", async () => {
@@ -139,7 +141,7 @@ describe("HU #14562 AC37 — lote Simple: «Crear trámite para {placa}» pide e
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(abrir).not.toHaveBeenCalled();
     expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(0);
-    expect(botonFila()).toHaveFocus();
+    expect(disparadorDe("TST001")).toHaveFocus();
   });
 });
 
@@ -169,7 +171,7 @@ describe("HU #14562 AC37 — lote IA con veredicto Viable: «Crear traspaso» ab
     expect(cuerpo === undefined || JSON.parse(String(cuerpo)).tipo_tramite_codigo === undefined).toBe(true);
     expect(pestana.location.href).toBe(URL_TRAMITE);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #57 de la placa TST001/i })).toBeInTheDocument();
+    expect(accionFila("TST001", /ver trámite #57 de la placa TST001/i)).toBeInTheDocument();
   });
 
   it("si la API rechaza la creación, cierra la pestaña vacía y deja el motivo en la fila", async () => {
@@ -193,7 +195,7 @@ describe("HU #14562 AC37 — lote IA con veredicto Viable: «Crear traspaso» ab
     await avanzar();
     fireEvent.click(within(screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" })).getByRole("button", { name: "Crear traspaso" }));
     await avanzar();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #59 de la placa TST001/i })).toHaveAttribute("href", URL_TRAMITE);
+    expect(accionFila("TST001", /ver trámite #59 de la placa TST001/i)).toHaveAttribute("href", URL_TRAMITE);
   });
 });
 

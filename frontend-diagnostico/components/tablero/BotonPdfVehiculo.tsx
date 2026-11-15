@@ -23,19 +23,25 @@ export interface BotonPdfVehiculoProps {
  * cuando terminen…». En un lote INCOMPLETO con celdas en error avisa que saldrán como «consulta no disponible». Un 409 del
  * servidor se muestra en texto, sin romper la fila. Nunca distingue celdas manuales (R-20).
  */
-export function BotonPdfVehiculo({ diagnosticoId, estadoLote, vehiculo }: BotonPdfVehiculoProps) {
-  const idAyuda = useId();
+/** Lógica del PDF del vehículo, sin presentación (FE-2: la usan este botón y el menú «Acciones» del tablero). */
+export function useAccionPdf({ diagnosticoId, estadoLote, vehiculo }: BotonPdfVehiculoProps) {
   const { descargando, error, alHacerClic } = useDescarga(`diagnostico-${vehiculo.identificador}.pdf`);
   const nombre = `Descargar PDF de ${vehiculo.identificador}`;
   const habilitado = puedeEmitirPdf(estadoLote, vehiculo);
   const conNoDisponibles = habilitado && estadoLote === "INCOMPLETO" && vehiculo.celdas.some((c) => c.estado === "ERROR");
   const ayuda = !habilitado ? AYUDA_PDF_EN_CURSO : conNoDisponibles ? AYUDA_PDF_NO_DISPONIBLE : null;
+  return { url: urlPdfVehiculo(diagnosticoId, vehiculo.id), nombre, habilitado, ayuda, descargando, error, alHacerClic };
+}
+
+export function BotonPdfVehiculo(props: BotonPdfVehiculoProps) {
+  const idAyuda = useId();
+  const { url, nombre, habilitado, ayuda, descargando, error, alHacerClic } = useAccionPdf(props);
 
   return (
     <div className="flex flex-col items-start gap-1">
       {habilitado ? (
         <a
-          href={urlPdfVehiculo(diagnosticoId, vehiculo.id)}
+          href={url}
           download
           onClick={alHacerClic}
           aria-label={nombre}

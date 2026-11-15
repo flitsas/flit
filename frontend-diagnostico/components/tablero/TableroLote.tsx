@@ -7,8 +7,7 @@ import { iconoComo } from "@flit/ui/iconoComo";
 import { INLINE_ALERT_TONES, InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { ACCION_FILA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
-import { IconoDxDeuda } from "@/components/dx/iconos/IconoDxDeuda";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
 import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
@@ -25,11 +24,10 @@ import {
 import { hayPendientes, marcarReintentada, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
 import { PanelDictamen } from "./PanelDictamen";
-import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
-import { BotonReintentar } from "./BotonReintentar";
-import { AccionTramiteFila, AvisoSaneamientoEnCurso, ModalTipoTramite, saneamientoEnCurso } from "./BotonCrearTramite";
+import { AccionesVehiculo } from "./AccionesVehiculo";
+import { AvisoSaneamientoEnCurso, ModalTipoTramite, saneamientoEnCurso } from "./BotonCrearTramite";
 import { CasillaTablero, mensajeSolicitudSaneamiento, seleccionDeFila, type ResultadoSanearVisible } from "./BarraSeleccionTablero";
-import { BotonSanear, SANEAMIENTO_SOLICITADO } from "@/components/saneamiento/BotonSanear";
+import { SANEAMIENTO_SOLICITADO } from "@/components/saneamiento/BotonSanear";
 import { banderaPanelDeuda, filaDeEstado } from "@/components/saneamiento/BanderaPanelDeuda";
 import { PanelDeudaSaneamiento } from "@/components/saneamiento/PanelDeudaSaneamiento";
 import { useRegionVivaPantalla } from "@/components/saneamiento/RegionVivaPantalla";
@@ -327,62 +325,33 @@ export function TableroLote({
   const actualizarSaneamientoFila = (vehiculoId: string, saneamientoFila: FilaVehiculo["saneamiento"]) =>
     actualizar((g) => ({ ...g, vehiculos: g.vehiculos.map((f) => (f.id === vehiculoId ? { ...f, saneamiento: saneamientoFila } : f)) }));
 
+  // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (chip del saneamiento + desplegable + mensajes).
   const accionVehiculo =
     puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda
-      ? (v: FilaVehiculo) => (
-          <div className="flex flex-col items-start gap-2">
-            {/* HU #14577 §2.1: la bandera va antes de «Crear trámite». Sin la capacidad, solo indicador si hay saneamiento. */}
-            {grilla && (
-              <BotonSanear
-                diagnosticoId={grilla.id}
-                vehiculo={v}
-                saneamiento={v.saneamiento}
-                puedeSanear={puedeSanear}
-                onCambio={(_estado, saneamiento) => actualizarSaneamientoFila(v.id, saneamiento)}
-                // D-29 (cerrada en FE-C): «Ver saneamiento» abre PS-2, el panel de deuda y saneamiento del vehículo.
-                onAbrirPanel={(disparador) => setDeuda({ vehiculo: v, disparador })}
-                onRefrescar={refrescar}
-                onAnunciar={anunciar}
-              />
-            )}
-            {puedeDerivar && grilla && (
-              <AccionTramiteFila
-                diagnosticoId={grilla.id}
-                vehiculo={v}
-                modo={grilla.modo}
-                tramiteAnalizado={grilla.lote?.tipo_tramite?.nombre ?? null}
-                tramitesUrl={tramitesUrl}
-                empresaId={sesion?.empresa.id}
-                onCreado={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
-                onRefrescar={refrescar}
-                solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
-              />
-            )}
-            {/* HU #14577 AC13 (spec-ui §3.1): «Ver deuda» abre PS-2; solo en vehículos terminados, después de «Crear trámite» (D-103). */}
-            {conDatosSaneamiento && v.terminado && (
-              <button
-                type="button"
-                aria-haspopup="dialog"
-                aria-label={`Ver deuda de la placa ${placaDe(v)}`}
-                onClick={(e) => setDeuda({ vehiculo: v, disparador: e.currentTarget })}
-                className={`${ACCION_FILA_CLS} whitespace-nowrap`}
-              >
-                <IconoDxDeuda tamano={16} className="h-3.5 w-3.5" />
-                Ver deuda
-              </button>
-            )}
-            {puedeDescargar && grilla && <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} />}
-            {puedeReprocesar && v.pegada && (
-              <BotonReintentar
-                etiqueta={`Reintentar consultas de la placa ${v.placa || v.vin || v.identificador}`}
-                texto="Reintentar placa"
-                reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
-                onReintentado={(r) => alReintentar(r, v.id)}
-                onError={alFallarReproceso}
-              />
-            )}
-          </div>
-        )
+      ? (v: FilaVehiculo) =>
+          grilla && (
+            <AccionesVehiculo
+              diagnosticoId={grilla.id}
+              vehiculo={v}
+              estadoLote={grilla.estado}
+              modo={grilla.modo}
+              tramiteAnalizado={grilla.lote?.tipo_tramite?.nombre ?? null}
+              tramitesUrl={tramitesUrl}
+              empresaId={sesion?.empresa.id}
+              capacidades={{ sanear: puedeSanear, derivar: puedeDerivar, descargar: puedeDescargar, reprocesar: puedeReprocesar }}
+              conDatosSaneamiento={conDatosSaneamiento}
+              // D-29: «Ver saneamiento» y «Ver deuda» abren PS-2; el foco vuelve al disparador «Acciones» de la fila.
+              onAbrirDeuda={(disparador) => setDeuda({ vehiculo: v, disparador })}
+              onCambioSaneamiento={(saneamiento) => actualizarSaneamientoFila(v.id, saneamiento)}
+              onCreadoTramite={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
+              onRefrescar={refrescar}
+              onAnunciar={anunciar}
+              solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
+              reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
+              onReintentado={(r) => alReintentar(r, v.id)}
+              onErrorReintento={alFallarReproceso}
+            />
+          )
       : undefined;
 
   async function cerrar() {
@@ -517,7 +486,7 @@ export function TableroLote({
             onReprocesada={alReprocesar}
             onErrorReproceso={alFallarReproceso}
             accionVehiculo={accionVehiculo}
-            tituloAccionVehiculo={puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda ? "Acciones" : "Reporte"}
+            tituloAccionVehiculo="Acciones"
             casillaVehiculo={
               haySeleccion
                 ? (v) => (

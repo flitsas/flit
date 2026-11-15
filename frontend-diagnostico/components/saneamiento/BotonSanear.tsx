@@ -67,67 +67,63 @@ const ICONO_CLS = { fila: "h-3.5 w-3.5", cabecera: undefined } as const;
  * En vuelo, `aria-busy` y los clics se ignoran (sin `disabled`, para no perder el foco). El error va en `role="alert"` bajo
  * el botón y se borra en el siguiente clic; el foco se queda en el botón. Un 403 lleva a /403.
  */
-export function BotonSanear({
+/** Estado de la acción de saneamiento de una fila, sin presentación (lo comparten la bandera y el menú «Acciones»). */
+export type AccionSanear =
+  | { tipo: "ninguna"; identificador: string; error: string | null }
+  | { tipo: "ver"; identificador: string; error: string | null; texto: string | undefined; nombre: string }
+  | {
+      tipo: "alternar";
+      identificador: string;
+      error: string | null;
+      encendida: boolean;
+      noElegible: boolean;
+      motivo: string | undefined;
+      enVuelo: boolean;
+      alternar: () => Promise<void>;
+    };
+
+export type UseAccionSanearProps = Omit<BotonSanearProps, "variante" | "onAbrirPanel">;
+
+/**
+ * Lógica de la bandera (FE-2: expuesta como hook para el menú «Acciones» del tablero). Optimista con reversión, en vuelo
+ * ignora los clics, 403 → /403, 409 YA_SOLICITADO o SANEAMIENTO_EN_GESTION → `onRefrescar`. Ver la doc de `BotonSanear`.
+ */
+export function useAccionSanear({
   diagnosticoId,
   vehiculo,
   saneamiento,
   puedeSanear,
   onCambio,
-  onAbrirPanel,
   onConfirmado,
   onRefrescar,
   onAnunciar,
-  variante = "fila",
-}: BotonSanearProps) {
+}: UseAccionSanearProps): AccionSanear {
   const router = useRouter();
-  const motivoId = `${useId()}-motivo`;
   const [enVuelo, setEnVuelo] = useState(false);
   const enVueloRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!saneamiento) return null;
   const identificador = vehiculo.placa || vehiculo.vin || vehiculo.identificador || "";
+  if (!saneamiento) return { tipo: "ninguna", identificador, error };
   const estado = saneamiento.estado;
-  const base = variante === "cabecera" ? BOTON_SECUNDARIO_CLS : FILA_CLS;
-
-  const errorVisible = error && (
-    <p role="alert" className="text-xs font-semibold text-[color:var(--di-danger)]">
-      {error}
-    </p>
-  );
-  const envolver = (boton: React.ReactNode) => (
-    <div className="flex flex-col items-start gap-1">
-      {boton}
-      {errorVisible}
-    </div>
-  );
 
   // Indicador: el saneamiento ya no se puede quitar desde aquí (o el usuario no tiene la capacidad).
   if (estado && (estado !== "SOLICITADO" || !puedeSanear)) {
     const texto = etiquetaSaneamiento(estado)?.texto;
-    return envolver(
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-label={texto ? `Ver saneamiento ${deLaPlaca(identificador)}: ${texto}` : `Ver saneamiento ${deLaPlaca(identificador)}`}
-        onClick={(e) => onAbrirPanel(e.currentTarget)}
-        className={`${base} ${ENCENDIDA_CLS}`}
-      >
-        <IconoDxBandera tamano={16} encendida className={ICONO_CLS[variante]} />
-        Ver saneamiento
-      </button>,
-    );
+    const nombre = texto ? `Ver saneamiento ${deLaPlaca(identificador)}: ${texto}` : `Ver saneamiento ${deLaPlaca(identificador)}`;
+    return { tipo: "ver", identificador, error, texto, nombre };
   }
 
-  if (!puedeSanear) return null;
+  if (!puedeSanear) return { tipo: "ninguna", identificador, error };
 
+  const actual = saneamiento;
   const encendida = estado === "SOLICITADO";
-  const motivo = !encendida && !saneamiento.elegible && saneamiento.motivo_no_elegible ? ROTULO_MOTIVO_NO_ELEGIBLE[saneamiento.motivo_no_elegible] : undefined;
-  const noElegible = !encendida && !saneamiento.elegible;
+  const motivo = !encendida && !actual.elegible && actual.motivo_no_elegible ? ROTULO_MOTIVO_NO_ELEGIBLE[actual.motivo_no_elegible] : undefined;
+  const noElegible = !encendida && !actual.elegible;
 
   async function alternar() {
-    if (enVueloRef.current || noElegible || !saneamiento) return;
-    const previo = saneamiento;
+    if (enVueloRef.current || noElegible) return;
+    const previo = actual;
     const siguiente = encendida ? SIN_SANEAMIENTO : SANEAMIENTO_SOLICITADO;
     setError(null);
     enVueloRef.current = true;
@@ -156,6 +152,44 @@ export function BotonSanear({
     }
   }
 
+  return { tipo: "alternar", identificador, error, encendida, noElegible, motivo, enVuelo, alternar };
+}
+
+export function BotonSanear({ onAbrirPanel, variante = "fila", ...props }: BotonSanearProps) {
+  const motivoId = `${useId()}-motivo`;
+  const accion = useAccionSanear(props);
+  const base = variante === "cabecera" ? BOTON_SECUNDARIO_CLS : FILA_CLS;
+
+  const errorVisible = accion.error && (
+    <p role="alert" className="text-xs font-semibold text-[color:var(--di-danger)]">
+      {accion.error}
+    </p>
+  );
+  const envolver = (boton: React.ReactNode) => (
+    <div className="flex flex-col items-start gap-1">
+      {boton}
+      {errorVisible}
+    </div>
+  );
+
+  if (accion.tipo === "ninguna") return null;
+
+  if (accion.tipo === "ver") {
+    return envolver(
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={accion.nombre}
+        onClick={(e) => onAbrirPanel(e.currentTarget)}
+        className={`${base} ${ENCENDIDA_CLS}`}
+      >
+        <IconoDxBandera tamano={16} encendida className={ICONO_CLS[variante]} />
+        Ver saneamiento
+      </button>,
+    );
+  }
+
+  const { encendida, noElegible, motivo, enVuelo, alternar, identificador } = accion;
   return envolver(
     <>
       <button
