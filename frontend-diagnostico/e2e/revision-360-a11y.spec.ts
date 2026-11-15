@@ -32,7 +32,8 @@ function rutaAxe(): string {
 }
 const AXE = rutaAxe();
 
-async function entrar(page: Page, usuario: string, clave: string, destino = "/") {
+// Ola 2026-11-15 (FE-4): «/» es el Dashboard; por defecto se entra al listado (/diagnosticos).
+async function entrar(page: Page, usuario: string, clave: string, destino = "/diagnosticos") {
   await page.goto(`${APP}${destino}`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
@@ -153,6 +154,20 @@ test.describe("revisión 360 + axe (usuario de compañía)", () => {
       await pestanas.getByRole("tab", { name: "Diagnósticos" }).click();
       await expect(pestanas.getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
     });
+    await test.step("dashboard (ola 2026-11-15, FE-5)", async () => {
+      await page.goto(`${APP}/`);
+      await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+      await revisarPantalla(page, "00-dashboard");
+      await page.goto(`${APP}/diagnosticos`);
+    });
+    await test.step("reportes (ola 2026-11-15, FE-6)", async () => {
+      await page.goto(`${APP}/reportes`);
+      const titulo = page.getByRole("heading", { level: 1, name: "Reportes" });
+      // Sin verReportes la ruta lleva a la 403: se registra y se sigue.
+      if (await titulo.isVisible({ timeout: 15_000 }).catch(() => false)) await revisarPantalla(page, "00b-reportes");
+      else guardar("360-00b-reportes", { hallazgo: "E2E_USUARIO no ve /reportes (sin verReportes)", url: page.url() });
+      await page.goto(`${APP}/diagnosticos`);
+    });
     await test.step("campana de avisos", async () => {
       const campana = page.getByRole("button", { name: /^Avisos/ });
       if (await campana.count()) {
@@ -175,7 +190,7 @@ test.describe("revisión 360 + axe (usuario de compañía)", () => {
     });
     let detalleUrl: string | null = null;
     await test.step("tablero", async () => {
-      await page.goto(`${APP}/`);
+      await page.goto(`${APP}/diagnosticos`);
       await lanzarExpress(page, PLACA, `E2E revision 360 ${Date.now()}`);
       const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
       await expect(grilla).toBeVisible();
@@ -257,7 +272,8 @@ test.describe("teclado en escritorio (1280)", () => {
     await page.goto(`${APP}/configuracion`);
     resultado.configuracion = await ordenDeTab(page, 20);
 
-    await page.goto(`${APP}/`);
+    // La campana está en el shell; se vuelve al listado porque lanzarExpress parte de la tarjeta «Placa o VIN».
+    await page.goto(`${APP}/diagnosticos`);
     const campana = page.getByRole("button", { name: /^Avisos/ }).first();
     await campana.waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
     if (await campana.count()) {

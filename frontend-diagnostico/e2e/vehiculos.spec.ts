@@ -19,6 +19,8 @@ import {
 } from "./saneamiento-comun";
 
 /**
+ * Ola 2026-11-15 (FE-4): el inicio con las pestañas vive en /diagnosticos («/» es el Dashboard y /?vista=… redirige).
+ *
  * HU #14577 — PS-3 pestaña «Vehículos» del inicio (AC20–AC23) con AC40 (cuatro estados), AC41 y AC42 (axe en claro y
  * oscuro, Tab a 360 px, sin desplazamiento horizontal) y las capturas C-7 y C-8 de .claude/state/saneamiento/auditoria-ui.md.
  *
@@ -63,7 +65,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
     await esperarTerminados(page, lote, [V1, V2, VIN]);
 
     await test.step("AC20: «Diagnósticos» por defecto; «Vehículos» pasa a ?vista=vehiculos y sobrevive a la recarga", async () => {
-      await page.goto(`${APP}/`);
+      await page.goto(`${APP}/diagnosticos`);
       const pestanas = page.getByRole("tablist", { name: "Vista del inicio" });
       const diagnosticos = pestanas.getByRole("tab", { name: "Diagnósticos" });
       const vehiculos = pestanas.getByRole("tab", { name: "Vehículos" });
@@ -83,7 +85,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
     });
 
     await test.step("AC21: filtros en la URL; Enter aplica la placa; recarga los conserva; «Limpiar filtros»", async () => {
-      await page.goto(`${APP}/?vista=vehiculos`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos`);
       const placa = filtros(page).getByRole("textbox", { name: "Placa", exact: true });
       // Se escribe en minúsculas: el campo la pinta en mayúsculas.
       await placa.fill(prefijo.toLowerCase());
@@ -106,7 +108,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
       await filtros(page).getByRole("button", { name: "Actualizar" }).click();
       await pedido;
       await filtros(page).getByRole("button", { name: "Limpiar filtros" }).click();
-      await expect(page).toHaveURL(`${APP}/?vista=vehiculos`);
+      await expect(page).toHaveURL(`${APP}/diagnosticos?vista=vehiculos`);
     });
 
     await test.step("AC21: «Filas por página» del kit (10/20/30/50) en la URL", async () => {
@@ -122,7 +124,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
     });
 
     await test.step("UA-5: la fila sin placa se nombra por su VIN, nunca con un nombre vacío", async () => {
-      await page.goto(`${APP}/?vista=vehiculos&placa=${prefijo}`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos&placa=${prefijo}`);
       await expect(tabla(page).getByRole("rowheader")).toHaveCount(4);
       for (const c of await tabla(page).getByRole("checkbox").all()) {
         await expect(c).toHaveAccessibleName(/^Seleccionar (la placa \S+|el vehículo sin placa)$/);
@@ -165,7 +167,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
     });
 
     await test.step("C-7 / AC41 / AC42: 1280 y 360 con selección; Tab a 360; sin desplazamiento de página", async () => {
-      await page.goto(`${APP}/?vista=vehiculos&placa=${prefijo}`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos&placa=${prefijo}`);
       await casilla(page, V1).check();
       await revisarTemas(page, "vehiculos-1280", { captura: "C-7" });
       await sinDesbordeHorizontal(page, "vehiculos-1280");
@@ -184,7 +186,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
 
     await test.step("cargando (respuesta real retenida)", async () => {
       const espera = await retener(page, LISTA);
-      await page.goto(`${APP}/?vista=vehiculos`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos`);
       await expect(page.getByText("Cargando vehículos…").first()).toBeVisible();
       await revisarTemas(page, "vehiculos-cargando-1280", { captura: "C-8" });
       await espera.soltar();
@@ -194,7 +196,7 @@ test.describe("PS-3 pestaña Vehículos", () => {
     await test.step("vacío sin filtros (página vacía del contrato ListaVehiculos)", async () => {
       const vacia = (route: Route) => route.fulfill({ json: { pagina: 1, tamano: 10, total: 0, vehiculos: [] } });
       await page.route(LISTA, vacia);
-      await page.goto(`${APP}/?vista=vehiculos`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos`);
       await expect(page.getByText("Aún no hay vehículos")).toBeVisible();
       await expect(page.getByText("Aquí verás todas las placas de tus diagnósticos, en proceso y terminadas.")).toBeVisible();
       await revisarTemas(page, "vehiculos-vacio-1280", { captura: "C-8" });
@@ -202,12 +204,12 @@ test.describe("PS-3 pestaña Vehículos", () => {
     });
 
     await test.step("vacío con filtros", async () => {
-      await page.goto(`${APP}/?vista=vehiculos&placa=ZZZ`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos&placa=ZZZ`);
       await expect(page.getByText("Ningún vehículo coincide")).toBeVisible();
       await expect(page.getByText("Prueba con otros filtros.")).toBeVisible();
       await revisarTemas(page, "vehiculos-vacio-filtros-1280", { captura: "C-8" });
       await page.getByRole("button", { name: "Limpiar filtros" }).last().click();
-      await expect(page).toHaveURL(`${APP}/?vista=vehiculos`);
+      await expect(page).toHaveURL(`${APP}/diagnosticos?vista=vehiculos`);
     });
 
     await test.step("error con «Reintentar» y sin código técnico (AC43)", async () => {

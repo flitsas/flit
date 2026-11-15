@@ -52,12 +52,13 @@ const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_IMPUESTO ?? "TST20Z";
 
 async function entrar(page: Page, usuario: string, clave: string) {
-  await page.goto(`${APP}/`);
+  // Ola 2026-11-15 (FE-4): «/» es el Dashboard; el listado y la tarjeta «Placa o VIN» viven en /diagnosticos.
+  await page.goto(`${APP}/diagnosticos`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
   await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
-  await page.waitForURL(`${APP}/`);
+  await page.waitForURL(`${APP}/diagnosticos`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
 }
 
@@ -75,7 +76,7 @@ test.describe("impuesto departamental en el tablero", () => {
     const casilla = page.getByRole("checkbox", { name: "Impuesto departamental" });
     test.skip((await casilla.count()) === 0, "La simulación no ofrece el impuesto: revisar la bandera y la réplica de departamentos");
     await expect(casilla).toBeVisible();
-    await page.goto(`${APP}/`);
+    await page.goto(`${APP}/diagnosticos`);
     await lanzarExpress(page, PLACA);
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
