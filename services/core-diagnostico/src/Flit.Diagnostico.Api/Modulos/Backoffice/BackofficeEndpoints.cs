@@ -52,9 +52,9 @@ public static class BackofficeEndpoints
         SaneamientosBackofficeEndpoints.Map(api);
 
         // HU #14579, BE-0 (ADR-0088): estadísticas (E2, E3) y reportes (B0–B6) del backoffice, cada uno con sus grupos; E3 y B4–B6 llevan
-        // .SoloEmpresaHabilitada() antes de ConEmpresaExplicita (SP-3). Los llenan BE-1 y BE-4.
-        Estadisticas.EstadisticasRegistro.MapEstadisticasBackoffice(api);
-        Reportes.Catalogo.ReportesRegistro.MapReportesBackoffice(api);
+        // .SoloEmpresaHabilitada() antes de ConEmpresaExplicita (SP-3). Reciben el grupo raíz de la API, no el de ConEmpresaExplicita.
+        EstadisticasBackofficeEndpoints.Map(api);
+        ReportesBackofficeEndpoints.Map(api);
 
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }

@@ -2,15 +2,15 @@
 
 **Fecha**: 2026-11-15
 **Status**: Propuesto
-**Deciders**: Líder Técnico FLIT. La aceptación es exclusiva del Líder Técnico humano, en su propio PR (regla FLIT 15). Se apoya en las decisiones de producto del usuario U1–U8 del 2026-11-15 y en los supuestos O1–O10 del orquestador (`.claude/state/diagnostico-ola-ux-dashboard/decisiones-usuario.md`).
+**Deciders**: Líder Técnico FLIT. La aceptación es exclusiva del Líder Técnico humano, en su propio PR (regla FLIT 15). Se apoya en las decisiones de producto del usuario U1–U8 del 2026-11-15 y en los supuestos O1–O11 del orquestador. Las que tienen efecto en el contrato están en este ADR (anexos A–C) y en `contracts/openapi/diagnostico.v1.yaml`.
 **Tags**: arquitectura, backend, frontend, persistencia, backoffice, auditoría, Habeas Data, diagnostico
-**Épica / Feature**: proyecto FLIT - DIAGNOSTICO, épica #12679. El Feature y sus HUs los crea el orquestador a partir de `particion-hus.md`.
+**Épica / Feature / HU**: proyecto FLIT - DIAGNOSTICO, épica #12679 / Feature #14578 / HU #14579 (backend) y #14580 (frontend).
 **Supersedes**: ninguno.
-**Enmienda**:
-- ADR-0073 (Propuesto): se agregan al «grupo A» (rutas `/backoffice` sin empresa explícita) las rutas `/backoffice/estadisticas/global` y `/backoffice/reportes/{tipo}/global[/excel|/pdf]`, con la auditoría por empresa del resultado. Las rutas con `?empresa=` siguen con `ConEmpresaExplicita` y además validan que la empresa tenga el producto activo.
-- ADR-0072 (Propuesto): tabla nueva `accesos_reporte` (solo inserción, sin PII, `@pii:low` en `usuario_id`).
+**Enmienda** (cada ADR enmendado lleva su nota «Enmendado por ADR-0088 (Propuesto)»):
+- ADR-0073 (Propuesto): se agregan al «grupo A» (rutas `/backoffice` sin empresa explícita) las rutas `/backoffice/estadisticas/global`, `/backoffice/reportes` y `/backoffice/reportes/{tipo}/global[/excel|/pdf]`, con la auditoría por empresa del resultado. Las rutas con `?empresa=` (E3, B4–B6) siguen con `ConEmpresaExplicita` y además validan antes, con `SoloEmpresaHabilitada`, que la empresa tenga el producto activo (404 sin auditar). En esas rutas `lecturas_backoffice` registra el **intento** autorizado y `accesos_reporte` la **entrega** (punto 4).
+- ADR-0072 (Propuesto): tabla nueva `accesos_reporte`, clase (b) (solo inserción, sin PII, `@pii:low` en `usuario_id`).
 
-**Diseño detallado**: `.claude/state/diagnostico-ola-ux-dashboard/diseno.md`. Contrato: `contrato-api.md` de esa carpeta. Seguridad: `security-previa.md` (SP-1..SP-18).
+**Borradores de trabajo**: el diseño detallado, el contrato de trabajo y la revisión de seguridad previa (SP-1..SP-18) se escribieron como borradores no versionados de la oleada. Lo que tiene efecto de contrato está en este ADR (anexos A–C) y en el OpenAPI; los identificadores SP-n, U-n y O-n se conservan como referencia.
 
 ## Contexto
 
@@ -46,6 +46,7 @@ Restricciones del repo:
    - tabla nueva `accesos_reporte`, solo inserción y sin PII, con una fila por petición de cualquier reporte (pantalla o archivo), escrita **antes** de responder (fail-closed);
    - en el backoffice, además, `lecturas_backoffice` por empresa;
    - el id del registro va impreso en el archivo.
+   - **Intento frente a entrega (SEC-6, aceptado):** en E3 y B4–B6 el filtro `ConEmpresaExplicita` escribe `lecturas_backoffice` antes del handler, así que esa tabla registra el *intento* autorizado aunque luego la petición termine en 400, 422 o 429. `accesos_reporte` registra la *entrega*: solo se escribe cuando hay datos que responder, nunca en 422 ni en 429. El sesgo es de sobre-registro (fail-safe para ADR-0069). Una empresa apagada o inexistente no deja fila, porque `SoloEmpresaHabilitada` corre antes, y un `{tipo}` fuera de los 5 códigos tampoco, porque B4–B6 lo restringen en la ruta (`{tipo:tipoReporte}`).
 5. **Límites:**
    - rango obligatorio de hasta 366 días;
    - pantalla de 1 a 100 filas por página con desplazamiento ≤ 10 000;
@@ -151,6 +152,39 @@ Estos riesgos no se mitigan sin reabrir U5:
 - [ADR-0072] — clasificación y retención de tablas de Diagnóstico (enmendado).
 - [ADR-0073] (`ADR-0073-diagnostico-acceso-backoffice.md`; hay otro ADR-0073 de permisos que no aplica) — acceso del backoffice y empresa explícita (enmendado: grupo A ampliado).
 - [ADR-0087] — saneamiento: precedente del grupo A y de los límites de exportación.
+
+## Anexo A: lista blanca de columnas por tipo (SP-16)
+
+Cerrada: el código la define en `Modulos/Reportes/Catalogo/DefinicionReporte.cs` y el OpenAPI la publica en `PaginaReporteDto.x-columnas`. En `BACKOFFICE_GLOBAL` todos los tipos salvo `consumo` anteponen `empresa_nombre`. Nunca salen `usuario_*`, `persona_id`, `consulta_id`, `tenant_id` ni el nombre de una persona.
+
+| Tipo | Columnas, en orden | PII |
+|---|---|---|
+| `vehiculos` | `fecha_diagnostico`, `diagnostico_nombre`, `modalidad`, `tipo_analisis`, `tipo_tramite`, `placa`, `vin`, `servicio`, `organismo`, `departamento`, `propietarios_documentos`, `locatario_documento`, `locatario_origen`, `veredicto`, `estado_consultas`, `saneamiento_estado`, `tramite_numero` | `placa`, `vin`, `propietarios_documentos`, `locatario_documento` |
+| `consultas` | `fecha_diagnostico`, `diagnostico_nombre`, `placa`, `fuente`, `estado`, `motivo_na`, `tipo_error`, `intentos`, `duracion_ms`, `dato_obtenido_en`, `reutilizada` y, solo en `BACKOFFICE_*`, `origen` | `placa` |
+| `saneamientos` | `solicitado_en`, `placa`, `diagnostico_nombre`, `estado`, `tomado_en`, `cerrado_en`, `dias_hasta_cierre`, `motivo_cierre`, `renglones_total`, `renglones_pendientes` | `placa` |
+| `derivaciones` | `fecha`, `placa`, `diagnostico_nombre`, `tipo_operacion`, `tipo_tramite`, `estado`, `motivo`, `tramite_numero` | `placa` |
+| `consumo` (solo backoffice) | `empresa_nombre`, `empresa_nit`, `diagnosticos`, `vehiculos`, `consultas_exitosas`, `consultas_con_error`, `tasa_exito`, `consultas_runt`, `consultas_simit`, `consultas_avaluo`, `consultas_impuesto`, `saneamientos`, `tramites_creados` | ninguna (el NIT es de una persona jurídica y nunca va al nombre del archivo) |
+
+Documentos: «`<tipo> <número>`» separados por «; » en orden. Un documento que no se pudo descifrar sale como «`<tipo> No disponible`» (por ejemplo «CC No disponible»): se conserva el tipo para que se sepa qué documento falta (CR-BE-12).
+
+## Anexo B: qué cuenta el reporte `consumo` (supuesto O11)
+
+Supuesto del orquestador del 2026-11-15 (CR-BE-4), tomado del contrato vigente y pendiente de confirmación del PO:
+- `diagnosticos`, `vehiculos` y las consultas salen de la cohorte de lotes creados en el rango; `saneamientos` por `solicitado_en`; `tramites_creados` = ítems `CREADO` de las operaciones creadas en el rango.
+- Las consultas cuentan solo lo que el contrato dice que consume: celdas `COMPLETADO` y `ERROR` que no se reutilizaron (`reutilizada_de_id` nulo). No cuentan `NA`, `PENDIENTE`, `EN_CURSO` ni las reutilizadas del mismo día (D-10, «sin consumo»).
+- Las tres fuentes RUNT y las tres SIMIT se suman en su columna.
+- **Abierto para el PO:** los `ERROR` definitivos sin llamada al proveedor (`SIN_PLACA`, `SIN_IDENTIFICADOR`, `BLOQUEADA_POR_RUNT`) hoy sí cuentan. El OpenAPI dice que `SIN_PLACA` no consume; si el PO lo confirma, se excluyen en una corrección aparte.
+
+## Anexo C: códigos de las rutas nuevas
+
+| Código | Estado | Rutas | Nota |
+|---|---|---|---|
+| `REPORTE_NO_ENCONTRADO` | 404 | R1–R3, B1–B3 | En B4–B6 un `{tipo}` desconocido no llega al handler: 404 del enrutador sin cuerpo y sin auditoría |
+| `EMPRESA_NO_ENCONTRADA` | 404 | E3, B4–B6 | Mismo cuerpo si la compañía no existe o no tiene Diagnóstico activo; sin auditoría |
+| `REPORTE_DEMASIADO_GRANDE` | 422 | R2, R3, B2, B3, B5, B6 | Con `filas` y `maximo`. No genera, no descifra y no escribe `accesos_reporte` |
+| `EXPORTACION_EN_CURSO` | 429 | R2, R3, B2, B3, B5, B6 | Con `Retry-After: 10`. No escribe `accesos_reporte` |
+| `IDENTIDAD_NO_CONFIGURADA` | 503 | E2, B1–B3 | Sin `Retry-After`. En E3 y B4–B6, sin Identidad configurada decide la suscripción, que falla cerrada |
+| `IDENTIDAD_NO_DISPONIBLE` | 503 | E2, E3, B1–B6 | Con `Retry-After: 30` |
 
 ## Notas para agentes
 

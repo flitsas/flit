@@ -21,7 +21,7 @@ internal static class DefinicionReporte
     /// <summary>Origen de la celda (API/MANUAL): solo en el backoffice.</summary>
     public const string Origen = "origen";
 
-    /// <summary>Texto de un documento que no se pudo descifrar.</summary>
+    /// <summary>Texto de un documento que no se pudo descifrar; sale precedido de su tipo («CC No disponible», CR-BE-12).</summary>
     public const string NoDisponible = "No disponible";
 
     private static readonly ColumnaReporte ColumnaEmpresa = new(EmpresaNombre, "Compañía", Texto, false);
