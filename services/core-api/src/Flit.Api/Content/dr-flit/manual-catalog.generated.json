@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFrom": "frontend/lib/manual (pnpm manual:export)",
-  "articleCount": 63,
+  "articleCount": 66,
   "articles": [
     {
       "slug": "0-introduccion/1-bienvenida",
@@ -3404,21 +3404,44 @@
           "paragraphs": [
             "Diagnóstico se abre desde el hub de la Suite: la tarjeta «Diagnóstico» del inicio o el menú de productos. No tiene un formulario de inicio de sesión propio: si llegas sin sesión, te lleva al login del hub y, al ingresar, vuelve a Diagnóstico. Cerrar sesión en cualquier producto la cierra en toda la Suite.",
             "La tarjeta solo aparece si tu compañía tiene Diagnóstico activo. Si el producto está apagado o la suscripción suspendida, verás «No tienes acceso» con el aviso «Diagnóstico no está habilitado para tu empresa o su suscripción está suspendida» y el botón «Ir a mis productos». Los diagnósticos ya guardados no se pierden por una suspensión.",
-            "Al entrar ves el título «Diagnóstico vehicular» y el dock de Diagnóstico: el inicio, «Ajustes → Configuración» y, si eres del equipo FLIT, la sección «Backoffice»."
+            "Al entrar se abre el «Dashboard» de Diagnóstico, con el resumen de tus diagnósticos del último mes (lo explica el artículo «Dashboard de Diagnóstico»). El botón central del dock, «Inicio Diagnóstico», siempre te devuelve ahí.",
+            "El dock de Diagnóstico tiene a la izquierda «Diagnósticos» (el listado de lotes y de vehículos), «Reportes» y, si eres del equipo FLIT, la sección «Backoffice»; a la derecha, «Ajustes → Configuración». Cada entrada aparece solo si tu rol la permite. También puedes saltar a cualquiera con Ctrl K."
           ],
           "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": "Tus enlaces guardados siguen sirviendo",
+              "text": "Antes el listado de diagnósticos estaba en la página de inicio. Si tienes enlaces guardados o marcadores de esa página con una pestaña o un filtro (por ejemplo la pestaña «Vehículos»), te llevan solos al listado «Diagnósticos» con los mismos filtros."
+            }
+          ]
+        },
+        {
+          "id": "sin-acceso",
+          "title": "4. Si ves «No tienes acceso»",
+          "paragraphs": [
+            "La pantalla «No tienes acceso» dice el motivo y ofrece «Ir a mis productos». Los mensajes más comunes:"
+          ],
+          "bullets": [
+            "«Diagnóstico no está habilitado para tu empresa o su suscripción está suspendida.»: el producto está apagado para tu compañía. Escribe a tu ejecutivo de cuenta.",
+            "«No tienes permisos en Diagnóstico. Pídele acceso a tu administrador.» o «No tienes un rol en Diagnóstico…»: tu usuario no tiene un rol del producto. Lo asigna el administrador de tu compañía en el hub.",
+            "«Tu usuario no tiene una empresa asociada…»: tu usuario no pertenece a ninguna compañía. Pide ayuda a tu administrador.",
+            "«Tu cuenta cambió o fue suspendida. Vuelve a iniciar sesión.»: tu sesión dejó de ser válida.",
+            "«No tienes permiso para abrir esta página.»: tu rol no incluye esa pantalla, por ejemplo «Reportes» sin el permiso de ver reportes."
+          ],
           "callouts": []
         },
         {
           "id": "roles",
-          "title": "3. Roles y permisos",
+          "title": "5. Roles y permisos",
           "paragraphs": [
             "Los usuarios y los roles se administran en el hub, no en Diagnóstico. Un rol de Trámites no da acceso a Diagnóstico: hace falta un rol del producto."
           ],
           "bullets": [
-            "Usuario de Diagnóstico: crea diagnósticos y carga vehículos, ve el tablero y el detalle de cada consulta, descarga PDF, Excel y ZIP, crea trámites, ve la configuración en solo lectura y solicita saneamientos.",
+            "Usuario de Diagnóstico: ve el Dashboard de su compañía, crea diagnósticos y carga vehículos, ve el tablero y el detalle de cada consulta, descarga PDF, Excel y ZIP, crea trámites, ve y exporta los «Reportes» de su compañía, ve la configuración en solo lectura y solicita saneamientos.",
             "Administrador de Diagnóstico: lo mismo, más editar la pestaña «Operación» de la configuración y reprocesar consultas en error. El administrador de la compañía lo recibe por defecto.",
-            "Equipo FLIT (Super Admin): el backoffice entre compañías, el contrato de cada compañía, el llenado a mano de consultas, el ajuste del dictamen, las fuentes obligatorias por trámite y la gestión de los saneamientos. El backoffice no crea diagnósticos: los crea la compañía que usa el producto."
+            "Equipo FLIT (Super Admin): el backoffice entre compañías, el contrato de cada compañía, el llenado a mano de consultas, el ajuste del dictamen, las fuentes obligatorias por trámite, la gestión de los saneamientos y la vista global del Dashboard y de los Reportes, con el selector «Compañía». El backoffice no crea diagnósticos: los crea la compañía que usa el producto.",
+            "Ver los reportes en pantalla y exportarlos son dos permisos distintos: si ves la tabla pero no los botones «Exportar Excel» y «Exportar PDF», tu rol no incluye la descarga de reportes."
           ],
           "callouts": [
             {
@@ -3433,18 +3456,18 @@
     },
     {
       "slug": "6-diagnostico/2-inicio-y-vehiculos",
-      "title": "Inicio de Diagnóstico: pestañas «Diagnósticos» y «Vehículos»",
+      "title": "Listado «Diagnósticos»: pestañas «Diagnósticos» y «Vehículos»",
       "href": "/manual/6-diagnostico/2-inicio-y-vehiculos",
       "audience": "Gestor",
       "sectionId": "diagnostico",
-      "summary": "Las dos vistas del inicio: los diagnósticos (lotes) de tu compañía y todas las placas diagnosticadas, con sus filtros.",
+      "summary": "El listado que abre «Diagnósticos» del dock: los diagnósticos (lotes) de tu compañía y todas las placas diagnosticadas, con sus filtros.",
       "primarySource": false,
       "blocks": [
         {
           "id": "inicio",
-          "title": "1. El inicio",
+          "title": "1. El listado",
           "paragraphs": [
-            "Arriba está el panel para empezar: «Placa o VIN» con «Diagnosticar en línea» (Express, un vehículo) y la tarjeta del masivo con «Nuevo diagnóstico masivo» y «Descargar plantilla». Debajo, dos pestañas: «Diagnósticos» y «Vehículos». La pestaña elegida queda en la dirección de la página, así que puedes compartir el enlace o volver a ella."
+            "El listado se abre con «Diagnósticos» del dock (antes era la página de inicio, que ahora es el Dashboard). Arriba está el panel para empezar: «Placa o VIN» con «Diagnosticar en línea» (Express, un vehículo) y la tarjeta del masivo con «Nuevo diagnóstico masivo» y «Descargar plantilla». Debajo, dos pestañas: «Diagnósticos» y «Vehículos». La pestaña elegida queda en la dirección de la página, así que puedes compartir el enlace o volver a ella."
           ],
           "bullets": [],
           "callouts": []
@@ -3466,7 +3489,7 @@
           "paragraphs": [
             "La tabla «Vehículos de la compañía» muestra todas las placas de tus diagnósticos, en proceso y terminadas, de todos los lotes. Columnas: Placa, Diagnóstico (enlace al lote), Modo, Estado (En proceso o Terminado), Dictamen (Viable, Bloqueado o Sin dictamen), Saneamiento, Trámite y Fecha.",
             "Filtros: Placa (se aplica al pulsar Enter o al salir del campo), Estado del vehículo, Dictamen, Saneamiento (Con saneamiento, Sin saneamiento o un estado concreto), Trámite (Con trámite o Sin trámite), Modo y fechas. «Limpiar filtros» los quita. La tabla se pagina con «Filas por página».",
-            "Desde cada fila puedes abrir el panel «Deuda y saneamiento» («Ver deuda de la placa…») y marcar la bandera de saneamiento. Si seleccionas varias placas aparecen «Sanear (N)» y «Descargar deuda (N)», que descarga un solo Excel con las placas elegidas."
+            "Desde cada fila puedes abrir la ventana «Deuda y saneamiento» («Ver deuda de la placa…») y solicitar el saneamiento. Si seleccionas varias placas aparecen «Sanear (N)» y «Descargar deuda (N)», que descarga un solo Excel con las placas elegidas."
           ],
           "bullets": [],
           "callouts": [
@@ -3493,7 +3516,7 @@
           "id": "express",
           "title": "1. Express: un vehículo en línea",
           "paragraphs": [
-            "En el inicio escribe la placa o el VIN en «Placa o VIN» (por ejemplo ABC123) y pulsa «Diagnosticar en línea». Se abre «Nuevo diagnóstico» en modo Express con el vehículo precargado y un «Nombre del diagnóstico» propuesto a partir del identificador y la fecha, que puedes cambiar.",
+            "En el listado «Diagnósticos» escribe la placa o el VIN en «Placa o VIN» (por ejemplo ABC123) y pulsa «Diagnosticar en línea». Se abre «Nuevo diagnóstico» en modo Express con el vehículo precargado y un «Nombre del diagnóstico» propuesto a partir del identificador y la fecha, que puedes cambiar.",
             "Opcionalmente indica el documento del locatario (tipo y número). Se guarda cifrado y en pantalla solo se ven los 4 últimos caracteres. Pulsa «Continuar» o «Iniciar diagnóstico». Si tu compañía muestra el estimado antes de lanzar, revisa las consultas previstas y pulsa «Lanzar diagnóstico».",
             "Al final ves «Diagnóstico iniciado con 1 vehículo» y «Ver tablero»; la aplicación te lleva sola al tablero."
           ],
@@ -3505,7 +3528,7 @@
           "title": "2. Masivo: varios vehículos desde un archivo",
           "paragraphs": [
             "Pulsa «Nuevo diagnóstico masivo» (o elige «Masivo» en el selector «Tipo de diagnóstico»). Llena los parámetros, descarga la plantilla si la necesitas y sube el «Archivo de vehículos (.xlsx o .csv)», de máximo 5 MB, con una fila por vehículo: la columna obligatoria Identificador_Vehiculo (placa o VIN) y, si lo tienes, el documento del locatario (Tipo_Documento_Locatario y Documento_Locatario).",
-            "Pulsa «Validar archivo». La validación no dispara consultas externas: solo revisa el archivo. El «Resumen de validación» muestra los válidos, los que tienen error, los duplicados que se consolidaron en una sola fila y los válidos frente al límite de vehículos por lote de tu contrato.",
+            "Pulsa «Validar archivo» en la barra del final de la pantalla. La validación no dispara consultas externas: solo revisa el archivo. El «Resumen de validación» muestra los válidos, los que tienen error, los duplicados que se consolidaron en una sola fila y los válidos frente al límite de vehículos por lote de tu contrato.",
             "Si hay filas con error, corrígelas en la tabla (se revalidan solas al dejar de escribir y quedan «Corregida» o «Inválido» con el motivo) o pulsa «Continuar solo con los válidos». Sin ningún válido no se puede continuar. Una vez validado el archivo, el selector Express o Masivo queda bloqueado; para cambiar parámetros o archivo usa «Subir otro archivo»."
           ],
           "bullets": [
@@ -3519,6 +3542,7 @@
           "id": "parametros",
           "title": "3. Parámetros: alcance y modo",
           "paragraphs": [
+            "La pantalla de alta va en una sola columna. Arriba, a lo ancho, la tarjeta «Parámetros» con tres partes en este orden: «Información general», «Modo» y «Alcance». En una pantalla ancha se ven las tres lado a lado; en una mediana, «Información general» y «Modo» arriba y «Alcance» debajo; en el celular, una debajo de la otra. Debajo va la tarjeta «Vehículos» (la placa o el archivo) y, al final, una barra con el estimado de consultas, los avisos, «Cancelar» y el botón para continuar. El orden en que avanzas con la tecla Tab es el mismo que ves.",
             "El «Alcance» agrupa las fuentes por vehículo, por propietario y por locatario. Solo ves las que tu compañía tiene contratadas y vienen marcadas las fuentes por defecto de la configuración. El RUNT del vehículo siempre se consulta: es la base del diagnóstico y va marcado sin poder quitarse.",
             "Las fuentes del propietario dependen del propietario que reporta el RUNT del vehículo. Las del locatario dependen del documento que declares en la carga; sin documento, quedan como Novedad «Sin documento del locatario» y no se consumen.",
             "«Modo»: Simple consulta las fuentes y entrega el consolidado. Con Análisis IA suma el dictamen y exige elegir el tipo de trámite (la familia traspaso: traspaso, traspaso unilateral y transferencia de dominio). En Con Análisis IA las fuentes que exige ese trámite quedan marcadas y bloqueadas con el aviso «Fuente obligatoria para el tipo de trámite elegido»; si alguna no está en tu contrato verás «Fuentes obligatorias no contratadas» y no podrás lanzar."
@@ -3531,6 +3555,16 @@
               "text": "Los parámetros aplican a todos los vehículos del lote y no se cambian después de lanzar. Un lote no mezcla modos ni tipos de trámite: si necesitas dos trámites distintos, crea dos diagnósticos."
             }
           ]
+        },
+        {
+          "id": "cargar-vehiculos",
+          "title": "4. Un diagnóstico guardado sin vehículos: «Cargar vehículos»",
+          "paragraphs": [
+            "Si un diagnóstico masivo quedó guardado sin confirmar los vehículos (por ejemplo, saliste antes de terminar), su tablero lo muestra como creado y sin lanzar, con el botón «Cargar vehículos». Ahí retomas la carga con sus parámetros ya guardados, en tres pasos: «Subir archivo», «Revisar» e «Iniciar».",
+            "Sube el archivo, revisa el resumen de validación, corrige o descarta las filas con error y pulsa iniciar. Si los vehículos no se pudieron confirmar verás «No se confirmaron los vehículos» con el motivo y, cuando aplica, la opción de reintentar. Sin el permiso de crear diagnósticos, la pantalla te pide que solicites acceso al administrador de tu compañía."
+          ],
+          "bullets": [],
+          "callouts": []
         }
       ],
       "sources": []
@@ -3548,8 +3582,9 @@
           "id": "grilla",
           "title": "1. La grilla de semáforos",
           "paragraphs": [
-            "El tablero muestra la cabecera del lote (nombre, modo, quién lo creó y cuándo), el estado del lote y la tabla «Semáforo de consultas del lote»: una fila por vehículo y una columna por fuente, más Dictamen y Reporte. El tablero se actualiza solo cada pocos segundos, sin recargar la página; si pierde la conexión verás «Datos desactualizados».",
+            "El tablero muestra la cabecera del lote (nombre, modo, quién lo creó y cuándo), el estado del lote y la tabla «Semáforo de consultas del lote»: una fila por vehículo y una columna por fuente, más Dictamen y «Acciones». El tablero se actualiza solo cada pocos segundos, sin recargar la página; si pierde la conexión verás «Datos desactualizados».",
             "Las tarjetas de arriba filtran la grilla: Vehículos, Terminados, Con error, Con deuda, Bloqueados y Listos para trámite. También hay un buscador por placa o VIN y el filtro «Con saneamiento / Sin saneamiento».",
+            "Las columnas de fuentes van agrupadas: una cabecera «RUNT» y otra «SIMIT», centradas, y debajo de cada una sus subcolumnas «vehículo», «propietario» y «locatario». Siguen «Avalúo» e «Impuesto». En el celular la tabla pasa a tarjetas y cada dato lleva su nombre completo, por ejemplo «RUNT propietario».",
             "Primero se consulta el RUNT del vehículo. Si falla, las demás fuentes de ese vehículo esperan («Espera al RUNT del vehículo») y no se consultan. Con el RUNT listo, el resto corre en paralelo. Si una misma placa y fuente ya se consultó hoy en tu compañía, se reutiliza ese dato sin una consulta nueva."
           ],
           "bullets": [],
@@ -3567,9 +3602,11 @@
         },
         {
           "id": "acciones",
-          "title": "3. Reprocesar, reintentar y cerrar el lote",
+          "title": "3. El menú «Acciones» de cada fila; reprocesar y cerrar el lote",
           "paragraphs": [
-            "El administrador de Diagnóstico ve «Reprocesar» en las celdas en error: repite solo esa consulta y deja las que ya están en verde. «Reintentar placa» y «Reintentar pegadas (N)» vuelven a encolar las consultas que llevan demasiado tiempo sin avanzar. El usuario de Diagnóstico no ve estos botones.",
+            "La última columna de la tabla, «Acciones», queda fija a la derecha. Cada fila tiene un botón «Acciones» que abre un menú con lo que puedes hacer con ese vehículo, en este orden: «Solicitar saneamiento» (o «Quitar solicitud de saneamiento» o «Ver saneamiento»), «Crear trámite» (o «Ver trámite #N»), «Ver deuda», «Descargar PDF» y «Reintentar consultas». Solo ves las opciones que tu rol permite. Si una opción aplica a tu rol pero no a ese vehículo todavía, aparece atenuada con el motivo escrito debajo (por ejemplo, que el PDF estará listo cuando terminen las consultas).",
+            "El menú se maneja también con el teclado: Enter o Espacio lo abre, las flechas, Inicio y Fin recorren las opciones y Escape lo cierra y devuelve el foco al botón. Encima del botón, si el vehículo tiene saneamiento, un rótulo dice su estado (por ejemplo «Solicitado» o «En gestión»). El resultado de cada acción aparece bajo el botón. Si una fila no tiene ninguna acción disponible, verás un guion.",
+            "El administrador de Diagnóstico ve «Reprocesar» en las celdas en error: repite solo esa consulta y deja las que ya están en verde. «Reintentar consultas» (en el menú «Acciones») y «Reintentar pegadas (N)» vuelven a encolar las consultas que llevan demasiado tiempo sin avanzar. El usuario de Diagnóstico no ve estas opciones.",
             "Cuando todas las consultas terminan sin error, el lote pasa solo a Completado. Si quedan consultas en error y decides no reprocesarlas, «Cerrar lote» lo deja Incompleto: esas consultas quedan sin resultado y no se vuelven a intentar. Reprocesar o llenar una consulta devuelve el lote a En proceso hasta que vuelva a terminar."
           ],
           "bullets": [],
@@ -3580,7 +3617,8 @@
           "title": "4. El dictamen por reglas (Con Análisis IA)",
           "paragraphs": [
             "Cuando un vehículo cierra sus consultas, el motor de reglas evalúa el catálogo vigente y emite el veredicto: Viable o Bloqueado. Una regla que bloquea deja el dictamen Bloqueado; si solo hay advertencias, o ninguna regla dispara, el dictamen es Viable. La IA redacta la explicación y no cambia el veredicto; mientras redacta verás «redacción IA pendiente» y, si no responde, el dictamen sale con un texto de plantilla.",
-            "Pulsa la celda Dictamen («Ver dictamen de ABC123») para abrir el panel: veredicto, trámite analizado, versión del catálogo, fecha de emisión y los alertamientos, cada uno con su fuente y su efecto («Bloquea» o «Advertencia»)."
+            "Pulsa «Dictamen» bajo la placa («Ver dictamen de ABC123») para abrir la ventana del dictamen: veredicto, trámite analizado, versión del catálogo, fecha de emisión y los alertamientos, cada uno con su fuente y su efecto («Bloquea» o «Advertencia»).",
+            "El dictamen y la deuda se abren en una ventana centrada sobre el tablero, de 640 px de ancho en pantallas grandes, con el mismo contenido que antes. Se cierra con «Cerrar», con la tecla Escape o con un clic fuera, y al cerrarla el foco vuelve al botón que la abrió. Desde un dictamen Bloqueado, «Ver deuda» cambia la ventana por la de «Deuda y saneamiento» sin abrir una encima de otra."
           ],
           "bullets": [
             "Bloquean: SOAT no vigente (en maquinaria solo advierte, mientras se confirma si se le exige); revisión técnico-mecánica no vigente cuando el vehículo ya cumplió el plazo de su primera revisión; multas pendientes en el SIMIT del vehículo, del propietario o del locatario; y un SIMIT que no se pudo verificar.",
@@ -3639,7 +3677,7 @@
             {
               "variant": "tip",
               "title": null,
-              "text": "En Con Análisis IA una deuda de impuesto es una advertencia del dictamen, no un bloqueo. En el panel «Deuda y saneamiento» aparece como «Vigencias del impuesto» con el «Total pendiente»."
+              "text": "En Con Análisis IA una deuda de impuesto es una advertencia del dictamen, no un bloqueo. En la ventana «Deuda y saneamiento» aparece como «Vigencias del impuesto» con el «Total pendiente»."
             }
           ]
         }
@@ -3659,7 +3697,7 @@
           "id": "pdf",
           "title": "1. PDF por vehículo",
           "paragraphs": [
-            "En la columna Reporte, «Descargar PDF de ABC123» baja el informe del vehículo en formato corporativo, con el encabezado del diagnóstico y solo las secciones de las fuentes que se pidieron. Está disponible cuando terminan las consultas de ese vehículo, sin esperar al resto del lote.",
+            "En el menú «Acciones» de la fila, «Descargar PDF» baja el informe del vehículo en formato corporativo, con el encabezado del diagnóstico y solo las secciones de las fuentes que se pidieron. Está disponible cuando terminan las consultas de ese vehículo, sin esperar al resto del lote. Mientras no lo esté, la opción aparece atenuada con el motivo.",
             "Si el lote se cerró como Incompleto, el PDF también sale para los vehículos con consultas en error y esas fuentes aparecen como no disponibles. El PDF se vuelve a generar solo cuando cambia la evidencia, por ejemplo tras un reproceso o un nuevo dictamen."
           ],
           "bullets": [],
@@ -3720,7 +3758,7 @@
           "id": "individual",
           "title": "2. Un vehículo",
           "paragraphs": [
-            "En la fila pulsa «Crear trámite para la placa ABC123». En Simple elige el «Tipo de trámite»; en Con Análisis IA se usa el trámite analizado del lote. Confirma y, al terminar, verás «Se creó el borrador del trámite» con «Ir al wizard», que abre Trámites en una pestaña nueva para que completes allí el borrador. Si la placa ya tenía trámite, verás «La placa ya tenía el trámite» y «Ver trámite»."
+            "En la fila abre «Acciones» y elige «Crear trámite». En Simple elige el «Tipo de trámite»; en Con Análisis IA se usa el trámite analizado del lote. Confirma y, al terminar, verás «Se creó el borrador del trámite» con «Ir al wizard», que abre Trámites en una pestaña nueva para que completes allí el borrador. Si la placa ya tenía trámite, verás «La placa ya tenía el trámite» y «Ver trámite». Cuando el vehículo ya tiene trámite, el menú «Acciones» muestra «Ver trámite #N», que lo abre en una pestaña nueva. Si el vehículo aún no cumple las condiciones, «Crear trámite» aparece atenuada con el motivo."
           ],
           "bullets": [],
           "callouts": []
@@ -3803,7 +3841,7 @@
           "id": "acceso",
           "title": "1. Acceso y lotes por compañía",
           "paragraphs": [
-            "La sección «Backoffice» del dock solo aparece para el equipo FLIT (Super Admin). Ahí está «Lotes por compañía»: elige la «Empresa» (busca por nombre o NIT) y revisa sus lotes con el filtro de estado y «Solo lotes con errores». Al abrir un lote ves su grilla con las mismas celdas que la compañía, más las marcas que solo ve FLIT: «Manual» en una celda llenada a mano y la «Auditoría» del dictamen.",
+            "La sección «Backoffice» del dock solo aparece para el equipo FLIT (Super Admin). Ahí está «Lotes por compañía»: elige la «Empresa» (busca por nombre o NIT) y revisa sus lotes con el filtro de estado y «Solo lotes con errores». Al abrir un lote ves su grilla con las mismas celdas que la compañía, más las marcas que solo ve FLIT: «Manual» en una celda llenada a mano y la «Auditoría» del dictamen, que se abre en una ventana como la del dictamen. Cada celda abre el detalle de la consulta en la vista del backoffice, con su respuesta y sus intentos, incluido el origen (automático o manual).",
             "Cada lectura de otra compañía queda auditada. El backoffice no crea diagnósticos ni solicita saneamientos en nombre de la compañía."
           ],
           "bullets": [],
@@ -3829,8 +3867,8 @@
           "id": "ajuste",
           "title": "3. Ajuste FLIT del dictamen",
           "paragraphs": [
-            "Desde el panel del dictamen en el backoffice puedes cambiar el veredicto y agregar, editar o eliminar alertamientos (incluido un «Alertamiento libre»). El motivo es obligatorio en todo ajuste (de 10 a 500 caracteres). Un dictamen Viable no puede tener alertamientos que bloqueen y uno Bloqueado necesita al menos uno.",
-            "Cada ajuste crea una versión nueva del dictamen. La compañía ve el dictamen corregido con «Ajustado por FLIT» y la fecha; el original, el motivo y quién hizo cada cambio quedan en «Versiones del dictamen», visible solo en el backoffice. Si el vehículo ya tiene trámite, el sistema pide confirmarlo y el trámite no se revierte. Si otra persona ajustó antes, se avisa y no se pisa su cambio. Un recálculo automático posterior gana y el ajuste queda como «Superado por recálculo»."
+            "Desde la ventana del dictamen en el backoffice puedes cambiar el veredicto y agregar, editar o eliminar alertamientos (incluido un «Alertamiento libre»). El motivo es obligatorio en todo ajuste (de 10 a 500 caracteres). Un dictamen Viable no puede tener alertamientos que bloqueen y uno Bloqueado necesita al menos uno.",
+            "Cada ajuste crea una versión nueva del dictamen. La compañía ve el dictamen corregido con «Ajustado por FLIT» y la fecha; el original, el motivo y quién hizo cada cambio quedan en «Versiones del dictamen», visible solo en el backoffice. Mientras editas el ajuste, la ventana no se cierra con un clic fuera, para no perder lo escrito: ciérrala con «Cerrar» o Escape. Si el vehículo ya tiene trámite, el sistema pide confirmarlo y el trámite no se revierte. Si otra persona ajustó antes, se avisa y no se pisa su cambio. Un recálculo automático posterior gana y el ajuste queda como «Superado por recálculo»."
           ],
           "bullets": [],
           "callouts": []
@@ -3871,8 +3909,8 @@
           "id": "solicitar",
           "title": "2. Cómo se solicita",
           "paragraphs": [
-            "Cuando un vehículo terminó todas sus consultas (en verde o en Novedad), su fila muestra la bandera «Sanear» («Solicitar saneamiento de la placa ABC123»). Un clic la marca y la etiqueta pasa a «Solicitado»; otro clic, mientras FLIT no la haya tomado, quita la solicitud. Con alguna consulta en error no se puede marcar hasta que se reprocese.",
-            "La bandera está en los dos modos y con cualquier veredicto: un vehículo Viable puede tener a la vez «Crear trámite» y «Sanear». FLIT decide si procede.",
+            "Cuando un vehículo terminó todas sus consultas (en verde o en Novedad), el menú «Acciones» de su fila ofrece «Solicitar saneamiento». Al elegirlo, encima del botón aparece el rótulo «Solicitado» con la bandera encendida; mientras FLIT no la haya tomado, la opción pasa a «Quitar solicitud de saneamiento». Cuando FLIT ya lo tomó o lo cerró, la opción es «Ver saneamiento». Con alguna consulta en error, «Solicitar saneamiento» aparece atenuada con el motivo hasta que se reprocese.",
+            "La solicitud está en los dos modos y con cualquier veredicto: un vehículo Viable puede tener a la vez «Crear trámite» y «Solicitar saneamiento». FLIT decide si procede.",
             "Para varias placas, selecciónalas en el tablero o en la pestaña «Vehículos» y pulsa «Sanear (N)», hasta 500 por solicitud. Las placas que no cumplen (faltan consultas por terminar o ya tienen un saneamiento) se omiten y se informa cuántas."
           ],
           "bullets": [
@@ -3883,10 +3921,10 @@
         },
         {
           "id": "panel",
-          "title": "3. El panel «Deuda y saneamiento»",
+          "title": "3. La ventana «Deuda y saneamiento»",
           "paragraphs": [
-            "Se abre desde la etiqueta de la fila, desde «Ver deuda de la placa…» en la pestaña «Vehículos» o desde el panel de un dictamen Bloqueado. Muestra primero los motivos del dictamen vigente, si lo hay, y debajo la deuda conocida por fuente: comparendos del SIMIT con su valor tal como lo reporta la fuente (Diagnóstico no los suma), acuerdos de pago, paz y salvo, vigencias del impuesto con su total pendiente y vigencia del SOAT y de la revisión técnico-mecánica. Si no hay nada pendiente, lo dice; nunca sale vacío.",
-            "Debajo están el estado del saneamiento, los conceptos que registró FLIT con su resultado (Pendiente, Saneado o No procede) y su nota, la «Observación de FLIT» y el historial. Si FLIT cargó una evidencia, la descargas con «Descargar evidencia». El panel descarga el PDF y el Excel de la deuda; el Excel trae una hoja por fuente."
+            "Se abre desde «Ver deuda» o «Ver saneamiento» del menú «Acciones», desde «Ver deuda de la placa…» en la pestaña «Vehículos» o desde la ventana de un dictamen Bloqueado. Es una ventana centrada de 640 px de ancho; como puede tener campos que estás llenando, no se cierra con un clic fuera: ciérrala con «Cerrar» o Escape. Muestra primero los motivos del dictamen vigente, si lo hay, y debajo la deuda conocida por fuente: comparendos del SIMIT con su valor tal como lo reporta la fuente (Diagnóstico no los suma), acuerdos de pago, paz y salvo, vigencias del impuesto con su total pendiente y vigencia del SOAT y de la revisión técnico-mecánica. Si no hay nada pendiente, lo dice; nunca sale vacío.",
+            "Debajo están el estado del saneamiento, los conceptos que registró FLIT con su resultado (Pendiente, Saneado o No procede) y su nota, la «Observación de FLIT» y el historial. Si FLIT cargó una evidencia, la descargas con «Descargar evidencia». La ventana descarga el PDF y el Excel de la deuda; el Excel trae una hoja por fuente."
           ],
           "bullets": [],
           "callouts": [
@@ -4016,7 +4054,235 @@
             "¿Puedo cambiar las fuentes de un lote ya lanzado? No. Crea un diagnóstico nuevo con el alcance que necesitas.",
             "¿Por qué no puedo crear el trámite? El vehículo aún no termina, ya tiene trámite, ya está en curso de creación o, en Con Análisis IA, su dictamen no es Viable.",
             "¿El saneamiento cuesta algo o cambia el dictamen? Diagnóstico no cobra el saneamiento y no cambia el dictamen al cerrarlo; si corresponde, FLIT ajusta el dictamen.",
-            "¿Quién llena datos a mano o corrige el dictamen? Solo el equipo FLIT. Ningún usuario de la compañía puede hacerlo, ni por pantalla ni por API."
+            "¿Quién llena datos a mano o corrige el dictamen? Solo el equipo FLIT. Ningún usuario de la compañía puede hacerlo, ni por pantalla ni por API.",
+            "¿Dónde quedaron los botones de cada vehículo? En el menú «Acciones» de la última columna del tablero. La bandera de saneamiento, «Crear trámite», «Ver deuda», el PDF y el reintento están ahí.",
+            "¿Por qué el Dashboard y un reporte dan cifras distintas para el mismo periodo? Porque cada indicador cuenta por su propia fecha: los diagnósticos y vehículos por la fecha de creación del diagnóstico, los saneamientos por la fecha de solicitud y los trámites por la fecha de creación. Revisa la fecha que usa cada uno.",
+            "¿Por qué no puedo exportar un reporte? Tu rol no incluye la descarga de reportes, la tabla está vacía o el filtro supera el máximo del formato. El motivo aparece junto al botón."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "6-diagnostico/13-dashboard",
+      "title": "Dashboard de Diagnóstico: indicadores, periodo y alcance por rol",
+      "href": "/manual/6-diagnostico/13-dashboard",
+      "audience": "Gestor",
+      "sectionId": "diagnostico",
+      "summary": "Qué mide cada indicador del Dashboard, con qué fecha cuenta, cómo cambiar el periodo y qué ve cada rol.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es el Dashboard",
+          "paragraphs": [
+            "El «Dashboard» es la primera pantalla de Diagnóstico y el destino del botón «Inicio Diagnóstico» del dock. Resume los diagnósticos de tu compañía en un periodo: cuántos se hicieron, cómo respondieron las fuentes, qué dictamen salió y cuántos saneamientos y trámites se originaron. No muestra placas, documentos ni nombres de personas: solo cifras.",
+            "La cabecera dice «Resumen de diagnósticos de» y el nombre de tu compañía. A la derecha están las fechas «Desde» y «Hasta» y, si tu rol puede crear diagnósticos, el botón «Nuevo diagnóstico»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "indicadores",
+          "title": "2. Los seis indicadores",
+          "paragraphs": [
+            "Arriba hay seis tarjetas. Las cifras usan separador de miles. Si no hay datos para calcular un valor, la tarjeta dice «sin datos» en lugar de un cero."
+          ],
+          "bullets": [
+            "«Diagnósticos»: los diagnósticos (lotes) creados en el periodo, con el desglose «N express · M masivos». Pulsa la tarjeta para abrir el listado «Diagnósticos» con esas mismas fechas.",
+            "«Vehículos»: los vehículos de esos diagnósticos y, debajo, cuántos son únicos (una placa diagnosticada dos veces cuenta una vez). La tarjeta abre la pestaña «Vehículos» del listado.",
+            "«Consultas a fuentes»: las consultas de esos vehículos a todas las fuentes, con la tasa de éxito: las consultas exitosas sobre las exitosas más las que terminaron en error. Las que quedaron en Novedad (no aplica) no cuentan en la tasa.",
+            "«Tiempo promedio de consulta»: cuánto tarda en promedio una consulta automática, en segundos. Los llenados a mano de FLIT no cuentan.",
+            "«Saneamientos solicitados»: las solicitudes de saneamiento hechas en el periodo, en cualquier estado. La tarjeta abre la pestaña «Vehículos» filtrada por «Con saneamiento».",
+            "«Trámites creados»: los borradores de trámite que se crearon desde Diagnóstico en el periodo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": "Cada indicador cuenta por su propia fecha",
+              "text": "Los diagnósticos, los vehículos y las consultas cuentan por la fecha de creación del diagnóstico. Los saneamientos, por la fecha de solicitud. Los trámites, por la fecha de creación del trámite. Por eso un saneamiento pedido hoy sobre un diagnóstico del mes pasado aparece en el periodo de hoy."
+            }
+          ]
+        },
+        {
+          "id": "graficas",
+          "title": "3. Las gráficas y la tabla de fuentes",
+          "paragraphs": [
+            "Cada gráfica tiene su título, los valores escritos junto a cada barra y una leyenda con texto, así que no dependes del color. Debajo de cada una puedes desplegar los datos en una tabla."
+          ],
+          "bullets": [
+            "«Uso en el tiempo»: diagnósticos y vehículos por día, por semana o por mes. El subtítulo dice cuál: por día hasta 62 días de rango, por semana hasta unos seis meses (desde el lunes) y por mes en rangos más largos.",
+            "«Veredictos»: el dictamen vigente de los vehículos (Viables, Bloqueados y Sin dictamen) con su cifra y su porcentaje.",
+            "«Tipo de análisis»: cuántos diagnósticos fueron Simple y cuántos Con análisis.",
+            "«Salud de las fuentes»: una fila por fuente con consultas, exitosas, con error, no aplica, pendientes, tasa de éxito y tiempo promedio. Solo salen las fuentes que se consultaron en el periodo.",
+            "«Saneamientos»: los cinco estados (Solicitado, En gestión, Saneado, No procede y Anulado), por la fecha de solicitud, aunque alguno esté en cero.",
+            "«Trámites»: las derivaciones a trámite del periodo, separadas en creadas, omitidas, fallidas y en curso."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "periodo",
+          "title": "4. Cambiar el periodo",
+          "paragraphs": [
+            "Por defecto el Dashboard muestra los últimos 30 días, con hoy incluido. Cambia «Desde» y «Hasta» y el resumen se actualiza solo, sin botón de aplicar. Las fechas son días completos en hora de Colombia. El periodo queda en la dirección de la página: puedes compartir el enlace o guardarlo.",
+            "Si el rango es inválido, el campo «Hasta» lo marca y no se pide nada: «El rango no puede superar un año», «La fecha final no puede ser posterior a hoy» o «La fecha final no puede ser anterior a la inicial»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "roles",
+          "title": "5. Qué ve cada rol",
+          "paragraphs": [
+            "El usuario y el administrador de Diagnóstico ven el resumen de su compañía, sin selector de compañía. Si la configuración «Quién ve los diagnósticos» está en «Solo los propios», cada usuario ve las cifras de los diagnósticos que puede ver en el listado.",
+            "El equipo FLIT abre el Dashboard en «Todas las compañías» y puede elegir una compañía. Lo explica el artículo «Vista global de FLIT: Dashboard y Reportes de todas las compañías»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "estados",
+          "title": "6. Sin datos, cargando o con error",
+          "paragraphs": [],
+          "bullets": [
+            "Mientras carga verás «Cargando el resumen…».",
+            "Sin diagnósticos en el periodo: «Aún no hay diagnósticos en este periodo», con «Nuevo diagnóstico» (si puedes crear) y «Ver los últimos 90 días».",
+            "Si no se pudo cargar: «No se pudo cargar el resumen» con «Reintentar». Si tu rol no permite ver el Dashboard, verás «No tienes acceso»."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "6-diagnostico/14-reportes",
+      "title": "Reportes de Diagnóstico: catálogo, filtros, datos personales y exportación a Excel y PDF",
+      "href": "/manual/6-diagnostico/14-reportes",
+      "audience": "Gestor",
+      "sectionId": "diagnostico",
+      "summary": "Los reportes detallados de tus diagnósticos: qué trae cada uno, cómo filtrar, el aviso de datos personales y cómo exportar a Excel o PDF.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué son los Reportes",
+          "paragraphs": [
+            "«Reportes» del dock abre el módulo con la información detallada de tus diagnósticos, renglón por renglón, para revisarla en pantalla o descargarla. La cabecera dice «Descarga la información detallada de tus diagnósticos». Debajo hay una pestaña por reporte: la pestaña elegida, las fechas y los filtros quedan en la dirección de la página, salvo la placa, que no se guarda en el enlace.",
+            "Para ver los reportes tu rol necesita el permiso de ver reportes; para exportarlos, además, el de descargar reportes. Los dos los tienen por defecto el usuario y el administrador de Diagnóstico. Sin el permiso de ver, la entrada «Reportes» no aparece en el dock."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "catalogo",
+          "title": "2. Los reportes disponibles",
+          "paragraphs": [
+            "La compañía tiene cuatro reportes. El equipo FLIT tiene además «Consumo por compañía». Cada reporte cuenta por su propia fecha de referencia."
+          ],
+          "bullets": [
+            "«Vehículos diagnosticados»: un renglón por vehículo de los diagnósticos creados en el periodo. Columnas: Fecha del diagnóstico, Diagnóstico, Modalidad, Tipo de análisis, Tipo de trámite, Placa, VIN, Servicio, Organismo de tránsito, Departamento, Propietarios (documento), Locatario (documento), Origen del locatario, Veredicto, Estado de las consultas, Saneamiento y Trámite. Filtros: modalidad, tipo de análisis, veredicto y placa.",
+            "«Consultas a fuentes»: un renglón por consulta, con Fecha del diagnóstico, Diagnóstico, Placa, Fuente, Estado, Motivo no aplica, Tipo de error, Intentos, Duración total (ms), Dato obtenido en y Reutilizada. Filtros: fuente, estado y placa.",
+            "«Saneamientos»: un renglón por solicitud, por la fecha de solicitud, con Solicitado en, Placa, Diagnóstico, Estado, Tomado en, Cerrado en, Días hasta el cierre, Motivo de cierre, Renglones y Renglones pendientes. Filtros: estado y placa.",
+            "«Derivaciones a trámite»: un renglón por placa enviada a Trámites, con Fecha, Placa, Diagnóstico, Operación (individual o masiva), Tipo de trámite, Estado, Motivo y Trámite. Filtros: estado y placa."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El documento de los propietarios y del locatario sale completo, con su tipo. Los reportes no incluyen el nombre de las personas. Si un documento no se puede leer, aparece como «No disponible»."
+            }
+          ]
+        },
+        {
+          "id": "datos-personales",
+          "title": "3. El aviso de datos personales",
+          "paragraphs": [
+            "Encima de las pestañas hay un aviso fijo, que no se puede cerrar. En «Vehículos diagnosticados» dice: «Este reporte contiene datos personales (números de documento de identidad) protegidos por la Ley 1581 de 2012. Úsalos solo para la finalidad autorizada. Cada consulta y descarga queda registrada con tu usuario.». En los reportes que solo traen placas dice lo mismo sin la mención a los documentos, porque la placa también es un dato protegido.",
+            "Cada vez que ves un reporte en pantalla o lo exportas, queda registrado quién lo hizo, cuándo, qué reporte, con qué periodo y filtros y cuántos registros recibió. El registro no guarda el contenido del reporte ni la placa que buscaste."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Tú respondes por el archivo",
+              "text": "Un Excel o un PDF descargado sale de FLIT y queda bajo tu responsabilidad y la de tu compañía. Descarga solo lo que necesitas, no lo compartas fuera de la finalidad autorizada y bórralo cuando ya no lo uses. El Excel trae una hoja «Aviso» y el PDF lleva el aviso y el número de registro en el pie de cada página."
+            }
+          ]
+        },
+        {
+          "id": "filtros-tabla",
+          "title": "4. Filtros y tabla",
+          "paragraphs": [
+            "El periodo funciona igual que en el Dashboard: «Desde» y «Hasta», los últimos 30 días por defecto y como máximo un año. Los filtros propios de cada reporte se eligen con chips; la placa se busca por su comienzo (por ejemplo ABC) y se aplica al confirmar la búsqueda. «Limpiar filtros» aparece cuando cambiaste algo y vuelve a los valores iniciales. Cambiar un filtro vuelve a la primera página.",
+            "La tabla dice cuántos registros hay y se pagina de 25, 50 o 100 filas. En el celular cada renglón pasa a una tarjeta. Si avanzas mucho en las páginas verás «Acota el filtro para ver más registros»: reduce el periodo o agrega un filtro."
+          ],
+          "bullets": [
+            "Sin datos en el periodo: «No hay registros en este periodo».",
+            "Sin datos por los filtros: «Ningún registro coincide con los filtros», con «Limpiar filtros».",
+            "Si no se pudo cargar: «No se pudo cargar el reporte.» con «Reintentar»."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "exportar",
+          "title": "5. Exportar a Excel o PDF",
+          "paragraphs": [
+            "Los botones «Exportar Excel» y «Exportar PDF» exportan todo el filtro, no solo la página que ves: lo dice la ayuda «Se exportan los N registros del filtro». Mientras se genera, el botón dice «Generando…» y aparece «Puede tardar unos segundos»; el otro formato sigue disponible. El archivo baja con un nombre del estilo diagnostico-reporte-vehiculos-AAAAMMDD-AAAAMMDD.",
+            "Cada formato tiene un máximo de registros: 5 000 en Excel y 1 000 en PDF. Si el filtro los supera, ese botón queda atenuado con el motivo «Acota el filtro: máximo 5 000 registros en Excel» (o el de PDF). Nunca se exporta un archivo recortado en silencio."
+          ],
+          "bullets": [
+            "Botones atenuados con «No hay registros para exportar» o «Espera a que cargue el reporte»: la tabla está vacía o todavía cargando.",
+            "«El reporte tiene N registros y el Excel admite 5 000. Acota el rango o los filtros.»: los datos crecieron entre que cargó la tabla y pediste el archivo.",
+            "«Ya hay una exportación en curso. Espera unos segundos e intenta de nuevo.»: solo se genera un archivo a la vez por usuario, y la plataforma limita las exportaciones simultáneas.",
+            "«No tienes permiso para descargar reportes.»: tu rol ve los reportes pero no los descarga.",
+            "«El rango no puede superar un año» o «Revisa los filtros del reporte.»: corrige el periodo o los filtros."
+          ],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "6-diagnostico/15-vista-global-flit",
+      "title": "Vista global de FLIT: Dashboard y Reportes de todas las compañías",
+      "href": "/manual/6-diagnostico/15-vista-global-flit",
+      "audience": "Super Admin",
+      "sectionId": "diagnostico",
+      "summary": "Cómo el equipo FLIT ve el Dashboard y los Reportes de todas las compañías o de una sola, y qué trae el reporte «Consumo por compañía».",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "quien",
+          "title": "1. Quién tiene la vista global",
+          "paragraphs": [
+            "La vista global es del equipo FLIT con el permiso de volumetría de Diagnóstico. Solo cuenta las compañías que tienen Diagnóstico activo. Un usuario de una compañía cliente nunca la ve, aunque sea administrador.",
+            "Cada lectura de otra compañía queda auditada, igual que en el backoffice."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "dashboard",
+          "title": "2. El Dashboard global",
+          "paragraphs": [
+            "El Dashboard abre en «Todas las compañías», con el rótulo «Vista global · todas las compañías» bajo el título. Además de los indicadores de siempre muestra «Compañías con más uso»: hasta 10 compañías ordenadas por diagnósticos creados en el periodo, con sus vehículos. Pulsa una para ver su resumen.",
+            "El selector «Compañía», junto a las fechas, busca por nombre entre las compañías con Diagnóstico activo. Al elegir una, la cabecera dice «Resumen de diagnósticos de» y su nombre, y desaparece la lista de compañías. Para volver al total elige «Todas las compañías». En la vista global no está el botón «Nuevo diagnóstico»: los diagnósticos los crea la compañía."
+          ],
+          "bullets": [
+            "Si la lista de compañías no carga, el selector queda deshabilitado con «No se pudo cargar la lista de compañías» y «Reintentar»; la vista global sigue funcionando.",
+            "Si la compañía elegida ya no tiene Diagnóstico activo, o el directorio de compañías no responde, el resumen no carga: pulsa «Reintentar» o elige otra compañía.",
+            "En «Reportes» esos casos tienen mensaje propio: «Esa compañía no tiene Diagnóstico activo.» y «El directorio de compañías no responde. Intenta de nuevo en unos segundos.»."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "reportes",
+          "title": "3. Los Reportes globales",
+          "paragraphs": [
+            "En «Reportes» tienes el mismo selector «Compañía», con «Todas las compañías» por defecto. En la vista de todas las compañías cada renglón empieza con la columna «Compañía», para saber de quién es el dato. Los reportes traen los mismos datos personales que ve la compañía, con el mismo aviso, y cada consulta y descarga queda registrada con tu usuario. En «Consultas a fuentes» ves además la columna «Origen» (automática o manual).",
+            "«Consumo por compañía» es solo de FLIT: una fila por compañía con datos, con Compañía, NIT, Diagnósticos, Vehículos, Consultas exitosas, Consultas con error, Tasa de éxito, consultas RUNT, SIMIT, avalúo e impuesto, Saneamientos solicitados y Trámites creados. No trae datos personales: su aviso solo recuerda que cada descarga queda registrada."
           ],
           "bullets": [],
           "callouts": []
