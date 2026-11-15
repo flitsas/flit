@@ -62,6 +62,8 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/pdf => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento/renglones/{rid:guid}/evidencia => diagnostico.reportes.descargar",
+        // HU #14579, BE-1: E1 con el permiso de lectura de siempre.
+        "GET /api/v1/diagnostico/estadisticas => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/notificaciones => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/plantilla => diagnostico.diagnosticos.crear",
         "GET /api/v1/diagnostico/reportes => diagnostico.reportes.ver",
