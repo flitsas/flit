@@ -29,6 +29,8 @@ internal static class ReportesRegistro
         services.AddScoped<IReporte, ReporteDerivaciones>();
         services.AddScoped<DescifradoDocumentos>();
         services.AddScoped<MotorReportes>();
+        // BE-4: el reporte de consumo (solo backoffice) y las compañías de la petición.
+        Backoffice.ReportesBackofficeEndpoints.AddServicios(services);
         return services;
     }
 
@@ -40,5 +42,5 @@ internal static class ReportesRegistro
     }
 
     /// <summary>B0–B6 bajo <c>/backoffice</c> (BE-4); recibe el grupo raíz de la API, no el de <c>ConEmpresaExplicita</c>.</summary>
-    public static void MapReportesBackoffice(RouteGroupBuilder api) => ArgumentNullException.ThrowIfNull(api);
+    public static void MapReportesBackoffice(RouteGroupBuilder api) => Backoffice.ReportesBackofficeEndpoints.Map(api);
 }
