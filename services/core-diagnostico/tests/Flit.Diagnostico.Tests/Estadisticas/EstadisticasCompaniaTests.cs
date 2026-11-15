@@ -80,6 +80,33 @@ public sealed class EstadisticasCompaniaTests
         dto.GetProperty("top_empresas").GetArrayLength().Should().Be(0);
     }
 
+    // CR-BE-11, «fechas por indicador» — un lote creado fuera del rango no cuenta como diagnóstico, pero su saneamiento solicitado y su
+    // derivación creada dentro del rango sí cuentan: cada indicador va por su fecha (solicitado_en, creada_en), no por la cohorte.
+    [Fact]
+    public async Task BE1_AC1_saneamiento_y_derivacion_del_rango_cuentan_aunque_el_lote_sea_de_fuera()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var a = DosEmpresas.En(api).A;
+        var viejo = await LoteAsync(a, Dia(-30), ct, placas: ["EST301", "EST302"]);
+        await SaneamientoDePrueba.SembrarAsync(a, viejo.Id, viejo.Vehiculos[0].Id, EstadoSaneamiento.EnGestion, ct);
+        await DerivacionAsync(a, viejo.Id, viejo.Vehiculos[1].Id, ct);
+
+        var respuesta = await a.Cliente().GetAsync(Ruta(Hoy.AddDays(-6), Hoy), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+        var dto = await JsonAsync(respuesta, ct);
+        var resumen = dto.GetProperty("resumen");
+        resumen.GetProperty("diagnosticos").GetInt32().Should().Be(0, "el lote se creó hace 30 días");
+        resumen.GetProperty("vehiculos").GetInt32().Should().Be(0);
+        resumen.GetProperty("consultas").GetInt32().Should().Be(0, "las celdas van con la cohorte del lote");
+        resumen.GetProperty("saneamientos_solicitados").GetInt32().Should().Be(1, "el saneamiento se solicitó dentro del rango");
+        dto.GetProperty("saneamientos").EnumerateArray().Single(s => s.GetProperty("estado").GetString() == "EN_GESTION")
+            .GetProperty("cantidad").GetInt32().Should().Be(1);
+        dto.GetProperty("derivaciones").GetProperty("en_curso").GetInt32().Should().Be(1, "la derivación se creó dentro del rango");
+    }
+
     // AC «visibilidad PROPIOS» (SP-6, O9) — U1 cuenta solo su lote; el admin de la compañía, los dos.
     [Fact]
     public async Task BE1_AC2_visibilidad_PROPIOS()
@@ -156,7 +183,7 @@ public sealed class EstadisticasCompaniaTests
     [InlineData("desde={hoy}&hasta={manana}", "RANGO_INVALIDO")]
     [InlineData("desde={hoy}&hasta={hoy}&empresa=0192f1a2-0000-7000-8000-000000000001", "FILTRO_INVALIDO")]
     [InlineData("desde={hoy}&hasta={hoy}&documento=1020304050", "FILTRO_INVALIDO")]
-    public async Task BE1_AC5_rango_y_parametros_invalidos_en_E1(string consulta, string codigo)
+    public async Task BE1_AC6_rango_y_parametros_invalidos_en_E1(string consulta, string codigo)
     {
         await using var api = await ApiDePrueba.SinBaseAsync();
         var ct = TestContext.Current.CancellationToken;
@@ -172,7 +199,7 @@ public sealed class EstadisticasCompaniaTests
 
     // Sin diagnosticos.ver: 403.
     [Fact]
-    public async Task BE1_AC5_sin_diagnosticos_ver_responde_403()
+    public async Task BE1_AC6_sin_diagnosticos_ver_responde_403()
     {
         await using var api = await ApiDePrueba.SinBaseAsync();
         var ct = TestContext.Current.CancellationToken;
