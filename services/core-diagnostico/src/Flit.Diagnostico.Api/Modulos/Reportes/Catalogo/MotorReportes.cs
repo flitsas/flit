@@ -49,8 +49,9 @@ internal sealed class MotorReportes(
 
     /// <summary>
     /// El archivo del reporte (R2/R3, B2/B3, B5/B6), sin paginar: cuenta primero y, si pasa el máximo del formato, lanza
-    /// <see cref="ReporteDemasiadoGrandeException"/> sin leer, descifrar ni registrar nada (SP-11); si no, lee todas las filas, registra el
-    /// acceso (filas y empresas del archivo, fail-closed) y solo entonces descifra, por lotes de 500.
+    /// <see cref="ReporteDemasiadoGrandeException"/> sin leer, descifrar ni registrar nada (SP-11); si no, lee hasta <c>máximo + 1</c> filas
+    /// (si crecieron tras contar, también 422), registra el acceso (filas y empresas del archivo, fail-closed) y solo entonces descifra, por
+    /// lotes de 500.
     /// </summary>
     public async Task<ArchivoReporte> ArchivoAsync(
         ContextoReporte contexto, FiltroReporte filtro, FormatoReporte formato, AuditorReporte auditar, DateTimeOffset generadoEn, CancellationToken ct)
@@ -64,7 +65,8 @@ internal sealed class MotorReportes(
         var maximo = Opciones.Maximo(formato);
         if (total > maximo)
             throw new ReporteDemasiadoGrandeException(total, maximo);
-        var filas = await reporte.LeerAsync(contexto, filtro, 0, null, ct).ConfigureAwait(false);
+        // CR-BE-7: si entre el conteo y la lectura entraron filas, basta leer una de más para saberlo, sin materializarlas todas.
+        var filas = await reporte.LeerAsync(contexto, filtro, 0, maximo + 1, ct).ConfigureAwait(false);
         if (filas.Count > maximo)
             throw new ReporteDemasiadoGrandeException(filas.Count, maximo);
         var (accesoId, empresas) = await AuditarAsync(contexto, filtro, formato, filas, auditar, ct).ConfigureAwait(false);

@@ -17,4 +17,7 @@ internal static partial class LogReportes
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Exportación de {TipoReporte} {Formato} rechazada: ya hay una en curso ({Motivo}).")]
     public static partial void EnCurso(ILogger logger, string tipoReporte, string formato, string motivo);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Exportación de {TipoReporte} {Formato} cortada: {Filas} filas superaron el tiempo límite de {LimiteSegundos} s ({DuracionMs} ms), registro {AccesoId}.")]
+    public static partial void TiempoAgotado(ILogger logger, string tipoReporte, string formato, int filas, int limiteSegundos, long duracionMs, Guid accesoId);
 }
