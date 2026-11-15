@@ -17,7 +17,7 @@ import type { BorradorExpress, BorradorMasivo, ModoCreacion } from "./borradores
 import { CamposExpress } from "./CamposExpress";
 import { CreacionExpress } from "./CreacionExpress";
 import { CreacionMasiva } from "./CreacionMasiva";
-import { DosZonas } from "./DosZonas";
+import { ZonasCreacion } from "./ZonasCreacion";
 import { SelectorModo } from "./SelectorModo";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
@@ -100,7 +100,7 @@ export function NuevoDiagnostico() {
     );
   } else if (carga.tipo !== "listo") {
     contenido = (
-      <DosZonas
+      <ZonasCreacion
         vehiculos={modo === "express" ? <CamposExpress borrador={express} onCambio={cambiarExpress} disabled /> : <ZonaArchivo archivo={masivo.archivo} onElegir={NOOP} disabled />}
         parametros={
           carga.tipo === "cargando" ? (

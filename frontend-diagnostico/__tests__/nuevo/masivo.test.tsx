@@ -74,7 +74,8 @@ describe("Masivo — un solo paso (AC3)", () => {
     expect(await screen.findByRole("region", { name: "Resumen de validación" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Identificador de la fila 3" })).toBeInTheDocument();
     const estimado = screen.getByRole("region", { name: "Estimado de consultas" });
-    expect(screen.getByRole("region", { name: "Parámetros" })).toContainElement(estimado);
+    // FE-3: el estimado va en la barra final de la pantalla (S5), no dentro de Parámetros.
+    expect(document.querySelector("[data-parte='pie-creacion']")).toContainElement(estimado);
     expect(nav.push).not.toHaveBeenCalled();
   });
 
@@ -125,6 +126,17 @@ describe("Masivo — validaciones en pantalla (AC4)", () => {
     elegir(archivo("flota.pdf", "application/pdf"));
     expect(await screen.findByRole("alert")).toHaveTextContent(/formato no admitido.*\.xlsx.*\.csv/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
+  });
+
+  it("FE-3: «Validar archivo» queda al final, después de la zona de archivo, y envía el formulario de Parámetros", async () => {
+    montar();
+    await nombre();
+    const vehiculos = screen.getByRole("region", { name: "Vehículos" });
+    const validarBoton = screen.getByRole("button", { name: "Validar archivo" });
+    expect(vehiculos.compareDocumentPosition(validarBoton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const form = screen.getByRole("form", { name: "Parámetros del diagnóstico masivo" });
+    expect(form.contains(validarBoton)).toBe(false);
+    expect(validarBoton).toHaveAttribute("form", form.id);
   });
 
   it("nombre vacío o de 151 caracteres: error en el campo y no crea la cabecera", async () => {
@@ -368,6 +380,7 @@ describe("Masivo — resultado «Diagnóstico iniciado con N vehículos» (AC18,
   it("AC16: el pie del masivo ofrece Cancelar hacia el inicio", async () => {
     montar();
     await nombre();
-    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
+    // FE-3: Cancelar va en la barra final, fuera de Parámetros.
+    expect(within(document.querySelector("[data-parte='pie-creacion']") as HTMLElement).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
   });
 });

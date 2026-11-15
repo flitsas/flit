@@ -18,6 +18,8 @@ export interface SeccionAlcanceProps {
   error?: string;
   disabled?: boolean;
   compacta?: boolean;
+  /** FE-3: en la disposición horizontal de Parámetros, los grupos (RUNT, SIMIT, otras) van en 3 columnas desde sm. */
+  columnas?: boolean;
 }
 
 /** Por qué dependen las fuentes de persona: no son fuentes sueltas, salen del RUNT o del documento declarado. */
@@ -34,7 +36,7 @@ const MOTIVO_OBLIGATORIA = "Fuente obligatoria para el tipo de trámite elegido.
  * que el backend declara en `fuentes_disponibles` (HU #13865: el impuesto departamental sale solo cuando llega ahí). RUNT vehículo y las obligatorias del tipo van marcadas y
  * bloqueadas con tooltip; las casillas bloqueadas siguen enfocables (aria-disabled) para que el tooltip llegue por teclado.
  */
-export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obligatorias, onAlternar, error, disabled = false, compacta = false }: SeccionAlcanceProps) {
+export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obligatorias, onAlternar, error, disabled = false, compacta = false, columnas = false }: SeccionAlcanceProps) {
   const id = useId();
   const errorId = `${id}-error`;
   const ofrecidas = fuentesOfrecidas(habilitadas, disponibles);
@@ -60,7 +62,7 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
             elige otro tipo.
           </InlineAlert>
         )}
-        <div className={compacta ? "grid gap-3" : "grid gap-4 lg:grid-cols-3"}>
+        <div className={columnas ? "grid gap-4 sm:grid-cols-3" : compacta ? "grid gap-3" : "grid gap-4 lg:grid-cols-3"}>
           {GRUPOS.map((g) => {
             const fuentes = g.fuentes.filter((f) => ofrecidas.includes(f));
             const sinConsulta = g.fuentes.filter((f) => noDisponibles.includes(f));
