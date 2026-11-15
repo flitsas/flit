@@ -145,9 +145,36 @@ describe("Dashboard — AC estados", () => {
     render(<Dashboard vistaGlobal={false} puedeCrear={false} />);
     expect(screen.getByRole("status", { name: "Cargando el resumen…" })).toBeInTheDocument();
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
+    // UA-2: «pendiente» (borde naranja: algo espera atención) no es «cargando»; aria-busy y «—» ya lo dicen.
+    const tarjetas = document.querySelectorAll("[data-testid^='kpi-']");
+    expect(tarjetas.length).toBe(6);
+    tarjetas.forEach((t) => expect(t.className).not.toContain("--kit-naranja"));
   });
 
-  it("vacío: EstadoVacio con «Nuevo diagnóstico» (si puede crear) y «Ver los últimos 90 días»", async () => {
+  it("un bloque que llega nulo muestra «Sin datos para este bloque» en vez de ceros (UA-4)", async () => {
+    const incompleto = estadisticas({ veredictos: null as never, saneamientos: null as never, derivaciones: null as never });
+    simularApi({ "GET /estadisticas": () => Response.json(incompleto) });
+    render(<Dashboard vistaGlobal={false} puedeCrear={false} />);
+    await screen.findByRole("figure", { name: "Tipo de análisis" });
+    for (const nombre of ["Veredictos", "Saneamientos", "Trámites"]) {
+      expect(screen.queryByRole("figure", { name: nombre })).toBeNull();
+      const bloque = screen.getByRole("group", { name: nombre });
+      expect(within(bloque).getByText("Sin datos para este bloque")).toBeInTheDocument();
+      expect(within(bloque).queryByText("0")).toBeNull();
+    }
+    expect(screen.getByRole("figure", { name: "Uso en el tiempo" })).toBeInTheDocument();
+  });
+
+  it("la serie «Vehículos» usa un token con contraste ≥ 3:1 en claro y oscuro, no --chart-2 (UA-3)", async () => {
+    simularApi({ "GET /estadisticas": () => Response.json(estadisticas()) });
+    render(<Dashboard vistaGlobal={false} puedeCrear={false} />);
+    const figura = await screen.findByRole("figure", { name: "Uso en el tiempo" });
+    const muestra = within(within(figura).getByRole("list", { name: "Leyenda" })).getByText("Vehículos").querySelector("span");
+    expect(muestra?.getAttribute("style")).toContain("var(--estado-entregado-fg)");
+    expect(figura.innerHTML).not.toContain("--chart-2");
+  });
+
+  it("vacío: un solo primario «Nuevo diagnóstico» (el de la cabecera, UA-6) y «Ver los últimos 90 días» en EstadoVacio", async () => {
     const vacio = estadisticas({
       resumen: { ...estadisticas().resumen, diagnosticos: 0, diagnosticos_express: 0, diagnosticos_masivos: 0, vehiculos: 0, vehiculos_unicos: 0, consultas: 0 },
       fuentes: [],
@@ -156,8 +183,8 @@ describe("Dashboard — AC estados", () => {
     render(<Dashboard vistaGlobal={false} puedeCrear />);
     expect(await screen.findByText("Aún no hay diagnósticos en este periodo")).toBeInTheDocument();
     const nuevos = screen.getAllByRole("link", { name: /Nuevo diagnóstico/ });
-    expect(nuevos).toHaveLength(2);
-    nuevos.forEach((a) => expect(a).toHaveAttribute("href", "/diagnosticos/nuevo"));
+    expect(nuevos).toHaveLength(1);
+    expect(nuevos[0]).toHaveAttribute("href", "/diagnosticos/nuevo");
     fireEvent.click(screen.getByRole("button", { name: "Ver los últimos 90 días" }));
     expect(String(h.replace.mock.calls.at(-1)?.[0])).toContain("desde=2026-08-18");
   });

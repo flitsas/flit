@@ -36,10 +36,14 @@ describe("TablaReporte — tabla genérica por columnas del contrato", () => {
     expect(screen.getByRole("navigation", { name: /Paginación/ })).toBeInTheDocument();
   });
 
-  it("con más de 10 000 registros detiene la paginación en el tope y pide acotar", () => {
-    render(<TablaReporte tipo="vehiculos" pagina={paginaVehiculos({ total: 12000 })} cargando={false} tamano={100} onPagina={() => {}} onTamano={() => {}} />);
-    expect(screen.getByText("Acota el filtro para ver más registros")).toBeInTheDocument();
-    expect(screen.getByText(/de 10000/)).toBeInTheDocument();
+  it("con más de 10 000 registros la paginación dice el total real, avisa el tope y no pasa de él (UA-5)", () => {
+    const onPagina = vi.fn();
+    render(<TablaReporte tipo="vehiculos" pagina={paginaVehiculos({ total: 12000 })} cargando={false} tamano={100} onPagina={onPagina} onTamano={() => {}} />);
+    expect(screen.getByText(/de 12000/)).toBeInTheDocument();
+    expect(screen.queryByText(/de 10000/)).toBeNull();
+    expect(screen.getByText("Se muestran los primeros 10.000 de 12.000 registros. Acota el filtro para ver más.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Última página" }));
+    expect(onPagina).toHaveBeenCalledWith(100);
   });
 
   it("cargando: esqueleto accesible sin filas", () => {

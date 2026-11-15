@@ -15,7 +15,6 @@
     "./loader.css": "./src/styles/loader.css",
     "./cn": "./src/cn.ts",
     "./ingreso-clases": "./src/ingreso-clases.ts",
-    "./ActionsMenu": "./src/ActionsMenu.tsx",
     "./Button": "./src/Button.tsx",
     "./CabeceraModulo": "./src/CabeceraModulo.tsx",
     "./ChipsFiltro": "./src/ChipsFiltro.tsx",

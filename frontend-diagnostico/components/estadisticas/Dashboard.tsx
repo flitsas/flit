@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@flit/ui/Button";
@@ -23,9 +23,14 @@ import { TarjetasResumen } from "./TarjetasResumen";
 import { useEstadisticas } from "./useEstadisticas";
 import { BarraApilada } from "./graficas/BarraApilada";
 import { BarrasSerie } from "./graficas/BarrasSerie";
-import { SECCION_CLS, TITULO_SECCION_CLS } from "./graficas/Figura";
+import { SECCION_CLS, SUBTITULO_CLS, TITULO_SECCION_CLS } from "./graficas/Figura";
 import { ListaBarras } from "./graficas/ListaBarras";
 
+/**
+ * Serie «Vehículos» de «Uso en el tiempo» (auditoría UI UA-3): `--chart-2` (#00dbd5) da ~1,7:1 sobre la tarjeta en claro.
+ * `--estado-entregado-fg` es el mismo turquesa en tono legible: #00736b ≈ 5,7:1 en claro y #2fd6c9 ≈ 8:1 en oscuro.
+ */
+const COLOR_SERIE_VEHICULOS = "var(--estado-entregado-fg)";
 
 const CHIP_GLOBAL_CLS =
   "inline-flex w-fit items-center gap-1 rounded-full bg-[var(--di-accent-soft)] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--kit-azul-texto)]";
@@ -77,14 +82,36 @@ function vistaDeUrl(params: Pick<URLSearchParams, "get">, hoy: string, vistaGlob
   return { rango: leerRango(params, hoy), empresa };
 }
 
-/** Secciones del dashboard con datos (estado «lleno»). Cada bloque cae a su vacío si viene sin datos. */
+/**
+ * Bloque que llegó nulo (auditoría UI UA-4): conserva su título y dice «Sin datos para este bloque» en vez de pintar
+ * ceros como si fueran datos. Aviso estático (`vivo={false}`): se lee al recorrer la página, no interrumpe.
+ */
+function BloqueSinDatos({ titulo, subtitulo, nivel = 3 }: { titulo: string; subtitulo?: string; nivel?: 2 | 3 }) {
+  const id = useId();
+  const Encabezado = nivel === 2 ? "h2" : "h3";
+  return (
+    <div role="group" aria-labelledby={id} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <Encabezado id={id} className={TITULO_SECCION_CLS}>
+          {titulo}
+        </Encabezado>
+        {subtitulo ? <span className={SUBTITULO_CLS}>{subtitulo}</span> : null}
+      </div>
+      <InlineAlert tone="warning" compact vivo={false}>
+        Sin datos para este bloque
+      </InlineAlert>
+    </div>
+  );
+}
+
+/** Secciones del dashboard con datos (estado «lleno»). Un bloque que llega nulo muestra `BloqueSinDatos`, no ceros. */
 function Secciones({ datos, vistaGlobal, onElegirEmpresa }: { datos: EstadisticasDto; vistaGlobal: boolean; onElegirEmpresa: (id: string) => void }) {
   const granularidad = datos.periodo?.granularidad ?? "DIA";
   const serie = datos.serie ?? [];
-  const veredictos = datos.veredictos ?? { viables: 0, bloqueados: 0, sin_dictamen: 0 };
-  const tipos = datos.tipos_analisis ?? { simple: 0, con_analisis: 0 };
-  const derivaciones = datos.derivaciones ?? { creadas: 0, omitidas: 0, fallidas: 0, en_curso: 0 };
-  const saneamientos = new Map((datos.saneamientos ?? []).map((s) => [s.estado as string, s.cantidad]));
+  const veredictos = datos.veredictos ?? null;
+  const tipos = datos.tipos_analisis ?? null;
+  const derivaciones = datos.derivaciones ?? null;
+  const saneamientos = datos.saneamientos ? new Map(datos.saneamientos.map((s) => [s.estado as string, s.cantidad])) : null;
   const top = datos.top_empresas ?? [];
 
   return (
@@ -98,7 +125,7 @@ function Secciones({ datos, vistaGlobal, onElegirEmpresa }: { datos: Estadistica
             etiquetas={serie.map((p) => rotuloCubeta(p.inicio, granularidad))}
             series={[
               { nombre: "Diagnósticos", color: "var(--chart-1)", valores: serie.map((p) => p.diagnosticos) },
-              { nombre: "Vehículos", color: "var(--chart-2)", valores: serie.map((p) => p.vehiculos) },
+              { nombre: "Vehículos", color: COLOR_SERIE_VEHICULOS, valores: serie.map((p) => p.vehiculos) },
             ]}
           />
         </section>
@@ -106,22 +133,30 @@ function Secciones({ datos, vistaGlobal, onElegirEmpresa }: { datos: Estadistica
           <h2 id="dashboard-resultado" className={TITULO_SECCION_CLS}>
             Resultado
           </h2>
-          <BarraApilada
-            titulo="Veredictos"
-            subtitulo="Dictamen vigente de los vehículos"
-            segmentos={[
-              { nombre: "Viables", valor: veredictos.viables, color: "var(--di-success-dot)" },
-              { nombre: "Bloqueados", valor: veredictos.bloqueados, color: "var(--di-danger)" },
-              { nombre: "Sin dictamen", valor: veredictos.sin_dictamen, color: "var(--di-border-strong)" },
-            ]}
-          />
-          <BarraApilada
-            titulo="Tipo de análisis"
-            segmentos={[
-              { nombre: "Simple", valor: tipos.simple, color: "var(--chart-1)" },
-              { nombre: "Con análisis", valor: tipos.con_analisis, color: "var(--chart-3)" },
-            ]}
-          />
+          {veredictos ? (
+            <BarraApilada
+              titulo="Veredictos"
+              subtitulo="Dictamen vigente de los vehículos"
+              segmentos={[
+                { nombre: "Viables", valor: veredictos.viables, color: "var(--di-success-dot)" },
+                { nombre: "Bloqueados", valor: veredictos.bloqueados, color: "var(--di-danger)" },
+                { nombre: "Sin dictamen", valor: veredictos.sin_dictamen, color: "var(--di-border-strong)" },
+              ]}
+            />
+          ) : (
+            <BloqueSinDatos titulo="Veredictos" subtitulo="Dictamen vigente de los vehículos" />
+          )}
+          {tipos ? (
+            <BarraApilada
+              titulo="Tipo de análisis"
+              segmentos={[
+                { nombre: "Simple", valor: tipos.simple, color: "var(--chart-1)" },
+                { nombre: "Con análisis", valor: tipos.con_analisis, color: "var(--chart-3)" },
+              ]}
+            />
+          ) : (
+            <BloqueSinDatos titulo="Tipo de análisis" />
+          )}
         </section>
       </div>
 
@@ -142,25 +177,33 @@ function Secciones({ datos, vistaGlobal, onElegirEmpresa }: { datos: Estadistica
         </section>
         <div className="flex flex-col gap-4">
           <section className={SECCION_CLS}>
-            <ListaBarras
-              nivel={2}
-              titulo="Saneamientos"
-              subtitulo="Por estado, según la fecha de solicitud"
-              items={ESTADOS_SANEAMIENTO.map((e) => ({ clave: e.estado, nombre: e.nombre, valor: saneamientos.get(e.estado) ?? 0 }))}
-            />
+            {saneamientos ? (
+              <ListaBarras
+                nivel={2}
+                titulo="Saneamientos"
+                subtitulo="Por estado, según la fecha de solicitud"
+                items={ESTADOS_SANEAMIENTO.map((e) => ({ clave: e.estado, nombre: e.nombre, valor: saneamientos.get(e.estado) ?? 0 }))}
+              />
+            ) : (
+              <BloqueSinDatos nivel={2} titulo="Saneamientos" subtitulo="Por estado, según la fecha de solicitud" />
+            )}
           </section>
           <section className={SECCION_CLS}>
-            <ListaBarras
-              nivel={2}
-              titulo="Trámites"
-              subtitulo="Derivaciones a trámite del periodo"
-              items={[
-                { clave: "creadas", nombre: "Creadas", valor: derivaciones.creadas, color: "var(--di-success-dot)" },
-                { clave: "omitidas", nombre: "Omitidas", valor: derivaciones.omitidas, color: "var(--di-border-strong)" },
-                { clave: "fallidas", nombre: "Fallidas", valor: derivaciones.fallidas, color: "var(--di-danger)" },
-                { clave: "en_curso", nombre: "En curso", valor: derivaciones.en_curso, color: "var(--chart-3)" },
-              ]}
-            />
+            {derivaciones ? (
+              <ListaBarras
+                nivel={2}
+                titulo="Trámites"
+                subtitulo="Derivaciones a trámite del periodo"
+                items={[
+                  { clave: "creadas", nombre: "Creadas", valor: derivaciones.creadas, color: "var(--di-success-dot)" },
+                  { clave: "omitidas", nombre: "Omitidas", valor: derivaciones.omitidas, color: "var(--di-border-strong)" },
+                  { clave: "fallidas", nombre: "Fallidas", valor: derivaciones.fallidas, color: "var(--di-danger)" },
+                  { clave: "en_curso", nombre: "En curso", valor: derivaciones.en_curso, color: "var(--chart-3)" },
+                ]}
+              />
+            ) : (
+              <BloqueSinDatos nivel={2} titulo="Trámites" subtitulo="Derivaciones a trámite del periodo" />
+            )}
           </section>
         </div>
       </div>
@@ -253,19 +296,12 @@ export function Dashboard({ vistaGlobal, puedeCrear, empresaNombre }: { vistaGlo
         </InlineAlert>
       );
   } else if (datos && (datos.resumen?.diagnosticos ?? 0) === 0) {
-    const acciones: ReactNode[] = [];
-    if (puedeCrear && !vistaGlobal)
-      acciones.push(
-        <Link key="nuevo" href="/diagnosticos/nuevo" className={BOTON_PRIMARIO_CLS}>
-          <Icono nombre="mas" className="h-4 w-4" />
-          Nuevo diagnóstico
-        </Link>,
-      );
-    acciones.push(
+    // Un solo primario por vista (auditoría UI UA-6): «Nuevo diagnóstico» ya está en la cabecera.
+    const acciones: ReactNode[] = [
       <Button key="90" variant="secondary" size="sm" onClick={() => aplicar({ ...vista, rango: rangoPorDefecto(hoy, 90) })}>
         Ver los últimos 90 días
       </Button>,
-    );
+    ];
     contenido = (
       <section className={SECCION_CLS}>
         <EstadoVacio titulo="Aún no hay diagnósticos en este periodo" mensaje="Cambia el rango de fechas o crea un diagnóstico." acciones={acciones} />
