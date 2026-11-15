@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
-import Inicio from "@/app/(app)/page";
+import Inicio from "@/app/(app)/diagnosticos/page";
 import { sesion } from "@/__tests__/configuracion/datos";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
@@ -13,7 +13,7 @@ import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 
 const h = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => "/diagnosticos",
   useSearchParams: () => h.params,
   useRouter: () => ({ replace: h.replace, push: h.push, refresh: vi.fn() }),
 }));
@@ -62,7 +62,7 @@ describe("Inicio — AC20: pestañas «Diagnósticos» y «Vehículos»", () => 
     await screen.findByRole("heading", { name: "Aún no tienes diagnósticos" });
     const pedidosDiagnosticos = llamadas(api, "GET", "/diagnosticos").length;
     fireEvent.click(within(lista).getByRole("tab", { name: "Vehículos" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?vista=vehiculos", { scroll: false });
     expect(within(lista).getByRole("tab", { name: "Vehículos" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByRole("heading", { name: "Aún no hay vehículos" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Aún no tienes diagnósticos" })).toBeNull();
@@ -85,7 +85,7 @@ describe("Inicio — AC20: pestañas «Diagnósticos» y «Vehículos»", () => 
     montar();
     const lista = await pestanas();
     fireEvent.click(within(lista).getByRole("tab", { name: "Diagnósticos" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
     expect(await screen.findByRole("heading", { name: "Aún no tienes diagnósticos" })).toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe("Inicio — AC20: pestañas «Diagnósticos» y «Vehículos»", () => 
     const diagnosticos = within(lista).getByRole("tab", { name: "Diagnósticos" });
     diagnosticos.focus();
     fireEvent.keyDown(diagnosticos, { key: "ArrowRight" });
-    expect(h.replace).toHaveBeenLastCalledWith("/?vista=vehiculos", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?vista=vehiculos", { scroll: false });
     expect(within(lista).getByRole("tab", { name: "Vehículos" })).toHaveFocus();
   });
 

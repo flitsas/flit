@@ -253,3 +253,50 @@ describe("HU14577 AC25 sondeo del resumen cada 60 s solo con la pestaña visible
     expect(result.current.solicitados).toBe(7);
   });
 });
+
+describe("FE-4 dock: «Diagnósticos» y «Reportes» como enlaces directos (spec-ui §6, V4)", () => {
+  const conCapacidades = (extra: Record<string, boolean>) =>
+    vi.fn(async (u: RequestInfo | URL) =>
+      String(u).startsWith("/api/v1/diagnostico/notificaciones")
+        ? Response.json({ no_leidas: 0, items: [], siguiente: null })
+        : String(u) === "/api/v1/diagnostico/backoffice/saneamientos/resumen"
+          ? Response.json({ solicitados: 0 })
+          : Response.json({ ...sesion, capacidades: { ...sesion.capacidades, ...extra } }),
+    );
+  const enlaces = (nombre: string) => screen.queryAllByRole("link", { name: nombre }).map((a) => a.getAttribute("href"));
+
+  it("con verDiagnosticos ve «Diagnósticos» (/diagnosticos) y sin verReportes no ve «Reportes»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verDiagnosticos: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(enlaces("Diagnósticos")).toContain("/diagnosticos");
+    expect(enlaces("Reportes")).toHaveLength(0);
+  });
+
+  it("con verReportes ve «Reportes» (/reportes); con crearDiagnosticos solo, también «Diagnósticos»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verDiagnosticos: false, crearDiagnosticos: true, verReportes: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(enlaces("Reportes")).toContain("/reportes");
+    expect(enlaces("Diagnósticos")).toContain("/diagnosticos");
+  });
+
+  it("sin verDiagnosticos ni crearDiagnosticos no hay «Diagnósticos»; la vista global abre «Reportes»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verDiagnosticos: false, crearDiagnosticos: false, backoffice: true, verEstadisticasGlobales: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(enlaces("Diagnósticos")).toHaveLength(0);
+    expect(enlaces("Reportes")).toContain("/reportes");
+  });
+
+  it("en el backoffice el orden a la izquierda es Diagnósticos · Reportes · Backoffice", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ backoffice: true, verReportes: true }));
+    const { container } = montar();
+    await screen.findByText("pantalla base");
+    const texto = container.textContent ?? "";
+    const pos = (s: string) => texto.indexOf(s);
+    expect(pos("Diagnósticos")).toBeGreaterThanOrEqual(0);
+    expect(pos("Diagnósticos")).toBeLessThan(pos("Reportes"));
+    expect(pos("Reportes")).toBeLessThan(pos("Backoffice"));
+  });
+});

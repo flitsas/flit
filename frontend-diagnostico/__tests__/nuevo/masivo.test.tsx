@@ -368,6 +368,6 @@ describe("Masivo — resultado «Diagnóstico iniciado con N vehículos» (AC18,
   it("AC16: el pie del masivo ofrece Cancelar hacia el inicio", async () => {
     montar();
     await nombre();
-    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/");
+    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/diagnosticos");
   });
 });

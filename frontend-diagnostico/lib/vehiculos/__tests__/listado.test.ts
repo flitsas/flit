@@ -16,7 +16,7 @@ import {
 } from "@/lib/vehiculos/listado";
 
 // Uso de ejemplo: const f = filtrosVehiculosDesdeUrl(searchParams); await listarVehiculos(f) → GET /vehiculos?…;
-// router.replace(urlVehiculos({ ...f, pagina: 1 })) → "/?vista=vehiculos&…" (pestaña «Vehículos» del inicio, PS-3).
+// router.replace(urlVehiculos({ ...f, pagina: 1 })) → "/diagnosticos?vista=vehiculos&…" (pestaña «Vehículos» del inicio, PS-3).
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -102,8 +102,8 @@ describe("consultaVehiculos y urlVehiculos", () => {
   });
 
   it("la URL va a la pestaña Vehículos y omite la página 1 y el tamaño por defecto", () => {
-    expect(urlVehiculos(vacios())).toBe("/?vista=vehiculos");
-    expect(urlVehiculos({ ...vacios(), estado: "EN_PROCESO", pagina: 2, tamano: 30 })).toBe("/?vista=vehiculos&estado=EN_PROCESO&pagina=2&tamano=30");
+    expect(urlVehiculos(vacios())).toBe("/diagnosticos?vista=vehiculos");
+    expect(urlVehiculos({ ...vacios(), estado: "EN_PROCESO", pagina: 2, tamano: 30 })).toBe("/diagnosticos?vista=vehiculos&estado=EN_PROCESO&pagina=2&tamano=30");
   });
 
   it("ida y vuelta: la URL se vuelve a leer igual", () => {

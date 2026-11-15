@@ -16,6 +16,11 @@ export interface PaginationProps {
    * Las opciones son SIEMPRE {@link TAMANOS_DE_PAGINA} (HU #13916): ninguna tabla elige las suyas.
    */
   onPageSizeChange?: (pageSize: number) => void;
+  /**
+   * Opciones de «Filas por página». Aditiva (ola Diagnóstico UX, decisión Q3 del orquestador): solo para tablas cuyo
+   * contrato fija otros tamaños (reportes de Diagnóstico, 25/50/100). Sin ella, {@link TAMANOS_DE_PAGINA}.
+   */
+  pageSizeOptions?: readonly number[];
   /** Nombre accesible de la navegación; distingue varias paginaciones en una misma pantalla. */
   ariaLabel?: string;
   /** Qué se cuenta, para la línea vacía («Sin representantes que mostrar»). Default: «registros». */
@@ -48,6 +53,7 @@ export function Pagination({
   onPageChange,
   className = "",
   onPageSizeChange,
+  pageSizeOptions,
   ariaLabel = "Paginación",
   noun = "registros",
 }: PaginationProps) {
@@ -57,7 +63,7 @@ export function Pagination({
   const to = Math.min(actual * pageSize, totalCount);
   // Un tamaño que no está en la lista (una pantalla con tamaño propio) se ofrece igual, para que el
   // selector no mienta sobre lo que se está mostrando.
-  const estandar: readonly number[] = TAMANOS_DE_PAGINA;
+  const estandar: readonly number[] = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : TAMANOS_DE_PAGINA;
   const opciones = estandar.includes(pageSize) ? estandar : [...estandar, pageSize].sort((a, b) => a - b);
 
   return (

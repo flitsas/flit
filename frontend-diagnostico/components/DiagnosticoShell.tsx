@@ -11,7 +11,7 @@ import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
 import { ResumenSaneamientosContext, useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
 import { mensajeErrorFijo } from "@/lib/errores";
-import { puedeGestionarSaneamiento, type SesionDiagnostico } from "@/lib/sesion";
+import { puedeGestionarSaneamiento, puedeVerReportes, type CapacidadesDiagnostico, type SesionDiagnostico } from "@/lib/sesion";
 
 export interface UsuarioShell extends ShellUser {
   permissions: string[];
@@ -98,6 +98,32 @@ function navBackoffice(gestionar: boolean, solicitados: number | null): NavCatal
   };
 }
 
+/**
+ * «Diagnósticos» y «Reportes» del dock (HU #14580, spec-ui §6, V4): dos secciones de una sola entrada, así que cada una
+ * es un enlace directo, a la izquierda y delante de «Backoffice». «Diagnósticos» con verDiagnosticos o crearDiagnosticos;
+ * «Reportes» con verReportes o la vista global (verEstadisticasGlobales, Q4). Se filtran al armar el catálogo con las
+ * capacidades de GET /sesion; la API vuelve a exigir cada permiso. El Dashboard es el botón de inicio (/), no una entrada.
+ */
+function navOperacion(capacidades: CapacidadesDiagnostico | undefined): NavCatalog {
+  const sections: NavCatalog["sections"] = [];
+  const items: NavCatalog["items"] = [];
+  if (capacidades?.verDiagnosticos || capacidades?.crearDiagnosticos) {
+    sections.push({ id: "diagnosticos", label: "Diagnósticos", icon: iconoComo("consulta"), side: "left", ilustracion: rutaKit("modulo/diagnostico") });
+    items.push({ key: "diagnosticos", label: "Diagnósticos", href: "/diagnosticos", section: "diagnosticos", icon: iconoComo("consulta"), ilustracion: rutaKit("modulo/diagnostico") });
+  }
+  if (puedeVerReportes(capacidades)) {
+    sections.push({ id: "reportes", label: "Reportes", icon: iconoComo("reportes"), side: "left", ilustracion: rutaKit("modulo/reportes") });
+    items.push({ key: "reportes", label: "Reportes", href: "/reportes", section: "reportes", icon: iconoComo("reportes"), ilustracion: rutaKit("modulo/reportes") });
+  }
+  return { sections, items };
+}
+
+/** Catálogo completo: Diagnósticos · Reportes · (Backoffice) | Inicio | Ajustes. */
+function catalogoDock(base: NavCatalog, capacidades: CapacidadesDiagnostico | undefined): NavCatalog {
+  const operacion = navOperacion(capacidades);
+  return { sections: [...operacion.sections, ...base.sections], items: [...operacion.items, ...base.items] };
+}
+
 /** Código de la 403 cuando la API niega el acceso sin decir por qué (usuario sin ningún permiso diagnostico.*). */
 const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";
 
@@ -142,9 +168,10 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
   const backoffice = estado.sesion?.capacidades.backoffice === true;
   const gestionarSaneamiento = backoffice && puedeGestionarSaneamiento(estado.sesion?.capacidades);
   const resumen = useSondeoResumenSaneamientos(gestionarSaneamiento);
+  const capacidades = estado.sesion?.capacidades;
   const nav = useMemo(
-    () => (backoffice ? navBackoffice(gestionarSaneamiento, resumen.solicitados) : NAV),
-    [backoffice, gestionarSaneamiento, resumen.solicitados],
+    () => catalogoDock(backoffice ? navBackoffice(gestionarSaneamiento, resumen.solicitados) : NAV, capacidades),
+    [backoffice, gestionarSaneamiento, resumen.solicitados, capacidades],
   );
 
   let contenido: ReactNode = children;

@@ -28,6 +28,16 @@ export interface CapacidadesDiagnostico {
   sanear?: boolean;
   /** Saneamiento (plan §5.3): bandeja y gestión FLIT del backoffice. Opcional; ausente = false (`puedeGestionarSaneamiento`). */
   gestionarSaneamiento?: boolean;
+  /**
+   * Ver reportes de la compañía en pantalla (permiso `diagnostico.reportes.ver`, contrato 1.5.0 SP-2). Exportar sigue con
+   * `descargarReportes`. Opcional: un back anterior no la manda y cuenta como false (`puedeVerReportes`).
+   */
+  verReportes?: boolean;
+  /**
+   * Vista global del Dashboard y de los reportes con selector de compañía (backoffice + `diagnostico.volumetria.ver`,
+   * contrato 1.5.0 SP-2, decisión Q4). Opcional; ausente = false (`tieneVistaGlobal`).
+   */
+  verEstadisticasGlobales?: boolean;
 }
 
 export interface SesionDiagnostico {
@@ -51,4 +61,14 @@ export function puedeSanear(capacidades: CapacidadesDiagnostico | null | undefin
 /** Bandeja y gestión de saneamientos del backoffice: solo con `gestionarSaneamiento` en true (ausente = false). */
 export function puedeGestionarSaneamiento(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
   return capacidades?.gestionarSaneamiento === true;
+}
+
+/** Vista global (Dashboard y Reportes con «Todas las compañías»): solo con `verEstadisticasGlobales` en true. */
+export function tieneVistaGlobal(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
+  return capacidades?.verEstadisticasGlobales === true;
+}
+
+/** Entrada «Reportes» y página /reportes: con `verReportes` (compañía) o con la vista global (rutas del backoffice). */
+export function puedeVerReportes(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
+  return capacidades?.verReportes === true || tieneVistaGlobal(capacidades);
 }

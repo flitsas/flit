@@ -106,7 +106,7 @@ describe("PaginaDetalleConsulta — la ruta, el título, las migas y el volver",
     const migas = screen.getByRole("navigation", { name: "Migas de pan" });
     const items = within(migas).getAllByRole("listitem");
     expect(items.map((i) => i.textContent?.replace("›", "").trim())).toEqual(["Diagnósticos", "Lote de prueba", "TST001", "SIMIT vehículo"]);
-    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/");
+    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/diagnosticos");
     expect(within(migas).getByRole("link", { name: "Lote de prueba" })).toHaveAttribute("href", `/diagnosticos/${ID}`);
     expect(within(items[3]).getByText("SIMIT vehículo")).toHaveAttribute("aria-current", "page");
   });

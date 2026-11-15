@@ -149,13 +149,13 @@ export function consultaVehiculos(f: FiltrosVehiculos): string {
   return q.toString();
 }
 
-/** URL del inicio en la pestaña Vehículos con los filtros: omite la página 1 y el tamaño por defecto. */
+/** URL del listado (/diagnosticos) en la pestaña Vehículos con los filtros: omite la página 1 y el tamaño por defecto. */
 export function urlVehiculos(f: FiltrosVehiculos): string {
   const q = new URLSearchParams({ vista: "vehiculos" });
   for (const [clave, valor] of parametros(f, false)) q.append(clave, valor);
   if (f.pagina > 1) q.set("pagina", String(f.pagina));
   if (f.tamano !== TAMANO_VEHICULOS_POR_DEFECTO) q.set("tamano", String(f.tamano));
-  return `/?${q.toString()}`;
+  return `/diagnosticos?${q.toString()}`;
 }
 
 /** Algún filtro activo (página y tamaño no cuentan): separa «ningún vehículo coincide» de «aún no hay vehículos». */

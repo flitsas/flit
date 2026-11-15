@@ -266,7 +266,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera,
               </>
             ) : (
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <Link href="/" className={BOTON_SECUNDARIO_CLS}>
+                <Link href="/diagnosticos" className={BOTON_SECUNDARIO_CLS}>
                   Cancelar
                 </Link>
                 <button type="submit" disabled={ocupado} aria-busy={fase !== "editando" || undefined} className={BOTON_PRIMARIO_CLS}>
