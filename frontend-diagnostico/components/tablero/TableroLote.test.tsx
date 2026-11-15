@@ -669,9 +669,10 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
     const dictamen = within(fila("TST002")).getByRole("button", { name: "Ver dictamen de TST002" }).closest("td")!;
     expect(within(dictamen).getByText("Saneamiento solicitado")).toBeInTheDocument();
-    // FE-2 (spec-ui §2.4): el estado también va como chip de solo lectura sobre el disparador «Acciones», no como botón.
+    // UA-1 (auditoría UI, supera spec-ui §2.4): el estado solo lo informa la celda Dictamen; la celda Acciones no lo repite.
     const acciones = disparadorDe("TST002")!.closest("td")!;
-    expect(within(acciones).getByText(/Saneamiento:/).closest("[data-parte='chip-saneamiento']")).toHaveTextContent("Saneamiento solicitado");
+    expect(acciones.querySelector("[data-parte='chip-saneamiento']")).toBeNull();
+    expect(within(acciones).queryByText(/Saneamiento:/)).toBeNull();
     expect(within(fila("TST003")).getByRole("button", { name: "Ver dictamen de TST003" }).closest("td")).toHaveTextContent("En saneamiento");
     const sin = within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")!;
     expect(sin).not.toHaveTextContent(/saneamiento/i);
