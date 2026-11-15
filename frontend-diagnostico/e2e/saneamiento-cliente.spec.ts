@@ -24,6 +24,7 @@ import {
   sinDesbordeHorizontal,
   tomarPorApi,
 } from "./saneamiento-comun";
+import { abrirAcciones, cerrarAcciones, disparadorAcciones, esperarDeshabilitadoConMotivo } from "./ola-ux-comun";
 
 /**
  * HU #14577 — saneamiento del lado de la compañía: PS-1 (tablero del lote) y PS-2 (panel «Deuda y saneamiento»).
@@ -40,7 +41,12 @@ import {
  * Lista congelada: nombres accesibles de los que depende este spec. Si uno cambia por decisión de UX, el spec se ajusta en
  * el mismo PR de la pantalla.
  *   - table «Semáforo de consultas del lote» · rowheader «<placa>»
- *   - button «Solicitar saneamiento de la placa <placa>» (aria-pressed, aria-disabled, descripción del motivo)
+ *   - Ola 2026-11-15 (FE-2): en el tablero las acciones de la fila viven en el menú button «Acciones de la placa <placa>»
+ *     · menu · menuitem «Solicitar saneamiento de la placa <placa>» / «Quitar solicitud de saneamiento de la placa <placa>»
+ *     (sin aria-pressed: el estado lo dice el nombre; aria-disabled + descripción del motivo) · menuitem «Ver saneamiento
+ *     de la placa <placa>: <estado>» · menuitem «Ver deuda de la placa <placa>» · menuitem «Crear trámite para la placa
+ *     <placa>». No se usa el chip «Saneamiento: …» de la fila (el carril fe1 lo retira).
+ *   - Panel PS-2: button «Solicitar saneamiento de la placa <placa>» (aria-pressed, sin cambio)
  *   - button «Ver saneamiento de la placa <placa>: En saneamiento»
  *   - button «Ver deuda de la placa <placa>» · button «Ver dictamen de <placa>» · button «Ver deuda y sanear»
  *   - group «Filtrar por saneamiento» · button «Con saneamiento» · button «Sin saneamiento»
@@ -58,7 +64,28 @@ import {
 test.describe.configure({ mode: "serial" });
 
 const ruta = (diagnosticoId: string, vehiculoId: string) => new RegExp(`/diagnosticos/${diagnosticoId}/vehiculos/${vehiculoId}/saneamiento$`);
-const bandera = (page: Page, placa: string) => page.getByRole("button", { name: `Solicitar saneamiento de la placa ${placa}` });
+// Ola 2026-11-15 (FE-2): la bandera de la fila es un menuitem del menú «Acciones»; el nombre dice el estado.
+const bandera = (page: Page, placa: string) =>
+  page.getByRole("menu").getByRole("menuitem", { name: new RegExp(`^(Solicitar saneamiento|Quitar solicitud de saneamiento) de la placa ${placa}$`) });
+const acciones = disparadorAcciones;
+
+/** Estado de la bandera leído del nombre del ítem («Quitar solicitud…» = encendida). Deja el menú cerrado. */
+async function estadoBandera(page: Page, placa: string): Promise<"apagada" | "encendida"> {
+  await abrirAcciones(page, placa);
+  const nombre = (await bandera(page, placa).getAttribute("aria-label")) ?? "";
+  await cerrarAcciones(page, placa);
+  return nombre.startsWith("Quitar") ? "encendida" : "apagada";
+}
+
+async function esperarBandera(page: Page, placa: string, estado: "apagada" | "encendida", timeout = 15_000) {
+  await expect(async () => expect(await estadoBandera(page, placa)).toBe(estado)).toPass({ timeout, intervals: [1_000] });
+}
+
+/** Abre el menú de la fila y elige la bandera (el menú se cierra y el foco vuelve a «Acciones»). */
+async function pulsarBandera(page: Page, placa: string) {
+  await abrirAcciones(page, placa);
+  await bandera(page, placa).click();
+}
 const grilla = (page: Page) => page.getByRole("table", { name: /semáforo de consultas/i });
 const fila = (page: Page, placa: string) => grilla(page).getByRole("row").filter({ has: page.getByRole("rowheader", { name: new RegExp(placa) }) });
 const panelDeuda = (page: Page) => page.getByRole("dialog", { name: "Deuda y saneamiento" });
@@ -75,56 +102,58 @@ test.describe("PS-1 tablero del lote", () => {
     await esperarTerminados(page, lote, [A, B, C, D]);
     const [vidA, vidB, vidC, vidD] = await Promise.all([A, B, C, D].map((p) => idVehiculo(page, lote, p)));
     await page.reload();
-    await expect(bandera(page, A)).toBeVisible();
+    await expect(acciones(page, A)).toBeVisible();
     test.skip((await leerGrilla(page, lote)).vehiculos.every((v) => v.saneamiento === undefined), "El backend no expone `saneamiento` en la grilla (§2.6)");
 
     await test.step("AC5: marca en un clic, sin confirmación, y anuncia", async () => {
-      await expect(bandera(page, A)).toHaveAttribute("aria-pressed", "false");
-      await expect(bandera(page, A)).toHaveText("Sanear");
+      const { menu } = await abrirAcciones(page, A);
+      await expect(bandera(page, A)).toHaveAccessibleName(`Solicitar saneamiento de la placa ${A}`);
+      await expect(bandera(page, A)).toContainText("Solicitar saneamiento");
+      await expect(bandera(page, A)).not.toHaveAttribute("aria-pressed", /.*/);
       const put = page.waitForResponse((r) => r.request().method() === "PUT" && ruta(lote, vidA).test(new URL(r.url()).pathname));
       await bandera(page, A).click();
-      await expect(bandera(page, A)).toHaveAttribute("aria-pressed", "true");
       expect([200, 201]).toContain((await put).status());
-      await expect(bandera(page, A)).toHaveText("Solicitado");
-      await expect(bandera(page, A)).toBeFocused();
-      await expect(fila(page, A)).toContainText("Saneamiento solicitado");
+      await expect(menu).toHaveCount(0);
+      await expect(acciones(page, A)).toBeFocused();
       await expect(page.getByText(`Saneamiento solicitado para ${A}.`)).toBeAttached();
       await expect(page.getByRole("dialog")).toHaveCount(0);
+      await esperarBandera(page, A, "encendida");
     });
 
     await test.step("AC6: desmarcar con 409 SANEAMIENTO_EN_GESTION revierte y explica", async () => {
       const fallo = await fallarUnaVez(page, "DELETE", ruta(lote, vidA), { status: 409, code: "SANEAMIENTO_EN_GESTION", error: "El saneamiento ya está en gestión." });
-      await bandera(page, A).click();
-      await expect(bandera(page, A)).toHaveAttribute("aria-pressed", "true");
+      await pulsarBandera(page, A);
       await expect(page.getByRole("alert").filter({ hasText: "FLIT ya empezó este saneamiento; ya no se puede quitar." })).toBeVisible();
-      await expect(bandera(page, A)).toBeFocused();
+      await expect(acciones(page, A)).toBeFocused();
+      await esperarBandera(page, A, "encendida");
       expect(fallo.usado()).toBe(true);
       await fallo.quitar();
     });
 
     await test.step("AC6: marcar con la red caída revierte y explica", async () => {
       const fallo = await fallarUnaVez(page, "PUT", ruta(lote, vidC), "red");
-      await bandera(page, C).click();
-      await expect(bandera(page, C)).toHaveAttribute("aria-pressed", "false");
+      await pulsarBandera(page, C);
       await expect(page.getByRole("alert").filter({ hasText: "No pudimos guardar el cambio. Intenta de nuevo." })).toBeVisible();
-      await expect(fila(page, C)).not.toContainText("Saneamiento solicitado");
+      await esperarBandera(page, C, "apagada");
       await fallo.quitar();
     });
 
     await test.step("AC6: desmarcar de verdad", async () => {
-      await bandera(page, A).click();
-      await expect(bandera(page, A)).toHaveAttribute("aria-pressed", "false");
-      await expect(fila(page, A)).not.toContainText("Saneamiento solicitado");
+      await pulsarBandera(page, A);
       await expect(page.getByText(`Se quitó la solicitud de saneamiento de ${A}.`)).toBeAttached();
+      await esperarBandera(page, A, "apagada");
     });
 
     await test.step("AC8: el vehículo que no termina tiene la bandera deshabilitada con el motivo", async () => {
+      await abrirAcciones(page, E);
       const e = bandera(page, E);
-      await expect(e).toHaveAttribute("aria-disabled", "true");
+      await esperarDeshabilitadoConMotivo(e, /Faltan consultas por terminar/);
       await expect(e).toHaveAccessibleDescription("Faltan consultas por terminar");
-      // aria-disabled: Playwright no lo pulsa por su cuenta; se fuerza el clic para comprobar que no cambia nada.
+      // aria-disabled: Playwright no lo pulsa por su cuenta; se fuerza el clic para comprobar que no cambia nada
+      // (el ítem deshabilitado no cierra el menú ni cambia de nombre).
       await e.click({ force: true });
-      await expect(e).toHaveAttribute("aria-pressed", "false");
+      await expect(e).toHaveAccessibleName(`Solicitar saneamiento de la placa ${E}`);
+      await cerrarAcciones(page, E);
       const casilla = page.getByRole("checkbox", { name: `Seleccionar la placa ${E}` });
       if (await casilla.count()) {
         await expect(casilla).toBeDisabled();
@@ -145,21 +174,22 @@ test.describe("PS-1 tablero del lote", () => {
       await tomarPorApi(bo, id, empresa);
       await contextoFlit.close();
       await page.reload();
-      const ver = page.getByRole("button", { name: `Ver saneamiento de la placa ${D}: En saneamiento` });
+      const { menu } = await abrirAcciones(page, D);
+      const ver = menu.getByRole("menuitem", { name: `Ver saneamiento de la placa ${D}: En saneamiento` });
       await expect(ver).toBeVisible();
       await expect(ver).not.toHaveAttribute("aria-pressed", /.*/);
-      await expect(ver).toHaveAttribute("aria-haspopup", "dialog");
-      await expect(fila(page, D)).toContainText("En saneamiento");
+      // Con el saneamiento tomado ya no se ofrece marcar ni quitar.
+      await expect(bandera(page, D)).toHaveCount(0);
       await ver.click();
       await expect(panelDeuda(page)).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(panelDeuda(page)).toHaveCount(0);
-      await expect(ver).toBeFocused();
+      await expect(acciones(page, D)).toBeFocused();
     });
 
     await test.step("C-1: bandera apagada, solicitada, no elegible y «Ver saneamiento» (1280 y 360)", async () => {
-      await bandera(page, A).click();
-      await expect(bandera(page, A)).toHaveAttribute("aria-pressed", "true");
+      await pulsarBandera(page, A);
+      await esperarBandera(page, A, "encendida");
       await revisarTemas(page, "tablero-1280", { captura: "C-1" });
       await ancho(page, 360);
       await revisarTemas(page, "tablero-360", { captura: "C-1" });
@@ -222,22 +252,22 @@ test.describe("PS-1 tablero del lote", () => {
       // El aviso se pinta en la barra de selección y se repite en la región `status` que lo anuncia: basta el primero.
       await expect(page.getByText(resultado).first()).toBeVisible();
       await expect(sanear).toBeFocused();
-      await expect(fila(page, C)).toContainText("Saneamiento solicitado");
       await revisarTemas(page, "tablero-resultado-parcial-1280", { captura: "C-3" });
       await ancho(page, 360);
       await revisarTemas(page, "tablero-resultado-parcial-360", { captura: "C-3" });
       await ancho(page, 1280);
+      await esperarBandera(page, C, "encendida");
       await sondeo.soltar();
-      await expect(fila(page, B)).toContainText("Saneamiento solicitado");
+      await esperarBandera(page, B, "encendida", 30_000);
     });
 
     await test.step("C-3: con la selección vacía el foco va al aviso del resultado", async () => {
       const quitar = page.getByRole("button", { name: "Quitar selección" });
       if (await quitar.isVisible()) await quitar.click();
       // A volvió a quedar sin saneamiento en C-1: se desmarca para que sea elegible.
-      if ((await bandera(page, A).getAttribute("aria-pressed")) === "true") {
-        await bandera(page, A).click();
-        await expect(bandera(page, A)).toHaveAttribute("aria-pressed", "false");
+      if ((await estadoBandera(page, A)) === "encendida") {
+        await pulsarBandera(page, A);
+        await esperarBandera(page, A, "apagada");
       }
       await page.getByRole("checkbox", { name: `Seleccionar la placa ${A}` }).check();
       await page.getByRole("button", { name: /^Sanear \(1\)$/ }).click();
@@ -247,8 +277,10 @@ test.describe("PS-1 tablero del lote", () => {
     });
 
     await test.step("AC12 / C-4: aviso «Saneamiento en curso» al crear trámite, individual y masivo", async () => {
-      const individual = page.getByRole("button", { name: `Crear trámite para la placa ${A}` });
+      const { menu } = await abrirAcciones(page, A);
+      const individual = menu.getByRole("menuitem", { name: `Crear trámite para la placa ${A}` });
       if (!(await individual.count())) {
+        await cerrarAcciones(page, A);
         test.info().annotations.push({ type: "omitido", description: "AC12 sin la capacidad derivar o con la derivación apagada" });
         return;
       }
@@ -287,12 +319,18 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
     await esperarTerminados(page, lote, [F]);
     const vid = await idVehiculo(page, lote, F);
     await page.reload();
-    const verDeuda = page.getByRole("button", { name: `Ver deuda de la placa ${F}` });
-    await expect(verDeuda).toBeVisible();
+    // Ola 2026-11-15 (FE-2): «Ver deuda» de la fila es un menuitem del menú «Acciones»; al cerrar PS-2 el foco vuelve al
+    // disparador «Acciones de la placa F».
+    const accionesF = acciones(page, F);
+    const abrirDeuda = async () => {
+      const { menu } = await abrirAcciones(page, F);
+      await menu.getByRole("menuitem", { name: `Ver deuda de la placa ${F}` }).click();
+    };
+    await expect(accionesF).toBeVisible();
 
     await test.step("C-5: cargando (respuesta real retenida)", async () => {
       const deuda = await retener(page, new RegExp(`/vehiculos/${vid}/deuda$`));
-      await verDeuda.click();
+      await abrirDeuda();
       await expect(panelDeuda(page).getByRole("status", { name: "Cargando deuda" })).toBeVisible();
       await revisarTemas(page, "panel-cargando-1280", { captura: "C-5", paginaCompleta: false });
       await deuda.soltar();
@@ -347,10 +385,10 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
       await ancho(page, 1280);
     });
 
-    await test.step("AC13: Escape cierra y el foco vuelve a «Ver deuda»", async () => {
+    await test.step("AC13: Escape cierra y el foco vuelve a «Acciones» de la fila", async () => {
       await page.keyboard.press("Escape");
       await expect(panelDeuda(page)).toHaveCount(0);
-      await expect(verDeuda).toBeFocused();
+      await expect(accionesF).toBeFocused();
     });
 
     await test.step("AC13: desde «Ver deuda y sanear» del dictamen bloqueado; el foco vuelve a «Ver dictamen»", async () => {
@@ -393,7 +431,7 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
         await route.fulfill({ response: real, json: cuerpo });
       };
       await page.route(rutaDeuda, dosPropietarios);
-      await verDeuda.click();
+      await abrirDeuda();
       const panel = panelDeuda(page);
       const uno = panel.getByRole("button", { name: /^SIMIT del propietario 1 de 2/ });
       const dos = panel.getByRole("button", { name: /^SIMIT del propietario 2 de 2/ });
@@ -408,7 +446,7 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
     });
 
     await test.step("AC13: desde «Ver deuda» de la grilla de placas (PS-3)", async () => {
-      await page.goto(`${APP}/?vista=vehiculos&placa=${encodeURIComponent(F)}`);
+      await page.goto(`${APP}/diagnosticos?vista=vehiculos&placa=${encodeURIComponent(F)}`);
       const tabla = page.getByRole("table", { name: "Vehículos de la compañía" });
       const ver = tabla.getByRole("button", { name: `Ver deuda de la placa ${F}` });
       await ver.click();
