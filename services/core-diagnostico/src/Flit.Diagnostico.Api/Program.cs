@@ -80,6 +80,9 @@ public static class Program
         Modulos.Consultas.EndpointsReproceso.AddReproceso(builder.Services);
         // HU #13800: llenado manual de una celda en ERROR desde el backoffice (PUT /backoffice/consultas/{cid}/manual).
         Modulos.Backoffice.LlenadoManualEndpoints.AddLlenadoManual(builder.Services);
+        // HU #14579, BE-0 (ADR-0088): estadísticas y reportes con PII; BE-1..BE-4 llenan estos registros sin volver a tocar Program.
+        Modulos.Estadisticas.EstadisticasRegistro.AddEstadisticas(builder.Services, builder.Configuration);
+        Modulos.Reportes.Catalogo.ReportesRegistro.AddReportesCatalogo(builder.Services, builder.Configuration);
         // HU #13861 (ADR-0075): lo que sigue en línea con core-consultas, la réplica de departamentos con impuesto.
         builder.Services.AddFuentesConsultas(builder.Configuration);
         // HU #13846: almacén de archivos (file-manager; sin él ni la bandera de pruebas, no arranca) y registro de evidencias con huella.

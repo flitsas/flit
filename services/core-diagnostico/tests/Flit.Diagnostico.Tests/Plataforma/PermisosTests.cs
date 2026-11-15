@@ -24,12 +24,13 @@ public sealed partial class PermisosTests
         [
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
             "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.saneamiento.solicitar",
+            "diagnostico.reportes.ver",
         ],
         ["admin_diagnostico"] =
         [
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
             "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.configuracion.editar",
-            "diagnostico.consultas.reprocesar", "diagnostico.saneamiento.solicitar",
+            "diagnostico.consultas.reprocesar", "diagnostico.saneamiento.solicitar", "diagnostico.reportes.ver",
         ],
     };
 
@@ -41,6 +42,8 @@ public sealed partial class PermisosTests
         "diagnostico.consultas.llenar", "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
         // HU #14576 AC31 (plan saneamiento §5.1): solicitar va a los dos roles; gestionar a ninguno.
         "diagnostico.saneamiento.solicitar", "diagnostico.saneamiento.gestionar",
+        // HU #14579, BE-0 (O8 = D-1, SP-1): ver reportes en pantalla va a los dos roles; exportar sigue con reportes.descargar.
+        "diagnostico.reportes.ver",
     ];
 
     private static List<string> Slugs => Permisos.Modulos.SelectMany(m => m.Permisos).Select(p => p.Slug).ToList();
@@ -51,7 +54,7 @@ public sealed partial class PermisosTests
     {
         var slugs = Slugs;
 
-        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2 y los 2 del saneamiento");
+        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2, los 2 del saneamiento y el de reportes (BE-0)");
         slugs.Should().AllSatisfy(s => FormatoSlug().IsMatch(s).Should().BeTrue($"«{s}» sigue diagnostico.<modulo>.<accion>"));
         Permisos.Modulos.Should().AllSatisfy(m =>
         {
@@ -89,6 +92,17 @@ public sealed partial class PermisosTests
 
         Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().NotContain("backoffice_diagnostico");
         Permisos.RolesPorDefecto.Should().AllSatisfy(r => r.Permisos.Should().NotContain(backoffice, r.Codigo));
+    }
+
+    // HU #14579, BE-0 (contrato-api §0 «Manifiesto») — reportes.ver en el módulo de diagnósticos con su nombre; descargar cambia de nombre visible.
+    [Fact]
+    public void BE0_reportes_ver_en_el_modulo_diagnosticos_y_nombre_nuevo_de_descargar()
+    {
+        var diagnosticos = Permisos.Modulos.Single(m => m.Codigo == "diagnostico_diagnosticos").Permisos;
+
+        diagnosticos.Should().Contain(("diagnostico.reportes.ver", "Ver reportes de la compañía (con datos personales)"));
+        diagnosticos.Should().Contain(("diagnostico.reportes.descargar", "Descargar reportes, exportaciones y evidencias"));
+        Permisos.ReportesVer.Should().Be("diagnostico.reportes.ver");
     }
 
     [GeneratedRegex(@"^diagnostico(\.[a-z]+){2,3}$", RegexOptions.CultureInvariant)]

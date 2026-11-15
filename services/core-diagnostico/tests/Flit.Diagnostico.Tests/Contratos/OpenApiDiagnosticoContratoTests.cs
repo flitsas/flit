@@ -27,7 +27,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.4.0\"", "HU #14576 sube a 1.4.0, aditivo");
+        info.Should().Contain("version: \"1.5.0\"", "BE-0 sube a 1.5.0, aditivo (estadísticas y reportes)");
         info.Should().Contain("Versión 1.3.1").And.Contain("backoffice_diagnostico").And.Contain("SuperAdmin");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
         Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
@@ -147,6 +147,72 @@ public sealed class OpenApiDiagnosticoContratoTests
         foreach (var operacion in OperacionesConCuerpoAcotado)
             Respuestas(operacion).Should().Contain("\"413\": { $ref: \"#/components/responses/CuerpoMuyGrande\" }", operacion);
         Respuestas("operationId: subirEvidenciaSaneamientoBackoffice").Should().Contain("ARCHIVO_MUY_GRANDE").And.NotContain("CuerpoMuyGrande");
+    }
+
+    /// <summary>Rutas de la ola de estadísticas y reportes (contrato-api.md §0, mapa SP-1): E1–E3, R0–R3 y B0–B6.</summary>
+    private static readonly string[] RutasEstadisticasYReportes =
+    [
+        "/estadisticas:",
+        "/backoffice/estadisticas/global:",
+        "/backoffice/estadisticas:",
+        "/reportes:",
+        "/reportes/{tipo}:",
+        "/reportes/{tipo}/excel:",
+        "/reportes/{tipo}/pdf:",
+        "/backoffice/reportes:",
+        "/backoffice/reportes/{tipo}/global:",
+        "/backoffice/reportes/{tipo}/global/excel:",
+        "/backoffice/reportes/{tipo}/global/pdf:",
+        "/backoffice/reportes/{tipo}:",
+        "/backoffice/reportes/{tipo}/excel:",
+        "/backoffice/reportes/{tipo}/pdf:",
+    ];
+
+    /// <summary>Exportaciones (R2, R3, B2, B3, B5, B6): las que declaran 422 REPORTE_DEMASIADO_GRANDE y 429 EXPORTACION_EN_CURSO.</summary>
+    private static readonly string[] OperacionesExportacion =
+    [
+        "operationId: exportarReporteExcel",
+        "operationId: exportarReportePdf",
+        "operationId: exportarReporteGlobalExcelBackoffice",
+        "operationId: exportarReporteGlobalPdfBackoffice",
+        "operationId: exportarReporteEmpresaExcelBackoffice",
+        "operationId: exportarReporteEmpresaPdfBackoffice",
+    ];
+
+    // HU #14579, BE-0 (contrato-api §0 y §8) — 1.5.0 aditivo: las 14 rutas de la ola con sus esquemas y códigos, y las capacidades nuevas.
+    [Fact]
+    public void BE0_version_1_5_0_con_rutas_esquemas_y_codigos_de_estadisticas_y_reportes()
+    {
+        var info = Bloque("info:", sangria: 0);
+        info.Should().Contain("version: \"1.5.0\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
+        var paths = Bloque("paths:", sangria: 0).Split('\n');
+        foreach (var ruta in RutasEstadisticasYReportes)
+            paths.Should().Contain("  /api/v1/diagnostico" + ruta, $"el contrato declara {ruta}");
+
+        Bloque("EstadisticasDto:", sangria: 4).Should().ContainAll("ambito:", "periodo:", "generado_en:", "resumen:", "serie:", "veredictos:",
+            "tipos_analisis:", "fuentes:", "saneamientos:", "derivaciones:", "top_empresas:");
+        Bloque("CatalogoReportesDto:", sangria: 4).Should().Contain("reportes:");
+        Bloque("ReporteCatalogo:", sangria: 4).Should().ContainAll("tipo:", "nombre:", "descripcion:", "contiene_pii:", "fecha_referencia:", "filtros:", "maximo_excel:", "maximo_pdf:");
+        Bloque("PaginaReporteDto:", sangria: 4).Should().ContainAll("tipo:", "ambito:", "pagina:", "tamano:", "total:", "acceso_id:", "columnas:", "filas:");
+        Bloque("TipoReporte:", sangria: 4).Should().Contain("enum: [vehiculos, consultas, saneamientos, derivaciones, consumo]");
+        Bloque("ErrorReporteDemasiadoGrande:", sangria: 4).Should().Contain("filas:").And.Contain("maximo:");
+
+        var capacidades = Bloque("Capacidades:", sangria: 4);
+        capacidades.Should().Contain("verReportes:").And.Contain("verEstadisticasGlobales:");
+
+        Yaml.Value.Should().Contain("REPORTE_NO_ENCONTRADO").And.Contain("EMPRESA_NO_ENCONTRADA").And.Contain("REPORTE_DEMASIADO_GRANDE")
+            .And.Contain("EXPORTACION_EN_CURSO").And.Contain("IDENTIDAD_NO_DISPONIBLE").And.Contain("diagnostico.reportes.ver");
+        foreach (var operacion in OperacionesExportacion)
+        {
+            var respuestas = Respuestas(operacion);
+            foreach (var codigo in new[] { "\"400\"", "\"403\"", "\"404\"", "\"422\"", "\"429\"" })
+                respuestas.Should().Contain(codigo, $"{operacion} declara {codigo}");
+        }
+
+        foreach (var operacion in new[] { "operationId: estadisticasEmpresaBackoffice", "operationId: estadisticasGlobalesBackoffice", "operationId: reporteGlobalBackoffice", "operationId: reporteEmpresaBackoffice" })
+            Respuestas(operacion).Should().Contain("\"503\"", operacion);
+        Respuestas("operationId: estadisticasEmpresaBackoffice").Should().Contain("EMPRESA_NO_ENCONTRADA");
+        Respuestas("operationId: reporteCompania").Should().Contain("\"404\"").And.Contain("REPORTE_NO_ENCONTRADO");
     }
 
     /// <summary>El bloque <c>responses:</c> de la operación cuya línea contiene <paramref name="operacion"/> (el primero después de ella).</summary>

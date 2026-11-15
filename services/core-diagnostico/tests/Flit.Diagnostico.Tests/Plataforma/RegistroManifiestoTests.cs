@@ -55,7 +55,7 @@ public sealed class RegistroManifiestoTests
         raiz.GetProperty("version").GetString().Should().Be("1");
         var slugs = raiz.GetProperty("modules").EnumerateArray()
             .SelectMany(m => m.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("slug").GetString()!)).ToList();
-        slugs.Should().HaveCount(15, "13 de la tabla §6.2 más los 2 del saneamiento (HU #14576 AC31)").And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
+        slugs.Should().HaveCount(16, "13 de la tabla §6.2, los 2 del saneamiento (HU #14576 AC31) y diagnostico.reportes.ver (BE-0)").And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
         raiz.GetProperty("modules").EnumerateArray().Should().AllSatisfy(m =>
         {
             m.GetProperty("code").GetString().Should().StartWith("diagnostico_");
