@@ -1,9 +1,14 @@
 using System.Net;
 using System.Text.Json;
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Backoffice;
 using Flit.Diagnostico.Api.Modulos.Comun;
+using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Reportes;
+using Flit.Diagnostico.Api.Modulos.Reportes.Catalogo;
+using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Saneamiento;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
@@ -11,6 +16,8 @@ using Flit.Diagnostico.Tests.Reportes.Catalogo;
 using Flit.Diagnostico.Tests.Saneamiento;
 using FluentAssertions;
 using Grpc.Core;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -177,6 +184,84 @@ public sealed class ReportesBackofficeTests
         texto.Should().NotContain("Gamma").And.NotContain(apagada.ToString()).And.NotContain("RPC425");
         deLaCompania.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await ReportesDePrueba.CodigoAsync(deLaCompania, ct)).Should().Be("REPORTE_NO_ENCONTRADO");
+    }
+
+    // O11 (CR-BE-4) — consumo cuenta solo lo que consume según el contrato: celdas COMPLETADO y ERROR no reutilizadas. Ni la
+    // reutilizada del mismo día (D-10), ni la NA, ni la PENDIENTE ni la EN_CURSO cuentan como consulta.
+    [Fact]
+    public async Task BE4_O11_consumo_cuenta_solo_celdas_COMPLETADO_y_ERROR_no_reutilizadas()
+    {
+        var a = Guid.NewGuid();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: ConIdentidad(new EmpresasDePrueba([new(a, "Alfa Renting S.A.S.", "900000001")])));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var ea = new EmpresaDePrueba(api, a);
+        var lote = await ReportesDePrueba.LoteAsync(ea, [new("RPA461"), new("RPA462")], ct);
+        var (v1, v2) = (lote.Vehiculos[0], lote.Vehiculos[1]);
+        var original = lote.Celdas[0];
+        await using (var db = ea.Db())
+        {
+            var ahora = DateTimeOffset.UtcNow.AddMinutes(-5);
+            CeldaConsulta Celda(Guid vehiculo, Fuente fuente, EstadoCelda estado) => new()
+            {
+                DiagnosticoId = lote.Id,
+                VehiculoId = vehiculo,
+                Fuente = fuente,
+                Estado = estado,
+                DisponibleDesde = ahora,
+                ActualizadoEn = ahora,
+                VersionTablero = 1,
+            };
+            var error = Celda(v1.Id, Fuente.SimitVehiculo, EstadoCelda.Error);
+            error.TipoError = "TIMEOUT";
+            var reutilizada = Celda(v1.Id, Fuente.RuntPropietario, EstadoCelda.Completado);
+            (reutilizada.Origen, reutilizada.Payload, reutilizada.ReutilizadaDeId, reutilizada.DatoObtenidoEn) = (OrigenCelda.Api, "{}", original.Id, original.DatoObtenidoEn);
+            var na = Celda(v1.Id, Fuente.ImpuestoDepartamental, EstadoCelda.Na);
+            na.MotivoNa = MotivoNa.ServicioPublico;
+            db.AddRange(error, reutilizada, na, Celda(v1.Id, Fuente.Avaluo, EstadoCelda.Pendiente), Celda(v2.Id, Fuente.Avaluo, EstadoCelda.EnCurso));
+            await db.SaveChangesAsync(ct);
+        }
+
+        var respuesta = await api.Cliente(TokenFlit(api, Guid.NewGuid())).GetAsync(Global("consumo"), ct);
+
+        var texto = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
+        var alfa = ReportesDePrueba.Filas(JsonDocument.Parse(texto).RootElement).Should().ContainSingle().Which;
+        alfa.GetProperty("consultas_exitosas").GetInt32().Should().Be(2, "las 2 RUNT consultadas; la reutilizada no consume");
+        alfa.GetProperty("consultas_con_error").GetInt32().Should().Be(1);
+        alfa.GetProperty("tasa_exito").GetDouble().Should().Be(0.6667);
+        alfa.GetProperty("consultas_runt").GetInt32().Should().Be(2, "RUNT_PROPIETARIO reutilizada no cuenta");
+        alfa.GetProperty("consultas_simit").GetInt32().Should().Be(1, "el ERROR sí se pidió al proveedor");
+        alfa.GetProperty("consultas_avaluo").GetInt32().Should().Be(0, "PENDIENTE y EN_CURSO no cuentan");
+        alfa.GetProperty("consultas_impuesto").GetInt32().Should().Be(0, "NA no cuenta");
+    }
+
+    // CR-BE-8 — consumo agrega una sola vez por petición: el conteo y la lectura del mismo filtro reutilizan el resultado.
+    [Fact]
+    public async Task BE4_CR8_consumo_agrega_una_sola_vez_por_peticion()
+    {
+        var a = Guid.NewGuid();
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var ea = new EmpresaDePrueba(api, a);
+        await ReportesDePrueba.LoteAsync(ea, [new("RPA471")], ct);
+        using var scope = api.App.Services.CreateScope();
+        var servicios = scope.ServiceProvider;
+        servicios.GetRequiredService<EmpresasDelReporte>().Empresas = new Dictionary<Guid, EmpresaPlataforma> { [a] = new(a, "Alfa", null) };
+        var consumo = servicios.GetServices<IReporte>().Single(r => r.Tipo == TipoReporte.Consumo);
+        var contexto = new ContextoReporte(
+            AlcanceReporte.BackofficeGlobal, AccesosReportesEntreEmpresas.De(servicios.GetRequiredService<DiagnosticoDb>(), [a]));
+        var query = new QueryCollection(QueryHelpers.ParseQuery(ReportesDePrueba.Rango()));
+        var filtro = FiltroReporte.Leer(
+            TipoReporte.Consumo, query, FiltroReporte.Hoy(servicios.GetRequiredService<TimeProvider>()), rechazarEmpresa: true, paginar: false);
+
+        var total = await consumo.ContarAsync(contexto, filtro, ct);
+        await ReportesDePrueba.LoteAsync(ea, [new("RPA472"), new("RPA473")], ct);
+        var filas = await consumo.LeerAsync(contexto, filtro, 0, null, ct);
+
+        total.Should().Be(1);
+        filas.Should().ContainSingle().Which.Valores["vehiculos"].Should().Be(1, "la lectura reutiliza el agregado del conteo, no vuelve a consultar");
     }
 
     // AC «autorización» — un cliente con los claims del backoffice armados a mano recibe 403 en B0, B1 y B4; ?empresa= en B1: 400.

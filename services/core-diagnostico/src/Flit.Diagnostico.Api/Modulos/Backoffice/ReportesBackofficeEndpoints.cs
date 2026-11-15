@@ -18,7 +18,10 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// de <c>accesos_reporte</c> (BACKOFFICE_GLOBAL) y una de <c>lecturas_backoffice</c> por empresa de la página (con la página vacía, las
 /// habilitadas). Si la auditoría falla no hay datos.</item>
 /// <item><b>B4</b> <c>GET /backoffice/reportes/{tipo}?empresa=</c>: <c>.SoloEmpresaHabilitada()</c> antes de <c>ConEmpresaExplicita</c>
-/// (que audita la lectura); deja además la fila de <c>accesos_reporte</c> BACKOFFICE_EMPRESA con <c>empresa_consultada</c>.</item>
+/// (que registra el <i>intento</i> autorizado en <c>lecturas_backoffice</c>, SEC-6); la <i>entrega</i> queda en la fila de
+/// <c>accesos_reporte</c> BACKOFFICE_EMPRESA con <c>empresa_consultada</c>. <c>{tipo}</c> lleva la restricción de ruta
+/// <see cref="RestriccionTipoReporte"/>: un código fuera de los 5 no entra al grupo (404 del fallback del backoffice, sin fila ni
+/// llamada a Identidad).</item>
 /// </list>
 /// Las exportaciones B2/B3 (<c>/{tipo}/global/excel|pdf</c>, nombre con <c>-global</c>) y B5/B6 (<c>/{tipo}/excel|pdf?empresa=</c>) exigen
 /// además <c>diagnostico.reportes.descargar</c>, llevan <c>.DescargaSegura()</c> y reutilizan <see cref="ExportadorReportes"/> de BE-3 (freno
@@ -29,12 +32,17 @@ internal static class ReportesBackofficeEndpoints
     public const string Reportes = "/reportes";
     public const string Ruta = BackofficeEndpoints.Grupo + Reportes;
 
-    /// <summary>Servicios propios de los reportes del backoffice: el reporte de consumo y las compañías de la petición.</summary>
+    /// <summary>
+    /// Servicios propios de los reportes del backoffice: el reporte de consumo, las compañías de la petición y la restricción de ruta de
+    /// <c>{tipo}</c>. Los llama <c>Program</c> después de <c>ReportesRegistro.AddReportesCatalogo</c> (el catálogo no conoce al backoffice,
+    /// CR-BE-9).
+    /// </summary>
     public static IServiceCollection AddServicios(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<EmpresasDelReporte>();
         services.AddScoped<IReporte, ReporteConsumo>();
+        services.Configure<RouteOptions>(o => o.SetParameterPolicy<RestriccionTipoReporte>(RestriccionTipoReporte.Nombre));
         return services;
     }
 
@@ -49,11 +57,13 @@ internal static class ReportesBackofficeEndpoints
         sinEmpresa.MapGet(Reportes + "/{tipo}/global/pdf", (string tipo, HttpContext http, CancellationToken ct) => ExportarGlobalAsync(tipo, http, FormatoReporte.Pdf, ct))
             .RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().WithName("ExportarReporteGlobalPdfBackoffice");
 
+        // SEC-6: la restricción de {tipo} va en la ruta, así que un código desconocido no pasa por los filtros del grupo (no audita).
+        const string rutaTipo = "/{tipo:" + RestriccionTipoReporte.Nombre + "}";
         var porEmpresa = api.MapGroup(Ruta).RequireAuthorization(PoliticaBackoffice.Nombre).SoloEmpresaHabilitada().ConEmpresaExplicita();
-        porEmpresa.MapGet("/{tipo}", PorEmpresaAsync).SinCacheEnRespuesta().WithName("ReporteEmpresaBackoffice");
-        porEmpresa.MapGet("/{tipo}/excel", (string tipo, HttpContext http, CancellationToken ct) => ExportarPorEmpresaAsync(tipo, http, FormatoReporte.Xlsx, ct))
+        porEmpresa.MapGet(rutaTipo, PorEmpresaAsync).SinCacheEnRespuesta().WithName("ReporteEmpresaBackoffice");
+        porEmpresa.MapGet(rutaTipo + "/excel", (string tipo, HttpContext http, CancellationToken ct) => ExportarPorEmpresaAsync(tipo, http, FormatoReporte.Xlsx, ct))
             .RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().WithName("ExportarReporteEmpresaExcelBackoffice");
-        porEmpresa.MapGet("/{tipo}/pdf", (string tipo, HttpContext http, CancellationToken ct) => ExportarPorEmpresaAsync(tipo, http, FormatoReporte.Pdf, ct))
+        porEmpresa.MapGet(rutaTipo + "/pdf", (string tipo, HttpContext http, CancellationToken ct) => ExportarPorEmpresaAsync(tipo, http, FormatoReporte.Pdf, ct))
             .RequirePermiso(Permisos.ReportesDescargar).DescargaSegura().WithName("ExportarReporteEmpresaPdfBackoffice");
     }
 
@@ -147,5 +157,20 @@ internal static class ReportesBackofficeEndpoints
         else
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return fila.Id;
+    }
+}
+
+/// <summary>
+/// Restricción de ruta <c>{tipo:tipoReporte}</c> (SEC-6): solo los 5 códigos de <see cref="TipoReporte"/>, en comparación ordinal (la misma
+/// de <see cref="TiposDeReporte.TryLeer"/>). Se aplica a B4–B6 para que un tipo desconocido no llegue a <c>ConEmpresaExplicita</c>.
+/// </summary>
+internal sealed class RestriccionTipoReporte : IRouteConstraint
+{
+    public const string Nombre = "tipoReporte";
+
+    public bool Match(HttpContext? httpContext, IRouter? route, string routeKey, RouteValueDictionary values, RouteDirection routeDirection)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return values.TryGetValue(routeKey, out var valor) && TiposDeReporte.TryLeer(Convert.ToString(valor, System.Globalization.CultureInfo.InvariantCulture), out _);
     }
 }
