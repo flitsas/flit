@@ -18,7 +18,7 @@ import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_C
 import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDiagnostico";
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorMasivo } from "./borradores";
-import { DosZonas } from "./DosZonas";
+import { ZonasCreacion } from "./ZonasCreacion";
 import { ResultadoCreacion } from "./ResultadoCreacion";
 
 type Fase = "editando" | "guardando" | "analizando";
@@ -247,13 +247,24 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera,
   if (iniciado) return <ResultadoCreacion diagnosticoId={iniciado.id} vehiculos={iniciado.vehiculos} />;
 
   return (
-    <DosZonas
+    <ZonasCreacion
       rejillaRef={rejillaRef}
       vehiculos={vehiculos}
       despuesVehiculos={despuesVehiculos}
       parametros={
         <form id={`${id}-form`} onSubmit={alEnviar} noValidate aria-label="Parámetros del diagnóstico masivo" className="flex flex-col gap-4">
-          <ParametrosDiagnostico p={p} nombre={borrador.nombre} onNombre={(nombre) => onBorrador({ nombre })} disabled={ocupado || analisis !== null}>
+          <ParametrosDiagnostico
+            p={p}
+            nombre={borrador.nombre}
+            onNombre={(nombre) => onBorrador({ nombre })}
+            disabled={ocupado || analisis !== null}
+            disposicion="horizontal"
+          />
+        </form>
+      }
+      // FE-3 (spec-ui §3.2, S5): estimado, avisos y acción al final de la pantalla; el submit sigue asociado al formulario.
+      pie={
+        <div className="flex w-full flex-col gap-3">
             {errorCabecera && (
               <InlineAlert tone="error" title="No se guardó el diagnóstico">
                 {errorCabecera}
@@ -269,14 +280,13 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera,
                 <Link href="/diagnosticos" className={BOTON_SECUNDARIO_CLS}>
                   Cancelar
                 </Link>
-                <button type="submit" disabled={ocupado} aria-busy={fase !== "editando" || undefined} className={BOTON_PRIMARIO_CLS}>
+                <button type="submit" form={`${id}-form`} disabled={ocupado} aria-busy={fase !== "editando" || undefined} className={BOTON_PRIMARIO_CLS}>
                   {fase === "guardando" ? "Guardando…" : fase === "analizando" ? "Analizando…" : "Validar archivo"}
                   <Icono nombre="derecha" className="h-4 w-4" />
                 </button>
               </div>
             )}
-          </ParametrosDiagnostico>
-        </form>
+        </div>
       }
     />
   );

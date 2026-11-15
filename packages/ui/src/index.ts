@@ -31,6 +31,7 @@ export * from "./UiStateBoundary";
 // HU #14562 (UI-1/UI-2): componentes genéricos del UI Kit 2026, con los tokens que ya existen.
 export * from "./EstadoVacio";
 export * from "./PanelLateral";
+export * from "./PanelModal";
 export * from "./BarraSeleccion";
 export * from "./PaginaExcepcion";
 export * from "./PantallaResultado";

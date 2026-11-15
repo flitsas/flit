@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
-import { FUENTES } from "@/lib/configuracion";
+import { FUENTES, nombreFuente, nombreSubfuente } from "@/lib/configuracion";
 import { V1, V2, V3, celda, grilla, llamadas, loteTerminadoConErrores, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import type { Grilla } from "@/lib/tablero/api";
 import { createElement, type ComponentType } from "react";
@@ -61,8 +61,15 @@ describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8
     const { container } = pintar(grilla({ columnas: { por_vehiculo: ["RUNT"], por_propietario: [], por_locatario: [] }, vehiculos: [vehiculo(1, [celda(1, "RUNT", "COMPLETADO")])] }));
     const fila = filaDe(container, "vehiculo-1");
     expect(Array.from(fila.querySelectorAll("[data-fuente]")).map((td) => td.getAttribute("data-fuente"))).toEqual(FUENTES.map((f) => f.codigo));
-    const cabeceras = Array.from(container.querySelectorAll("thead tr:last-child th")).map((th) => th.textContent);
-    expect(cabeceras).toEqual(["RUNT vehículo", "RUNT propietario", "RUNT locatario", "SIMIT vehículo", "SIMIT propietario", "SIMIT locatario"]);
+    // FE-2 (spec-ui §2.6): el texto visible de la subcolumna va sin el prefijo del grupo; el prefijo queda en sr-only.
+    const visible = (th: Element) => {
+      const copia = th.cloneNode(true) as HTMLElement;
+      copia.querySelectorAll(".sr-only").forEach((n) => n.remove());
+      return copia.textContent?.trim();
+    };
+    const cabeceras = Array.from(container.querySelectorAll("thead tr:last-child th"));
+    expect(cabeceras.map(visible)).toEqual(["vehículo", "propietario", "locatario", "vehículo", "propietario", "locatario"]);
+    expect(cabeceras.map((th) => th.textContent)).toEqual(["RUNT vehículo", "RUNT propietario", "RUNT locatario", "SIMIT vehículo", "SIMIT propietario", "SIMIT locatario"]);
   });
 
   it("la fuente no pedida en el lote dice «Sin solicitar» en cada fila y no es un botón", () => {
@@ -508,5 +515,55 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
     const enlace = screen.getAllByRole("link", { name: /^Ver detalle de / })[0];
     expect(clases(enlace)).toContain("motion-reduce:transition-none");
     expect(clases(enlace)).toContain("duration-[var(--dx-motion-rapido)]");
+  });
+});
+
+// Ola Diagnóstico UX 2026-11-15 · FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas; las subcolumnas
+// dicen «vehículo», «propietario» y «locatario», con el nombre completo para lectores; nombreFuente() no cambia.
+describe("GrillaSemaforos — FE-2 encabezados RUNT/SIMIT agrupados", () => {
+  it("la fila 1 muestra «RUNT» y «SIMIT» centrados (text-center y rótulo justify-center)", () => {
+    pintar();
+    const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
+    for (const grupo of ["RUNT", "SIMIT"]) {
+      const th = within(tabla).getByRole("columnheader", { name: grupo });
+      const clases = th.className.split(/\s+/);
+      expect(clases).toContain("text-center");
+      expect(clases.lastIndexOf("text-center")).toBeGreaterThan(clases.lastIndexOf("text-left"));
+      expect((th.firstElementChild as HTMLElement).className).toContain("justify-center");
+    }
+  });
+
+  it("cada subcolumna conserva su nombre accesible completo («RUNT propietario») con el prefijo en sr-only", () => {
+    const { container } = pintar();
+    const th = within(screen.getByRole("table", { name: /semáforo de consultas/i })).getByRole("columnheader", { name: "RUNT propietario" });
+    expect(th.querySelector(".sr-only")).toHaveTextContent("RUNT");
+    expect(container.querySelector('[data-fuente="RUNT_PROPIETARIO"]')).toHaveAttribute("data-label", "RUNT propietario");
+  });
+
+  it("nombreSubfuente da el rótulo corto y nombreFuente sigue con el nombre completo", () => {
+    expect(nombreSubfuente("RUNT")).toBe("vehículo");
+    expect(nombreSubfuente("RUNT_PROPIETARIO")).toBe("propietario");
+    expect(nombreSubfuente("SIMIT_LOCATARIO")).toBe("locatario");
+    expect(nombreSubfuente("AVALUO")).toBe("Avalúo comercial");
+    expect(FUENTES.map((f) => nombreFuente(f.codigo))).toEqual([
+      "RUNT vehículo",
+      "RUNT propietario",
+      "RUNT locatario",
+      "SIMIT vehículo",
+      "SIMIT propietario",
+      "SIMIT locatario",
+      "Avalúo comercial",
+      "Impuesto departamental",
+    ]);
+  });
+
+  it("la columna de acciones mide 10rem en th y td y sigue fija a la derecha", () => {
+    const { container } = pintar(grilla(), false, { accionVehiculo: () => "x", tituloAccionVehiculo: "Acciones" });
+    const th = within(screen.getByRole("table", { name: /semáforo de consultas/i })).getByRole("columnheader", { name: "Acciones" });
+    expect(th.className).toContain("w-[10rem]");
+    expect(th.className).toContain("min-w-[10rem]");
+    const td = container.querySelector('td[data-label="Acciones"]') as HTMLElement;
+    expect(td.className).toContain("w-[10rem]");
+    expect(td.className).toContain("min-[900px]:right-0");
   });
 });

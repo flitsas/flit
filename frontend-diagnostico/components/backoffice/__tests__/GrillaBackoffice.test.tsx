@@ -248,6 +248,10 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
     const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
     expect(await within(panel).findByText("Este vehículo aún no tiene dictamen.")).toBeInTheDocument();
+    // FE-1: modal de la suite de 640 px; sin campos, el velo cierra como el panel.
+    expect(panel.firstElementChild?.className).toContain("max-w-[640px]");
+    fireEvent.mouseDown(panel);
+    expect(screen.queryByRole("dialog", { name: "Auditoría del dictamen · TST001" })).toBeNull();
   });
 
   it("AC47: sin verAuditoria no se ofrece la auditoría", async () => {

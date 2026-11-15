@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
-import { PanelLateral } from "@flit/ui/PanelLateral";
+import { PanelModal } from "@flit/ui/PanelModal";
 import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
 import { Button } from "@flit/ui/Button";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
@@ -131,7 +131,7 @@ const filasDe = (dictamen: Dictamen): FilaAlertamiento[] =>
 
 /**
  * Panel del dictamen vigente (corte 7; HU #14562 F-05), el mismo en el tablero del lote y en la grilla del backoffice: un
- * `PanelLateral` de 640 px con el tablero visible detrás. No es una ruta y no entra en el sondeo: al abrirse pide el GET.
+ * modal de 640 px (FE-1: `PanelModal`, antes un panel lateral) con el tablero visible detrás. No es una ruta y no entra en el sondeo: al abrirse pide el GET.
  * Cuatro estados: vacío (SIN_DICTAMEN), cargando, error con Reintentar y lleno. En lleno: veredicto (con texto, no solo
  * color), aviso si está bloqueado, trámite analizado, fecha de emisión, versión del catálogo, la marca «Ajustado por FLIT»
  * (D6, sin autor ni motivo), las consultas del vehículo con su estado y cada alertamiento con título, efecto, detalle
@@ -166,7 +166,7 @@ export function PanelDictamen({
   const [alertamientos, setAlertamientos] = useState<FilaAlertamiento[] | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [errorAjuste, setErrorAjuste] = useState<ErrorAjuste | null>(null);
-  // PanelLateral devuelve el foco al elemento activo al abrir; si el que abrió es otro, se le devuelve aquí.
+  // El modal devuelve el foco al elemento activo al abrir; si el que abrió es otro, se le devuelve aquí.
   const disparador = useRef(devolverFocoA);
   useEffect(() => {
     const destino = disparador.current;
@@ -368,11 +368,12 @@ export function PanelDictamen({
   }
 
   return (
-    <PanelLateral
+    <PanelModal
       abierto
       onCerrar={onClose}
       ocupado={enviando}
-      ancho={640}
+      // FE-1 (spec-ui §1.6): con el override editable, el clic en el velo no cierra para no perder lo escrito.
+      cerrarConVelo={!ofreceOverride}
       titulo={`Dictamen · ${identificador}`}
       pie={
         ofreceTramite || ofreceAplicar ? (
@@ -395,6 +396,6 @@ export function PanelDictamen({
       }
     >
       {contenido}
-    </PanelLateral>
+    </PanelModal>
   );
 }

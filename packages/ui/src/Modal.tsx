@@ -41,7 +41,7 @@ export const MODAL_CERRAR_CLS =
   "absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] " +
   "transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]";
 
-export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
+export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "panel";
 
 // Anchos como clases literales (Tailwind JIT necesita el nombre completo).
 // AC1: ancho estándar, "no angosto" → por defecto `md` (max-w-lg).
@@ -55,6 +55,8 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   lg: "max-w-2xl",
   xl: "max-w-4xl",
   "2xl": "max-w-6xl",
+  // Ola Diagnóstico 2026-11-15 (FE-1): ancho exacto del antiguo PanelLateral (640 px). Aditivo; ningún tamaño existente cambia.
+  panel: "max-w-[640px]",
 };
 
 export interface ModalProps {

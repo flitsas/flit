@@ -89,6 +89,18 @@ export function nombreFuente(codigo: Fuente): string {
   return rotular({ contexto: "fuente", codigo, respaldo: NOMBRES_FUENTE });
 }
 
+/** Prefijo de grupo de las fuentes que se agrupan bajo «RUNT» o «SIMIT» en la cabecera de la grilla. */
+const PREFIJO_GRUPO = /^(RUNT|SIMIT) /;
+
+/**
+ * Rótulo corto de una subcolumna bajo su grupo en la cabecera agrupada (ola Diagnóstico UX 2026-11-15 · FE-2, spec-ui §2.6):
+ * «RUNT propietario» → «propietario». Las fuentes sin grupo conservan su nombre. Filtros, detalle, reportes y nombres
+ * accesibles siguen con `nombreFuente()`.
+ */
+export function nombreSubfuente(codigo: Fuente): string {
+  return nombreFuente(codigo).replace(PREFIJO_GRUPO, "");
+}
+
 /** Nombre de una fuente con la etiqueta de la API (`fuente_etiqueta`) primero y el diccionario local de respaldo. */
 export function rotuloFuente(codigo: string | null | undefined, etiqueta?: string | null): string {
   return rotular({ contexto: "fuente", codigo, etiqueta, respaldo: NOMBRES_FUENTE });

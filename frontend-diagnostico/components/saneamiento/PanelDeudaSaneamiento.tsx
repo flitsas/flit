@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
-import { PanelLateral } from "@flit/ui/PanelLateral";
+import { PanelModal } from "@flit/ui/PanelModal";
 import { Placa } from "@flit/ui/Placa";
 import type { StatusTone } from "@flit/ui/StatusBadge";
 import {
@@ -41,7 +41,7 @@ import { nombreDescargaDeuda } from "@/lib/saneamiento/descargas";
 import { ROTULO_HALLAZGO, ROTULO_RESULTADO, rotuloConcepto } from "@/lib/saneamiento/estados";
 import { useDescarga } from "@/lib/reportes/useDescarga";
 
-// PS-2 «Deuda y saneamiento» (spec-ui §3; plan §7.3; HU #14577 AC13–AC19). PanelLateral de 640 px: foco atrapado, Escape
+// PS-2 «Deuda y saneamiento» (spec-ui §3; plan §7.3; HU #14577 AC13–AC19). modal de 640 px (FE-1: PanelModal sobre Modal size="panel"; antes un panel lateral): foco atrapado, Escape
 // y «Cerrar», y el foco vuelve a quien lo abrió. Pide en paralelo GET …/deuda y GET …/saneamiento. Cuatro estados del
 // patrón de Diagnóstico (D-01): cargando con role="status", error con «Reintentar», «Sin pendientes» en lugar de vacío y
 // el 409 VEHICULO_NO_TERMINADO como aviso sin código. Todo valor visual sale de tokens (--di-*, --badge-*); sin hex.
@@ -288,7 +288,7 @@ export function PanelDeudaSaneamiento({
   const pdf = useDescarga(nombreDescargaDeuda(placaLeida, "pdf"));
   const excel = useDescarga(nombreDescargaDeuda(placaLeida, "xlsx"));
 
-  // PanelLateral devuelve el foco al elemento activo al abrir; si quien abrió es otro (el dictamen reemplazado), aquí.
+  // El modal devuelve el foco al elemento activo al abrir; si quien abrió es otro (el dictamen reemplazado), aquí.
   const disparador = useRef(devolverFocoA);
   useEffect(() => {
     const destino = disparador.current;
@@ -449,10 +449,11 @@ export function PanelDeudaSaneamiento({
   const errorDescarga = pdf.error || excel.error;
 
   return (
-    <PanelLateral
+    <PanelModal
       abierto
       onCerrar={onClose}
-      ancho={640}
+      // FE-1 (spec-ui §1.6): con campos editables (gestión del saneamiento), el clic en el velo no cierra.
+      cerrarConVelo={false}
       titulo="Deuda y saneamiento"
       descripcion={identificador}
       acciones={bandera ?? undefined}
@@ -494,6 +495,6 @@ export function PanelDeudaSaneamiento({
       <p role="status" aria-live="polite" className="sr-only" data-region-viva="">
         {anuncio && <span key={anuncio.n}>{anuncio.texto}</span>}
       </p>
-    </PanelLateral>
+    </PanelModal>
   );
 }

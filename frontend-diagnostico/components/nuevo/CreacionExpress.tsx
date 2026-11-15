@@ -29,7 +29,7 @@ import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDi
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorExpress } from "./borradores";
 import { CamposExpress, type ErroresLocatario } from "./CamposExpress";
-import { DosZonas } from "./DosZonas";
+import { ZonasCreacion } from "./ZonasCreacion";
 import { ResultadoCreacion } from "./ResultadoCreacion";
 
 type Fase =
@@ -161,12 +161,23 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
   if (fase.tipo === "creado") return <ResultadoCreacion diagnosticoId={fase.id} vehiculos={1} />;
 
   return (
-    <DosZonas
+    <ZonasCreacion
       rejillaRef={rejillaRef}
       vehiculos={<CamposExpress borrador={borrador} onCambio={cambiar} errorPlaca={errorPlaca} errores={errores} disabled={ocupado} formId={formId} />}
       parametros={
         <form id={formId} onSubmit={alEnviar} noValidate aria-label="Parámetros del diagnóstico express" className="flex flex-col gap-4">
-          <ParametrosDiagnostico p={p} nombre={nombre} onNombre={(valor) => onBorrador({ nombreManual: valor })} disabled={ocupado}>
+          <ParametrosDiagnostico
+            p={p}
+            nombre={nombre}
+            onNombre={(valor) => onBorrador({ nombreManual: valor })}
+            disabled={ocupado}
+            disposicion="horizontal"
+          />
+        </form>
+      }
+      // FE-3 (spec-ui §3.2, S5): estimado, avisos y acción al final de la pantalla; el submit sigue asociado al formulario.
+      pie={
+        <div className="flex w-full flex-col gap-3">
             {fase.tipo === "enviando" && <VehicleLoader label={fase.texto} />}
 
             {errorGeneral && (
@@ -215,14 +226,13 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                 <Link href="/diagnosticos" className={BOTON_SECUNDARIO_CLS}>
                   Cancelar
                 </Link>
-                <Button type="submit" size="sm" cargando={fase.tipo === "enviando"} disabled={ocupado} className="gap-1.5 text-sm">
+                <Button type="submit" form={formId} size="sm" cargando={fase.tipo === "enviando"} disabled={ocupado} className="gap-1.5 text-sm">
                   {conEstimado ? "Continuar" : "Iniciar diagnóstico"}
                   <Icono nombre="derecha" className="h-4 w-4" />
                 </Button>
               </div>
             )}
-          </ParametrosDiagnostico>
-        </form>
+        </div>
       }
     />
   );

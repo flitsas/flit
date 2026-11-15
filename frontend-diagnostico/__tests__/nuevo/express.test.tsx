@@ -64,9 +64,20 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toMatchObject({ nombre: "Revisión flota", identificador: "TST125" });
   });
 
+  it("FE-3: con el nombre vacío y sin placa, el foco va al primer inválido, que ahora es el nombre (Parámetros arriba)", async () => {
+    const api = montar();
+    fireEvent.change(await nombre(), { target: { value: "" } });
+    await continuar();
+    expect(await nombre()).toHaveAttribute("aria-invalid", "true");
+    expect(await placa()).toHaveAttribute("aria-invalid", "true");
+    expect(await nombre()).toHaveFocus();
+    expect(llamadas(api, "POST", "/express")).toHaveLength(0);
+  });
+
   it("placa vacía: pide la placa o el VIN en su campo y no llama a la API", async () => {
     const api = montar();
-    await nombre();
+    // FE-3: con Parámetros arriba, un nombre vacío sería el primer inválido; aquí se aísla el error de la placa.
+    fireEvent.change(await nombre(), { target: { value: "Revisión flota" } });
     await continuar();
     expect(await placa()).toHaveAttribute("aria-invalid", "true");
     expect(await placa()).toHaveAccessibleDescription(/escribe la placa o el vin/i);
@@ -166,7 +177,8 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     await nombre();
     await continuar();
     const estimado = await screen.findByRole("region", { name: "Estimado de consultas" });
-    expect(screen.getByRole("region", { name: "Parámetros" })).toContainElement(estimado);
+    // FE-3: el estimado va en la barra final de la pantalla (S5), no dentro de Parámetros.
+    expect(document.querySelector("[data-parte='pie-creacion']")).toContainElement(estimado);
     expect(estimado).toHaveTextContent("SIMIT vehículo");
     expect(within(estimado).getByText("RUNT propietario").nextSibling).toHaveTextContent(/^al menos 1$/);
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
@@ -326,7 +338,9 @@ describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () =>
     let soltar: (r: Response) => void = () => {};
     montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => new Promise<Response>((r) => (soltar = r)) } });
     await nombre();
-    expect(within(screen.getByRole("region", { name: "Parámetros" })).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/diagnosticos");
+    // FE-3: la barra con Cancelar y la acción va al final de la pantalla, fuera de Parámetros. FE-4: vuelve a /diagnosticos.
+    expect(screen.getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/diagnosticos");
+    expect(within(screen.getByRole("region", { name: "Parámetros" })).queryByRole("link", { name: "Cancelar" })).toBeNull();
     await continuar();
     await waitFor(() => expect(screen.getByRole("button", { name: PRINCIPAL })).toHaveAttribute("aria-busy", "true"));
     soltar(creadoOk());
