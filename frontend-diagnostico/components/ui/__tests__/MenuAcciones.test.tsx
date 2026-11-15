@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ActionsMenu, type ActionsMenuItem } from "@flit/ui";
+import { MenuAcciones } from "@/components/ui/MenuAcciones";
 
-// Uso de ejemplo: <ActionsMenu variante="kit" ariaLabel="Acciones de la placa ABC123" items={[
+// Uso de ejemplo: <MenuAcciones ariaLabel="Acciones de la placa ABC123" items={[
 //   { key: "deuda", label: "Ver deuda", onSelect: ({ disparador }) => abrirDeuda(disparador) },
 //   { key: "tramite", label: "Ver trámite #41", href: url, target: "_blank" },
 //   { key: "pdf", label: "Descargar PDF", href: urlPdf, download: true, disabled: true, disabledReason: "Disponible cuando…" },
 // ]} />
-// Ola Diagnóstico UX 2026-11-15 · FE-2 (spec-ui §2.2; decisión V3): extensiones aditivas (ítem enlace, `onSelect(ctx)` con
-// el disparador, motivo de deshabilitado visible y anunciado) y el aspecto del Kit 2026 como variante opt-in. El default,
-// que usa Comparendos, no cambia.
+// Ola Diagnóstico UX 2026-11-15 · FE-2 (spec-ui §2.2) y U10-1: menú propio de Diagnóstico con el aspecto del Kit 2026,
+// ítem enlace, `onSelect(ctx)` con el disparador, motivo de deshabilitado visible y anunciado, `hint`, `ocupado` y foco
+// inicial. `@flit/ui/ActionsMenu` (Comparendos) volvió a su versión previa: sus casos siguen aquí como guarda.
 
 const abrir = (nombre = "Acciones de la placa ABC123") => {
   const disparador = screen.getByRole("button", { name: nombre });
@@ -17,7 +18,7 @@ const abrir = (nombre = "Acciones de la placa ABC123") => {
   return disparador;
 };
 
-describe("ActionsMenu — default (Comparendos) sin cambios", () => {
+describe("@flit/ui ActionsMenu — Comparendos sin cambios (versión previa a FE-2)", () => {
   const items: ActionsMenuItem[] = [
     { key: "ver", label: "Ver detalle", onSelect: vi.fn() },
     { key: "pago", label: "Registrar pago", onSelect: vi.fn(), disabled: true, disabledReason: "Ya tiene un pago registrado." },
@@ -45,9 +46,9 @@ describe("ActionsMenu — default (Comparendos) sin cambios", () => {
   });
 });
 
-describe("ActionsMenu — variante kit (FE-2)", () => {
+describe("MenuAcciones — Kit 2026 propio de Diagnóstico (FE-2, U10-1)", () => {
   it("aspecto del Kit 2026: píldora de 32 px y ≥ 44 px de ancho, menú de radio 9 px e ítems de 40 px", () => {
-    render(<ActionsMenu variante="kit" ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect: vi.fn() }]} />);
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect: vi.fn() }]} />);
     const disparador = abrir();
     for (const c of ["min-h-8", "min-w-11", "rounded-full", "text-[color:var(--di-action)]"]) expect(disparador.className).toContain(c);
     expect(disparador).toHaveAttribute("aria-haspopup", "menu");
@@ -58,7 +59,7 @@ describe("ActionsMenu — variante kit (FE-2)", () => {
 
   it("onSelect recibe el disparador para devolverle el foco al cerrar un modal", () => {
     const onSelect = vi.fn();
-    render(<ActionsMenu variante="kit" ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect }]} />);
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect }]} />);
     const disparador = abrir();
     fireEvent.click(screen.getByRole("menuitem", { name: "Ver deuda" }));
     expect(onSelect).toHaveBeenCalledTimes(1);
@@ -72,8 +73,7 @@ describe("ActionsMenu — variante kit (FE-2)", () => {
       ctx.evento.preventDefault();
     });
     render(
-      <ActionsMenu
-        variante="kit"
+      <MenuAcciones
         ariaLabel="Acciones de la placa ABC123"
         items={[
           { key: "t", label: "Ver trámite #41", ariaLabel: "Ver trámite #41 de la placa ABC123 (se abre en una pestaña nueva)", href: "https://tramites.example/t/41", target: "_blank" },
@@ -97,8 +97,7 @@ describe("ActionsMenu — variante kit (FE-2)", () => {
   it("deshabilitado con motivo: aria-disabled (no disabled), motivo visible enlazado por aria-describedby, y no hace nada", () => {
     const onSelect = vi.fn();
     render(
-      <ActionsMenu
-        variante="kit"
+      <MenuAcciones
         ariaLabel="Acciones de la placa ABC123"
         items={[{ key: "pdf", label: "Descargar PDF", onSelect, disabled: true, disabledReason: "Disponible cuando terminen las consultas" }]}
       />,
@@ -120,8 +119,7 @@ describe("ActionsMenu — variante kit (FE-2)", () => {
 
   it("hint: una segunda línea visible también en ítems habilitados", () => {
     render(
-      <ActionsMenu
-        variante="kit"
+      <MenuAcciones
         ariaLabel="Acciones de la placa ABC123"
         items={[{ key: "pdf", label: "Descargar PDF", onSelect: vi.fn(), hint: "Las consultas no disponibles aparecerán así en el PDF" }]}
       />,
@@ -132,8 +130,7 @@ describe("ActionsMenu — variante kit (FE-2)", () => {
 
   it("teclado: ↓/↑/Home/End recorren también los ítems aria-disabled; Escape cierra y devuelve el foco", () => {
     render(
-      <ActionsMenu
-        variante="kit"
+      <MenuAcciones
         ariaLabel="Acciones de la placa ABC123"
         items={[
           { key: "a", label: "Sanear", onSelect: vi.fn() },
@@ -161,14 +158,14 @@ describe("ActionsMenu — variante kit (FE-2)", () => {
   });
 
   it("ocupado: el disparador lleva aria-busy", () => {
-    render(<ActionsMenu variante="kit" ocupado ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Creando…", onSelect: vi.fn(), disabled: true }]} />);
+    render(<MenuAcciones ocupado ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Creando…", onSelect: vi.fn(), disabled: true }]} />);
     expect(screen.getByRole("button", { name: "Acciones de la placa ABC123" })).toHaveAttribute("aria-busy", "true");
   });
 
   it("el menú se portaliza a body (no lo recorta el scroll horizontal de la grilla)", () => {
     render(
       <div className="overflow-x-auto" data-testid="scroll">
-        <ActionsMenu variante="kit" ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect: vi.fn() }]} />
+        <MenuAcciones ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect: vi.fn() }]} />
       </div>,
     );
     abrir();

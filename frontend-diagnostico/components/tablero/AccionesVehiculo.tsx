@@ -1,7 +1,7 @@
 "use client";
 
 import { useId } from "react";
-import { ActionsMenu, type ActionsMenuItem } from "@flit/ui/ActionsMenu";
+import { MenuAcciones, type MenuAccionesItem } from "@/components/ui/MenuAcciones";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { IconoDxBandera } from "@/components/dx/iconos/IconoDxBandera";
 import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite";
@@ -40,7 +40,7 @@ export interface AccionesVehiculoProps {
   onErrorReintento: (mensaje: string, refrescar: boolean) => void;
 }
 
-type IconoItem = NonNullable<ActionsMenuItem["icon"]>;
+type IconoItem = NonNullable<MenuAccionesItem["icon"]>;
 const BanderaApagada: IconoItem = ({ className }) => <IconoDxBandera tamano={16} className={className} />;
 const BanderaEncendida: IconoItem = ({ className }) => <IconoDxBandera tamano={16} encendida className={className} />;
 const CrearTramite: IconoItem = ({ className }) => <IconoDxCrearTramite tamano={16} className={className} />;
@@ -53,8 +53,8 @@ const MENSAJE_CLS = "max-w-[12rem] text-xs font-semibold";
 
 /**
  * Columna «Acciones» de una fila del tablero (ola Diagnóstico UX 2026-11-15 · FE-2, spec-ui §2.3–§2.5): el menú
- * «Acciones» del Kit 2026 (el estado del saneamiento lo informa la columna Dictamen, auditoría UI UA-1) con los ítems en el orden D-103 (saneamiento · trámite ·
- * deuda · PDF · reintento) y, debajo del disparador, los mensajes de resultado. Sin la capacidad el ítem no existe; si la
+ * «Acciones» propio de Diagnóstico (`MenuAcciones`, Kit 2026) con los ítems en el orden D-103 (saneamiento · trámite ·
+ * deuda · PDF · reintento; el estado del saneamiento lo informa la columna Dictamen, auditoría UI UA-1) y, debajo del disparador, los mensajes de resultado. Sin la capacidad el ítem no existe; si la
  * acción no aplica ahora, sale deshabilitado con su motivo visible. Los modales de crear trámite van fuera del menú.
  * La lógica de cada acción vive en su hook (`useAccionSanear`, `useAccionTramite`, `useAccionPdf`, `useReintento`).
  */
@@ -107,7 +107,7 @@ export function AccionesVehiculo({
   const pdf = useAccionPdf({ diagnosticoId, estadoLote, vehiculo: v });
   const reintento = useReintento({ reintentar, onReintentado, onError: onErrorReintento });
 
-  const items: ActionsMenuItem[] = [];
+  const items: MenuAccionesItem[] = [];
 
   // 1 / 1′ — saneamiento (HU #14577 §2.1: la bandera va antes de «Crear trámite»).
   if (sanear.tipo === "alternar") {
@@ -192,7 +192,7 @@ export function AccionesVehiculo({
   return (
     <div id={celdaId} className="flex flex-col items-start gap-1.5">
       {items.length > 0 ? (
-        <ActionsMenu variante="kit" ariaLabel={`Acciones de la placa ${placa}`} triggerLabel="Acciones" items={items} ocupado={ocupado} />
+        <MenuAcciones ariaLabel={`Acciones de la placa ${placa}`} triggerLabel="Acciones" items={items} ocupado={ocupado} />
       ) : (
         <span>
           <span aria-hidden="true">—</span>
