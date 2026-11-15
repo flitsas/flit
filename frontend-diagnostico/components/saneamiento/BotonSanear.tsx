@@ -56,17 +56,6 @@ const NO_ELEGIBLE_CLS = "cursor-not-allowed opacity-60";
 /** En la fila, el glifo a 14 px como «Crear trámite»; en la cabecera, a su tamaño (16 px). */
 const ICONO_CLS = { fila: "h-3.5 w-3.5", cabecera: undefined } as const;
 
-/**
- * Bandera de saneamiento de un vehículo (spec-ui §1.3, HU #14577 AC5–AC8). Patrón del «prioritario» de Trámites: un clic,
- * sin confirmación, optimista y con reversión si la API falla.
- * - Con `puedeSanear` y sin saneamiento: toggle apagado «Sanear» (PUT); en SOLICITADO, encendido «Solicitado» (DELETE). El
- *   nombre accesible no cambia («Solicitar saneamiento de la placa X»): el estado lo da `aria-pressed` (D-02).
- * - No elegible: `aria-disabled` (no `disabled`: sigue en el Tab) con el motivo por `aria-describedby` (D-03).
- * - EN_GESTION, SANEADO, NO_PROCEDE, o SOLICITADO sin la capacidad: «Ver saneamiento», que abre el panel.
- * - Sin la capacidad y sin saneamiento, o sin el dato: no se pinta.
- * En vuelo, `aria-busy` y los clics se ignoran (sin `disabled`, para no perder el foco). El error va en `role="alert"` bajo
- * el botón y se borra en el siguiente clic; el foco se queda en el botón. Un 403 lleva a /403.
- */
 /** Estado de la acción de saneamiento de una fila, sin presentación (lo comparten la bandera y el menú «Acciones»). */
 export type AccionSanear =
   | { tipo: "ninguna"; identificador: string; error: string | null }
@@ -155,6 +144,17 @@ export function useAccionSanear({
   return { tipo: "alternar", identificador, error, encendida, noElegible, motivo, enVuelo, alternar };
 }
 
+/**
+ * Bandera de saneamiento de un vehículo (spec-ui §1.3, HU #14577 AC5–AC8). Patrón del «prioritario» de Trámites: un clic,
+ * sin confirmación, optimista y con reversión si la API falla.
+ * - Con `puedeSanear` y sin saneamiento: toggle apagado «Sanear» (PUT); en SOLICITADO, encendido «Solicitado» (DELETE). El
+ *   nombre accesible no cambia («Solicitar saneamiento de la placa X»): el estado lo da `aria-pressed` (D-02).
+ * - No elegible: `aria-disabled` (no `disabled`: sigue en el Tab) con el motivo por `aria-describedby` (D-03).
+ * - EN_GESTION, SANEADO, NO_PROCEDE, o SOLICITADO sin la capacidad: «Ver saneamiento», que abre el panel.
+ * - Sin la capacidad y sin saneamiento, o sin el dato: no se pinta.
+ * En vuelo, `aria-busy` y los clics se ignoran (sin `disabled`, para no perder el foco). El error va en `role="alert"` bajo
+ * el botón y se borra en el siguiente clic; el foco se queda en el botón. Un 403 lleva a /403.
+ */
 export function BotonSanear({ onAbrirPanel, variante = "fila", ...props }: BotonSanearProps) {
   const motivoId = `${useId()}-motivo`;
   const accion = useAccionSanear(props);

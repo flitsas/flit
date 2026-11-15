@@ -21,17 +21,25 @@ export function BotonesExportar({
   total,
   cargando,
   avisoId,
+  claveConsulta = "",
   onDescargar,
 }: {
   reporte: ReporteCatalogo;
   total: number | null;
   cargando: boolean;
   avisoId: string;
+  /** Identifica el filtro que se exporta; al cambiar, se borra el error de la exportación anterior (CR-FE-5). */
+  claveConsulta?: string;
   onDescargar: (formato: FormatoExportacion) => Promise<unknown>;
 }) {
   const id = useId();
   const [enVuelo, setEnVuelo] = useState<Record<FormatoExportacion, boolean>>({ excel: false, pdf: false });
   const [error, setError] = useState<string | null>(null);
+  const [claveDelError, setClaveDelError] = useState(claveConsulta);
+  if (claveConsulta !== claveDelError) {
+    setClaveDelError(claveConsulta);
+    setError(null);
+  }
   const montado = useRef(true);
   useEffect(() => {
     montado.current = true;

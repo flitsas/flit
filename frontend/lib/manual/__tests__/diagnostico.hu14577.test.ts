@@ -55,7 +55,8 @@ describe("manual/diagnostico (HU #14577)", () => {
       expect(a!.audience, e.slug).toBe(e.audience);
     }
     const tree = getNavTree().find((n) => n.section.id === "diagnostico");
-    expect(tree?.articles.map((a) => a.slug)).toEqual(ESPERADOS.map((e) => e.slug));
+    // HU #14580 suma artículos después de estos 12; el orden de los de esta HU no cambia.
+    expect(tree?.articles.map((a) => a.slug).slice(0, ESPERADOS.length)).toEqual(ESPERADOS.map((e) => e.slug));
   });
 
   it("los cuatro flujos principales tienen su diagrama en algún artículo de la sección", () => {
@@ -92,8 +93,10 @@ describe("manual/diagnostico (HU #14577)", () => {
     }
   });
 
-  it("versión del manual 2.2.0 de noviembre de 2026", () => {
-    expect(MANUAL_VERSION).toBe("2.2.0");
+  it("versión del manual 2.2.0 o posterior, de noviembre de 2026", () => {
+    // HU #14580 la sube a 2.3.0 (lo fija diagnostico.hu14580.test.ts); esta HU solo exige no volver a 2.1.
+    const [mayor, menor] = MANUAL_VERSION.split(".").map(Number);
+    expect(mayor * 100 + menor).toBeGreaterThanOrEqual(202);
     expect(MANUAL_VERSION_DATE).toBe("Noviembre 2026");
   });
 });

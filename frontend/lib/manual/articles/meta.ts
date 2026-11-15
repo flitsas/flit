@@ -17,10 +17,10 @@ export const MANUAL_NAV_SECTIONS: readonly ManualNavSection[] = [
 export const MANUAL_HOME_SLUG = "0-introduccion/1-bienvenida";
 
 /**
- * Manual v2.2 (DR-FLIT v3): 4 perfiles + Normativa (fuente principal) + Diagnóstico vehicular y saneamiento (HU #14577),
- * 63 artículos, sugerencia contextual y filtro por rol.
+ * Manual v2.3 (DR-FLIT v3): 4 perfiles + Normativa (fuente principal) + Diagnóstico vehicular y saneamiento (HU #14577)
+ * + Dashboard, Reportes y navegación nueva de Diagnóstico (HU #14580), 66 artículos, sugerencia contextual y filtro por rol.
  */
-export const MANUAL_VERSION = "2.2.0";
+export const MANUAL_VERSION = "2.3.0";
 export const MANUAL_VERSION_DATE = "Noviembre 2026";
 
 /**

@@ -25,6 +25,7 @@ import {
   sinDesbordeHorizontal,
   tomarPorApi,
 } from "./saneamiento-comun";
+import { abrirAcciones } from "./ola-ux-comun";
 
 /**
  * HU #14577 — backoffice FLIT: PS-4 bandeja «Saneamientos» (AC24–AC28) y PS-5 gestión de un saneamiento (AC29–AC38), más el
@@ -57,7 +58,7 @@ import {
  *   - button «Quitar concepto <concepto>» · dialog «¿Quitar el concepto?» · button «Cancelar» · button «Quitar»
  *   - textbox «Observación para la compañía» · button «Cerrar como saneado» · dialog «¿Cerrar como saneado?»
  *   - button «Cerrar como no procede» · button «Reabrir» · button «Anular» · textbox «Motivo» · heading «Historial»
- *   - Cliente: button «Ver saneamiento de la placa <placa>: Saneado» · dialog «Deuda y saneamiento» · table «Conceptos del saneamiento»
+ *   - Cliente (ola 2026-11-15, FE-2): button «Acciones de la placa <placa>» · menuitem «Ver saneamiento de la placa <placa>: Saneado» · dialog «Deuda y saneamiento» · table «Conceptos del saneamiento»
  *     · link «Descargar evidencia de <concepto>» · button «/^Avisos/» · region «Avisos» · link «/^Ver lote: /»
  */
 
@@ -436,7 +437,9 @@ test.describe("PS-5 gestión y recorrido AC45", () => {
 
     await test.step("AC45 (compañía): ve el saneamiento cerrado y descarga la evidencia y el PDF", async () => {
       await page.goto(`${APP}/diagnosticos/${lote}`);
-      await page.getByRole("button", { name: `Ver saneamiento de la placa ${P}: Saneado` }).click();
+      // Ola 2026-11-15 (FE-2): «Ver saneamiento» vive en el menú «Acciones» de la fila.
+      const { menu } = await abrirAcciones(page, P);
+      await menu.getByRole("menuitem", { name: `Ver saneamiento de la placa ${P}: Saneado` }).click();
       const panel = page.getByRole("dialog", { name: "Deuda y saneamiento" });
       await expect(panel.getByRole("heading", { name: "Saneamiento", exact: true })).toBeVisible();
       await expect(panel.getByText("Gestionado por FLIT en la prueba E2E.")).toBeVisible();

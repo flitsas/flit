@@ -41,8 +41,12 @@ export function exigirBackoffice() {
   test.skip(!BACKOFFICE.usuario || !BACKOFFICE.clave || !EMPRESA, "Faltan E2E_BACKOFFICE_USUARIO / E2E_BACKOFFICE_CLAVE / E2E_EMPRESA");
 }
 
-/** Login en el hub (OIDC) y vuelta a la app; mismo patrón que los specs existentes. */
-export async function entrar(page: Page, usuario: string, clave: string, destino = "/") {
+/**
+ * Login en el hub (OIDC) y vuelta a la app; mismo patrón que los specs existentes.
+ * Ola 2026-11-15 (FE-4): el destino por defecto pasa de «/» a «/diagnosticos», porque «/» es ahora el Dashboard. Quien
+ * quiera el Dashboard pasa `"/"` explícito.
+ */
+export async function entrar(page: Page, usuario: string, clave: string, destino = "/diagnosticos") {
   await page.goto(`${APP}${destino}`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);

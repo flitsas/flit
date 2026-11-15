@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { Placa } from "@flit/ui/Placa";
+import { formatoEntero } from "@/lib/estadisticas/formato";
 import { TAMANOS_REPORTE, TOPE_DESPLAZAMIENTO } from "@/lib/reportes/catalogo";
 import { NOMBRE_REPORTE, VACIO, formatoCelda } from "@/lib/reportes/formato";
 import type { PaginaReporteDto, TipoReporte, ValorCelda } from "@/lib/reportes/tipos";
@@ -14,7 +15,8 @@ const NUMERICOS = new Set(["numero", "moneda", "porcentaje"]);
 /**
  * Tabla genérica del módulo de reportes (spec-ui §5.4): las columnas y filas salen de la respuesta (contrato §3–§4) y
  * cada celda se formatea por el tipo de su columna. `DataTable` + `Pagination` del kit con 25/50/100 filas (Q3); el
- * desplazamiento se detiene en 10 000 registros (`pagina × tamano ≤ 10 000`) y se pide acotar el filtro. Celdas largas
+ * desplazamiento se detiene en 10 000 registros (`pagina × tamano ≤ 10 000`): el pie cuenta el total real, una página
+ * más allá del tope se lleva a la última alcanzable y una nota dice cuántos se muestran y pide acotar el filtro. Celdas largas
  * truncadas con `title`; placas con `Placa`. Exporta y filtra el módulo, no la tabla.
  */
 export function TablaReporte({
@@ -57,6 +59,8 @@ export function TablaReporte({
   const filas = useMemo<Fila[]>(() => (pagina?.filas ?? []).map((f, i) => ({ ...f, __clave: `${pagina?.pagina ?? 1}-${i}` })), [pagina]);
   const total = pagina?.total ?? 0;
   const alcanzable = Math.min(total, Math.floor(TOPE_DESPLAZAMIENTO / tamano) * tamano);
+  // Auditoría UI UA-5: la paginación cuenta el total real (coherente con el encabezado) y no pasa del tope de 10 000.
+  const paginaMaxima = Math.max(1, Math.ceil(alcanzable / tamano));
 
   return (
     <div className="flex flex-col gap-2">
@@ -71,14 +75,16 @@ export function TablaReporte({
         pagination={{
           page: pagina?.pagina ?? 1,
           pageSize: tamano,
-          totalCount: alcanzable,
-          onPageChange: onPagina,
+          totalCount: total,
+          onPageChange: (p) => onPagina(Math.min(p, paginaMaxima)),
           onPageSizeChange: onTamano,
           pageSizeOptions: TAMANOS_REPORTE,
         }}
       />
       {!cargando && total > alcanzable ? (
-        <p className="text-xs text-[color:var(--di-text-secondary)]">Acota el filtro para ver más registros</p>
+        <p className="text-xs text-[color:var(--di-text-secondary)]">
+          Se muestran los primeros {formatoEntero(alcanzable)} de {formatoEntero(total)} registros. Acota el filtro para ver más.
+        </p>
       ) : null}
     </div>
   );

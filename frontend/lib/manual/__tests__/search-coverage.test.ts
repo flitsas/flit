@@ -113,6 +113,19 @@ const CASOS: { pregunta: string; perfil: ManualProfile; slug: string }[] = [
   { pregunta: "bandeja de saneamientos tomar", perfil: "superadmin", slug: "6-diagnostico/11-saneamiento-gestion-flit" },
   { pregunta: "cerrar como saneado o no procede", perfil: "superadmin", slug: "6-diagnostico/11-saneamiento-gestion-flit" },
   { pregunta: "qué significa novedad en el semáforo", perfil: "gestor", slug: "6-diagnostico/12-estados-y-preguntas" },
+  // HU #14580 — Dashboard, Reportes, navegación y cambios de la ola en Diagnóstico
+  { pregunta: "dashboard de diagnóstico", perfil: "gestor", slug: "6-diagnostico/13-dashboard" },
+  { pregunta: "qué mide cada indicador del dashboard", perfil: "gestor", slug: "6-diagnostico/13-dashboard" },
+  { pregunta: "tasa de éxito y tiempo promedio de consulta", perfil: "gestor", slug: "6-diagnostico/13-dashboard" },
+  { pregunta: "reportes de diagnóstico", perfil: "gestor", slug: "6-diagnostico/14-reportes" },
+  { pregunta: "exportar reporte de diagnóstico a excel o pdf", perfil: "gestor", slug: "6-diagnostico/14-reportes" },
+  { pregunta: "datos personales ley 1581 en los reportes", perfil: "gestor", slug: "6-diagnostico/14-reportes" },
+  { pregunta: "máximo de registros para exportar", perfil: "gestor", slug: "6-diagnostico/14-reportes" },
+  { pregunta: "vista global de todas las compañías en diagnóstico", perfil: "superadmin", slug: "6-diagnostico/15-vista-global-flit" },
+  { pregunta: "reporte de consumo por compañía", perfil: "superadmin", slug: "6-diagnostico/15-vista-global-flit" },
+  { pregunta: "menú acciones de la fila del tablero", perfil: "gestor", slug: "6-diagnostico/4-tablero-y-dictamen" },
+  { pregunta: "cargar vehículos a un diagnóstico sin lanzar", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
+  { pregunta: "dónde quedó el listado de diagnósticos", perfil: "gestor", slug: "6-diagnostico/2-inicio-y-vehiculos" },
 ];
 
 describe("manual/search-coverage (HU-H)", () => {

@@ -225,6 +225,18 @@ public static class EscenariosDeFuga
             await Reportes.Catalogo.ReportesDePrueba.LoteAsync(empresa, [new(placa, Propietarios: [new("CC", documento)])], ct);
             return new Sembrado(Reportes.Catalogo.ReportesDePrueba.Ruta("vehiculos"), [placa, documento], Exclusivos: [documento]);
         }),
+        new EscenarioDeFuga(RutaReporte + "/excel", async (empresa, ct) =>
+        {
+            var (placa, documento) = DePrueba(empresa);
+            await Reportes.Catalogo.ReportesDePrueba.LoteAsync(empresa, [new(placa, Propietarios: [new("CC", documento)])], ct);
+            return new Sembrado(Reportes.Catalogo.ReportesDePrueba.Ruta("vehiculos", sufijo: "/excel"), [placa, documento], Exclusivos: [documento]);
+        }, Reportes.ExcelDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaReporte + "/pdf", async (empresa, ct) =>
+        {
+            var (placa, documento) = DePrueba(empresa);
+            await Reportes.Catalogo.ReportesDePrueba.LoteAsync(empresa, [new(placa, Propietarios: [new("CC", documento)])], ct);
+            return new Sembrado(Reportes.Catalogo.ReportesDePrueba.Ruta("vehiculos", sufijo: "/pdf"), [placa, documento], Exclusivos: [documento]);
+        }, Reportes.PdfDePrueba.TextoAsync),
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
         new EscenarioDeFuga(RutaSesion, (empresa, _) =>
             Task.FromResult(new Sembrado($"{RutaSesion}?empresa={empresa.Id}", [empresa.Id.ToString()]))),

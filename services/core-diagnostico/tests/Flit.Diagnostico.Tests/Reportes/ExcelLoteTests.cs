@@ -718,6 +718,9 @@ internal sealed class LibroLeido(Dictionary<string, List<string[]>> hojas, HashS
 
     public bool ComoTextoLiteral(string hoja, int fila, string columna) => literales.Contains((hoja, fila, IndiceColumna(hoja, columna)));
 
+    /// <summary>¿La celda (fila y columna base 0) va como texto literal (quotePrefix)? Para hojas cuyo encabezado no está en la fila 0.</summary>
+    public bool EsLiteral(string hoja, int fila, int columna) => literales.Contains((hoja, fila, columna));
+
     private int IndiceColumna(string hoja, string columna)
     {
         var indice = Array.IndexOf(Hojas[hoja][0], columna);

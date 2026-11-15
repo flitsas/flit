@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { ModuloReportes } from "@/components/reportes/ModuloReportes";
 import { catalogoBackoffice, catalogoCompania, paginaVehiculos } from "@/lib/reportes/__tests__/datosReportes";
 import { AHORA } from "@/lib/estadisticas/__tests__/datos";
+import { MENSAJE_RANGO_GENERICO } from "@/lib/estadisticas/periodo";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: <ModuloReportes vistaGlobal={capacidades.verEstadisticasGlobales} puedeDescargar={capacidades.descargarReportes} />
@@ -184,5 +185,75 @@ describe("ModuloReportes — cuatro estados", () => {
     simularApi({ "GET /reportes": () => new Promise<Response>(() => {}) });
     render(<ModuloReportes vistaGlobal={false} puedeDescargar />);
     expect(screen.getByRole("status", { name: "Cargando reportes…" })).toBeInTheDocument();
+  });
+});
+
+describe("ModuloReportes — correcciones de la revisión de código (CR-FE-2, 4, 5 y 11)", () => {
+  it("CR-FE-2: 404 EMPRESA_NO_ENCONTRADA explica el motivo y «Ver todas las compañías» limpia ?empresa= y pide /global", async () => {
+    h.params = new URLSearchParams(`empresa=${E1}`);
+    const fetchMock = simularApi({
+      "GET /backoffice/reportes": () => Response.json(catalogoBackoffice()),
+      "GET /backoffice/reportes/vehiculos": () => Response.json({ code: "EMPRESA_NO_ENCONTRADA", error: "detalle interno" }, { status: 404 }),
+      "GET /backoffice/reportes/vehiculos/global": () => Response.json(paginaVehiculos({ ambito: "BACKOFFICE_GLOBAL" })),
+      "GET /backoffice/empresas": empresas,
+    });
+    render(<ModuloReportes vistaGlobal puedeDescargar />);
+    expect(await screen.findByText("Esa compañía no tiene Diagnóstico activo.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ver todas las compañías" }));
+    await waitFor(() => expect(query(fetchMock, "/backoffice/reportes/vehiculos/global")).toHaveLength(1));
+    expect(String(h.replace.mock.calls.at(-1)?.[0])).not.toContain("empresa=");
+    expect(await screen.findByRole("table", { name: "Vehículos diagnosticados" })).toBeInTheDocument();
+  });
+
+  it("CR-FE-2: 503 IDENTIDAD_NO_DISPONIBLE muestra su texto fijo con «Reintentar»", async () => {
+    simularApi({
+      "GET /backoffice/reportes": () => Response.json(catalogoBackoffice()),
+      "GET /backoffice/reportes/vehiculos/global": () => Response.json({ code: "IDENTIDAD_NO_DISPONIBLE", error: "x" }, { status: 503 }),
+      "GET /backoffice/empresas": empresas,
+    });
+    render(<ModuloReportes vistaGlobal puedeDescargar />);
+    expect(await screen.findByText("El directorio de compañías no responde. Intenta de nuevo en unos segundos.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+
+  it("CR-FE-4: un 400 RANGO_INVALIDO con el rango válido en el cliente usa el texto genérico junto a «Hasta»", async () => {
+    simularApi({
+      "GET /reportes": () => Response.json(catalogoCompania()),
+      "GET /reportes/vehiculos": () => Response.json({ code: "RANGO_INVALIDO", error: "x" }, { status: 400 }),
+    });
+    render(<ModuloReportes vistaGlobal={false} puedeDescargar />);
+    expect(await screen.findByText(MENSAJE_RANGO_GENERICO)).toBeInTheDocument();
+    expect(screen.queryByText("El rango no puede superar un año")).not.toBeInTheDocument();
+  });
+
+  it("CR-FE-5: el error de la última exportación se limpia al cambiar los filtros", async () => {
+    simularApi({
+      "GET /reportes": () => Response.json(catalogoCompania()),
+      "GET /reportes/vehiculos": () => Response.json(paginaVehiculos()),
+      "GET /reportes/vehiculos/excel": () => Response.json({ code: "EXPORTACION_EN_CURSO", error: "x" }, { status: 429, headers: { "Retry-After": "10" } }),
+    });
+    render(<ModuloReportes vistaGlobal={false} puedeDescargar />);
+    await screen.findByRole("table", { name: "Vehículos diagnosticados" });
+    fireEvent.click(screen.getByRole("button", { name: /Exportar Excel/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ya hay una exportación en curso");
+    fireEvent.click(screen.getByRole("button", { name: "Masivo" }));
+    await waitFor(() => expect(screen.queryByText(/Ya hay una exportación en curso/)).not.toBeInTheDocument());
+  });
+
+  it("CR-FE-11: la lista de compañías se pide una sola vez aunque se cambie de pestaña", async () => {
+    const fetchMock = simularApi({
+      "GET /backoffice/reportes": () => Response.json(catalogoBackoffice()),
+      "GET /backoffice/reportes/vehiculos/global": () => Response.json(paginaVehiculos({ ambito: "BACKOFFICE_GLOBAL" })),
+      "GET /backoffice/reportes/consultas/global": () => Response.json({ ...paginaVehiculos({ ambito: "BACKOFFICE_GLOBAL" }), tipo: "consultas", total: 0, filas: [] }),
+      "GET /backoffice/empresas": empresas,
+    });
+    render(<ModuloReportes vistaGlobal puedeDescargar />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Compañía" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("tab", { name: "Consultas a fuentes" }));
+    await waitFor(() => expect(query(fetchMock, "/backoffice/reportes/consultas/global")).toHaveLength(1));
+    fireEvent.click(screen.getByRole("tab", { name: "Vehículos diagnosticados" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Compañía" })).not.toBeDisabled());
+    expect(llamadas(fetchMock, "GET", "/backoffice/empresas")).toHaveLength(1);
   });
 });

@@ -10,6 +10,13 @@ import {
 } from "@/lib/reportes/api";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 import { catalogoBackoffice, catalogoCompania, paginaVehiculos } from "./datosReportes";
+import { MENSAJE_RANGO_GENERICO } from "@/lib/estadisticas/periodo";
+
+const auth = vi.hoisted(() => ({ renovando: false }));
+vi.mock("@flit/auth/client", async (original) => ({
+  ...(await original<typeof import("@flit/auth/client")>()),
+  isReauthenticating: () => auth.renovando,
+}));
 
 // Uso de ejemplo: obtenerCatalogo(backoffice) → GET /reportes o /backoffice/reportes; obtenerReporte(ambito, "vehiculos",
 // { desde, hasta, filtros, placa, pagina, tamano }) → PaginaReporteDto; descargarReporte(ambito, tipo, consulta, "excel")
@@ -28,6 +35,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  auth.renovando = false;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -104,5 +112,22 @@ describe("descargarReporte — Blob, nombre del Content-Disposition y revokeObje
     });
     const error = await descargarReporte({ tipo: "COMPANIA" }, "vehiculos", consulta, "excel").catch((e: unknown) => e);
     expect(mensajeDescargaReporte(error, "excel")).toBe("Ya hay una exportación en curso. Espera 10 segundos e intenta de nuevo.");
+  });
+});
+
+describe("descargarReporte — reautenticación y RANGO_INVALIDO (CR-FE-4, CR-FE-6)", () => {
+  it("durante la reautenticación rechaza con un error tipado (el botón no se queda en «Generando…») y no pide nada", async () => {
+    auth.renovando = true;
+    const fetchMock = simularApi({});
+    const error = await descargarReporte({ tipo: "COMPANIA" }, "vehiculos", consulta, "excel").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ErrorDescargaReporte);
+    expect((error as ErrorDescargaReporte).code).toBe("SESION_RENOVANDO");
+    expect(mensajeDescargaReporte(error, "excel")).toBe("Tu sesión se está renovando. Intenta de nuevo en unos segundos.");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(descargados).toEqual([]);
+  });
+
+  it("un 400 RANGO_INVALIDO de la exportación usa el texto genérico del periodo, no solo «más de un año»", () => {
+    expect(mensajeDescargaReporte(new ErrorDescargaReporte(400, "x", "RANGO_INVALIDO"), "pdf")).toBe(MENSAJE_RANGO_GENERICO);
   });
 });

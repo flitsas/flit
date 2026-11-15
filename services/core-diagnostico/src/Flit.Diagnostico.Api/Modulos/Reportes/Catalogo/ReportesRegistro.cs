@@ -31,6 +31,9 @@ internal static class ReportesRegistro
         services.AddScoped<MotorReportes>();
         // BE-4: el reporte de consumo (solo backoffice) y las compañías de la petición.
         Backoffice.ReportesBackofficeEndpoints.AddServicios(services);
+        // BE-3: exportación a Excel y PDF con el freno de concurrencia del proceso (singleton, compartido con el backoffice).
+        services.AddSingleton<FrenoExportaciones>();
+        services.AddScoped<ExportadorReportes>();
         return services;
     }
 

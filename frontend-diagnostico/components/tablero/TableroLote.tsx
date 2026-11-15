@@ -325,7 +325,7 @@ export function TableroLote({
   const actualizarSaneamientoFila = (vehiculoId: string, saneamientoFila: FilaVehiculo["saneamiento"]) =>
     actualizar((g) => ({ ...g, vehiculos: g.vehiculos.map((f) => (f.id === vehiculoId ? { ...f, saneamiento: saneamientoFila } : f)) }));
 
-  // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (chip del saneamiento + desplegable + mensajes).
+  // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (desplegable + mensajes; UA-1 retiró el chip del saneamiento).
   const accionVehiculo =
     puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda
       ? (v: FilaVehiculo) =>
