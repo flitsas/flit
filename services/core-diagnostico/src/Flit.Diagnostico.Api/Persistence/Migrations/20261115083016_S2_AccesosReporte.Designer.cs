@@ -2796,6 +2796,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_accesos_reporte_filas", "filas >= 0");
 
+                            t.HasCheckConstraint("ck_accesos_reporte_filtros", "jsonb_typeof(filtros) = 'object' AND octet_length(filtros::text) <= 1024 AND NOT jsonb_path_exists(filtros, 'strict $.keyvalue() ? (!(@.key like_regex \"^[a-z_]{1,32}$\"))', '{}', true) AND NOT jsonb_path_exists(filtros, 'strict $.keyvalue() ? (@.key == \"placa_filtrada\" && !(@.value.type() == \"boolean\" && @.value == true))', '{}', true) AND NOT jsonb_path_exists(filtros, 'strict $.keyvalue() ? (@.key != \"placa_filtrada\" && @.value.type() != \"array\")', '{}', true) AND NOT jsonb_path_exists(filtros, 'strict $.* ? (@.type() == \"array\")[*] ? (@.type() != \"string\" || !(@ like_regex \"^[A-Z0-9_]{1,32}$\"))', '{}', true)");
+
                             t.HasCheckConstraint("ck_accesos_reporte_formato", "formato IN ('PANTALLA', 'XLSX', 'PDF')");
 
                             t.HasCheckConstraint("ck_accesos_reporte_rango", "desde <= hasta");

@@ -103,7 +103,9 @@ public sealed class EsquemaS1Tests
         await using var db = DosEmpresas.Contexto(api.BaseDeDatos, null);
         var error = (await FluentActions.Awaiting(() => db.GetService<IMigrator>().MigrateAsync(MigracionAnterior, ct)).Should().ThrowAsync<PostgresException>()).Which;
         error.MessageText.Should().Contain("S1_Saneamiento");
-        (await db.Database.GetPendingMigrationsAsync(ct)).Should().BeEmpty("el rollback fallido no bajó nada");
+        await RollbackBloqueado.DebeDetenerseEnAsync(db, "20261114171738_S1_Saneamiento", ct);
+        (await ListaAsync(conexion, $"SELECT id::text FROM diagnostico.saneamientos WHERE id = '{primero}'", ct))
+            .Should().ContainSingle("el rollback fallido no borró el saneamiento");
     }
 
     private static async Task<(string SqlState, string? Constraint)> Violacion(Func<Task> accion)

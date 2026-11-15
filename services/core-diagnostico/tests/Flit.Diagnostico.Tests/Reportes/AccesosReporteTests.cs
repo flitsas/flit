@@ -40,8 +40,65 @@ public sealed class AccesosReporteTests
     private static readonly string[] Checks =
     [
         "ck_accesos_reporte_alcance", "ck_accesos_reporte_formato", "ck_accesos_reporte_tipo", "ck_accesos_reporte_rango",
-        "ck_accesos_reporte_filas", "ck_accesos_reporte_empresas", "ck_accesos_reporte_empresa_consultada",
+        "ck_accesos_reporte_filas", "ck_accesos_reporte_empresas", "ck_accesos_reporte_empresa_consultada", "ck_accesos_reporte_filtros",
     ];
+
+    /// <summary>Formas de <c>filtros</c> que el CHECK rechaza: no-objeto, valor de placa, texto libre, anidados, claves raras, tamaño.</summary>
+    public static TheoryData<string> FiltrosInvalidos =>
+    [
+        "[]",
+        "\"EXPRESS\"",
+        """{"placa": "TST123"}""",
+        """{"placa_filtrada": "TST123"}""",
+        """{"placa_filtrada": false}""",
+        """{"documento": "1020304050"}""",
+        """{"Estado": ["SANEADO"]}""",
+        """{"estado": ["texto libre"]}""",
+        """{"estado": [1]}""",
+        """{"estado": [["SANEADO"]]}""",
+        """{"estado": {"valor": "SANEADO"}}""",
+        """{"estado": true}""",
+        "{\"estado\": [" + string.Join(", ", Enumerable.Range(0, 40).Select(i => $"\"CODIGO_LARGO_DE_RELLENO_{i:D2}\"")) + "]}",
+    ];
+
+    // CR-BE-1 (ADR-0072 §(d) criterio 7) — la base acepta lo que escribe el registro: vacío, y el peor caso (toda la lista blanca más la
+    // placa). Cualquier otra forma la rechaza ck_accesos_reporte_filtros, aunque llegue por SQL directo (el Theory de abajo).
+    [Fact]
+    public async Task BE0_S2_check_de_filtros_admite_la_lista_blanca_completa()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var completo = RegistroAccesosReporte.FiltrosJson(new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["modalidad"] = ["EXPRESS", "MASIVO"],
+            ["tipo_analisis"] = ["SIMPLE", "CON_ANALISIS"],
+            ["veredicto"] = ["VIABLE", "BLOQUEADO", "SIN_DICTAMEN"],
+            ["fuente"] = ["RUNT", "RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "AVALUO", "IMPUESTO_DEPARTAMENTAL"],
+            ["estado"] = ["PENDIENTE", "EN_CURSO", "COMPLETADO", "ERROR", "NA", "SOLICITADO", "EN_GESTION", "SANEADO", "NO_PROCEDE", "ANULADO", "ENVIADO", "CREADO", "OMITIDO", "FALLIDO"],
+            ["placa"] = ["TST123"],
+        });
+
+        await InsertarFiltrosAsync(conexion, "{}", ct);
+        await InsertarFiltrosAsync(conexion, completo, ct);
+
+        completo.Should().Contain("\"placa_filtrada\":true").And.NotContain("TST123");
+    }
+
+    [Theory]
+    [MemberData(nameof(FiltrosInvalidos))]
+    public async Task BE0_S2_check_de_filtros_rechaza_formas_fuera_de_la_lista_blanca(string filtros)
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+
+        var error = (await FluentActions.Awaiting(() => InsertarFiltrosAsync(conexion, filtros, ct)).Should().ThrowAsync<PostgresException>()).Which;
+
+        (error.SqlState, error.ConstraintName).Should().Be((PostgresErrorCodes.CheckViolation, "ck_accesos_reporte_filtros"));
+    }
 
     // SP-8 — la migración crea la tabla con sus columnas, CHECK, índice y comentarios @pii, y el Down la retira.
     [Fact]
@@ -223,6 +280,20 @@ public sealed class AccesosReporteTests
         DateOnly? hasta = null) =>
         new(alcance, tipo, formato, desde ?? new DateOnly(2026, 10, 17), hasta ?? new DateOnly(2026, 11, 15),
             filtros ?? new Dictionary<string, IReadOnlyList<string>>(), filas, Empresas: 1, empresaConsultada);
+
+    /// <summary>Una fila válida salvo, quizá, <c>filtros</c> (el valor va como parámetro jsonb).</summary>
+    private static async Task InsertarFiltrosAsync(NpgsqlConnection conexion, string filtros, CancellationToken ct)
+    {
+        await using var insertar = new NpgsqlCommand(
+            "INSERT INTO diagnostico.accesos_reporte (id, tenant_id, usuario_id, alcance, tipo_reporte, formato, desde, hasta, filtros, filas, empresas) " +
+            "VALUES (@id, @t, @u, 'COMPANIA', 'vehiculos', 'PANTALLA', DATE '2026-11-01', DATE '2026-11-10', @f::jsonb, 1, 1)",
+            conexion);
+        insertar.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        insertar.Parameters.AddWithValue("t", Guid.NewGuid());
+        insertar.Parameters.AddWithValue("u", Guid.NewGuid());
+        insertar.Parameters.AddWithValue("f", filtros);
+        await insertar.ExecuteNonQueryAsync(ct);
+    }
 
     private static async Task<List<string>> ListaAsync(NpgsqlConnection conexion, string sql, CancellationToken ct)
     {
