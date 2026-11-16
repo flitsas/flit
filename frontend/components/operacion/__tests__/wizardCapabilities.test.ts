@@ -10,6 +10,7 @@ import {
   modalidadPorPartes,
   permiteAccionComplementaria,
   rolesDeActores,
+  rolesDeActoresEnPantalla,
   runtAvisoGravamenVariant,
   transformacionDelTipo,
   permiteGenerarImprontaAutomatica,
@@ -280,6 +281,23 @@ describe('vendedor que no se captura por formulario (ADR-0051)', () => {
     expect(caps.pideVendedor).toBe(true);
     expect(caps.vendedorCapturaPorFormulario).toBe(false);
     expect(rolesDeActores(caps)).toEqual(['comprador']);
+  });
+
+  // HU #14225 — con revealSellerForm (backend / TRASPASO_UNILATERAL) la pantalla SÍ incluye vendedor
+  // para mostrar datos y el selector de RL (#10937).
+  it('revealSellerForm añade vendedor a los roles en pantalla sin cambiar rolesDeActores', () => {
+    const caps = capacidadesEfectivas(UNILATERAL, 'TRASPASO');
+
+    expect(rolesDeActores(caps)).toEqual(['comprador']);
+    expect(rolesDeActoresEnPantalla(caps, false)).toEqual(['comprador']);
+    expect(rolesDeActoresEnPantalla(caps, true)).toEqual(['vendedor', 'comprador']);
+  });
+
+  it('revealSellerForm no duplica vendedor si el tipo ya lo captura por formulario', () => {
+    const caps = capacidadesEfectivas(TRASPASO, 'TRASPASO');
+
+    expect(rolesDeActoresEnPantalla(caps, true)).toEqual(['vendedor', 'comprador']);
+    expect(rolesDeActoresEnPantalla(caps, false)).toEqual(['vendedor', 'comprador']);
   });
 
   it('solo el propietario valida identidad y firma: el locatario no', () => {
