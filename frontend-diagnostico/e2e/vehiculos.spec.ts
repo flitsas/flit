@@ -169,6 +169,11 @@ test.describe("PS-3 pestaña Vehículos", () => {
     await test.step("C-7 / AC41 / AC42: 1280 y 360 con selección; Tab a 360; sin desplazamiento de página", async () => {
       await page.goto(`${APP}/diagnosticos?vista=vehiculos&placa=${prefijo}`);
       await casilla(page, V1).check();
+      // CR-2 (WCAG 1.4.3): axe con la fila de la bandera «Solicitado» en hover, para que el gate no dependa de dónde quedó el
+      // puntero (el hover --table-row-hover es el fondo más exigente para esa bandera).
+      const filaBandera = page.locator("tbody tr").filter({ has: page.locator('[aria-pressed="true"][title="Clic para quitar la solicitud"]') }).first();
+      if (await filaBandera.count()) await filaBandera.hover({ position: { x: 4, y: 4 } });
+      else await page.locator("tbody tr").first().hover({ position: { x: 4, y: 4 } });
       await revisarTemas(page, "vehiculos-1280", { captura: "C-7" });
       await sinDesbordeHorizontal(page, "vehiculos-1280");
       await ancho(page, 360);
