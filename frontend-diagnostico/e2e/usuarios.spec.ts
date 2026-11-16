@@ -346,9 +346,19 @@ test.describe("HU #14588 Usuarios de Diagnóstico", () => {
     await revisarTemasReq(page, "usuarios-companias-1280", { captura: "US-3" });
 
     const nombreEmpresa = MOCK ? EMPRESA_DEMO.nombre : ((await companias.getByRole("row").nth(1).getByRole("cell").first().textContent()) ?? "").trim();
+
+    // O-1: el texto buscado (nombre o NIT, que puede ser una cédula) llega a la API pero no a la URL de la pantalla.
+    const buscarCompania = page.getByRole("textbox", { name: "Buscar por nombre o NIT" });
+    const conBusqueda = page.waitForRequest(
+      (r) => new URL(r.url()).pathname.endsWith("/backoffice/usuarios/empresas") && new URL(r.url()).searchParams.get("busqueda") === nombreEmpresa,
+    );
+    await buscarCompania.fill(nombreEmpresa);
+    await conBusqueda;
+    expect(new URL(page.url()).searchParams.has("busqueda")).toBe(false);
     await page.getByRole("link", { name: `Gestionar usuarios de ${nombreEmpresa}` }).click();
     await page.waitForURL((u) => u.pathname === "/usuarios" && u.searchParams.has("empresa"));
     if (MOCK) expect(new URL(page.url()).searchParams.get("empresa")).toBe(EMPRESA_DEMO.id);
+    expect(new URL(page.url()).searchParams.has("busqueda")).toBe(false);
 
     // Paso 2: las lecturas van al grupo del backoffice; migas «Usuarios › Compañía».
     await expect.poll(() => deEmpresa.length, { message: "GET /backoffice/empresas/{empresa}/usuarios" }).toBeGreaterThan(0);
@@ -370,6 +380,9 @@ test.describe("HU #14588 Usuarios de Diagnóstico", () => {
     await migas.getByRole("link", { name: "Usuarios", exact: true }).click();
     await page.waitForURL((u) => u.pathname === "/usuarios" && !u.searchParams.has("empresa"));
     await expect(page.getByRole("link", { name: `Gestionar usuarios de ${nombreEmpresa}` })).toBeVisible();
+    // O-1: la búsqueda vuelve desde la pestaña (sessionStorage), no desde la URL.
+    await expect(buscarCompania).toHaveValue(nombreEmpresa);
+    expect(new URL(page.url()).searchParams.has("busqueda")).toBe(false);
     await capturar(page, SPEC, 16, "superadmin-vuelta-por-migas");
   });
 });

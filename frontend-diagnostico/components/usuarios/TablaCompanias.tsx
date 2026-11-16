@@ -28,16 +28,19 @@ const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 const IconoBuscar = iconoComo("buscar");
 const IconoEmpresas = iconoComo("empresas");
 
-/** Filtros de la tabla de compañías en la URL de /usuarios (sin `empresa`): para volver a ellos desde las migas. */
-export function consultaEmpresas(f: Pick<FiltrosEmpresas, "busqueda" | "usuarios">): URLSearchParams {
+/**
+ * Filtros de la tabla de compañías en la URL de /usuarios (sin `empresa`): para volver a ellos desde las migas. Solo
+ * códigos: el texto buscado (nombre o NIT, que puede ser una cédula) nunca va a la URL (O-1); vive en
+ * lib/usuarios/busquedaCompanias.
+ */
+export function consultaEmpresas(f: Pick<FiltrosEmpresas, "usuarios">): URLSearchParams {
   const q = new URLSearchParams();
-  if (f.busqueda.trim()) q.set("busqueda", f.busqueda.trim());
   if (f.usuarios) q.set("usuarios", f.usuarios);
   return q;
 }
 
-/** Destino de una compañía: /usuarios?empresa=<id> conservando los filtros del paso 1. */
-export function destinoEmpresa(id: string, f: Pick<FiltrosEmpresas, "busqueda" | "usuarios">): string {
+/** Destino de una compañía: /usuarios?empresa=<id> conservando los filtros por código del paso 1 (sin la búsqueda, O-1). */
+export function destinoEmpresa(id: string, f: Pick<FiltrosEmpresas, "usuarios">): string {
   const q = new URLSearchParams({ empresa: id });
   consultaEmpresas(f).forEach((v, k) => q.set(k, v));
   return `/usuarios?${q.toString()}`;

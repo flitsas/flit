@@ -73,6 +73,7 @@ beforeEach(() => {
   nav.replace.mockReset();
   nav.params = new URLSearchParams();
   sesionMock.actual = sesion();
+  window.sessionStorage.clear();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -265,7 +266,7 @@ describe("HU14588 PaginaUsuarios — SuperAdmin (spec-ui §10.2)", () => {
 
   it("con ?empresa usa el grupo del backoffice, migas «Usuarios › Compañía» y ofrece los dos roles", async () => {
     sesionMock.actual = sesion({ superAdmin: true });
-    nav.params = new URLSearchParams({ empresa: EMPRESA.id, busqueda: "demo" });
+    nav.params = new URLSearchParams({ empresa: EMPRESA.id, usuarios: "CON" });
     const f = simular({
       "GET /backoffice/usuarios/empresas": () =>
         Response.json({ pagina: 1, tamano: 20, total: 1, empresas: [{ ...EMPRESA, estado: "ACTIVA", usuarios_diagnostico: 4, administradores_diagnostico: 1 }] }),
@@ -279,7 +280,7 @@ describe("HU14588 PaginaUsuarios — SuperAdmin (spec-ui §10.2)", () => {
     const migas = screen.getByRole("navigation", { name: "Migas de pan" });
     const volver = within(migas).getByRole("link", { name: "Usuarios" });
     expect(new URL(volver.getAttribute("href")!, "http://x").searchParams.has("empresa")).toBe(false);
-    expect(new URL(volver.getAttribute("href")!, "http://x").searchParams.get("busqueda")).toBe("demo");
+    expect(new URL(volver.getAttribute("href")!, "http://x").searchParams.get("usuarios")).toBe("CON");
     await waitFor(() => expect(migas.querySelector('[aria-current="page"]')).toHaveTextContent("Compañía Demo"));
     fireEvent.click(screen.getByRole("button", { name: "Invitar usuario" }));
     const dialogo = screen.getByRole("dialog", { name: "Invitar usuario" });
@@ -300,6 +301,90 @@ describe("HU14588 PaginaUsuarios — SuperAdmin (spec-ui §10.2)", () => {
 });
 
 // D-6: la cabecera del backoffice sale de `empresa` de GET /backoffice/empresas/{id}/usuarios; la lista pagina en el servidor.
+// O-1 (seguridad, Habeas Data): el texto buscado en compañías (nombre o NIT; un NIT de persona natural es una cédula) no va
+// a la URL —ni historial, ni Referer, ni logs—. Se guarda en sessionStorage de la pestaña y se restaura al volver por la miga
+// o con atrás/adelante. Datos sintéticos.
+describe("HU14588 PaginaUsuarios — O-1 búsqueda de compañías fuera de la URL", () => {
+  const NIT = "900000001";
+  const rutasSuperAdmin = () =>
+    simular({
+      "GET /backoffice/usuarios/empresas": () =>
+        Response.json({ pagina: 1, tamano: 20, total: 1, empresas: [{ ...EMPRESA, estado: "ACTIVA", usuarios_diagnostico: 4, administradores_diagnostico: 1 }] }),
+      [`GET /backoffice/empresas/${EMPRESA.id}/usuarios`]: () =>
+        Response.json({ pagina: 1, tamano: 20, total: USUARIOS.length, roles_asignables: ["usuario_diagnostico"], usuarios: USUARIOS, empresa: EMPRESA }),
+    });
+
+  it("tras escribir la búsqueda, ni la URL ni el enlace a la compañía la llevan; al volver por la miga o con atrás se restaura", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    const f = rutasSuperAdmin();
+    const companias = render(<PaginaUsuarios />);
+    await screen.findByRole("link", { name: "Gestionar usuarios de Compañía Demo" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Buscar por nombre o NIT" }), { target: { value: NIT } });
+    // La API sí recibe la búsqueda (contrato §3.3); la URL de la pantalla, no.
+    await waitFor(() => expect(f.mock.calls.some(([u]) => new URL(String(u), "http://x").searchParams.get("busqueda") === NIT)).toBe(true));
+    expect(window.location.search).not.toContain(NIT);
+    for (const [url] of nav.replace.mock.calls) expect(String(url)).not.toContain(NIT);
+    for (const [url] of nav.push.mock.calls) expect(String(url)).not.toContain(NIT);
+    const destino = (await screen.findByRole("link", { name: "Gestionar usuarios de Compañía Demo" })).getAttribute("href")!;
+    expect(destino).not.toContain(NIT);
+    companias.unmount();
+
+    // Paso 2: /usuarios?empresa=<id>; la miga «Usuarios» tampoco lleva el texto.
+    nav.params = new URL(destino, "http://x").searchParams;
+    const deEmpresa = render(<PaginaUsuarios />);
+    const migas = await screen.findByRole("navigation", { name: "Migas de pan" });
+    const volver = within(migas).getByRole("link", { name: "Usuarios" }).getAttribute("href")!;
+    expect(volver).not.toContain(NIT);
+    deEmpresa.unmount();
+
+    // Vuelta (miga o atrás): /usuarios sin `empresa`; la caja y la petición recuperan la búsqueda.
+    nav.params = new URL(volver, "http://x").searchParams;
+    f.mockClear();
+    render(<PaginaUsuarios />);
+    expect(await screen.findByRole("textbox", { name: "Buscar por nombre o NIT" })).toHaveValue(NIT);
+    await waitFor(() => expect(f.mock.calls.some(([u]) => new URL(String(u), "http://x").searchParams.get("busqueda") === NIT)).toBe(true));
+    expect(window.location.search).not.toContain(NIT);
+  });
+
+  it("vaciar la caja borra la búsqueda guardada: al volver queda vacía", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    rutasSuperAdmin();
+    const primera = render(<PaginaUsuarios />);
+    await screen.findByRole("link", { name: "Gestionar usuarios de Compañía Demo" });
+    const caja = screen.getByRole("textbox", { name: "Buscar por nombre o NIT" });
+    fireEvent.change(caja, { target: { value: NIT } });
+    await waitFor(() => expect(window.sessionStorage.length).toBeGreaterThan(0));
+    fireEvent.change(caja, { target: { value: "" } });
+    await waitFor(() => expect(window.sessionStorage.length).toBe(0));
+    primera.unmount();
+    render(<PaginaUsuarios />);
+    expect(await screen.findByRole("textbox", { name: "Buscar por nombre o NIT" })).toHaveValue("");
+  });
+
+  it("la búsqueda guardada es de la persona de la sesión: otra persona en la misma pestaña no la ve", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    rutasSuperAdmin();
+    const primera = render(<PaginaUsuarios />);
+    await screen.findByRole("link", { name: "Gestionar usuarios de Compañía Demo" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Buscar por nombre o NIT" }), { target: { value: NIT } });
+    await waitFor(() => expect(window.sessionStorage.length).toBeGreaterThan(0));
+    primera.unmount();
+    const otra = sesion({ superAdmin: true });
+    sesionMock.actual = { ...otra, usuario: { ...otra.usuario, id: "00000000-0000-4000-8000-0000000000bb" } };
+    render(<PaginaUsuarios />);
+    expect(await screen.findByRole("textbox", { name: "Buscar por nombre o NIT" })).toHaveValue("");
+  });
+
+  it("una URL antigua con ?busqueda se limpia: la búsqueda pasa al almacén de la pestaña y la URL queda sin ella", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    nav.params = new URLSearchParams({ busqueda: NIT, usuarios: "CON" });
+    rutasSuperAdmin();
+    render(<PaginaUsuarios />);
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/usuarios?usuarios=CON", { scroll: false }));
+    expect(await screen.findByRole("textbox", { name: "Buscar por nombre o NIT" })).toHaveValue(NIT);
+  });
+});
+
 describe("HU14588 PaginaUsuarios — D-6 cabecera de la compañía y paginación", () => {
   const conEmpresa = (empresa: unknown) => () =>
     Response.json({

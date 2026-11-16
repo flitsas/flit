@@ -15,6 +15,7 @@ import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ENLACE_ACCION_CLS, TARJETA_
 import { ApiError } from "@/lib/api";
 import { puedeGestionarUsuarios, type SesionDiagnostico } from "@/lib/sesion";
 import { accesoNegadoUsuarios, acotarPaginacion, listarUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
+import { guardarBusquedaCompanias, useBusquedaCompanias } from "@/lib/usuarios/busquedaCompanias";
 import {
   AVISO_INVITACION,
   TAMANO_POR_DEFECTO,
@@ -37,15 +38,18 @@ import { EsqueletoTabla, TablaUsuarios } from "./TablaUsuarios";
 const IconoBuscar = iconoComo("buscar");
 const IconoUsuarios = iconoComo("usuarios");
 
-/** Filtros de la tabla de compañías desde la URL (solo códigos y el texto buscado, SP-21). */
-function filtrosEmpresasDe(params: URLSearchParams): FiltrosEmpresas {
+/**
+ * Filtros de la tabla de compañías: los códigos salen de la URL (SP-21) y el texto buscado del almacén de la pestaña,
+ * nunca de la URL (O-1: un NIT de persona natural es una cédula).
+ */
+function filtrosEmpresasDe(params: URLSearchParams, busqueda: string): FiltrosEmpresas {
   const usuarios = params.get("usuarios");
   const pagina = Number.parseInt(params.get("pagina") ?? "", 10);
   const tamano = Number.parseInt(params.get("tamano") ?? "", 10);
   // CR-5: una URL editada a mano no puede pedir fuera del contrato (tamano 1..100, pagina ≤ floor(10 000 / tamano)).
   const acotada = acotarPaginacion(Number.isFinite(pagina) ? pagina : 1, Number.isFinite(tamano) ? tamano : TAMANO_POR_DEFECTO);
   return {
-    busqueda: params.get("busqueda") ?? "",
+    busqueda,
     usuarios: usuarios === "CON" || usuarios === "SIN" ? (usuarios as FiltroConUsuarios) : null,
     ...acotada,
   };
@@ -73,15 +77,29 @@ export function PaginaUsuarios() {
   const { sesion } = useSesion();
   const puede = puedeGestionarUsuarios(sesion?.capacidades);
   const sinAcceso = sesion !== null && !puede;
+  const usuario = sesion?.usuario.id ?? null;
+  const busqueda = useBusquedaCompanias(usuario);
 
   useEffect(() => {
     if (sinAcceso) router.replace("/403?code=SIN_PERMISO");
   }, [sinAcceso, router]);
 
+  // O-1: una URL anterior a la corrección (marcador, historial) aún puede traer ?busqueda. Se pasa al almacén de la
+  // pestaña y se quita de la barra de direcciones; los filtros nunca la leen de la URL.
+  const busquedaEnUrl = usuario ? params.get("busqueda") : null;
+  useEffect(() => {
+    if (busquedaEnUrl === null) return;
+    guardarBusquedaCompanias(usuario, busquedaEnUrl);
+    const q = new URLSearchParams(params.toString());
+    q.delete("busqueda");
+    const texto = q.toString();
+    router.replace(texto ? `/usuarios?${texto}` : "/usuarios", { scroll: false });
+  }, [busquedaEnUrl, usuario, params, router]);
+
   if (!sesion || !puede) return null;
   const superAdmin = sesion.usuario.esSuperAdmin === true;
   const empresa = superAdmin ? params.get("empresa") : null;
-  const filtrosEmpresas = filtrosEmpresasDe(new URLSearchParams(params.toString()));
+  const filtrosEmpresas = filtrosEmpresasDe(new URLSearchParams(params.toString()), busqueda);
 
   if (superAdmin && !empresa) {
     return (
@@ -89,7 +107,10 @@ export function PaginaUsuarios() {
         <CabeceraModulo titulo="Usuarios" descripcion="Compañías con Diagnóstico activo" icono="colaboradores" />
         <TablaCompanias
           filtros={filtrosEmpresas}
-          onCambiar={(cambios) => router.replace(urlEmpresas({ ...filtrosEmpresas, ...cambios }), { scroll: false })}
+          onCambiar={(cambios) => {
+            if (cambios.busqueda !== undefined) guardarBusquedaCompanias(usuario, cambios.busqueda);
+            router.replace(urlEmpresas({ ...filtrosEmpresas, ...cambios }), { scroll: false });
+          }}
         />
       </>
     );
