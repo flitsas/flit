@@ -56,7 +56,7 @@ export function ZonaArchivo({ archivo, onElegir, onQuitar, cargando, disabled = 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={AYUDA_CLS}>Una fila por vehículo: placa o VIN y, si lo tienes, el documento del locatario.</p>
+        <p className={AYUDA_CLS}>Una fila por vehículo: placa o VIN y, si lo tienes, el documento del propietario actual (opcional).</p>
         <a href={URL_PLANTILLA} download className={BOTON_SECUNDARIO_CLS}>
           <Icono nombre="nube-bajar" className="h-4 w-4" />
           Descargar plantilla

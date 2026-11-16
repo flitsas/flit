@@ -1,5 +1,6 @@
 // Diagnóstico Express (HU #13755, F02-H8). Tipos y llamadas del contrato contracts/openapi/diagnostico.v1.yaml (esquemas
-// ExpressEntrada, ExpressCreado, EstimadoExpress y EstimadoFuente), en snake_case. El documento del locatario solo vive
+// ExpressEntrada, ExpressCreado, EstimadoExpress y EstimadoFuente), en snake_case. HU #14585 (contrato §1, C1): el documento
+// declarado es el del propietario actual (tipo_documento_propietario / documento_propietario); solo vive
 // en memoria mientras el usuario lo escribe y viaja en la petición: nunca se guarda en el navegador ni se escribe en la
 // consola. La API vuelve a validar el identificador, el documento y la cabecera, y responde 422 con el campo que incumple.
 import { ApiError, apiFetch } from "@/lib/api";
@@ -20,8 +21,8 @@ export interface ExpressEntrada {
   tipo_tramite_codigo: string | null;
   alcance: Alcance;
   identificador: string;
-  tipo_documento_locatario: string | null;
-  documento_locatario: string | null;
+  tipo_documento_propietario: string | null;
+  documento_propietario: string | null;
 }
 
 export interface EstimadoFuente {
@@ -40,9 +41,7 @@ export interface VehiculoExpress {
   identificador: string;
   identificador_norm: string;
   tipo_identificador: "PLACA_CARRO" | "PLACA_MOTO" | "PLACA_REMOLQUE" | "PLACA_MAQUINARIA" | "PLACA_MOTOCARRO" | "VIN";
-  tipo_documento_locatario?: string | null;
-  /** Enmascarado («****» y los 4 últimos). */
-  documento_locatario?: string | null;
+  // HU #14585 (contrato C5): la respuesta ya no trae el documento declarado, ni enmascarado.
 }
 
 export interface ExpressCreado {
@@ -62,11 +61,11 @@ export interface EstimadoExpress {
   estimado_consultas?: EstimadoFuente[];
 }
 
-/** Tipos de documento del locatario que acepta la API (ExpressEntrada.tipo_documento_locatario). */
-export const TIPOS_DOCUMENTO_LOCATARIO = ["CC", "CE", "NIT", "PAS", "TI"] as const;
+/** Tipos de documento del propietario actual que acepta la API (ExpressEntrada.tipo_documento_propietario). */
+export const TIPOS_DOCUMENTO_PROPIETARIO = ["CC", "CE", "NIT", "PAS", "TI"] as const;
 
 /** Campos del vehículo que un 422 de POST /express puede señalar (ErrorRegla.campo). */
-export type CampoVehiculo = "identificador" | "tipo_documento_locatario" | "documento_locatario";
+export type CampoVehiculo = "identificador" | "tipo_documento_propietario" | "documento_propietario";
 
 /** Códigos de 403 de sesión de POST /express: llevan a la página 403, como GET /sesion (HU #13732). */
 const CODIGOS_ACCESO_NEGADO: ReadonlySet<string> = new Set(["SIN_USUARIO", "SIN_EMPRESA", "PRODUCTO_NO_HABILITADO"]);
@@ -78,23 +77,25 @@ export function accesoNegadoExpress(error: unknown): string | null {
 
 /**
  * AP-9 (SF-6): texto fijo por `code` de POST /express y /express/estimado (contrato diagnostico.v1.yaml): las reglas del
- * vehículo y del documento del locatario, más las de la cabecera (los mismos códigos de POST /diagnosticos).
+ * vehículo y del documento del propietario actual, más las de la cabecera (los mismos códigos de POST /diagnosticos).
  */
 export const ERRORES_EXPRESS: Readonly<Record<string, string>> = {
   ...ERRORES_CABECERA,
   IDENTIFICADOR_REQUERIDO: "Falta el identificador del vehículo (placa o VIN).",
   IDENTIFICADOR_INVALIDO: "El identificador no es una placa ni un VIN válido.",
   IDENTIFICADOR_DEMASIADO_LARGO: "El identificador supera el largo máximo de una placa o un VIN: revisa el valor (no se recorta).",
-  TIPO_DOCUMENTO_INVALIDO: "El tipo de documento del locatario no es válido.",
+  TIPO_DOCUMENTO_INVALIDO: "El tipo de documento del propietario actual no es válido.",
   DOCUMENTO_INVALIDO:
-    "El número de documento del locatario no es válido: solo dígitos (en pasaporte, letras y dígitos), sin puntos, guiones ni espacios.",
-  DOCUMENTO_INCOMPLETO: "Declara el tipo y el número del documento del locatario, o deja los dos vacíos.",
+    "El número de documento del propietario actual no es válido: solo dígitos (en pasaporte, letras y dígitos), sin puntos, guiones ni espacios.",
+  DOCUMENTO_INCOMPLETO: "Declara el tipo y el número del documento del propietario actual, o deja los dos vacíos.",
+  // HU #14585 (contrato §1.1): límite de solicitudes de POST /express (429 + Retry-After).
+  DEMASIADAS_SOLICITUDES: "Hiciste demasiadas solicitudes seguidas. Espera un momento y vuelve a intentarlo.",
 };
 
 /** Campo del vehículo de un 422, o null si el error no es de un campo del vehículo. */
 export function campoVehiculo(error: unknown): CampoVehiculo | null {
   if (!(error instanceof ApiError) || error.status !== 422) return null;
-  return error.campo === "identificador" || error.campo === "tipo_documento_locatario" || error.campo === "documento_locatario"
+  return error.campo === "identificador" || error.campo === "tipo_documento_propietario" || error.campo === "documento_propietario"
     ? error.campo
     : null;
 }
@@ -116,14 +117,14 @@ export function errorIdentificador(valor: string): string | null {
 export function entradaExpress(
   cabecera: CabeceraEntrada,
   identificador: string,
-  locatario: { tipo: string; documento: string },
+  propietario: { tipo: string; documento: string },
 ): ExpressEntrada {
-  const documento = locatario.documento.trim();
+  const documento = propietario.documento.trim();
   return {
     ...cabecera,
     identificador,
-    tipo_documento_locatario: documento ? locatario.tipo || null : null,
-    documento_locatario: documento || null,
+    tipo_documento_propietario: documento ? propietario.tipo || null : null,
+    documento_propietario: documento || null,
   };
 }
 

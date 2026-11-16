@@ -38,8 +38,8 @@ const placa = async () => {
   await nombre();
   return screen.getByRole("textbox", { name: "Placa o VIN" });
 };
-const documento = () => screen.getByRole("textbox", { name: /número de documento del locatario/i });
-const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de documento del locatario/i });
+const documento = () => screen.getByRole("textbox", { name: /número de documento del propietario actual/i });
+const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de documento del propietario actual/i });
 const iniciado = () => screen.findByRole("heading", { name: "Diagnóstico iniciado con 1 vehículo" });
 /** HU #14562: «Continuar» cuando la operación muestra el estimado antes de lanzar; si no, «Iniciar diagnóstico». */
 const PRINCIPAL = /^(Continuar|Iniciar diagnóstico)$/;
@@ -110,12 +110,12 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
   });
 
-  it("documento del locatario sin tipo: pide el tipo y no lanza", async () => {
+  it("documento del propietario actual sin tipo: pide el tipo y no lanza (HU #14585)", async () => {
     const api = montar({ query: "modo=express&placa=TST123" });
     await nombre();
     fireEvent.change(documento(), { target: { value: "12345678" } });
     await continuar();
-    expect(await screen.findByText(/elige el tipo de documento del locatario/i)).toBeInTheDocument();
+    expect(await screen.findByText(/elige el tipo de documento del propietario actual/i)).toBeInTheDocument();
     expect(tipoDocumento()).toHaveAttribute("aria-invalid", "true");
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
   });
@@ -133,7 +133,7 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(documento()).toHaveValue("****5678");
     await continuar();
     await waitFor(() => expect(llamadas(api, "POST", "/express")).toHaveLength(1));
-    expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toMatchObject({ tipo_documento_locatario: "CC", documento_locatario: "12345678" });
+    expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toMatchObject({ tipo_documento_propietario: "CC", documento_propietario: "12345678" });
     expect(JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage })).not.toContain("12345678");
     expect(log.mock.calls.flat().join(" ")).not.toContain("12345678");
     log.mockRestore();
@@ -154,8 +154,8 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
       tipo_tramite_codigo: "TRASPASO_STANDARD",
       alcance: { por_vehiculo: ["RUNT", "SIMIT_VEHICULO"], por_propietario: [], por_locatario: [] },
       identificador: "TST123",
-      tipo_documento_locatario: null,
-      documento_locatario: null,
+      tipo_documento_propietario: null,
+      documento_propietario: null,
     });
   });
 
@@ -222,7 +222,7 @@ describe("Express — errores (AC4)", () => {
   it("el 422 del documento se pinta en su campo", async () => {
     montar({
       query: "modo=express&placa=TST123",
-      rutas: { "POST /express": () => Response.json({ code: "DOCUMENTO_INVALIDO", error: SECRETO, campo: "documento_locatario" }, { status: 422 }) },
+      rutas: { "POST /express": () => Response.json({ code: "DOCUMENTO_INVALIDO", error: SECRETO, campo: "documento_propietario" }, { status: 422 }) },
     });
     await nombre();
     fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
@@ -238,7 +238,7 @@ describe("Express — errores (AC4)", () => {
   it("AP-9: el 422 del tipo de documento se pinta en su campo con el texto fijo del code", async () => {
     montar({
       query: "modo=express&placa=TST123",
-      rutas: { "POST /express": () => Response.json({ code: "TIPO_DOCUMENTO_INVALIDO", error: SECRETO, campo: "tipo_documento_locatario" }, { status: 422 }) },
+      rutas: { "POST /express": () => Response.json({ code: "TIPO_DOCUMENTO_INVALIDO", error: SECRETO, campo: "tipo_documento_propietario" }, { status: 422 }) },
     });
     await nombre();
     fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
@@ -405,5 +405,38 @@ describe("Express — HU #14562 rótulo del botón principal", () => {
     await nombre();
     expect(screen.getByRole("button", { name: "Continuar" })).toHaveAttribute("type", "submit");
     expect(screen.queryByRole("button", { name: "Iniciar diagnóstico" })).toBeNull();
+  });
+});
+
+// HU #14585 (spec-ui §8, contrato §1 C1): el documento declarado es el del propietario actual; la API recibe
+// tipo_documento_propietario / documento_propietario y la respuesta ya no trae documento (C5).
+describe("Express — propietario actual (opcional) (HU #14585)", () => {
+  it("rótulo «Propietario actual (opcional)» con la insignia «Declarado por el cliente» y la ayuda de la comparación", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    const seccion = screen.getByRole("region", { name: /propietario actual \(opcional\)/i });
+    expect(within(seccion).getByText(/declarado por el cliente/i)).toBeInTheDocument();
+    expect(within(seccion).getByText(/lo comparamos con el propietario actual que reporta el RUNT/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^locatario$/i)).toBeNull();
+  });
+
+  it("el cuerpo no lleva los nombres viejos *_locatario", async () => {
+    const api = montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
+    fireEvent.change(documento(), { target: { value: "12345678" } });
+    await continuar();
+    await waitFor(() => expect(llamadas(api, "POST", "/express")).toHaveLength(1));
+    const cuerpo = cuerpoDe(llamadas(api, "POST", "/express")[0]) as Record<string, unknown>;
+    expect(cuerpo).not.toHaveProperty("tipo_documento_locatario");
+    expect(cuerpo).not.toHaveProperty("documento_locatario");
+  });
+
+  it("los mensajes de documento hablan del propietario actual", () => {
+    for (const code of ["TIPO_DOCUMENTO_INVALIDO", "DOCUMENTO_INVALIDO", "DOCUMENTO_INCOMPLETO"]) {
+      expect(ERRORES_EXPRESS[code]).toMatch(/propietario actual/);
+      expect(ERRORES_EXPRESS[code]).not.toMatch(/locatario/);
+    }
+    expect(ERRORES_EXPRESS.DEMASIADAS_SOLICITUDES).toBeTruthy();
   });
 });
