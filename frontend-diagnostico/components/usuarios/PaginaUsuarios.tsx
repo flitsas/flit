@@ -288,7 +288,7 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
       {/* Región viva estable: el aviso de invitar (siempre el mismo, SP-15) y el resultado de suspender o reactivar. */}
       <div role="status" aria-live="polite" aria-atomic="true">
         {aviso && (
-          <InlineAlert tone="success" title="Listo">
+          <InlineAlert tone="success" title="Listo" vivo={false}>
             {aviso}
           </InlineAlert>
         )}

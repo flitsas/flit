@@ -365,3 +365,29 @@ describe("HU14588 PaginaUsuarios — D-6 cabecera de la compañía y paginación
     expect(new URL(String(f.mock.calls.at(-1)![0]), "http://x").searchParams.get("tamano")).toBe("25");
   });
 });
+
+// Code review HU #14588 (CR-2, CR-5, CR-6).
+describe("HU14588 PaginaUsuarios — región viva, límites de la URL y foco (CR-2, CR-5, CR-6)", () => {
+  const abrirAccion = (nombre: string, accion: RegExp) => {
+    const disparador = within(filaDe(nombre)).getByRole("button", { name: /^Acciones/ });
+    fireEvent.click(disparador);
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: accion }));
+    return disparador;
+  };
+
+  it("CR-2: el aviso vive en una sola región viva (sin otra anidada)", async () => {
+    const id = USUARIOS[1].id;
+    simular({
+      "GET /usuarios": () => lista(USUARIOS),
+      [`POST /usuarios/${id}/suspension`]: () => Response.json({ ...USUARIOS[1], estado: "SUSPENDIDO", acciones: ["REACTIVAR"] }),
+    });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    abrirAccion("Usuario Uno", /^Suspender/);
+    fireEvent.click(within(screen.getByRole("dialog", { name: /Suspender/ })).getByRole("button", { name: "Suspender" }));
+    const aviso = await screen.findByText(/quedó suspendido/);
+    const region = aviso.closest('[aria-live]')!;
+    expect(region).toHaveAttribute("aria-atomic", "true");
+    expect(region.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).toHaveLength(0);
+  });
+});
