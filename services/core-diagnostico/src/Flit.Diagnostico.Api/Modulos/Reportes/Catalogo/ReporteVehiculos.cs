@@ -19,11 +19,6 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes.Catalogo;
 /// </summary>
 internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
 {
-    /// <summary>Texto de <c>cambio_propietario</c> (HU #14582): true → «Sí», false → «No», null → vacío.</summary>
-    public const string CambioSi = "Sí";
-
-    public const string CambioNo = "No";
-
     public TipoReporte Tipo => TipoReporte.Vehiculos;
 
     public Task<int> ContarAsync(ContextoReporte contexto, FiltroReporte filtro, CancellationToken ct) => Consulta(contexto, filtro).CountAsync(ct);
@@ -65,7 +60,7 @@ internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
         v["departamento"] = l.Departamento;
         v["propietarios_documentos"] = null;
         v["propietario_declarado_documento"] = null;
-        v["cambio_propietario"] = l.CambioPropietario is { } cambio ? (cambio ? CambioSi : CambioNo) : null;
+        v["cambio_propietario"] = Plataforma.RotulosDiagnostico.DeCambioPropietario(l.CambioPropietario);
         v["locatario_runt_documento"] = null;
         v["veredicto"] = l.Veredicto;
         v["estado_consultas"] = l.EstadoConsultas;

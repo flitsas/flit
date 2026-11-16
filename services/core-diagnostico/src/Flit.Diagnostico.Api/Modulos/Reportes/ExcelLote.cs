@@ -50,11 +50,6 @@ internal static class ExcelLote
     /// </summary>
     public const int VersionPlantilla = 3;
 
-    /// <summary>Texto de «Cambio de propietario» cuando es true / false (null queda vacío).</summary>
-    public const string Si = "Sí";
-
-    public const string No = "No";
-
     public const string ContentType = TabularWorkbookWriter.ContentType;
 
     public const string HojaVehiculos = "Vehículos";
@@ -122,7 +117,7 @@ internal static class ExcelLote
             var fila = new List<Celda>
             {
                 Celda.Of(v.Orden), Celda.Of(v.Identificador), Celda.Of(RotulosDiagnostico.DeTipoIdentificador(v.TipoIdentificador)), Celda.Of(v.Placa), Celda.Of(v.Vin),
-                Celda.Of(v.PropietarioDeclarado), v.CambioPropietario is { } cambio ? Celda.Of(cambio ? Si : No) : Celda.Empty,
+                Celda.Of(v.PropietarioDeclarado), RotulosDiagnostico.DeCambioPropietario(v.CambioPropietario) is { } cambio ? Celda.Of(cambio) : Celda.Empty,
                 Celda.Of(EstadoVehiculo(v.Secciones)),
             };
             foreach (var seccion in v.Secciones)
