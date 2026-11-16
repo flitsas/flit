@@ -5596,6 +5596,68 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("password_reset_tokens", "security");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.ProductRoleSuspensionEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("product_code");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("role_id")
+                        .HasComment("Rol del producto que tenía al suspenderse; se recrea al reactivar.");
+
+                    b.Property<DateTimeOffset>("SuspendedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("suspended_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("SuspendedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("suspended_by")
+                        .HasComment("Usuario que suspendió (@pii:low).");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_product_role_suspensions");
+
+                    b.HasIndex("ProductCode")
+                        .HasDatabaseName("ix_product_role_suspensions_product_code");
+
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("ix_product_role_suspensions_role_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_product_role_suspensions_user_id");
+
+                    b.HasIndex("TenantId", "UserId", "ProductCode")
+                        .IsUnique()
+                        .HasDatabaseName("uq_product_role_suspensions");
+
+                    b.ToTable("product_role_suspensions", "security", t =>
+                        {
+                            t.HasComment("Suspensión de un usuario en un producto (ADR-0089): la asignación del rol del producto se cierra y esta fila permite listarlo como SUSPENDIDO y reactivarlo con el mismo rol. No suspende la cuenta.");
+
+                            t.HasCheckConstraint("ck_product_role_suspensions_product_code", "product_code <> ''");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.RbacAction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8451,122 +8513,6 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstanceFirmaBaulCopia", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<DateTimeOffset>("CapturedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("captured_at");
-
-                    b.Property<string>("CodigoHash")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("codigo_hash");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTimeOffset?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<string>("DocumentNumber")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("document_number");
-
-                    b.Property<string>("DocumentType")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("document_type");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("full_name");
-
-                    b.Property<string>("PartyRole")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("party_role");
-
-                    b.Property<Guid>("ProcedureInstanceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("procedure_instance_id");
-
-                    b.Property<string>("SignatureHash")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("signature_hash");
-
-                    b.Property<Guid>("SignatureVaultId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("signature_vault_id");
-
-                    b.Property<string>("SlotKey")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("slot_key");
-
-                    b.Property<string>("SourceStoragePath")
-                        .HasColumnType("text")
-                        .HasColumnName("source_storage_path");
-
-                    b.Property<string>("StoragePath")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("storage_path");
-
-                    b.Property<string>("StorageSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("storage_sha256");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<DateOnly>("VigenciaDesde")
-                        .HasColumnType("date")
-                        .HasColumnName("vigencia_desde");
-
-                    b.Property<DateOnly>("VigenciaHasta")
-                        .HasColumnType("date")
-                        .HasColumnName("vigencia_hasta");
-
-                    b.HasKey("Id")
-                        .HasName("pk_procedure_instance_signature_vault_copies");
-
-                    b.HasIndex("TenantId", "ProcedureInstanceId")
-                        .HasDatabaseName("ix_procedure_instance_signature_vault_copies_instance");
-
-                    b.ToTable("procedure_instance_signature_vault_copies", "tramites", t =>
-                        {
-                            t.ExcludeFromMigrations();
-                        });
-                });
-
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.ExternalDataSource", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10727,6 +10673,122 @@ namespace Flit.Infrastructure.Migrations
                             t.HasTrigger("tr_procedure_instance_field_values_audit");
 
                             t.HasTrigger("tr_procedure_instance_field_values_immutable");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Tramites.Domain.Entities.ProcedureInstanceFirmaBaulCopia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CapturedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("captured_at");
+
+                    b.Property<string>("CodigoHash")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("codigo_hash");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("document_type");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("PartyRole")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("party_role");
+
+                    b.Property<Guid>("ProcedureInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_instance_id");
+
+                    b.Property<string>("SignatureHash")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("signature_hash");
+
+                    b.Property<Guid>("SignatureVaultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("signature_vault_id");
+
+                    b.Property<string>("SlotKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("slot_key");
+
+                    b.Property<string>("SourceStoragePath")
+                        .HasColumnType("text")
+                        .HasColumnName("source_storage_path");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("storage_path");
+
+                    b.Property<string>("StorageSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("storage_sha256");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateOnly>("VigenciaDesde")
+                        .HasColumnType("date")
+                        .HasColumnName("vigencia_desde");
+
+                    b.Property<DateOnly>("VigenciaHasta")
+                        .HasColumnType("date")
+                        .HasColumnName("vigencia_hasta");
+
+                    b.HasKey("Id")
+                        .HasName("pk_procedure_instance_signature_vault_copies");
+
+                    b.HasIndex("TenantId", "ProcedureInstanceId")
+                        .HasDatabaseName("ix_procedure_instance_signature_vault_copies_instance");
+
+                    b.ToTable("procedure_instance_signature_vault_copies", "tramites", t =>
+                        {
+                            t.ExcludeFromMigrations();
                         });
                 });
 
@@ -13060,6 +13122,37 @@ namespace Flit.Infrastructure.Migrations
                         .HasConstraintName("fk_password_reset_tokens_users");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.ProductRoleSuspensionEntity", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Platform.ProductEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ProductCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_role_suspensions_products");
+
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.Role", null)
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_role_suspensions_roles");
+
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Identity.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_role_suspensions_tenants");
+
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_role_suspensions_users");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.RoleGrant", b =>
