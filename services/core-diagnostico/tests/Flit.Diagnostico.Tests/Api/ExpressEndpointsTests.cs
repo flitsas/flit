@@ -70,6 +70,7 @@ public sealed class ExpressEndpointsTests
         vehiculos[0].TipoIdentificador.Should().Be(TipoIdentificador.PlacaCarro);
         vehiculos[0].Orden.Should().Be(1);
         vehiculos[0].LocatarioDocCifrado.Should().BeNull();
+        vehiculos[0].PropietarioDeclaradoDocCifrado.Should().BeNull();
         espia.Entregas.Should().ContainSingle();
         espia.Entregas[0].DiagnosticoId.Should().Be(id);
         espia.Entregas[0].EnTransaccion.Should().BeTrue();
@@ -134,8 +135,8 @@ public sealed class ExpressEndpointsTests
             (Express("9FBTEST12345678901"), ValidadorFilaVehiculo.CodigoIdentificadorDemasiadoLargo, "identificador"),
             (Express("   "), ValidadorFilaVehiculo.CodigoIdentificadorRequerido, "identificador"),
             (Express(null), ValidadorFilaVehiculo.CodigoIdentificadorRequerido, "identificador"),
-            (Express("ABC123", tipo: "CC", documento: "12AB34"), ValidadorDocumentoPersona.CodigoNumeroInvalido, "documento_locatario"),
-            (Express("ABC123", tipo: "XX", documento: "123456"), ValidadorDocumentoPersona.CodigoTipoInvalido, "tipo_documento_locatario"),
+            (Express("ABC123", tipo: "CC", documento: "12AB34"), ValidadorDocumentoPersona.CodigoNumeroInvalido, "documento_propietario"),
+            (Express("ABC123", tipo: "XX", documento: "123456"), ValidadorDocumentoPersona.CodigoTipoInvalido, "tipo_documento_propietario"),
         ];
         foreach (var (cuerpo, codigo, campo) in casos)
         {
@@ -186,7 +187,8 @@ public sealed class ExpressEndpointsTests
         textoCon.Should().NotContain("1020304050");
         var jsonCon = JsonElement.Parse(textoCon);
         jsonCon.GetProperty("mostrar_estimado").GetBoolean().Should().BeTrue();
-        Estimado(jsonCon).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 1 });
+        Estimado(jsonCon).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 0 },
+            "HU #14582: el declarado no alimenta al locatario; antes del RUNT cuenta 0");
         var textoSin = await sinDocumento.Content.ReadAsStringAsync(ct);
         sinDocumento.StatusCode.Should().Be(HttpStatusCode.OK, textoSin);
         Estimado(JsonElement.Parse(textoSin)).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 0 });
@@ -226,14 +228,14 @@ public sealed class ExpressEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
-        texto.Should().NotContain(Documento).And.Contain("****4050");
+        texto.Should().NotContain(Documento).And.NotContain("****4050").And.NotContain("documento", "HU #14582 C5: la respuesta no lleva documentos");
         var id = JsonElement.Parse(texto).GetProperty("id").GetGuid();
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
-        vehiculo.LocatarioDocTipo.Should().Be("CC");
-        vehiculo.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        vehiculo.LocatarioDocCifrado.Should().NotBeNullOrEmpty();
-        Encoding.UTF8.GetString(vehiculo.LocatarioDocCifrado!).Should().NotContain(Documento);
-        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vehiculo.LocatarioDocCifrado!).Should().Be(Documento);
+        vehiculo.PropietarioDeclaradoDocTipo.Should().Be("CC");
+        vehiculo.LocatarioDocOrigen.Should().BeNull("HU #14582 AC7: el declarado en Express es el propietario actual");
+        vehiculo.PropietarioDeclaradoDocCifrado.Should().NotBeNullOrEmpty();
+        Encoding.UTF8.GetString(vehiculo.PropietarioDeclaradoDocCifrado!).Should().NotContain(Documento);
+        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vehiculo.PropietarioDeclaradoDocCifrado!).Should().Be(Documento);
         JsonSerializer.Serialize(espia.Entregas).Should().NotContain(Documento, "el encolador no recibe documentos");
         logs.Mensajes.Should().NotBeEmpty();
         logs.Mensajes.Should().NotContain(m => m.Contains(Documento, StringComparison.Ordinal), "ningún log lleva el documento");
@@ -298,8 +300,8 @@ public sealed class ExpressEndpointsTests
                 ["por_propietario"] = [],
                 ["por_locatario"] = porLocatario ?? [],
             },
-            ["tipo_documento_locatario"] = tipo,
-            ["documento_locatario"] = documento,
+            ["tipo_documento_propietario"] = tipo,
+            ["documento_propietario"] = documento,
         };
         if (nombre is not null)
             json["nombre"] = nombre;

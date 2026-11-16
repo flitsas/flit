@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.5.0"
+  version: "1.6.0"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -44,6 +44,20 @@ info:
     (404), REPORTE_DEMASIADO_GRANDE (422, con filas y maximo) y EXPORTACION_EN_CURSO (429, con Retry-After). Las vistas globales
     reutilizan los 503 IDENTIDAD_NO_CONFIGURADA e IDENTIDAD_NO_DISPONIBLE de /backoffice/empresas. Las descargas existentes del
     lote siguen enmascaradas.
+
+    Versión 1.6.0 (HU #14582): el documento que captura el cliente es el propietario actual (opcional), no el locatario. En
+    los cuerpos de entrada (FilaCapturada, CorreccionFila, ExpressEntrada) los campos pasan a tipo_documento_propietario y
+    documento_propietario; tipo_documento_locatario y documento_locatario se aceptan como alias obsoleto durante 1.6.x
+    (deprecated, se retiran en 1.7.0) y los dos nombres juntos responden 400 CAMPOS_EXCLUYENTES. La plantilla usa las
+    cabeceras Tipo_Documento_Propietario y Documento_Propietario; las viejas de locatario valen como alias y un archivo con
+    las dos parejas responde 422 ENCABEZADO_AMBIGUO. El declarado ya no alimenta RUNT_LOCATARIO ni SIMIT_LOCATARIO (el
+    locatario sale solo del RUNT) y solo sirve para fijar cambio_propietario (true, false o null), que se persiste al cerrar
+    la celda RUNT y viaja, requerido, en FilaVehiculo (y FilaVehiculoBackoffice), FilaPlaca, DictamenVehiculo y
+    DictamenVehiculoBackoffice. RUPTURA de forma en lecturas: FilaVehiculo deja de traer documento_declarado y propietarios
+    (se retiran DocumentoDeclaradoGrilla y PropietarioGrilla) y VehiculoConfirmado deja de traer documentos; su único
+    consumidor es la app de Diagnóstico, que sale en el mismo despliegue. FilaResumen renombra sus campos de documento
+    (siempre enmascarado). El motivo N/A SIN_DOCUMENTO_LOCATARIO conserva el código y su texto pasa a
+    «El RUNT no reporta locatario».
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -517,10 +531,11 @@ paths:
       operationId: descargarPlantillaDiagnostico
       summary: Plantilla .xlsx de carga masiva
       description: >
-        Permiso diagnostico.diagnosticos.crear (HU #13749, F02-C5). Libro con una hoja «Vehiculos» y el encabezado
-        Identificador_Vehiculo (obligatoria), Tipo_Documento_Locatario y Documento_Locatario (opcionales, R-3), con
-        formato de texto en las tres columnas. El documento del propietario no se pide: sale del RUNT por placa (D-02).
-        Archivo fijo, igual para toda compañía.
+        Permiso diagnostico.diagnosticos.crear (HU #13749, F02-C5; HU #14582). Libro con una hoja «Vehiculos» y el encabezado
+        Identificador_Vehiculo, Tipo_Documento_Propietario y Documento_Propietario (texto en las tres; el documento es el
+        propietario actual, opcional, que solo se compara con el propietario del RUNT). La carga acepta además las
+        cabeceras anteriores Tipo_Documento_Locatario y Documento_Locatario como alias; un archivo con las dos parejas
+        responde 422 ENCABEZADO_AMBIGUO. Archivo fijo, igual para toda compañía.
       responses:
         "200":
           description: La plantilla.
@@ -807,8 +822,8 @@ paths:
         cambiadas (una fila que cambió sin celdas viaja con `celdas` vacío); `terminado` se
         calcula con todas sus celdas (COMPLETADO o NA, R-7). El cliente guarda `version`, la manda como `desde` en el
         siguiente sondeo y fusiona por `vehiculos[].id` y `celdas[].fuente`. DTO de cliente: nunca lleva el origen de
-        la celda, el usuario que la llenó a mano, el payload ni documentos en claro (R-20); cada fila que viaja lleva
-        sus documentos actuales enmascarados en el servidor (`documento_declarado`, `propietarios`, HU #14087). Con estimado_consultas=AL_FINALIZAR
+        la celda, el usuario que la llenó a mano, el payload ni documentos, ni enmascarados (R-20; HU #14582 SP-4); cada fila
+        que viaja lleva `cambio_propietario` tal como está guardado (la lectura no descifra nada). Con estimado_consultas=AL_FINALIZAR
         en la copia de configuración del lote y el lote COMPLETADO o INCOMPLETO trae `estimado_consultas` (estimado por
         fuente frente a consumidas: intentos con desde_cache=false, sin los de llenado manual); en otro caso la clave
         no viene. Otra compañía, o un lote de otro usuario con visibilidad_usuario=PROPIOS, responde 404.
@@ -2156,7 +2171,7 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
         "422":
           description: >
-            Regla del vehículo (`campo` = identificador, tipo_documento_locatario o documento_locatario) o de la cabecera
+            Regla del vehículo (`campo` = identificador, tipo_documento_propietario o documento_propietario) o de la cabecera
             (los códigos de POST /diagnosticos). No se crea nada.
           content:
             application/json:
@@ -2974,7 +2989,7 @@ paths:
         HU #13799 (F06-H2, F06-C5/C6). Misma política y empresa explícita que listarDiagnosticosBackoffice (la lectura
         queda auditada). Es la grilla de obtenerGrillaDiagnostico (misma semántica de `desde`/`version`, columnas, avance
         y estimado_consultas) más `empresa` y, en cada celda, `origen` y `usuario_manual_id`. Sin payload ni documentos
-        en claro: cada fila lleva, como la de la compañía, `documento_declarado` y `propietarios` enmascarados (HU #14087).
+        en claro: cada fila lleva, como la de la compañía, `cambio_propietario` y ningún documento (HU #14582).
         No aplica la visibilidad_usuario de la compañía. El DTO de la compañía no cambia.
       parameters:
         - name: empresa
@@ -4813,7 +4828,10 @@ components:
 
     FilaResumen:
       type: object
-      required: [fila, identificador, identificador_norm, tipo_identificador, tipo_documento_locatario, documento_locatario, valida, filas_duplicadas, errores]
+      description: >
+        Una fila de la vista previa de la carga. El documento es el propietario actual declarado (HU #14582), leído de las
+        cabeceras Tipo_Documento_Propietario y Documento_Propietario (o de su alias anterior); siempre enmascarado.
+      required: [fila, identificador, identificador_norm, tipo_identificador, tipo_documento_propietario, documento_propietario, valida, filas_duplicadas, errores]
       properties:
         fila:
           type: integer
@@ -4828,14 +4846,14 @@ components:
           type: string
           nullable: true
           enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO, VIN, null]
-        tipo_documento_locatario:
+        tipo_documento_propietario:
           type: string
           nullable: true
           example: CC
-        documento_locatario:
+        documento_propietario:
           type: string
           nullable: true
-          description: Siempre enmascarado.
+          description: Propietario actual declarado, siempre enmascarado.
           example: "****4050"
         valida:
           type: boolean
@@ -4854,7 +4872,7 @@ components:
       properties:
         campo:
           type: string
-          enum: [Identificador_Vehiculo, Tipo_Documento_Locatario, Documento_Locatario]
+          enum: [Identificador_Vehiculo, Tipo_Documento_Propietario, Documento_Propietario]
         code:
           type: string
           enum: [IDENTIFICADOR_REQUERIDO, IDENTIFICADOR_INVALIDO, IDENTIFICADOR_DEMASIADO_LARGO, TIPO_DOCUMENTO_INVALIDO, DOCUMENTO_INVALIDO, DOCUMENTO_INCOMPLETO]
@@ -4867,8 +4885,9 @@ components:
         Consultas previstas de una fuente del alcance (HU #13747). Lo usan el resumen de carga, la confirmación de
         vehículos, Express y la vista previa de Express. Las fuentes de persona (RUNT_PROPIETARIO, RUNT_LOCATARIO,
         SIMIT_PROPIETARIO, SIMIT_LOCATARIO) consultan una vez por persona, que antes de lanzar aún no se conocen: su
-        número es un mínimo de uno por vehículo (locatario, uno por vehículo con documento declarado) y llevan
-        `minimo=true`, para rotularlo «al menos N» (HU #13796, Q7).
+        número es un mínimo de uno por vehículo y llevan `minimo=true`, para rotularlo «al menos N» (HU #13796, Q7). Las de
+        locatario cuentan 0 antes del RUNT: el locatario solo se conoce con el RUNT y el documento declarado es el propietario
+        actual, que no alimenta consultas (HU #14582).
       required: [fuente, consultas, minimo]
       properties:
         fuente:
@@ -4884,7 +4903,10 @@ components:
 
     FilaCapturada:
       type: object
-      description: Una fila capturada (HU #13751). El documento del locatario es opcional; si viene, tipo y número juntos.
+      description: >
+        Una fila capturada (HU #13751). El documento del propietario actual es opcional (HU #14582); si viene, tipo y número
+        juntos. Los nombres de locatario son un alias obsoleto: con el nombre nuevo y el alias a la vez responde 400
+        CAMPOS_EXCLUYENTES.
       properties:
         fila:
           type: integer
@@ -4893,14 +4915,24 @@ components:
           type: string
           nullable: true
           description: Placa o VIN tal como lo escribió el cliente.
-        tipo_documento_locatario:
+        tipo_documento_propietario:
           type: string
           nullable: true
           description: CC, CE, NIT, PAS o TI.
+        documento_propietario:
+          type: string
+          nullable: true
+          description: "@pii:high Número del documento del propietario actual; se guarda cifrado y nunca vuelve en claro."
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Alias obsoleto de tipo_documento_propietario (se retira en 1.7.0).
         documento_locatario:
           type: string
           nullable: true
-          description: "@pii:high Número del documento; se guarda cifrado y nunca vuelve en claro."
+          deprecated: true
+          description: "@pii:high Alias obsoleto de documento_propietario (se retira en 1.7.0)."
 
     FilasAValidar:
       type: object
@@ -4923,7 +4955,7 @@ components:
           type: string
           description: >
             JSON (texto del campo del formulario) con una lista de CorreccionFila; vacío o ausente es sin correcciones.
-            Ejemplo: [{"fila": 2, "identificador": "ABC123"}, {"fila": 5, "tipo_documento_locatario": "CC", "documento_locatario": "1020304050"}]
+            Ejemplo: [{"fila": 2, "identificador": "ABC123"}, {"fila": 5, "tipo_documento_propietario": "CC", "documento_propietario": "1020304050"}]
 
     CorreccionFila:
       type: object
@@ -4931,7 +4963,8 @@ components:
         Corrección de una fila del archivo (va dentro del JSON de `correcciones`). `fila` es el número de fila del análisis
         (encabezado en la fila 1). Un campo ausente conserva el valor del archivo; con null o vacío lo deja vacío. No envíe
         el documento enmascarado del análisis («****…»): es inválido y la fila se descarta; omita el campo para conservar
-        el del archivo.
+        el del archivo. El documento es el propietario actual (HU #14582); los nombres de locatario son un alias obsoleto y,
+        junto con el nombre nuevo, responden 400 CAMPOS_EXCLUYENTES.
       required: [fila]
       properties:
         fila:
@@ -4939,14 +4972,24 @@ components:
         identificador:
           type: string
           nullable: true
-        tipo_documento_locatario:
+        tipo_documento_propietario:
           type: string
           nullable: true
           description: CC, CE, NIT, PAS o TI.
+        documento_propietario:
+          type: string
+          nullable: true
+          description: "@pii:high Número completo del documento del propietario actual; se guarda cifrado y nunca vuelve en claro."
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Alias obsoleto de tipo_documento_propietario (se retira en 1.7.0).
         documento_locatario:
           type: string
           nullable: true
-          description: "@pii:high Número completo del documento; se guarda cifrado y nunca vuelve en claro."
+          deprecated: true
+          description: "@pii:high Alias obsoleto de documento_propietario (se retira en 1.7.0)."
 
     ResultadoConfirmacion:
       type: object
@@ -4977,6 +5020,7 @@ components:
 
     VehiculoConfirmado:
       type: object
+      description: Un vehículo guardado del lote. Sin ningún dato personal (HU #14582 SP-4).
       required: [id, orden, identificador, identificador_norm, tipo_identificador]
       properties:
         id:
@@ -4991,19 +5035,14 @@ components:
         tipo_identificador:
           type: string
           enum: [PLACA_CARRO, PLACA_MOTO, PLACA_REMOLQUE, PLACA_MAQUINARIA, PLACA_MOTOCARRO, VIN]
-        tipo_documento_locatario:
-          type: string
-          nullable: true
-        documento_locatario:
-          type: string
-          nullable: true
-          description: Enmascarado («****» y los 4 últimos).
 
     ExpressEntrada:
       type: object
       description: >
         Cuerpo de POST /express y POST /express/estimado (HU #13753): la cabecera como en CabeceraEntrada, pero con el
-        nombre opcional, y el único vehículo con el documento del locatario opcional (tipo y número juntos).
+        nombre opcional, y el único vehículo con el documento del propietario actual opcional (tipo y número juntos; HU
+        #14582). Los nombres de locatario son un alias obsoleto: con el nombre nuevo y el alias a la vez responde 400
+        CAMPOS_EXCLUYENTES.
       required: [modo, alcance, identificador]
       properties:
         nombre:
@@ -5023,14 +5062,24 @@ components:
           type: string
           nullable: true
           description: Placa o VIN tal como lo escribió el cliente.
-        tipo_documento_locatario:
+        tipo_documento_propietario:
           type: string
           nullable: true
           description: CC, CE, NIT, PAS o TI.
+        documento_propietario:
+          type: string
+          nullable: true
+          description: "@pii:high Número del documento del propietario actual; se guarda cifrado y nunca vuelve en claro."
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          deprecated: true
+          description: Alias obsoleto de tipo_documento_propietario (se retira en 1.7.0).
         documento_locatario:
           type: string
           nullable: true
-          description: "@pii:high Número del documento; se guarda cifrado y nunca vuelve en claro."
+          deprecated: true
+          description: "@pii:high Alias obsoleto de documento_propietario (se retira en 1.7.0)."
       example:
         identificador: ABC123
         modo: SIMPLE
@@ -5206,7 +5255,7 @@ components:
 
     FilaVehiculo:
       type: object
-      required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, documento_declarado, propietarios]
+      required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, cambio_propietario]
       properties:
         saneamiento:
           $ref: "#/components/schemas/SaneamientoFila"
@@ -5239,20 +5288,13 @@ components:
           description: Solo las celdas cambiadas desde `desde`, en el orden del alcance.
           items:
             $ref: "#/components/schemas/CeldaGrilla"
-        documento_declarado:
-          allOf:
-            - $ref: "#/components/schemas/DocumentoDeclaradoGrilla"
+        cambio_propietario:
+          type: boolean
           nullable: true
           description: >
-            HU #14087. El documento que declaró el cliente para el vehículo (hoy el locatario de la captura masiva o
-            Express); null si no declaró ninguno. Es el origen del documento, no el de la celda (que sigue sin viajar, R-20).
-        propietarios:
-          type: array
-          description: >
-            HU #14087. Los propietarios que trajo el RUNT, en su orden; siempre presente, vacío mientras el RUNT no
-            los registre. Solo tipo y número enmascarado.
-          items:
-            $ref: "#/components/schemas/PropietarioGrilla"
+            HU #14582. true si el propietario actual declarado no coincide con ningún propietario del RUNT; false si coincide
+            con alguno; null sin declarado, sin celda RUNT cerrada, RUNT sin propietarios o tipo no homologable. Se calcula una
+            vez al cerrar la celda RUNT y viaja también en el delta. Ningún documento acompaña al valor.
         pegada:
           type: boolean
           description: >
@@ -5547,34 +5589,6 @@ components:
           type: string
           example: OT no habilitado para la compañía
 
-    DocumentoDeclaradoGrilla:
-      type: object
-      description: Documento declarado por el cliente, enmascarado en el servidor («****» + 4 últimos alfanuméricos).
-      required: [rol, tipo_documento, documento_enmascarado]
-      properties:
-        rol:
-          type: string
-          enum: [PROPIETARIO, LOCATARIO]
-        tipo_documento:
-          type: string
-          example: CC
-        documento_enmascarado:
-          type: string
-          example: "****5678"
-          description: Nunca el número en claro; «****» si tiene 4 caracteres o menos o no se puede leer.
-
-    PropietarioGrilla:
-      type: object
-      description: Un propietario del RUNT, enmascarado en el servidor («****» + 4 últimos alfanuméricos).
-      required: [tipo_documento, documento_enmascarado]
-      properties:
-        tipo_documento:
-          type: string
-          example: NIT
-        documento_enmascarado:
-          type: string
-          example: "****4567"
-          description: Nunca el número en claro.
 
     CeldaGrilla:
       type: object
@@ -5897,7 +5911,7 @@ components:
                 $ref: "#/components/schemas/FilaVehiculoBackoffice"
 
     FilaVehiculoBackoffice:
-      description: FilaVehiculo (documentos enmascarados incluidos, HU #14087) con celdas del backoffice.
+      description: FilaVehiculo (con cambio_propietario y sin documentos, HU #14582) con celdas del backoffice.
       allOf:
         - $ref: "#/components/schemas/FilaVehiculo"
         - type: object
@@ -5995,7 +6009,8 @@ components:
       description: >
         Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa. HU #14563 (D6, P1 = a): la marca
         ajustado_por_flit y ajustado_en; nunca el autor, el motivo, la versión anterior ni la marca ajuste por alertamiento.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en]
+        HU #14582: cambio_propietario del vehículo.
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6016,12 +6031,16 @@ components:
           format: date-time
           nullable: true
           description: HU #14563. Fecha del ajuste FLIT; null sin ajuste.
+        cambio_propietario:
+          type: boolean
+          nullable: true
+          description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
 
     DictamenVehiculoBackoffice:
       type: object
       additionalProperties: false
       description: El de la compañía más los tres campos de override. Sin lease, intentos ni texto de cola.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en]
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6035,6 +6054,10 @@ components:
         analisis_override: { type: boolean }
         usuario_override_id: { type: string, format: uuid, nullable: true }
         override_en: { type: string, format: date-time, nullable: true }
+        cambio_propietario:
+          type: boolean
+          nullable: true
+          description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
 
     CuerpoOverrideDictamen:
       type: object
@@ -7078,8 +7101,8 @@ components:
       type: object
       description: >
         Una fila de GET /vehiculos (plan §6.6). estado es EN_PROCESO o TERMINADO, calculado sobre las celdas (C1). UA-5: vin e
-        identificador (el valor cargado), nullables, para nombrar una fila sin placa.
-      required: [vehiculo_id, placa, diagnostico_id, diagnostico_nombre, diagnostico_creado_en, modo, estado, veredicto, saneamiento, tramite, vin, identificador]
+        identificador (el valor cargado), nullables, para nombrar una fila sin placa. HU #14582: cambio_propietario del vehículo.
+      required: [vehiculo_id, placa, diagnostico_id, diagnostico_nombre, diagnostico_creado_en, modo, estado, veredicto, saneamiento, tramite, vin, identificador, cambio_propietario]
       properties:
         vehiculo_id: { type: string, format: uuid }
         placa: { type: string, description: Placa, o VIN, o el identificador normalizado. }
@@ -7099,6 +7122,10 @@ components:
           properties:
             id: { type: string, format: uuid }
             numero: { type: string, nullable: true }
+        cambio_propietario:
+          type: boolean
+          nullable: true
+          description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin filtro en servidor.
 
     ListadoVehiculos:
       type: object

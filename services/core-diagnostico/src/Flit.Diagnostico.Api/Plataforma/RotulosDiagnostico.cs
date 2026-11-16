@@ -158,7 +158,7 @@ internal static partial class RotulosDiagnostico
     {
         ["SERVICIO_PUBLICO"] = "El vehículo es de servicio público: esta consulta no aplica.",
         ["DEPARTAMENTO_NO_SOPORTADO"] = "El departamento del vehículo todavía no está soportado.",
-        ["SIN_DOCUMENTO_LOCATARIO"] = "El vehículo está sin el documento del locatario: no hay a quién consultar.",
+        ["SIN_DOCUMENTO_LOCATARIO"] = "El RUNT no reporta locatario",
     };
 
     /// <summary>Tipo de error de una celda o persona (los de <see cref="ClasificadorErrores"/> y los propios del orquestador).</summary>

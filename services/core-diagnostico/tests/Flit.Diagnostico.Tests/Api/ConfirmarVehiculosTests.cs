@@ -166,19 +166,24 @@ public sealed class ConfirmarVehiculosTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
-        texto.Should().NotContain(Documento, "la respuesta trae el documento enmascarado").And.Contain("****4050");
+        texto.Should().NotContain(Documento).And.NotContain("****4050").And.NotContain("documento", "HU #14582 C5: la confirmación no devuelve documentos");
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         var conDocumento = vehiculos.Single(v => v.IdentificadorNorm == "ABC123");
-        conDocumento.LocatarioDocTipo.Should().Be("CC");
-        conDocumento.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        conDocumento.LocatarioDocCifrado.Should().NotBeNullOrEmpty();
-        conDocumento.LocatarioDocCifrado.Should().NotEqual(Encoding.UTF8.GetBytes(Documento));
-        Encoding.UTF8.GetString(conDocumento.LocatarioDocCifrado!).Should().NotContain(Documento);
-        Convert.ToBase64String(conDocumento.LocatarioDocCifrado!).Should().NotContain(Convert.ToBase64String(Encoding.UTF8.GetBytes(Documento)));
-        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(conDocumento.LocatarioDocCifrado!).Should().Be(Documento);
+        conDocumento.PropietarioDeclaradoDocTipo.Should().Be("CC");
+        conDocumento.LocatarioDocTipo.Should().BeNull();
+        conDocumento.LocatarioDocOrigen.Should().BeNull("HU #14582 AC7: el declarado es el propietario actual, no el locatario");
+        conDocumento.LocatarioDocCifrado.Should().BeNull();
+
+        conDocumento.PropietarioDeclaradoDocCifrado.Should().NotBeNullOrEmpty();
+        conDocumento.PropietarioDeclaradoDocCifrado.Should().NotEqual(Encoding.UTF8.GetBytes(Documento));
+        Encoding.UTF8.GetString(conDocumento.PropietarioDeclaradoDocCifrado!).Should().NotContain(Documento);
+        Convert.ToBase64String(conDocumento.PropietarioDeclaradoDocCifrado!).Should().NotContain(Convert.ToBase64String(Encoding.UTF8.GetBytes(Documento)));
+        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(conDocumento.PropietarioDeclaradoDocCifrado!).Should().Be(Documento);
+        conDocumento.CambioPropietario.Should().BeNull("sin RUNT cerrado no hay comparación");
         var sinDocumento = vehiculos.Single(v => v.IdentificadorNorm == "XYZ987");
         sinDocumento.LocatarioDocCifrado.Should().BeNull();
         sinDocumento.LocatarioDocOrigen.Should().BeNull();
+        sinDocumento.PropietarioDeclaradoDocCifrado.Should().BeNull();
         JsonSerializer.Serialize(espia.Entregas).Should().NotContain(Documento, "el encolador no recibe documentos");
     }
 
@@ -212,7 +217,7 @@ public sealed class ConfirmarVehiculosTests
         var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, id, ct);
         cabecera.Estado.Should().Be(EstadoDiagnostico.Creado);
         var estimado = JsonElement.Parse(cabecera.EstimadoConsultas!).EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
-        estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 2, ["RUNT_LOCATARIO"] = 1 });
+        estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 2, ["RUNT_LOCATARIO"] = 0 }, "HU #14582: el declarado no alimenta al locatario");
         JsonElement.Parse(texto).GetProperty("estimado_consultas").EnumerateArray()
             .ToDictionary(e => e.GetProperty("fuente").GetString()!, e => e.GetProperty("consultas").GetInt32())
             .Should().Equal(estimado, "con ANTES_DE_LANZAR la respuesta trae el estimado");

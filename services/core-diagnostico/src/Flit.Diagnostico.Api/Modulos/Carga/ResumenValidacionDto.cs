@@ -7,8 +7,8 @@ namespace Flit.Diagnostico.Api.Modulos.Carga;
 /// <summary>
 /// Resumen de validación de <c>POST /diagnosticos/{id}/carga</c> (HU #13749, F02-H4): conteos, una fila por identificador
 /// (los duplicados del archivo consolidados en la primera), avisos y, solo con <c>estimado_consultas=ANTES_DE_LANZAR</c>,
-/// el estimado por fuente. Se cumple <c>total_filas = validos + erroneos + duplicados</c>. El documento del locatario va
-/// siempre enmascarado. No se guarda nada: el lote se confirma en F02-H5.
+/// el estimado por fuente. Se cumple <c>total_filas = validos + erroneos + duplicados</c>. El documento del propietario actual
+/// declarado (HU #14582) va siempre enmascarado. No se guarda nada: el lote se confirma en F02-H5.
 /// </summary>
 public sealed record ResumenValidacionDto(
     [property: JsonPropertyName("total_filas")] int TotalFilas,
@@ -37,8 +37,8 @@ public sealed record FilaResumenDto(
     [property: JsonPropertyName("identificador")] string Identificador,
     [property: JsonPropertyName("identificador_norm")] string IdentificadorNorm,
     [property: JsonPropertyName("tipo_identificador")] string? TipoIdentificador,
-    [property: JsonPropertyName("tipo_documento_locatario")] string? TipoDocumentoLocatario,
-    [property: JsonPropertyName("documento_locatario")] string? DocumentoLocatario,
+    [property: JsonPropertyName("tipo_documento_propietario")] string? TipoDocumentoPropietario,
+    [property: JsonPropertyName("documento_propietario")] string? DocumentoPropietario,
     [property: JsonPropertyName("valida")] bool Valida,
     [property: JsonPropertyName("filas_duplicadas")] IReadOnlyList<int> FilasDuplicadas,
     [property: JsonPropertyName("errores")] IReadOnlyList<ErrorFilaDto> Errores);

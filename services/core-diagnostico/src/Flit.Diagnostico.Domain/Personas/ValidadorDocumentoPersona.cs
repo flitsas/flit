@@ -34,7 +34,7 @@ public static class ValidadorDocumentoPersona
         if (t.Length == 0 && n.Length == 0)
             return ResultadoDocumento.Ausente;
         if (t.Length == 0 || n.Length == 0)
-            return Error(CodigoIncompleto, "Declare el tipo y el número del documento del locatario, o deje los dos vacíos.");
+            return Error(CodigoIncompleto, "Declare el tipo y el número del documento del propietario actual, o deje los dos vacíos.");
 
         var codigo = Tipos.FirstOrDefault(x => string.Equals(x, t, StringComparison.OrdinalIgnoreCase));
         if (codigo is null)
