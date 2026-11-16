@@ -51,14 +51,16 @@ describe("HU14588 TablaCompanias", () => {
     expect(push).toHaveBeenCalledWith(`/usuarios?empresa=${DEMO.id}`);
   });
 
-  it("los filtros de la tabla viajan en el enlace para volver a ellos por las migas", async () => {
+  it("el enlace conserva el filtro «Usuarios» pero nunca el texto buscado (O-1: un NIT puede ser una cédula)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => lista([DEMO])));
-    render(<TablaCompanias filtros={{ ...FILTROS, busqueda: "demo", usuarios: "CON" }} onCambiar={vi.fn()} />);
+    render(<TablaCompanias filtros={{ ...FILTROS, busqueda: "900000001", usuarios: "CON" }} onCambiar={vi.fn()} />);
     const enlace = await screen.findByRole("link", { name: "Gestionar usuarios de Compañía Demo" });
-    const q = new URL(enlace.getAttribute("href")!, "http://x").searchParams;
+    const href = enlace.getAttribute("href")!;
+    const q = new URL(href, "http://x").searchParams;
     expect(q.get("empresa")).toBe(DEMO.id);
-    expect(q.get("busqueda")).toBe("demo");
     expect(q.get("usuarios")).toBe("CON");
+    expect(q.has("busqueda")).toBe(false);
+    expect(href).not.toContain("900000001");
   });
 
   it("no ofrece filtro de estado (H-U3); sí «Usuarios» con Todas / Con usuarios / Sin usuarios", async () => {
