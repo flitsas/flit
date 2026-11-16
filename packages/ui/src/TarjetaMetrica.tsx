@@ -116,7 +116,7 @@ export function TarjetaMetrica({
           disco
           size={40}
           className="col-start-2 row-span-3 row-start-1"
-          style={pendiente ? { background: "#ff4e001a", color: "var(--kit-naranja)" } : undefined}
+          style={pendiente ? { background: "var(--badge-warning-bg)", color: "var(--kit-naranja)" } : undefined}
         />
       ) : ilustracion ? (
         <img

@@ -656,3 +656,54 @@ describe("GrillaSemaforos — región desplazable (ronda 2 de E2E)", () => {
     expect(screen.getByRole("table").parentElement).not.toHaveAttribute("tabindex");
   });
 });
+
+describe("GrillaSemaforos — HU #14584 M-2 (A6.2): la cabecera de las columnas fijas queda por encima de las demás", () => {
+  const clases = (el: Element) => el.className.split(/\s+/);
+
+  it("las th fijas (casilla, «Placa o VIN» y «Acciones») van en z-20; las th sticky normales siguen en z-10", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }), false, {
+      casillaVehiculo: () => <input type="checkbox" aria-label="Seleccionar" />,
+      accionVehiculo: () => <span>acción</span>,
+      tituloAccionVehiculo: "Acciones",
+    });
+    const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
+    const fijas = [
+      container.querySelector<HTMLElement>("thead tr:first-child th:first-child")!,
+      within(tabla).getByRole("columnheader", { name: "Placa o VIN" }),
+      within(tabla).getByRole("columnheader", { name: "Acciones" }),
+    ];
+    for (const th of fijas) {
+      expect(clases(th)).toContain("z-20");
+      expect(clases(th)).not.toContain("z-10");
+      expect(clases(th)).toContain("min-[900px]:sticky");
+    }
+    const normales = Array.from(container.querySelectorAll("thead tr:last-child th"));
+    expect(normales.length).toBeGreaterThan(0);
+    for (const th of normales) expect(clases(th)).toContain("z-10");
+  });
+
+  it("las celdas fijas del cuerpo quedan por debajo de la cabecera (z-10) y alineadas con su th (mismo left/right y ancho)", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }), false, {
+      casillaVehiculo: () => <input type="checkbox" aria-label="Seleccionar" />,
+      accionVehiculo: () => <span>acción</span>,
+    });
+    const fila = filaDe(container, "vehiculo-1");
+    const casilla = fila.querySelector<HTMLElement>('[data-columna="seleccion"]')!;
+    const placa = within(fila).getByRole("rowheader");
+    const acciones = fila.querySelector<HTMLElement>("td:last-child")!;
+    for (const celdaFija of [casilla, placa, acciones]) {
+      expect(clases(celdaFija)).toContain("z-10");
+      expect(clases(celdaFija)).not.toContain("z-20");
+    }
+    const ths = container.querySelectorAll<HTMLElement>("thead tr:first-child th");
+    expect(clases(ths[0])).toContain("min-[900px]:left-0");
+    expect(clases(casilla)).toContain("min-[900px]:left-0");
+    expect(clases(ths[1])).toContain("min-[900px]:left-10");
+    expect(clases(placa)).toContain("min-[900px]:left-10");
+    const thAcciones = ths[ths.length - 1];
+    for (const c of ["min-[900px]:right-0", "w-[10rem]", "min-w-[10rem]"]) {
+      expect(clases(thAcciones)).toContain(c);
+      expect(clases(acciones)).toContain(c);
+    }
+  });
+});
