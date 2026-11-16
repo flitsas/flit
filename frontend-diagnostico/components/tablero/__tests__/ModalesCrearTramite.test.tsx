@@ -205,7 +205,8 @@ describe("HU #14562 F-05 — «Crear trámite» desde el pie del panel del dicta
   const RUTA_DICTAMEN = `GET /diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen`;
   const VIABLE = { version: 1, veredicto: "VIABLE", estado_redaccion: "LISTA", alertamientos: [], catalogo_version: 1, creado_en: "2026-11-12T15:00:00Z" };
   const abrirPanel = async () => {
-    fireEvent.click(within(tabla()).getByRole("button", { name: "Ver dictamen de TST001" }));
+    // HU #14584 §6.4: el panel del dictamen se abre con «Ver dictamen» del menú «Acciones» de la fila.
+    fireEvent.click(accionFila("TST001", "Ver dictamen de TST001"));
     await avanzar();
     return screen.getByRole("dialog", { name: "Dictamen · TST001" });
   };
