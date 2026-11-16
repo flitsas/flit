@@ -31,7 +31,8 @@ public sealed record ProductInvitationSent(Guid InvitationId, bool EmailSent);
 /// <summary>
 /// ADR-0089 regla 7 / SP-15 — invitar desde el producto. Correo nuevo: invitación con el rol resuelto por código. Miembro de
 /// la empresa sin rol del producto: se le asigna (conserva los de otros productos). Ya con rol, invitación pendiente o
-/// correo de otra empresa: no hace nada (jamás mueve a un usuario de empresa). El resultado real solo es para auditoría.
+/// correo de otra empresa: no hace nada (jamás mueve a un usuario de empresa). AdminCompany o SuperAdmin de la empresa: no hace
+/// nada (su acceso se gestiona en el hub, CR-8). El resultado real solo es para auditoría.
 /// </summary>
 public sealed class InviteProductUserHandler(IProductRoleRepository repo, IProductInvitationSender sender)
 {
@@ -65,6 +66,8 @@ public sealed class InviteProductUserHandler(IProductRoleRepository repo, IProdu
                 return new InviteProductUserResult(InviteOutcome.PendingInvitation, null, EmailSent: false);
             case InviteTargetKind.OtherTenant:
                 return new InviteProductUserResult(InviteOutcome.OtherTenant, null, EmailSent: false);
+            case InviteTargetKind.ProtectedMember:
+                return new InviteProductUserResult(InviteOutcome.ProtectedTarget, target.UserId, EmailSent: false);
             default:
                 var sent = await sender.SendAsync(cmd.TenantId, email, name, role.Id, cmd.Actor.UserId, ct).ConfigureAwait(false);
                 return sent is null

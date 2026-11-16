@@ -134,6 +134,9 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
         var member = await GetMemberAsync(tenantId, user.Id, productCode, ct).ConfigureAwait(false);
         if (member is null)
             return new InviteTarget(InviteTargetKind.OtherTenant);
+        // CR-8: el acceso de AdminCompany y SuperAdmin al producto se gestiona en el hub.
+        if (member.IsAdminCompany || member.IsSuperAdmin)
+            return new InviteTarget(InviteTargetKind.ProtectedMember, user.Id);
         return member.CurrentRole is not null || member.SuspendedRole is not null
             ? new InviteTarget(InviteTargetKind.MemberWithRole, user.Id)
             : new InviteTarget(InviteTargetKind.MemberWithoutRole, user.Id);

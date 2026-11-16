@@ -199,6 +199,7 @@ internal sealed partial class UsuariosProductoGrpcService(
         InviteOutcome.RoleAssigned => "ROL_ASIGNADO",
         InviteOutcome.AlreadyWithRole => "YA_CON_ROL",
         InviteOutcome.PendingInvitation => "INVITACION_PENDIENTE",
+        InviteOutcome.ProtectedTarget => ProductRoleErrorCodes.ObjetivoProtegido,
         _ => "OTRA_COMPANIA",
     };
 
