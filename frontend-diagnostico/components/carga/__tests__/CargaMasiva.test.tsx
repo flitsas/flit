@@ -267,6 +267,26 @@ describe("Carga — propietario actual (HU #14585)", () => {
     expect(ERRORES_CARGA.DEMASIADAS_SOLICITUDES).toBeTruthy();
   });
 
+  // CR-7 (code review del kit): el texto fijo llega a la pantalla, nunca el mensaje del servidor.
+  it("422 ENCABEZADO_AMBIGUO al analizar: muestra el texto fijo de columnas duplicadas", async () => {
+    await montar({ [`POST ${ruta("/carga")}`]: () => Response.json({ code: "ENCABEZADO_AMBIGUO", error: SECRETO }, { status: 422 }) });
+    await subir();
+    expect(await screen.findByText(ERRORES_CARGA.ENCABEZADO_AMBIGUO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
+  });
+
+  it("429 DEMASIADAS_SOLICITUDES al confirmar: muestra el texto fijo de espera", async () => {
+    await montar({
+      [`POST ${ruta("/carga")}`]: () => Response.json(resumen()),
+      [`POST ${ruta("/vehiculos")}`]: () => Response.json({ code: "DEMASIADAS_SOLICITUDES", error: SECRETO }, { status: 429, headers: { "Retry-After": "30" } }),
+    });
+    await subir();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(continuar());
+    expect(await screen.findByText(ERRORES_CARGA.DEMASIADAS_SOLICITUDES)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
+  });
+
   it("la ayuda de la subida pide el documento del propietario actual (opcional)", async () => {
     await montar({});
     expect(await screen.findByText(/el documento del propietario actual \(opcional\)/i)).toBeInTheDocument();
