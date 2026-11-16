@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
 import { FUENTES, nombreFuente, nombreSubfuente } from "@/lib/configuracion";
 import { V1, V2, V3, celda, grilla, llamadas, loteTerminadoConErrores, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import type { Grilla } from "@/lib/tablero/api";
 import { simularDesborde } from "@/components/comun/__tests__/desborde";
+import { CONTENEDOR_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { createElement, type ComponentType } from "react";
 import { join, resolve } from "node:path";
 import {
@@ -17,8 +18,8 @@ import {
 } from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <GrillaSemaforos grilla={grilla} puedeReprocesar={sesion.capacidades.reprocesarConsultas}
-// onReprocesada={(celda) => …} onErrorReproceso={(mensaje) => …} /> pinta una fila por vehículo (placa o VIN, documento
-// declarado y documentos del propietario) y SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial,
+// onReprocesada={(celda) => …} onErrorReproceso={(mensaje) => …} /> pinta una fila por vehículo (placa o VIN con el ícono de
+// cambio de propietario; sin columnas de documento desde HU #14585) y SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial,
 // Impuesto departamental): la fuente no pedida dice «Sin solicitar»; la pedida sin celda, «Sin ejecutar». «Reprocesar» solo
 // en las rojas y solo si la sesión trae la capacidad (HU #14087 sobre HU #13748).
 
@@ -96,16 +97,23 @@ describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8
       expect(td).toHaveTextContent("Sin ejecutar");
       expect(within(td).queryByRole("button")).not.toBeInTheDocument();
     }
-    expect(within(fila).getAllByRole("cell")).toHaveLength(2 + 8);
+    expect(within(fila).getAllByRole("cell")).toHaveLength(8);
   });
 });
 
-describe("GrillaSemaforos — HU #14087 AC4: placa, documento declarado y documentos del propietario", () => {
-  it("columnas Placa o VIN, Documento declarado y Documento del propietario antes de las fuentes", () => {
+describe("GrillaSemaforos — HU #14585: placa con su ícono de cambio de propietario, sin columnas de documento", () => {
+  it("A6.1: la primera columna es «Placa o VIN» y no existen «Documento declarado» ni «Documento del propietario»", () => {
     const { container } = pintar();
-    const primeras = Array.from(container.querySelectorAll("thead tr:first-child th")).slice(0, 3);
-    expect(primeras.map((th) => th.textContent)).toEqual(["Placa o VIN", "Documento declarado", "Documento del propietario"]);
-    for (const th of primeras) expect(th).toHaveAttribute("scope", "col");
+    const primera = container.querySelector("thead tr:first-child th")!;
+    expect(primera.textContent).toBe("Placa o VIN");
+    expect(primera).toHaveAttribute("scope", "col");
+    expect(screen.queryByRole("columnheader", { name: /documento/i })).toBeNull();
+    expect(container.querySelector("[data-columna='documento-declarado'], [data-columna='documento-propietario']")).toBeNull();
+  });
+
+  it("la tabla recalcula su ancho mínimo sin las dos columnas (min-w ~1040 px)", () => {
+    pintar();
+    expect(screen.getByRole("table", { name: /semáforo de consultas/i }).className).toContain("min-w-[1040px]");
   });
 
   it("una fila por vehículo con su placa como encabezado de fila, su avance y el badge Terminado", () => {
@@ -133,45 +141,100 @@ describe("GrillaSemaforos — HU #14087 AC4: placa, documento declarado y docume
     expect(within(filaDe(container, "vehiculo-7")).getByRole("rowheader")).toHaveTextContent(vin);
   });
 
-  it("el documento declarado se ve con su tipo, enmascarado y su rol; uno completo se vuelve a enmascarar", () => {
-    const declarado = vehiculo(1, [celda(1, "RUNT", "COMPLETADO")], {
-      documento_declarado: { rol: "LOCATARIO", tipo_documento: "C", documento_enmascarado: "****5678" },
-    });
-    const completo = vehiculo(2, [celda(2, "RUNT", "COMPLETADO")], {
-      documento_declarado: { rol: "PROPIETARIO", tipo_documento: "NIT", documento_enmascarado: "9001234567" },
-    });
-    const { container } = pintar(grilla({ vehiculos: [declarado, completo] }));
-    const d1 = filaDe(container, "vehiculo-1").querySelector<HTMLElement>("[data-columna='documento-declarado']")!;
-    expect(d1).toHaveTextContent("C ****5678");
-    expect(d1).toHaveTextContent("Locatario");
-    const d2 = filaDe(container, "vehiculo-2").querySelector<HTMLElement>("[data-columna='documento-declarado']")!;
-    expect(d2).toHaveTextContent("NIT ****4567");
-    expect(d2).toHaveTextContent("Propietario");
-    expect(container).not.toHaveTextContent("9001234567");
+  it("A6.7: el ícono de cambio de propietario va en la celda de la placa solo con true", () => {
+    const con = vehiculo(1, [celda(1, "RUNT", "COMPLETADO")], { cambio_propietario: true });
+    const sin = vehiculo(2, [celda(2, "RUNT", "COMPLETADO")], { cambio_propietario: false });
+    const nulo = vehiculo(3, [celda(3, "RUNT", "COMPLETADO")], { cambio_propietario: null });
+    const { container } = pintar(grilla({ vehiculos: [con, sin, nulo] }));
+    expect(within(within(filaDe(container, "vehiculo-1")).getByRole("rowheader")).getByRole("button", { name: "Cambio de propietario" })).toBeInTheDocument();
+    for (const id of ["vehiculo-2", "vehiculo-3"]) expect(within(filaDe(container, id)).queryByRole("button", { name: "Cambio de propietario" })).toBeNull();
   });
 
-  it("los documentos del propietario van uno por línea, con su tipo y enmascarados", () => {
-    const v = vehiculo(1, [celda(1, "RUNT", "COMPLETADO")], {
-      propietarios: [
-        { tipo_documento: "C", documento_enmascarado: "****1222" },
-        { tipo_documento: "NIT", documento_enmascarado: "8001112223" },
-      ],
-    });
-    const { container } = pintar(grilla({ vehiculos: [v] }));
-    const td = filaDe(container, "vehiculo-1").querySelector<HTMLElement>("[data-columna='documento-propietario']")!;
-    expect(within(td).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["C ****1222", "NIT ****2223"]);
-    expect(container).not.toHaveTextContent("8001112223");
+  it("SP-19: aunque el backend viejo mandara documentos, el HTML de la grilla no trae el número ni su máscara", () => {
+    const viejo = {
+      ...vehiculo(1, [celda(1, "RUNT", "COMPLETADO")], { cambio_propietario: true }),
+      documento_declarado: { rol: "LOCATARIO", tipo_documento: "CC", documento_enmascarado: "****5678" },
+      propietarios: [{ tipo_documento: "NIT", documento_enmascarado: "9001234567" }],
+    };
+    const { container } = pintar(grilla({ vehiculos: [viejo as never] }));
+    // Con el tooltip del ícono abierto tampoco: su contenido es el literal fijo.
+    const icono = within(filaDe(container, "vehiculo-1")).getByRole("button", { name: "Cambio de propietario" });
+    act(() => icono.focus());
+    const html = document.body.innerHTML;
+    for (const fuga of ["5678", "9001234567", "4567", "****"]) expect(html).not.toContain(fuga);
   });
 
-  it("sin documento declarado ni propietarios (o sin las claves) muestra «—»", () => {
-    const sinClaves = { ...vehiculo(2, [celda(2, "RUNT", "PENDIENTE")]) } as Record<string, unknown>;
-    delete sinClaves.documento_declarado;
-    delete sinClaves.propietarios;
-    const { container } = pintar(grilla({ vehiculos: [vehiculo(1, [celda(1, "RUNT", "PENDIENTE")]), sinClaves as never] }));
-    for (const id of ["vehiculo-1", "vehiculo-2"]) {
-      expect(filaDe(container, id).querySelector("[data-columna='documento-declarado']")).toHaveTextContent(/^—$/);
-      expect(filaDe(container, id).querySelector("[data-columna='documento-propietario']")).toHaveTextContent(/^—$/);
-    }
+  it("la placa no lleva botones de Dictamen ni Auditoría (A6.6): solo lo que pase accionEncabezado como marca", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }), false, { accionEncabezado: () => <span>Ajustado por FLIT</span> });
+    const placa = within(filaDe(container, "vehiculo-1")).getByRole("rowheader");
+    expect(within(placa).queryByRole("button", { name: /dictamen|auditor/i })).toBeNull();
+    expect(placa).toHaveTextContent("Ajustado por FLIT");
+  });
+
+  it("filas con el hover del kit (--table-row-hover) y transición con el token de movimiento", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }));
+    const fila = filaDe(container, "vehiculo-1");
+    expect(fila.className).toContain("hover:bg-[var(--table-row-hover)]");
+    expect(fila.className).toContain("motion-reduce:transition-none");
+  });
+
+  it("CR-6: contenedor CONTENEDOR_TABLA_CLS y las celdas fijas (placa y Acciones) toman el hover de la fila (group-hover)", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }), false, { accionVehiculo: () => <span>acción</span> });
+    const contenedor = screen.getByRole("table", { name: /semáforo de consultas/i }).parentElement!;
+    for (const c of CONTENEDOR_TABLA_CLS.split(" ")) expect(contenedor.className.split(/\s+/)).toContain(c);
+    const fila = filaDe(container, "vehiculo-1");
+    expect(fila.className.split(/\s+/)).toContain("group");
+    expect(within(fila).getByRole("rowheader").className).toContain("group-hover:bg-[var(--table-row-hover)]");
+    expect(fila.querySelector<HTMLElement>("td:last-child")!.className).toContain("group-hover:bg-[var(--table-row-hover)]");
+  });
+});
+
+describe("GrillaSemaforos — HU #14584 §6.2: la celda pinta solo el chip; el detalle va al tooltip", () => {
+  const conTooltip = (td: HTMLElement) => {
+    const disparador = td.querySelector<HTMLElement>("a, [tabindex='0']")!;
+    act(() => disparador.focus());
+    return { disparador, tip: screen.getByRole("tooltip") };
+  };
+
+  it("A6.3/A6.4: Ejecutado reutilizado → tooltip «Ejecutado · Dato del …» enlazado con aria-describedby", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }));
+    const { disparador, tip } = conTooltip(celdaDe(container, "celda-1-runt"));
+    expect(disparador.tagName).toBe("A");
+    expect(tip).toHaveTextContent("Ejecutado");
+    expect(tip).toHaveTextContent("Dato del 21/10/2026 09:05");
+    expect(disparador.getAttribute("aria-describedby") ?? "").toContain(tip.id);
+  });
+
+  it("Ejecutado sin reutilizar también dice la fecha del dato; sin fecha, «Consultado en este lote»", () => {
+    const sinFecha = vehiculo(1, [celda(1, "RUNT", "COMPLETADO", { dato_obtenido_en: null })]);
+    const { container } = pintar(grilla({ vehiculos: [sinFecha] }));
+    expect(conTooltip(celdaDe(container, "celda-1-runt")).tip).toHaveTextContent("Consultado en este lote");
+  });
+
+  it("Error → «Error · No se pudo consultar»; Novedad → su motivo; Sin ejecutar → «La consulta aún no termina»", () => {
+    const { container } = pintar();
+    expect(conTooltip(celdaDe(container, "celda-2-simit_propietario")).tip).toHaveTextContent("No se pudo consultar");
+    expect(conTooltip(celdaDe(container, "celda-1-impuesto_departamental")).tip).toHaveTextContent("Servicio público");
+    expect(conTooltip(celdaDe(container, "celda-3-runt")).tip).toHaveTextContent("La consulta aún no termina");
+  });
+
+  it("Sin solicitar (sin enlace): el chip va en un span enfocable con nombre de fuente, placa y estado; tooltip «No se pidió en este lote»", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }));
+    const td = fuenteDe(filaDe(container, "vehiculo-1"), "RUNT_PROPIETARIO");
+    const span = td.querySelector<HTMLElement>("[tabindex='0']")!;
+    // CR-8: sin aria-label en un span sin rol; el nombre va como texto sr-only dentro del disparador.
+    expect(span).not.toHaveAttribute("aria-label");
+    expect(span.querySelector(".sr-only")).toHaveTextContent("RUNT propietario de TST001: Sin solicitar");
+    act(() => span.focus());
+    expect(screen.getByRole("tooltip")).toHaveTextContent("No se pidió en este lote");
+  });
+
+  it("la línea secundaria en la celda solo se ve por debajo de 900 px y es aria-hidden (ya va en el tooltip)", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }));
+    const td = fuenteDe(filaDe(container, "vehiculo-1"), "RUNT_PROPIETARIO");
+    const linea = within(td).getByText("No se pidió en este lote");
+    expect(linea).toHaveAttribute("aria-hidden", "true");
+    expect(linea.className).toContain("min-[900px]:hidden");
   });
 });
 
@@ -218,7 +281,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
   it.each([
     ["celda-1-impuesto_departamental", "Servicio público"],
     ["celda-2-impuesto_departamental", "Departamento no soportado"],
-    ["celda-1-runt_locatario", "Sin documento del locatario"],
+    ["celda-1-runt_locatario", "El RUNT no reporta locatario"],
   ])("la novedad %s muestra su motivo «%s» debajo", (id, motivo) => {
     const { container } = pintar();
     // El enlace del semáforo lleva además el aviso sr-only de pestaña nueva (HU #14087): el motivo va justo después.
@@ -330,9 +393,9 @@ describe("GrillaSemaforos — AC6: dato reutilizado y sin indicador manual", () 
     expect(celdaDe(container, "celda-1-runt")).toHaveTextContent("Dato del 21/10/2026 09:05");
   });
 
-  it("la celda no reutilizada no repite la fecha del dato", () => {
+  it("HU #14584 §6.2: la celda no reutilizada también lleva la fecha del dato (tooltip y línea móvil)", () => {
     const { container } = pintar();
-    expect(celdaDe(container, "celda-2-runt")).not.toHaveTextContent(/Dato del/);
+    expect(celdaDe(container, "celda-2-runt")).toHaveTextContent("Dato del 21/10/2026 10:00");
   });
 
   it("no existe ningún indicador de dato manual ni de origen", () => {
@@ -462,8 +525,6 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
       "Seleccionar",
       "Placa o VIN",
       "Dictamen",
-      "Documento declarado",
-      "Documento del propietario",
       ...FUENTES.map((f) => f.nombre),
       "Acciones",
     ]);

@@ -231,3 +231,52 @@ describe("AccionesVehiculo — resultados (spec-ui §2.5)", () => {
     expect(onAbrirDeuda).toHaveBeenCalledWith(disparador());
   });
 });
+
+// HU #14584 §6.4 (A6.6): «Ver dictamen» abre el menú, en su grupo «Dictamen», antes del orden D-103; solo si la fila trae
+// veredicto. Uso de ejemplo: <AccionesVehiculo … onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })} />.
+describe("AccionesVehiculo — HU #14584: «Ver dictamen» en el menú", () => {
+  it("«Ver dictamen» va primero y llama a onVerDictamen con el disparador", () => {
+    const onVerDictamen = vi.fn();
+    pintar({ vehiculo: TERMINADO({ veredicto: "VIABLE" }), onVerDictamen });
+    expect(abrir().map((i) => i.textContent?.trim())[0]).toBe("Ver dictamen");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ver dictamen de TST001" }));
+    expect(onVerDictamen).toHaveBeenCalledWith(disparador());
+  });
+
+  it("sin veredicto (Pendiente) también hay «Ver dictamen»: el panel dice que no hay dictamen vigente", () => {
+    pintar({ vehiculo: TERMINADO({ veredicto: null }), onVerDictamen: vi.fn() });
+    expect(abrir().map((i) => i.textContent?.trim())[0]).toBe("Ver dictamen");
+  });
+
+  it("sin onVerDictamen no hay «Ver dictamen»", () => {
+    pintar({ vehiculo: TERMINADO({ veredicto: "VIABLE" }) });
+    expect(abrir().map((i) => i.textContent?.trim())).not.toContain("Ver dictamen");
+  });
+
+  it("sin otras capacidades, la fila con veredicto igual tiene el menú con «Ver dictamen»", () => {
+    pintar({
+      vehiculo: TERMINADO({ veredicto: "BLOQUEADO", pegada: false }),
+      capacidades: { sanear: false, derivar: false, descargar: false, reprocesar: false },
+      conDatosSaneamiento: false,
+      onVerDictamen: vi.fn(),
+    });
+    expect(abrir().map((i) => i.textContent?.trim())).toEqual(["Ver dictamen"]);
+  });
+});
+
+// HU #14584 §6.4: «Auditoría del dictamen» en el grupo Dictamen del menú del cliente, solo si quien pinta pasa onVerAuditoria
+// (capacidad verAuditoria). Uso de ejemplo: <AccionesVehiculo … onVerAuditoria={puedeAuditar ? abrir : undefined} />.
+describe("AccionesVehiculo — HU #14584: «Auditoría del dictamen» con verAuditoria", () => {
+  it("con onVerAuditoria, va justo después de «Ver dictamen» y llama con el disparador", () => {
+    const onVerAuditoria = vi.fn();
+    pintar({ onVerDictamen: vi.fn(), onVerAuditoria });
+    expect(abrir().map((i) => i.textContent?.trim()).slice(0, 2)).toEqual(["Ver dictamen", "Auditoría del dictamen"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Auditoría del dictamen de TST001" }));
+    expect(onVerAuditoria).toHaveBeenCalledWith(disparador());
+  });
+
+  it("sin onVerAuditoria no hay auditoría", () => {
+    pintar({ onVerDictamen: vi.fn() });
+    expect(abrir().map((i) => i.textContent?.trim())).not.toContain("Auditoría del dictamen");
+  });
+});

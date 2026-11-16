@@ -29,6 +29,8 @@ export interface FilaVehiculoListado {
   veredicto: "VIABLE" | "BLOQUEADO" | null;
   saneamiento: SaneamientoFila;
   tramite: Pick<TramiteFila, "id" | "numero"> | null;
+  /** Contrato 1.6.0 §1.2 (`FilaPlaca`): cambio de propietario (true pinta el ícono junto a la placa; false/null, nada). */
+  cambio_propietario?: boolean | null;
 }
 
 export interface ListaVehiculos {

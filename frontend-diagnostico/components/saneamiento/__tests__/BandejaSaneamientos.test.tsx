@@ -6,6 +6,7 @@ import { sesion } from "@/__tests__/configuracion/datos";
 import { filtrosBandejaDesdeUrl } from "@/lib/backoffice/saneamientos";
 import { ResumenSaneamientosContext } from "@/lib/backoffice/useResumenSaneamientos";
 import { BASE, EMPRESAS, EMPRESA_A, EMPRESA_DESCONOCIDA, LOTE_BO, filaBandeja, listaBandeja, llamadas, simularApi } from "./datosBackoffice";
+import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 
 // Uso de ejemplo: /backoffice/saneamientos?estado=SOLICITADO&empresa=… monta <BandejaSaneamientos filtros={…} /> dentro
 // de AccesoSaneamientos (capacidades backoffice y gestionarSaneamiento). Pide GET /backoffice/saneamientos con los filtros
@@ -427,5 +428,16 @@ describe("AC28 — ir a la gestión", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar la placa TST001" }));
     expect(h.push).not.toHaveBeenCalled();
     expect(LOTE_BO).toBeTruthy();
+  });
+});
+
+// HU #14585 (spec-ui §7, A7.1): la bandeja con la tabla por defecto (hover --table-row-hover en vez de --kit-hover).
+// Uso de ejemplo: esperarTablaPorDefecto(await tabla()).
+describe("BandejaSaneamientos — HU #14585: tabla por defecto", () => {
+  it("contenedor, cabecera de 12 px y hover de fila iguales al listado principal", async () => {
+    conEmpresas({ [`GET ${BASE}`]: () => json(listaBandeja([filaBandeja(1)])) });
+    montar();
+    esperarTablaPorDefecto(await tabla());
+    esperarCabecera12px();
   });
 });

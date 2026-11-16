@@ -43,8 +43,8 @@ function ListaAlertas({ etiqueta, alertas, conAjuste }: { etiqueta: string; aler
 }
 
 /**
- * Auditoría del dictamen de un vehículo (HU #14562 · AC47, D6/D7). Solo existe en el backoffice: ninguna pantalla de la
- * compañía muestra autor, motivo ni versiones anteriores. Versiones de la más nueva a la más vieja, con origen, usuario,
+ * Auditoría del dictamen de un vehículo (HU #14562 · AC47, D6/D7). Solo operación FLIT: la abren el backoffice y, desde
+ * HU #14584 §6.4, el menú «Acciones» del tablero cuando la sesión trae verAuditoria (la API valida el permiso). Versiones de la más nueva a la más vieja, con origen, usuario,
  * motivo, fecha, alertamientos agregados o editados, eliminados y la marca «Superado por recálculo». Cuatro estados.
  */
 export function AuditoriaDictamen({ diagnosticoId, vehiculoId, empresa }: AuditoriaDictamenProps) {

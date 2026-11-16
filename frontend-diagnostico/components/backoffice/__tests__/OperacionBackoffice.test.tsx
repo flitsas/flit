@@ -67,7 +67,9 @@ const enlacesBackoffice = () => screen.queryAllByRole("button", { name: "Backoff
 const botonesLlenar = () => screen.queryAllByRole("button", { name: /^Llenar a mano/ });
 
 async function abrirDictamen() {
-  fireEvent.click(screen.getByRole("button", { name: "Ver dictamen de TST001" }));
+  // HU #14584 §6.4: Dictamen en el menú «Acciones» de la fila del backoffice.
+  fireEvent.click(screen.getByRole("button", { name: "Acciones de la placa TST001" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Ver dictamen de TST001" }));
   expect(await screen.findByText("El SOAT no está vigente.")).toBeInTheDocument();
 }
 

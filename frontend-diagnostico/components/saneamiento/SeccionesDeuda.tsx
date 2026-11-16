@@ -14,7 +14,7 @@ import {
 import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
-import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
+import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, CONTENEDOR_TABLA_CLS, FILA_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "@/components/tablero/vistasDetalle/comun";
 import type {
   EstadoFuenteDeuda,
   FuenteDeuda,
@@ -83,7 +83,7 @@ function Consultado({ en }: { en?: string | null }) {
 /** Tabla simple que pasa a tarjetas por debajo de 900 px (recetas TABLA_MOVIL_*), dentro de la región desplazable. */
 function TablaSimple({ nombre, columnas, filas }: { nombre: string; columnas: { titulo: string; derecha?: boolean }[]; filas: ReactNode[][] }) {
   return (
-    <RegionDesplazable nombre={nombre} className="rounded-xl border border-border">
+    <RegionDesplazable nombre={nombre} className={CONTENEDOR_TABLA_CLS}>
       <table aria-label={nombre} className={`w-full border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
@@ -96,7 +96,7 @@ function TablaSimple({ nombre, columnas, filas }: { nombre: string; columnas: { 
         </thead>
         <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {filas.map((fila, i) => (
-            <tr key={i} className={`${FILA_TABLA_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+            <tr key={i} className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
               {fila.map((celda, j) => (
                 <td
                   key={columnas[j].titulo}
@@ -172,7 +172,7 @@ function ContenidoFuente({ fuente, rotulo }: { fuente: FuenteDeudaPanel; rotulo:
   if (fuente.estado === "NO_APLICA") {
     return (
       <p className="text-sm text-flit-primary">
-        {fuente.motivo_na === "SIN_DOCUMENTO_LOCATARIO" ? "No se consultó: falta el documento del locatario." : "No aplica para este vehículo."}
+        {fuente.motivo_na === "SIN_DOCUMENTO_LOCATARIO" ? "No se consultó: el RUNT no reporta locatario." : "No aplica para este vehículo."}
       </p>
     );
   }

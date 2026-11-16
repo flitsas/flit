@@ -212,7 +212,7 @@ test.describe("HU #14584 grilla del detalle", () => {
     const estado = page.getByRole("combobox", { name: "Estado", exact: true });
     const dictamen = page.getByRole("combobox", { name: "Dictamen", exact: true });
     const limpiar = page.getByRole("button", { name: "Limpiar filtros" }).first();
-    const buscador = page.getByRole("textbox", { name: "Buscar por placa o VIN" });
+    const buscador = page.getByRole("searchbox", { name: "Buscar por placa o VIN" });
     await expect(contadorFilas(page)).toHaveText("Mostrando 3 de 3 vehículos");
     await expect(limpiar).toBeDisabled();
 

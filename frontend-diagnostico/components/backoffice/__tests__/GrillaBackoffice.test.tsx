@@ -39,6 +39,13 @@ function montar(g: TGrilla = grillaBo(), extra: Parameters<typeof simularApi>[0]
 const tabla = () => screen.findByRole("table", { name: /semáforo de consultas/i });
 const td = (container: HTMLElement, id: string) => container.querySelector<HTMLElement>(`[data-celda="${id}"]`)!;
 const semaforo = (fuente: string, placa: string) => screen.getByRole("link", { name: new RegExp(`^Ver detalle de ${fuente} de ${placa}`) });
+/** Abre el menú «Acciones» de la fila (HU #14584 §6.4) y devuelve su disparador. */
+function abrirMenu(placa: string) {
+  const disparador = screen.getByRole("button", { name: `Acciones de la placa ${placa}` });
+  disparador.focus();
+  fireEvent.click(disparador);
+  return disparador;
+}
 const llenar = (fuente: string, placa: string) => screen.queryByRole("button", { name: `Llenar a mano ${fuente} de ${placa}` });
 
 describe("GrillaBackoffice — cuatro estados y empresa explícita", () => {
@@ -79,12 +86,14 @@ describe("GrillaBackoffice — cuatro estados y empresa explícita", () => {
 });
 
 describe("GrillaBackoffice — HU #14087 AC6: la misma tabla por pilares que la compañía", () => {
-  it("cabecera por pilar, columnas de vehículo y documentos, y las 8 fuentes en cada fila", async () => {
+  it("cabecera por pilar, Placa o VIN sin columnas de documento (HU #14585), «Acciones» al final y las 8 fuentes en cada fila", async () => {
     const { container } = montar();
     const t = await tabla();
     expect(within(t).getByRole("columnheader", { name: "RUNT" })).toHaveAttribute("colspan", "3");
     expect(within(t).getByRole("columnheader", { name: "SIMIT" })).toHaveAttribute("colspan", "3");
-    for (const nombre of ["Placa o VIN", "Documento declarado", "Documento del propietario"]) expect(within(t).getByRole("columnheader", { name: nombre })).toBeInTheDocument();
+    expect(within(t).getByRole("columnheader", { name: "Placa o VIN" })).toBeInTheDocument();
+    expect(within(t).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    expect(within(t).queryByRole("columnheader", { name: /documento/i })).toBeNull();
     expect(container.querySelector('[data-vehiculo="vehiculo-1"]')!.querySelectorAll("[data-fuente]")).toHaveLength(8);
   });
 });
@@ -246,7 +255,8 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
       [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen/versiones`]: () => Response.json({ versiones: [] }),
     });
     await tabla();
-    fireEvent.click(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
+    abrirMenu("TST001");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Auditoría del dictamen de TST001" }));
     const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
     expect(await within(panel).findByText("Este vehículo aún no tiene dictamen.")).toBeInTheDocument();
     // FE-1: modal de la suite de 640 px; sin campos, el velo cierra como el panel.
@@ -255,7 +265,7 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
     expect(screen.queryByRole("dialog", { name: "Auditoría del dictamen · TST001" })).toBeNull();
   });
 
-  it("FE-1: Escape en «Auditoría del dictamen» devuelve el foco a su botón también con StrictMode (next dev)", async () => {
+  it("FE-1: Escape en «Auditoría del dictamen» devuelve el foco al disparador «Acciones» también con StrictMode (next dev)", async () => {
     h.capacidades = { ...h.capacidades, verAuditoria: true };
     simularApi({
       [RUTA_GRILLA]: () => Response.json(grillaBo()),
@@ -267,21 +277,73 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
       </StrictMode>,
     );
     await tabla();
-    const boton = screen.getByRole("button", { name: "Auditoría del dictamen de TST001" });
-    boton.focus();
-    fireEvent.click(boton);
+    const disparador = abrirMenu("TST001");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Auditoría del dictamen de TST001" }));
     const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
     await within(panel).findByText("Este vehículo aún no tiene dictamen.");
     expect(panel.contains(document.activeElement)).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
+    expect(document.activeElement).toBe(disparador);
   });
 
   it("AC47: sin verAuditoria no se ofrece la auditoría", async () => {
     montar();
     await tabla();
+    abrirMenu("TST001");
+    expect(screen.queryByRole("menuitem", { name: /^Auditoría del dictamen/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Auditoría del dictamen/ })).toBeNull();
+  });
+});
+
+describe("GrillaBackoffice — HU #14584 §6.4 (A6.6): Dictamen y Auditoría en el menú «Acciones»", () => {
+  it("la celda de la placa no tiene botones de Dictamen ni Auditoría; quedan solo las marcas", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    const { container } = montar();
+    await tabla();
+    const placa = within(container.querySelector<HTMLElement>('[data-vehiculo="vehiculo-1"]')!).getByRole("rowheader");
+    expect(within(placa).queryByRole("button")).toBeNull();
+  });
+
+  it("«Ver dictamen de PLACA» en el menú abre el panel del dictamen y la auditoría solo con verAuditoria", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    montar(grillaBo(), {
+      [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen`]: () => Response.json({ code: "SIN_DICTAMEN", error: "Sin dictamen" }, { status: 404 }),
+    });
+    await tabla();
+    abrirMenu("TST001");
+    const items = screen.getAllByRole("menuitem").map((i) => i.getAttribute("aria-label") ?? i.textContent);
+    expect(items).toEqual(["Ver dictamen de TST001", "Auditoría del dictamen de TST001"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ver dictamen de TST001" }));
+    expect(await screen.findByRole("dialog", { name: "Dictamen · TST001" })).toBeInTheDocument();
+  });
+
+  it("el ícono de cambio de propietario va junto a la placa también en el backoffice", async () => {
+    const g = grillaBo();
+    g.vehiculos[0] = { ...g.vehiculos[0], cambio_propietario: true };
+    montar(g);
+    await tabla();
+    expect(screen.getByRole("button", { name: "Cambio de propietario" })).toBeInTheDocument();
+  });
+
+  it("decisión del orquestador: la misma barra de filtros que el cliente (fuente + estado y Limpiar filtros)", async () => {
+    montar();
+    await tabla();
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Fuente" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Estado" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Limpiar filtros" })).toBeDisabled();
+  });
+
+  it("CR-3: «Limpiar filtros» del vacío por filtro restablece la grilla y lleva el foco al buscador", async () => {
+    montar();
+    await tabla();
+    fireEvent.change(screen.getByLabelText("Buscar por placa o VIN"), { target: { value: "ZZZ999" } });
+    expect(await screen.findByText("Ningún vehículo coincide")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!);
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveValue("");
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveFocus();
+    expect(await tabla()).toBeInTheDocument();
   });
 });
 

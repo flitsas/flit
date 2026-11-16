@@ -51,7 +51,11 @@ export interface BotonSanearProps {
 }
 
 const FILA_CLS = `${ACCION_FILA_CLS} whitespace-nowrap`;
-const ENCENDIDA_CLS = "bg-[var(--di-accent-soft)]";
+/**
+ * Encendida: el tinte --di-accent-soft como capa sobre --card, para que el fondo sea opaco (CR-2, WCAG 1.4.3). Translúcido,
+ * sobre el hover de fila (--table-row-hover) bajaba a 4,23:1 en claro y 4,30:1 en oscuro; opaco queda en 5,02 y 5,31.
+ */
+const ENCENDIDA_CLS = "bg-card bg-[image:linear-gradient(var(--di-accent-soft),var(--di-accent-soft))]";
 const NO_ELEGIBLE_CLS = "cursor-not-allowed opacity-60";
 /** En la fila, el glifo a 14 px como «Crear trámite»; en la cabecera, a su tamaño (16 px). */
 const ICONO_CLS = { fila: "h-3.5 w-3.5", cabecera: undefined } as const;

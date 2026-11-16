@@ -9,6 +9,7 @@ import { validarIdentificador, validarLongitudIdentificador } from "@/lib/valida
 import { AYUDA_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
 import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
+import { CONTENEDOR_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
 
 export interface TablaFilasCorregiblesProps {
   diagnosticoId: string;
@@ -300,6 +301,8 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
         errorFila={(f) => f.edicion.errorServidor}
         // «Reintentar» (solo tras un fallo de la revalidación) vuelve a pedirla con lo digitado.
         onGuardar={(f) => revalidar(f.edicion)}
+        // HU #14585 (spec-ui §7): contenedor de la tabla por defecto (rounded-xl = 9 px y borde de marca); la cabecera es del kit.
+        className={CONTENEDOR_TABLA_CLS}
       />
       {paginas > 1 && (
         <nav aria-label="Páginas de filas con errores" className="flex items-center justify-end gap-2">

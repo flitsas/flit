@@ -571,3 +571,20 @@ describe("PanelDictamen — FE-1 modal: velo y ocupado", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+// HU #14585 (spec-ui §6.5; contrato 1.6.0 §1.2 `DictamenVehiculo.cambio_propietario`): el panel muestra el ícono con su
+// tooltip junto al veredicto solo con true. Uso de ejemplo: GET …/dictamen → { …, cambio_propietario: true }.
+describe("PanelDictamen — HU #14585: cambio de propietario del dictamen", () => {
+  it("con cambio_propietario true, el ícono «Cambio de propietario» acompaña el veredicto (compañía y backoffice)", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, cambio_propietario: true }) });
+    pintar();
+    expect(await screen.findByRole("button", { name: "Cambio de propietario" })).toBeInTheDocument();
+  });
+
+  it("con false o sin la clave no hay ícono", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, cambio_propietario: false }) });
+    pintar();
+    await screen.findByText("Bloqueado");
+    expect(screen.queryByRole("button", { name: "Cambio de propietario" })).toBeNull();
+  });
+});

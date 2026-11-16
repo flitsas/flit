@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { PanelModal } from "@flit/ui/PanelModal";
-import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
+import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import { Button } from "@flit/ui/Button";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
 import { ChipEstadoCelda } from "@/components/tablero/CeldaSemaforo";
@@ -28,6 +28,7 @@ import {
   rotuloFuenteAlerta,
   type Dictamen,
 } from "@/lib/dictamen/api";
+import { IconoCambioPropietario } from "./IconoCambioPropietario";
 
 export interface PanelDictamenProps {
   diagnosticoId: string;
@@ -68,48 +69,6 @@ function fechaCorta(iso: string): string {
 }
 
 type Carga = { tipo: "cargando" } | { tipo: "vacio" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; dictamen: Dictamen };
-
-const BOTON_DICTAMEN_CLS = BOTON_SECUNDARIO_CLS.replace("px-4 py-2 text-sm", "px-3 py-1 text-xs");
-
-/** «Dictamen» bajo la placa. Al abrirlo el panel pide el GET; no entra en el sondeo de la grilla. */
-export function BotonAbrirDictamen({ identificador, onAbrir }: { identificador: string; onAbrir: (disparador: HTMLElement) => void }) {
-  return (
-    <button type="button" className={BOTON_DICTAMEN_CLS} aria-label={`Ver dictamen de ${identificador}`} onClick={(e) => onAbrir(e.currentTarget)}>
-      Dictamen
-    </button>
-  );
-}
-
-/**
- * HU #14562 AC28: celda de la columna Dictamen del tablero. El veredicto viene en la fila (`FilaVehiculo.veredicto`, B1), así
- * que las cifras y la columna no piden el dictamen por vehículo; el GET sale solo al abrir el panel. Con `ajustado` (B7, D6)
- * se lee «Ajustado por FLIT», sin autor ni motivo.
- */
-export function BotonDictamenFila({
-  identificador,
-  veredicto,
-  ajustado = false,
-  onAbrir,
-}: {
-  identificador: string;
-  veredicto: { texto: string; tono: "success" | "danger" | "neutral" };
-  ajustado?: boolean;
-  onAbrir: (disparador: HTMLElement) => void;
-}) {
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <button
-        type="button"
-        className={`rounded-full ${FOCO_CLS}`}
-        aria-label={`Ver dictamen de ${identificador}`}
-        onClick={(e) => onAbrir(e.currentTarget)}
-      >
-        <Etiqueta tono={veredicto.tono}>{veredicto.texto}</Etiqueta>
-      </button>
-      {ajustado && <span className={TEXTO_SECUNDARIO_CLS}>Ajustado por FLIT</span>}
-    </div>
-  );
-}
 
 const nombreVeredicto = (veredicto: Dictamen["veredicto"]) => (veredicto === "BLOQUEADO" ? "Bloqueado" : "Viable");
 
@@ -262,9 +221,11 @@ export function PanelDictamen({
     const { dictamen } = carga;
     contenido = (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-flit-primary">
+        <p className="flex flex-wrap items-center gap-1.5 text-sm text-flit-primary">
           Veredicto:{" "}
           <Etiqueta tono={dictamen.veredicto === "BLOQUEADO" ? "danger" : "success"}>{nombreVeredicto(dictamen.veredicto)}</Etiqueta>
+          {/* HU #14585 (contrato 1.6.0 §1.2): cambio de propietario del vehículo, solo con true. */}
+          <IconoCambioPropietario cambio={dictamen.cambio_propietario} />
         </p>
         {dictamen.veredicto === "BLOQUEADO" && (
           <InlineAlert

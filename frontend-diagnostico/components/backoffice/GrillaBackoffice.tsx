@@ -10,10 +10,14 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { PanelModal } from "@flit/ui/PanelModal";
 import { AuditoriaDictamen } from "@/components/backoffice/AuditoriaDictamen";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { EstadoGlobal, EstimadoVsConsumido } from "@/components/tablero/EstadoGlobal";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
-import { BotonAbrirDictamen, PanelDictamen } from "@/components/tablero/PanelDictamen";
+import { PanelDictamen } from "@/components/tablero/PanelDictamen";
+import { FiltrosGrilla, VacioFiltros } from "@/components/tablero/FiltrosGrilla";
+import { AYUDA_GRILLA } from "@/components/tablero/GrillaLote";
+import { MenuAcciones, type MenuAccionesItem } from "@/components/ui/MenuAcciones";
+import { FILTROS_GRILLA_VACIOS, aplicarFiltrosGrilla, hayFiltrosGrilla, type FiltrosGrilla as ValorFiltros } from "@/lib/tablero/filtrosTablero";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
 import {
@@ -56,6 +60,11 @@ interface Llenado {
 const BOTON_LLENAR_CLS = BOTON_PRIMARIO_CLS.replace("px-5 py-2 text-sm", "px-3 py-1 text-xs");
 
 /** Ruta de la lista de lotes de la compañía elegida. */
+const IconoDictamen = iconoComo("documento") as NonNullable<MenuAccionesItem["icon"]>;
+const IconoAuditoria = iconoComo("portapapeles") as NonNullable<MenuAccionesItem["icon"]>;
+
+const placaDe = (v: FilaVehiculo) => v.placa || v.vin || v.identificador;
+
 const rutaLista = (empresa: string) => `/backoffice/diagnosticos?empresa=${encodeURIComponent(empresa)}`;
 
 /**
@@ -139,6 +148,9 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   const [exito, setExito] = useState<string | null>(null);
   const [avisoLectura, setAvisoLectura] = useState<string | null>(null);
   const [leyendo, setLeyendo] = useState(false);
+  // HU #14584 §6.6 (decisión del orquestador): la misma barra de filtros del tablero, en memoria.
+  const [filtros, setFiltros] = useState<ValorFiltros>(FILTROS_GRILLA_VACIOS);
+  const buscador = useRef<HTMLInputElement>(null);
   const grillaRef = useRef<TGrillaBackoffice | null>(null);
   const contenedor = useRef<HTMLDivElement>(null);
 
@@ -214,6 +226,34 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     );
   }
 
+  /**
+   * HU #14584 §6.4 (A6.6): Dictamen y Auditoría salen de la celda de la placa y pasan a la columna «Acciones» con el menú de
+   * Diagnóstico; misma visibilidad por capacidad (la auditoría solo con verAuditoria). El foco vuelve al disparador al cerrar.
+   */
+  function accionesFila(v: FilaVehiculo) {
+    const placa = placaDe(v);
+    const items: MenuAccionesItem[] = [
+      {
+        key: "dictamen",
+        label: "Ver dictamen",
+        ariaLabel: `Ver dictamen de ${placa}`,
+        icon: IconoDictamen,
+        grupo: "dictamen",
+        onSelect: ({ disparador }) => setDictamen({ vehiculo: v, disparador }),
+      },
+    ];
+    if (puedeAuditar)
+      items.push({
+        key: "auditoria",
+        label: "Auditoría del dictamen",
+        ariaLabel: `Auditoría del dictamen de ${placa}`,
+        icon: IconoAuditoria,
+        grupo: "dictamen",
+        onSelect: ({ disparador }) => setAuditoria({ vehiculo: v, disparador }),
+      });
+    return <MenuAcciones ariaLabel={`Acciones de la placa ${placa}`} triggerLabel="Acciones" items={items} />;
+  }
+
   let contenido: React.ReactNode;
   let titulo = "Grilla del lote";
   if (carga.tipo === "cargando" || es403) {
@@ -251,6 +291,9 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   } else {
     const { grilla } = carga;
     titulo = grilla.nombre;
+    const filas = grilla.vehiculos as unknown as FilaVehiculo[];
+    const visibles = aplicarFiltrosGrilla(filas, filtros);
+    const filtrando = hayFiltrosGrilla(filtros);
     contenido =
       grilla.avance.vehiculos === 0 ? (
         <Vacio titulo="Este lote no tiene vehículos">
@@ -275,35 +318,48 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
             <p className={TEXTO_SECUNDARIO_CLS}>
               Las celdas con la marca «Manual» se llenaron a mano desde el backoffice. La compañía ve el mismo dato, sin la marca.
             </p>
+            <FiltrosGrilla
+              buscadorRef={buscador}
+              grilla={grilla}
+              vehiculos={filas}
+              valor={filtros}
+              onCambiar={setFiltros}
+              onLimpiar={() => setFiltros(FILTROS_GRILLA_VACIOS)}
+              hayActivos={filtrando}
+              resumen={`Mostrando ${visibles.length} de ${filas.length} vehículos`}
+            />
+            {filtrando && visibles.length === 0 ? (
+              <VacioFiltros
+                onLimpiar={() => {
+                  setFiltros(FILTROS_GRILLA_VACIOS);
+                  // CR-3: como el botón de la barra, el foco vuelve al buscador.
+                  buscador.current?.focus();
+                }}
+              />
+            ) : (
             <div ref={contenedor}>
               <GrillaSemaforos
                 grilla={grilla as unknown as Grilla}
+                vehiculos={visibles}
                 puedeReprocesar={false}
                 hrefDetalle={(celda, v) => rutaDetalleBackoffice(grilla.id, v.id, celda.fuente, empresa)}
                 accionCelda={accionCelda}
                 marcaCelda={(celda) => (origenDe(celda) === "MANUAL" ? <MarcaManual /> : null)}
-                accionEncabezado={(v) => (
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <BotonAbrirDictamen
-                      identificador={v.placa || v.vin || v.identificador}
-                      onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
-                    />
-                    {v.dictamen_ajustado && <Etiqueta tono="info">Ajustado por FLIT</Etiqueta>}
-                    <SaneamientoFila vehiculo={v} empresa={empresa} gestionar={gestionaSaneamiento} />
-                    {puedeAuditar && (
-                      <button
-                        type="button"
-                        onClick={(e) => setAuditoria({ vehiculo: v, disparador: e.currentTarget })}
-                        className="rounded-full px-2 py-1 text-xs font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]"
-                      >
-                        <span aria-hidden="true">Auditoría</span>
-                        <span className="sr-only">{`Auditoría del dictamen de ${v.placa || v.vin || v.identificador}`}</span>
-                      </button>
-                    )}
-                  </span>
-                )}
+                accionEncabezado={(v) =>
+                  v.dictamen_ajustado || (v as unknown as FilaVehiculoBackoffice).saneamiento ? (
+                    // Solo marcas de estado bajo la placa (spec-ui §6.1); las acciones van en «Acciones».
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {v.dictamen_ajustado && <Etiqueta tono="info">Ajustado por FLIT</Etiqueta>}
+                      <SaneamientoFila vehiculo={v} empresa={empresa} gestionar={gestionaSaneamiento} />
+                    </span>
+                  ) : null
+                }
+                accionVehiculo={accionesFila}
+                tituloAccionVehiculo="Acciones"
               />
             </div>
+            )}
+            <p className={AYUDA_CLS}>{AYUDA_GRILLA}</p>
             <EstimadoVsConsumido estimado={grilla.estimado_consultas} />
           </section>
         </>

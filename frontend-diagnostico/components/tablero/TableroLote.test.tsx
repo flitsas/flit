@@ -162,11 +162,11 @@ describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
 });
 
 describe("/diagnosticos/{id} — AC4/AC5: acciones por perfil", () => {
-  it("AC4: el usuario sin capacidad de reprocesar no ve «Reprocesar»; sí puede abrir el dictamen", async () => {
+  it("AC4: el usuario sin capacidad de reprocesar no ve «Reprocesar»; sí ve el Dictamen de cada fila", async () => {
     await montar({ [GRILLA]: () => Response.json(loteTerminadoConErrores({ estado: "INCOMPLETO" })) });
     const tabla = screen.getByRole("table");
     expect(within(tabla).queryAllByRole("button", { name: /reprocesar/i })).toHaveLength(0);
-    expect(within(tabla).getAllByRole("button", { name: /^Ver dictamen de / })).toHaveLength(2);
+    expect(tabla.querySelectorAll('[data-columna="dictamen"]')).toHaveLength(2);
   });
 
   it("AC5: el admin reprocesa una roja de un lote INCOMPLETO: la celda vuelve a gris, el lote a EN_PROCESO y el sondeo se reanuda", async () => {
@@ -339,7 +339,7 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
     expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Descargas del lote" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Reporte" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
+    // HU #14584 §6.4: la columna «Acciones» existe siempre por «Ver dictamen»; sin la capacidad no hay descarga en el menú.
     expect(screen.queryByRole("link", { name: /descargar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /descargar/i })).not.toBeInTheDocument();
   });
@@ -400,6 +400,8 @@ const LOTE_META = {
 const CONTEOS = { vehiculos: 3, terminados: 1, con_error: 1, con_deuda: 0, bloqueados: 1, listos_tramite: 0 };
 const tarjeta = (nombre: RegExp) => screen.getByRole("button", { name: nombre });
 const tablaLote = () => screen.getByRole("table", { name: /semáforo de consultas/i });
+/** HU #14584 §6.4: la columna Dictamen es un dato (chip), no un botón; el panel se abre con «Ver dictamen» del menú. */
+const dictamenDe = (tr: HTMLElement) => tr.querySelector<HTMLElement>('[data-columna="dictamen"]')!;
 const filas = () => within(tablaLote()).getAllByRole("rowheader").map((th) => th.closest("tr")!);
 
 describe("/diagnosticos/{id} — HU #14562 AC23: cabecera con metadatos del lote", () => {
@@ -463,7 +465,7 @@ describe("/diagnosticos/{id} — HU #14562 AC27/AC31: tarjetas-filtro con los co
     expect(tarjeta(/^Terminados: 1$/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Bloqueados/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Listos para trámite/ })).toBeNull();
-    const dictamenes = within(tablaLote()).getAllByRole("button", { name: /^Ver dictamen de / });
+    const dictamenes = filas().map(dictamenDe);
     expect(dictamenes).toHaveLength(3);
     dictamenes.forEach((b) => expect(b).toHaveTextContent("Pendiente"));
   });
@@ -476,11 +478,13 @@ describe("/diagnosticos/{id} — HU #14562 AC28: columna Dictamen, búsqueda y c
       [GRILLA]: () => Response.json(grilla({ vehiculos: [{ ...a, veredicto: "VIABLE" }, { ...b, veredicto: "BLOQUEADO", dictamen_ajustado: true }, c] })),
     });
     expect(within(tablaLote()).getByRole("columnheader", { name: "Dictamen" })).toBeInTheDocument();
-    expect(within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST001" })).toHaveTextContent("Viable");
-    const bloqueado = within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST002" });
-    expect(bloqueado).toHaveTextContent("Bloqueado");
-    expect(bloqueado.closest("td")).toHaveTextContent(/ajustado por flit/i);
-    expect(within(tablaLote()).getByRole("button", { name: "Ver dictamen de TST003" })).toHaveTextContent("Pendiente");
+    const [f1, f2, f3] = filas();
+    expect(dictamenDe(f1)).toHaveTextContent("Viable");
+    expect(dictamenDe(f2)).toHaveTextContent("Bloqueado");
+    expect(dictamenDe(f2)).toHaveTextContent(/ajustado por flit/i);
+    expect(dictamenDe(f3)).toHaveTextContent("Pendiente");
+    // HU #14584 §6.4: el veredicto es dato; ningún botón en la columna.
+    for (const tr of [f1, f2, f3]) expect(within(dictamenDe(tr)).queryByRole("button")).toBeNull();
     // Fija desde 900 px; por debajo, la fila es tarjeta (auditoría B2, AC56).
     expect(within(tablaLote()).getByRole("rowheader", { name: /TST001/ })).toHaveClass("min-[900px]:sticky");
   });
@@ -509,7 +513,7 @@ describe("/diagnosticos/{id} — HU #14562 AC29: el dictamen ajustado se ve en e
     expect(tarjeta(/^Bloqueados: 0$/)).toBeInTheDocument();
     await avanzar(INTERVALO_REPOSO_MS);
     expect(desdesPedidos(api)).toEqual([0, 12]);
-    expect(screen.getByRole("button", { name: "Ver dictamen de TST001" })).toHaveTextContent("Bloqueado");
+    expect(dictamenDe(filas()[0])).toHaveTextContent("Bloqueado");
     expect(tarjeta(/^Bloqueados: 1$/)).toBeInTheDocument();
     expect(tarjeta(/^Listos para trámite: 0$/)).toBeInTheDocument();
     expect(navegacion.refresh).not.toHaveBeenCalled();
@@ -552,10 +556,10 @@ describe("/diagnosticos/{id} — HU #14562 AC33/AC34: estimado plegable y enmasc
     expect(screen.queryByRole("button", { name: /estimado frente a consumido/i })).toBeNull();
   });
 
-  it("AC34: los documentos del propietario siguen enmascarados y ningún documento sale en claro", async () => {
+  it("AC34 / HU #14585 (C5, SP-19): la grilla no pinta documentos, ni en claro ni enmascarados, aunque llegaran", async () => {
     const v = { ...grilla().vehiculos[0], propietarios: [{ tipo_documento: "CC", documento_enmascarado: "******7710" }] };
     await montar({ [GRILLA]: () => Response.json(grilla({ vehiculos: [v] })) });
-    expect(within(tablaLote()).getByText(/CC .*7710/)).toBeInTheDocument();
+    expect(tablaLote().innerHTML).not.toContain("7710");
     expect(tablaLote().textContent).not.toMatch(/\d{6,}/);
   });
 });
@@ -610,7 +614,7 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
   // FE-2: la bandera es el ítem «Solicitar / Quitar solicitud de saneamiento» del menú «Acciones» de la fila.
   const bandera = (placa: string) => accionFila(placa, `Solicitar saneamiento de la placa ${placa}`);
   const quitar = (placa: string) => quizaAccionFila(placa, `Quitar solicitud de saneamiento de la placa ${placa}`);
-  const celdaDictamen = (placa: string) => within(fila(placa)).getByRole("button", { name: `Ver dictamen de ${placa}` }).closest("td")!;
+  const celdaDictamen = (placa: string) => dictamenDe(fila(placa));
 
   beforeEach(() => window.history.replaceState(null, "", "/diagnosticos/x"));
 
@@ -620,7 +624,8 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
       { [GRILLA]: () => Response.json(loteSan()), [`PUT ${ruta}`]: () => Response.json({ id: "s1", estado: "SOLICITADO" }, { status: 201 }) },
       SANEA_DERIVA,
     );
-    expect(accionesDeFila("TST001").slice(0, 2)).toEqual(["Solicitar saneamiento de la placa TST001", "Crear trámite para la placa TST001"]);
+    // HU #14584 §6.4: «Ver dictamen» abre el menú (grupo propio); luego el orden D-103.
+    expect(accionesDeFila("TST001").slice(0, 3)).toEqual(["Ver dictamen de TST001", "Solicitar saneamiento de la placa TST001", "Crear trámite para la placa TST001"]);
     expect(within(fila("TST001")).queryByText("Saneamiento solicitado")).toBeNull();
     fireEvent.click(bandera("TST001"));
     expect(within(celdaDictamen("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();
@@ -670,14 +675,14 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
 
   it("AC9: la etiqueta va en la celda Dictamen, debajo del veredicto; sin saneamiento no hay etiqueta", async () => {
     await montarSan({ [GRILLA]: () => Response.json(loteSan()) });
-    const dictamen = within(fila("TST002")).getByRole("button", { name: "Ver dictamen de TST002" }).closest("td")!;
+    const dictamen = dictamenDe(fila("TST002"));
     expect(within(dictamen).getByText("Saneamiento solicitado")).toBeInTheDocument();
     // UA-1 (auditoría UI, supera spec-ui §2.4): el estado solo lo informa la celda Dictamen; la celda Acciones no lo repite.
     const acciones = disparadorDe("TST002")!.closest("td")!;
     expect(acciones.querySelector("[data-parte='chip-saneamiento']")).toBeNull();
     expect(within(acciones).queryByText(/Saneamiento:/)).toBeNull();
-    expect(within(fila("TST003")).getByRole("button", { name: "Ver dictamen de TST003" }).closest("td")).toHaveTextContent("En saneamiento");
-    const sin = within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")!;
+    expect(dictamenDe(fila("TST003"))).toHaveTextContent("En saneamiento");
+    const sin = dictamenDe(fila("TST001"));
     expect(sin).not.toHaveTextContent(/saneamiento/i);
   });
 
@@ -715,7 +720,8 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     await avanzar(100);
     expect(screen.getByRole("heading", { name: "Ningún vehículo coincide" })).toBeInTheDocument();
     expect(screen.getByText("Quita el filtro de saneamiento o prueba con otra búsqueda.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
+    // HU #14584 §6.6: «Limpiar filtros» está en la barra y en el vacío; se usa el del vacío.
+    fireEvent.click(screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!);
     expect(placasVisibles()).toHaveLength(5);
     expect(chip("Con saneamiento")).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("searchbox", { name: /buscar por placa o vin/i })).toHaveValue("");
@@ -779,7 +785,7 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     expect(aviso).toHaveTextContent("Saneamiento solicitado");
     // UA-4: el aviso visible no es región viva; el anuncio va solo por la región de la pantalla (el foco no se movió).
     expect(aviso.querySelector("[role='alert'], [role='status'], [aria-live]")).toBeNull();
-    expect(within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" }).closest("td")).toHaveTextContent("Saneamiento solicitado");
+    expect(dictamenDe(fila("TST001"))).toHaveTextContent("Saneamiento solicitado");
     expect(within(fila("TST005")).getByRole("checkbox")).toBeChecked();
     expect(within(fila("TST001")).getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByRole("region", { name: "Selección" })).toHaveTextContent("1 vehículo seleccionado");
@@ -895,16 +901,16 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     expect(within(panelDeuda()).queryByRole("button", { name: /saneamiento de la placa/ })).toBeNull();
   });
 
-  it("AC13: «Ver deuda y sanear» del dictamen bloqueado reemplaza el panel del dictamen por PS-2 y al cerrar el foco vuelve a «Ver dictamen»", async () => {
+  it("AC13: «Ver deuda y sanear» del dictamen bloqueado reemplaza el panel del dictamen por PS-2 y al cerrar el foco vuelve al disparador «Acciones»", async () => {
     const dictamen = { version: 1, veredicto: "BLOQUEADO", estado_redaccion: "PENDIENTE", alertamientos: [], catalogo_version: 1, creado_en: "2026-11-03T15:00:00+00:00" };
     await montarSan({
       [GRILLA]: () => Response.json(loteSan({ "vehiculo-1": { veredicto: "BLOQUEADO" } })),
       [`GET ${rutaVeh(1, "dictamen")}`]: () => Response.json(dictamen),
       ...rutasPanel(1),
     });
-    const abrir = within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" });
-    abrir.focus();
-    fireEvent.click(abrir);
+    // HU #14584 §6.4: «Ver dictamen» vive en el menú «Acciones» de la fila.
+    disparadorDe("TST001")!.focus();
+    fireEvent.click(accionFila("TST001", "Ver dictamen de TST001"));
     await avanzar();
     await avanzar();
     fireEvent.click(screen.getByRole("button", { name: "Ver deuda y sanear" }));
@@ -915,7 +921,7 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
     await avanzar();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(within(fila("TST001")).getByRole("button", { name: "Ver dictamen de TST001" })).toHaveFocus();
+    expect(disparadorDe("TST001")).toHaveFocus();
   });
 
   it("cableado §1: la bandera de la cabecera de PS-2 marca con PUT, la fila del tablero toma la etiqueta y el detalle se relee solo tras la confirmación", async () => {
@@ -948,12 +954,61 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     expect(within(panelDeuda()).getByText("Saneamiento solicitado para TST005.")).toBeInTheDocument();
     fireEvent.click(within(panelDeuda()).getAllByRole("button", { name: /cerrar/i })[0]);
     await avanzar();
-    expect(within(fila("TST005")).getByRole("button", { name: "Ver dictamen de TST005" }).closest("td")).toHaveTextContent("Saneamiento solicitado");
+    expect(dictamenDe(fila("TST005"))).toHaveTextContent("Saneamiento solicitado");
     expect(quizaAccionFila("TST005", "Quitar solicitud de saneamiento de la placa TST005")).not.toBeNull();
   });
 
   it("§2.6: filas sin la clave saneamiento (backend previo): sin «Ver deuda»", async () => {
     await montarSan({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO" })) });
     expect(accionesEnTodas(/^Ver deuda/)).toHaveLength(0);
+  });
+});
+
+// HU #14584 CR-4/CR-9 (spec-ui §6.4): «Auditoría del dictamen» del menú solo con verAuditoria (con la compañía de la sesión)
+// y «Ver dictamen» de una fila Pendiente abre el panel con un vacío claro, no un error.
+// Uso de ejemplo: «Acciones de la placa TST001» → «Auditoría del dictamen de TST001» → modal de versiones; Esc devuelve el foco.
+describe("/diagnosticos/{id} — HU #14584: auditoría y dictamen desde el menú «Acciones»", () => {
+  const RUTA_VERSIONES = `/diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen/versiones`;
+
+  it("CR-4: sin verAuditoria no hay «Auditoría del dictamen» en el menú", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    expect(quizaAccionFila("TST001", "Auditoría del dictamen de TST001")).toBeNull();
+    expect(quizaAccionFila("TST001", "Ver dictamen de TST001")).not.toBeNull();
+  });
+
+  it("CR-4: con verAuditoria abre el modal de versiones con ?empresa= de la sesión y al cerrarlo el foco vuelve a «Acciones»", async () => {
+    const api = await montar(
+      {
+        [GRILLA]: () => Response.json(grilla()),
+        [`GET /backoffice${RUTA_VERSIONES}`]: () => Response.json({ versiones: [] }),
+      },
+      { ...USUARIO, verAuditoria: true },
+    );
+    disparadorDe("TST001")!.focus();
+    fireEvent.click(accionFila("TST001", "Auditoría del dictamen de TST001"));
+    await avanzar();
+    await avanzar();
+    const panel = screen.getByRole("dialog", { name: "Auditoría del dictamen · TST001" });
+    expect(panel).toBeInTheDocument();
+    const [[url]] = llamadas(api, "GET", `/backoffice${RUTA_VERSIONES}`) as [[string]];
+    expect(new URL(url, "http://localhost").searchParams.get("empresa")).toBe(sesion({}).empresa.id);
+    fireEvent.keyDown(document.activeElement ?? panel, { key: "Escape" });
+    await avanzar();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(disparadorDe("TST001")).toHaveFocus();
+  });
+
+  it("CR-9: «Ver dictamen» de una fila Pendiente (SIN_DICTAMEN) muestra el vacío claro, sin aviso de error", async () => {
+    await montar({
+      [GRILLA]: () => Response.json(grilla()),
+      [`GET /diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen`]: () => Response.json({ code: "SIN_DICTAMEN", error: "x" }, { status: 404 }),
+    });
+    fireEvent.click(accionFila("TST001", "Ver dictamen de TST001"));
+    await avanzar();
+    await avanzar();
+    const panel = screen.getByRole("dialog", { name: "Dictamen · TST001" });
+    expect(within(panel).getByText("Este vehículo no tiene un dictamen vigente.")).toBeInTheDocument();
+    expect(within(panel).queryByRole("alert")).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Reintentar" })).toBeNull();
   });
 });

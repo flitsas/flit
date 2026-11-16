@@ -20,7 +20,7 @@ import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ENLACE_ACCION_CL
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { EtiquetaTono, SeccionesDeuda } from "@/components/saneamiento/SeccionesDeuda";
-import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
+import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, CONTENEDOR_TABLA_CLS, FILA_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
 import {
   obtenerDeuda,
@@ -145,7 +145,7 @@ const COLUMNAS_RENGLONES = ["Concepto", "Hallazgo", "Resultado", "Nota", "Eviden
 
 function TablaRenglones({ renglones, evidenciaDe }: { renglones: RenglonSaneamiento[]; evidenciaDe: ((r: RenglonSaneamiento) => string) | null }) {
   return (
-    <RegionDesplazable nombre="Conceptos del saneamiento" className="rounded-xl border border-border">
+    <RegionDesplazable nombre="Conceptos del saneamiento" className={CONTENEDOR_TABLA_CLS}>
       <table aria-label="Conceptos del saneamiento" className={`w-full border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
@@ -169,7 +169,7 @@ function TablaRenglones({ renglones, evidenciaDe }: { renglones: RenglonSaneamie
               !r.evidencia ? "—" : evidenciaDe ? <EnlaceEvidencia href={evidenciaDe(r)} concepto={concepto} /> : "Con evidencia",
             ];
             return (
-              <tr key={r.id} className={`${FILA_TABLA_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+              <tr key={r.id} className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 {celdas.map((celda, j) => (
                   <td
                     key={COLUMNAS_RENGLONES[j]}

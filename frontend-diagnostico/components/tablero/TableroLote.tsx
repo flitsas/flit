@@ -24,6 +24,8 @@ import {
 import { hayPendientes, marcarReintentada, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
 import { PanelDictamen } from "./PanelDictamen";
+import { PanelModal } from "@flit/ui/PanelModal";
+import { AuditoriaDictamen } from "@/components/backoffice/AuditoriaDictamen";
 import { AccionesVehiculo } from "./AccionesVehiculo";
 import { AvisoSaneamientoEnCurso, ModalTipoTramite, saneamientoEnCurso } from "./BotonCrearTramite";
 import { CasillaTablero, mensajeSolicitudSaneamiento, seleccionDeFila, type ResultadoSanearVisible } from "./BarraSeleccionTablero";
@@ -133,6 +135,7 @@ export function TableroLote({
   const puedeDerivar = sesion?.capacidades.derivar ?? false;
   // HU #14577 (E3): bandera y «Sanear (N)» solo con la capacidad `sanear` (la API vuelve a exigir el permiso).
   const puedeSanear = tieneSanear(sesion?.capacidades);
+  const puedeAuditar = sesion?.capacidades.verAuditoria ?? false;
   const { anunciar, region: regionViva } = useRegionVivaPantalla();
   const { grilla, cargando, error, errorSondeo, sondeando, actualizadoEn, reintentar, reanudar, refrescar, actualizar } = useGrillaIncremental(diagnosticoId, {
     habilitado: puedeVer,
@@ -145,6 +148,8 @@ export function TableroLote({
   // HU #14562 AC24 (D4): «Cerrar lote» pide confirmación antes de llamar a cerrar-panel.
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  // HU #14584 §6.4: auditoría del dictamen desde el menú, solo con verAuditoria (la API vuelve a validar el permiso).
+  const [auditoria, setAuditoria] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   // HU #14577 AC13 (PS-2): panel «Deuda y saneamiento» del vehículo; `disparador` recibe el foco al cerrarlo.
   const [deuda, setDeuda] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   // HU #14562 F-05: «Crear trámite» desde el pie del panel del dictamen; el número cambia en cada pedido.
@@ -181,9 +186,6 @@ export function TableroLote({
   // HU #14577 §2.6: sin la clave `saneamiento` en las filas (backend previo) no hay chips ni «Sanear (N)».
   const conDatosSaneamiento = hayDatosSaneamiento(grilla?.vehiculos ?? []);
   const haySaneamiento = puedeSanear && conDatosSaneamiento;
-  const hayAlgunSaneamiento = (grilla?.vehiculos ?? []).some((v) => v.saneamiento?.estado != null);
-  // HU #14577 AC13: «Ver deuda» de la fila (solo terminados) con un backend que ya expone el saneamiento (D-102).
-  const hayVerDeuda = conDatosSaneamiento && (grilla?.vehiculos ?? []).some((v) => v.terminado);
   // HU #14577 AC10: la casilla se habilita si la fila es elegible para alguna acción que el usuario tiene.
   const haySeleccion = hayDerivacion || haySaneamiento;
   const selecciones = useMemo(
@@ -327,8 +329,8 @@ export function TableroLote({
 
   // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (desplegable + mensajes; UA-1 retiró el chip del saneamiento).
   const accionVehiculo =
-    puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda
-      ? (v: FilaVehiculo) =>
+    // HU #14584 §6.4: «Ver dictamen» vive en el menú de toda fila, así que la columna «Acciones» siempre existe.
+    (v: FilaVehiculo) =>
           grilla && (
             <AccionesVehiculo
               diagnosticoId={grilla.id}
@@ -350,9 +352,10 @@ export function TableroLote({
               reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
               onReintentado={(r) => alReintentar(r, v.id)}
               onErrorReintento={alFallarReproceso}
+              onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })}
+              onVerAuditoria={puedeAuditar ? (disparador) => setAuditoria({ vehiculo: v, disparador }) : undefined}
             />
-          )
-      : undefined;
+          );
 
   async function cerrar() {
     setConfirmandoCierre(false);
@@ -499,7 +502,6 @@ export function TableroLote({
                   )
                 : undefined
             }
-            onAbrirDictamen={(vehiculo, disparador) => setDictamen({ vehiculo, disparador })}
             onQuitarFiltro={() => {
               setFiltro(null);
               if (filtroSaneamiento) cambiarFiltroSaneamiento(null);
@@ -538,6 +540,19 @@ export function TableroLote({
             void encolar(codigo);
           }}
         />
+      )}
+      {auditoria && (
+        <PanelModal
+          abierto
+          onCerrar={() => {
+            const { disparador } = auditoria;
+            setAuditoria(null);
+            if (disparador?.isConnected) disparador.focus();
+          }}
+          titulo={`Auditoría del dictamen · ${auditoria.vehiculo.placa || auditoria.vehiculo.vin || auditoria.vehiculo.identificador}`}
+        >
+          <AuditoriaDictamen diagnosticoId={diagnosticoId} vehiculoId={auditoria.vehiculo.id} empresa={sesion?.empresa.id ?? ""} />
+        </PanelModal>
       )}
       {dictamen && (
         <PanelDictamen

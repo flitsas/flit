@@ -15,7 +15,7 @@ import {
 import { AYUDA_CLS, CAMPO_CLS, ENLACE_ACCION_CLS } from "@/components/configuracion/estilos";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { EtiquetaTono } from "@/components/saneamiento/SeccionesDeuda";
-import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
+import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, CONTENEDOR_TABLA_CLS, FILA_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "@/components/tablero/vistasDetalle/comun";
 import type { RenglonSaneamiento, ResultadoRenglon } from "@/lib/saneamiento/api";
 import { ROTULO_HALLAZGO, ROTULO_RESULTADO, rotuloConcepto } from "@/lib/saneamiento/estados";
 import { LIMITES_TEXTO } from "@/lib/saneamiento/textoLibre";
@@ -250,7 +250,7 @@ export function RenglonesLectura({
   const columnas = ["Concepto", "Hallazgo", "Resultado", "Nota", "Evidencia"];
   if (renglones.length === 0) return <p className={AYUDA_CLS}>El saneamiento no tiene conceptos.</p>;
   return (
-    <RegionDesplazable nombre="Conceptos del saneamiento" className="rounded-xl border border-border">
+    <RegionDesplazable nombre="Conceptos del saneamiento" className={CONTENEDOR_TABLA_CLS}>
       <table aria-label="Conceptos a sanear" className={`w-full border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
@@ -296,7 +296,7 @@ export function RenglonesLectura({
               ),
             ];
             return (
-              <tr key={r.id} aria-label={concepto} className={`${FILA_TABLA_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+              <tr key={r.id} aria-label={concepto} className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 {celdas.map((celda, j) =>
                   j === 0 ? (
                     <th key={columnas[j]} scope="row" data-label={columnas[j]} className={`${CELDA_TABLA_CLS} text-left font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
