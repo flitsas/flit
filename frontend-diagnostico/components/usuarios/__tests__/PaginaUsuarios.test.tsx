@@ -401,4 +401,77 @@ describe("HU14588 PaginaUsuarios — región viva, límites de la URL y foco (CR
     expect(q.get("tamano")).toBe("100");
     expect(q.get("pagina")).toBe("100");
   });
+
+  it("CR-6: tras cambiar rol, el foco vuelve al disparador", async () => {
+    const id = USUARIOS[1].id;
+    simular({
+      "GET /usuarios": () => lista(USUARIOS, ["usuario_diagnostico", "admin_diagnostico"]),
+      [`PUT /usuarios/${id}/rol`]: () => Response.json({ ...USUARIOS[1], rol: "admin_diagnostico", rol_etiqueta: "Administrador de Diagnóstico" }),
+    });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    const disparador = abrirAccion("Usuario Uno", /^Cambiar rol/);
+    const dialogo = screen.getByRole("dialog", { name: /Cambiar rol/ });
+    fireEvent.click(within(dialogo).getByRole("radio", { name: /Administrador de Diagnóstico/ }));
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Guardar rol" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disparador).toHaveFocus();
+  });
+
+  it("CR-6: tras suspender, el foco vuelve al disparador", async () => {
+    const id = USUARIOS[1].id;
+    simular({
+      "GET /usuarios": () => lista(USUARIOS),
+      [`POST /usuarios/${id}/suspension`]: () => Response.json({ ...USUARIOS[1], estado: "SUSPENDIDO", acciones: ["REACTIVAR"] }),
+    });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    const disparador = abrirAccion("Usuario Uno", /^Suspender/);
+    fireEvent.click(within(screen.getByRole("dialog", { name: /Suspender/ })).getByRole("button", { name: "Suspender" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disparador).toHaveFocus();
+  });
+
+  it("CR-6: tras reactivar, el foco vuelve al disparador", async () => {
+    const id = USUARIOS[2].id;
+    simular({
+      "GET /usuarios": () => lista(USUARIOS),
+      [`DELETE /usuarios/${id}/suspension`]: () => Response.json({ ...USUARIOS[2], estado: "ACTIVO", acciones: ["CAMBIAR_ROL", "SUSPENDER"] }),
+    });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    const disparador = abrirAccion("Usuario Dos", /^Reactivar/);
+    fireEvent.click(within(screen.getByRole("dialog", { name: /Reactivar/ })).getByRole("button", { name: "Reactivar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disparador).toHaveFocus();
+  });
+
+  it("CR-6: si la fila queda sin menú (el disparador sale del DOM), el foco cae en la región de usuarios", async () => {
+    const id = USUARIOS[2].id;
+    simular({
+      "GET /usuarios": () => lista(USUARIOS),
+      [`DELETE /usuarios/${id}/suspension`]: () => Response.json({ ...USUARIOS[2], estado: "ACTIVO", acciones: [], motivo_sin_acciones: "CUENTA_INACTIVA" }),
+    });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    abrirAccion("Usuario Dos", /^Reactivar/);
+    fireEvent.click(within(screen.getByRole("dialog", { name: /Reactivar/ })).getByRole("button", { name: "Reactivar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("region", { name: "Usuarios de la compañía" })).toHaveFocus();
+  });
+
+  it.each([
+    ["Cambiar rol", /^Cambiar rol/, "Usuario Uno"],
+    ["Suspender", /^Suspender/, "Usuario Uno"],
+    ["Reactivar", /^Reactivar/, "Usuario Dos"],
+  ])("CR-6: Esc en el diálogo «%s» lo cierra y devuelve el foco al disparador", async (_n, accion, nombre) => {
+    simular({ "GET /usuarios": () => lista(USUARIOS, ["usuario_diagnostico", "admin_diagnostico"]) });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    const disparador = abrirAccion(nombre, accion);
+    const dialogo = screen.getByRole("dialog");
+    fireEvent.keyDown(document.activeElement ?? dialogo, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disparador).toHaveFocus();
+  });
 });

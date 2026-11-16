@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, buttonClass } from "@flit/ui/Button";
@@ -116,7 +116,9 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
   // D-6: nombre y NIT de la compañía del backoffice vienen en `empresa` de la propia lista (se conserva el último).
   const [empresaVista, setEmpresaVista] = useState<EmpresaCabecera | null>(null);
   const invitarRef = useRef<HTMLButtonElement>(null);
-
+  const regionRef = useRef<HTMLElement>(null);
+  // CR-6: destino del foco al cerrar un diálogo; se aplica después de pintar (la fila puede haber cambiado).
+  const focoPendiente = useRef<{ destino: HTMLElement | null } | null>(null);
   const clave = JSON.stringify(filtros);
 
   useEffect(() => {
@@ -149,11 +151,22 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
   const valor: ValorFiltros = { busqueda: filtros.busqueda, rol: filtros.rol, estado: filtros.estado };
   const conFiltros = hayFiltrosUsuarios(valor);
 
-  /** Cierra el diálogo y devuelve el foco a su disparador (el retorno por defecto no sobrevive a la fila re-pintada). */
+  /**
+   * Cierra el diálogo y, ya pintado el cambio, devuelve el foco a su disparador. Si el disparador salió del DOM (la fila
+   * quedó sin acciones), el foco cae en la región de usuarios (CR-6), nunca en `body`.
+   */
   const cerrar = (destino?: HTMLElement | null) => {
+    focoPendiente.current = { destino: destino ?? null };
     setDialogo(null);
-    if (destino?.isConnected) destino.focus();
   };
+  // Sin dependencias a propósito: corre tras cada pintado y solo actúa si hay un foco pendiente.
+  useLayoutEffect(() => {
+    const pendiente = focoPendiente.current;
+    if (!pendiente) return;
+    focoPendiente.current = null;
+    if (pendiente.destino?.isConnected) pendiente.destino.focus();
+    else regionRef.current?.focus();
+  });
   const actualizarFila = (fila: UsuarioDiagnostico) =>
     setCarga((c) => (c.tipo === "listo" ? { tipo: "listo", lista: { ...c.lista, usuarios: c.lista.usuarios.map((u) => (u.id === fila.id ? fila : u)) } } : c));
 
@@ -294,7 +307,7 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
           </InlineAlert>
         )}
       </div>
-      <section aria-label="Usuarios de la compañía" className={`${TARJETA_CLS} flex flex-col gap-4`}>
+      <section ref={regionRef} tabIndex={-1} aria-label="Usuarios de la compañía" className={`${TARJETA_CLS} flex flex-col gap-4`}>
         <BarraFiltros valor={valor} onCambiar={aplicar} onLimpiar={conFiltros ? limpiar : undefined} />
         <div>{contenido}</div>
       </section>
