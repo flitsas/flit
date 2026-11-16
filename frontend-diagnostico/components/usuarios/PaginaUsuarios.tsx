@@ -14,7 +14,7 @@ import { Migas } from "@/components/comun/Migas";
 import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ENLACE_ACCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { puedeGestionarUsuarios, type SesionDiagnostico } from "@/lib/sesion";
-import { accesoNegadoUsuarios, listarUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
+import { accesoNegadoUsuarios, acotarPaginacion, listarUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
 import {
   AVISO_INVITACION,
   TAMANO_POR_DEFECTO,
@@ -42,11 +42,12 @@ function filtrosEmpresasDe(params: URLSearchParams): FiltrosEmpresas {
   const usuarios = params.get("usuarios");
   const pagina = Number.parseInt(params.get("pagina") ?? "", 10);
   const tamano = Number.parseInt(params.get("tamano") ?? "", 10);
+  // CR-5: una URL editada a mano no puede pedir fuera del contrato (tamano 1..100, pagina ≤ floor(10 000 / tamano)).
+  const acotada = acotarPaginacion(Number.isFinite(pagina) ? pagina : 1, Number.isFinite(tamano) ? tamano : TAMANO_POR_DEFECTO);
   return {
     busqueda: params.get("busqueda") ?? "",
     usuarios: usuarios === "CON" || usuarios === "SIN" ? (usuarios as FiltroConUsuarios) : null,
-    pagina: Number.isFinite(pagina) && pagina > 0 ? pagina : 1,
-    tamano: Number.isFinite(tamano) && tamano > 0 ? tamano : TAMANO_POR_DEFECTO,
+    ...acotada,
   };
 }
 

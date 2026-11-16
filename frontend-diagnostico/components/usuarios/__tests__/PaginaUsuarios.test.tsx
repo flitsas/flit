@@ -390,4 +390,15 @@ describe("HU14588 PaginaUsuarios — región viva, límites de la URL y foco (CR
     expect(region).toHaveAttribute("aria-atomic", "true");
     expect(region.querySelectorAll('[role="status"], [role="alert"], [aria-live]')).toHaveLength(0);
   });
+
+  it("CR-5: ?tamano=500 se acota a 100 y ?pagina se acota a floor(10000/tamano) al leerlos de la URL", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    nav.params = new URLSearchParams({ tamano: "500", pagina: "900" });
+    const f = simular({ "GET /backoffice/usuarios/empresas": () => Response.json({ pagina: 100, tamano: 100, total: 0, empresas: [] }) });
+    render(<PaginaUsuarios />);
+    await waitFor(() => expect(f).toHaveBeenCalled());
+    const q = new URL(String(f.mock.calls.at(-1)![0]), "http://x").searchParams;
+    expect(q.get("tamano")).toBe("100");
+    expect(q.get("pagina")).toBe("100");
+  });
 });
