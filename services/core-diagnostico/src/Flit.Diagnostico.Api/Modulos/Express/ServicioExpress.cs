@@ -18,7 +18,7 @@ namespace Flit.Diagnostico.Api.Modulos.Express;
 /// <see cref="ValidadorFilaVehiculo"/> (la misma regla de la carga y de la confirmación): un identificador o documento
 /// inválido responde 422 con su campo y no se abre nada. Después, en una sola transacción, crea la cabecera con
 /// <see cref="ServicioCabecera"/> (<c>es_express=true</c>, reglas de F01-H4) y confirma el vehículo con
-/// <see cref="ServicioConfirmacionVehiculos"/> (documento del locatario cifrado con origen DECLARADO_CLIENTE, estimado en la
+/// <see cref="ServicioConfirmacionVehiculos"/> (propietario actual declarado cifrado, HU #14582; nunca como locatario; estimado en la
 /// cabecera y entrega al encolador); si algo falla no queda cabecera huérfana. Sin nombre, se autogenera
 /// «Express &lt;identificador&gt;», sin fecha (HU #14087: la fecha ya está en <c>creado_en</c>; los nombres guardados no cambian). El estimado de vista
 /// previa usa la configuración vigente de la compañía y no persiste nada. Los logs solo llevan el id.
@@ -31,14 +31,15 @@ internal sealed partial class ServicioExpress(
     ILogger<ServicioExpress> log)
 {
     public const string CampoIdentificador = "identificador";
-    public const string CampoTipoDocumento = "tipo_documento_locatario";
-    public const string CampoDocumento = "documento_locatario";
+    public const string CampoTipoDocumento = AliasPropietario.CampoTipo;
+    public const string CampoDocumento = AliasPropietario.CampoDocumento;
 
     public async Task<(CabeceraDiagnostico Cabecera, ConfirmacionLote Confirmacion)> CrearAsync(ExpressEntradaDto entrada, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(entrada);
         usuario.EmpresaPropia();
-        var fila = ValidadorFilaVehiculo.Validar(entrada.Identificador, entrada.TipoDocumentoLocatario, entrada.DocumentoLocatario);
+        var (tipoDeclarado, numeroDeclarado) = entrada.Declarado();
+        var fila = ValidadorFilaVehiculo.Validar(entrada.Identificador, tipoDeclarado, numeroDeclarado);
         if (!fila.EsValida)
         {
             var error = fila.Errores[0];
@@ -47,7 +48,7 @@ internal sealed partial class ServicioExpress(
 
         var nombre = string.IsNullOrWhiteSpace(entrada.Nombre) ? NombreAutogenerado(fila.Normalizado) : entrada.Nombre;
         var cabeceraEntrada = new CabeceraEntradaDto(nombre, entrada.Modo, entrada.TipoTramiteCodigo, entrada.Alcance);
-        VehiculoCapturado[] capturados = [new(entrada.Identificador, entrada.TipoDocumentoLocatario, entrada.DocumentoLocatario)];
+        VehiculoCapturado[] capturados = [new(entrada.Identificador, tipoDeclarado, numeroDeclarado)];
 
         // El reintento de Npgsql exige que la transacción del usuario vaya dentro de la estrategia de ejecución.
         var creado = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -69,7 +70,8 @@ internal sealed partial class ServicioExpress(
         ArgumentNullException.ThrowIfNull(entrada);
         usuario.EmpresaPropia();
         var alcance = ServicioCabecera.LeerAlcance(entrada.Alcance);
-        var documento = ValidadorDocumentoPersona.Validar(entrada.TipoDocumentoLocatario, entrada.DocumentoLocatario);
+        var (tipoDeclarado, numeroDeclarado) = entrada.Declarado();
+        var documento = ValidadorDocumentoPersona.Validar(tipoDeclarado, numeroDeclarado);
         if (!documento.EsValido)
         {
             throw new ReglaException(documento.Codigo!, documento.Mensaje!)
@@ -82,7 +84,8 @@ internal sealed partial class ServicioExpress(
         if (copia.EstimadoConsultas != EstimadoConsultas.AntesDeLanzar)
             return new EstimadoExpressDto(false, null);
 
-        var estimado = EstimadorConsultas.Estimar(alcance.Fuentes, [new VehiculoAEstimar(true, documento.Presente)]);
+        // HU #14582: el declarado no alimenta al locatario; antes del RUNT sus fuentes cuentan 0.
+        var estimado = EstimadorConsultas.Estimar(alcance.Fuentes, [new VehiculoAEstimar(true, TieneDocumentoLocatario: false)]);
         return new EstimadoExpressDto(true, [.. estimado.Select(EstimadoFuenteDto.De)]);
     }
 

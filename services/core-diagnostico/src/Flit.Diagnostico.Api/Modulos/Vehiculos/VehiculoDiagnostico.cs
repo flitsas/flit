@@ -55,13 +55,20 @@ public sealed class VehiculoDiagnostico : IEntidadDeEmpresa
     public OrigenDocumento? LocatarioDocOrigen { get; set; }
 
     /// <summary>
-    /// Tipo del documento del locatario que declaró el cliente y que el del proveedor reemplazó (respaldo, R-3, HU #13730b);
-    /// null si el declarado sigue vigente o si no hubo declarado. Va siempre junto con <see cref="LocatarioDeclaradoDocCifrado"/>.
+    /// Tipo del documento del propietario actual que declaró el cliente (opcional, Express o carga masiva; HU #14582). Solo sirve para
+    /// compararlo con el propietario del RUNT: no alimenta ninguna consulta. Va siempre junto con <see cref="PropietarioDeclaradoDocCifrado"/>.
     /// </summary>
-    public string? LocatarioDeclaradoDocTipo { get; set; }
+    public string? PropietarioDeclaradoDocTipo { get; set; }
 
-    /// <summary>Documento declarado por el cliente, cifrado, que quedó de respaldo al llegar el del proveedor (R-3).</summary>
-    public byte[]? LocatarioDeclaradoDocCifrado { get; set; }
+    /// <summary>Documento del propietario actual declarado, cifrado con <c>IProtectorDocumentoPersona</c>; nunca en claro ni en logs.</summary>
+    public byte[]? PropietarioDeclaradoDocCifrado { get; set; }
+
+    /// <summary>
+    /// Resultado de <c>ComparacionPropietario</c> (HU #14582, SP-1): true si el declarado no coincide con ningún propietario del RUNT,
+    /// false si coincide, null sin declarado o sin RUNT cerrado. Se calcula una vez, al cerrar la celda RUNT (también la reutilizada),
+    /// y las lecturas solo leen la columna.
+    /// </summary>
+    public bool? CambioPropietario { get; set; }
 
     /// <summary>Datos del vehículo consolidados de las fuentes (objeto JSON), sin documentos en claro.</summary>
     public string DatosConsolidados { get; set; } = "{}";

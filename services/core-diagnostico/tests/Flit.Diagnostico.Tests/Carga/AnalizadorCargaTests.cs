@@ -118,12 +118,12 @@ public sealed class AnalizadorCargaTests
     {
         var resumen = AnalizadorCarga.Analizar(Tabla(("ABC123", "CC", "1020304050"), ("XYZ987", "CC", "71A3B2"), ("DEF456", "PAS", "AB1")), Sin);
 
-        resumen.Filas[0].DocumentoLocatario.Should().Be("****4050");
-        resumen.Filas[0].TipoDocumentoLocatario.Should().Be("CC");
+        resumen.Filas[0].DocumentoPropietario.Should().Be("****4050");
+        resumen.Filas[0].TipoDocumentoPropietario.Should().Be("CC");
         resumen.Filas[1].Valida.Should().BeFalse();
         resumen.Filas[1].Errores.Single().Campo.Should().Be(PlantillaCarga.ColumnaDocumento);
-        resumen.Filas[1].DocumentoLocatario.Should().Be("****A3B2");
-        resumen.Filas[2].DocumentoLocatario.Should().Be("****");
+        resumen.Filas[1].DocumentoPropietario.Should().Be("****A3B2");
+        resumen.Filas[2].DocumentoPropietario.Should().Be("****");
         AnalizadorCarga.Enmascarar("1020304050").Should().Be("****4050");
         AnalizadorCarga.Enmascarar("1234").Should().Be("****");
     }
@@ -138,7 +138,8 @@ public sealed class AnalizadorCargaTests
         var sin = AnalizadorCarga.Analizar(tabla, new([Fuente.Runt, Fuente.SimitLocatario], 500, MostrarEstimado: false));
 
         // #13796: SIMIT_LOCATARIO es fuente de persona y antes de lanzar su número es un mínimo.
-        con.EstimadoConsultas.Should().Equal(new EstimadoFuenteDto("RUNT", 2, Minimo: false), new EstimadoFuenteDto("SIMIT_LOCATARIO", 1, Minimo: true));
+        con.EstimadoConsultas.Should().Equal([new EstimadoFuenteDto("RUNT", 2, Minimo: false), new EstimadoFuenteDto("SIMIT_LOCATARIO", 0, Minimo: true)],
+            "HU #14582: el declarado no alimenta al locatario");
         sin.EstimadoConsultas.Should().BeNull();
     }
 

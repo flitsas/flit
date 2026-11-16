@@ -116,13 +116,13 @@ internal static class DiagnosticosBackofficeEndpoints
                 l.EsExpress))]));
     }
 
-    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, IProtectorDocumentoPersona protector, CancellationToken ct)
+    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var version = desde ?? 0;
         ConsultaGrilla.ValidarDesde(version);
         var cabecera = await CabeceraAsync(db, empresa, id, ct).ConfigureAwait(false);
-        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, protector, ct).ConfigureAwait(false);
+        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, ct).ConfigureAwait(false);
         // HU #14576 AC35: el saneamiento no anulado de las filas de la página, para enlazar a su gestión.
         var vehiculos = grilla.Vehiculos.Select(v => v.Id).ToList();
         var saneamientos = (await db.DeLaEmpresa<Saneamiento.Saneamiento>(empresa)

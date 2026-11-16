@@ -249,14 +249,14 @@ public sealed class ReutilizacionTests
         leasing.LocatarioDocTipo.Should().Be(leasingOriginal.LocatarioDocTipo);
         leasing.LocatarioDocCifrado.Should().Equal(leasingOriginal.LocatarioDocCifrado!);
         protector.Desproteger(leasing.LocatarioDocCifrado!).Should().Be(LocatarioLeasing);
-        leasing.LocatarioDeclaradoDocTipo.Should().Be("CE", "el declarado queda de respaldo con su tipo");
-        protector.Desproteger(leasing.LocatarioDeclaradoDocCifrado!).Should().Be(OtroDeclarado);
+        leasing.PropietarioDeclaradoDocTipo.Should().Be("CE", "HU #14582: el declarado es el propietario actual del vehículo destino");
+        protector.Desproteger(leasing.PropietarioDeclaradoDocCifrado!).Should().Be(OtroDeclarado);
         leasing.PropietarioDocCifrado.Should().Equal(leasingOriginal.PropietarioDocCifrado!);
 
         var natural = await MotorRunt.VehiculoAsync(api, empresa, segundo, "TST001", ct);
-        natural.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente, "el RUNT original no trajo locatario");
-        protector.Desproteger(natural.LocatarioDocCifrado!).Should().Be(OtroDeclarado, "conserva su propio declarado, no el del otro vehículo");
-        natural.LocatarioDeclaradoDocCifrado.Should().BeNull();
+        natural.LocatarioDocOrigen.Should().BeNull("HU #14582: el RUNT original no trajo locatario y el declarado ya no lo es");
+        natural.LocatarioDocCifrado.Should().BeNull();
+        protector.Desproteger(natural.PropietarioDeclaradoDocCifrado!).Should().Be(OtroDeclarado, "conserva su propio declarado, no el del otro vehículo");
         (await Motor.CeldasAsync(api, empresa.Id, segundo, ct)).Should().OnlyContain(c => c.ReutilizadaDeId != null);
     }
 

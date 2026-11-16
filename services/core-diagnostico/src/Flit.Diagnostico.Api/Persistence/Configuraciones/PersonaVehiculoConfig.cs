@@ -41,7 +41,7 @@ internal sealed class PersonaVehiculoConfig : IEntityTypeConfiguration<PersonaVe
         builder.Property(x => x.DocCifrado).HasComment("@pii:high Número de documento cifrado con Data Protection (HU #13751). El nombre no se guarda.");
         builder.Property(x => x.Origen)
             .HasConversion(CodigosDeEnum.Convertidor<OrigenDocumento>()).HasMaxLength(20)
-            .HasComment("PROVEEDOR (RUNT) o DECLARADO_CLIENTE (locatario declarado cuando el proveedor no trae ninguno).");
+            .HasComment("PROVEEDOR (RUNT); DECLARADO_CLIENTE solo en filas históricas anteriores a HU #14582 (el declarado ya no entra como persona).");
         builder.Property(x => x.CreadoEn).HasComment("Instante en que se registró (cierre de la celda RUNT).");
 
         builder.HasOne<VehiculoDiagnostico>().WithMany()

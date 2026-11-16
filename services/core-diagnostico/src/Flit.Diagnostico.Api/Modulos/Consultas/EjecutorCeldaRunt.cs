@@ -97,6 +97,8 @@ internal sealed partial class EjecutorCeldaRunt(IProtectorDocumentoPersona prote
             guardado.RuntConsultadoEn = ahora;
             guardado.DatosConsolidados = Consolidar(guardado.DatosConsolidados, runt, placa, vin);
             DocumentosVehiculo.Aplicar(guardado, runt, protector);
+            // HU #14582 (SP-1): cambio_propietario se fija una vez, aquí, con el RUNT en claro en memoria.
+            DocumentosVehiculo.FijarCambioPropietario(guardado, [.. runt.Propietarios.Select(p => (p.TipoDocumento, p.NumeroDocumento))], protector);
             // HU #13790: todos los propietarios y locatarios, cifrados, en la misma transacción de cierre.
             await DocumentosVehiculo.RegistrarPersonasAsync(db, guardado, DocumentosVehiculo.Personas(guardado, runt, protector, ahora), token)
                 .ConfigureAwait(false);

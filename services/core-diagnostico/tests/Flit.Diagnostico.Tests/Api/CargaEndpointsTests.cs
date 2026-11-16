@@ -63,15 +63,16 @@ public sealed class CargaEndpointsTests
         hoja.Should().NotBeNull("la plantilla es un libro de Excel con una hoja");
         using var lector = new StreamReader(hoja!.Open());
         var xml = await lector.ReadToEndAsync(ct);
-        foreach (var columna in new[] { "Identificador_Vehiculo", "Tipo_Documento_Locatario", "Documento_Locatario" })
+        foreach (var columna in new[] { "Identificador_Vehiculo", "Tipo_Documento_Propietario", "Documento_Propietario" })
             xml.Should().Contain(columna);
+        xml.Should().NotContain("Locatario", "HU #14582 AC6: la plantilla pide el propietario actual");
         xml.IndexOf("Identificador_Vehiculo", StringComparison.Ordinal).Should()
-            .BeLessThan(xml.IndexOf("Tipo_Documento_Locatario", StringComparison.Ordinal), "la obligatoria va primero");
+            .BeLessThan(xml.IndexOf("Tipo_Documento_Propietario", StringComparison.Ordinal), "la obligatoria va primero");
         sinPermiso.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         // La plantilla que se descarga se puede subir tal cual: sin filas, el resumen dice que no hay válidos.
         var tabla = LectorXlsx.Leer(bytes);
-        tabla.Encabezados.Should().Equal("Identificador_Vehiculo", "Tipo_Documento_Locatario", "Documento_Locatario");
+        tabla.Encabezados.Should().Equal("Identificador_Vehiculo", "Tipo_Documento_Propietario", "Documento_Propietario");
         tabla.Filas.Should().BeEmpty();
     }
 
@@ -97,8 +98,8 @@ public sealed class CargaEndpointsTests
         (await coma.Content.ReadAsStringAsync(ct)).Should().Be(deXlsx);
         var resumen = JsonElement.Parse(deXlsx);
         resumen.GetProperty("total_filas").GetInt32().Should().Be(9, "la fila 9 está vacía y no cuenta");
-        Fila(resumen, 3).GetProperty("documento_locatario").GetString().Should().Be("****4050", "la celda numérica se lee como texto");
-        Fila(resumen, 4).GetProperty("tipo_documento_locatario").GetString().Should().Be("NIT", "la cadena en línea se lee");
+        Fila(resumen, 3).GetProperty("documento_propietario").GetString().Should().Be("****4050", "la celda numérica se lee como texto");
+        Fila(resumen, 4).GetProperty("tipo_documento_propietario").GetString().Should().Be("NIT", "la cadena en línea se lee");
     }
 
     // Escenario 3 (F02-C6) — .xls (por extensión o por firma) responde 422 con el mensaje de guardarlo como .xlsx, sin filas.
@@ -277,8 +278,8 @@ public sealed class CargaEndpointsTests
         Fila(resumen, 2).GetProperty("valida").GetBoolean().Should().BeFalse();
         Errores(Fila(resumen, 2)).Should().Equal("DOCUMENTO_INVALIDO");
         Fila(resumen, 3).GetProperty("valida").GetBoolean().Should().BeTrue();
-        Fila(resumen, 3).GetProperty("tipo_documento_locatario").GetString().Should().Be("CC");
-        Fila(resumen, 3).GetProperty("documento_locatario").GetString().Should().Be("****4433");
+        Fila(resumen, 3).GetProperty("tipo_documento_propietario").GetString().Should().Be("CC");
+        Fila(resumen, 3).GetProperty("documento_propietario").GetString().Should().Be("****4433");
         Errores(Fila(resumen, 4)).Should().Equal("DOCUMENTO_INCOMPLETO");
         texto.Should().NotContain("7766554433").And.NotContain("71A3B2").And.NotContain("55443322");
         logs.Mensajes.Should().NotBeEmpty("la captura de logs funciona");
@@ -306,7 +307,7 @@ public sealed class CargaEndpointsTests
 
         var estimado = conEstimado.GetProperty("estimado_consultas").EnumerateArray()
             .ToDictionary(e => e.GetProperty("fuente").GetString()!, e => e.GetProperty("consultas").GetInt32());
-        estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 3, ["RUNT_LOCATARIO"] = 1 });
+        estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 3, ["RUNT_LOCATARIO"] = 0 }, "HU #14582: el declarado no alimenta al locatario");
         JsonElement.Parse(sinEstimadoTexto).TryGetProperty("estimado_consultas", out _).Should().BeFalse(sinEstimadoTexto);
     }
 
