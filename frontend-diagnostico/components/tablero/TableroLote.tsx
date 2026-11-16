@@ -50,7 +50,7 @@ import { AccionesBloqueLote } from "./AccionesBloqueLote";
 import { CabeceraLote } from "./CabeceraLote";
 import { GrillaLote } from "./GrillaLote";
 import { MetricasLote } from "./MetricasLote";
-import { hayDatosSaneamiento, hayVeredictos, leerFiltroSaneamiento, type FiltroSaneamiento, type FiltroTablero } from "@/lib/tablero/filtrosTablero";
+import { hayDatosSaneamiento, leerFiltroSaneamiento, type FiltroSaneamiento, type FiltroTablero } from "@/lib/tablero/filtrosTablero";
 import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 
 /** «hh:mm» en hora de Colombia (HU #14562 AC26). */
@@ -181,9 +181,6 @@ export function TableroLote({
   // HU #14577 §2.6: sin la clave `saneamiento` en las filas (backend previo) no hay chips ni «Sanear (N)».
   const conDatosSaneamiento = hayDatosSaneamiento(grilla?.vehiculos ?? []);
   const haySaneamiento = puedeSanear && conDatosSaneamiento;
-  const hayAlgunSaneamiento = (grilla?.vehiculos ?? []).some((v) => v.saneamiento?.estado != null);
-  // HU #14577 AC13: «Ver deuda» de la fila (solo terminados) con un backend que ya expone el saneamiento (D-102).
-  const hayVerDeuda = conDatosSaneamiento && (grilla?.vehiculos ?? []).some((v) => v.terminado);
   // HU #14577 AC10: la casilla se habilita si la fila es elegible para alguna acción que el usuario tiene.
   const haySeleccion = hayDerivacion || haySaneamiento;
   const selecciones = useMemo(
@@ -327,9 +324,8 @@ export function TableroLote({
 
   // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (desplegable + mensajes; UA-1 retiró el chip del saneamiento).
   const accionVehiculo =
-    // HU #14584 §6.4: «Ver dictamen» también vive en el menú, así que basta con que alguna fila traiga veredicto.
-    puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda || hayVeredictos(grilla?.vehiculos ?? [])
-      ? (v: FilaVehiculo) =>
+    // HU #14584 §6.4: «Ver dictamen» vive en el menú de toda fila, así que la columna «Acciones» siempre existe.
+    (v: FilaVehiculo) =>
           grilla && (
             <AccionesVehiculo
               diagnosticoId={grilla.id}
@@ -353,8 +349,7 @@ export function TableroLote({
               onErrorReintento={alFallarReproceso}
               onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })}
             />
-          )
-      : undefined;
+          );
 
   async function cerrar() {
     setConfirmandoCierre(false);

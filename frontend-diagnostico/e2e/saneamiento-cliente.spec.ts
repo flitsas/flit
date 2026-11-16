@@ -213,7 +213,8 @@ test.describe("PS-1 tablero del lote", () => {
       await revisarTemas(page, "tablero-vacio-filtro-360", { captura: "C-2" });
       await sinDesbordeHorizontal(page, "tablero-vacio-filtro-360");
       await ancho(page, 1280);
-      await page.getByRole("button", { name: "Limpiar filtros" }).click();
+      // HU #14584 §6.6: «Limpiar filtros» está en la barra y en el vacío por filtro; se pulsa el del vacío.
+      await page.getByRole("button", { name: "Limpiar filtros" }).last().click();
       await expect(con).toHaveAttribute("aria-pressed", "false");
       await expect(page).not.toHaveURL(/saneamiento=/);
       await expect(page.getByRole("searchbox", { name: "Buscar por placa o VIN" })).toHaveValue("");

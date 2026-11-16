@@ -6,7 +6,6 @@ import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import {
   FILTROS_GRILLA_VACIOS,
   FILTROS_SANEAMIENTO,
-  FILTROS_TABLERO,
   aplicarFiltrosGrilla,
   filtrarPorSaneamiento,
   filtrarVehiculos,
@@ -82,9 +81,6 @@ export function GrillaLote({
 }: GrillaLoteProps) {
   const [filtros, setFiltros] = useState<ValorFiltros>(FILTROS_GRILLA_VACIOS);
   const vehiculos = aplicarFiltrosGrilla(filtrarPorSaneamiento(filtrarVehiculos(grilla.vehiculos, filtro), filtroSaneamiento), filtros);
-  const etiquetaFiltro = [FILTROS_TABLERO.find((f) => f.clave === filtro)?.etiqueta, FILTROS_SANEAMIENTO.find((f) => f.clave === filtroSaneamiento)?.etiqueta]
-    .filter(Boolean)
-    .join(" · ");
   const total = grilla.vehiculos.length;
   const filtrando = filtro !== null || filtroSaneamiento !== null || hayFiltrosGrilla(filtros);
   const limpiar = () => {
@@ -116,7 +112,8 @@ export function GrillaLote({
             </div>
           )
         }
-        resumen={filtrando ? `${etiquetaFiltro ? `Filtro: ${etiquetaFiltro} · ` : ""}${vehiculos.length} de ${total}` : `Mostrando los ${total} vehículos`}
+        // spec-ui §6.6: «Mostrando N de M vehículos» siempre (aria-live); el filtro activo ya lo dicen sus controles.
+        resumen={`Mostrando ${vehiculos.length} de ${total} vehículos`}
       />
       {filtrando && vehiculos.length === 0 ? (
         <VacioFiltros onLimpiar={limpiar} mensaje={filtroSaneamiento ? "Quita el filtro de saneamiento o prueba con otra búsqueda." : undefined} />

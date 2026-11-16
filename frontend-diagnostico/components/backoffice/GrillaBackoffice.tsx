@@ -324,7 +324,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
               onCambiar={setFiltros}
               onLimpiar={() => setFiltros(FILTROS_GRILLA_VACIOS)}
               hayActivos={filtrando}
-              resumen={filtrando ? `${visibles.length} de ${filas.length}` : `Mostrando los ${filas.length} vehículos`}
+              resumen={`Mostrando ${visibles.length} de ${filas.length} vehículos`}
             />
             {filtrando && visibles.length === 0 ? (
               <VacioFiltros onLimpiar={() => setFiltros(FILTROS_GRILLA_VACIOS)} />

@@ -339,7 +339,7 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
     expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Descargas del lote" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Reporte" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Acciones" })).not.toBeInTheDocument();
+    // HU #14584 §6.4: la columna «Acciones» existe siempre por «Ver dictamen»; sin la capacidad no hay descarga en el menú.
     expect(screen.queryByRole("link", { name: /descargar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /descargar/i })).not.toBeInTheDocument();
   });
@@ -624,7 +624,8 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
       { [GRILLA]: () => Response.json(loteSan()), [`PUT ${ruta}`]: () => Response.json({ id: "s1", estado: "SOLICITADO" }, { status: 201 }) },
       SANEA_DERIVA,
     );
-    expect(accionesDeFila("TST001").slice(0, 2)).toEqual(["Solicitar saneamiento de la placa TST001", "Crear trámite para la placa TST001"]);
+    // HU #14584 §6.4: «Ver dictamen» abre el menú (grupo propio); luego el orden D-103.
+    expect(accionesDeFila("TST001").slice(0, 3)).toEqual(["Ver dictamen de TST001", "Solicitar saneamiento de la placa TST001", "Crear trámite para la placa TST001"]);
     expect(within(fila("TST001")).queryByText("Saneamiento solicitado")).toBeNull();
     fireEvent.click(bandera("TST001"));
     expect(within(celdaDictamen("TST001")).getByText("Saneamiento solicitado")).toBeInTheDocument();

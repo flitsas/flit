@@ -40,7 +40,7 @@ export interface AccionesVehiculoProps {
   onErrorReintento: (mensaje: string, refrescar: boolean) => void;
   /**
    * HU #14584 §6.4: «Ver dictamen» abre el panel del dictamen con el disparador «Acciones» (recibe el foco al cerrarlo). Va
-   * primero, en su grupo, solo si la fila trae veredicto. Sin él, no hay ítem.
+   * primero, en su grupo, en toda fila. Sin él, no hay ítem.
    */
   onVerDictamen?: (disparador: HTMLElement | null) => void;
 }
@@ -120,8 +120,9 @@ export function AccionesVehiculo({
 
   const items: MenuAccionesItem[] = [];
 
-  // 0 — dictamen (HU #14584 §6.4): «Ver dictamen» al principio, en su grupo, si la fila trae veredicto.
-  if (onVerDictamen && v.veredicto != null) {
+  // 0 — dictamen (HU #14584 §6.4): «Ver dictamen» al principio, en su grupo. Como el botón de la columna que reemplaza, va en
+  // toda fila: el panel ya resuelve «sin dictamen vigente» (Pendiente o modo Simple).
+  if (onVerDictamen) {
     items.push({
       key: "dictamen",
       label: "Ver dictamen",

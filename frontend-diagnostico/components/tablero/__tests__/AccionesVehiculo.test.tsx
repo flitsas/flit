@@ -235,7 +235,7 @@ describe("AccionesVehiculo — resultados (spec-ui §2.5)", () => {
 // HU #14584 §6.4 (A6.6): «Ver dictamen» abre el menú, en su grupo «Dictamen», antes del orden D-103; solo si la fila trae
 // veredicto. Uso de ejemplo: <AccionesVehiculo … onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })} />.
 describe("AccionesVehiculo — HU #14584: «Ver dictamen» en el menú", () => {
-  it("con veredicto, «Ver dictamen» va primero y llama a onVerDictamen con el disparador", () => {
+  it("«Ver dictamen» va primero y llama a onVerDictamen con el disparador", () => {
     const onVerDictamen = vi.fn();
     pintar({ vehiculo: TERMINADO({ veredicto: "VIABLE" }), onVerDictamen });
     expect(abrir().map((i) => i.textContent?.trim())[0]).toBe("Ver dictamen");
@@ -243,8 +243,13 @@ describe("AccionesVehiculo — HU #14584: «Ver dictamen» en el menú", () => {
     expect(onVerDictamen).toHaveBeenCalledWith(disparador());
   });
 
-  it("sin veredicto (Pendiente o modo Simple) no hay «Ver dictamen»", () => {
+  it("sin veredicto (Pendiente) también hay «Ver dictamen»: el panel dice que no hay dictamen vigente", () => {
     pintar({ vehiculo: TERMINADO({ veredicto: null }), onVerDictamen: vi.fn() });
+    expect(abrir().map((i) => i.textContent?.trim())[0]).toBe("Ver dictamen");
+  });
+
+  it("sin onVerDictamen no hay «Ver dictamen»", () => {
+    pintar({ vehiculo: TERMINADO({ veredicto: "VIABLE" }) });
     expect(abrir().map((i) => i.textContent?.trim())).not.toContain("Ver dictamen");
   });
 
