@@ -17,11 +17,11 @@ import {
 } from "@flit/ui/table-styles";
 import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ENLACE_ACCION_CLS, ETIQUETA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
-import { listarEmpresasUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
+import { accesoNegadoUsuarios, listarEmpresasUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
 import { BUSQUEDA_MAXIMA, ESPERA_BUSQUEDA_MS, type FiltroConUsuarios, type FiltrosEmpresas, type ListaEmpresasUsuarios } from "@/lib/usuarios/tipos";
 import { EsqueletoTabla } from "./TablaUsuarios";
 
-type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; lista: ListaEmpresasUsuarios };
+type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string; acceso: string | null } | { tipo: "listo"; lista: ListaEmpresasUsuarios };
 
 const COLUMNAS = ["Compañía", "NIT", "Usuarios", "Administradores", "Acción"] as const;
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
@@ -80,7 +80,8 @@ export function TablaCompanias({ filtros, onCambiar }: TablaCompaniasProps) {
         if (!control.signal.aborted) setCarga({ tipo: "listo", lista });
       },
       (e: unknown) => {
-        if (!control.signal.aborted) setCarga({ tipo: "error", mensaje: traducirErrorUsuarios(e, "No pudimos cargar las compañías. Revisa tu conexión.") });
+        if (!control.signal.aborted)
+          setCarga({ tipo: "error", mensaje: traducirErrorUsuarios(e, "No pudimos cargar las compañías. Revisa tu conexión."), acceso: accesoNegadoUsuarios(e) });
       },
     );
     return () => control.abort();
@@ -94,11 +95,17 @@ export function TablaCompanias({ filtros, onCambiar }: TablaCompaniasProps) {
     return () => clearTimeout(espera);
   }, [busqueda]);
 
+  // CR-4: un 403 de la lista (sin permiso o producto no habilitado) lleva a la página 403 con su código.
+  const acceso = carga.tipo === "error" ? carga.acceso : null;
+  useEffect(() => {
+    if (acceso) router.replace(`/403?code=${encodeURIComponent(acceso)}`);
+  }, [acceso, router]);
+
   const hayFiltros = Boolean(filtros.busqueda.trim() || filtros.usuarios);
   const limpiar = () => onCambiar({ busqueda: "", usuarios: null, pagina: 1 });
 
   let contenido: ReactNode;
-  if (carga.tipo === "cargando") {
+  if (carga.tipo === "cargando" || acceso) {
     contenido = <EsqueletoTabla etiqueta="Cargando compañías…" />;
   } else if (carga.tipo === "error") {
     contenido = (

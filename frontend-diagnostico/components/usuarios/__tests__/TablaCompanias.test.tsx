@@ -9,7 +9,8 @@ import type { FiltrosEmpresas } from "@/lib/usuarios/tipos";
 // a /usuarios?empresa=<id>. Cuatro estados. Datos ficticios.
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace: vi.fn(), refresh: vi.fn() }) }));
+const replace = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh: vi.fn() }) }));
 
 const DEMO = { id: "00000000-0000-4000-8000-0000000000e1", nombre: "Compañía Demo", nit: "900000001", estado: "ACTIVA", usuarios_diagnostico: 4, administradores_diagnostico: 1 };
 const OTRA = { id: "00000000-0000-4000-8000-0000000000e2", nombre: "Compañía Ejemplo", nit: null, estado: "ACTIVA", usuarios_diagnostico: 0, administradores_diagnostico: 0 };
@@ -17,7 +18,10 @@ const OTRA = { id: "00000000-0000-4000-8000-0000000000e2", nombre: "Compañía E
 const FILTROS = { busqueda: "", usuarios: null, pagina: 1, tamano: 20 } as const;
 const lista = (empresas: unknown[]) => Response.json({ pagina: 1, tamano: 20, total: empresas.length, empresas });
 
-beforeEach(() => push.mockReset());
+beforeEach(() => {
+  push.mockReset();
+  replace.mockReset();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("HU14588 TablaCompanias", () => {
@@ -138,3 +142,12 @@ describe("HU14588 TablaCompanias — paginación en el servidor (D-6)", () => {
   });
 });
 
+// Code review HU #14588 (CR-4): un 403 de la lista de compañías lleva a la página 403 con su código.
+describe("HU14588 TablaCompanias — 403 (CR-4)", () => {
+  it("un 403 lleva a /403?code=… y no muestra el error con Reintentar", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ code: "SIN_PERMISO" }, { status: 403 })));
+    render(<TablaCompanias filtros={FILTROS} onCambiar={vi.fn()} />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/403?code=SIN_PERMISO"));
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
+});
