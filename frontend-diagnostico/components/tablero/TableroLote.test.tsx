@@ -963,3 +963,38 @@ describe("/diagnosticos/{id} — HU #14577 PS-1: saneamiento en el tablero", () 
     expect(accionesEnTodas(/^Ver deuda/)).toHaveLength(0);
   });
 });
+
+// HU #14584 CR-4/CR-9 (spec-ui §6.4): «Auditoría del dictamen» del menú solo con verAuditoria (con la compañía de la sesión)
+// y «Ver dictamen» de una fila Pendiente abre el panel con un vacío claro, no un error.
+// Uso de ejemplo: «Acciones de la placa TST001» → «Auditoría del dictamen de TST001» → modal de versiones; Esc devuelve el foco.
+describe("/diagnosticos/{id} — HU #14584: auditoría y dictamen desde el menú «Acciones»", () => {
+  const RUTA_VERSIONES = `/diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen/versiones`;
+
+  it("CR-4: sin verAuditoria no hay «Auditoría del dictamen» en el menú", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    expect(quizaAccionFila("TST001", "Auditoría del dictamen de TST001")).toBeNull();
+    expect(quizaAccionFila("TST001", "Ver dictamen de TST001")).not.toBeNull();
+  });
+
+  it("CR-4: con verAuditoria abre el modal de versiones con ?empresa= de la sesión y al cerrarlo el foco vuelve a «Acciones»", async () => {
+    const api = await montar(
+      {
+        [GRILLA]: () => Response.json(grilla()),
+        [`GET /backoffice${RUTA_VERSIONES}`]: () => Response.json({ versiones: [] }),
+      },
+      { ...USUARIO, verAuditoria: true },
+    );
+    disparadorDe("TST001")!.focus();
+    fireEvent.click(accionFila("TST001", "Auditoría del dictamen de TST001"));
+    await avanzar();
+    await avanzar();
+    const panel = screen.getByRole("dialog", { name: "Auditoría del dictamen · TST001" });
+    expect(panel).toBeInTheDocument();
+    const [[url]] = llamadas(api, "GET", `/backoffice${RUTA_VERSIONES}`) as [[string]];
+    expect(new URL(url, "http://localhost").searchParams.get("empresa")).toBe(sesion({}).empresa.id);
+    fireEvent.keyDown(document.activeElement ?? panel, { key: "Escape" });
+    await avanzar();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(disparadorDe("TST001")).toHaveFocus();
+  });
+});
