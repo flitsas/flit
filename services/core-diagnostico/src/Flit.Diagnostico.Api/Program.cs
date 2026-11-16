@@ -26,13 +26,10 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         // HU #14582 (H-A3): `backfill-cambio-propietario --empresa <uuid> [--lote n]` corre el backfill y sale, sin arrancar el host
-        // ni migrar (lo lanza infra por ambiente, con la configuración del servicio por variables de entorno).
+        // ni migrar (lo lanza infra por ambiente, con la configuración del servicio por variables de entorno). Un argumento inválido
+        // escribe el uso por stderr y sale con 2, sin traza.
         if (Modulos.Trabajos.ComandoBackfillCambioPropietario.EsComando(args))
-        {
-            var opciones = Modulos.Trabajos.ComandoBackfillCambioPropietario.Leer(args);
-            await using var comando = Build([]);
-            return await Modulos.Trabajos.ComandoBackfillCambioPropietario.EjecutarAsync(comando.Services, opciones, CancellationToken.None).ConfigureAwait(false);
-        }
+            return await Modulos.Trabajos.ComandoBackfillCambioPropietario.CorrerAsync(args, () => Build([]), Console.Error, CancellationToken.None).ConfigureAwait(false);
 
         var app = Build(args);
         await MigrateAsync(app).ConfigureAwait(false);

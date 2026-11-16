@@ -166,6 +166,29 @@ public sealed class BackfillCambioPropietarioTests
         filasDespues[noHomologable].Should().Be(filasAntes[noHomologable], "sigue en null: no se marca");
     }
 
+    // CR-4 del review de be1-b — un argumento inválido del subcomando no deja traza: mensaje de uso por stderr, código 2, y el host
+    // ni se construye.
+    [Fact]
+    public async Task Argumento_invalido_del_subcomando_da_uso_por_stderr_y_codigo_2()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var error = new StringWriter();
+        var construido = false;
+
+        var codigo = await ComandoBackfillCambioPropietario.CorrerAsync(
+            [ComandoBackfillCambioPropietario.Nombre, "--empresa", "no-es-un-uuid"], () =>
+            {
+                construido = true;
+                throw new InvalidOperationException("no debe construirse");
+            }, error, ct);
+
+        codigo.Should().Be(2);
+        construido.Should().BeFalse();
+        var texto = error.ToString();
+        texto.Should().Contain("Uso:").And.Contain(ComandoBackfillCambioPropietario.Nombre);
+        texto.Should().NotContain("   at ").And.NotContain("ArgumentException", "sin traza ni tipo de excepción");
+    }
+
     // CR-4 (§1.4) y CR-2 del review de be1-b — un propietario del RUNT con un tipo fuera de la tabla suma 1 a tipos_no_homologados
     // con una sola etiqueta, «origen» (cierre / reutilizacion / backfill): sin id de vehículo (cardinalidad acotada), ni tipo ni
     // número. La regla pura no cambia (sigue null).

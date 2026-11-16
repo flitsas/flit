@@ -137,6 +137,38 @@ internal static class ComandoBackfillCambioPropietario
     public const string Nombre = "backfill-cambio-propietario";
     public const int LotePorDefecto = 200;
 
+    /// <summary>Uso del subcomando (va a stderr con un argumento inválido).</summary>
+    public const string Uso = "Uso: " + Nombre + " --empresa <uuid> [--empresa <uuid> ...] [--lote <n>]";
+
+    /// <summary>
+    /// Punto de entrada de <c>Main</c> (CR-4 del review): lee los argumentos y, si son inválidos, escribe el motivo y <see cref="Uso"/>
+    /// en <paramref name="error"/> y devuelve 2, sin traza y sin construir el host; si son válidos construye el host con
+    /// <paramref name="construir"/> y corre <see cref="EjecutarAsync"/>.
+    /// </summary>
+    public static async Task<int> CorrerAsync(string[] args, Func<WebApplication> construir, TextWriter error, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(construir);
+        ArgumentNullException.ThrowIfNull(error);
+        OpcionesComandoBackfill opciones;
+        try
+        {
+            opciones = Leer(args);
+        }
+        catch (ArgumentException ex)
+        {
+            await error.WriteLineAsync(Motivo(ex)).ConfigureAwait(false);
+            await error.WriteLineAsync(Uso).ConfigureAwait(false);
+            return 2;
+        }
+
+        await using var host = construir();
+        return await EjecutarAsync(host.Services, opciones, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>El mensaje de la excepción sin el sufijo «(Parameter 'args')» que añade ArgumentException.</summary>
+    private static string Motivo(ArgumentException ex) =>
+        ex.ParamName is { } nombre ? ex.Message.Replace($" (Parameter '{nombre}')", string.Empty, StringComparison.Ordinal) : ex.Message;
+
     public static bool EsComando(string[] args) => args is { Length: > 0 } && string.Equals(args[0], Nombre, StringComparison.Ordinal);
 
     /// <summary>Lee <c>--empresa</c> (una o más, uuid) y <c>--lote</c> (entero ≥ 1); cualquier otra cosa es ArgumentException.</summary>
@@ -159,7 +191,7 @@ internal static class ComandoBackfillCambioPropietario
                     i++;
                     break;
                 default:
-                    throw new ArgumentException($"Argumento inválido en {Nombre}: «{args[i]}». Uso: {Nombre} --empresa <uuid> [--empresa <uuid>] [--lote <n>].", nameof(args));
+                    throw new ArgumentException($"Argumento inválido en {Nombre}: «{args[i]}».", nameof(args));
             }
         }
 
