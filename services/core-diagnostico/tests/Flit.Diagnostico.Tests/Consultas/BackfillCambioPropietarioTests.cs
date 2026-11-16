@@ -143,6 +143,29 @@ public sealed class BackfillCambioPropietarioTests
         (await ValoresAsync(empresas.B, ct))[deB].Should().BeNull("solo la compañía pedida");
     }
 
+    // CR-3 del review de be1-b — el lote que fija cambio_propietario sube version_tablero de la cabecera (como el cierre de una
+    // celda) y deja esa versión en las filas fijadas, para que el delta ?desde= las traiga; la fila que sigue en null no cambia.
+    [Fact]
+    public async Task Backfill_sube_la_version_del_tablero_de_las_filas_fijadas()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        var (coincide, noCoincide, _, _, noHomologable) = await SembrarAsync(empresa, protector, ct);
+        var (cabeceraAntes, filasAntes) = await VersionesAsync(empresa, ct);
+
+        await using (var db = empresa.Db())
+            await new BackfillCambioPropietario(db, protector, api.App.Services.GetRequiredService<ILogger<BackfillCambioPropietario>>()).EjecutarAsync(100, ct);
+
+        var (cabeceraDespues, filasDespues) = await VersionesAsync(empresa, ct);
+        cabeceraDespues.Should().BeGreaterThan(cabeceraAntes, "el lote fijó valores: sube la versión del tablero");
+        filasDespues[coincide].Should().Be(cabeceraDespues);
+        filasDespues[noCoincide].Should().Be(cabeceraDespues);
+        filasDespues[noHomologable].Should().Be(filasAntes[noHomologable], "sigue en null: no se marca");
+    }
+
     // CR-4 (§1.4) y CR-2 del review de be1-b — un propietario del RUNT con un tipo fuera de la tabla suma 1 a tipos_no_homologados
     // con una sola etiqueta, «origen» (cierre / reutilizacion / backfill): sin id de vehículo (cardinalidad acotada), ni tipo ni
     // número. La regla pura no cambia (sigue null).
@@ -223,6 +246,14 @@ public sealed class BackfillCambioPropietarioTests
         Origen = OrigenDocumento.Proveedor,
         CreadoEn = DateTimeOffset.UtcNow,
     };
+
+    private static async Task<(long Cabecera, Dictionary<Guid, long> Filas)> VersionesAsync(EmpresaDePrueba empresa, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        var filas = await db.Set<VehiculoDiagnostico>().AsNoTracking().ToDictionaryAsync(v => v.Id, v => v.VersionTablero, ct);
+        var cabecera = await db.Set<Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico>().AsNoTracking().Select(c => c.VersionTablero).SingleAsync(ct);
+        return (cabecera, filas);
+    }
 
     private static async Task<Dictionary<Guid, bool?>> ValoresAsync(EmpresaDePrueba empresa, CancellationToken ct)
     {

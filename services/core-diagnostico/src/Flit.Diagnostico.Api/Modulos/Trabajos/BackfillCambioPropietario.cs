@@ -22,7 +22,7 @@ internal sealed record OpcionesComandoBackfill(IReadOnlyList<Guid> Empresas, int
 /// empresas), los vehículos con <c>propietario_declarado_doc_cifrado</c>, <c>cambio_propietario IS NULL</c> y al menos un propietario en
 /// <c>personas_vehiculo</c> (es decir, con la celda RUNT ya cerrada), por lotes ordenados por id. Por fila descifra solo sus
 /// propietarios y su declarado (SP-1), compara con <see cref="DocumentosVehiculo.FijarCambioPropietario"/> (la misma regla del cierre
-/// de la celda) y guarda el lote. Idempotente: lo ya fijado no vuelve a entrar; lo que sigue en null (tipo no homologable, cifrado
+/// de la celda) y guarda el lote en una transacción que sube <c>version_tablero</c> como el cierre de una celda. Idempotente: lo ya fijado no vuelve a entrar; lo que sigue en null (tipo no homologable, cifrado
 /// ilegible) se vuelve a mirar en la siguiente corrida sin cambiar. Al log solo van conteos y la compañía; nunca un documento.
 /// </summary>
 /// <example>
@@ -40,54 +40,78 @@ internal sealed partial class BackfillCambioPropietario(DiagnosticoDb db, IProte
         while (true)
         {
             var desde = ultimo;
-            var candidatos = await db.Set<VehiculoDiagnostico>()
-                .Where(v => v.PropietarioDeclaradoDocCifrado != null && v.CambioPropietario == null
-                    && db.Set<PersonaVehiculo>().Any(p => p.TenantId == v.TenantId && p.VehiculoId == v.Id && p.Rol == RolPersona.Propietario))
-                .Where(v => desde == null || v.Id > desde.Value)
-                .OrderBy(v => v.Id)
-                .Take(tamanoLote)
-                .ToListAsync(ct).ConfigureAwait(false);
-            if (candidatos.Count == 0)
+            // El reintento de Npgsql exige que la transacción vaya dentro de la estrategia de ejecución; el lote se relee entero.
+            var lote = await db.Database.CreateExecutionStrategy()
+                .ExecuteAsync(() => LoteEnTransaccionAsync(desde, tamanoLote, ct)).ConfigureAwait(false);
+            if (lote.Leidos == 0)
                 break;
-
-            var ids = candidatos.Select(v => v.Id).ToList();
-            var propietarios = (await db.Set<PersonaVehiculo>().AsNoTracking()
-                    .Where(p => ids.Contains(p.VehiculoId) && p.Rol == RolPersona.Propietario)
-                    .OrderBy(p => p.Orden)
-                    .Select(p => new { p.VehiculoId, p.DocTipo, p.DocCifrado })
-                    .ToListAsync(ct).ConfigureAwait(false))
-                .ToLookup(p => p.VehiculoId);
-            foreach (var vehiculo in candidatos)
-            {
-                List<(string Tipo, string Numero)>? delRunt;
-                try
-                {
-                    delRunt = [.. propietarios[vehiculo.Id].Select(p => (p.DocTipo, protector.Desproteger(p.DocCifrado)))];
-                }
-                catch (CryptographicException)
-                {
-                    delRunt = null;
-                }
-
-                if (delRunt is not null)
-                    DocumentosVehiculo.FijarCambioPropietario(vehiculo, delRunt, protector, MetricasDiagnostico.OrigenBackfill);
-                revisados++;
-                if (vehiculo.CambioPropietario is null)
-                    sinResultado++;
-                else
-                    fijados++;
-            }
-
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-            db.ChangeTracker.Clear();
+            revisados += lote.Leidos;
+            fijados += lote.Fijados;
+            sinResultado += lote.Leidos - lote.Fijados;
             lotes++;
-            ultimo = candidatos[^1].Id;
-            if (candidatos.Count < tamanoLote)
+            ultimo = lote.Ultimo;
+            if (lote.Leidos < tamanoLote)
                 break;
         }
 
         Terminado(log, db.EmpresaActual, revisados, fijados, sinResultado, lotes);
         return new ResultadoBackfill(revisados, fijados, sinResultado, lotes);
+    }
+
+    /// <summary>
+    /// Un lote en su transacción: lee las candidatas después de <paramref name="desde"/>, fija el valor y, por cada diagnóstico con
+    /// filas fijadas, sube <c>version_tablero</c> de la cabecera (<see cref="EscritorCeldas.SubirVersionTableroAsync(DiagnosticoDb, Guid, CancellationToken)"/>,
+    /// que la bloquea hasta el commit) y deja esa versión en sus filas (<see cref="EscritorCeldas.MarcarFila"/>), como el cierre de una
+    /// celda (CR-3 del review): el delta <c>?desde=</c> de la grilla las trae. Las filas que siguen en null no se marcan.
+    /// </summary>
+    private async Task<(int Leidos, int Fijados, Guid? Ultimo)> LoteEnTransaccionAsync(Guid? desde, int tamanoLote, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        await using var transaccion = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        var candidatos = await db.Set<VehiculoDiagnostico>()
+            .Where(v => v.PropietarioDeclaradoDocCifrado != null && v.CambioPropietario == null
+                && db.Set<PersonaVehiculo>().Any(p => p.TenantId == v.TenantId && p.VehiculoId == v.Id && p.Rol == RolPersona.Propietario))
+            .Where(v => desde == null || v.Id > desde.Value)
+            .OrderBy(v => v.Id)
+            .Take(tamanoLote)
+            .ToListAsync(ct).ConfigureAwait(false);
+        if (candidatos.Count == 0)
+            return (0, 0, null);
+
+        var ids = candidatos.Select(v => v.Id).ToList();
+        var propietarios = (await db.Set<PersonaVehiculo>().AsNoTracking()
+                .Where(p => ids.Contains(p.VehiculoId) && p.Rol == RolPersona.Propietario)
+                .OrderBy(p => p.Orden)
+                .Select(p => new { p.VehiculoId, p.DocTipo, p.DocCifrado })
+                .ToListAsync(ct).ConfigureAwait(false))
+            .ToLookup(p => p.VehiculoId);
+        foreach (var vehiculo in candidatos)
+        {
+            List<(string Tipo, string Numero)>? delRunt;
+            try
+            {
+                delRunt = [.. propietarios[vehiculo.Id].Select(p => (p.DocTipo, protector.Desproteger(p.DocCifrado)))];
+            }
+            catch (CryptographicException)
+            {
+                delRunt = null;
+            }
+
+            if (delRunt is not null)
+                DocumentosVehiculo.FijarCambioPropietario(vehiculo, delRunt, protector, MetricasDiagnostico.OrigenBackfill);
+        }
+
+        var conValor = candidatos.Where(v => v.CambioPropietario is not null).ToList();
+        foreach (var delLote in conValor.GroupBy(v => v.DiagnosticoId))
+        {
+            var version = await EscritorCeldas.SubirVersionTableroAsync(db, delLote.Key, ct).ConfigureAwait(false);
+            foreach (var vehiculo in delLote)
+                EscritorCeldas.MarcarFila(vehiculo, version);
+        }
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await transaccion.CommitAsync(ct).ConfigureAwait(false);
+        return (candidatos.Count, conValor.Count, candidatos[^1].Id);
     }
 
     [LoggerMessage(EventId = 14584, Level = LogLevel.Information,
