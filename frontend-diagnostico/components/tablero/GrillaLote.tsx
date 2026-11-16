@@ -34,11 +34,6 @@ export interface GrillaLoteProps {
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
   tituloAccionVehiculo: string;
   casillaVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
-  /**
-   * Abre el panel del dictamen. HU #14584 §6.4: ya no lo abre la columna Dictamen (es un dato) sino «Ver dictamen» del menú
-   * «Acciones» (`AccionesVehiculo`); se conserva para quien pinta la grilla.
-   */
-  onAbrirDictamen?: (vehiculo: FilaVehiculo, disparador: HTMLElement) => void;
   /** «Limpiar filtros» también apaga la tarjeta-filtro y el chip de saneamiento (los controla quien pinta la grilla). */
   onQuitarFiltro?: () => void;
 }

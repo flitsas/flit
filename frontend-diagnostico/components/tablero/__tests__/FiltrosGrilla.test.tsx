@@ -22,7 +22,6 @@ const pintar = (props: Partial<GrillaLoteProps> = {}) =>
       onReprocesada={vi.fn()}
       onErrorReproceso={vi.fn()}
       tituloAccionVehiculo="Acciones"
-      onAbrirDictamen={vi.fn()}
       {...props}
     />,
   );
