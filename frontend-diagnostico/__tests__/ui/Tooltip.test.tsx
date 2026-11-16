@@ -257,7 +257,7 @@ describe("Tooltip — táctil (spec-ui §5.2)", () => {
 });
 
 // Code review del kit (CR-3 y CR-4, 2026-11-16).
-describe("Tooltip — envoltorio, componentes y una sola llamada (CR-3)", () => {
+describe("Tooltip — envoltorio, componentes y Esc en captura (CR-3, CR-4)", () => {
   it("CR-3 (i): en el envoltorio, el onClick, onKeyDown y onFocus del hijo corren una sola vez", () => {
     const onClick = vi.fn();
     const onKeyDown = vi.fn();
@@ -295,5 +295,38 @@ describe("Tooltip — envoltorio, componentes y una sola llamada (CR-3)", () => 
     expect(onClick).toHaveBeenCalledTimes(1);
     act(() => disparador().focus());
     expect(disparador().getAttribute("aria-describedby")).toBe(screen.getByRole("tooltip").id);
+  });
+
+  it("CR-4: con la burbuja abierta, Esc la cierra sin llegar al listener de document del modal; cerrada, sí llega", () => {
+    const delModal = vi.fn();
+    document.addEventListener("keydown", delModal);
+    try {
+      montar();
+      act(() => disparador().focus());
+      expect(screen.getByRole("tooltip")).toBeInTheDocument();
+      fireEvent.keyDown(disparador(), { key: "Escape" });
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      expect(delModal).not.toHaveBeenCalled();
+      fireEvent.keyDown(disparador(), { key: "Escape" });
+      expect(delModal).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", delModal);
+    }
+  });
+
+  it("CR-4: abierta por hover (foco fuera), Esc en otro elemento también se corta en captura", () => {
+    vi.useFakeTimers();
+    const delModal = vi.fn();
+    document.addEventListener("keydown", delModal);
+    try {
+      montar();
+      pointer("pointerEnter", disparador());
+      act(() => vi.advanceTimersByTime(300));
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      expect(delModal).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener("keydown", delModal);
+    }
   });
 });

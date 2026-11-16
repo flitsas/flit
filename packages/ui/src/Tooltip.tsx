@@ -173,14 +173,18 @@ export function Tooltip({
       if (disparadorRef.current?.contains(t) || burbujaRef.current?.contains(t)) return;
       cerrar();
     };
+    // Fase de captura: corre antes que el Escape de un Modal o menú contenedor (que escucha en burbujeo) y lo corta
+    // solo cuando la burbuja estaba abierta (este efecto solo existe con `abierto`). El segundo Esc ya cierra la capa.
     const esc = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape" && !disparadorRef.current?.contains(document.activeElement)) cerrar();
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      cerrar();
     };
     document.addEventListener("pointerdown", fuera);
-    document.addEventListener("keydown", esc);
+    document.addEventListener("keydown", esc, true);
     return () => {
       document.removeEventListener("pointerdown", fuera);
-      document.removeEventListener("keydown", esc);
+      document.removeEventListener("keydown", esc, true);
     };
   }, [abierto, cerrar]);
 
