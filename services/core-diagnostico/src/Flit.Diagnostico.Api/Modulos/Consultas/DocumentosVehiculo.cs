@@ -110,15 +110,16 @@ internal static class DocumentosVehiculo
     /// memoria. Sin declarado queda null; si el declarado no se puede descifrar, también null. Se llama en la transacción que cierra
     /// la celda RUNT (la consultada, la reprocesada y la reutilizada del mismo día) y en el backfill; las lecturas solo leen la columna.
     /// No loguea nada: los propietarios con un tipo fuera de la tabla de sinónimos solo suman al contador
-    /// <see cref="MetricasDiagnostico.TiposNoHomologados"/> con el id del vehículo (CR-4, §1.4).
+    /// <see cref="MetricasDiagnostico.TiposNoHomologados"/> con <paramref name="origen"/> como única etiqueta (CR-4, §1.4).
     /// </summary>
     public static void FijarCambioPropietario(
-        VehiculoDiagnostico vehiculo, IReadOnlyList<(string Tipo, string Numero)> propietariosRunt, IProtectorDocumentoPersona protector)
+        VehiculoDiagnostico vehiculo, IReadOnlyList<(string Tipo, string Numero)> propietariosRunt, IProtectorDocumentoPersona protector,
+        string origen = MetricasDiagnostico.OrigenCierre)
     {
         ArgumentNullException.ThrowIfNull(vehiculo);
         ArgumentNullException.ThrowIfNull(propietariosRunt);
         ArgumentNullException.ThrowIfNull(protector);
-        MetricasDiagnostico.ContarTiposNoHomologados(vehiculo.Id, propietariosRunt.Count(p => HomologacionTipoDocumento.Canonico(p.Tipo) is null));
+        MetricasDiagnostico.ContarTiposNoHomologados(origen, propietariosRunt.Count(p => HomologacionTipoDocumento.Canonico(p.Tipo) is null));
         if (vehiculo.PropietarioDeclaradoDocTipo is not { } tipo || vehiculo.PropietarioDeclaradoDocCifrado is not { } cifrado)
         {
             vehiculo.CambioPropietario = null;

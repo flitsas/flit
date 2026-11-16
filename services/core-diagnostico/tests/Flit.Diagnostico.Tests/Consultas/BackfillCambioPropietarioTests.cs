@@ -143,8 +143,9 @@ public sealed class BackfillCambioPropietarioTests
         (await ValoresAsync(empresas.B, ct))[deB].Should().BeNull("solo la compañía pedida");
     }
 
-    // CR-4 (§1.4) — un propietario del RUNT con un tipo fuera de la tabla suma 1 a tipos_no_homologados con el id del vehículo
-    // como etiqueta; ni el tipo ni el número van en la medición. La regla pura no cambia (sigue null).
+    // CR-4 (§1.4) y CR-2 del review de be1-b — un propietario del RUNT con un tipo fuera de la tabla suma 1 a tipos_no_homologados
+    // con una sola etiqueta, «origen» (cierre / reutilizacion / backfill): sin id de vehículo (cardinalidad acotada), ni tipo ni
+    // número. La regla pura no cambia (sigue null).
     [Fact]
     public void Tipo_del_runt_no_homologado_suma_al_contador_sin_valores()
     {
@@ -167,7 +168,7 @@ public sealed class BackfillCambioPropietarioTests
         oyente.SetMeasurementEventCallback<long>((_, valor, etiquetas, _) =>
         {
             var copia = etiquetas.ToArray();
-            if (copia.Any(e => Equals(e.Value, vehiculo.Id.ToString())))
+            if (copia.Any(e => e.Key == MetricasDiagnostico.EtiquetaOrigen && Equals(e.Value, MetricasDiagnostico.OrigenBackfill)))
             {
                 lock (mediciones)
                     mediciones.Add((valor, copia));
@@ -175,11 +176,12 @@ public sealed class BackfillCambioPropietarioTests
         });
         oyente.Start();
 
-        DocumentosVehiculo.FijarCambioPropietario(vehiculo, [("XX", Otro), ("CC", "55555555")], protector);
+        DocumentosVehiculo.FijarCambioPropietario(vehiculo, [("XX", Otro), ("CC", "55555555")], protector, MetricasDiagnostico.OrigenBackfill);
 
         vehiculo.CambioPropietario.Should().BeNull("SP-3: con un propietario no homologable y sin coincidencia el resultado es null");
         var medicion = mediciones.Should().ContainSingle().Subject;
         medicion.Valor.Should().Be(1);
+        medicion.Etiquetas.Select(e => e.Key).Should().Equal([MetricasDiagnostico.EtiquetaOrigen], "CR-2: sin vehiculo_id ni otra etiqueta");
         medicion.Etiquetas.Select(e => e.Value?.ToString()).Should().NotContain(v => v == "XX" || v == Otro || v == "55555555" || v == Declarado);
     }
 

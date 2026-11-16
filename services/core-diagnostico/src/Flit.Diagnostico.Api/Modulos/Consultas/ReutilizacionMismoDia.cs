@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
@@ -129,7 +130,7 @@ internal static class ReutilizacionMismoDia
                     if (propietarios is null)
                         destino.CambioPropietario = null;
                     else
-                        DocumentosVehiculo.FijarCambioPropietario(destino, propietarios, documentos);
+                        DocumentosVehiculo.FijarCambioPropietario(destino, propietarios, documentos, MetricasDiagnostico.OrigenReutilizacion);
                 }
             })
             : null;

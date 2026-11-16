@@ -70,7 +70,7 @@ internal sealed partial class BackfillCambioPropietario(DiagnosticoDb db, IProte
                 }
 
                 if (delRunt is not null)
-                    DocumentosVehiculo.FijarCambioPropietario(vehiculo, delRunt, protector);
+                    DocumentosVehiculo.FijarCambioPropietario(vehiculo, delRunt, protector, MetricasDiagnostico.OrigenBackfill);
                 revisados++;
                 if (vehiculo.CambioPropietario is null)
                     sinResultado++;
