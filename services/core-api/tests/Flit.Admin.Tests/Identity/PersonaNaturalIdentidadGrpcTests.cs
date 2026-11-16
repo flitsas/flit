@@ -391,7 +391,9 @@ public sealed class PersonaNaturalIdentidadGrpcTests(PersonaNaturalIdentidadGrpc
     {
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
-        var tenant = await db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.Code).Select(t => t.Id).FirstAsync(ct);
+        // El tenant MÁS ANTIGUO (sembrado por las migraciones): uno cualquiera podía ser el que otra clase crea y borra en
+        // paralelo, y la inserción fallaba por fk_persons_tenant.
+        var tenant = await db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).Select(t => t.Id).FirstAsync(ct);
         var persona = new Person
         {
             Id = Guid.NewGuid(),
