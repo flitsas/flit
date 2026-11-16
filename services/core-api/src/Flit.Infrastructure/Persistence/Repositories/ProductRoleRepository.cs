@@ -64,13 +64,18 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
         return list.GroupBy(i => i.InvitationId).Select(g => g.First()).ToList();
     }
 
-    public Task<int> CountOtherActiveAdminsAsync(Guid tenantId, string adminRoleCode, Guid excludingUserId, CancellationToken ct) =>
-        (from a in db.UserRoleAssignments.AsNoTracking()
-         join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
-         join u in db.Users.AsNoTracking() on a.UserId equals u.Id
-         where a.TenantId == tenantId && a.DeletedAt == null && r.Code == adminRoleCode && r.DeletedAt == null
-             && u.DeletedAt == null && u.Status == Active && a.UserId != excludingUserId
-         select a.UserId).Distinct().CountAsync(ct);
+    /// <remarks>CR-5: «activo» = cuenta activa y sin suspensión temporal vigente en la empresa.</remarks>
+    public Task<int> CountOtherActiveAdminsAsync(Guid tenantId, string adminRoleCode, Guid excludingUserId, CancellationToken ct)
+    {
+        var suspendidas = SuspensionesVigentes();
+        return (from a in db.UserRoleAssignments.AsNoTracking()
+                join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                where a.TenantId == tenantId && a.DeletedAt == null && r.Code == adminRoleCode && r.DeletedAt == null
+                    && u.DeletedAt == null && u.Status == Active && a.UserId != excludingUserId
+                    && !suspendidas.Any(s => s.UserId == a.UserId && s.TenantId == a.TenantId)
+                select a.UserId).Distinct().CountAsync(ct);
+    }
 
     public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
         InTransactionAsync(async () =>
@@ -135,12 +140,19 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
 
     public async Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, IReadOnlyCollection<string> roleCodes, string adminRoleCode, CancellationToken ct)
     {
+        var suspendidas = SuspensionesVigentes();
         var activos = await (
             from a in db.UserRoleAssignments.AsNoTracking()
             join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
             join u in db.Users.AsNoTracking() on a.UserId equals u.Id
             where a.DeletedAt == null && r.ProductCode == productCode && roleCodes.Contains(r.Code) && u.DeletedAt == null
-            select new { a.TenantId, a.UserId, Admin = r.Code == adminRoleCode && u.Status == Active })
+            select new
+            {
+                a.TenantId,
+                a.UserId,
+                // CR-5: un admin con suspensión temporal vigente en la empresa no cuenta como administrador activo.
+                Admin = r.Code == adminRoleCode && u.Status == Active && !suspendidas.Any(s => s.UserId == a.UserId && s.TenantId == a.TenantId),
+            })
             .Distinct().ToListAsync(ct).ConfigureAwait(false);
         var suspendidos = await (
             from s in db.ProductRoleSuspensions.AsNoTracking()
@@ -166,6 +178,9 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
                 activos.Where(a => a.TenantId == t && a.Admin).Select(a => a.UserId).Distinct().Count()))
             .ToList();
     }
+
+    private IQueryable<UserTempSuspension> SuspensionesVigentes() =>
+        db.UserTempSuspensions.AsNoTracking().Where(UserTempSuspension.VigenteEn(DateTimeOffset.UtcNow));
 
     private IQueryable<ProductInvitationSnapshot> PendingInvitations(Guid tenantId, string productCode) =>
         from i in db.UserInvitations.AsNoTracking()
