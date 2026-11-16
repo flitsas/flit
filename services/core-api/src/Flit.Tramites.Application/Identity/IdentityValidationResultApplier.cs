@@ -34,6 +34,8 @@ public sealed record IdentityValidationTerminalResult(
 /// <c>dato_modificado</c> con la frase corta («Identidad del comprador: aprobada» / «rechazada»; la parte
 /// en minúscula). Anterior vacío. No guarda imagen, puntaje ni el cuerpo del proveedor. La misma frase
 /// (Ordinal tras trim) no genera otra fila. No escribe <see cref="IdentityValidationAuditEvent"/>.</para>
+/// <para>La consulta que aplica <c>expirado</c> (<see cref="IdentityValidationReconciler"/>) encola «expirada» con
+/// <see cref="EncolarFraseExpiradaAsync"/>, sin pasar por <see cref="ApplyAsync"/> ni publicar el evento.</para>
 /// </summary>
 public sealed class IdentityValidationResultApplier(
     IIdentityValidationEventPublisher events,
@@ -132,7 +134,7 @@ public sealed class IdentityValidationResultApplier(
             }
         }
 
-        await RegistrarFraseEnBitacoraAsync(v, result.Approved, now, ct);
+        await RegistrarFraseEnBitacoraAsync(v, result.Approved ? "aprobada" : "rechazada", now, ct);
 
         await events.PublishAsync(new IdentityValidationCompleted
         {
@@ -160,11 +162,22 @@ public sealed class IdentityValidationResultApplier(
         bool approved,
         DateTimeOffset now,
         CancellationToken ct = default)
-        => RegistrarFraseEnBitacoraAsync(v, approved, now, ct);
+        => RegistrarFraseEnBitacoraAsync(v, approved ? "aprobada" : "rechazada", now, ct);
+
+    /// <summary>
+    /// L4 — encola «Identidad del {parte}: expirada» cuando la consulta a Kyverum (botón, respaldo del webhook o
+    /// proceso de fondo) aplica <c>expirado</c>. Mismas reglas que aprobada/rechazada: sin repositorio, trámite o
+    /// parte no hay fila, y la misma frase no se encola otra vez. NO publica <see cref="IdentityValidationCompleted"/>.
+    /// </summary>
+    public Task EncolarFraseExpiradaAsync(
+        ProcedureInstanceBiometricValidation v,
+        DateTimeOffset now,
+        CancellationToken ct = default)
+        => RegistrarFraseEnBitacoraAsync(v, "expirada", now, ct);
 
     private async Task RegistrarFraseEnBitacoraAsync(
         ProcedureInstanceBiometricValidation v,
-        bool approved,
+        string resultado,
         DateTimeOffset now,
         CancellationToken ct)
     {
@@ -175,9 +188,7 @@ public sealed class IdentityValidationResultApplier(
         if (parte is null)
             return;
 
-        var frase = approved
-            ? $"Identidad del {parte}: aprobada"
-            : $"Identidad del {parte}: rechazada";
+        var frase = $"Identidad del {parte}: {resultado}";
 
         var clave = (instanceId, frase);
         if (_frasesEmitidas.Contains(clave))

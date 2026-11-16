@@ -44,7 +44,7 @@ describe('Placa Colombia', () => {
   it('rechaza formatos inválidos', () => {
     expect(validatePlate('AB123')).not.toBeNull();
     expect(validatePlate('ABCD12')).not.toBeNull();
-    expect(validatePlate('123ABC')).not.toBeNull();
+    expect(validatePlate('12ABC')).not.toBeNull();
     expect(validatePlate('MC02955')).not.toBeNull(); // maquinaria incompleta (5 dígitos)
     expect(validatePlate('MC0295544')).not.toBeNull(); // maquinaria con dígito de más
   });
@@ -67,8 +67,25 @@ describe('Número de documento por tipo', () => {
     expect(validateDocNumber('AB 12', 'PAS')).not.toBeNull(); // espacio fuera
   });
 
+  it('PPT: admite letras y números (HU #14499)', () => {
+    expect(validateDocNumber('V12345678', 'PPT')).toBeNull();
+    expect(validateDocNumber('V12-345', 'PPT')).not.toBeNull();
+    expect(sanitizeDocNumber('V12-345', 'PPT')).toBe('V12345');
+  });
+
   it('sanea según el tipo', () => {
     expect(sanitizeDocNumber('12a.34', 'CC')).toBe('1234');
     expect(sanitizeDocNumber('ab-12', 'PAS')).toBe('ab12');
+  });
+});
+
+// HU10 (2026-11-09) — la unión de formatos del paso 1 suma el motocarro 123ABC.
+// Uso de ejemplo: validatePlate('123ABC') → null
+describe('Placa de motocarro (HU10)', () => {
+  it('acepta 123ABC y el mensaje lo nombra', () => {
+    expect(validatePlate('123ABC')).toBeNull();
+    expect(validatePlate('1234AB')).toBe(
+      'Placa inválida. Ej: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).',
+    );
   });
 });

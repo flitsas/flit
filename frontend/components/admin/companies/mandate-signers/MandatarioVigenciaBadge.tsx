@@ -1,20 +1,8 @@
-import { CalendarClock, CheckCircle2, Clock3, MinusCircle, XCircle } from "lucide-react";
-import type { ComponentType } from "react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { iconoDeTono } from "@/components/admin/companies/ConfigUi";
 import type { MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { formatFechaCalendario } from "@/lib/format/date";
-import {
-  presentarVigencia,
-  type EstadoVigenciaVista,
-} from "@/lib/plataforma/mandatario-vigencia";
-
-const ICONO: Partial<Record<EstadoVigenciaVista, ComponentType<{ className?: string; "aria-hidden"?: boolean }>>> = {
-  vigente: CheckCircle2,
-  por_vencer: Clock3,
-  vencido: XCircle,
-  inactivo: MinusCircle,
-  no_vigente: CalendarClock,
-};
+import { presentarVigencia } from "@/lib/plataforma/mandatario-vigencia";
 
 type Props = Pick<MandateSigner, "signerModel" | "validityStatus" | "isActive" | "validityKind" | "validTo">;
 
@@ -34,7 +22,6 @@ export function MandatarioVigenciaBadge({ signer }: { signer: Props }) {
     );
   }
 
-  const Icono = ICONO[vista.estado];
   const hasta =
     signer.validityKind === "range" && signer.validTo ? formatFechaCalendario(signer.validTo) : null;
 
@@ -42,15 +29,11 @@ export function MandatarioVigenciaBadge({ signer }: { signer: Props }) {
     <span className="inline-flex flex-col items-start gap-0.5" data-testid="mandatario-vigencia" data-estado={vista.estado}>
       <StatusBadge
         tone={vista.tone}
+        icono={iconoDeTono(vista.tone)}
         ariaLabel={`Vigencia: ${vista.texto}`}
-        label={
-          <span className="inline-flex items-center gap-1">
-            {Icono ? <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden={true} /> : null}
-            {vista.texto}
-          </span>
-        }
+        label={vista.texto}
       />
-      {hasta ? <span className="text-xs text-[#59677D] dark:text-white/55">Hasta {hasta}</span> : null}
+      {hasta ? <span className="text-xs text-muted-foreground">Hasta {hasta}</span> : null}
     </span>
   );
 }

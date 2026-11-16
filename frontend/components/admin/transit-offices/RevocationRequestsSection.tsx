@@ -84,7 +84,7 @@ export function RevocationRequestsSection({ transitOfficeId }: { transitOfficeId
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <RevocationRequestsFiltersBar
           value={filtros}
           onChange={handleFiltrosChange}

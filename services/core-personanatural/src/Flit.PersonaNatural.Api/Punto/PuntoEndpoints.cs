@@ -25,6 +25,7 @@ public static class PuntoEndpoints
     public const string CodigoDesconocido = "codigo_desconocido";
     public const string OrganismoNoOperable = "organismo_no_operable";
     public const string CanalApagado = "canal_apagado";
+    public const string SinTramitesDisponibles = "sin_tramites_disponibles";
     public const string CodigoProveedor = ConsultasEndpoints.CodigoProveedor;
 
     private const string ItemSesion = "flit.pn.punto";
@@ -63,8 +64,9 @@ public static class PuntoEndpoints
         ArgumentNullException.ThrowIfNull(app);
         var grupo = app.MapGroup(SesionEndpoints.Base + "/punto").AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp);
 
-        grupo.MapPost("/entrada", async (EntradaPuntoRequest? body, HttpContext http, ICanalPunto canal, CookiePunto cookie, CancellationToken ct) =>
+        grupo.MapPost("/entrada", async (EntradaPuntoRequest? body, HttpContext http, ICanalPunto canal, CookiePunto cookie, IFachadaTramites? catalogo, CancellationToken ct) =>
         {
+            http.Response.Headers.CacheControl = "no-store";
             var codigo = (body?.Codigo ?? string.Empty).Trim();
             if (codigo.Length == 0 || codigo.Length > 20)
                 return Fallo(http, cookie, CodigoDesconocido, "No encontramos un organismo con ese código.");
@@ -83,6 +85,12 @@ public static class PuntoEndpoints
             if (!string.Equals(resolucion.Estado, "ok", StringComparison.OrdinalIgnoreCase) || resolucion.OrganismoId == Guid.Empty)
                 return Fallo(http, cookie, CodigoDe(resolucion.Estado), MensajeDe(resolucion.Estado));
 
+            // HU #14391 AC3 — un punto sin ningún tipo con precio no tiene nada que ofrecer: se informa y no se abre la sesión. Es la
+            // MISMA lista que muestra el selector (/tipos-tramite). Si la consulta falla no se bloquea la entrada: el selector
+            // reportará el error por su cuenta.
+            if (catalogo is not null && await SinTramitesAsync(catalogo, resolucion.OrganismoId, ct).ConfigureAwait(false))
+                return Fallo(http, cookie, SinTramitesDisponibles, "En este momento este punto no tiene trámites disponibles.");
+
             var organismo = new OrganismoPunto(resolucion.OrganismoId, resolucion.Codigo, resolucion.Nombre);
             cookie.Fijar(http, organismo);
             return Results.Json(new { organismoId = organismo.OrganismoId, codigo = organismo.Codigo, nombre = organismo.Nombre }, Json);
@@ -93,9 +101,31 @@ public static class PuntoEndpoints
         grupo.MapGet("/tipos-tramite", async (HttpContext http, IFachadaTramites catalogo, CancellationToken ct) =>
         {
             var sesion = Sesion(http);
+            http.Response.Headers.CacheControl = "no-store";
             try
             {
                 return Results.Json(await catalogo.ListarTiposAsync(sesion.OrganismoId.ToString(), ct).ConfigureAwait(false), Json);
+            }
+            catch (FachadaException ex)
+            {
+                return SesionEndpoints.Problema(ex.EstadoHttp, "No disponible", ex.Message, ex.Codigo);
+            }
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        // HU #14395 — medios de pago del punto: los configurados para el organismo de la cookie (el único portal con PIN de caja).
+        // Sin caché: una bandera o un switch recién guardados se ven en la siguiente consulta.
+        grupo.MapGet("/medios-pago", async (string? tipoCodigo, HttpContext http, CancellationToken ct) =>
+        {
+            // Se resuelve desde RequestServices para que el host de PuntoCanalTests (sin cobro) pueda mapear el grupo.
+            var medios = http.RequestServices.GetRequiredService<IFachadaMediosPago>();
+            var sesion = Sesion(http);
+            http.Response.Headers.CacheControl = "no-store";
+            if (string.IsNullOrWhiteSpace(tipoCodigo) || tipoCodigo.Length > 80)
+                return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "Elija un tipo de trámite.", "datos_invalidos");
+            try
+            {
+                var organismo = sesion.OrganismoId.ToString();
+                return Results.Json(await medios.ListarMediosPagoAsync(tipoCodigo.Trim(), organismo, organismo, ct).ConfigureAwait(false), Json);
             }
             catch (FachadaException ex)
             {
@@ -398,6 +428,18 @@ public static class PuntoEndpoints
         if (r.Campo is not null)
             extensiones["field"] = r.Campo;
         return Results.Problem(statusCode: r.Http, title: r.Codigo, detail: r.Mensaje, extensions: extensiones);
+    }
+
+    private static async Task<bool> SinTramitesAsync(IFachadaTramites catalogo, Guid organismoId, CancellationToken ct)
+    {
+        try
+        {
+            return (await catalogo.ListarTiposAsync(organismoId.ToString(), ct).ConfigureAwait(false)).Count == 0;
+        }
+        catch (FachadaException)
+        {
+            return false;
+        }
     }
 
     private static IResult SinSesion() => SesionEndpoints.Problema(

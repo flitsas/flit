@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FlaskConical, ListChecks, Pencil, Plus, Scale, Send, Undo2 } from "lucide-react";
+import { FlaskConical } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -76,7 +77,7 @@ function Editor({ inicial, onCerrar, onGuardado }: { inicial: Edicion; onCerrar:
   };
 
   return (
-    <Modal
+    <Modal icono="lapiz"
       open
       onClose={onCerrar}
       busy={enviando}
@@ -141,7 +142,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 
   const campos = Object.entries(resultado?.campos ?? {});
   return (
-    <Modal open onClose={onCerrar} busy={probando} size="2xl" title={`Probar la versión ${v.numeroVersion}`} description="Se envía un archivo de muestra al modelo con este prompt. No se guarda nada.">
+    <Modal icono="destello" open onClose={onCerrar} busy={probando} size="2xl" title={`Probar la versión ${v.numeroVersion}`} description="Se envía un archivo de muestra al modelo con este prompt. No se guarda nada.">
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
           <input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,.png,.tif,.tiff,.pdf" onChange={(e) => e.target.files?.[0] && probar(e.target.files[0])} />
@@ -159,6 +160,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         )}
         {resultado?.exitoso && (
           <DataTable
+            tarjeta={false}
             ariaLabel="Campos extraídos"
             rows={campos}
             getRowKey={([k]) => k}
@@ -173,7 +175,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         {resultado?.crudo && (
           <details className="text-xs">
             <summary className="cursor-pointer font-semibold">JSON devuelto por {resultado.modelo}</summary>
-            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">{formatear(resultado.crudo)}</pre>
+            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-secondary p-3 text-[11px]">{formatear(resultado.crudo)}</pre>
           </details>
         )}
       </div>
@@ -182,7 +184,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 }
 
 function Valor({ v, ok }: { v: string | null; ok: boolean }) {
-  return <span className={ok ? "" : "font-semibold text-[#C10000] dark:text-red-400"}>{v ?? <span className="opacity-50">vacío</span>}</span>;
+  return <span className={ok ? "" : "font-semibold text-destructive"}>{v ?? <span className="opacity-50">vacío</span>}</span>;
 }
 
 /** Campo por campo, solo donde alguna de las dos versiones no acertó. */
@@ -194,7 +196,7 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
   );
   const fallos = (e?.detalle ?? []).filter((d) => d.falloCandidata || d.falloVigente);
   return (
-    <Modal
+    <Modal icono="reportes"
       open
       onClose={onCerrar}
       size="2xl"
@@ -217,6 +219,7 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
         ))}
         {e?.estado === "Terminada" && (
           <DataTable
+            tarjeta={false}
             ariaLabel="Campos que no coincidieron"
             rows={filas}
             getRowKey={(f) => f.clave}
@@ -290,7 +293,7 @@ function Prompts() {
           <div className="flex flex-wrap gap-2">
             {anterior && (
               <button type="button" className={controlCls(false)} onClick={() => setPublicar(anterior)}>
-                <Undo2 className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="devolucion" className="h-3.5 w-3.5" />
                 Volver a la versión {anterior.numeroVersion}
               </button>
             )}
@@ -299,7 +302,7 @@ function Prompts() {
               className={BOTON_PRIMARIO_CLS}
               onClick={() => setEdicion({ id: null, texto: publicada?.texto ?? "", modelo: publicada?.modelo ?? "" })}
             >
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="mas" className="h-3.5 w-3.5" />
               Nueva versión
             </button>
           </div>
@@ -321,7 +324,7 @@ function Prompts() {
         renderExpanded={(v) => (
           <details className="px-3 pb-3 text-xs">
             <summary className="cursor-pointer font-semibold">Ver el texto</summary>
-            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-[#F8FAFC] p-3 text-[11px] dark:bg-[#0B0F14]">{v.texto}</pre>
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-secondary p-3 text-[11px]">{v.texto}</pre>
           </details>
         )}
         columns={[
@@ -360,18 +363,18 @@ function Prompts() {
                 </button>
                 {v.evaluacion && v.evaluacion.estado !== "EnCurso" && !v.publicada && !v.retiradaEn && (
                   <button type="button" className={controlCls(false)} onClick={() => setResultado(v.evaluacion!.id)}>
-                    <ListChecks className="h-3.5 w-3.5" aria-hidden />
+                    <Icono nombre="lista" className="h-3.5 w-3.5" />
                     Resultado
                   </button>
                 )}
                 {!v.publicada && !v.retiradaEn && (
                   <>
                     <button type="button" className={controlCls(false)} onClick={() => setEdicion({ id: v.id, texto: v.texto, modelo: v.modelo })}>
-                      <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="lapiz" className="h-3.5 w-3.5" />
                       Editar
                     </button>
                     <button type="button" className={controlCls(false)} disabled={v.evaluacion?.estado === "EnCurso"} onClick={() => evaluar(v)}>
-                      <Scale className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="mazo" className="h-3.5 w-3.5" />
                       Evaluar
                     </button>
                   </>
@@ -384,7 +387,7 @@ function Prompts() {
                     title={v.puedePublicar ? undefined : "Necesita una evaluación aprobada contra la versión publicada."}
                     onClick={() => setPublicar(v)}
                   >
-                    {v.retiradaEn ? <Undo2 className="h-3.5 w-3.5" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />}
+                    {v.retiradaEn ? <Icono nombre="devolucion" className="h-3.5 w-3.5" /> : <Icono nombre="radicacion" className="h-3.5 w-3.5" />}
                     {v.retiradaEn ? "Volver a publicar" : "Publicar"}
                   </button>
                 )}
@@ -407,7 +410,7 @@ function Prompts() {
       {prueba && <Probar v={prueba} onCerrar={() => setPrueba(null)} />}
       {resultado && <ResultadoEvaluacion id={resultado} onCerrar={() => setResultado(null)} />}
       {publicar && (
-        <Modal
+        <Modal icono="check"
           open
           onClose={() => setPublicar(null)}
           busy={ocupado}

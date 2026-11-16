@@ -57,7 +57,8 @@ public static class Program
             .RequireServiceToken<ConsultasGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
             .RequireServiceToken<ConsultasAdminGrpcService>(ConsultasAdminGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
             .RequireServiceToken<ValidacionIdentidadGrpcService>(ValidacionIdentidadGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
-            .RequireServiceToken<Comparendos.FuentesComparendosGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
+            .RequireServiceToken<Comparendos.FuentesComparendosGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
+            .RequireServiceToken<RuntIntempo.RuntIntempoGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
         builder.Services.AddFlitOutbox<ConsultasDb>(builder.Configuration);
 
         // HU #13343 (ADR-0065): los proveedores del módulo, con sus modos mock|real y credenciales (las mismas claves de
@@ -70,6 +71,31 @@ public static class Program
         builder.Services.AddScoped<IAvaluoProviderPolicy, ConsultasAvaluoPolicy>();
         builder.Services.AddScoped<IAvaluoMockValueSource, ValoresMockDeAvaluo>(); // HU #13348
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
+
+        // HU #13876 (ADR-0075): los trabajos del diagnóstico llegan por el bus y se atienden con los mismos *Core de los servicios
+        // gRPC (registrados en el contenedor para que el ejecutor los use con el llamador del sobre). Dos colas con su propio
+        // consumidor (lotes y Express, D1/brecha 3), solo para mensajes que publicó el usuario «diagnostico» del broker (Q3 = 3a).
+        // HU #13727 (U3 = a): la simulación de LOCAL y DEV vive aquí; en otro ambiente el servicio no arranca con ella.
+        var consumidores = Bus.OpcionesConsumidoresDiagnostico.Desde(builder.Configuration);
+        builder.Services.AddSingleton(consumidores);
+        builder.Services.AddSingleton(Simulacion.OpcionesSimulacion.Desde(builder.Configuration));
+        builder.Services.AddSingleton<Simulacion.SimuladorConsultas>();
+        builder.Services.AddScoped<ConsultasGrpcService>();
+        builder.Services.AddScoped<RuntIntempo.RuntIntempoGrpcService>();
+        builder.Services.AddScoped<Bus.EjecutorTrabajo>();
+        builder.Services.AddScoped<Bus.PublicadorResultado>();
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosLote, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaLote, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.Patron(esExpress: false)],
+            o => consumidores.Lote.Aplicar(o, consumidores.ProductoresPermitidos));
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosExpress, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaExpress, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.Patron(esExpress: true)],
+            o => consumidores.Express.Aplicar(o, consumidores.ProductoresPermitidos));
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosImpuesto, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaImpuesto, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.PatronImpuesto(esExpress: false)],
+            o => consumidores.Impuesto.Aplicar(o, consumidores.ProductoresPermitidos));
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosImpuestoExpress, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaImpuestoExpress, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.PatronImpuesto(esExpress: true)],
+            o => consumidores.ImpuestoExpress.Aplicar(o, consumidores.ProductoresPermitidos));
 
         // HU #13520: fuentes de Gestión de Comparendos (separadas de ConsultarMultas). Verifik SIMIT con las mismas
         // credenciales de Trámites; el simulado solo en DEV (Development o Consultations:ComparendosSimulados=true).
@@ -99,6 +125,28 @@ public static class Program
             });
         builder.Services.AddSingleton(sp => new Comparendos.ProveedorContratosRenting(sp.GetRequiredService<IHttpClientFactory>(), renting, motivoCertificado,
             sp.GetRequiredService<TimeProvider>()));
+        // HU #13876 (F10-H4): RUNT por Intempo (API nativa, sin autenticación). Sin INTEMPO_API_BASE_URL queda no conectado
+        // (FailedPrecondition con el nombre de la variable) y el servicio arranca igual.
+        var intempo = RuntIntempo.IntempoOpciones.Desde(builder.Configuration);
+        builder.Services.AddHttpClient(RuntIntempo.ProveedorRuntIntempo.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(intempo.TimeoutSegundos));
+        builder.Services.AddSingleton(sp => new RuntIntempo.ProveedorRuntIntempo(sp.GetRequiredService<IHttpClientFactory>(), intempo));
+        var impuesto = Impuesto.OpcionesImpuesto.Desde(builder.Configuration);
+        builder.Services.AddSingleton(impuesto);
+        builder.Services.AddHttpClient(Impuesto.TransporteImpuestoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(impuesto.TimeoutSegundos));
+        builder.Services.AddSingleton<Impuesto.ITransporteImpuesto>(sp =>
+        {
+            var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
+            if (simulacion.Simula(Bus.FuentesBus.Impuesto))
+                return new Impuesto.TransporteImpuestoSimulado();
+            return new Impuesto.TransporteImpuestoHttp(
+                sp.GetRequiredService<IHttpClientFactory>(), impuesto, sp.GetRequiredService<ILogger<Impuesto.TransporteImpuestoHttp>>());
+        });
+        builder.Services.AddScoped<Impuesto.CatalogoDepartamentosImpuesto>();
+        builder.Services.AddScoped<Impuesto.ICatalogoDepartamentosImpuesto>(sp => sp.GetRequiredService<Impuesto.CatalogoDepartamentosImpuesto>());
+        builder.Services.AddScoped(sp => new Impuesto.ProveedorImpuesto(
+            sp.GetRequiredService<Impuesto.ITransporteImpuesto>(),
+            sp.GetRequiredService<Impuesto.OpcionesImpuesto>(),
+            sp.GetRequiredService<Impuesto.ICatalogoDepartamentosImpuesto>()));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 
@@ -155,6 +203,7 @@ public static class Program
         app.MapGrpcService<ConsultasAdminGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<ValidacionIdentidadGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<Comparendos.FuentesComparendosGrpcService>().RequireHost(grpcHost);
+        app.MapGrpcService<RuntIntempo.RuntIntempoGrpcService>().RequireHost(grpcHost);
         app.MapAvisosKyverum(); // HU #13351: receptor público de avisos (lo expone el gateway)
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;

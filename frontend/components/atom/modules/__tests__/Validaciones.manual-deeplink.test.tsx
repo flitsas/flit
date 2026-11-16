@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
   listCompanies: vi.fn(),
 }));
 
+vi.mock('@/components/admin/Toast', () => ({
+  useToast: () => ({ show: vi.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mocks.search),
 }));

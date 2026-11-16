@@ -133,6 +133,8 @@ public sealed class WizardStateDynamicGapsTests
         // Bug #13194 (D2) — reemplaza HU #10548: las partes YA NO cuentan como satisfechas porque el OT
         // deshabilite la identidad; sin validación aprobada, el gate biométrico aporta su blocker.
         var (handler, instance) = Armar(identityRequired: false);
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
 
         var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, TestContext.Current.CancellationToken);
 

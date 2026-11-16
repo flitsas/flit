@@ -34,8 +34,9 @@ public sealed record ActorContactLookupDto(
 /// </remarks>
 public sealed class ActorContactLookupHandler(IProcedureInstanceRepository repo)
 {
+    // HU #14498 / ADR-0082 — PPT (Permiso por Protección Temporal).
     private static readonly HashSet<string> ValidDocumentTypes =
-        new(StringComparer.OrdinalIgnoreCase) { "CC", "CE", "NIT", "PAS", "TI" };
+        new(StringComparer.OrdinalIgnoreCase) { "CC", "CE", "NIT", "PAS", "TI", "PPT" };
 
     private static readonly ActorContactLookupDto Empty = new(null, null, null, null);
 

@@ -1,6 +1,8 @@
 // Tipos del contrato de la captura manual pública (Épica #13202, contrato de API §2).
 // Si el contrato cambia, se reporta al architecture-agent; aquí solo se refleja.
 
+import type { ValidacionFotos } from "./validacionFotos";
+
 export interface ManualCaptureView {
   fullName: string;
   documentType: string;
@@ -28,7 +30,8 @@ export interface ManualSubmitFiles {
 export interface ManualCaptureClient {
   getManualCapture(token: string): Promise<ManualCaptureView>;
   postConsent(token: string, body: ConsentBody): Promise<void>;
-  submit(token: string, files: ManualSubmitFiles): Promise<{ status: string }>;
+  /** `validacion`: resultado de la validación en el dispositivo de cada foto (informativo; ver validacionFotos.ts). */
+  submit(token: string, files: ManualSubmitFiles, validacion?: ValidacionFotos): Promise<{ status: string }>;
 }
 
 /** Motivo por el que el enlace ya no sirve (estados terminales). */

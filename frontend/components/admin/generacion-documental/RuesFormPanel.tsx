@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 
 export interface RuesFormPanelProps {
@@ -27,7 +27,7 @@ export function RuesFormPanel({ status = "empty", onRetry, children }: RuesFormP
   return (
     <section aria-labelledby="gd-rues-title" className="flex flex-1 flex-col gap-3">
       <header className="flex items-start gap-2">
-        <FileText className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+        <Icono nombre="documento" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
         <div>
           <h2 id="gd-rues-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Certificado RUES

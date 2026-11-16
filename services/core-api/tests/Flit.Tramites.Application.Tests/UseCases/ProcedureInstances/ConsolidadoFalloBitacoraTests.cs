@@ -333,16 +333,44 @@ public sealed class ConsolidadoFalloBitacoraTests
     [InlineData(TramiteEstado.Anulado)]
     public async Task AC5_Entrega_EstadoFinal_NoRegistraNiAvisa(string estado)
     {
+        var tPdf = DateTimeOffset.UtcNow;
         var instance = Instancia(estado);
-        AddAttachment(instance, "consolidado_maestro", "definitivo.pdf", "system");
+        var adj = AddAttachment(instance, "consolidado_maestro", "definitivo.pdf", "system");
+        adj.UploadedAt = tPdf;
+        instance.ConsolidadoMaestroGeneradoEn = tPdf;
+        instance.ConsolidadoMaestroVigente = true;
         RomperFactura(instance);
-        Wire(instance);
+        Wire(instance, ultimoCambioEstado: tPdf.AddHours(-1));
 
         var (result, _) = await Entrega().HandleAsync(
             new EntregarConsolidadoRequest(instance.Id, instance.TenantId, ConsolidadoEntregaTipo.Maestro, Force: true), Ct);
 
         result!.AvisosCascada.Should().BeNull();
         _traza.Eventos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HU14494_AC4_EstadoFinal_Stale_FalloRegeneracion_EntregaAnteriorConAviso()
+    {
+        var tCambio = DateTimeOffset.UtcNow;
+        var tPdf = tCambio.AddHours(-3);
+        var instance = Instancia(TramiteEstado.Aprobado);
+        var previo = AddAttachment(instance, "consolidado", "stale.pdf", "system");
+        previo.UploadedAt = tPdf;
+        instance.ConsolidadoWizardGeneradoEn = tPdf;
+        instance.ConsolidadoWizardVigente = false;
+        RomperFactura(instance);
+        Wire(instance, ultimoCambioEstado: tCambio);
+
+        var (result, error) = await Entrega().HandleAsync(
+            new EntregarConsolidadoRequest(instance.Id, instance.TenantId, ConsolidadoEntregaTipo.Wizard), Ct);
+
+        error.Should().BeNull();
+        result!.Document.AttachmentId.Should().Be(previo.Id);
+        result.AvisosCascada.Should().ContainSingle().Which.Should().StartWith("consolidado:");
+        result.Modo.Should().BeNull();
+        result.DefinitivoPorEstadoFinal.Should().BeFalse();
+        _traza.Eventos.Should().ContainSingle(e => e.Tipo == ConsolidadoFalloBitacora.EventoFallo);
     }
 
     [Fact]
@@ -471,10 +499,12 @@ public sealed class ConsolidadoFalloBitacoraTests
     private void RomperFactura(ProcedureInstance instance) =>
         _storage.Files.Remove(instance.Attachments.Single(a => a.Tipo == "factura").StoragePath);
 
-    private void Wire(ProcedureInstance instance)
+    private void Wire(ProcedureInstance instance, DateTimeOffset? ultimoCambioEstado = null)
     {
         _repo.GetByIdWithAttachmentsAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.GetByIdWithChecklistGraphAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetUltimoCambioEstadoCreatedAtAsync(instance.Id, instance.TenantId, Arg.Any<CancellationToken>())
+            .Returns(ultimoCambioEstado);
     }
 
     private ProcedureInstance Instancia(string estado)

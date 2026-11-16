@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
@@ -19,7 +20,12 @@ public sealed record CreateProcedureInstanceRequest(
     string? ProcedureTypeCode = null,
     // ICT — origen ('ict') y referencia externa (id del pre-trámite) para materialización idempotente.
     string? Origin = null,
-    string? ExternalRef = null);
+    string? ExternalRef = null,
+    // HU #14318 (Épica #14296) — canal del trámite y OT del punto. Los fija el SERVIDOR en cada llamador
+    // (ICT → integracion, portal → pn_web/pn_punto, resto → tramites), nunca el cliente: no se leen del
+    // JSON de POST /instances ([property: JsonIgnore]) y además el endpoint los reescribe.
+    [property: JsonIgnore] string Channel = TramiteCanal.Tramites,
+    [property: JsonIgnore] Guid? ChannelTransitOfficeId = null);
 
 public sealed record ProcedureInstanceSummary(
     Guid Id,
@@ -60,6 +66,12 @@ public sealed class CreateProcedureInstanceHandler(
         CreateProcedureInstanceRequest request,
         CancellationToken ct = default)
     {
+        // HU #14318 — defensa: canal fuera del catálogo o OT del canal incoherente (solo pn_punto lo lleva)
+        // se rechaza antes de tocar la base, en vez de dejar que el CHECK devuelva un 500.
+        if (!TramiteCanal.EsValido(request.Channel)
+            || (request.Channel == TramiteCanal.PersonaNaturalOt) != (request.ChannelTransitOfficeId is { } channelOffice && channelOffice != Guid.Empty))
+            return (null, "invalid_request");
+
         var hasCode = !string.IsNullOrWhiteSpace(request.ProcedureTypeCode);
         var hasTypeId = request.ProcedureTypeId is { } id && id != Guid.Empty;
         var hasModalidad = !string.IsNullOrWhiteSpace(request.Modalidad);
@@ -158,6 +170,9 @@ public sealed class CreateProcedureInstanceHandler(
             // que AddWithUniqueReferenceAsync: nada de UPDATE posterior que dejaría external_ref sin grabar.
             Origin = request.Origin,
             ExternalRef = request.ExternalRef,
+            // HU #14318 — canal y OT del canal en el MISMO INSERT; nunca se actualizan después.
+            Channel = request.Channel,
+            ChannelTransitOfficeId = request.ChannelTransitOfficeId,
             // HU #13402 — se congela el parámetro «generar improntas» de la compañía en este instante:
             // cambiarlo o reactivarlo después no altera este trámite.
             ImprontaGeneracionHabilitada = await familyGate

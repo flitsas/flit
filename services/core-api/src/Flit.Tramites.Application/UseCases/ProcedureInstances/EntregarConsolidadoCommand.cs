@@ -23,7 +23,7 @@ public static class ConsolidadoEntregaModos
     /// <summary>La bandera estaba abajo o no había PDF: se reconstruyó (AC1/AC6).</summary>
     public const string Regenerado = "regenerado";
 
-    /// <summary>Trámite en estado final: se sirve el PDF existente sin regenerar (AC3).</summary>
+    /// <summary>Trámite en estado final: PDF coherente temporalmente o recién regenerado (HU #14494 / AC3 residual).</summary>
     public const string DefinitivoEstadoFinal = Flit.Queries.Domain.Documentos.ConsolidadoVigencia.ModoDefinitivoEstadoFinal;
 
     /// <summary>Trámite migrado de V1 en estado final: foto de solo lectura (AC5).</summary>
@@ -58,8 +58,10 @@ public static class ConsolidadoEntregaModos
 
 /// <summary>Petición a la ruta de entrega del consolidado (HU #12785).</summary>
 /// <param name="Force">
-/// Reconstruye saltando la caché de vigencia. Nunca aplica en estado final, sobre un PDF
-/// <c>Source="user"</c> ni en modo <paramref name="SoloLectura"/>.
+/// Reconstruye saltando la caché de vigencia cuando el llamador lo pide explícitamente. No aplica sobre un PDF
+/// <c>Source="user"</c> ni en modo <paramref name="SoloLectura"/>; en estado final el cliente no usa
+/// <c>force</c> (p. ej. GET de entrega lo rechaza), pero el handler puede aplicar regeneración JIT por
+/// obsolescencia temporal (<c>forceEfectivo</c>, HU #14494) salvo excepciones (migrado, maestro Quipux radicado).
 /// </param>
 /// <param name="SoloLectura">
 /// Devuelve el adjunto existente tal cual, sin mirar la bandera y sin escribir nada. Es la vía de la
@@ -82,8 +84,9 @@ public sealed record EntregarConsolidadoRequest(
 /// <see cref="GenerarConsolidadoMaestroHandler"/>, que ya respetan la bandera de vigencia; aquí solo se
 /// añaden las excepciones que la entrega debe garantizar ANTES de delegar:
 /// <list type="number">
-///   <item>Estado final (aprobado/anulado/revocado): se sirve el PDF existente, marcado como
-///   definitivo; nunca se regenera (AC3). Migrado V1 ⇒ modo <c>migrado_solo_lectura</c> (AC5).</item>
+///   <item>Estado final (aprobado/anulado/revocado): excepciones (migrado, Quipux, <c>Source=user</c>)
+///   primero; si el PDF es obsoleto frente al último cambio relevante se regenera JIT (HU #14494);
+///   si es fresco se sirve sin regenerar (AC3 residual). Migrado V1 ⇒ modo <c>migrado_solo_lectura</c> (AC5).</item>
 ///   <item><c>Source="user"</c>: el PDF del SuperAdmin prevalece incluso con <c>force</c> (AC4).</item>
 ///   <item><c>SoloLectura</c>: el adjunto tal cual, sin comprobar vigencia.</item>
 /// </list>
@@ -138,20 +141,12 @@ public sealed class EntregarConsolidadoHandler(
             ? await _maestroRadicado.AttachmentRadicadoAsync(request.TenantId, request.Id, ct).ConfigureAwait(false)
             : null;
 
-        // AC3/AC5 — la documentación de un trámite final es la que el organismo tuvo a la vista: se
-        // entrega tal cual, con la bandera como esté. Va ANTES que todo lo demás (incluido `force`).
-        // Si hubo radicación, lo que el organismo tuvo a la vista es el maestro radicado.
         if (esFinal)
         {
-            var modo = instance.IsMigrated
-                ? ConsolidadoEntregaModos.MigradoSoloLectura
-                : ConsolidadoEntregaModos.DefinitivoEstadoFinal;
-            var definitivo = (radicadoId is { } rid ? instance.Attachments.FirstOrDefault(a => a.Id == rid) : null)
-                ?? existente;
-            if (definitivo is null)
-                return (null, instance.IsMigrated ? ConsolidadoEntregaModos.MigradoSoloLectura : ConsolidadoNoGenerado);
-
-            return (Servir(definitivo, modo, definitivo: true), null);
+            var entregaFinal = await EntregarEstadoFinalAsync(
+                instance, request, existente, radicadoId, tipoAdjunto, ct).ConfigureAwait(false);
+            if (entregaFinal is not null)
+                return entregaFinal.Value;
         }
 
         // HU #12787 (AC2) — radicado ⇒ fijo: ni `force` ni `soloLectura=false` lo regeneran. Si el adjunto
@@ -200,6 +195,72 @@ public sealed class EntregarConsolidadoHandler(
             DefinitivoPorEstadoFinal = false,
             Modo = result.Regenerado ? ConsolidadoEntregaModos.Regenerado : ConsolidadoEntregaModos.Vigente,
         }, null);
+    }
+
+    private async Task<(GenerarConsolidadoResult? Result, string? Error)?> EntregarEstadoFinalAsync(
+        ProcedureInstance instance,
+        EntregarConsolidadoRequest request,
+        ProcedureInstanceAttachment? existente,
+        Guid? radicadoId,
+        string tipoAdjunto,
+        CancellationToken ct)
+    {
+        if (instance.IsMigrated)
+        {
+            if (existente is null)
+                return (null, ConsolidadoEntregaModos.MigradoSoloLectura);
+
+            return (Servir(existente, ConsolidadoEntregaModos.MigradoSoloLectura, definitivo: true), null);
+        }
+
+        var fijo = MaestroRadicadoFijo.Resolver(instance, radicadoId, definitivo: true);
+        if (fijo.Aplica)
+            return fijo.Error is null ? (fijo.Result, null) : (null, fijo.Error);
+
+        if (existente is not null && string.Equals(existente.Source, "user", StringComparison.OrdinalIgnoreCase))
+            return (Servir(existente, ConsolidadoEntregaModos.CargadoPorUsuario, definitivo: false), null);
+
+        var ultimoCambio = await repo
+            .GetUltimoCambioEstadoCreatedAtAsync(instance.Id, instance.TenantId, ct)
+            .ConfigureAwait(false);
+        var tPdf = ConsolidadoCoherenciaTemporal.ResolverTpdf(instance, request.Tipo, existente);
+        var tCambio = ConsolidadoCoherenciaTemporal.ResolverTCambioRelevante(
+            ultimoCambio, instance.ExpedienteActualizadoEn);
+        var banderaVigente = ConsolidadoCoherenciaTemporal.BanderaVigente(instance, request.Tipo);
+        var obsoleto = ConsolidadoCoherenciaTemporal.EsObsoleto(tPdf, tCambio, banderaVigente);
+
+        if (existente is null || obsoleto)
+        {
+            var forceEfectivo = existente is null || obsoleto;
+            var salida = await _bitacora
+                .GenerarConRespaldoAsync(
+                    request.TenantId, request.Id, tipoAdjunto, ConsolidadoFalloBitacora.Origenes.EntregaConsolidado,
+                    existente,
+                    c => request.Tipo == ConsolidadoEntregaTipo.Maestro
+                        ? maestroHandler.HandleAsync(
+                            request.Id, request.TenantId, request.MatrizPrecedencia, request.Force || forceEfectivo, c)
+                        : wizardHandler.HandleAsync(
+                            request.Id, request.TenantId, request.UserId, request.Force || forceEfectivo, c),
+                    (ex, c) => ConsolidadoVigenteTrasConflicto.ResolverAsync(
+                        repo, ex, request.Id, request.TenantId, tipoAdjunto, c),
+                    ct)
+                .ConfigureAwait(false);
+
+            var (result, error) = (salida.Result, salida.Error);
+            if (error is not null || result is null)
+                return (null, error ?? "consolidado_sin_resultado");
+
+            if (salida.SirvioAnterior)
+                return (result with { DefinitivoPorEstadoFinal = false, Modo = null }, null);
+
+            return (result with
+            {
+                DefinitivoPorEstadoFinal = true,
+                Modo = ConsolidadoEntregaModos.DefinitivoEstadoFinal,
+            }, null);
+        }
+
+        return (Servir(existente, ConsolidadoEntregaModos.DefinitivoEstadoFinal, definitivo: true), null);
     }
 
     private static GenerarConsolidadoResult Servir(ProcedureInstanceAttachment adjunto, string modo, bool definitivo) =>

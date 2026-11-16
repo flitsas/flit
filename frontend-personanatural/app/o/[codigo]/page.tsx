@@ -1,19 +1,20 @@
 import type { Metadata } from "next";
-import { CanalPunto } from "@/components/punto/CanalPunto";
+import { decodificar, marcaDe, metadataPunto, PaginaPunto } from "@/components/punto/PaginaPunto";
 
-export const metadata: Metadata = {
-  title: "Punto de atención | FLIT",
-  robots: { index: false, follow: false },
-};
+// La marca del organismo se lee en CADA petición (ver PaginaPunto): sin `revalidate`.
+export const dynamic = "force-dynamic";
 
-/** El código va en la ruta. Placa y documento no. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ codigo: string }>;
+}): Promise<Metadata> {
+  const { codigo } = await params;
+  return metadataPunto(decodificar(codigo));
+}
+
 export default async function Pagina({ params }: { params: Promise<{ codigo: string }> }) {
-  const { codigo: crudo } = await params;
-  let codigo = crudo;
-  try {
-    codigo = decodeURIComponent(crudo);
-  } catch {
-    codigo = crudo;
-  }
-  return <CanalPunto codigo={codigo} />;
+  const { codigo } = await params;
+  const codigoPunto = decodificar(codigo);
+  return <PaginaPunto codigo={codigoPunto} marca={await marcaDe(codigoPunto)} />;
 }

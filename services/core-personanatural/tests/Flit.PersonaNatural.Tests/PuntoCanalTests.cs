@@ -59,6 +59,39 @@ public sealed class PuntoCanalTests
     }
 
     [Fact]
+    public async Task HU14391_AC3_PuntoSinNingunTipoConPrecio_InformaQueNoHayTramites_YNoAbreSesion()
+    {
+        var fachada = FachadaCon();
+        await using var host = Host(Ok(), fachada: fachada);
+
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        entrada.Status.Should().Be(HttpStatusCode.UnprocessableEntity);
+        entrada.Json.GetProperty("code").GetString().Should().Be("sin_tramites_disponibles");
+        entrada.Json.GetProperty("message").GetString().Should().Contain("no tiene trámites disponibles");
+        CookieUtil(entrada.SetCookie).Should().BeNullOrEmpty();
+        fachada.UltimoOrganismo.Should().Be(OrganismoId.ToString(), "se consulta la misma lista que el selector, del organismo del enlace");
+        (await host.GetAsync("/sesion", entrada.Cookie)).Status.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task HU14391_AC5_ElPuntoAbreApenasElOrganismoTienePrecio_YSiLaConsultaFallaNoBloqueaLaEntrada()
+    {
+        var fachada = FachadaCon();
+        await using var host = Host(Ok(), fachada: fachada);
+        (await host.PostAsync("/entrada", new { codigo = Codigo })).Status.Should().Be(HttpStatusCode.UnprocessableEntity);
+
+        // Se registra un precio: la consulta inmediata siguiente ya abre.
+        fachada.Tipos.Add(new TipoTramiteDto("CAMBIO_COLOR", "Color", "OTROS", 1, true, string.Empty));
+        (await host.PostAsync("/entrada", new { codigo = Codigo })).Status.Should().Be(HttpStatusCode.OK);
+
+        // Si el catálogo no responde, la entrada no se bloquea por eso (el selector reportará el error).
+        fachada.Tipos.Clear();
+        fachada.Lanzar = true;
+        (await host.PostAsync("/entrada", new { codigo = Codigo })).Status.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
     public async Task Apagado_NoAbre_YNoDejaCookie()
     {
         await using var host = Host(new ResolucionCanalPunto(PuntoEndpoints.CanalApagado, OrganismoId, Codigo, Nombre));
@@ -849,7 +882,7 @@ public sealed class PuntoCanalTests
             Conductor = () => ResultadosFalsos.Conductor(),
             Multas = MultasConUnComparendo,
         };
-        await using var host = Host(Ok(), runt, FachadaCon());
+        await using var host = Host(Ok(), runt, FachadaCon(new TipoTramiteDto("CAMBIO_COLOR", "Color", "OTROS", 1, true, string.Empty)));
 
         (await host.PostAsync("/consultas/vehiculo", CuerpoVehiculo())).Status.Should().Be(HttpStatusCode.Unauthorized);
         (await host.PostAsync("/consultas/persona", CuerpoPersona())).Status.Should().Be(HttpStatusCode.Unauthorized);
@@ -1036,7 +1069,7 @@ public sealed class PuntoCanalTests
         BorradorPuntoFalso? borrador = null,
         FachadaDefinicionesFalsa? definiciones = null,
         BorradorGuardadoFalso? guardado = null) =>
-        new(resolucion, runt ?? new ConsultasRuntFalso(), fachada ?? FachadaCon(), requisitos ?? new FachadaRequisitosPuntoFalsa(), borrador ?? new BorradorPuntoFalso(), definiciones ?? new FachadaDefinicionesFalsa(), guardado ?? new BorradorGuardadoFalso());
+        new(resolucion, runt ?? new ConsultasRuntFalso(), fachada ?? FachadaCon(new TipoTramiteDto("CAMBIO_COLOR", "Color", "OTROS", 1, true, string.Empty)), requisitos ?? new FachadaRequisitosPuntoFalsa(), borrador ?? new BorradorPuntoFalso(), definiciones ?? new FachadaDefinicionesFalsa(), guardado ?? new BorradorGuardadoFalso());
 
     private sealed class HostPunto : IAsyncDisposable
     {
@@ -1140,6 +1173,7 @@ public sealed class PuntoCanalTests
     {
         public List<TipoTramiteDto> Tipos { get; } = [];
         public string? UltimoOrganismo { get; private set; }
+        public bool Lanzar { get; set; }
 
         public List<OrganismoDto> Organismos { get; } = [];
         public int LlamadasOrganismos { get; private set; }
@@ -1153,6 +1187,8 @@ public sealed class PuntoCanalTests
         public Task<IReadOnlyList<TipoTramiteDto>> ListarTiposAsync(string? organismoId, CancellationToken ct)
         {
             UltimoOrganismo = organismoId;
+            if (Lanzar)
+                throw new FachadaException("servicio_no_disponible", "core-api no responde", 503);
             return Task.FromResult<IReadOnlyList<TipoTramiteDto>>(Tipos);
         }
 

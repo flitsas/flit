@@ -1,3 +1,4 @@
+using Flit.PersonaNatural.Api.Cotizaciones;
 using System.Net;
 using System.Text.Json;
 using Flit.PersonaNatural.Api.Adjuntos;
@@ -557,7 +558,133 @@ public sealed class RadicacionTests : IAsyncLifetime
         r.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
     }
 
+    // ── HU #14395: la cotización se congela al radicar (regla 9) ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14395_SinCuerpo_RadicaComoSiempre_YNoCongelaNiCotiza()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+
+        (await Radicar(id, token, "k-sin-cobro")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        _host.Medios.Cotizaciones.Should().Be(0, "sin medio no se llama a la fachada de cobro");
+        await using var db = _host.NuevaDb();
+        (await db.Set<CotizacionCongelada>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU14395_ConMedio_QuedaGuardadoLoQueSeCotizo_ConSuMedioSuTotalYSuVersion()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+
+        var r = await RadicarConCobro(id, token, "k-congela", new { medio = "pasarela", adicionales = new List<string> { "CAMBIO_COLOR" }, totalCop = 366_000 });
+
+        r.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await using var db = _host.NuevaDb();
+        var q = await db.Set<CotizacionCongelada>().SingleAsync(TestContext.Current.CancellationToken);
+        q.SolicitudId.Should().Be(id);
+        q.Medio.Should().Be("PASARELA");
+        q.TotalCop.Should().Be(366_000);
+        q.AmbitoOrganismoId.Should().BeNull("la solicitud vino por la web");
+        q.VersionTarifa.Should().Be("v:185000:181000:True");
+        JsonDocument.Parse(q.Lineas).RootElement.EnumerateArray().Select(l => (l.GetProperty("codigo").GetString(), l.GetProperty("valorCop").GetInt64()))
+            .Should().Equal(("DERECHOS_TRANSITO", 185_000L), ("SERVICIO_FLIT", 181_000L));
+        _host.Medios.UltimosAdicionales.Should().Equal("CAMBIO_COLOR");
+    }
+
+    [Fact]
+    public async Task HU14395_AC3_UnCambioDePrecioODeSwitchDespuesDeRadicar_NoAlteraElValorGuardadoDeEseTramite()
+    {
+        await IniciarAsync();
+        var (primero, tokenPrimero) = await Completa();
+        (await RadicarConCobro(primero, tokenPrimero, "k-antes", new { medio = "PASARELA", totalCop = 366_000 })).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var antes = await LeerCongelada(primero);
+
+        // Después de radicar cambia el precio de los derechos y se apaga el switch de la gestión.
+        _host.Medios.Derechos = 300_000;
+        _host.Medios.GestionEncendida = false;
+
+        (await LeerCongelada(primero)).Should().Be(antes, "nada recalcula lo ya radicado");
+        // Reintentar la misma radicación con la misma llave tampoco recalcula ni vuelve a cotizar.
+        var cotizacionesAntes = _host.Medios.Cotizaciones;
+        (await RadicarConCobro(primero, tokenPrimero, "k-antes", new { medio = "PASARELA", totalCop = 300_000 })).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        _host.Medios.Cotizaciones.Should().Be(cotizacionesAntes);
+        (await LeerCongelada(primero)).Should().Be(antes);
+        antes.Total.Should().Be(366_000);
+
+        // Un trámite nuevo SÍ toma los valores nuevos: 300.000 de derechos y sin gestión.
+        var (segundo, tokenSegundo) = await Completa();
+        (await RadicarConCobro(segundo, tokenSegundo, "k-despues", new { medio = "PASARELA", totalCop = 300_000 })).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await LeerCongelada(segundo)).Total.Should().Be(300_000);
+        (await LeerCongelada(primero)).Should().Be(antes, "radicar otro trámite tampoco toca el primero");
+    }
+
+    [Fact]
+    public async Task HU14395_SiElValorCambioMientrasSeRevisaba_NoRadica_YAvisaElNuevoTotal()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+        _host.Medios.Derechos = 200_000;
+
+        var r = await RadicarConCobro(id, token, "k-cambio", new { medio = "PASARELA", totalCop = 366_000 });
+
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var json = (await PortalHost.JsonAsync(r)).RootElement;
+        json.GetProperty("code").GetString().Should().Be("cotizacion_cambio");
+        json.GetProperty("totalCop").GetInt64().Should().Be(200_000 + 181_000);
+        await using var db = _host.NuevaDb();
+        (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Estado.Should().Be("borrador");
+        (await db.Set<CotizacionCongelada>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+        (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU14395_UnMedioQueYaNoSeOfrece_NoRadica_ConConflicto_YUnMedioInvalidoEs400()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+        _host.Medios.MedioDisponible = false;
+
+        var r = await RadicarConCobro(id, token, "k-medio", new { medio = "PIN" });
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await PortalHost.JsonAsync(r)).RootElement.GetProperty("code").GetString().Should().Be("medio_no_disponible");
+        (await RadicarConCobro(id, token, "k-medio-2", new { medio = "TRANSFERENCIA" })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        await using var db = _host.NuevaDb();
+        (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Estado.Should().Be("borrador");
+        (await db.Set<CotizacionCongelada>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU14395_EnElPuntoLaConfiguracionQueRigeEsLaDelOrganismo_EnLaWebLaDeLaWeb()
+    {
+        await IniciarAsync();
+        var (web, tokenWeb) = await Completa();
+        var (punto, tokenPunto) = await Completa(canalPunto: true);
+
+        (await RadicarConCobro(web, tokenWeb, "k-web", new { medio = "PASARELA" })).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        _host.Medios.UltimoAmbito.Should().BeNull();
+        (await RadicarConCobro(punto, tokenPunto, "k-punto", new { medio = "PIN" })).StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        _host.Medios.UltimoAmbito.Should().Be(PortalHost.Organismo.ToString());
+        await using var db = _host.NuevaDb();
+        var q = await db.Set<CotizacionCongelada>().SingleAsync(c => c.SolicitudId == punto, TestContext.Current.CancellationToken);
+        q.Medio.Should().Be("PIN");
+        q.AmbitoOrganismoId.Should().Be(PortalHost.Organismo);
+    }
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    private Task<HttpResponseMessage> RadicarConCobro(Guid id, string? token, string llave, object cuerpo) =>
+        _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/radicar", cuerpo, token, false, [("Idempotency-Key", llave)]);
+
+    private async Task<(long Total, string Version, string Lineas)> LeerCongelada(Guid id)
+    {
+        await using var db = _host.NuevaDb();
+        var q = await db.Set<CotizacionCongelada>().AsNoTracking().SingleAsync(c => c.SolicitudId == id, TestContext.Current.CancellationToken);
+        return (q.TotalCop, q.VersionTarifa, q.Lineas);
+    }
 
     private Task<HttpResponseMessage> Radicar(Guid id, string? token, string? llave) =>
         _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/radicar", null, token, false, llave is null ? Array.Empty<(string, string)>() : [("Idempotency-Key", llave)]);
@@ -604,5 +731,38 @@ public sealed class RadicacionTests : IAsyncLifetime
         }
 
         return (id, token);
+    }
+}
+
+/// <summary>
+/// Fachada de medios de pago de prueba (HU #14395): el precio de los derechos y el switch de la gestión se cambian a mano para
+/// comprobar que lo ya radicado no se recalcula.
+/// </summary>
+internal sealed class FachadaMediosFalsa : IFachadaMediosPago
+{
+    public long Derechos = 185_000;
+    public long Gestion = 181_000;
+    public bool GestionEncendida = true;
+    public bool MedioDisponible = true;
+    public int Cotizaciones;
+    public string? UltimoAmbito;
+    public List<string> UltimosAdicionales { get; } = [];
+
+    public Task<IReadOnlyList<MedioPagoDto>> ListarMediosPagoAsync(string tipoCodigo, string organismoId, string? ambitoOrganismoId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<MedioPagoDto>>([]);
+
+    public Task<CotizacionDto> CotizarConMedioAsync(
+        string tipoCodigo, string organismoId, IReadOnlyCollection<string> adicionales, string medio, string? ambitoOrganismoId, CancellationToken ct)
+    {
+        Interlocked.Increment(ref Cotizaciones);
+        UltimoAmbito = ambitoOrganismoId;
+        UltimosAdicionales.Clear();
+        UltimosAdicionales.AddRange(adicionales);
+        if (!MedioDisponible)
+            throw new FachadaException("medio_no_disponible", "no disponible", 409);
+        List<LineaCobroDto> lineas = [new("DERECHOS_TRANSITO", "Valor del Servicio de tránsito", string.Empty, Derechos)];
+        if (GestionEncendida)
+            lineas.Add(new("SERVICIO_FLIT", "Valor de Servicio FLIT", string.Empty, Gestion));
+        return Task.FromResult(new CotizacionDto(lineas, lineas.Sum(l => l.ValorCop), $"v:{Derechos}:{Gestion}:{GestionEncendida}", []));
     }
 }

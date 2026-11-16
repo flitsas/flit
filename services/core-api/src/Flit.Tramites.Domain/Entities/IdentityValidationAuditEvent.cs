@@ -141,6 +141,12 @@ public static class IdentityValidationAuditStages
     public const string ManualEnlaceRegenerado = "manual_enlace_regenerado";
 
     /// <summary>
+    /// HU #14305 — el Super Admin copió el enlace de captura manual vigente (sin regenerarlo ni reenviar correo). Solo quién y
+    /// cuándo; nunca el token ni la URL.
+    /// </summary>
+    public const string ManualEnlaceCopiado = "manual_enlace_copiado";
+
+    /// <summary>
     /// HU #13287 — el correo con el enlace de captura manual NO salió (titular sin correo o fallo de envío). La activación o la
     /// regeneración ya estaban confirmadas; el Super Admin puede regenerar. Sin correo, sin token y sin PII.
     /// </summary>

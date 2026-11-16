@@ -1,7 +1,7 @@
 "use client";
 
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
-import { esRangoVacio, sinRango, type DateRange } from "./range";
+import { RangoFechas } from "@/components/atom/RangoFechas";
+import type { DateRange } from "./range";
 
 interface DateRangeFilterProps {
   value: DateRange;
@@ -17,35 +17,16 @@ interface DateRangeFilterProps {
 }
 
 /**
- * Filtro de rango de fechas compartido (HU #10247, migrado HU #12724).
- * Envuelve {@link DateRangePicker} de un solo campo con calendario popover.
+ * Filtro de rango de fechas compartido de Reportes (HU #10247). Delega en {@link RangoFechas}:
+ * selector de periodo y, en «Rango propio», Desde/Hasta nativos que se editan por separado.
  */
 export function DateRangeFilter({ value, onChange, disabled, permiteSinRango }: DateRangeFilterProps) {
-  const vacio = esRangoVacio(value);
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <DateRangePicker value={value} onChange={onChange} disabled={disabled} label="Rango de fechas" />
-      {permiteSinRango && (
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase opacity-60" aria-hidden="true">
-            &nbsp;
-          </span>
-          <button
-            type="button"
-            className="h-10 rounded-[10px] border border-[#DFE5ED] px-3 text-xs font-medium text-flit-primary transition hover:bg-flit-brand/10 disabled:opacity-60 dark:border-white/15 dark:text-white"
-            disabled={disabled || vacio}
-            aria-pressed={vacio}
-            title={
-              vacio
-                ? "Ya se están mostrando todos los trámites, sin filtro de fechas"
-                : "Quitar el filtro de fechas y ver todos los trámites"
-            }
-            onClick={() => onChange(sinRango())}
-          >
-            Todo el periodo
-          </button>
-        </div>
-      )}
-    </div>
+    <RangoFechas
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      permiteSinRango={permiteSinRango}
+    />
   );
 }

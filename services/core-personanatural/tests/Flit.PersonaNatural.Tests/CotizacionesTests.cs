@@ -26,12 +26,13 @@ internal sealed class FachadaFalsa : IFachadaTramites
     public int LlamadasCotizar;
     public string? ErrorCotizar;
     public string? UltimoOrganismoDeTipos;
+    public bool SinOrganismos;
     public List<string> UltimosAdicionales { get; } = [];
 
     public Task<IReadOnlyList<OrganismoDto>> ListarOrganismosAsync(CancellationToken ct)
     {
         Interlocked.Increment(ref LlamadasOrganismos);
-        return Task.FromResult<IReadOnlyList<OrganismoDto>>([new OrganismoDto(CotizacionesTests.Organismo, "AB1", "Tránsito de Prueba", "Municipio", "Depto", string.Empty)]);
+        return Task.FromResult<IReadOnlyList<OrganismoDto>>(SinOrganismos ? [] : [new OrganismoDto(CotizacionesTests.Organismo, "AB1", "Tránsito de Prueba", "Municipio", "Depto", string.Empty)]);
     }
 
     public Task<IReadOnlyList<TipoTramiteDto>> ListarTiposAsync(string? organismoId, CancellationToken ct)
@@ -130,7 +131,24 @@ public sealed class CotizacionesTests : IAsyncLifetime
     // ── AC1: catálogo ────────────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ElCatalogoDeOrganismosYTipos_SaleDeLaFachada_YSeCacheaUnosSegundos()
+    public async Task HU14391_AC5_ElCatalogoNoSeCachea_UnCambioDeLaFachadaSeVeEnLaSiguienteConsulta()
+    {
+        if (!await IniciarAsync()) return;
+        var ct = TestContext.Current.CancellationToken;
+
+        var antes = await _http.GetAsync("/api/v1/persona-natural/organismos", ct);
+        (await Json(antes)).RootElement.GetArrayLength().Should().Be(1);
+
+        // El último precio del organismo se cierra: la fachada deja de ofrecerlo y la consulta inmediata ya no lo trae.
+        _fachada.SinOrganismos = true;
+        var despues = await _http.GetAsync("/api/v1/persona-natural/organismos", ct);
+
+        (await Json(despues)).RootElement.GetArrayLength().Should().Be(0);
+        _fachada.LlamadasOrganismos.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ElCatalogoDeOrganismosYTipos_SaleDeLaFachada_SinCacheDeTiempo()
     {
         if (!await IniciarAsync()) return;
         var ct = TestContext.Current.CancellationToken;
@@ -143,8 +161,8 @@ public sealed class CotizacionesTests : IAsyncLifetime
         primera.StatusCode.Should().Be(HttpStatusCode.OK);
         (await Json(primera)).RootElement[0].GetProperty("nombre").GetString().Should().Be("Tránsito de Prueba");
         (await Json(tipos)).RootElement[0].GetProperty("code").GetString().Should().Be("TRASPASO_STANDARD");
-        _fachada.LlamadasOrganismos.Should().Be(1, "la segunda lectura sale de la caché corta");
-        _fachada.LlamadasTipos.Should().Be(1);
+        _fachada.LlamadasOrganismos.Should().Be(2, "HU #14391: cada lectura va a la fachada, sin caché");
+        _fachada.LlamadasTipos.Should().Be(2);
         _fachada.UltimoOrganismoDeTipos.Should().Be(Organismo);
     }
 

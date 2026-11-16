@@ -1,0 +1,245 @@
+// Detalles de celda ficticios (HU #13801): forma exacta de obtenerDetalleCelda (HU #13798) con placas TST### y documentos
+// inventados, ya enmascarados como los entrega la API. Los reutiliza la grilla de backoffice (F06-H5).
+import type { Fuente } from "@/lib/configuracion";
+import type { Comparendo, DetalleCelda, PersonaDetalle, VigenciaImpuestoDetalle } from "@/lib/tablero/detalle";
+
+export const DATO_EN = "2026-10-22T15:00:00+00:00";
+
+export function detalle(fuente: Fuente, cambios: Partial<DetalleCelda> = {}): DetalleCelda {
+  return {
+    id: `celda-1-${fuente.toLowerCase()}`,
+    vehiculo_id: "vehiculo-1",
+    identificador: "TST001",
+    nombre_diagnostico: "Lote de prueba",
+    fuente,
+    estado: "COMPLETADO",
+    motivo_na: null,
+    tipo_error: null,
+    dato_obtenido_en: DATO_EN,
+    reutilizada: false,
+    resultado: null,
+    personas: null,
+    ...cambios,
+  };
+}
+
+export function comparendo(n: number, cambios: Partial<Comparendo> = {}): Comparendo {
+  return {
+    numero: `C-${String(n).padStart(4, "0")}`,
+    fecha: "2026-01-02",
+    valor: "500000",
+    estado: "PENDIENTE",
+    organismo: "ORGANISMO PRUEBA",
+    ...cambios,
+  };
+}
+
+export const simitVehiculo = (comparendos: Comparendo[] = [comparendo(1)], truncados = false, total = comparendos.length) =>
+  detalle("SIMIT_VEHICULO", {
+    resultado: { semaforo: comparendos.length ? "ROJO" : "VERDE", cantidad_comparendos: total, comparendos, comparendos_truncados: truncados },
+  });
+
+export const runtVehiculo = () =>
+  detalle("RUNT", {
+    resultado: {
+      placa: "TST001",
+      vin: "9ZZPRUEBA00000001",
+      servicio: "PARTICULAR",
+      clase: "AUTOMOVIL",
+      organismo: "STRIA PRUEBA",
+      propietarios: [{ tipo_documento: "C", tipo_propiedad: "PROPIA" }],
+      locatarios: 0,
+    },
+  });
+
+export const avaluoSinValor = () =>
+  detalle("AVALUO", {
+    resultado: {
+      sin_valor_comercial: true,
+      valor_sugerido: null,
+      fuente_principal: null,
+      fuentes: [{ fuente: "fasecolda", estado: "SIN_DATOS", valor: null, muestras: null, fecha: "2026-10-22" }],
+    },
+  });
+
+export const avaluoConValor = () =>
+  detalle("AVALUO", {
+    resultado: {
+      sin_valor_comercial: false,
+      valor_sugerido: 45000000,
+      fuente_principal: "fasecolda",
+      fuentes: [
+        { fuente: "fasecolda", estado: "OK", valor: 45000000, muestras: null, fecha: "2026-10-22" },
+        { fuente: "mercado_libre", estado: "OK", valor: 47000000, muestras: 12, fecha: "2026-10-22" },
+      ],
+    },
+  });
+
+/** Impuesto departamental (HU #13866): 2025 pagada y 2026 con 350.000 pendientes. */
+export const impuestoConVigencias = (
+  vigencias: VigenciaImpuestoDetalle[] = [
+    { anio: 2025, valor: 180000, pagada: true },
+    { anio: 2026, valor: 350000, pagada: false },
+  ],
+  montoTotal = 350000,
+) => detalle("IMPUESTO_DEPARTAMENTAL", { resultado: { monto_total: montoTotal, vigencias } });
+
+/** Impuesto completado que no registra vigencias. */
+export const impuestoSinVigencias = () => detalle("IMPUESTO_DEPARTAMENTAL", { resultado: { monto_total: 0, vigencias: [] } });
+
+/** Impuesto en N/A por el motivo dado (sin departamento derivado también llega como DEPARTAMENTO_NO_SOPORTADO). */
+export const impuestoNa = (motivo: "SERVICIO_PUBLICO" | "DEPARTAMENTO_NO_SOPORTADO") =>
+  detalle("IMPUESTO_DEPARTAMENTAL", { estado: "NA", motivo_na: motivo, dato_obtenido_en: null, resultado: null });
+
+export function persona(orden: number, cambios: Partial<PersonaDetalle> = {}): PersonaDetalle {
+  return {
+    orden,
+    rol: "PROPIETARIO",
+    tipo_documento: "C",
+    documento_enmascarado: `****${String(1000 + orden)}`,
+    declarado_por_cliente: false,
+    consulta: "RUNT_PERSONA",
+    estado: "OK",
+    tipo_error: null,
+    consultado_en: DATO_EN,
+    resultado: { inscrito: true, estado_conductor: "ACTIVO", licencias: [{ categoria: "B1", estado: "VIGENTE", vigente_hasta: "2030-01-01" }] },
+    ...cambios,
+  };
+}
+
+/** RUNT_LOCATARIO con el documento que declaró el cliente. */
+export const runtLocatarioDeclarado = () =>
+  detalle("RUNT_LOCATARIO", {
+    personas: [persona(1, { rol: "LOCATARIO", documento_enmascarado: "****5678", declarado_por_cliente: true })],
+  });
+
+/** RUNT_PROPIETARIO con tres propietarios: dos naturales y uno con NIT consultado en el RUES. */
+export const runtTresPropietarios = () =>
+  detalle("RUNT_PROPIETARIO", {
+    personas: [
+      persona(1, { documento_enmascarado: "****1222" }),
+      persona(2, { documento_enmascarado: "****3344", resultado: { inscrito: false, estado_conductor: null, licencias: [] } }),
+      persona(3, {
+        tipo_documento: "NIT",
+        documento_enmascarado: "****4567",
+        consulta: "RUES",
+        resultado: { encontrada: true, estado_matricula: "ACTIVA", ultima_renovacion: "2026" },
+      }),
+    ],
+  });
+
+/** Celda ERROR PERSONAS_CON_ERROR: un natural respondió y el NIT falló por tiempo. */
+export const runtPropietarioConError = () =>
+  detalle("RUNT_PROPIETARIO", {
+    estado: "ERROR",
+    tipo_error: "PERSONAS_CON_ERROR",
+    dato_obtenido_en: null,
+    personas: [
+      persona(1, { documento_enmascarado: "****1222" }),
+      persona(2, { tipo_documento: "NIT", documento_enmascarado: "****4567", consulta: "RUES", estado: "ERROR", tipo_error: "TIMEOUT", consultado_en: null, resultado: null }),
+    ],
+  });
+
+/**
+ * Respuesta completa del RUNT (HU #14087): proto-JSON ficticio del ConsultarVehiculoIntempoResponse, con nombres snake_case,
+ * valores por defecto (0, "", []) y la auditoría del proveedor que la página oculta. Nombres, documentos y direcciones inventados.
+ */
+export const respuestaFuenteRunt = (): Record<string, unknown> => ({
+  proveedor: "PROVEEDOR-FICTICIO",
+  resultado: "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+  vehiculo: {
+    plate: "TST001",
+    vin: "9ZZPRUEBA00000001",
+    informacion_general: { marca: "MARCA PRUEBA", modelo: "2020", cilidraje: "1600", color: "", serialVersionUID: "1" },
+    soat: [
+      { no_poliza: "POL-0001", estado: "VIGENTE" },
+      { no_poliza: "POL-0002", estado: "VENCIDO" },
+    ],
+    tecno_mecanica: [],
+    propietarios_actuales: [
+      {
+        id: 101,
+        id_tipo_documento: "1",
+        nombre_completo: "PERSONA FICTICIA UNO",
+        direcciones: [{ id: 7, direccion: "CALLE FALSA 123", id_departamento: "05", departamento: "DEPTO PRUEBA" }],
+        locatarios: [],
+      },
+    ],
+    accident_rate: [{ campos: { siniestros: "0", aseguradora: "ASEGURADORA PRUEBA" } }],
+  },
+  tipo_error: "",
+  mensaje_error: "",
+  http_status: 200,
+  duracion_ms: 0,
+  errores: [],
+});
+
+/** RUNT del vehículo con la respuesta completa guardada (además del resultado resumido). */
+export const runtVehiculoConRespuesta = () => ({ ...runtVehiculo(), respuesta_fuente: respuestaFuenteRunt() });
+
+/** Respuesta completa ficticia del RUNT de una persona. */
+export const respuestaFuentePersona = (nombre: string): Record<string, unknown> => ({
+  proveedor: "PROVEEDOR-FICTICIO",
+  persona: { nombre_completo: nombre, inscrito: true, licencias: [{ categoria: "B1", departamento: "DEPTO PRUEBA" }] },
+  tipo_error: "",
+});
+
+/**
+ * Respuesta íntegra del proveedor del RUNT de una persona (HU #14154): JSON ficticio del proveedor tal como llega en
+ * `respuesta_proveedor`, con ids internos, firma, campos técnicos y claves sin traducir. Conductor con tres licencias
+ * (activa, vencida y suspendida) cuyas filas no traen las mismas claves. Nombres y documentos inventados.
+ */
+export const conductorProveedor = (): Record<string, unknown> => ({
+  ok: true,
+  message: "",
+  id_consulta: "CONS-FICT-0001",
+  persona: {
+    tipoDocumento: "CC",
+    documento: "9999901222",
+    nombres: "PERSONA",
+    apellidos: "FICTICIA UNO",
+    estadoPersona: "VIVO",
+    estadoConductor: "ACTIVO",
+    nroPazYSalvo: null,
+    tieneLicencias: true,
+    tieneMultas: false,
+    identidad: { id_tipo_documento: "1", verificada: true },
+  },
+  licencias: [
+    { numeroLicencia: "LIC-FICT-0001", categoria: "B1", estadoLicencia: "ACTIVA", fechaVencimiento: "2030-01-01", id_licencia: "L-1" },
+    { numeroLicencia: "LIC-FICT-0002", categoria: "C1", estadoLicencia: "VENCIDA", fechaVencimiento: "2020-01-01", restricciones: ["LENTES"] },
+    { numeroLicencia: "LIC-FICT-0003", categoria: "A2", estadoLicencia: "SUSPENDIDA", fechaVencimiento: "", motivoSuspension: "SANCION FICTICIA" },
+  ],
+  multas: [],
+  restricciones_generales: ["USO DE LENTES", "AUDIFONOS"],
+  signature: { message: "Certified by PROVEEDOR-FICTICIO", hash: "ZmlybWEtZmljdGljaWE=" },
+  http_status: 200,
+  duracion_ms: 812,
+  campo_sin_traducir: "valor-x",
+  observaciones: null,
+  metadatos: {},
+});
+
+/** Respuesta íntegra ficticia del RUES de una empresa (HU #14154): registro, actividades CIIU y representantes legales. */
+export const empresaProveedor = (): Record<string, unknown> => ({
+  data: {
+    commercialRegistry: {
+      NIT: "999990001",
+      businessName: "EMPRESA FICTICIA S.A.S.",
+      registrationStatus: "ACTIVA",
+      registrationNumber: "9999900001",
+      chamberCommerce: "CAMARA FICTICIA",
+      idRm: "RM-FICT-1",
+    },
+    economicActivities: [
+      { code: "4511", description: "COMERCIO DE VEHICULOS FICTICIO", category: "PRINCIPAL" },
+      { code: "4520", description: "MANTENIMIENTO FICTICIO" },
+    ],
+    legalRepresentatives: [
+      { name: "REPRESENTANTE FICTICIO UNO", documentType: "CC", documentNumber: "9999909999", position: "GERENTE" },
+      { name: "REPRESENTANTE FICTICIO DOS", position: "SUPLENTE", faculty: "FACULTADES FICTICIAS" },
+    ],
+  },
+  signature: { message: "Certified by PROVEEDOR-FICTICIO" },
+  id: "FICT1",
+});

@@ -30,7 +30,7 @@ public sealed record RechazarValidacionManualResult(
 /// <summary>
 /// Rechaza una validación en <c>pendiente_revision_manual</c> con un motivo de la lista cerrada (decisión del PO: la fila QUEDA en
 /// <c>rechazado</c>, no vuelve a <c>manual_activo</c>): registra <c>rejection_reason_code</c>, <c>reviewed_by</c> y
-/// <c>reviewed_at</c>; en la misma operación emite un enlace nuevo de 24 h (solo su hash SHA-256 se guarda) y envía al cliente el
+/// <c>reviewed_at</c>; en la misma operación emite un enlace nuevo de 24 h (se guarda su hash SHA-256 y, cifrado, el token - HU #14305) y envía al cliente el
 /// correo con el motivo en texto legible y el enlace. Con ese enlace el cliente repite la captura estando <c>rechazado</c> (la
 /// sesión de captura lo acepta, HU #13299). Sin tope de intentos. El motivo y la revisión se conservan hasta que la siguiente
 /// captura los limpie (<c>RegistrarCapturaManual</c>).
@@ -43,6 +43,7 @@ public sealed class RechazarValidacionManualHandler(
     IProcedureInstanceRepository repo,
     IIdentityValidationAuditLog audit,
     IManualCaptureLinkNotifier notifier,
+    IManualCaptureTokenProtector tokenProtector,
     TimeProvider? clock = null)
 {
     public const string MotivoInvalido = "motivo_invalido";
@@ -73,7 +74,7 @@ public sealed class RechazarValidacionManualHandler(
 
         var now = (clock ?? TimeProvider.System).GetUtcNow();
         var token = BiometricToken.Generate();
-        v.RechazarRevisionManual(command.ReviewedByUserId, reasonCode, now, BiometricToken.Hash(token));
+        v.RechazarRevisionManual(command.ReviewedByUserId, reasonCode, now, BiometricToken.Hash(token), tokenProtector.Protect(token));
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
         await audit.LogAsync(new IdentityValidationAuditEntry(

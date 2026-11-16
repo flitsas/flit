@@ -77,6 +77,8 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/validaciones-identidad/reenviar", RepoMethod.GetByIdAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/consolidado/limpiar", RepoMethod.GetByIdWithChecklistGraphAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/consolidado/cargar", RepoMethod.GetByIdWithAttachmentsAsync },
+        // HU #14547 — solo SuperAdmin: un caller que no lo es recibe 403 por rol y el repositorio ni se consulta.
+        { "POST", $"/api/v1/admin/tramites/{ProcedureId}/mandato/regenerar", RepoMethod.NingunoSoloSuperAdmin },
     };
 
     public enum RepoMethod
@@ -84,6 +86,7 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
         GetByIdAsync,
         GetByIdWithChecklistGraphAsync,
         GetByIdWithAttachmentsAsync,
+        NingunoSoloSuperAdmin,
     }
 
     // ── Prueba negativa por ruta ─────────────────────────────────────────────────────────────
@@ -129,6 +132,9 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
                 await repo.Received(1).GetByIdWithAttachmentsAsync(ProcedureId, TenantA, Arg.Any<CancellationToken>());
                 await repo.DidNotReceive().GetByIdWithAttachmentsAsync(ProcedureId, TenantB, Arg.Any<CancellationToken>());
                 break;
+            case RepoMethod.NingunoSoloSuperAdmin:
+                repo.ReceivedCalls().Should().BeEmpty("la ruta es solo del rol SuperAdmin (HU #14547)");
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(repoMethod));
         }
@@ -151,7 +157,7 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
             .ToList();
 
         registered.Should().NotBeEmpty("deben existir rutas de escritura bajo /api/v1/admin/tramites/{id:guid}");
-        registered.Should().HaveCount(7,
+        registered.Should().HaveCount(8,
             "el inventario de esta prueba (Routes()) debe tener una entrada por cada ruta registrada; "
             + "si esto cambia, agrega/retira la ruta en Routes() (Bug #12554)");
     }
@@ -223,7 +229,19 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
     /// jerarquía — el caso que <c>TenantWriteGuard</c> no cubre).</summary>
     public sealed class RepoSubstituteFactory : WebApplicationFactory<Program>
     {
-        public IProcedureInstanceRepository Repo { get; } = Substitute.For<IProcedureInstanceRepository>();
+        public IProcedureInstanceRepository Repo { get; } = CreateRepo();
+
+        /// <summary>
+        /// HU #14494 — stub por defecto de <c>GetUltimoCambioEstadoCreatedAtAsync</c> para que la
+        /// entrega en estado final no intente regenerar JIT cuando el test no configura vigencia.
+        /// </summary>
+        private static IProcedureInstanceRepository CreateRepo()
+        {
+            var repo = Substitute.For<IProcedureInstanceRepository>();
+            repo.GetUltimoCambioEstadoCreatedAtAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+                .Returns((DateTimeOffset?)null);
+            return repo;
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {

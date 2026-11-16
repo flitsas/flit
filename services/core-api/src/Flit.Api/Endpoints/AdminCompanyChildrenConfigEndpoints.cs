@@ -78,12 +78,6 @@ public static class AdminCompanyChildrenConfigEndpoints
         group.MapGroup("/deeds")
             .MapAdminCompanyDeedsChildRoutes();
 
-        group.MapGroup("/document-params")
-            // HU #12710 — sección reservada al SuperAdmin: la cabeza gestiona de sus hijas solo
-            // Representantes y Mandatarios (Epic #12685).
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
-            .MapAdminCompanyDocumentParamsChildRoutes();
-
         return app;
     }
 

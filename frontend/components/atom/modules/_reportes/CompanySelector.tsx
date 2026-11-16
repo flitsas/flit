@@ -16,6 +16,11 @@ interface CompanySelectorProps {
   hideLabel?: boolean;
   className?: string;
   id?: string;
+  /**
+   * Épica #14296 — opción extra «Todas las compañías» al inicio de la lista. Solo la pasa quien
+   * puede consultar todas (SuperAdmin); sin esta prop el selector no cambia.
+   */
+  allOption?: { value: string; label: string };
 }
 
 /**
@@ -34,11 +39,12 @@ export function CompanySelector({
   hideLabel = false,
   className,
   id = "reportes-compania",
+  allOption,
 }: CompanySelectorProps) {
-  const options = useMemo(
-    () => companies.map((c) => ({ value: c.id, label: c.razonSocial, hint: c.nit })),
-    [companies],
-  );
+  const options = useMemo(() => {
+    const items = companies.map((c) => ({ value: c.id, label: c.razonSocial, hint: c.nit }));
+    return allOption ? [{ value: allOption.value, label: allOption.label, hint: undefined }, ...items] : items;
+  }, [companies, allOption]);
 
   return (
     <SearchableSelect

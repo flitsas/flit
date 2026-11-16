@@ -245,3 +245,16 @@ describe("proxy del canal del punto", () => {
     expect(resultado.cookie).toBeUndefined();
   });
 });
+
+describe("proxy: imágenes de marca del organismo (HU #14379)", () => {
+  it("las reenvía anónimas y conserva su Cache-Control (cada imagen tiene id propio)", async () => {
+    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2]), { status: 200, headers: { "content-type": "image/png", "cache-control": "public, max-age=31536000, immutable" } }));
+    const r = await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/marca/imagenes/l1", { headers: { cookie: "pn_sesion=t" } }), ["marca", "imagenes", "l1"], { apiOrigin: ORIGEN, tokenSesion: "tok-cookie", fetchImpl });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe(`${ORIGEN}/api/v1/persona-natural/marca/imagenes/l1`);
+    expect((init.headers as Headers).get("authorization")).toBeNull();
+    expect(r.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(r.headers.get("content-type")).toBe("image/png");
+  });
+});

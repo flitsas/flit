@@ -41,14 +41,111 @@ export const OWNERSHIP_ZERO_MESSAGE =
 export const OWNERSHIP_RANGE_MESSAGE =
   'Cada propietario debe tener un porcentaje mayor a 0% y como máximo 100%.';
 
+/** Guía en vivo (HU #14192 — edición manual con tope 100%). */
+export const OWNERSHIP_CAP_MESSAGE =
+  'No puedes superar el 100% entre todos los propietarios.';
+export const OWNERSHIP_EXACT_MESSAGE = 'Exactamente 100%.';
+
+/** Tolerancia de comparación de punto flotante — la regla de negocio exige EXACTAMENTE 100.00. */
+const FLOAT_EPSILON = 0.005;
+
 /** Acota un porcentaje al rango válido (0.01 .. 100). */
 export function clampOwnershipShare(value: number): number {
   if (!Number.isFinite(value)) return MIN_OWNERSHIP_SHARE;
   return round2(Math.min(MAX_OWNERSHIP_SHARE, Math.max(MIN_OWNERSHIP_SHARE, value)));
 }
 
-/** Tolerancia de comparación de punto flotante — la regla de negocio exige EXACTAMENTE 100.00. */
-const FLOAT_EPSILON = 0.005;
+/** Suma de porcentajes de un lado (rol). */
+export function sumSharesForRol(actors: ProcedureActor[], rol: ActorRol): number {
+  return round2(
+    indicesForRol(actors, rol).reduce((s, i) => s + (actors[i]?.porcentaje ?? 0), 0),
+  );
+}
+
+/**
+ * Residuo libre del lado: `max(0, 100 − suma actual)`. Usado al agregar un copropietario
+ * (nuevo % = residuo; si ya suman 100, entra en 0% y el gestor debe bajar otro antes).
+ */
+export function remainingShareForRol(actors: ProcedureActor[], rol: ActorRol): number {
+  return round2(Math.max(0, 100 - sumSharesForRol(actors, rol)));
+}
+
+/**
+ * Tope editable de un actor: `100 − suma de los demás del mismo lado`.
+ * Garantiza que la suma del lado nunca supere 100 al editar (HU #14192).
+ */
+export function maxEditableShare(actors: ProcedureActor[], index: number): number {
+  const rol = actors[index]?.rol;
+  if (!rol) return MAX_OWNERSHIP_SHARE;
+  const idxs = indicesForRol(actors, rol);
+  const sumOthers = idxs
+    .filter((i) => i !== index)
+    .reduce((s, i) => s + (actors[i]?.porcentaje ?? 0), 0);
+  return round2(Math.max(0, Math.min(MAX_OWNERSHIP_SHARE, 100 - sumOthers)));
+}
+
+/**
+ * Acota un valor tecleado/arrastrado al rango [0, maxAllowed] (permite 0 temporal mientras se edita;
+ * el guardado sigue exigiendo > 0 vía `validateOwnershipShares`).
+ */
+export function clampEditableShare(value: number, maxAllowed: number): number {
+  const max = Math.max(0, maxAllowed);
+  if (!Number.isFinite(value)) return 0;
+  return round2(Math.min(max, Math.max(0, value)));
+}
+
+/**
+ * Mensaje de guía según el total del lado (siempre visible con 2+ propietarios).
+ * Si algún propietario está en ≤0%, no se declara "exacto" aunque la suma sea 100
+ * (p. ej. 100% + 0% tras agregar).
+ */
+export function ownershipShareGuidance(
+  total: number,
+  opts?: { hasZero?: boolean; activeMaxIsZero?: boolean },
+): {
+  kind: 'exacto' | 'faltan' | 'superan';
+  text: string;
+  delta: number;
+} {
+  if (opts?.activeMaxIsZero) {
+    return {
+      kind: 'faltan',
+      text: 'Baja el porcentaje de otro propietario para liberar espacio y poder asignar a este.',
+      delta: 0,
+    };
+  }
+  if (opts?.hasZero) {
+    return {
+      kind: 'faltan',
+      text: 'Asigna un porcentaje mayor a 0% a cada propietario y completa exactamente 100%.',
+      delta: round2(Math.abs(100 - round2(total))),
+    };
+  }
+  const t = round2(total);
+  const delta = round2(Math.abs(100 - t));
+  if (Math.abs(t - 100) <= FLOAT_EPSILON) {
+    return { kind: 'exacto', text: OWNERSHIP_EXACT_MESSAGE, delta: 0 };
+  }
+  if (t > 100) {
+    return {
+      kind: 'superan',
+      text: `${OWNERSHIP_CAP_MESSAGE} (sobran ${formatGuidanceDelta(delta)}%).`,
+      delta,
+    };
+  }
+  return {
+    kind: 'faltan',
+    text: `Faltan ${formatGuidanceDelta(delta)}% para completar el 100%.`,
+    delta,
+  };
+}
+
+function formatGuidanceDelta(value: number): string {
+  const rounded = round2(value);
+  return Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
 
 /**
  * Ordena por `ordinal` (ausente ⇒ 1) cualquier lista de actores/entidades que lo traigan — usada
@@ -80,15 +177,17 @@ export function isFirstOfRol(actors: ProcedureActor[], index: number): boolean {
   return indicesForRol(actors, rol)[0] === index;
 }
 
+/** % inicial del nuevo copropietario = residuo libre del lado (nunca negativo, máx 100). */
+export function percentageForNewOwner(remaining: number): number {
+  if (!Number.isFinite(remaining) || remaining <= 0) return 0;
+  return round2(Math.min(MAX_OWNERSHIP_SHARE, remaining));
+}
+
 /**
- * Porcentaje por defecto de un propietario recién agregado: reparto equitativo entre TODOS los
- * actores que quedarán en el lado (incluido el que se está agregando). Tras el insert,
- * `equalizeSharesForRol` reescribe TODOS los % del lado a 100/n (evita sumas >100 cuando el
- * solidario ya estaba editado a mano y la absorción no corre — hallazgo QA HU #14192).
+ * Alias de `percentageForNewOwner` — el argumento es el residuo libre, no el conteo de actores.
  */
-export function defaultPercentageForNewActor(countAfterAdd: number): number {
-  if (countAfterAdd <= 0) return 100;
-  return round2(100 / countAfterAdd);
+export function defaultPercentageForNewActor(remaining: number): number {
+  return percentageForNewOwner(remaining);
 }
 
 /**
@@ -156,10 +255,9 @@ export function applySolidarioAbsorption(
 }
 
 /**
- * Redistribuye el porcentaje de un actor eliminado entre los que quedan de su mismo lado,
- * proporcionalmente a su porcentaje actual (si todos están en 0, reparto equitativo). Con un solo
- * actor restante, éste queda con 100% ESCRITO (encargo cerrado: "si eliminan el segundo, el
- * primero queda con 100% escrito"). Pura: devuelve un array NUEVO ya sin el actor eliminado.
+ * Al quitar un copropietario (HU #14192 — edición manual): deja el residuo libre en el lado
+ * (no redistribuye entre los que quedan). Con un solo actor restante, éste queda con 100%
+ * ESCRITO (encargo cerrado). Pura: devuelve un array NUEVO ya sin el actor eliminado.
  */
 export function redistributeAfterRemoval(
   actors: ProcedureActor[],
@@ -168,7 +266,6 @@ export function redistributeAfterRemoval(
   const removed = actors[removedIndex];
   if (!removed) return actors.slice();
   const rol = removed.rol;
-  const removedShare = removed.porcentaje ?? 0;
   const remaining = actors.filter((_, i) => i !== removedIndex);
   const remainingIdxsOfRol: number[] = [];
   remaining.forEach((a, i) => {
@@ -183,37 +280,7 @@ export function redistributeAfterRemoval(
     return remaining;
   }
 
-  const positiveTotal = remainingIdxsOfRol.reduce((s, i) => {
-    const p = remaining[i].porcentaje ?? 0;
-    return s + (p > 0 ? p : 0);
-  }, 0);
-  const hadInvalid =
-    removedShare < 0 ||
-    remainingIdxsOfRol.some((i) => (remaining[i].porcentaje ?? 0) < MIN_OWNERSHIP_SHARE);
-  if (positiveTotal <= 0 || hadInvalid) {
-    // Residuo negativo / partes inválidas: reparto equitativo (HU #14192).
-    return assignEqualShares(remaining, remainingIdxsOfRol);
-  }
-  for (const i of remainingIdxsOfRol) {
-    const current = remaining[i].porcentaje ?? 0;
-    const weight = current > 0 ? current : 0;
-    const extra = weight === 0 ? 0 : removedShare * (weight / positiveTotal);
-    remaining[i] = { ...remaining[i], porcentaje: clampOwnershipShare(current + extra) };
-  }
-  // Si tras el clamp la suma no es 100 (p. ej. había negativos), normaliza equitativo.
-  const sumAfter = remainingIdxsOfRol.reduce((s, i) => s + (remaining[i].porcentaje ?? 0), 0);
-  if (Math.abs(sumAfter - 100) > FLOAT_EPSILON || remainingIdxsOfRol.some((i) => (remaining[i].porcentaje ?? 0) <= 0)) {
-    return assignEqualShares(remaining, remainingIdxsOfRol);
-  }
-  // Ajuste fino del último para cerrar exactamente 100.00.
-  const last = remainingIdxsOfRol[remainingIdxsOfRol.length - 1];
-  const sumExceptLast = remainingIdxsOfRol
-    .slice(0, -1)
-    .reduce((s, i) => s + (remaining[i].porcentaje ?? 0), 0);
-  remaining[last] = {
-    ...remaining[last],
-    porcentaje: clampOwnershipShare(100 - sumExceptLast),
-  };
+  // 2+ remanentes: conservar sus % tal cual (el gestor completa el 100% a mano).
   return remaining;
 }
 

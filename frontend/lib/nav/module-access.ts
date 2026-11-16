@@ -242,6 +242,9 @@ const ROUTE_API_ADMIN ={ kind: "policy", policy: "SuperAdmin", source: "services
  * Reglas por prefijo, de la más específica a la más general. Reproducen una a una las del guard de rol anterior
  * (HU #10194, #10218, #12856, #12860, #11228, Feature #12201 y #12276); lo nuevo es que viven en una tabla.
  */
+/** Módulo del Portal Persona Natural en el hub del organismo; viaja en `?modulo=` para dar el motivo exacto. */
+export const PORTAL_PN_MODULE_ID = "admin-transit-offices-portal-persona-natural";
+
 export const ROUTE_ACCESS: readonly RouteAccessRule[] = [
   // HU #12856 — Reglas, Requisitos y Configuración del organismo: exclusivos de SuperAdmin.
   {
@@ -266,6 +269,16 @@ export const ROUTE_ACCESS: readonly RouteAccessRule[] = [
       },
     }),
   ),
+  // Épica #14297 — Portal Persona Natural del organismo: solo ot_admin o SuperAdmin, por rol y sin permiso delegable.
+  {
+    id: PORTAL_PN_MODULE_ID,
+    pattern: /^\/admin\/transit-offices\/[^/]+\/portal-persona-natural(\/|$)/,
+    requirement: {
+      transitOfficeUser: true,
+      rolesAny: [OT_ADMIN_ROLE],
+      api: { kind: "policy", policy: "OtAdminOrSuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminOtPortalMarcaEndpoints.cs" },
+    },
+  },
   // HU #10218 — el resto del hub del organismo (listado e Inicio del organismo): cualquier usuario de un organismo.
   {
     id: "admin-transit-offices",

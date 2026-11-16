@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { CheckCircle2, Clock, Hourglass, Timer, XCircle } from 'lucide-react';
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import type { ManualOrigin, ManualStatus } from '@/lib/api/types/manual-review';
 
@@ -14,17 +14,17 @@ export interface ManualStatusMeta {
 }
 
 export const MANUAL_STATUS_META: Record<ManualStatus, ManualStatusMeta> = {
-  manual_activo: { label: 'Esperando captura', tone: 'info', icon: Hourglass },
-  pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info', icon: Clock },
-  aprobado: { label: 'Aprobada manual', tone: 'success', icon: CheckCircle2 },
-  rechazado: { label: 'Rechazada', tone: 'danger', icon: XCircle },
-  expirado: { label: 'Vencida', tone: 'neutral', icon: Timer },
+  manual_activo: { label: 'Esperando captura', tone: 'info', icon: iconoComo("espera") },
+  pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info', icon: iconoComo("reloj") },
+  aprobado: { label: 'Aprobada manual', tone: 'success', icon: iconoComo("check") },
+  rechazado: { label: 'Rechazada', tone: 'danger', icon: iconoComo("cerrar") },
+  expirado: { label: 'Vencida', tone: 'neutral', icon: iconoComo("cronometro") },
 };
 
 /** Estado desconocido (el backend puede añadir uno): neutral, con el código visible. */
 export function manualStatusMeta(status: string): ManualStatusMeta {
   return (
-    MANUAL_STATUS_META[status as ManualStatus] ?? { label: status, tone: 'neutral', icon: Timer }
+    MANUAL_STATUS_META[status as ManualStatus] ?? { label: status, tone: 'neutral', icon: iconoComo("cronometro") }
   );
 }
 
@@ -51,4 +51,19 @@ export function formatEspera(minutes: number | null | undefined): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h} h ${String(m % 60).padStart(2, '0')} min`;
   return `${Math.floor(h / 24)} d ${h % 24} h`;
+}
+
+/** Motivo por el que una foto quedó «No verificada» (HU #14311), en lenguaje para quien revisa. */
+const MOTIVO_FOTO: Record<string, string> = {
+  sin_rostro: 'No se detectó un rostro.',
+  varios_rostros: 'Se detectó más de una persona.',
+  sin_documento: 'No se detectó un documento.',
+  lado_incorrecto: 'Puede ser el lado equivocado del documento.',
+  sin_soporte: 'El dispositivo no pudo validarla.',
+  sin_resultado: 'No llegó el resultado de la validación.',
+};
+
+/** Texto del motivo; uno desconocido no rompe la pantalla. */
+export function etiquetaMotivoFoto(motivo: string | null | undefined): string {
+  return (motivo && MOTIVO_FOTO[motivo]) || 'Sin detalle del motivo.';
 }

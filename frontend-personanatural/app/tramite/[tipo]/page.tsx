@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
+import { MarcaWeb } from "@/components/marca/MarcaWeb";
 import { PaginaTramite } from "@/components/tramite/PaginaTramite";
+
+// La marca de la web se lee en cada petición (sin caché).
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Tu trámite | FLIT Persona Natural",
@@ -16,5 +20,9 @@ export default async function Pagina({ params }: { params: Promise<{ tipo: strin
   } catch {
     // Un código con % mal formado se usa tal cual: el catálogo no lo va a encontrar y la página dirá que no está disponible.
   }
-  return <PaginaTramite tipoCodigo={codigo} />;
+  return (
+    <MarcaWeb>
+      <PaginaTramite tipoCodigo={codigo} />
+    </MarcaWeb>
+  );
 }

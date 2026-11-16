@@ -194,6 +194,26 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.HasIndex(h => new { h.SolicitudId, h.OcurrioEn }).HasDatabaseName("ix_status_history_request_occurred");
         });
 
+        // HU #14395: la cotización que se congela al radicar. Solo inserción; una por solicitud; no sobrevive a la solicitud que la origina.
+        modelBuilder.Entity<CotizacionCongelada>(e =>
+        {
+            e.ToTable("frozen_quote", t =>
+            {
+                t.HasComment("Cotización congelada al radicar (medio, líneas, total y versión de tarifa). Solo inserción: un cambio posterior de precio o de switch no altera el trámite. Sin datos personales.");
+                t.HasCheckConstraint("ck_frozen_quote_method", "method IN ('PASARELA', 'PIN')");
+                t.HasCheckConstraint("ck_frozen_quote_total", "total_cop >= 0");
+            });
+            e.HasKey(c => c.SolicitudId).HasName("pk_frozen_quote");
+            e.Property(c => c.SolicitudId).HasColumnName("procedure_request_id").ValueGeneratedNever();
+            e.Property(c => c.Medio).HasColumnName("method").HasMaxLength(20).IsRequired();
+            e.Property(c => c.AmbitoOrganismoId).HasColumnName("scope_transit_office_id");
+            e.Property(c => c.Lineas).HasColumnName("lines").HasColumnType("jsonb").IsRequired();
+            e.Property(c => c.TotalCop).HasColumnName("total_cop");
+            e.Property(c => c.VersionTarifa).HasColumnName("tariff_version").HasMaxLength(1000).IsRequired();
+            e.Property(c => c.CongeladaEn).HasColumnName("frozen_at").HasDefaultValueSql("now()");
+            e.HasOne<SolicitudTramite>().WithOne().HasForeignKey<CotizacionCongelada>(c => c.SolicitudId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("fk_frozen_quote_procedure_request");
+        });
+
         // Intentos fallidos de reanudar, por radicado (HU #14035): sin llaves foráneas, porque también cuentan los radicados que no existen.
         modelBuilder.Entity<IntentoReanudar>(e =>
         {

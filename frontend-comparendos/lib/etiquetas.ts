@@ -77,7 +77,11 @@ export const CONSULTA_CONTRAVENTOR: Record<string, Etiqueta> = {
   Pendiente: { texto: "Consultando", tono: "info" },
   Encontrado: { texto: "Asignado automáticamente", tono: "success" },
   NoEncontrado: { texto: "No encontrado: asignar a mano", tono: "warning" },
-  Error: { texto: "No se pudo consultar", tono: "danger" },
+  // GDC punto 20: Error es temporal (se reintenta, un intento por día); Agotada es definitivo tras 3 intentos.
+  Error: { texto: "No se pudo consultar: se reintenta", tono: "danger" },
+  Agotada: { texto: "Consulta agotada: asignar a mano", tono: "danger" },
+  // GDC «sin hora»: el comparendo no trae hora y ese día cambió el conductor.
+  SinHora: { texto: "Sin hora: revisar conductor", tono: "warning" },
 };
 
 export const RESULTADO_DP: Record<string, Etiqueta> = {

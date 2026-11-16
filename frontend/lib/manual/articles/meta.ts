@@ -57,6 +57,7 @@ export const MANUAL_OT_TAB_ARTICLES: Readonly<Record<string, string>> = {
   mandatos: "2-ot/10-mandatos",
   "imprint-validation": "2-ot/11-validar-impronta",
   configuracion: "2-ot/12-configuracion",
+  "portal-persona-natural": "2-ot/14-portal-persona-natural",
 };
 
 /** Rutas de página (fuera de `?m=`) con artículo propio; se evalúan por prefijo, en orden. */

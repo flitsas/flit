@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Inbox, Pencil, RefreshCw, TriangleAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ApiError } from "@/lib/api/types";
 import {
   updateTestMailbox,
@@ -79,14 +79,14 @@ export function NotificacionBuzonPruebasSection({
   return (
     <section
       aria-labelledby="notificaciones-buzon-heading"
-      className="flex flex-col gap-3 rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4"
       data-testid="notificaciones-buzon-pruebas"
     >
       <h2
         id="notificaciones-buzon-heading"
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#162244] dark:text-white"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground"
       >
-        <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="radicacion" className="h-3.5 w-3.5" />
         Buzón de pruebas
       </h2>
 
@@ -96,7 +96,7 @@ export function NotificacionBuzonPruebasSection({
           aria-busy="true"
           aria-live="polite"
           data-testid="notificaciones-buzon-cargando"
-          className="h-10 w-full animate-pulse rounded-xl border bg-[#F4F7FC] dark:bg-white/5"
+          className="h-10 w-full animate-pulse rounded-xl border bg-secondary"
         >
           <span className="sr-only">Cargando buzón de pruebas…</span>
         </div>
@@ -104,7 +104,7 @@ export function NotificacionBuzonPruebasSection({
         <div
           role="alert"
           data-testid="notificaciones-buzon-error"
-          className="flex items-center justify-between gap-3 rounded-xl border border-[#FF4E00]/30 bg-[#FF4E00]/10 px-3 py-2 text-xs text-[#9A3412] dark:text-[#FFB199]"
+          className="flex items-center justify-between gap-3 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive"
         >
           <span>No se pudo cargar el buzón de pruebas.</span>
           <button
@@ -113,7 +113,7 @@ export function NotificacionBuzonPruebasSection({
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white"
             style={{ background: "var(--color-flit-brand)" }}
           >
-            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3 w-3" />
             Reintentar
           </button>
         </div>
@@ -123,7 +123,7 @@ export function NotificacionBuzonPruebasSection({
           <form onSubmit={handleSubmit} className="flex flex-col gap-2" noValidate>
             <label
               htmlFor="notificaciones-buzon-email"
-              className="text-[11px] font-semibold text-[#59677D] dark:text-white/55"
+              className="text-[11px] font-semibold text-muted-foreground"
             >
               Correo del buzón de pruebas
             </label>
@@ -136,13 +136,13 @@ export function NotificacionBuzonPruebasSection({
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={saving}
                 placeholder="pruebas@flit.com.co"
-                className="flex-1 rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+                className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
               />
               <div className="flex gap-2">
                 <button
                   type="submit"
                   disabled={saving || email.trim().length === 0}
-                  className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  className="rounded-full bg-[image:var(--gradient-action)] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   {saving ? "Guardando…" : "Guardar"}
                 </button>
@@ -150,15 +150,15 @@ export function NotificacionBuzonPruebasSection({
                   type="button"
                   onClick={cancelEditing}
                   disabled={saving}
-                  className="rounded-full border border-[#DFE5ED] px-4 py-2 text-xs font-semibold text-[#59677D] disabled:opacity-50 dark:border-white/10 dark:text-white/70"
+                  className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground disabled:opacity-50"
                 >
                   Cancelar
                 </button>
               </div>
             </div>
             {formError ? (
-              <p role="alert" className="inline-flex items-center gap-1.5 text-xs text-[#B42318]">
-                <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <p role="alert" className="inline-flex items-center gap-1.5 text-xs text-destructive">
+                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                 {formError}
               </p>
             ) : null}
@@ -166,9 +166,9 @@ export function NotificacionBuzonPruebasSection({
         ) : (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {mailbox?.isConfigured && mailbox.testRecipientEmail ? (
-              <p className="text-sm text-[#162244] dark:text-white">
+              <p className="text-sm text-foreground">
                 <span className="font-semibold">{mailbox.testRecipientEmail}</span>
-                <span className="ml-2 text-[11px] text-[#59677D] dark:text-white/55">
+                <span className="ml-2 text-[11px] text-muted-foreground">
                   {mailbox.lastTestSentAt
                     ? `Última prueba enviada: ${formatFechaHora(new Date(mailbox.lastTestSentAt))}`
                     : "Sin envíos de prueba todavía."}
@@ -176,10 +176,10 @@ export function NotificacionBuzonPruebasSection({
               </p>
             ) : (
               <p
-                className="inline-flex items-center gap-1.5 text-xs text-[#9A3412] dark:text-[#FFB199]"
+                className="inline-flex items-center gap-1.5 text-xs text-destructive"
                 data-testid="notificaciones-buzon-sin-configurar"
               >
-                <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                 No hay un buzón de pruebas configurado. Configúralo para poder enviar correos de
                 prueba.
               </p>
@@ -187,9 +187,9 @@ export function NotificacionBuzonPruebasSection({
             <button
               type="button"
               onClick={startEditing}
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[#DFE5ED] px-3 py-1.5 text-[11px] font-semibold text-[#162244] dark:border-white/10 dark:text-white"
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground"
             >
-              <Pencil className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="lapiz" className="h-3 w-3" />
               {mailbox?.isConfigured ? "Modificar" : "Configurar"}
             </button>
           </div>

@@ -19,6 +19,12 @@ public sealed record ExportDetailedProceduresQuery(
 {
     /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
     public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
+    /// <summary>HU #14319 — código de <c>TramiteCanal</c> (validado por el endpoint); <c>null</c> = todos.</summary>
+    public string? Channel { get; init; }
+
+    /// <summary>HU #14319 — organismo del canal; <c>null</c> = sin filtro.</summary>
+    public Guid? ChannelTransitOfficeId { get; init; }
 }
 
 /// <summary>Valida filtros del export del reporte detallado (HU #10816).</summary>
@@ -44,7 +50,11 @@ public static class ExportDetailedProceduresHandler
             Normalize(query.PersonName),
             query.HasTransformation,
             query.IsLeasing)
-        { AllowedFamilies = query.AllowedFamilies }, null);
+        {
+            AllowedFamilies = query.AllowedFamilies,
+            Channel = Normalize(query.Channel),
+            ChannelTransitOfficeId = query.ChannelTransitOfficeId,
+        }, null);
     }
 
     private static string? Normalize(string? value) =>

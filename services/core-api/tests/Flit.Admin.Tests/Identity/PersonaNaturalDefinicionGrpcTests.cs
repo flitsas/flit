@@ -382,6 +382,17 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
                 var orgs = new[] { Organismo, OrganismoSinGrant };
                 var tipos = _tipos.ToArray();
                 var docs = _documentos.ToArray();
+                // CI: instancias (u otras pruebas en BD compartida) pueden referenciar los tipos;
+                // borrar procedure_types sin limpiar instances dispara FK 23503 y tumba el Dispose.
+                await using var tx = await _db.Database.BeginTransactionAsync();
+                await _db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
+                await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                    DELETE FROM tramites.procedure_state_change_outbox
+                     WHERE procedure_instance_id IN (
+                        SELECT id FROM tramites.procedure_instances WHERE procedure_type_id = ANY({tipos}))
+                    """);
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM tramites.procedure_instances WHERE procedure_type_id = ANY({tipos})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.document_order_overrides WHERE procedure_type_id = ANY({tipos})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_document_requirements WHERE procedure_type_id = ANY({tipos})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.document_types WHERE id = ANY({docs})");
@@ -393,6 +404,11 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.transit_office_profiles WHERE tenant_id = {TenantOt}");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.tenants WHERE id = {TenantOt}");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM catalogs.transit_offices WHERE id = ANY({orgs})");
+                await tx.CommitAsync();
+            }
+            catch (Exception)
+            {
+                // Retiro best-effort: la base de CI es compartida y los códigos/ids son únicos por escenario.
             }
             finally
             {

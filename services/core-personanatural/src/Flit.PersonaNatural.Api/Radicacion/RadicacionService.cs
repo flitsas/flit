@@ -31,7 +31,8 @@ public sealed class RadicacionService(
     IPlatformOutbox outbox,
     TimeProvider reloj,
     VerificadorDeOrganismo verificadorDeOrganismo,
-    IGravamenDelBorrador? gravamen = null)
+    IGravamenDelBorrador? gravamen = null,
+    IFachadaMediosPago? medios = null)
 {
     public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
     public const int VersionEvento = 1;
@@ -40,9 +41,17 @@ public sealed class RadicacionService(
     public const string CodigoRequisitosIncompletos = "requisitos_incompletos";
     public const string CodigoIdentidadPendiente = "identity_pending";
     public const int MaxLlave = 100;
+    public const string CodigoCotizacionCambio = "cotizacion_cambio";
+    public const string CodigoMedioNoDisponible = "medio_no_disponible";
     private const string IndiceLlave = "uq_procedure_request_idempotency";
 
-    public async Task<RadicacionAceptada> RadicarAsync(Guid id, string? llave, CancellationToken ct)
+    public Task<RadicacionAceptada> RadicarAsync(Guid id, string? llave, CancellationToken ct) => RadicarAsync(id, llave, null, ct);
+
+    /// <summary>
+    /// HU #14395: con <paramref name="cobro"/> (medio elegido) la cotización se calcula en este momento con el medio y queda
+    /// congelada en la solicitud, en la MISMA transacción que la deja en cola. Sin él, radica exactamente como antes.
+    /// </summary>
+    public async Task<RadicacionAceptada> RadicarAsync(Guid id, string? llave, CobroAlRadicar? cobro, CancellationToken ct)
     {
         llave = llave?.Trim();
         if (string.IsNullOrEmpty(llave) || llave.Length > MaxLlave)
@@ -50,12 +59,12 @@ public sealed class RadicacionService(
 
         try
         {
-            return await EnTransaccionAsync(ct2 => RadicarEnTransaccionAsync(id, llave, ct2), ct).ConfigureAwait(false);
+            return await EnTransaccionAsync(ct2 => RadicarEnTransaccionAsync(id, llave, cobro, ct2), ct).ConfigureAwait(false);
         }
         catch (ReglaDeNegocioException ex) when (ex.Codigo == SolicitudesService.CodigoConflictoVersion)
         {
             // Dos peticiones a la vez con la misma llave: la que perdió vuelve a mirar y encuentra el resultado de la ganadora.
-            return await EnTransaccionAsync(ct2 => RadicarEnTransaccionAsync(id, llave, ct2), ct).ConfigureAwait(false);
+            return await EnTransaccionAsync(ct2 => RadicarEnTransaccionAsync(id, llave, cobro, ct2), ct).ConfigureAwait(false);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: IndiceLlave })
         {
@@ -63,7 +72,7 @@ public sealed class RadicacionService(
         }
     }
 
-    private async Task<RadicacionAceptada> RadicarEnTransaccionAsync(Guid id, string llave, CancellationToken ct)
+    private async Task<RadicacionAceptada> RadicarEnTransaccionAsync(Guid id, string llave, CobroAlRadicar? cobro, CancellationToken ct)
     {
         var s = await db.Set<SolicitudTramite>().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw SolicitudesService.NoEncontrada();
 
@@ -140,6 +149,9 @@ public sealed class RadicacionService(
             }
         }
 
+        if (cobro?.Medio is not null)
+            db.Add(await CongelarCotizacionAsync(s, cobro, ct).ConfigureAwait(false));
+
         var evento = await ArmarEventoAsync(s, borrador, llave, ct).ConfigureAwait(false);
         var ahora = reloj.GetUtcNow();
         db.Add(new HistorialEstado { Id = Guid.CreateVersion7(), SolicitudId = s.Id, Desde = s.Estado, Hasta = EstadoSolicitud.EnCola, Origen = "bff", Motivo = "radicada", OcurrioEn = ahora });
@@ -165,6 +177,52 @@ public sealed class RadicacionService(
             comprobante?.Id, llave, s.CorrelationId);
     }
 
+    /// <summary>
+    /// HU #14395 (regla 9) — cotiza con el medio elegido y deja el resultado guardado. Si la persona vio un total y ya cambió,
+    /// no se radica: se le avisa para que confirme el nuevo valor. Lo guardado es lo que se cobra a ese trámite; ningún cambio
+    /// posterior de precio o de switch lo altera (nada actualiza la fila).
+    /// </summary>
+    private async Task<CotizacionCongelada> CongelarCotizacionAsync(SolicitudTramite s, CobroAlRadicar cobro, CancellationToken ct)
+    {
+        if (medios is null)
+            throw new ReglaDeNegocioException(StatusCodes.Status503ServiceUnavailable, "servicio_no_disponible", "No disponible", "El cobro no está disponible por ahora.");
+
+        var ambito = SolicitudesService.EsCanalPunto(s.Datos) ? s.OrganismoId : (Guid?)null;
+        CotizacionDto cotizacion;
+        try
+        {
+            cotizacion = await medios.CotizarConMedioAsync(
+                s.TipoTramiteCodigo, s.OrganismoId.ToString(), cobro.Adicionales, cobro.Medio!, ambito?.ToString(), ct).ConfigureAwait(false);
+        }
+        catch (FachadaException ex) when (ex.Codigo == CodigoMedioNoDisponible)
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, CodigoMedioNoDisponible, "Medio no disponible", "Ese medio de pago ya no está disponible. Elija otro.");
+        }
+        catch (FachadaException ex)
+        {
+            throw new ReglaDeNegocioException(ex.EstadoHttp, ex.Codigo, "No se pudo cotizar", ex.Message);
+        }
+
+        if (cobro.TotalCopVisto is { } visto && visto != cotizacion.TotalCop)
+        {
+            throw new ReglaDeNegocioException(
+                StatusCodes.Status409Conflict, CodigoCotizacionCambio, "El valor cambió", "El valor del trámite cambió mientras lo revisaba. Confirme el nuevo total para continuar.",
+                new Dictionary<string, object?> { ["totalCop"] = cotizacion.TotalCop });
+        }
+
+        return new CotizacionCongelada
+        {
+            SolicitudId = s.Id,
+            Medio = cobro.Medio!,
+            AmbitoOrganismoId = ambito,
+            Lineas = System.Text.Json.JsonSerializer.Serialize(
+                cotizacion.Lineas.Select(l => new { codigo = l.Codigo, nombre = l.Nombre, subtitulo = l.Subtitulo, valorCop = l.ValorCop })),
+            TotalCop = cotizacion.TotalCop,
+            VersionTarifa = cotizacion.VersionTarifa,
+            CongeladaEn = reloj.GetUtcNow(),
+        };
+    }
+
     private static ReglaDeNegocioException LlaveEnUso() =>
         new(StatusCodes.Status409Conflict, CodigoIdempotenciaConflicto, "Clave ya usada", "Esa Idempotency-Key ya se usó con otro trámite.");
 
@@ -179,3 +237,6 @@ public sealed class RadicacionService(
             return resultado;
         }, ct);
 }
+
+/// <summary>Cobro elegido al radicar: el medio, los adicionales que se cotizaron y, si se quiere, el total que la persona vio.</summary>
+public sealed record CobroAlRadicar(string? Medio, IReadOnlyCollection<string> Adicionales, long? TotalCopVisto);

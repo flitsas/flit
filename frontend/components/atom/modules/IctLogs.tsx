@@ -5,7 +5,8 @@
 // Las Consultas personalizadas y la Programación de informes viven en su propio módulo, "Reportes
 // ICT" (HU #11619) — separar los logs técnicos de los reportes de autoservicio.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
@@ -17,6 +18,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import {
   fetchIctAlerts,
@@ -37,6 +39,8 @@ import { ModuleTitle } from "./ModuleTitle";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 type Tab = "logs" | "alertas";
 
 const LOG_TYPES: ReadonlyArray<{ value: IctLogType; label: string }> = [
@@ -46,19 +50,18 @@ const LOG_TYPES: ReadonlyArray<{ value: IctLogType; label: string }> = [
   { value: "external", label: "Fuente externa" },
 ];
 
-const BORDER = "#DFE5ED";
+const BORDER = "var(--border)";
 
-const inputCls =
-  "rounded-lg border border-[#D9DEE8] bg-white px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 dark:border-white/15 dark:bg-[#0B0F14]";
+// HU #14484 — el `.control` del prototipo y los botones `.btn sm`, los mismos de la barra de Trámites.
+const inputCls = TRAMITES_INPUT_CLS;
 
-const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] px-3 py-2 text-xs font-medium opacity-80 hover:border-flit-brand hover:opacity-100 dark:border-white/15";
+const ghostCls = buttonClass({ variant: "secondary", size: "sm" });
 
 export function IctLogs() {
   const [tab, setTab] = useState<Tab>("logs");
 
   return (
-    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-24 text-flit-primary dark:text-white">
+    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-24 text-flit-primary">
       <ModuleTitle
         title="Log ICT"
         subtitle="Peticiones HTTP de la integración con terceros, ya enmascaradas. El recorrido por trámite está en Trazabilidad ICT."
@@ -148,7 +151,7 @@ function LogsTab() {
     <section className="flex flex-col gap-4">
       <form
         onSubmit={applyFilters}
-        className="flex shrink-0 flex-wrap items-end gap-2 rounded-2xl border border-[#DFE5ED] bg-white p-3 dark:border-white/10 dark:bg-[#0B0F14]"
+        className="flex shrink-0 flex-wrap items-end gap-2 rounded-2xl border border-border bg-card p-3"
         role="search"
         aria-label="Filtros del Log ICT"
       >
@@ -198,13 +201,13 @@ function LogsTab() {
         <span className="flex-1" />
         {hayFiltros ? (
           <button type="button" onClick={clearFilters} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         ) : null}
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center gap-2 rounded-lg bg-flit-brand px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Buscar
         </button>
@@ -221,7 +224,7 @@ function LogsTab() {
         emptyMessage="Ningún log coincide con los filtros. Amplía el rango o quita algún filtro."
       >
         {!loading && data.length > 0 ? (
-          <>
+          <div className={TABLA_TARJETA_CLS}>
             <div className="overflow-x-auto">
               <table
                 aria-label="Logs de integración ICT"
@@ -268,17 +271,14 @@ function LogsTab() {
                     return (
                       <Fragment key={row.id}>
                         <tr
-                          className={`cursor-pointer bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                          className={`cursor-pointer bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}
                           onClick={() => setExpandedId(open ? null : row.id)}
                         >
                           <td
                             className="rounded-l-xl border-y border-l px-3 py-3 align-middle"
                             style={{ borderColor: BORDER }}
                           >
-                            <ChevronRight
-                              className={`h-4 w-4 text-flit-brand transition ${open ? "rotate-90" : ""}`}
-                              aria-hidden="true"
-                            />
+                            <Icono nombre="derecha" className={`h-4 w-4 text-flit-brand transition ${open ? "rotate-90" : ""}`} />
                             <span className="sr-only">{open ? "Ocultar detalle" : "Ver detalle"}</span>
                           </td>
                           <td className="border-y px-4 py-3 align-middle whitespace-nowrap" style={{ borderColor: BORDER }}>
@@ -315,7 +315,7 @@ function LogsTab() {
                         {open ? (
                           <tr>
                             <td colSpan={9} className="pb-2">
-                              <div className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
+                              <div className="rounded-2xl border border-border bg-card p-4">
                                 <LogDetail row={row} />
                               </div>
                             </td>
@@ -343,7 +343,7 @@ function LogsTab() {
               noun="registros"
               ariaLabel="Paginación del Log ICT"
             />
-          </>
+          </div>
         ) : null}
       </UiStateBoundary>
     </section>
@@ -371,7 +371,7 @@ function Campo({
   children: React.ReactNode;
 }) {
   return (
-    <label htmlFor={htmlFor} className="flex min-w-0 flex-col gap-1 text-xs font-medium text-[#59677D] dark:text-white/70">
+    <label htmlFor={htmlFor} className="flex min-w-0 flex-col gap-1 text-xs font-medium text-muted-foreground">
       {label}
       {children}
     </label>
@@ -389,23 +389,23 @@ function LogDetail({ row }: { row: IctLogEntry }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[#59677D] dark:text-white/70">
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
         <span>
-          ID: <span className="font-mono text-flit-primary dark:text-white">{row.id}</span>
+          ID: <span className="font-mono text-flit-primary">{row.id}</span>
         </span>
         <span>
           Correlación:{" "}
-          <span className="font-mono text-flit-primary dark:text-white">{row.correlationId ?? "—"}</span>
+          <span className="font-mono text-flit-primary">{row.correlationId ?? "—"}</span>
         </span>
         <span>
-          Usuario: <span className="font-mono text-flit-primary dark:text-white">{row.usuario ?? "—"}</span>
+          Usuario: <span className="font-mono text-flit-primary">{row.usuario ?? "—"}</span>
         </span>
         <span>
-          Tenant: <span className="font-mono text-flit-primary dark:text-white">{row.tenantId ?? "—"}</span>
+          Tenant: <span className="font-mono text-flit-primary">{row.tenantId ?? "—"}</span>
         </span>
       </div>
       {present.length === 0 ? (
-        <p className="text-xs text-[#59677D] dark:text-white/70">Sin cuerpo capturado para esta entrada.</p>
+        <p className="text-xs text-muted-foreground">Sin cuerpo capturado para esta entrada.</p>
       ) : (
         present.map(([label, value]) => <JsonBlock key={label} label={label} value={value as string} />)
       )}
@@ -432,12 +432,12 @@ function JsonBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-flit-primary dark:text-white">{label}</span>
+        <span className="text-xs font-semibold text-flit-primary">{label}</span>
         <button type="button" onClick={copy} className={ghostCls}>
           {copied ? "Copiado" : "Copiar"}
         </button>
       </div>
-      <pre className="max-h-64 overflow-auto rounded-xl border border-[#DFE5ED] bg-white p-3 font-mono text-xs leading-snug text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white">
+      <pre className="max-h-64 overflow-auto rounded-xl border border-border bg-card p-3 font-mono text-xs leading-snug text-flit-primary">
         {pretty}
       </pre>
     </div>
@@ -447,7 +447,7 @@ function JsonBlock({ label, value }: { label: string; value: string }) {
 function AlertsTab() {
   return (
     <section className="flex flex-col gap-4">
-      <p className="text-xs text-[#59677D] dark:text-white/70">
+      <p className="text-xs text-muted-foreground">
         Indicadores en vivo del pipeline ICT. Las reglas, umbrales y destinatarios se configuran en
         Reportes ICT.
       </p>
@@ -474,7 +474,7 @@ function IctAlertMetricsRow() {
     return () => controller.abort();
   }, []);
 
-  if (error) return <p className="text-sm text-[#FF4E00]">{error}</p>;
+  if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!metrics) {
     return (
       <div className="py-10">
@@ -496,14 +496,14 @@ function IctAlertMetricsRow() {
 function MetricCard({ label, value, warn }: { label: string; value: number | string; warn: boolean }) {
   return (
     <div
-      className="rounded-2xl border bg-white p-5 dark:bg-[#162744]"
+      className="rounded-2xl border bg-card p-5"
       style={{
-        borderColor: warn ? "#FF4E00" : BORDER,
-        background: warn ? "rgba(255, 78, 0, 0.06)" : undefined,
+        borderColor: warn ? "var(--destructive)" : BORDER,
+        background: warn ? "var(--badge-warning-bg)" : undefined,
       }}
     >
-      <p className="text-xs font-medium text-[#59677D] dark:text-white/70">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${warn ? "text-[#FF4E00]" : "text-flit-primary dark:text-white"}`}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${warn ? "text-destructive" : "text-flit-primary"}`}>
         {value}
       </p>
     </div>
@@ -569,7 +569,7 @@ function IctAlertEventsList() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-flit-primary dark:text-white">Eventos de alerta ICT</h2>
+      <h2 className="text-sm font-semibold text-flit-primary">Eventos de alerta ICT</h2>
       {acking ? <CarLoaderModal label="Reconociendo alerta…" /> : null}
       {status === "loading" ? (
         <div className="py-10">
@@ -582,6 +582,7 @@ function IctAlertEventsList() {
           errorMessage="El historial de alertas ICT no está disponible aquí; gestiónelo en Reportes ICT."
           onRetry={() => void load()}
         >
+          <div className={TABLA_TARJETA_CLS}>
           <div className="overflow-x-auto">
           <table
             aria-label="Eventos de alerta ICT"
@@ -615,7 +616,7 @@ function IctAlertEventsList() {
             </thead>
             <tbody>
               {pg.paginar(events).map((e) => (
-                <tr key={e.id} className={`bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                <tr key={e.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}>
                   <td
                     className="rounded-l-xl border-y border-l px-4 py-3 align-middle whitespace-nowrap"
                     style={{ borderColor: BORDER }}
@@ -655,7 +656,7 @@ function IctAlertEventsList() {
                       <RowActions
                         actions={[
                           {
-                            icon: Check,
+                            icon: iconoComo("check"),
                             label: `Reconocer alerta ${e.ruleName}`,
                             tone: "primary",
                             disabled: acking === e.id,
@@ -679,6 +680,7 @@ function IctAlertEventsList() {
             noun="eventos"
             ariaLabel="Paginación de eventos de alerta ICT"
           />
+          </div>
         </UiStateBoundary>
       )}
     </div>

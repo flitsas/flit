@@ -7,13 +7,15 @@
 import { useCallback, useState } from "react";
 import { SectionTabs, type SectionTab } from "@/components/atom/SectionTabs";
 import { ContenidoTab } from "./contenido/ContenidoTab";
+import { DisenoWebTab } from "./DisenoWebTab";
 import { OrganismosTab } from "./OrganismosTab";
 import { ParametrosTab } from "./ParametrosTab";
+import { ReportesTab } from "./ReportesTab";
 import { PnEstadoConfiguracion, usePnResumen, type PasoConfiguracion } from "./PnEstadoConfiguracion";
-import { TarifasTab } from "./TarifasTab";
+import { CobroWebSection } from "./CobroWebSection";
 import { TramitesTab } from "./TramitesTab";
 
-type TabId = "tramites" | "organismos" | "tarifas" | "parametros" | "contenido";
+type TabId = "tramites" | "organismos" | "tarifas" | "parametros" | "contenido" | "reportes" | "diseno-web";
 
 const PASO_A_PESTANA: Record<PasoConfiguracion, { tab: TabId; ancla: string }> = {
   tipos: { tab: "tramites", ancla: "pn-tipos-titulo" },
@@ -64,7 +66,7 @@ export function PersonaNaturalConsole() {
       id: "tarifas",
       label: "Tarifas",
       title: "Cuánto cuesta cada trámite",
-      render: () => <TarifasTab onCambio={refrescar} />,
+      render: () => <CobroWebSection onCambio={refrescar} />,
     },
     {
       id: "parametros",
@@ -77,6 +79,18 @@ export function PersonaNaturalConsole() {
       label: "Contenido",
       title: "Preguntas, banners y enlaces que lee el ciudadano",
       render: () => <ContenidoTab />,
+    },
+    {
+      id: "reportes",
+      label: "Reportes",
+      title: "Trámites que llegan por el portal y la aplicación",
+      render: () => <ReportesTab />,
+    },
+    {
+      id: "diseno-web",
+      label: "Diseño web",
+      title: "Logo y colores de la web de persona",
+      render: () => <DisenoWebTab onIrABanners={() => onChange("contenido")} />,
     },
   ];
 

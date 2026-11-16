@@ -34,9 +34,12 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
         DateTimeOffset? expiresAt = null,
         DateTimeOffset? validatedAt = null,
         int attempts = 0,
-        int maxAttempts = 5) => new()
+        int maxAttempts = 5,
+        ProcedureInstance? tramite = null) => new()
     {
         Id = Guid.NewGuid(),
+        ProcedureInstanceId = tramite?.Id,
+        ProcedureInstance = tramite,
         TenantId = TenantId,
         Name = nombre,
         DocumentType = "CC",
@@ -49,6 +52,17 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
         Provider = BiometricProviders.Mock,
         Attempts = attempts,
         MaxAttempts = maxAttempts,
+    };
+
+    /// <summary>Trámite con su radicado (FT[1-9]-dígitos) al que se liga una validación.</summary>
+    private static ProcedureInstance Tramite(string radicado) => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = TenantId,
+        ProcedureType = ProcedureTypeFixture.Matricula,
+        ProcedureTypeId = ProcedureTypeFixture.Matricula.Id,
+        ReferenceNumber = radicado,
+        CreatedAt = Now.AddDays(-3),
     };
 
     private static async Task<IProcedureInstanceRepository> RepoAsync(
@@ -235,5 +249,69 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
         var fila = rows.Should().ContainSingle().Which;
         fila.Attempts.Should().Be(4);
         fila.MaxAttempts.Should().Be(5);
+    }
+    // ── Búsqueda por número de radicado ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Radicado_filtra_por_coincidencia_parcial_sobre_el_tramite_ligado()
+    {
+        var repo = await RepoAsync(
+            nameof(Radicado_filtra_por_coincidencia_parcial_sobre_el_tramite_ligado),
+            Validacion("501", BiometricEstados.Aprobado, tramite: Tramite("FT1-0001234")),
+            Validacion("502", BiometricEstados.Rechazado, tramite: Tramite("FT1-0005678")),
+            // Prevalidación standalone: no cuelga de ningún trámite, así que ningún radicado la encuentra.
+            Validacion("503", BiometricEstados.Aprobado));
+
+        // El gestor teclea un trozo del radicado, no el radicado entero.
+        (await DocumentosAsync(repo, new BiometricPersonGroupFilter { ReferenceNumber = "0001234" }))
+            .Should().ContainSingle().Which.Should().Be("501");
+
+        // Sin distinguir mayúsculas: "ft1-" encuentra los dos trámites y deja fuera la standalone.
+        (await DocumentosAsync(repo, new BiometricPersonGroupFilter { ReferenceNumber = "ft1-" }))
+            .Should().BeEquivalentTo(["501", "502"]);
+    }
+
+    [Fact]
+    public async Task Radicado_trata_los_comodines_como_texto_literal()
+    {
+        var repo = await RepoAsync(
+            nameof(Radicado_trata_los_comodines_como_texto_literal),
+            Validacion("511", BiometricEstados.Aprobado, tramite: Tramite("FT1-0001234")));
+
+        (await DocumentosAsync(repo, new BiometricPersonGroupFilter { ReferenceNumber = "%" }))
+            .Should().BeEmpty();
+        (await DocumentosAsync(repo, new BiometricPersonGroupFilter { ReferenceNumber = "FT1_" }))
+            .Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// El radicado filtra validaciones ANTES de agrupar: la fila muestra la validación ligada a ese trámite
+    /// (aunque la persona tenga otra más reciente fuera de él) y el contador solo cuenta las que coinciden.
+    /// </summary>
+    [Fact]
+    public async Task Radicado_muestra_la_validacion_de_ese_tramite_y_cuenta_solo_las_que_coinciden()
+    {
+        var tramite = Tramite("FT2-0004321");
+        var ligada = Validacion("601", BiometricEstados.Aprobado, createdAt: Now.AddDays(-4),
+            validatedAt: Now.AddDays(-4), tramite: tramite);
+        var repo = await RepoAsync(
+            nameof(Radicado_muestra_la_validacion_de_ese_tramite_y_cuenta_solo_las_que_coinciden),
+            ligada,
+            // Más reciente, pero standalone: no pertenece al trámite buscado.
+            Validacion("601", BiometricEstados.Rechazado, createdAt: Now.AddDays(-1)));
+
+        var filtro = new BiometricPersonGroupFilter { ReferenceNumber = "FT2-0004321" };
+        var (rows, total) = await repo.ListBiometricValidationsGroupedByPersonAsync(
+            TenantId, 0, 50, filtro, Now, TestContext.Current.CancellationToken);
+        var counts = await repo.CountBiometricPersonsByEstadoAsync(
+            TenantId, filtro, Now, TestContext.Current.CancellationToken);
+
+        total.Should().Be(1);
+        var fila = rows.Should().ContainSingle().Which;
+        fila.LatestValidationId.Should().Be(ligada.Id);
+        fila.ReferenceNumber.Should().Be("FT2-0004321");
+        fila.ValidationCount.Should().Be(1);
+        counts.Values.Sum().Should().Be(1);
+        counts.GetValueOrDefault(BiometricEstados.Aprobado).Should().Be(1);
     }
 }

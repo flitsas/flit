@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { CheckCircle2, MinusCircle, ShieldAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ToggleSwitch, type ToggleSwitchState } from "../ToggleSwitch";
 import { Accordion } from "../ConfigUi";
@@ -126,7 +126,7 @@ export function TramitesTab({
           onChange={(v) => onChange({ onlyOwnVehiclesTraspaso: v, onlyOwnVehicles: v })}
         />
         {whitelistSlot && (
-          <div className="rounded-[14px] border border-[#DFE5ED] p-4 lg:col-span-2 dark:border-white/10">{whitelistSlot}</div>
+          <div className="rounded-[14px] border border-border p-4 lg:col-span-2">{whitelistSlot}</div>
         )}
       </FamilySection>
 
@@ -190,9 +190,9 @@ function ImprontasSection({
             label={
               <span className="inline-flex items-center gap-1">
                 {enabled ? (
-                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                  <Icono nombre="check" className="h-3.5 w-3.5" />
                 ) : (
-                  <MinusCircle className="h-3.5 w-3.5" aria-hidden />
+                  <Icono nombre="menos" className="h-3.5 w-3.5" />
                 )}
                 {enabled ? "Habilitada" : "Deshabilitada"}
               </span>
@@ -251,9 +251,9 @@ function FamilySection({
           label={
             <span className="inline-flex items-center gap-1">
               {restrictions === 0 ? (
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="check" className="h-3.5 w-3.5" />
               ) : (
-                <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="alerta" className="h-3.5 w-3.5" />
               )}
               {summary}
             </span>
@@ -271,7 +271,7 @@ function FieldError({ message }: { message?: string }) {
     return null;
   }
   return (
-    <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+    <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
       {message}
     </p>
   );

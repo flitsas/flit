@@ -168,14 +168,165 @@ public sealed class TarifasPnTests(WebApplicationFactory<Program> factory) : ICl
         (await e.VersionarAsync(e.Tipo, null, hoy.AddDays(1), ("DERECHOS_TRANSITO", 100))).Error.Should().BeNull();
         (await e.VersionarAsync(e.Tipo, null, hoy.AddDays(10), ("DERECHOS_TRANSITO", 200))).Error.Should().BeNull();
 
-        // Misma fecha de inicio que una existente.
-        (await e.VersionarAsync(e.Tipo, null, hoy.AddDays(10), ("DERECHOS_TRANSITO", 300))).Error.Should().Be(TarifaPnErrores.Solapada);
         // Inicio que cae dentro de una versión ya cerrada: el segundo valor del lote falla y NADA queda del primero.
         var lote = await e.VersionarAsync(e.Tipo, null, hoy.AddDays(5), ("SERVICIO_FLIT", 10), ("DERECHOS_TRANSITO", 400));
 
         lote.Error.Should().Be(TarifaPnErrores.Solapada);
         (await e.Lista.HandleAsync(new TarifaPnFiltro(false, e.Tipo, null, "SERVICIO_FLIT", null), ct)).Should().BeEmpty();
         (await e.Lista.HandleAsync(new TarifaPnFiltro(false, e.Tipo, null, "DERECHOS_TRANSITO", null), ct)).Should().HaveCount(2);
+    }
+
+    // ── HU #14389 — un valor con el mismo inicio reemplaza al de ese día ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14389_AC1_ElValorNuevoConElMismoInicioReemplazaAlDeHoy_SinErrorDeSolape()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        var primera = (await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 100_000))).Tarifas!.Single();
+
+        var segunda = await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 120_000));
+
+        segunda.Error.Should().BeNull();
+        var vigente = (await e.Vigente.HandleAsync(e.Tipo, e.Organismo, hoy, ct)).Single(t => t.Concepto == "DERECHOS_TRANSITO");
+        vigente.Id.Should().Be(segunda.Tarifas!.Single().Id);
+        vigente.ValorCop.Should().Be(120_000);
+        // Solo queda una versión viva en la lista y en el historial; la reemplazada no aparece.
+        var lista = await e.Lista.HandleAsync(new TarifaPnFiltro(false, e.Tipo, null, "DERECHOS_TRANSITO", null), ct);
+        lista.Select(t => t.ValorCop).Should().Equal(120_000L);
+        (await e.Lista.HandleAsync(new TarifaPnFiltro(true, e.Tipo, null, "DERECHOS_TRANSITO", hoy), ct)).Select(t => t.ValorCop).Should().Equal(120_000L);
+        (await e.Historial.HandleAsync(segunda.Tarifas!.Single().Id, ct))!.Select(t => t.ValorCop).Should().Equal(120_000L);
+        (await e.Historial.HandleAsync(primera.Id, ct))!.Select(t => t.ValorCop).Should().Equal(120_000L);
+    }
+
+    [Fact]
+    public async Task HU14389_AC1_VariasCorreccionesElMismoDia_DejanSoloLaUltimaViva()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        await e.VersionarAsync(e.Tipo, e.Organismo, hoy, ("DERECHOS_TRANSITO", 100));
+        await e.VersionarAsync(e.Tipo, e.Organismo, hoy, ("DERECHOS_TRANSITO", 200));
+        (await e.VersionarAsync(e.Tipo, e.Organismo, hoy, ("DERECHOS_TRANSITO", 300))).Error.Should().BeNull();
+
+        (await e.Lista.HandleAsync(new TarifaPnFiltro(false, e.Tipo, e.Organismo, "DERECHOS_TRANSITO", null), ct)).Select(t => t.ValorCop).Should().Equal(300L);
+        (await e.Db.Database.SqlQuery<int>($"""
+            SELECT count(*)::int AS "Value" FROM admin.persona_natural_tariffs WHERE procedure_type_id = {e.Tipo} AND superseded_at IS NOT NULL
+            """).ToListAsync(ct)).Single().Should().Be(2, "las reemplazadas no se borran");
+    }
+
+    [Fact]
+    public async Task HU14389_AC2_LaAuditoriaConservaElValorReemplazadoYElNuevo_ConAutorYHora()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 100_000));
+
+        var segunda = await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 120_000));
+
+        var nuevaId = segunda.Tarifas!.Single().Id;
+        var fila = (await e.Db.Database.SqlQuery<AuditoriaFila>($"""
+            SELECT changed_by, changed_at, old_value, new_value, operation, module FROM admin.tenant_config_audit_logs
+             WHERE entity_name = 'persona_natural_tariffs' AND target_entity_id = {nuevaId}
+            """).ToListAsync(ct)).Should().ContainSingle().Subject;
+        fila.ChangedBy.Should().Be(e.Actor);
+        fila.ChangedAt.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(-5));
+        fila.OldValue.Should().MatchRegex(@"""valorCop"":\s*100000\b");
+        fila.NewValue.Should().MatchRegex(@"""valorCop"":\s*120000\b");
+    }
+
+    [Fact]
+    public async Task HU14389_AC3_UnaCotizacionQueCongeloLaVersionReemplazada_ConservaSuValor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        var congelada = (await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 100_000))).Tarifas!.Single();
+
+        await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 120_000));
+
+        // La solicitud guarda el id de la versión (version_tarifa): la fila sigue existiendo, con su valor y su vigencia.
+        var guardada = await e.Repo.ObtenerAsync(congelada.Id, ct);
+        guardada.Should().NotBeNull();
+        guardada!.ValorCop.Should().Be(100_000);
+        guardada.VigenteDesde.Should().Be(hoy);
+        // Y el cotizador, que lee las vigentes, ya no la ofrece.
+        var portal = e.Scope.ServiceProvider.GetRequiredService<Flit.Infrastructure.PersonaNatural.PersonaNaturalPortalReader>();
+        var vigentes = await portal.TarifasVigentesAsync(hoy, ct);
+        vigentes.Should().NotContain(t => t.VersionId == congelada.Id);
+        vigentes.Single(t => t.TipoId == e.Tipo && t.Concepto == "DERECHOS_TRANSITO").ValorCop.Should().Be(120_000);
+    }
+
+    [Fact]
+    public async Task HU14389_AC4_UnaVersionDeOtroDia_SeVersionaComoSiempre_SinTocarElHistorial()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        var primera = (await e.VersionarAsync(e.Tipo, null, hoy.AddDays(1), ("DERECHOS_TRANSITO", 100))).Tarifas!.Single();
+
+        await e.VersionarAsync(e.Tipo, null, hoy.AddDays(5), ("DERECHOS_TRANSITO", 200));
+
+        var historial = (await e.Historial.HandleAsync(primera.Id, ct))!;
+        historial.Select(v => (v.ValorCop, v.VigenteHasta)).Should().Equal((200L, (DateOnly?)null), (100L, hoy.AddDays(4)));
+        (await e.Db.Database.SqlQuery<int>($"""
+            SELECT count(*)::int AS "Value" FROM admin.persona_natural_tariffs WHERE procedure_type_id = {e.Tipo} AND superseded_at IS NOT NULL
+            """).ToListAsync(ct)).Single().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU14389_UnReemplazoQueSeCruzaConOtraVersionViva_SeRechazaYNoDejaNada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        var a = (await e.VersionarAsync(e.Tipo, null, hoy.AddDays(1), ("DERECHOS_TRANSITO", 100))).Tarifas!.Single();
+        await e.VersionarAsync(e.Tipo, null, hoy.AddDays(3), ("DERECHOS_TRANSITO", 200));
+
+        // Reemplazar la que ya está cerrada por B dejaría el valor nuevo abierto y cruzado con B.
+        (await e.VersionarAsync(e.Tipo, null, hoy.AddDays(1), ("DERECHOS_TRANSITO", 150))).Error.Should().Be(TarifaPnErrores.Solapada);
+
+        var historial = (await e.Historial.HandleAsync(a.Id, ct))!;
+        historial.Select(v => v.ValorCop).Should().Equal(200L, 100L);
+        (await e.Db.Database.SqlQuery<int>($"""
+            SELECT count(*)::int AS "Value" FROM admin.persona_natural_tariffs WHERE procedure_type_id = {e.Tipo} AND superseded_at IS NOT NULL
+            """).ToListAsync(ct)).Single().Should().Be(0, "la transacción se deshizo completa");
+    }
+
+    [Fact]
+    public async Task HU14389_ElTriggerSigueProtegiendoElHistorial_YElIndiceUnicoEsParcial()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        var hoy = e.Repo.HoyColombia();
+        var reemplazada = (await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 100))).Tarifas!.Single();
+        var viva = (await e.VersionarAsync(e.Tipo, null, hoy, ("DERECHOS_TRANSITO", 200))).Tarifas!.Single();
+
+        // La reemplazada es historial: no se edita, no se des-marca, no se borra.
+        var cerrar = async () => await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE admin.persona_natural_tariffs SET valid_to = {hoy} WHERE id = {reemplazada.Id}", ct);
+        (await cerrar.Should().ThrowAsync<Exception>()).Which.ToString().Should().Contain("reemplazada");
+        var desmarcar = async () => await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE admin.persona_natural_tariffs SET superseded_at = NULL WHERE id = {reemplazada.Id}", ct);
+        await desmarcar.Should().ThrowAsync<Exception>();
+        var borrar = async () => await e.Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE id = {reemplazada.Id}", ct);
+        await borrar.Should().ThrowAsync<Exception>();
+        // Marcar una viva como reemplazada no puede de paso cambiar su valor.
+        var marcarYEditar = async () => await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE admin.persona_natural_tariffs SET superseded_at = now(), amount_cop = 1 WHERE id = {viva.Id}", ct);
+        await marcarYEditar.Should().ThrowAsync<Exception>();
+        // Una viva sigue sin poder editarse el valor (regla de siempre).
+        var editarViva = async () => await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE admin.persona_natural_tariffs SET amount_cop = 1 WHERE id = {viva.Id}", ct);
+        await editarViva.Should().ThrowAsync<Exception>();
+        // Dos vivas con el mismo inicio: el índice único parcial las rechaza (insert directo, sin la función).
+        var duplicada = async () => await e.Db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO admin.persona_natural_tariffs (concept, procedure_type_id, transit_office_id, amount_cop, valid_from)
+            VALUES ('DERECHOS_TRANSITO', {e.Tipo}, NULL, 5, {hoy})
+            """, ct);
+        await duplicada.Should().ThrowAsync<Exception>();
+        // El índice existe y es parcial.
+        (await e.Db.Database.SqlQuery<string>($"""
+            SELECT indexdef AS "Value" FROM pg_indexes WHERE indexname = 'uq_persona_natural_tariffs_scope_start'
+            """).ToListAsync(ct)).Single().Should().Contain("superseded_at IS NULL");
     }
 
     [Fact]
@@ -226,7 +377,7 @@ public sealed class TarifasPnTests(WebApplicationFactory<Program> factory) : ICl
 
         var nuevaId = segunda.Tarifas!.Single().Id;
         var filas = await e.Db.Database.SqlQuery<AuditoriaFila>($"""
-            SELECT changed_by, old_value, new_value, operation, module FROM admin.tenant_config_audit_logs
+            SELECT changed_by, changed_at, old_value, new_value, operation, module FROM admin.tenant_config_audit_logs
              WHERE entity_name = 'persona_natural_tariffs' AND target_entity_id = {nuevaId}
             """).ToListAsync(ct);
         var fila = filas.Should().ContainSingle().Subject;
@@ -277,6 +428,7 @@ public sealed class TarifasPnTests(WebApplicationFactory<Program> factory) : ICl
     private sealed class AuditoriaFila
     {
         public Guid? ChangedBy { get; set; }
+        public DateTimeOffset ChangedAt { get; set; }
         public string? OldValue { get; set; }
         public string? NewValue { get; set; }
         public string? Operation { get; set; }
@@ -294,6 +446,8 @@ public sealed class TarifasPnTests(WebApplicationFactory<Program> factory) : ICl
         public int Llamadas { get; private set; }
         public DateOnly HoyColombia() => DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
         public Task<IReadOnlyList<TarifaPnView>> ListarAsync(TarifaPnFiltro filtro, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TarifaPnView>>([]);
+        public Task<IReadOnlyList<TarifaPnView>> ListarDelOrganismoAsync(Guid organismoId, Guid? tipoId, string? concepto, bool soloVigentes, DateOnly? fecha, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TarifaPnView>>([]);
+        public Task<IReadOnlyList<TipoTarifaPnView>> ListarTiposDelPortalAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TipoTarifaPnView>>([]);
         public Task<TarifaPnView?> ObtenerAsync(Guid id, CancellationToken ct = default) => Task.FromResult<TarifaPnView?>(null);
         public Task<IReadOnlyList<TarifaPnView>?> HistorialAsync(Guid id, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TarifaPnView>?>(null);
         public Task<bool> TipoExisteAsync(Guid tipoId, CancellationToken ct = default) => Task.FromResult(true);
@@ -316,6 +470,7 @@ public sealed class TarifasPnTests(WebApplicationFactory<Program> factory) : ICl
         private readonly IServiceScope _scope;
         private readonly string _sufijo = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
+        public IServiceScope Scope => _scope;
         public FlitDbContext Db { get; }
         public IPersonaNaturalTarifaRepository Repo { get; }
         public ListarTarifasPnHandler Lista { get; }

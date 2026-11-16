@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.OtClientProcedures;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtBandejaCounters;
@@ -508,6 +509,29 @@ public static partial class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        // Feature #14420 (HU #14425, ADR-0077) — invitación masiva por Excel, espejo de /security/invitations/bulk*.
+        // Exige además ot.usuarios.manage (OtPermissionMap). Ver AdminOtEndpoints.BulkInvitations.cs.
+        group.MapGet("/users/invite/bulk/template", BulkInviteTemplateAsync)
+            .WithName("AdminOtBulkInviteTemplate")
+            .WithSummary("Descarga la plantilla Excel de invitación masiva del organismo, con el catálogo de roles asignables")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/users/invite/bulk", BulkInviteSubmitAsync)
+            .DisableAntiforgery()
+            .AddEndpointFilter(new CommitOnlyAuditFilter(new AdminAuditFilter(
+                AuditVocabulary.Modules.Users, AuditVocabulary.Operations.BulkInvite, "invitation", "INVITATION")))
+            .WithName("AdminOtBulkInviteSubmit")
+            .WithSummary("Valida (dryRun=true, por defecto) o ejecuta (dryRun=false) la invitación masiva por Excel del organismo")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status413PayloadTooLarge)
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         group.MapGet("/users", ListUsersAsync)
             .WithName("AdminOtListUsers")

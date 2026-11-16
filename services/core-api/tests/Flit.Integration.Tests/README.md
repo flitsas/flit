@@ -120,8 +120,8 @@ debe ser del lector; C2 es simétrico a C1 y actúa como dueño de las filas que
 | Q08 | Historial por placa: `ListProcedureInstancesFilteredHandler` con el request de `PlateHistoryScope.BuildRequest` | `Guid? TenantId` | ✔ | ✔ | ✔ |
 | Q09 | `CompanyReadRepository.ListAsync` (listado de compañías) | — (solo SuperAdmin) | n/a | DTO | ✔ |
 | Q10 | `CompanyReadRepository.GetByIdAsync` | `Guid tenantId` | ✔ | ✔ | ✔ (ficha de cualquier cliente) |
-| Q11 | `CompanyDocumentParamRepository.ListByTenantAsync` | `Guid tenantId` | ✔ | ✔ | — |
-| Q12 | `CompanyAgreementRepository.ListActiveOfficeIdsAsync` | `Guid companyTenantId` | ✔ (contenido exacto) | ✔ | — |
+| Q11 | `CompanyPersonalizedDocumentRepository.ListByTenantAsync` | `Guid tenantId` | ✔ | ✔ | — |
+| Q12 | `TransitGrantRepository.ListEnabledOfficeIdsAsync` | `Guid tenantId` | ✔ (agregado) | ✔ | — |
 | Q13 | `AdminAuditLogRepository.ListPagedAsync` | `Guid? filter.TenantId` | ✔ | ✔ | ✔ |
 | Q14 | `InvitationRepository.ListPendingByTenantAsync` | `Guid tenantId` | ✔ | ✔ | — |
 | Q15 | `AnalyticsReadRepository.GetOverviewAsync` | `Guid? tenantId` | ✔ (agregado) | ✔ | ✔ |

@@ -8,12 +8,16 @@ namespace Flit.Admin.Application.Companies.Domains;
 /// <remarks>
 /// HU #12968: <see cref="ProductCode"/> es el producto del dominio (<c>admin.tenant_domains.purpose</c>):
 /// <c>plataforma</c> para el dominio <c>HUB</c> de la red, o el código del producto.
+/// <see cref="TransitOfficeId"/> (HU #14383) solo viene en el host activo del portal de un organismo; ahí <see cref="IsNetwork"/> es <c>false</c>.
 /// </remarks>
-public readonly record struct NetworkResolution(bool IsNetwork, Guid? HeadTenantId, string ProductCode = "plataforma")
+public readonly record struct NetworkResolution(bool IsNetwork, Guid? HeadTenantId, string ProductCode = "plataforma", Guid? TransitOfficeId = null)
 {
     public static NetworkResolution None { get; } = new(false, null);
 
     public static NetworkResolution Head(Guid headTenantId, string productCode = "plataforma") => new(true, headTenantId, productCode);
+
+    /// <summary>Host de un portal de organismo (HU #14383): NO es una red (<see cref="IsNetwork"/> sigue en <c>false</c>) ni acota a ninguna.</summary>
+    public static NetworkResolution Portal(Guid transitOfficeId) => new(false, null, "plataforma", transitOfficeId);
 }
 
 /// <summary>

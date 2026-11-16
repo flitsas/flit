@@ -9,7 +9,9 @@ function buildDocumentTabHtml(kind: "loading" | "error", message: string): strin
   const title = message.replace(/</g, "");
   const track = isError ? "#FF4E00" : "#557eff";
   const accent = isError ? "#FF4E00" : "#00dbd5";
-  const textColor = isError ? "#FF4E00" : "#557eff";
+  // UI Kit 2026: el texto va en los tonos AA del kit (#1D53FF y #BD3A00); la pista y el carro siguen en el azul y
+  // turquesa del dibujo. Es HTML suelto en otra pestaña: no hay tokens CSS, por eso los valores van escritos.
+  const textColor = isError ? "#BD3A00" : "#1D53FF";
   const animCss = isError
     ? ""
     : `
@@ -41,7 +43,7 @@ function buildDocumentTabHtml(kind: "loading" | "error", message: string): strin
   @keyframes car-loader-spin-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @keyframes car-loader-spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
   @keyframes car-loader-dot-blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
-  html, body { margin: 0; height: 100%; background: #fcfbf8; }
+  html, body { margin: 0; height: 100%; background: #e6f0ff; }
   body {
     display: flex;
     align-items: center;

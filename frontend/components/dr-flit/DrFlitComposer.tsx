@@ -1,6 +1,6 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { FormEvent, type RefObject, useState } from "react";
 
 export function DrFlitComposer({
@@ -58,13 +58,13 @@ export function DrFlitComposer({
         type="submit"
         disabled={disabled || !value.trim()}
         aria-label="Enviar mensaje"
-        className="h-10 w-10 shrink-0 rounded-full grid place-items-center text-white transition-opacity disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+        className="h-10 w-10 shrink-0 rounded-full grid place-items-center text-(--dr-flit-text-inverse) transition-opacity disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
         style={{
           background: "var(--dr-flit-gradient-primary)",
           boxShadow: "var(--dr-flit-shadow-fab)",
         }}
       >
-        <Send className="h-4 w-4" aria-hidden="true" />
+        <Icono nombre="radicacion" className="h-4 w-4" />
       </button>
     </form>
   );

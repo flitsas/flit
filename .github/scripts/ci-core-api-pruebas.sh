@@ -16,7 +16,7 @@ contar() { sed -n 's/^    //p' | grep -c . ; }
 
 case "$carril" in
   admin)
-    exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" "${cob[@]}" ;;
+    exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" --blame-hang --blame-hang-timeout 8min --blame-hang-dump-type none "${cob[@]}" ;;
 
   integration)
     p=tests/Flit.Integration.Tests

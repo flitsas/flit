@@ -425,10 +425,14 @@ redirect_uri no es válido para este cliente»* (`OidcNetworkRedirects`). En un 
 1. `FLIT_NETWORK_DOMAINS_ENABLED=true` en el `.env`. Con eso, `@flit/auth` (hub y Trámites) pregunta a
    `GET /api/v1/public/network` cuál es el hub de la red del host de la petición. La respuesta se guarda 60 s. En los
    hosts de FLIT responde `null` y todo sigue igual.
-2. Los dos dominios en `admin.tenant_domains`. La pantalla de administración solo registra el `HUB`. El de producto
-   se inserta por SQL mientras tanto: misma red, `purpose = 'tramites'`, `status = 'active'` y fechas de verificación y
-   certificado.
-3. nginx: un `server{}` por dominio, con todo hacia la app, **sin** `location /api/v1/` directo al gateway (el Bearer
+2. Los dos dominios se registran en la pantalla de la empresa (Dominios de la red): el principal y uno por producto
+   habilitado. El panel indica los registros DNS (un TXT y un A por dominio) y comprueba el TXT solo. `Domains:EdgeIp`
+   (`FLIT_EDGE_IP`) es la IP que se le pide al cliente.
+   Con el certificado emitido, el SuperAdmin pulsa **Activar red**: la activación es aparte porque, desde ese momento,
+   los usuarios de la red ya no inician sesión por el hub de FLIT. En PDN el certificado y la ruta los crea el
+   sincronizador del clúster (`flit-gitops/services/flit2-pdn/domain-sync.yaml`). En DEV y QA se siguen creando a mano
+   en la 177, y el certificado se informa con `PUT /api/v1/internal/domains/{host}/certificate`.
+3. nginx (DEV y QA): un `server{}` por dominio, con todo hacia la app, **sin** `location /api/v1/` directo al gateway (el Bearer
    lo pone el proxy de la app). Plantilla: sección «Con la FLIT Suite» de `flit-network-domains.conf.example`. El
    catch-all de arriba es solo para la sesión legacy.
 
@@ -615,7 +619,7 @@ Cuando uno se despliegue (por PR, no a mano):
 
 | Tema | Estado |
 |---|---|
-| Dominios de red (Marca Blanca) con la suite | Soportado (§6.4). Falta: alta de dominios de producto desde la administración (hoy, SQL); `core-consultas` y `core-notificaciones` aceptan solo el emisor de FLIT (`Platform:Auth:Issuers`), así que rechazan los tokens de una red; el cierre de sesión del hub de la red no abre el front-channel logout de los productos de la red (sin verificar: la sesión del producto podría seguir abierta hasta que venza su token); las rutas viejas de Trámites en el hub de la red (A-11) redirigen a la Trámites de FLIT |
+| Dominios de red (Marca Blanca) con la suite | Soportado (§6.4). Falta: `core-consultas` y `core-notificaciones` aceptan solo el emisor de FLIT (`Platform:Auth:Issuers`), así que rechazan los tokens de una red; el cierre de sesión del hub de la red no abre el front-channel logout de los productos de la red (sin verificar: la sesión del producto podría seguir abierta hasta que venza su token); las rutas viejas de Trámites en el hub de la red (A-11) redirigen a la Trámites de FLIT |
 | Trámites en su host con `FLIT_SESSION_MODE=legacy` | No soportado: el CORS del gateway no incluye `<ambiente>.tramites.flitsas.online`. Por eso, en el rollback de la fase 3 la raíz vuelve a Trámites |
 | Límite de peticiones del gateway por IP | Detrás de nginx y del servidor de Trámites, todas las peticiones comparten IP: el tope (600/min) es casi global. Vigilar 429 en DEV |
 | Duración de sesión | La sesión del producto dura 14 días y la del hub 12 h (caso H1 de `matriz-pruebas.md`); decisión pendiente |

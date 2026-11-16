@@ -37,17 +37,27 @@ export interface AdminAccessDecision {
   redirectTo?: string;
 }
 
+export interface RouteAccessOptions {
+  /**
+   * Sesión de @flit/auth: el access token dura 15 minutos y el servidor lo renueva en la siguiente llamada, así que uno
+   * vencido no significa «sin sesión» (mismo criterio de `useAuthGate`). Se decide con sus claims; si la sesión ya no
+   * sirve, la API responde SESSION_EXPIRED. Sin esto, volver a una pantalla tras un rato sin actividad daba /403.
+   */
+  renewableSession?: boolean;
+}
+
 /** Decisión común: sesión válida + regla de la tabla para el pathname (`fallbackPath` si ninguna regla lo cubre). */
 function evaluateRouteAccess(
   token: string | null | undefined,
   pathname: string,
   fallbackPath: string,
+  options: RouteAccessOptions = {},
 ): AdminAccessDecision {
-  if (!hasActiveSession(token)) {
+  const claims = decodeJwtPayload(token);
+  if (options.renewableSession ? !claims : !hasActiveSession(token)) {
     return { allowed: false, redirectTo: FORBIDDEN_PATH };
   }
 
-  const claims = decodeJwtPayload(token);
   // Una ruta que ninguna regla cubre se trata como la raíz de su sección: deny-by-default.
   const effectivePath = matchRouteRule(pathname) ? pathname : fallbackPath;
   const decision = resolveRouteAccess(claims, effectivePath);
@@ -65,16 +75,17 @@ function evaluateRouteAccess(
 export function evaluateAdminAccess(
   token: string | null | undefined,
   pathname?: string,
+  options?: RouteAccessOptions,
 ): AdminAccessDecision {
-  return evaluateRouteAccess(token, pathname ?? "/admin", "/admin");
+  return evaluateRouteAccess(token, pathname ?? "/admin", "/admin", options);
 }
 
 /**
  * Evalúa si un token habilita el acceso a la sección de empresa (/empresa/*): AdminCompany y SuperAdmin. Sin sesión
  * activa → /403; con sesión sin el rol → inicio con el aviso.
  */
-export function evaluateEmpresaAccess(token: string | null | undefined): AdminAccessDecision {
-  return evaluateRouteAccess(token, "/empresa", "/empresa");
+export function evaluateEmpresaAccess(token: string | null | undefined, options?: RouteAccessOptions): AdminAccessDecision {
+  return evaluateRouteAccess(token, "/empresa", "/empresa", options);
 }
 
 /**

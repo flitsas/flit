@@ -284,7 +284,10 @@ public sealed class WizardStateHandlerTests
     public async Task Get_OtConIdentidadDeshabilitada_SigueExigiendoIdentidad()
     {
         var ct = TestContext.Current.CancellationToken;
-        Setup(Base("matricula_inicial"));
+        var conPlaca = Base("matricula_inicial");
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        conPlaca.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        Setup(conPlaca);
 
         var policy = Substitute.For<IIdentityValidationPolicy>();
         policy.IsIdentityValidationRequiredAsync(
@@ -945,6 +948,150 @@ public sealed class WizardStateHandlerTests
         result.CanSubmit.Should().BeTrue();
     }
 
+    // ── Matrícula por preasignación: la falta de firma no veta el envío sin placa ─────────────
+
+    [Fact]
+    public async Task Get_MatriculaSinPlaca_SinFirma_FirmaExentaTrue_YPuedeEnviarse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance); // sin AprobarIdentidadComprador: nadie firmó
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.FirmaExentaPorPreasignacion.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.IdentidadNoAprobada);
+        result.CanSubmit.Should().BeTrue();
+        result.Steps.Single(s => s.Index == 4).Status.Should().Be("incomplete", "el paso de identidad sigue mostrando su estado real");
+    }
+
+    [Fact]
+    public async Task Get_MatriculaSinPlaca_ConDocumentosIncompletos_SigueSinPoderEnviarse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.FirmaExentaPorPreasignacion.Should().BeTrue();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.DocumentosIncompletos);
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Get_MatriculaConPlaca_SinFirma_FirmaExentaFalse_YSigueBloqueando()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.FirmaExentaPorPreasignacion.Should().BeFalse();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.IdentidadNoAprobada);
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null, true, false)]            // OT en la columna, canal Quipux activo
+    [InlineData("field_values", true, false)]  // columna vacía, OT solo en field_values: no se escapa
+    [InlineData(null, false, true)]            // OT sin canal Quipux activo: canal gestor/OT
+    public async Task Get_MatriculaSinPlaca_SegunElCanalQuipux_FirmaExentaPorPreasignacion(
+        string? dondeVaElOt, bool canalQuipuxActivo, bool exentaEsperada)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ot = Guid.NewGuid();
+        var tipo = new ProcedureType
+        {
+            Id = Guid.NewGuid(),
+            Code = "MATRICULA_NUEVA",
+            Name = "Matrícula inicial",
+            Family = "MATRICULAS",
+            GateProfile = ProcedureTypeFixture.Matricula.GateProfile,
+            Steps = ProcedureTypeFixture.Matricula.Steps,
+            ExternalRefs = """{"quipux":{"familia":"MATRICULA"}}""",
+        };
+        var instance = Base("matricula_inicial");
+        instance.ProcedureType = tipo;
+        if (dondeVaElOt == "field_values")
+            instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "transit_office_id", ValueText = ot.ToString(), Source = "user" });
+        else
+            instance.TransitOfficeId = ot;
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance); // nadie firmó
+        Setup(instance);
+        var canal = Substitute.For<ITransitOfficeQuipuxCanalReader>();
+        canal.GetAsync(ot, Arg.Any<CancellationToken>())
+            .Returns(new TransitOfficeQuipuxCanal("11001", canalQuipuxActivo, canalQuipuxActivo, canalQuipuxActivo));
+        var handler = new GetWizardStateHandler(
+            _repo, prendaRepo: new StubPrendaRepo(PrendaDecision.Omitir), quipuxCanalReader: canal);
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.FirmaExentaPorPreasignacion.Should().Be(exentaEsperada);
+        result.CanSubmit.Should().Be(exentaEsperada);
+        result.Blockers.Contains(TramiteEstadoErrores.IdentidadNoAprobada).Should().Be(!exentaEsperada);
+    }
+
+    [Theory]
+    [InlineData("persona_natural")]
+    [InlineData("ict")]
+    public async Task Get_MatriculaSinPlaca_ConOrigenDistintoDePlataforma_FirmaExentaFalse(string origin)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.Origin = origin;
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
+        instance.PreflightSnapshots.Add(Preflight("green"));
+        instance.Actors.Add(Actor("comprador", "777"));
+        CompletarDocsMatricula(instance);
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.FirmaExentaPorPreasignacion.Should().BeFalse();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.IdentidadNoAprobada);
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Get_TraspasoSinFirma_FirmaExentaFalse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Setup(Base("traspaso"));
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.FirmaExentaPorPreasignacion.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FirmaExentaPorPreasignacion_SerializaEnCamelCase()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new WizardStateDto("MATRICULAS", null, 5, [], false, [], "borrador", [])
+            {
+                FirmaExentaPorPreasignacion = true,
+            },
+            System.Text.Json.JsonSerializerOptions.Web);
+
+        json.Should().Contain("\"firmaExentaPorPreasignacion\":true");
+    }
+
     // ── Gating ESTRICTO de documentos obligatorios (Slice 4a-fix) ─────────────
 
     [Fact]
@@ -1073,6 +1220,8 @@ public sealed class WizardStateHandlerTests
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vin", ValueText = "1HGCM82633A004352", Source = "user" });
         instance.PreflightSnapshots.Add(Preflight("green"));
         instance.Actors.Add(ActorNit("comprador"));
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         CompletarDocsMatricula(instance);
         Setup(instance);
 

@@ -123,8 +123,8 @@ internal sealed class StandalonePersonPrefillAdapter : IStandaloneRuntPersonPref
 
     /// <summary>
     /// Mismo mapeo documentType FLIT → proveedor que aplica el lookup del wizard (CC→CC, CE→CE,
-    /// PAS→PA, TI→PPT). NIT devuelve null: una persona jurídica va por el endpoint de RUES, no por la
-    /// cadena de conductor.
+    /// PAS→PA, TI→PPT alias, PPT nativo→PPT — HU #14501 / ADR-0082). NIT devuelve null: una persona
+    /// jurídica va por el endpoint de RUES, no por la cadena de conductor.
     /// </summary>
     private static string? MapDocumentType(string documentType) =>
         documentType.ToUpperInvariant() switch
@@ -133,6 +133,7 @@ internal sealed class StandalonePersonPrefillAdapter : IStandaloneRuntPersonPref
             "CE" => "CE",
             "PAS" => "PA",
             "TI" => "PPT",
+            "PPT" => "PPT",
             "NIT" => null,
             _ => documentType,
         };

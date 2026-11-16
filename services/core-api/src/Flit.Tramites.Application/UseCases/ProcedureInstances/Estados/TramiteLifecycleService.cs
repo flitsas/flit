@@ -60,7 +60,13 @@ public sealed class TramiteLifecycleService(
     // Bug #13194 (P4, D2) — al final por la misma razón. Null ⇒ el gate bloquea igual, sin notificar.
     IFirmaPendienteNotifier? firmaNotifier = null,
     // Bug #13194 (MAYOR-1) — accesor scoped para la extensión `partesSinFirma` del 409. Null en tests.
-    UltimoBloqueoFirma? ultimoBloqueo = null) : ITramiteLifecycleService
+    UltimoBloqueoFirma? ultimoBloqueo = null,
+    // Excepción de firma de la matrícula sin placa: se excluye el canal Quipux (OT efectivo). AL FINAL por la misma
+    // razón. Null ⇒ con OT elegido no hay exención (fail-safe).
+    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null,
+    // Copia de la firma de baúl al radicar. AL FINAL por la misma razón. Null en tests que no la ejercitan:
+    // sin capturador el trámite sigue leyendo el baúl en vivo (comportamiento previo).
+    FirmaBaulCopiaCapturer? firmaBaulCopia = null) : ITramiteLifecycleService
 {
     private readonly ILogger<TramiteLifecycleService> _logger =
         logger ?? NullLogger<TramiteLifecycleService>.Instance;
@@ -205,6 +211,12 @@ public sealed class TramiteLifecycleService(
                     {
                         var notificadas = await NotificarPartesSinFirmaAsync(instance, faltantes, ct)
                             .ConfigureAwait(false);
+
+                        // Matrícula sin placa: la falta de firma no es la causa del bloqueo (otro gate lo
+                        // es); se notificó, pero no se reporta ni registra como firma pendiente.
+                        if (await FirmaGate.EximidaPorPreasignacionAsync(instance, quipuxCanalReader, ct).ConfigureAwait(false))
+                            return TramiteTransitionOutcome.Fail(code, detail);
+
                         RegistrarBloqueo(notificadas);
                         return TramiteTransitionOutcome.Fail(
                                 code, $"{detail} Firma pendiente de: {FirmaGate.PartesConNotificacion(notificadas)}.")
@@ -231,9 +243,15 @@ public sealed class TramiteLifecycleService(
                 // Cada parte sin firma (baúl o VID ausentes o vencidos) recibe el correo de validación. Un
                 // fallo de la notificación no cambia el 409: queda como estado «fallida» de esa parte.
                 var notificadas = await NotificarPartesSinFirmaAsync(instance, sinFirma, ct).ConfigureAwait(false);
-                RegistrarBloqueo(notificadas);
-                return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(notificadas))
-                    with { PartesSinFirma = notificadas };
+
+                // Matrícula sin placa (preasignación): el correo de validación se envía igual, pero la
+                // falta de firma no bloquea. Con placa asignada la firma sigue siendo obligatoria.
+                if (!await FirmaGate.EximidaPorPreasignacionAsync(instance, quipuxCanalReader, ct).ConfigureAwait(false))
+                {
+                    RegistrarBloqueo(notificadas);
+                    return TramiteTransitionOutcome.Fail(TramiteEstadoErrores.FirmaPendiente, FirmaGate.Detalle(notificadas))
+                        with { PartesSinFirma = notificadas };
+                }
             }
         }
 
@@ -266,6 +284,21 @@ public sealed class TramiteLifecycleService(
                 await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
             if (mandatoError is not null)
                 return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError, sinCandidatos));
+        }
+
+        // Firma de baúl: al RADICAR (salir de borrador, con todos los gates ya superados) se copia al trámite la
+        // firma de cada parte; desde entonces FUR, regeneraciones, gate y listado usan la copia y no el baúl en
+        // vivo. Va en la MISMA unidad de trabajo que la transición. Volver a borrador la descarta (el borrador
+        // vuelve a leer el baúl en vivo y se recapturará al radicar de nuevo).
+        if (from == TramiteEstado.Borrador
+            && command.ToStatus is not (TramiteEstado.Borrador or TramiteEstado.Anulado)
+            && firmaBaulCopia is not null)
+        {
+            await firmaBaulCopia.CapturarAsync(instance, ct).ConfigureAwait(false);
+        }
+        else if (command.ToStatus == TramiteEstado.Borrador)
+        {
+            instance.FirmaBaulCopiadaAt = null;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -531,6 +564,7 @@ public sealed class TramiteLifecycleService(
         SubmitGate.FurRequerido => "generar el FUR",
         SubmitGate.OrganismoRequerido => "seleccionar el organismo de tránsito",
         SubmitGate.ImprontaRequerida => "generar la impronta de motor y chasis",
+        SubmitGate.TipoServicioRequerido => "seleccionar el tipo de servicio del vehículo",
         _ => $"resolver un requisito pendiente ({code})",
     };
 
@@ -574,9 +608,19 @@ public sealed class TramiteLifecycleService(
         if (snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct).ConfigureAwait(false))
             snapshot = await snapshotRepo.GetByInstanceIdAsync(instance.Id, command.TenantId, ct).ConfigureAwait(false);
 
+        // Matrícula sin placa (preasignación): la identidad/firma no bloquea la preparación. Los demás
+        // gates (documentos, impronta, preflight, prenda…) siguen igual.
+        var identidadExenta = await FirmaGate.EximidaPorPreasignacionAsync(instance, quipuxCanalReader, ct).ConfigureAwait(false);
         var gateErrors = snapshot is not null
-            ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos)
-            : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos, improntaObligatoria);
+            ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos, identidadExenta)
+            : SubmitGate.Evaluate(
+                instance,
+                identidadExenta
+                    ? new HashSet<string>(
+                        [BiometricRules.ParteComprador, BiometricRules.ParteVendedor], StringComparer.OrdinalIgnoreCase)
+                    : identidadAprobada,
+                docsCompletos,
+                improntaObligatoria);
         if (gateErrors.Count > 0)
             return (gateErrors[0], DetalleGatePreparacion(gateErrors));
 
@@ -754,7 +798,8 @@ public sealed class TramiteLifecycleService(
         ProcedureInstance instance,
         ProcedureTypeSnapshotRecord snapshot,
         IReadOnlySet<string> approvedParties,
-        bool? docsCompletosOverride)
+        bool? docsCompletosOverride,
+        bool identidadExenta = false)
     {
         var root = JsonNode.Parse(snapshot.Snapshot) as JsonObject ?? [];
         var gateProfile = ProcedureTypeGateProfile.FromJson(root["gateProfile"]?.ToJsonString());
@@ -763,6 +808,7 @@ public sealed class TramiteLifecycleService(
         {
             DocumentosCompletos = docsCompletosOverride ?? DocsCompletos(instance),
             BiometricsApproved = MapPartiesToEntityCodes(approvedParties),
+            IdentidadExentaPorPreasignacion = identidadExenta,
             FurGenerado = instance.Attachments.Any(a =>
                 string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)),
             PreflightProviderError = LatestPreflightHasProviderError(instance),

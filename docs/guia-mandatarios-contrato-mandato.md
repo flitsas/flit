@@ -59,6 +59,18 @@ Es el lugar principal. Aquí la compañía registra a las personas y decide dón
 
 El formulario **bloquea el guardado** si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados, o si elige «Validación de identidad» sin correo. En ese caso muestra una alerta indicando qué hacer: capturarle la firma del baúl o registrar su correo para la validación.
 
+#### Cómo identifica el contrato a un mandatario de modelo Persona jurídica
+
+Con **modelo** Persona jurídica en la ficha, el contrato nombra a la entidad con su razón social y su NIT, y nunca con cédula de ciudadanía. Lo decide el modelo del mandatario, no el documento. No se debe confundir con el **tipo de mandato** Persona jurídica (§3.3 y §3.4), donde actúa el organismo o la unión temporal.
+
+| Dónde | Texto |
+|---|---|
+| Cuerpo: Genérico, Municipio y Bello sin unión temporal | `Y de {razón social}, con NIT No. {nit}, quien para los efectos del presente contrato se denominará EL MANDATARIO,` |
+| Cuerpo: Bello con unión temporal | `Y de la otra parte, {razón social}, con NIT No. {nit}, quien para efectos del presente contrato se denominará EL MANDATARIO,` |
+| Recuadro del mandatario | `RAZÓN SOCIAL: {razón social}` y `NIT: {nit}`, aunque el organismo tenga datos institucionales configurados |
+
+El simulador usa los mismos textos. No cambian la Persona natural, un mandatario sin modelo registrado (se trata como Persona natural), el Formato en blanco, el mandato abierto, el institucional ni el formato Sabaneta, que sigue nombrando a su unión temporal.
+
 #### Alta con validación de identidad automática
 
 Al **crear** un mandatario persona natural con forma de firma «Validación de identidad», el sistema **lanza solo la validación**, con el mismo flujo de un trámite: Kyverum envía un enlace al correo del mandatario, la persona captura su identidad y el resultado vuelve por webhook a la ficha. No hay que ir al módulo Identidad. Pasa igual cuando el alta la hace el Admin del OT desde el hub; la validación queda a nombre de la **compañía** del mandatario.
@@ -126,11 +138,9 @@ Qué significa cada tipo:
 
 Esta configuración por compañía **manda sobre** la del organismo cuando ambas existen.
 
-### 3.4. Convenio comercial compañía ↔ organismo
+### 3.4. Cuándo el contrato no lleva bloque de firma del mandatario
 
-Cuando existe un convenio comercial registrado entre la compañía y el organismo, el contrato de mandato **no lleva bloque de firma del mandatario**: firma solo el mandante. Los datos del mandatario siguen apareciendo en el cuerpo del contrato; lo que desaparece es el recuadro de firma.
-
-El sistema distingue dos situaciones que parecen iguales pero no lo son: un organismo al que **nadie** le ha registrado convenios se comporta distinto de uno donde sí hay convenios pero esta compañía no está incluida.
+Cuando el tipo de mandato es **Persona jurídica**, el contrato de mandato **no lleva bloque de firma del mandatario**: firma solo el mandante. Los datos del mandatario siguen apareciendo en el cuerpo del contrato; lo que desaparece es el recuadro de firma.
 
 ### 3.5. Durante la operación: aprobación del organismo
 
@@ -184,7 +194,7 @@ En los tres casos los datos del mandatario siguen apareciendo en el **cuerpo** d
 |---|---|---|
 | **Estampada** | La firma o el sello del mandatario impresos sobre la línea | Es el caso normal |
 | **Manual** | Línea de guiones con sus datos debajo, sin estampa | Marca histórica de firma física en ese organismo (ya no se asigna), o que el mandatario sea el propio organismo |
-| **Sin bloque** | El recuadro solo lleva al mandante | Convenio comercial entre la compañía y el organismo, o tipo Persona jurídica |
+| **Sin bloque** | El recuadro solo lleva al mandante | Tipo Persona jurídica |
 
 ### Las dos formas de tener con qué firmar
 
@@ -209,7 +219,7 @@ La firma posterior sigue disponible solo para las partes **comprador** y **vende
 | Aparece un mandatario pero no el esperado | Las empresas marcadas dentro de ese organismo en su ficha (puede estar acotado por NIT) |
 | Error `mandatario_requerido` al aprobar | Hay varios candidatos y ninguno resuelve solo: elegir en el diálogo o definir un mandatario por defecto en Plataforma → Mandatos |
 | El trámite no pasa la validación del mandatario al radicar | El mandatario no tiene firma del baúl vigente ni validación propia aprobada (o no tiene vigencia propia activa), o no hay mandatario activo y vigente para el organismo y la compañía |
-| El mandato sale sin firma del mandatario | Revisar si hay convenio comercial con ese organismo, o si el tipo es Persona jurídica |
+| El mandato sale sin firma del mandatario | Revisar si el tipo es Persona jurídica |
 | El contrato nombra a un municipio o una UT que no corresponde | Se aplicó al organismo una redacción de otro (Sabaneta o Bello). Cambiar a «Automática» o a la genérica |
 | No se puede guardar el mandatario | La alerta roja indica en qué organismos queda sin poder firmar. Asignarle la firma del baúl o registrar su correo para lanzar la validación de identidad |
 | El mandatario aparece «sin validación» o «en curso» | Revisar el correo; usar «Reenviar validación». Una validación como comprador o vendedor no cuenta |
@@ -236,7 +246,6 @@ Para quien necesite consultar o auditar directamente.
 |---|---|
 | `admin.transit_office_mandate_config` | Configuración por organismo: redacción, familia del mandatario, datos de la UT (nombre, NIT, ciudad cámara, sigla), plantilla propia |
 | `admin.company_ot_mandate_rules` | Configuración por compañía y organismo: tipo de mandato y mandatario por defecto. Manda sobre la anterior |
-| `admin.company_transit_office_agreements` | Convenios comerciales que suprimen el bloque de firma del mandatario |
 | `admin.company_personalized_documents` | PDF de mandato propio de la compañía que reemplaza al generado |
 
 ### Rastro en el trámite

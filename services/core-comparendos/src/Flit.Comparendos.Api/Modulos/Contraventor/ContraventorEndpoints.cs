@@ -100,8 +100,12 @@ public static class ContraventorEndpoints
     };
 }
 
-/// <summary>Trabajo diario: reintenta la consulta de contraventor de lo pendiente o con error, hasta 3 intentos (S-35).</summary>
-public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioContraventor servicio, IProductosHabilitados productos, ILogger<ReintentoContraventor> logger) : IEjecutorTrabajo
+/// <summary>
+/// Trabajo diario: reintenta la consulta de contraventor de lo pendiente o con error, hasta 3 intentos (S-35). Como
+/// también lo encola cada ciclo de ingesta, gasta como máximo un intento por comparendo y por día (GDC punto 20).
+/// </summary>
+public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioContraventor servicio, IProductosHabilitados productos, Reloj reloj,
+    ILogger<ReintentoContraventor> logger) : IEjecutorTrabajo
 {
     public bool Atiende(TipoTrabajo tipo) => tipo == TipoTrabajo.ReintentoContraventor;
 
@@ -119,9 +123,11 @@ public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioCont
         }
 
         empresas = habilitadas;
+        var hoy = reloj.Hoy;
         var ids = await db.Comparendos.AsNoTracking()
-            .Where(c => empresas.Contains(c.TenantId) && c.Activo && c.Contraventor == null && c.IntentosConsultaContraventor < 3
-                && (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error))
+            .Where(c => empresas.Contains(c.TenantId) && c.Activo && c.Contraventor == null && c.IntentosConsultaContraventor < ServicioContraventor.MaxIntentos
+                && (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error)
+                && (c.UltimoIntentoConsultaContraventor == null || c.UltimoIntentoConsultaContraventor < hoy))
             .OrderBy(c => c.CreadoEn).Select(c => c.Id).Take(2000).ToListAsync(ct).ConfigureAwait(false);
         foreach (var id in ids)
         {

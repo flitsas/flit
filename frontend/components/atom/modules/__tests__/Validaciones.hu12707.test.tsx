@@ -217,7 +217,7 @@ describe('Administrador de Compañía — mismo alcance de hoy (AC8)', () => {
     renderValidaciones();
     await screen.findByText('Carolina Pérez');
 
-    expect(screen.getByPlaceholderText('Nombre o número de documento')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Nombre, documento o radicado')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /periodo/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /\+ filtro/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /columnas/i })).toBeInTheDocument();
@@ -229,7 +229,7 @@ describe('Administrador de Compañía — mismo alcance de hoy (AC8)', () => {
     renderValidaciones();
     await screen.findByText('Carolina Pérez');
 
-    await user.type(screen.getByPlaceholderText('Nombre o número de documento'), '1020445118');
+    await user.type(screen.getByPlaceholderText('Nombre, documento o radicado'), '1020445118');
 
     await waitFor(() => expect(ultimaPeticion()[0]).toMatchObject({ documentNumber: '1020445118', page: 1 }));
     expect(ultimaPeticion()[0].name).toBeUndefined();

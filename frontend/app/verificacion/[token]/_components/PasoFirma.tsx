@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { SignaturePad, type SignaturePadHandle } from "./SignaturePad";
 import { AUTORIZACION_FIRMA_INSTRUCTION, AUTORIZACION_FIRMA_TEXT, AUTORIZACION_FIRMA_TITLE } from "@/lib/captura-manual/consent";
 import { isComplete, offendingCapture, type CaptureKey, type Captures } from "@/lib/captura-manual/captures";
+import type { ValidacionFotos } from "@/lib/captura-manual/validacionFotos";
 import {
   ManualCaptureError,
   terminalKindOf,
@@ -23,6 +24,7 @@ export function PasoFirma({
   token,
   client,
   captures,
+  validacion,
   onSignature,
   onOutcome,
   onSendingChange,
@@ -30,6 +32,8 @@ export function PasoFirma({
   token: string;
   client: ManualCaptureClient;
   captures: Captures;
+  /** Resultado de validar cada foto en el dispositivo (informativo): viaja como texto, nunca como imagen. */
+  validacion?: ValidacionFotos;
   onSignature: (png: Blob | null) => void;
   onOutcome: (o: SubmitOutcome) => void;
   /** El Flow oculta este paso y muestra la pantalla «Enviando…» mientras dura el POST final. */
@@ -47,7 +51,7 @@ export function PasoFirma({
     onSendingChange?.(true);
     setError(null);
     try {
-      await client.submit(token, captures);
+      await client.submit(token, captures, validacion);
       onOutcome({ kind: "success" });
       return;
     } catch (e) {
@@ -97,7 +101,7 @@ export function PasoFirma({
         aria-label="Texto de autorización"
         tabIndex={0}
         data-testid="autorizacion-firma"
-        className="max-h-40 overflow-y-auto rounded-2xl border border-flit-gray bg-slate-50 p-3 text-xs leading-snug text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+        className="max-h-40 overflow-y-auto rounded-2xl border border-border bg-secondary p-3 text-xs leading-snug text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
       >
         {AUTORIZACION_FIRMA_TEXT}
       </div>
@@ -108,7 +112,7 @@ export function PasoFirma({
         La firma se traza en pantalla y no tiene alternativa de teclado. Si no puedes trazarla, pídele ayuda a FLIT 2.0.
       </p>
       {error ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           {error}
         </p>
       ) : null}

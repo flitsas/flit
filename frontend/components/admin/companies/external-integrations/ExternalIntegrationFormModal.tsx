@@ -3,7 +3,7 @@
 // HU #14068 AC2 — Alta de la integración de Persona Natural de la compañía: modal normal (no lateral) con nombre y
 // finalidad opcionales (la API pone valores por defecto). Si falla, conserva lo escrito y muestra el motivo.
 import { useState } from "react";
-import { PlugZap } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { Modal } from "@/components/atom/Modal";
@@ -11,11 +11,10 @@ import type { NewExternalIntegration } from "@/lib/api/external-integrations";
 import { externalIntegrationErrorMessage } from "./externalIntegrationErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
-  "dark:border-white/15 dark:bg-[#162744] dark:text-white";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
-const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
+  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary";
+const HINT_CLS = "text-xs font-normal text-muted-foreground";
 const DISPLAY_NAME_MAX = 120;
 const PURPOSE_MAX = 300;
 
@@ -58,14 +57,14 @@ export function ExternalIntegrationFormModal({ onClose, onCreate }: ExternalInte
       busy={busy}
       title="Crear conexión de Persona Natural"
       description="Conecta el portal de Persona Natural con esta compañía. La clave secreta se genera al crear y se muestra una sola vez."
-      icon={PlugZap}
+      icono="integraciones"
       size="md"
       footer={
         <div className="flex justify-end gap-2">
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="external-integration-form" variant="primary" icon={PlugZap} loading={busy}>
+          <PnButton type="submit" form="external-integration-form" variant="primary" icon={iconoComo("integraciones")} loading={busy}>
             Crear conexión
           </PnButton>
         </div>

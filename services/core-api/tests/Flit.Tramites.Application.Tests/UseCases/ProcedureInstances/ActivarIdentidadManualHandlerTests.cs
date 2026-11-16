@@ -32,7 +32,7 @@ public sealed class ActivarIdentidadManualHandlerTests
         _notifier.NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private ActivarIdentidadManualHandler Handler() => new(_repo, _audit, _notifier, new FixedTime(Now));
+    private ActivarIdentidadManualHandler Handler() => new(_repo, _audit, _notifier, new FakeManualCaptureTokenProtector(), new FixedTime(Now));
 
     private ProcedureInstanceBiometricValidation Fila(
         string status, string provider = BiometricProviders.Kyverum, Guid? instanceId = null, string? tramiteStatus = null)
@@ -89,6 +89,8 @@ public sealed class ActivarIdentidadManualHandlerTests
         enviado.Should().NotBeNull();
         enviado!.Token.Should().NotBeNullOrWhiteSpace();
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado.Token)).And.NotBe(enviado.Token);
+        // HU #14305 (AC1): además del hash, la fila guarda el token CIFRADO (descifrable a lo enviado, nunca en claro).
+        v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token).And.NotBe(enviado.Token);
         enviado.ExpiresAt.Should().Be(Now.AddHours(24));
         enviado.TenantId.Should().Be(v.TenantId);
     }

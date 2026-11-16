@@ -18,6 +18,8 @@ import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validatio
 export interface ValidacionesUiFilters {
   name: string;
   documentNumber: string;
+  /** Ajuste 2026-11-10 (D1=a) — radicado FT escrito en la caja única (mayúsculas; parcial en servidor). */
+  referenceNumber: string;
   status: '' | BiometricEstado;
   vigenciaEstado: '' | BiometricVigenciaEstado;
   /** `yyyy-mm-dd` local. */
@@ -33,6 +35,7 @@ export interface ValidacionesUiFilters {
 export const EMPTY_VALIDACIONES_FILTERS: ValidacionesUiFilters = {
   name: '',
   documentNumber: '',
+  referenceNumber: '',
   status: '',
   vigenciaEstado: '',
   createdFrom: '',
@@ -47,6 +50,7 @@ export function hasActiveValidacionesFilters(f: ValidacionesUiFilters): boolean 
   return (
     f.name.trim() !== '' ||
     f.documentNumber.trim() !== '' ||
+    f.referenceNumber.trim() !== '' ||
     f.status !== '' ||
     f.vigenciaEstado !== '' ||
     f.createdFrom !== '' ||
@@ -59,20 +63,40 @@ export function hasActiveValidacionesFilters(f: ValidacionesUiFilters): boolean 
 }
 
 /**
- * Una sola caja «Nombre o número de documento»: si lo escrito es casi todo dígitos (≥ 4 y ≥ 80 %) se
- * busca como documento, si no como nombre. Misma regla que el panel anterior.
+ * Ajuste 2026-11-10 (D1=a) — forma de un radicado, completo o a medio escribir: «FT», un dígito de
+ * familia opcional, guion opcional y dígitos. Tras «FT» no admite letras, para que un nombre que empiece
+ * por «Ft…» se siga buscando como nombre.
+ */
+const RADICADO_FT_RE = /^ft\d?-?\d*$/i;
+
+/**
+ * Una sola caja «Nombre, documento o radicado». Primero el radicado: lo que tiene forma de radicado FT
+ * viaja como `referenceNumber` en mayúsculas (coincidencia parcial en servidor). Va ANTES de la regla de
+ * dígitos porque «FT1-0000012» es casi todo dígitos y caía como documento. Si no, lo que es casi todo
+ * dígitos (≥ 4 y ≥ 80 %) se busca como documento, y el resto como nombre (regla del panel anterior).
  */
 export function splitPersonaODocumentoQuery(
   q: string,
-): Pick<ValidacionesUiFilters, 'name' | 'documentNumber'> {
+): Pick<ValidacionesUiFilters, 'name' | 'documentNumber' | 'referenceNumber'> {
   const t = q.trim();
-  if (!t) return { name: '', documentNumber: '' };
+  if (!t) return { name: '', documentNumber: '', referenceNumber: '' };
   const compact = t.replace(/\s/g, '');
+  if (RADICADO_FT_RE.test(compact)) {
+    return {
+      name: '',
+      documentNumber: '',
+      referenceNumber: compact.toUpperCase().slice(0, SEARCH_TEXT_MAX_LENGTH),
+    };
+  }
   const digits = digitsOnly(t);
   if (digits.length >= 4 && digits.length >= compact.length * 0.8) {
-    return { name: '', documentNumber: digits };
+    return { name: '', documentNumber: digits, referenceNumber: '' };
   }
-  return { name: sanitizeNoAngleBrackets(t).slice(0, SEARCH_TEXT_MAX_LENGTH), documentNumber: '' };
+  return {
+    name: sanitizeNoAngleBrackets(t).slice(0, SEARCH_TEXT_MAX_LENGTH),
+    documentNumber: '',
+    referenceNumber: '',
+  };
 }
 
 // ── «+ Filtro» ─────────────────────────────────────────────────────────────────────────────────
@@ -260,6 +284,7 @@ export function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometric
   return {
     name: text(f.name),
     documentNumber: text(f.documentNumber),
+    referenceNumber: text(f.referenceNumber),
     status: f.status || undefined,
     createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
     createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,

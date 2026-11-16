@@ -7,22 +7,20 @@ using Xunit;
 namespace Flit.Tramites.Domain.Tests;
 
 /// <summary>
-/// HU #10521 (RF30/31/35) — cómputo del checklist con reglas condicionales por atributo y
-/// parámetros por gestora enchufados (<see cref="ChecklistEngine.ComputeConditional"/>).
+/// HU #10521 (RF30/35) — cómputo del checklist con reglas condicionales por atributo
+/// (<see cref="ChecklistEngine.ComputeConditional"/>).
 /// </summary>
 public sealed class ChecklistEngineConditionalComputeTests
 {
     private static readonly string Traspaso = TramiteTipologiaCatalog.CodigoTraspasoStandard;
 
-    private static ChecklistResultado Compute(
-        TramiteDocumentContext context,
-        IReadOnlyCollection<CompanyDocumentParam>? parametros = null) =>
+    private static ChecklistResultado Compute(TramiteDocumentContext context) =>
         ChecklistEngine.ComputeConditional(
             Traspaso, null, null, context,
-            ConditionalDocumentRules.For(Traspaso), parametros)!;
+            ConditionalDocumentRules.For(Traspaso))!;
 
     [Fact]
-    public void ContextoVacio_SinParametros_EsIgualAlChecklistBase()
+    public void ContextoVacio_EsIgualAlChecklistBase()
     {
         var conditional = Compute(new TramiteDocumentContext());
         var plano = ChecklistEngine.Compute(Traspaso, null, null)!;
@@ -49,30 +47,5 @@ public sealed class ChecklistEngineConditionalComputeTests
         var nit = Compute(new TramiteDocumentContext(EsNit: true));
         nit.Items.Should().NotContain(i => i.Item.Id == "rues");
         nit.Items.Should().NotContain(i => i.Item.Id == "cedulas");
-    }
-
-    [Fact]
-    public void ParametroGestora_Oculto_QuitaDocumento_RF31()
-    {
-        var conParam = Compute(
-            new TramiteDocumentContext(),
-            [new CompanyDocumentParam("soat", CompanyDocumentParamState.Oculto)]);
-
-        conParam.Items.Should().NotContain(i => i.Item.Id == "soat");
-    }
-
-    [Fact]
-    public void ParametroGestora_Opcional_RelajaObligatoriedad_RF31()
-    {
-        // "rtm" es obligatorio en el traspaso base; la gestora lo vuelve opcional.
-        ChecklistEngine.Compute(Traspaso, null, null)!
-            .Items.Single(i => i.Item.Id == "rtm").Item.Obligatorio.Should().BeTrue();
-
-        var conParam = Compute(
-            new TramiteDocumentContext(),
-            [new CompanyDocumentParam("rtm", CompanyDocumentParamState.Opcional)]);
-
-        conParam.Items.Single(i => i.Item.Id == "rtm").Item.Obligatorio.Should().BeFalse();
-        conParam.FaltanObligatorios.Should().NotContain("rtm");
     }
 }

@@ -30,7 +30,7 @@ public sealed class RechazarValidacionManualHandlerTests
         _notifier.NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private RechazarValidacionManualHandler Handler() => new(_repo, _audit, _notifier, new FixedTime(Now));
+    private RechazarValidacionManualHandler Handler() => new(_repo, _audit, _notifier, new FakeManualCaptureTokenProtector(), new FixedTime(Now));
 
     private ProcedureInstanceBiometricValidation Fila(
         string status = BiometricEstados.PendienteRevisionManual, string provider = BiometricProviders.Manual)
@@ -82,6 +82,8 @@ public sealed class RechazarValidacionManualHandlerTests
 
         enviado.Should().NotBeNull();
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado!.Token)).And.NotBe(hashViejo).And.NotBe(enviado.Token);
+        // HU #14305 (AC1): el token cifrado sustituye al anterior.
+        v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token);
         enviado.ExpiresAt.Should().Be(Now.AddHours(24));
     }
 

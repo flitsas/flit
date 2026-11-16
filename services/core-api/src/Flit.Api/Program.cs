@@ -130,6 +130,8 @@ builder.Services.AddPublicBrandingRateLimiter();
 builder.Services.AddExternalClientRateLimiter(builder.Configuration);
 // HU #13289 (Épica #13202) — policy manual-capture (por IP) de la captura manual pública; no fija OnRejected.
 builder.Services.AddManualCaptureRateLimiter();
+// Feature #14420 (HU #14424 AC4) — límite del dryRun de la invitación masiva, por usuario (no por IP).
+builder.Services.AddBulkInvitationDryRunLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -195,6 +197,7 @@ builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (S
 builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13348: consultas, avalúos y documentos por core-consultas
 builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
+Flit.Api.Derivacion.DerivacionExtensions.AddDerivacionDiagnostico(builder.Services, builder.Configuration); // ADR-0084 · Punto 4: borradores desde Diagnóstico (rpc apagado por defecto)
 builder.Services.AddPersonaNaturalConsumidor(builder.Configuration); // Épica #14021 · HU #14050/#14051: crea los trámites del portal y devuelve su estado (apagado por defecto)
 
 var app = builder.Build();
@@ -256,6 +259,8 @@ app.UseRateLimiter();
 // X-Flit-Domain que fija Flit.Gateway. Va ANTES de auth: el login/recuperación (#12422) necesita
 // el dominio de la petición sin depender de un JWT (hoy sin validar — Bug diferido).
 app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
+// HU #14383 (Feature #14380) — un dominio de portal de organismo no abre el login de FLIT.
+app.UseMiddleware<Flit.Api.Middleware.PortalDomainGuardMiddleware>();
 
 app.UseAuthentication();
 

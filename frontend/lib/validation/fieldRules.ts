@@ -82,22 +82,39 @@ export const PLATE_PATTERN = /^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9
 /** Deja solo alfanumérico en mayúsculas, tope de 8 (maquinaria `AA123456`). */
 export const sanitizePlate = (v: string): string =>
   v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+/**
+ * HU10 (registro diferido 2026-11-09) — placa de motocarro (MOTOCARRO / MOTOTRICICLO / TRICIMOTO):
+ * 3 números y 3 letras. Va APARTE de `PLATE_PATTERN` a propósito: ese patrón es el contrato
+ * compartido con el validador .NET de core-diagnóstico (`contracts/fixtures/validacion/
+ * identificadores-vehiculo.json`, test `identificadoresCompartidos`, cuatro ramas) y cambiarlo es
+ * una decisión del Líder Técnico. Trámites lo suma en `validatePlate`.
+ */
+export const PLATE_MOTOCARRO_PATTERN = /^[0-9]{3}[A-Z]{3}$/;
 export const validatePlate = (value: string): string | null =>
-  PLATE_PATTERN.test(value)
+  PLATE_PATTERN.test(value) || PLATE_MOTOCARRO_PATTERN.test(value)
     ? null
-    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
+    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), 123ABC (motocarro), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria).";
 
 /** ¿El tipo de documento es pasaporte? (admite letras y números). */
 export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";
+/** HU #14499 / ADR-0082 — PAS y PPT admiten letras y números. */
+export const allowsAlphanumericDocNumber = (docType: string): boolean => {
+  const t = docType.trim().toUpperCase();
+  return t === "PAS" || t === "PPT";
+};
 /**
- * Número de documento por tipo: pasaporte admite letras y números; el resto
+ * Número de documento por tipo: PAS/PPT admiten letras y números; el resto
  * (CC, CE, TI, NIT) solo dígitos. Se sanea en onChange según el tipo actual.
  */
 export const sanitizeDocNumber = (v: string, docType: string): string =>
-  isPassport(docType) ? v.replace(/[^A-Za-z0-9]/g, "") : v.replace(/[^0-9]/g, "");
+  allowsAlphanumericDocNumber(docType) ? v.replace(/[^A-Za-z0-9]/g, "") : v.replace(/[^0-9]/g, "");
 export const validateDocNumber = (value: string, docType: string): string | null => {
-  if (isPassport(docType))
-    return /^[A-Za-z0-9]+$/.test(value) ? null : "El pasaporte solo admite letras y números.";
+  if (allowsAlphanumericDocNumber(docType))
+    return /^[A-Za-z0-9]+$/.test(value)
+      ? null
+      : isPassport(docType)
+        ? "El pasaporte solo admite letras y números."
+        : "El PPT solo admite letras y números.";
   return /^[0-9]+$/.test(value) ? null : "El número de documento solo admite dígitos.";
 };
 

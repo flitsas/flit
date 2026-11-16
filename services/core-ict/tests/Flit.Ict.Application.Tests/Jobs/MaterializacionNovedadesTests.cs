@@ -59,4 +59,25 @@ public sealed class MaterializacionNovedadesTests
         var largo = string.Join(';', Enumerable.Range(0, 60).Select(i => $"actors_warning:codigo_{i}"));
         MaterializacionNovedades.Mensaje(largo)!.Length.Should().BeLessThanOrEqualTo(MaterializacionNovedades.MaxLongitud);
     }
+
+    [Theory]
+    [InlineData("ot_runt_no_habilitado", "según el RUNT no está activo o no está habilitado")]
+    [InlineData("ot_not_permitted", "no está habilitado para la compañía")]
+    [InlineData("OT_NOT_AUTHORIZED_FOR_TYPE", "no está habilitado u operativo")]
+    [InlineData("tenant_inactive", "no está activo")]
+    [InlineData("network_inactive", "red")]
+    public void MensajeError_traduce_los_codigos_de_organismo_y_conserva_el_codigo(string codigo, string fragmento)
+    {
+        var mensaje = MaterializacionNovedades.MensajeError(codigo);
+
+        mensaje.Should().Contain(fragmento).And.EndWith($"({codigo})");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("grpc_unavailable")]
+    [InlineData("create_failed")]
+    public void MensajeError_devuelve_null_para_codigos_no_mapeados(string? codigo) =>
+        MaterializacionNovedades.MensajeError(codigo).Should().BeNull();
 }

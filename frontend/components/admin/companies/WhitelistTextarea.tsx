@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Mail, Save } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { WhitelistEntry } from "@/lib/api/types";
 
 // Gestión de la lista blanca de correos (HU #10194, AC3). Textarea multilínea
@@ -70,7 +70,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
   return (
     <section aria-label="Lista blanca de correos" className="space-y-3">
       <div className="flex items-center gap-2">
-        <Mail className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
+        <Icono nombre="correo" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
         <h4 className="text-sm font-semibold">Lista Blanca</h4>
       </div>
       <p className="text-xs opacity-70">
@@ -88,13 +88,13 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         placeholder={"comprador@dominio.com\nradicador@dominio.com"}
         aria-invalid={errors.length > 0}
         className="w-full rounded-xl border bg-transparent px-3 py-2 font-mono text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
-        style={{ borderColor: errors.length > 0 ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: errors.length > 0 ? "var(--destructive)" : "var(--border)" }}
       />
 
       {errors.length > 0 && (
         <ul className="space-y-1" role="alert" data-testid="whitelist-errors">
           {errors.map((e, i) => (
-            <li key={`${e.line}-${i}`} className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+            <li key={`${e.line}-${i}`} className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
               Línea {e.line}: {e.value ? `"${e.value}" — ` : ""}
               {e.message}
             </li>
@@ -115,7 +115,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
         style={{ background: "var(--color-flit-brand)" }}
       >
-        <Save className="h-3.5 w-3.5" /> {saving ? "Guardando…" : "Guardar lista blanca"}
+        <Icono nombre="nube-subir" className="h-3.5 w-3.5" /> {saving ? "Guardando…" : "Guardar lista blanca"}
       </button>
 
       {entries.length > 0 && (

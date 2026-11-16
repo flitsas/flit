@@ -31,4 +31,13 @@ public static class DomainErrors
 
     /// <summary>El dominio aún no pasó a <c>verified</c>/<c>active</c>: no puede recibir la señal de certificado (#12426). HU #12425 AC3.</summary>
     public const string NotVerified = "DOMAIN_NOT_VERIFIED";
+
+    /// <summary>El propósito de la ruta no es el código de un producto con dominio propio.</summary>
+    public const string PurposeInvalid = "DOMAIN_PURPOSE_INVALID";
+
+    /// <summary>La empresa no tiene habilitado el producto para el que se registra el dominio.</summary>
+    public const string ProductNotEnabled = "DOMAIN_PRODUCT_NOT_ENABLED";
+
+    /// <summary>La red no se puede activar: falta un dominio, su comprobación o su certificado.</summary>
+    public const string NotReady = "DOMAIN_NOT_READY";
 }

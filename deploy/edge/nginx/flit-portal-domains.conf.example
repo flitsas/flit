@@ -1,0 +1,38 @@
+# deploy/edge/nginx/flit-portal-domains.conf.example
+#
+# Dominios de portal de organismo (HU #14383, Feature #14380, Epica #14297, ADR-0081). Plantilla versionada: el nginx real del
+# VPS vive FUERA de este repositorio y no se toca desde aqui. Se instala junto al catch-all de marca blanca
+# (flit-network-domains.conf.example); no lo reemplaza.
+#
+# QUE RESUELVE: el catch-all envia todo `location /` de un dominio externo al frontend de FLIT. Un dominio de portal debe llegar
+# al frontend del PORTAL Persona Natural (sin login), no a FLIT 2.0. nginx decide con un `map` por Host cuyo archivo lo genera
+# sync-portal-hosts.sh.example a partir de GET /api/v1/internal/domains/provisioning (items con purpose = "portal-pn").
+# Un host que no esta en el mapa sigue yendo al frontend de FLIT, exactamente como hoy.
+#
+# Host: `proxy_set_header Host $host` se conserva en TODAS las rutas. El portal lo lee de la cabecera Host y el Gateway sella
+# X-Flit-Domain con el host real de la conexion (DomainSealTransform), nunca con un valor que mande el cliente.
+#
+# En el bloque `http {}`, ANTES del server del catch-all:
+#
+#   map $host $flit_front_upstream {
+#       default                       http://127.0.0.1:${FRONTEND_PORT};
+#       include /etc/nginx/flit/portal-hosts.map;   # lineas: "tramites.miorganismo.gov.co  http://127.0.0.1:${PORTAL_PN_PORT};"
+#   }
+#
+# En el server{} 443 del catch-all (flit-network-domains.conf.example) se cambia SOLO el `location /`:
+#
+#   location / {
+#       proxy_pass $flit_front_upstream;
+#       proxy_http_version 1.1;
+#       proxy_set_header Host $host;
+#       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#       proxy_set_header X-Forwarded-Proto $scheme;
+#       proxy_set_header X-Real-IP $remote_addr;
+#   }
+#
+# `/api/v1/` sigue yendo al Gateway (no cambia); el Gateway bloquea el login de FLIT en estos hosts (PortalDomainGuardMiddleware).
+# PORTAL_PN_PORT: puerto del frontend-personanatural en el ambiente (mismo patron que FRONTEND_PORT/HUB_PORT).
+#
+# Verificacion tras instalar:  nginx -t && systemctl reload nginx
+#   curl -sI https://<dominio-activo>/                 -> portal del organismo (no el login de FLIT)
+#   curl -s  https://<dominio-activo>/api/v1/auth/me   -> 404 PORTAL_SIN_LOGIN

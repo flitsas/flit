@@ -84,7 +84,15 @@ public enum EstadoConsultaContraventor
     Pendiente,
     Encontrado,
     NoEncontrado,
+
+    /// <summary>Fallo temporal: se reintenta (un intento por día, hasta 3 en total).</summary>
     Error,
+
+    /// <summary>GDC «sin hora»: sin hora en el comparendo y el contrato cambió ese día. No se asigna: lo revisa la gestora.</summary>
+    SinHora,
+
+    /// <summary>GDC punto 20: fallo definitivo tras 3 intentos. Ni el trabajo ni la consulta manual lo vuelven a intentar.</summary>
+    Agotada,
 }
 
 public enum OrigenContraventor

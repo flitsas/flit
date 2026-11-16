@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, Info, Loader2 } from 'lucide-react';
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
 import { useFamilyAccess } from '@/hooks/useFamilyAccess';
@@ -15,13 +15,17 @@ import {
   type ModalidadTraspasoUi,
   type NuevoTramiteTipoUi,
 } from '@/lib/tramites/nuevo-tramite-resolver';
-import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { buttonClass } from '@flit/ui/Button';
 import { OperacionLoadingState } from './states';
 import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
 
 const BLUE = 'var(--color-flit-brand)';
-const BORDER = '#DFE5ED';
-const ALERT = '#FF4E00';
+
+/** Clave del kit a partir de la ruta del catálogo (`/assets/kit/modulo/<clave>.svg`); sin ella, «documento». */
+function claveIcono(ruta: string): string {
+  return ruta.split('/').pop()?.replace(/\.(svg|webp|png)$/, '') ?? 'documento';
+}
+const BORDER = 'var(--border)';
 
 export type { FamiliasBloqueadasResolver as FamiliasBloqueadas };
 
@@ -136,14 +140,11 @@ function TarjetaSelect({
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2.5 text-left text-[13px] outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#0B0F14]"
-        style={{ borderColor: BORDER, color: elegida ? 'var(--color-flit-primary)' : '#94A3B8' }}
+        className="flex min-h-11 w-full items-center justify-between rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3.5 py-2.5 text-left text-[13px] text-[color:var(--di-text-primary)] outline-none transition focus:border-[color:var(--di-action)] focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ borderColor: BORDER, color: elegida ? 'var(--color-flit-primary)' : 'var(--muted-foreground)' }}
       >
         <span className="truncate pr-2">{elegida?.label ?? placeholder}</span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-slate-400 transition ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
+        <Icono nombre="abajo" className={`h-4 w-4 shrink-0 text-muted-foreground transition ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && typeof document !== 'undefined'
@@ -153,7 +154,7 @@ function TarjetaSelect({
               role="listbox"
               aria-label={ariaLabel}
               // z por encima del overlay del Modal (z-[100]): si no, el panel queda detrás.
-              className="fixed z-[1200] overflow-y-auto rounded-xl border bg-white shadow-lg dark:bg-flit-primary"
+              className="fixed z-[1200] overflow-y-auto rounded-xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-modal)]"
               style={{
                 borderColor: BORDER,
                 left: rect?.left ?? -9999,
@@ -176,8 +177,8 @@ function TarjetaSelect({
                     }}
                     className={`block w-full px-3 py-2 text-left text-[13px] transition ${
                       on
-                        ? 'bg-[#EEF5FF] font-semibold text-flit-primary'
-                        : 'text-[#475569] hover:bg-[#EEF5FF] hover:text-flit-primary dark:text-white/80'
+                        ? 'bg-secondary font-semibold text-flit-primary'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-flit-primary'
                     }`}
                   >
                     {o.label}
@@ -328,17 +329,17 @@ export function NuevoTramiteModalContent({
     return (
       <div
         className="rounded-xl border p-4"
-        style={{ borderColor: 'rgba(255,78,0,0.32)', background: 'rgba(255,78,0,0.12)' }}
+        style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)' }}
         role="alert"
       >
-        <p className="text-xs" style={{ color: '#C2410C' }}>
+        <p className="text-xs" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
         <button
           type="button"
           onClick={() => void reload()}
           className="mt-2 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ color: '#C2410C' }}
+          style={{ color: 'var(--destructive)' }}
         >
           Reintentar
         </button>
@@ -361,7 +362,7 @@ export function NuevoTramiteModalContent({
           <h2 className="text-[22px] font-bold leading-tight" style={{ color: BLUE }}>
             Nuevo trámite
           </h2>
-          <p className="mt-1.5 text-[13.5px] text-[#59677D]">
+          <p className="mt-1.5 text-[13.5px] text-muted-foreground">
             Selecciona el trámite principal y completa su configuración. Al iniciar entrarás
             directamente al Paso 1.
           </p>
@@ -378,19 +379,19 @@ export function NuevoTramiteModalContent({
           return (
             <div
               key={t.id}
-              className={`rounded-2xl border-2 p-5 transition ${on ? 'bg-blue-50/50' : 'bg-white dark:bg-flit-primary'}`}
+              className={`rounded-2xl border-2 p-5 transition ${on ? 'bg-[var(--badge-info-bg)]' : 'bg-card'}`}
               style={{
                 borderColor: on ? BLUE : BORDER,
                 opacity: inhabilitada ? 0.55 : 1,
               }}
             >
-              {/* Aro claro detrás del icono: el círculo azul macizo ya viene dentro del SVG. */}
-              <div className="mx-auto grid h-[120px] w-[120px] place-items-center rounded-full bg-[#EFF6FF]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={t.icon} alt="" aria-hidden="true" className="h-[72px] w-[72px]" />
+              {/* UI Kit 2026: el ícono del kit de la clave que declara el catálogo (`/assets/kit/modulo/<clave>.svg`), en su
+                  disco de 56 px. Decorativo. */}
+              <div className="mx-auto grid place-items-center">
+                <IconoModulo clave={claveIcono(t.icon)} disco size={56} />
               </div>
 
-              <h3 className="mt-4 text-center text-[15px] font-bold text-[#1E3A8A] dark:text-white">
+              <h3 className="mt-4 text-center text-[15px] font-bold text-foreground">
                 {t.title}
               </h3>
 
@@ -405,7 +406,7 @@ export function NuevoTramiteModalContent({
               />
 
               {inhabilitada ? (
-                <p className="mt-2 text-center text-[11px] text-[#59677D]">
+                <p className="mt-2 text-center text-[11px] text-muted-foreground">
                   {blocked ? 'No habilitado para tu compañía' : 'Sin tipos habilitados'}
                 </p>
               ) : null}
@@ -422,12 +423,12 @@ export function NuevoTramiteModalContent({
       */}
       {infoText ? (
         <div
-          className="mt-4 flex w-full items-start gap-2.5 rounded-lg bg-[#F4F7FF] p-3.5 dark:bg-white/5"
+          className="mt-4 flex w-full items-start gap-2.5 rounded-lg bg-secondary p-3.5"
           role="status"
           aria-live="polite"
         >
-          <Info className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
-          <p className="text-[13.5px] leading-snug text-[#59677D] dark:text-white/70">{infoText}</p>
+          <Icono nombre="exclamacion" className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} />
+          <p className="text-[13.5px] leading-snug text-muted-foreground">{infoText}</p>
         </div>
       ) : null}
 
@@ -445,7 +446,7 @@ export function NuevoTramiteModalContent({
       </div>
 
       {resolveError ? (
-        <p className="mt-3 text-xs font-medium" style={{ color: '#C2410C' }} role="alert">
+        <p className="mt-3 text-xs font-medium" style={{ color: 'var(--destructive)' }} role="alert">
           {resolveError}
         </p>
       ) : null}
@@ -456,8 +457,7 @@ export function NuevoTramiteModalContent({
             type="button"
             onClick={onCancelar}
             disabled={registrandoTerminos}
-            className="min-w-[160px] rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ background: ALERT }}
+            className={buttonClass({ variant: 'secondary', className: 'min-w-[160px]' })}
           >
             Cancelar
           </button>
@@ -466,10 +466,9 @@ export function NuevoTramiteModalContent({
           type="button"
           onClick={() => void iniciar()}
           disabled={!puedeIniciar}
-          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: WIZARD_CTA_GRADIENT }}
+          className={buttonClass({ className: 'min-w-[160px]' })}
         >
-          {registrandoTerminos ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+          {registrandoTerminos ? <Icono nombre="girador" className="h-4 w-4 animate-spin" /> : null}
           {registrandoTerminos ? 'Registrando…' : 'Iniciar trámite'}
         </button>
       </div>

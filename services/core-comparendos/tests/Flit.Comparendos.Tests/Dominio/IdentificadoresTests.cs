@@ -26,6 +26,21 @@ public sealed class IdentificadoresTests
     [InlineData("890903938-88")]
     public void Separar_rechaza_lo_que_no_es_NIT(string texto) => Nit.Separar(texto).Should().BeNull();
 
+    [Theory]
+    [InlineData("890903938-8", null, "890903938")]
+    [InlineData("890.903.938-8", null, "890903938")]
+    [InlineData("890903938", null, "890903938")]
+    [InlineData("890903938-1", "debería ser 8", null)]
+    [InlineData("89O903938", "solo números", null)]
+    public void ErrorDigito_y_Normalizar_GdcPunto6(string texto, string? error, string? normalizado)
+    {
+        if (error is null)
+            Nit.ErrorDigito(texto).Should().BeNull();
+        else
+            Nit.ErrorDigito(texto).Should().Contain(error);
+        Nit.Normalizar(texto).Should().Be(normalizado);
+    }
+
     [Fact]
     public void Variantes_consulta_con_y_sin_digito() =>
         Nit.Variantes("890903938").Should().Equal("890903938", "8909039388");
@@ -40,11 +55,17 @@ public sealed class IdentificadoresTests
 public sealed class NumeroComparendoTests
 {
     [Theory]
-    [InlineData(" d-123 456 ", "D123456")]
+    [InlineData(" d-11001000000012345678 ", "11001000000012345678")]
+    [InlineData("A-05001000000054280231", "05001000000054280231")]
+    [InlineData("A-98765", "A98765")]
+    [InlineData("AV3", "AV3")]
+    [InlineData("OCR-RENTING-1", "OCRRENTING1")]
     [InlineData("11001000000012345678", "11001000000012345678")]
+    [InlineData("OCR-A", "OCRA")]
     [InlineData("  ", null)]
     [InlineData("---", null)]
-    public void Normalizar_conserva_prefijo_y_quita_separadores(string texto, string? esperado) =>
+    [InlineData("ABC", "ABC")]
+    public void Normalizar_quita_prefijo_alfabetico_solo_en_numeros_largos(string texto, string? esperado) =>
         NumeroComparendo.Normalizar(texto).Should().Be(esperado);
 
     [Theory]

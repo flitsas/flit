@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
 import {
@@ -8,6 +8,13 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { StandaloneDocumentListItem } from "@/lib/api/types-generacion-documental";
@@ -50,15 +57,15 @@ export function HistorialTable({
   downloadingId = null,
 }: HistorialTableProps) {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
       <div className="overflow-x-auto">
         <table
-          className="min-w-[720px] text-xs"
+          className={`min-w-[720px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
           style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
         >
           <caption className="sr-only">Documentos generados por la compañía</caption>
-          <thead>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr>
               <th
                 scope="col"
@@ -111,35 +118,35 @@ export function HistorialTable({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {rows.map((row) => {
               const statusView = standaloneDocumentStatusView(row.status);
               return (
-                <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                <td className="border-y px-4 py-3 rounded-l-xl border-l font-medium" style={{ borderColor: "#DFE5ED" }}>
+                <tr key={row.id} className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+                <td className={`border-y px-4 py-3 rounded-l-xl border-l font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} data-label="Tipo" style={{ borderColor: "var(--border)" }}>
                   {generacionDocumentalTypeLabel(row.documentType)}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Escenario" style={{ borderColor: "var(--border)" }}>
                   {row.scenario ?? "—"}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Empresa" style={{ borderColor: "var(--border)" }}>
                   {row.companyName ?? "—"}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Usuario" style={{ borderColor: "var(--border)" }}>
                   {row.createdByUserName ?? "—"}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 opacity-80 ${TABLA_MOVIL_CELL_CLS}`} data-label="Fecha" style={{ borderColor: "var(--border)" }}>
                   {formatGeneracionDocumentalDate(row.createdAt)}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} data-label="Resultado" style={{ borderColor: "var(--border)" }}>
                   <StatusBadge label={statusView.label} tone={statusView.tone} />
                 </td>
-                <td className="border-y px-4 py-3 rounded-r-xl border-r" style={{ borderColor: "#DFE5ED" }}>
+                <td className={`border-y px-4 py-3 rounded-r-xl border-r ${TABLA_MOVIL_CELL_CLS}`} data-label="Acciones" style={{ borderColor: "var(--border)" }}>
                   {onDownload && row.status === "generated" ? (
                     <RowActions
                       actions={[
                         {
-                          icon: Download,
+                          icon: iconoComo("nube-bajar"),
                           label: `Descargar ${generacionDocumentalTypeLabel(row.documentType)} del ${formatGeneracionDocumentalDate(row.createdAt)}`,
                           tone: "primary",
                           onClick: () => onDownload(row),

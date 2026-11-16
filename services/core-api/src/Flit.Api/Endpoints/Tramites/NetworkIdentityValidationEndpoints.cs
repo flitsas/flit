@@ -63,6 +63,7 @@ internal static class NetworkIdentityValidationEndpoints
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
             [FromQuery] bool? standalone,
+            [FromQuery] string? referenceNumber,
             CancellationToken ct) =>
         {
             var query = new TenantBiometricPersonListQuery(
@@ -70,7 +71,8 @@ internal static class NetworkIdentityValidationEndpoints
                 expiraDesde, expiraHasta, venceEnDias,
                 page ?? 1,
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
-                standalone);
+                standalone,
+                referenceNumber);
 
             var (result, error) = await handler.HandleAsync(
                 RequestTenantResolver.ScopeFromItems(http), childTenantId, query, ct);
@@ -222,9 +224,11 @@ internal static class NetworkIdentityValidationEndpoints
     /// </summary>
     internal static string FiltersJson(Guid? childTenantId, TenantBiometricPersonListQuery query)
     {
-        var textFilters = new List<string>(2);
+        // Los filtros de texto libre se auditan solo por nombre, nunca su valor (igual que documento y nombre).
+        var textFilters = new List<string>(3);
         if (!string.IsNullOrWhiteSpace(query.Name)) textFilters.Add("name");
         if (!string.IsNullOrWhiteSpace(query.DocumentNumber)) textFilters.Add("documentNumber");
+        if (!string.IsNullOrWhiteSpace(query.ReferenceNumber)) textFilters.Add("referenceNumber");
 
         return JsonSerializer.Serialize(new
         {

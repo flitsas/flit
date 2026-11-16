@@ -25,6 +25,11 @@ beforeEach(() => {
 
 const cliente = () => createMockManualReviewClient({ delayMs: 0, now: NOW });
 
+vi.mock('@/components/admin/Toast', () => ({
+  useToast: () => ({ show: vi.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 describe('Detalle de una validación rechazada', () => {
   it('muestra el estado Rechazada, el motivo en español y el aviso del enlace nuevo con DD/MM/YYYY HH:mm', async () => {
     render(<ManualReviewDetailModal id={RECHAZADA} client={cliente()} onClose={() => {}} />);

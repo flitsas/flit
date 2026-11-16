@@ -119,6 +119,32 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("POST", "/api/v1/admin/tramites/{id}/consolidado/cargar"),
     ];
 
+    /// <summary>
+    /// HU #14547 — rutas de escritura SOLO del rol SuperAdmin. La política de rol corta antes que el guard de
+    /// escritura (que además exime al SuperAdmin), así que su prueba negativa es el 403 por rol, no por CanWrite.
+    /// </summary>
+    private static readonly (string Method, string Route)[] RutasSoloSuperAdmin =
+    [
+        ("POST", "/api/v1/admin/tramites/{id}/mandato/regenerar"),
+    ];
+
+    public static TheoryData<string, string> SuperAdminRoutes()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var (method, route) in RutasSoloSuperAdmin)
+            data.Add(method, route);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(SuperAdminRoutes))]
+    public async Task AC4_Cabeza_de_grupo_en_una_ruta_solo_SuperAdmin_recibe_403_por_rol(string method, string route)
+    {
+        var response = await ClientFor(P).SendAsync(Request(method, route, ChildProcedure), TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{method} {route}");
+    }
+
     public static TheoryData<string, string> WriteRoutes()
     {
         var data = new TheoryData<string, string>();
@@ -174,7 +200,7 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var covered = Routes
+        var covered = Routes.Concat(RutasSoloSuperAdmin)
             .Select(r => $"{r.Method} {Normalize(r.Route)}")
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 

@@ -1,7 +1,9 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -13,6 +15,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -193,7 +203,7 @@ export function SchedulesSection({
   return (
     <section data-testid="schedules-section" className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-muted-foreground">
           {otTransitOfficeId
             ? "Recibe por correo un resumen del panel de tu organismo, en la hora que elijas."
             : superAdminMode
@@ -248,8 +258,8 @@ export function SchedulesSection({
         >
           {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
           <div className={CARDLIST_SCROLL}>
-            <table className={CARDLIST_TABLE} aria-label="Informes programados">
-              <thead>
+            <table className={`${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Informes programados">
+              <thead className={TABLA_MOVIL_THEAD_CLS}>
                 <tr className={CARDLIST_HEAD_ROW}>
                   <th scope="col" className={CARDLIST_TH}>Nombre</th>
                   <th scope="col" className={CARDLIST_TH}>Tipo</th>
@@ -261,32 +271,27 @@ export function SchedulesSection({
                   <th scope="col" className={`${CARDLIST_TH} text-right`}>Acciones</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className={TABLA_MOVIL_TBODY_CLS}>
                 {pg.paginar(items).map((s) => (
-                  <tr key={s.id} data-testid="schedule-row" className={CARDLIST_ROW}>
-                    <td className={`${CARDLIST_CELL} font-medium`}>{s.name}</td>
-                    <td className={CARDLIST_CELL}>{REPORT_TYPE_LABELS[s.reportType]}</td>
-                    <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{describeWhen(s)}</td>
-                    <td className={CARDLIST_CELL}>{FORMAT_LABELS[s.format]}</td>
-                    <td className={CARDLIST_CELL}>{s.recipients.length}</td>
-                    <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{formatDateTime(s.lastSentAt)}</td>
-                    <td className={CARDLIST_CELL}>
+                  <tr key={s.id} data-testid="schedule-row" className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                    <td data-label="Nombre" className={`${CARDLIST_CELL} font-medium ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>{s.name}</td>
+                    <td data-label="Tipo" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{REPORT_TYPE_LABELS[s.reportType]}</td>
+                    <td data-label="Programación" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{describeWhen(s)}</td>
+                    <td data-label="Formato" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{FORMAT_LABELS[s.format]}</td>
+                    <td data-label="Destinatarios" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{s.recipients.length}</td>
+                    <td data-label="Último envío" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{formatDateTime(s.lastSentAt)}</td>
+                    <td data-label="Estado" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                       <span
-                        className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                        style={
-                          s.isActive
-                            ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
-                            : { background: "#6b7a941A", color: "#6b7a94" }
-                        }
+                        {...etiquetaKit(s.isActive ? "success" : "neutral")}
                       >
                         {s.isActive ? "Activo" : "Inactivo"}
                       </span>
                     </td>
-                    <td className={CARDLIST_CELL}>
+                    <td data-label="Acciones" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>
                       <RowActions
                         actions={[
-                          { icon: Pencil, label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
-                          { icon: Trash2, label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
+                          { icon: iconoComo("lapiz"), label: `Editar ${s.name}`, tone: "primary", onClick: () => setEditing(s) },
+                          { icon: iconoComo("papelera"), label: `Eliminar ${s.name}`, tone: "danger", onClick: () => setConfirmDelete(s) },
                         ]}
                       />
                     </td>
@@ -312,19 +317,19 @@ export function SchedulesSection({
           role="alertdialog"
           aria-label="Confirmar eliminación"
           data-testid="schedule-delete-confirm"
-          className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 space-y-2"
+          className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-4 space-y-2"
         >
-          <p className="text-sm text-flit-primary dark:text-slate-100">
+          <p className="text-sm text-flit-primary">
             ¿Eliminar el informe programado <strong>{confirmDelete.name}</strong>? Esta acción no se puede deshacer.
           </p>
           {actionError && (
-            <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">{actionError}</p>
+            <p role="alert" className="text-xs font-medium text-destructive">{actionError}</p>
           )}
           <div className="flex gap-2">
             <button
               type="button"
               onClick={handleDelete}
-              className="rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white"
+              className="rounded-xl bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground"
             >
               Eliminar
             </button>
@@ -334,7 +339,7 @@ export function SchedulesSection({
                 setConfirmDelete(null);
                 setActionError(null);
               }}
-              className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
+              className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-flit-primary"
             >
               Cancelar
             </button>

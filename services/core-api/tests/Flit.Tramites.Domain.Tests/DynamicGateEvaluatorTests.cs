@@ -200,6 +200,20 @@ public sealed class DynamicGateEvaluatorTests
         ok.Should().BeEmpty();
     }
 
+    [Fact]
+    public void CanSubmitBlockers_IdentidadExentaPorPreasignacion_NoEmiteIdentidadNoAprobada_PeroSiLosDemas()
+    {
+        var profile = MatriculaProfile();
+
+        var blockers = DynamicGateEvaluator.CanSubmitBlockers(profile, new DynamicWizardContext
+        {
+            IdentidadExentaPorPreasignacion = true,
+        });
+
+        blockers.Should().NotContain(DynamicGateEvaluator.IdentidadNoAprobada);
+        blockers.Should().Contain(DynamicGateEvaluator.DocumentosIncompletos);
+    }
+
     // ── prenda_decision (ADR-0050) ───────────────────────────────────────────────────────────────
     // Antes de ADR-0050 esta sección devolvía Complete() en ambas ramas del ternario: el gate no
     // bloqueaba nunca y ningún test lo cubría. Ahora delega en PrendaGate (mismo núcleo R10 del

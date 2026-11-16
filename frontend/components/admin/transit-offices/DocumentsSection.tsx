@@ -1,7 +1,9 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Tag, Trash2 } from "lucide-react";
+import { Tag } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { getToken } from "@/lib/api/client";
@@ -27,6 +29,7 @@ import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
 import { OtTabBar } from "./OtTabBar";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { TAG_COLOR_OPTIONS, TagFormPanel } from "./TagFormPanel";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 /** Nombre accesible/legible del color de una etiqueta (HU #12883 AC3 — paleta cerrada). */
 function tagColorLabel(hex: string): string {
@@ -194,7 +197,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         <span className="inline-flex items-center gap-2">
           <span
             aria-hidden="true"
-            className="h-4 w-4 shrink-0 rounded-full border border-black/10"
+            className="h-4 w-4 shrink-0 rounded-full border border-border"
             style={{ background: tag.color }}
           />
           <span className="text-xs">{tagColorLabel(tag.color)}</span>
@@ -209,7 +212,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         <RowActions
           actions={[
             {
-              icon: Trash2,
+              icon: iconoComo("papelera"),
               label: `Eliminar etiqueta ${tag.name}`,
               tone: "danger",
               onClick: () => setDeleteTarget(tag),
@@ -244,10 +247,10 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               ancho disponible y no quede en una columna angosta con un hueco al lado. */}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-flit-primary dark:text-white">
+              <h2 className="text-sm font-semibold text-flit-primary">
                 Orden de documentos del expediente
               </h2>
-              <p className="mt-1 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 Arrastra un documento —o usa las flechas y Enter— hasta la página que quieres que
                 ocupe. El orden nuevo aplica a partir de la próxima generación del expediente.
               </p>
@@ -273,7 +276,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               ni siquiera se monta (evita la llamada a la API de políticas de prenda). */}
           {superAdmin && (
             <section className="space-y-3 rounded-2xl border bg-card p-4">
-              <h3 className="text-sm font-semibold text-flit-primary dark:text-white">
+              <h3 className="text-sm font-semibold text-flit-primary">
                 Documento de prenda por compañía
               </h3>
               <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
@@ -354,12 +357,11 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
 
       {superAdmin && deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* HU #12883 AC1 — overlay exacto del token FLIT (rgba(22,39,68,0.45) + blur 6px);
-              antes era `bg-slate-900/40`, ajeno a la paleta FLIT. */}
+          {/* HU #12883 AC1 — overlay del token FLIT; antes era `bg-slate-900/40`, ajeno a la paleta FLIT.
+              HU #14510: mismo velo y desenfoque que el Modal. */}
           <button
             type="button"
-            className="absolute inset-0"
-            style={{ background: "rgba(22,39,68,0.45)", backdropFilter: "blur(6px)" }}
+            className={`absolute inset-0 ${DIALOGO_VELO_CLS}`}
             aria-label="Cerrar"
             onClick={() => !deleting && setDeleteTarget(null)}
           />
@@ -369,11 +371,13 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             aria-modal="true"
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
-            className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-xl"
+            className={`relative w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}
           >
-            <h3 id="delete-tag-title" className="text-sm font-bold text-foreground">
-              Eliminar etiqueta
-            </h3>
+            <FranjaDialogo icono="papelera" className="-mx-6 -mt-6 mb-4">
+              <h3 id="delete-tag-title" className={`text-sm font-bold ${DIALOGO_TITULO_CLS}`}>
+                Eliminar etiqueta
+              </h3>
+            </FranjaDialogo>
             <p id="delete-tag-desc" className="mt-2 text-xs opacity-80">
               {(deleteTarget.usageCount ?? 0) > 0
                 ? `Esta etiqueta está en uso en ${deleteTarget.usageCount} documento(s). ¿Deseas continuar?`
@@ -382,7 +386,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded-xl border px-4 py-2 text-xs font-semibold"
+                className={buttonClass({ variant: "secondary", size: "sm" })}
                 disabled={deleting}
                 onClick={() => setDeleteTarget(null)}
               >
@@ -390,8 +394,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
               </button>
               <button
                 type="button"
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "#FF4E00" }}
+                className={buttonClass({ variant: "navy", size: "sm", className: "bg-destructive text-destructive-foreground hover:bg-destructive/90" })}
                 disabled={deleting}
                 onClick={() => void confirmDelete()}
               >

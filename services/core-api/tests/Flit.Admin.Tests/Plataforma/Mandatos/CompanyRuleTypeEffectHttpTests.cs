@@ -177,7 +177,7 @@ public sealed class CompanyRuleTypeEffectHttpTests(WebApplicationFactory<Program
 
         var config = await ConfigAsync();
         config.InstitutionalMandataryName.Should().Be(Entidad, "el contrato cita a la entidad");
-        MandatoFirmaModoResolver.Resolve(config.AssignmentMode, tieneConvenio: false, tieneEstampa: false)
+        MandatoFirmaModoResolver.Resolve(config.AssignmentMode, tieneEstampa: false)
             .Should().Be(MandatarioFirmaModo.SinBloque);
     }
 
@@ -194,7 +194,7 @@ public sealed class CompanyRuleTypeEffectHttpTests(WebApplicationFactory<Program
 
         var config = await ConfigAsync();
         config.InstitutionalMandataryName.Should().BeNull("el mandato abierto no cita a nadie");
-        MandatoFirmaModoResolver.Resolve(config.AssignmentMode, tieneConvenio: false, tieneEstampa: false)
+        MandatoFirmaModoResolver.Resolve(config.AssignmentMode, tieneEstampa: false)
             .Should().Be(MandatarioFirmaModo.Manual, "líneas abiertas para el mandatario");
     }
 
