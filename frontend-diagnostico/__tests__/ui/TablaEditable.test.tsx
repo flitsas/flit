@@ -416,3 +416,28 @@ describe("TablaEditable: ediciones durante el guardado (code review, observació
     await act(async () => { resolver(); });
   });
 });
+
+describe("TablaEditable: cabecera de la tabla por defecto (HU #14585 · spec-ui §1)", () => {
+  // Uso de ejemplo: <TablaEditable apilado="contenedor" … /> pinta cada th con la barra --table-header-* del sistema.
+  it.each(["pantalla", "contenedor"] as const)(
+    "modo %s: cada th lleva --table-header-bg/--table-header-fg, 12 px versalita, y el thead conserva su sr-only",
+    (apilado) => {
+      render(
+        <TablaEditable etiqueta="Fuentes" filas={filas} columnas={columnas} clave={(f) => f.id} onGuardar={vi.fn()} apilado={apilado} />,
+      );
+      const tabla = screen.getByRole("table", { name: "Fuentes" });
+      const thead = tabla.querySelector("thead")!;
+      expect(thead.className).not.toContain("surface-sunken");
+      expect(thead.className).toContain(apilado === "pantalla" ? "max-[900px]:sr-only" : "@max-[80rem]:sr-only");
+      const ths = screen.getAllByRole("columnheader");
+      expect(ths).toHaveLength(5);
+      for (const th of ths) {
+        const estilo = th.getAttribute("style") ?? "";
+        expect(estilo).toContain("var(--table-header-bg)");
+        expect(estilo).toContain("var(--table-header-fg)");
+        for (const c of ["text-xs", "font-semibold", "uppercase", "tracking-wider"]) expect(th.classList).toContain(c);
+        expect(th.className).not.toContain("di-text-secondary");
+      }
+    },
+  );
+});
