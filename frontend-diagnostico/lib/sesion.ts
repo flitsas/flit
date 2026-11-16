@@ -79,7 +79,6 @@ export function puedeVerReportes(capacidades: CapacidadesDiagnostico | null | un
   return capacidades?.verReportes === true || tieneVistaGlobal(capacidades);
 }
 
-
 /** Entrada «Usuarios» y página /usuarios: solo con `gestionarUsuarios` en true (ausente = false). */
 export function puedeGestionarUsuarios(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
   return capacidades?.gestionarUsuarios === true;
