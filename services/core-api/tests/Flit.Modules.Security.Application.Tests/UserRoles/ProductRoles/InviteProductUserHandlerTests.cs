@@ -115,6 +115,25 @@ public sealed class InviteProductUserHandlerTests
         (await act.Should().ThrowAsync<ProductRoleRuleException>()).Which.Code.Should().Be("ROL_NO_PERMITIDO");
     }
 
+    [Fact]
+    public async Task MiembroConRolPropioDeDiagnostico_CuentaComoYaMiembro()
+    {
+        _repo.Miembro(Empresa, Guid.NewGuid(), "rol_propio_diagnostico", email: "propio@ejemplo.test");
+
+        (await Invitar(Admin, "propio@ejemplo.test")).Outcome.Should().Be(InviteOutcome.AlreadyWithRole);
+        _repo.Escrituras.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AdminCompanySinRolDelProducto_NoHaceNada_ObjetivoProtegido()
+    {
+        _repo.Miembro(Empresa, Guid.NewGuid(), rolDiagnostico: null, adminCompany: true, email: "admin.compania@ejemplo.test");
+
+        (await Invitar(Super, "admin.compania@ejemplo.test")).Outcome.Should().Be(InviteOutcome.ProtectedTarget);
+        _repo.Escrituras.Should().BeEmpty();
+        _sender.Enviados.Should().BeEmpty();
+    }
+
     private sealed class SenderFalso : IProductInvitationSender
     {
         public List<(Guid Tenant, string Email, string Name, Guid RoleId, Guid InvitedBy)> Enviados { get; } = [];

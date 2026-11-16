@@ -31,13 +31,16 @@ public interface IProductRoleRepository
     Task<int> CountOtherActiveAdminsAsync(Guid tenantId, string adminRoleCode, Guid excludingUserId, CancellationToken ct);
 
     /// <summary>En una transacción: cierra las asignaciones vigentes del usuario en la empresa de ESE producto y crea la nueva.</summary>
-    Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct);
+    /// <param name="lastAdminGuardRoleCode">Si no es null, dentro de la transacción bloquea (<c>FOR UPDATE</c>) las asignaciones vigentes
+    /// de ese rol en la empresa y rechaza con ULTIMO_ADMINISTRADOR si no queda otro activo (CR-4).</param>
+    Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct);
 
     /// <summary>Crea la asignación del producto a un miembro que no tenía rol en él (invitar a un miembro).</summary>
     Task AddProductRoleAsync(Guid tenantId, Guid userId, Guid roleId, Guid actorId, CancellationToken ct);
 
     /// <summary>En una transacción: cierra la asignación del producto y guarda la marca con el rol que tenía.</summary>
-    Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct);
+    /// <param name="lastAdminGuardRoleCode">Como en <see cref="ReplaceProductRoleAsync"/>.</param>
+    Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct);
 
     /// <summary>En una transacción: recrea la asignación con <paramref name="roleId"/> y borra la marca.</summary>
     Task ReactivateAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct);
@@ -49,7 +52,8 @@ public interface IProductRoleRepository
     Task<InviteTarget> ResolveInviteTargetAsync(Guid tenantId, string normalizedEmail, string productCode, CancellationToken ct);
 
     /// <summary>Conteos por empresa del producto (usuarios = activos + suspendidos + invitados; admins = activos con el rol admin).</summary>
-    Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, string adminRoleCode, CancellationToken ct);
+    /// <param name="roleCodes">Solo cuentan los roles de la lista blanca (CR-1).</param>
+    Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, IReadOnlyCollection<string> roleCodes, string adminRoleCode, CancellationToken ct);
 }
 
 /// <summary>Rol del catálogo, por id y código.</summary>
@@ -87,6 +91,9 @@ public enum InviteTargetKind
 
     /// <summary>El correo es de un usuario de otra empresa: nunca se mueve.</summary>
     OtherTenant,
+
+    /// <summary>Miembro AdminCompany o SuperAdmin: su acceso al producto se gestiona en el hub (CR-8).</summary>
+    ProtectedMember,
 }
 
 public sealed record InviteTarget(InviteTargetKind Kind, Guid? UserId = null);

@@ -62,6 +62,15 @@ public static class ProductRoleRules
         string.Equals(roleCode, UserRole(productCode), StringComparison.Ordinal)
         || string.Equals(roleCode, AdminRole(productCode), StringComparison.Ordinal);
 
+    /// <summary>CR-1: solo se ve (y se toca) quien tiene un rol de la lista blanca, vigente o guardado en la marca.</summary>
+    public static bool IsVisible(string productCode, ProductMemberSnapshot member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+        return member.CurrentRole is { } actual
+            ? IsAllowedRole(productCode, actual.Code)
+            : member.SuspendedRole is { } guardado && IsAllowedRole(productCode, guardado.Code);
+    }
+
     public static IReadOnlyList<string> AssignableRoles(ProductActor actor, string productCode)
     {
         ArgumentNullException.ThrowIfNull(actor);
@@ -97,12 +106,15 @@ public static class ProductRoleRules
             throw Fail(ProductRoleErrorCodes.ObjetivoProtegido, ProductRoleErrorKind.PermissionDenied, "El acceso de este usuario se gestiona en la plataforma.");
     }
 
-    /// <summary>SP-11=a: un admin del producto solo actúa sobre usuarios con el rol de usuario del producto.</summary>
+    /// <summary>
+    /// SP-11=a / CR-1: un admin del producto solo actúa sobre usuarios con el rol de usuario del producto (exactamente
+    /// <c>usuario_&lt;producto&gt;</c>, de la lista blanca); ni sobre otro admin ni sobre un rol propio de la compañía.
+    /// </summary>
     public static void EnsureCanTouch(ProductActor actor, string productCode, ProductMemberSnapshot member)
     {
         ArgumentNullException.ThrowIfNull(actor);
         ArgumentNullException.ThrowIfNull(member);
-        if (!actor.IsSuperAdmin && string.Equals(RoleOf(member), AdminRole(productCode), StringComparison.Ordinal))
+        if (!actor.IsSuperAdmin && !string.Equals(RoleOf(member), UserRole(productCode), StringComparison.Ordinal))
             throw Fail(ProductRoleErrorCodes.RolNoAsignable, ProductRoleErrorKind.PermissionDenied, "Solo el SuperAdmin cambia el acceso de un administrador del producto.");
     }
 
@@ -138,7 +150,7 @@ public static class ProductRoleRules
             return ([], NoActionsReason.AdminCompany);
         if (!member.AccountActive)
             return ([], NoActionsReason.AccountInactive);
-        if (!actor.IsSuperAdmin && string.Equals(RoleOf(member), AdminRole(productCode), StringComparison.Ordinal))
+        if (!actor.IsSuperAdmin && !string.Equals(RoleOf(member), UserRole(productCode), StringComparison.Ordinal))
             return ([], NoActionsReason.SuperAdminOnly);
         if (state == ProductUserState.Suspended)
             return ([ProductUserAction.Reactivate], NoActionsReason.None);
@@ -157,17 +169,19 @@ public static class ProductRoleRules
         Fail(ProductRoleErrorCodes.UsuarioNoEncontrado, ProductRoleErrorKind.NotFound, "Usuario no encontrado.");
 
     /// <summary>
-    /// SP-13: el objetivo tiene que ser de la empresa y tener o haber tenido rol del producto; si no, NOT_FOUND (mismo error
-    /// en los dos casos). El id de una invitación pendiente del producto responde INVITACION_PENDIENTE.
+    /// SP-13: el objetivo tiene que ser de la empresa y tener o haber tenido un rol del producto de la lista blanca; si no,
+    /// NOT_FOUND (mismo error en todos los casos). El id de una invitación pendiente del producto responde INVITACION_PENDIENTE.
     /// </summary>
     internal static async Task<ProductMemberSnapshot> LoadTargetAsync(
         IProductRoleRepository repo, Guid tenantId, Guid userId, string productCode, CancellationToken ct)
     {
         var member = await repo.GetMemberAsync(tenantId, userId, productCode, ct).ConfigureAwait(false);
-        if (member is { CurrentRole: not null } or { SuspendedRole: not null })
+        if (member is not null && IsVisible(productCode, member))
             return member;
 
-        if (await repo.GetPendingInvitationAsync(tenantId, userId, productCode, ct).ConfigureAwait(false) is not null)
+        // CR-1: un rol propio de la compañía (fuera de la lista blanca) no existe para el producto: NOT_FOUND.
+        if (await repo.GetPendingInvitationAsync(tenantId, userId, productCode, ct).ConfigureAwait(false) is { } invitacion
+            && IsAllowedRole(productCode, invitacion.RoleCode))
             throw Fail(ProductRoleErrorCodes.InvitacionPendiente, ProductRoleErrorKind.FailedPrecondition, "Es una invitación pendiente: se gestiona cuando la persona active su cuenta.");
 
         throw NotFound();

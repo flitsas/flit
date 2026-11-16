@@ -161,4 +161,29 @@ public sealed class AssignProductRoleHandlerTests
 
         await Rechaza(() => Cambiar(Super, id, rol), "ROL_NO_PERMITIDO", ProductRoleErrorKind.InvalidArgument);
     }
+
+    [Fact]
+    public async Task UsuarioConRolPropioDeDiagnostico_NoSeVeNiSeToca()
+    {
+        var id = Guid.NewGuid();
+        _repo.Miembro(Empresa, id, "rol_propio_diagnostico");
+
+        await Rechaza(() => Cambiar(Super, id, "usuario_diagnostico"), "USUARIO_NO_ENCONTRADO", ProductRoleErrorKind.NotFound);
+        await Rechaza(() => Cambiar(Admin, id, "usuario_diagnostico"), "USUARIO_NO_ENCONTRADO", ProductRoleErrorKind.NotFound);
+    }
+
+    [Fact]
+    public async Task QuitarUnAdmin_PideLaGuardaAtomicaDelUltimoAdmin_DarloNo()
+    {
+        var admin = Guid.NewGuid();
+        _repo.Miembro(Empresa, admin, "admin_diagnostico");
+        _repo.Miembro(Empresa, Guid.NewGuid(), "admin_diagnostico");
+        var usuario = Guid.NewGuid();
+        _repo.Miembro(Empresa, usuario, "usuario_diagnostico");
+
+        await Cambiar(Super, admin, "usuario_diagnostico");
+        await Cambiar(Super, usuario, "admin_diagnostico");
+
+        _repo.Guardas.Should().Equal("admin_diagnostico", null);
+    }
 }

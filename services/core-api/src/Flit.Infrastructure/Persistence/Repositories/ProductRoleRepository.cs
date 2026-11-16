@@ -72,7 +72,7 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
              && u.DeletedAt == null && u.Status == Active && a.UserId != excludingUserId
          select a.UserId).Distinct().CountAsync(ct);
 
-    public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct) =>
+    public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
         InTransactionAsync(async () =>
         {
             await CloseProductAssignmentsAsync(tenantId, userId, productCode, actorId, ct).ConfigureAwait(false);
@@ -82,7 +82,7 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
     public Task AddProductRoleAsync(Guid tenantId, Guid userId, Guid roleId, Guid actorId, CancellationToken ct) =>
         InsertAssignmentAsync(tenantId, userId, roleId, actorId, ct);
 
-    public Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct) =>
+    public Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
         InTransactionAsync(async () =>
         {
             await CloseProductAssignmentsAsync(tenantId, userId, productCode, actorId, ct).ConfigureAwait(false);
@@ -131,25 +131,27 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
             : new InviteTarget(InviteTargetKind.MemberWithoutRole, user.Id);
     }
 
-    public async Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, string adminRoleCode, CancellationToken ct)
+    public async Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, IReadOnlyCollection<string> roleCodes, string adminRoleCode, CancellationToken ct)
     {
         var activos = await (
             from a in db.UserRoleAssignments.AsNoTracking()
             join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
             join u in db.Users.AsNoTracking() on a.UserId equals u.Id
-            where a.DeletedAt == null && r.ProductCode == productCode && u.DeletedAt == null
+            where a.DeletedAt == null && r.ProductCode == productCode && roleCodes.Contains(r.Code) && u.DeletedAt == null
             select new { a.TenantId, a.UserId, Admin = r.Code == adminRoleCode && u.Status == Active })
             .Distinct().ToListAsync(ct).ConfigureAwait(false);
-        var suspendidos = await db.ProductRoleSuspensions.AsNoTracking()
-            .Where(s => s.ProductCode == productCode)
-            .Select(s => new { s.TenantId, s.UserId })
+        var suspendidos = await (
+            from s in db.ProductRoleSuspensions.AsNoTracking()
+            join r in db.Roles.AsNoTracking() on s.RoleId equals r.Id
+            where s.ProductCode == productCode && roleCodes.Contains(r.Code)
+            select new { s.TenantId, s.UserId })
             .ToListAsync(ct).ConfigureAwait(false);
         var invitaciones = await (
             from i in db.UserInvitations.AsNoTracking()
             where i.Status == Pending && i.DeletedAt == null
                 && (db.InvitationRoles.Any(ir => ir.InvitationId == i.Id && ir.DeletedAt == null
-                        && db.Roles.Any(r => r.Id == ir.RoleId && r.ProductCode == productCode))
-                    || db.Roles.Any(r => r.Id == i.RoleId && r.ProductCode == productCode))
+                        && db.Roles.Any(r => r.Id == ir.RoleId && r.ProductCode == productCode && roleCodes.Contains(r.Code)))
+                    || db.Roles.Any(r => r.Id == i.RoleId && r.ProductCode == productCode && roleCodes.Contains(r.Code)))
             select new { i.TenantId, i.Id })
             .ToListAsync(ct).ConfigureAwait(false);
 

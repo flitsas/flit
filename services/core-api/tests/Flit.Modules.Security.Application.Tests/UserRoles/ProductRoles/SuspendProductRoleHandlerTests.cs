@@ -115,4 +115,28 @@ public sealed class SuspendProductRoleHandlerTests
 
         await Rechaza(() => Suspender(Admin, invitacion), "INVITACION_PENDIENTE", ProductRoleErrorKind.FailedPrecondition);
     }
+
+    [Fact]
+    public async Task SuspenderUnAdmin_PideLaGuardaAtomica_UnUsuarioNo()
+    {
+        var admin = Guid.NewGuid();
+        _repo.Miembro(Empresa, admin, "admin_diagnostico");
+        _repo.Miembro(Empresa, Guid.NewGuid(), "admin_diagnostico");
+        var usuario = Guid.NewGuid();
+        _repo.Miembro(Empresa, usuario, "usuario_diagnostico");
+
+        await Suspender(Super, admin);
+        await Suspender(Super, usuario);
+
+        _repo.Guardas.Should().Equal("admin_diagnostico", null);
+    }
+
+    [Fact]
+    public async Task UsuarioConRolPropio_NoSeSuspende()
+    {
+        var id = Guid.NewGuid();
+        _repo.Miembro(Empresa, id, "rol_propio_diagnostico");
+
+        await Rechaza(() => Suspender(Super, id), "USUARIO_NO_ENCONTRADO", ProductRoleErrorKind.NotFound);
+    }
 }

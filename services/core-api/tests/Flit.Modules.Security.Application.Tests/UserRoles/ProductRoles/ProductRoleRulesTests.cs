@@ -121,4 +121,17 @@ public sealed class ProductRoleRulesTests
     [Fact]
     public void PermisoDeGestion_EsDelManifiestoDelProducto() =>
         ProductRoleRules.ManagePermission(P).Should().Be("diagnostico.usuarios.gestionar");
+
+    [Fact]
+    public void RolPropioDeLaCompania_NoEsVisible_NiLoTocaUnAdminDelProducto()
+    {
+        var propio = new ProductRoleRef(Guid.NewGuid(), "rol_propio_diagnostico");
+
+        ProductRoleRules.IsVisible(P, Miembro(rol: propio)).Should().BeFalse("CR-1: solo roles de la lista blanca");
+        ProductRoleRules.IsVisible(P, Miembro(suspendido: propio)).Should().BeFalse();
+        ProductRoleRules.IsVisible(P, Miembro(rol: new ProductRoleRef(Guid.NewGuid(), "usuario_diagnostico"))).Should().BeTrue();
+        FluentActions.Invoking(() => ProductRoleRules.EnsureCanTouch(Admin, P, Miembro(rol: propio)))
+            .Should().Throw<ProductRoleRuleException>().Where(e => e.Code == "ROL_NO_ASIGNABLE");
+        ProductRoleRules.RowFor(Admin, P, Miembro(rol: propio)).Reason.Should().Be(NoActionsReason.SuperAdminOnly);
+    }
 }

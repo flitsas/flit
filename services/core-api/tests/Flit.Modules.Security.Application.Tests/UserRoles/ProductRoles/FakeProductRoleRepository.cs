@@ -15,6 +15,12 @@ internal sealed class FakeProductRoleRepository : IProductRoleRepository
     public static readonly ProductRoleRef AdminRol = new(Guid.Parse("00000000-0000-4000-8000-0000000000a2"), "admin_diagnostico");
     public static readonly ProductRoleRef TramitesRol = new(Guid.Parse("00000000-0000-4000-8000-0000000000b1"), "user");
 
+    /// <summary>Rol propio de la compañía con product_code = diagnostico: NO es de la lista blanca (CR-1).</summary>
+    public static readonly ProductRoleRef RolPropio = new(Guid.Parse("00000000-0000-4000-8000-0000000000c1"), "rol_propio_diagnostico");
+
+    /// <summary>Código de rol que pidió la guarda atómica del último admin en cada escritura (null = sin guarda).</summary>
+    public List<string?> Guardas { get; } = [];
+
     private readonly Dictionary<Guid, Usuario> _usuarios = [];
 
     public List<string> Escrituras { get; } = [];
@@ -58,7 +64,7 @@ internal sealed class FakeProductRoleRepository : IProductRoleRepository
 
     public Usuario Get(Guid id) => _usuarios[id];
 
-    private static ProductRoleRef Rol(string code) => code == AdminRol.Code ? AdminRol : UsuarioRol;
+    private static ProductRoleRef Rol(string code) => code == AdminRol.Code ? AdminRol : code == UsuarioRol.Code ? UsuarioRol : RolPropio;
 
     public Task<ProductRoleRef?> FindAssignableRoleAsync(string productCode, string roleCode, CancellationToken ct) =>
         Task.FromResult<ProductRoleRef?>(productCode == Producto && roleCode == UsuarioRol.Code ? UsuarioRol
@@ -84,8 +90,9 @@ internal sealed class FakeProductRoleRepository : IProductRoleRepository
         Task.FromResult(_usuarios.Values.Count(u => u.Tenant == tenantId && u.Id != excludingUserId && u.CuentaActiva
             && u.Roles.TryGetValue(Producto, out var r) && r.Code == adminRoleCode));
 
-    public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct)
+    public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct)
     {
+        Guardas.Add(lastAdminGuardRoleCode);
         _usuarios[userId].Roles[productCode] = roleId == AdminRol.Id ? AdminRol : UsuarioRol;
         Escrituras.Add($"replace:{userId}:{productCode}");
         return Task.CompletedTask;
@@ -98,8 +105,9 @@ internal sealed class FakeProductRoleRepository : IProductRoleRepository
         return Task.CompletedTask;
     }
 
-    public Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct)
+    public Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct)
     {
+        Guardas.Add(lastAdminGuardRoleCode);
         var u = _usuarios[userId];
         u.Suspendido = u.Roles[productCode];
         u.Roles.Remove(productCode);
@@ -130,14 +138,17 @@ internal sealed class FakeProductRoleRepository : IProductRoleRepository
             return Task.FromResult(new InviteTarget(CorreosPendientes.Contains(normalizedEmail) ? InviteTargetKind.PendingInvitation : InviteTargetKind.NewEmail));
         if (u.Tenant != tenantId)
             return Task.FromResult(new InviteTarget(InviteTargetKind.OtherTenant));
+        if (u.AdminCompany || u.SuperAdmin)
+            return Task.FromResult(new InviteTarget(InviteTargetKind.ProtectedMember, u.Id));
         return Task.FromResult(u.Roles.ContainsKey(productCode) || u.Suspendido is not null
             ? new InviteTarget(InviteTargetKind.MemberWithRole, u.Id)
             : new InviteTarget(InviteTargetKind.MemberWithoutRole, u.Id));
     }
 
-    public Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, string adminRoleCode, CancellationToken ct) =>
+    public Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, IReadOnlyCollection<string> roleCodes, string adminRoleCode, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<ProductTenantCount>>(_usuarios.Values.GroupBy(u => u.Tenant)
-            .Select(g => new ProductTenantCount(g.Key, g.Count(u => u.Roles.ContainsKey(productCode) || u.Suspendido is not null),
+            .Select(g => new ProductTenantCount(g.Key, g.Count(u => (u.Roles.TryGetValue(productCode, out var x) && roleCodes.Contains(x.Code))
+                    || (u.Suspendido is { } s && roleCodes.Contains(s.Code))),
                 g.Count(u => u.Roles.TryGetValue(productCode, out var r) && r.Code == adminRoleCode))).ToList());
 
     private static ProductMemberSnapshot Snapshot(Usuario u, string productCode) =>

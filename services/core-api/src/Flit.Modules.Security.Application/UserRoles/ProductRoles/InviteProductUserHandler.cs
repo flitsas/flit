@@ -14,6 +14,7 @@ public enum InviteOutcome
     AlreadyWithRole,
     PendingInvitation,
     OtherTenant,
+    ProtectedTarget,
 }
 
 public sealed record InviteProductUserResult(InviteOutcome Outcome, Guid? TargetId, bool EmailSent);

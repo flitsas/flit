@@ -29,7 +29,7 @@ public sealed class SuspendProductRoleHandler(IProductRoleRepository repo)
         var otherAdmins = await repo.CountOtherActiveAdminsAsync(cmd.TenantId, ProductRoleRules.AdminRole(cmd.ProductCode), cmd.UserId, ct).ConfigureAwait(false);
         ProductRoleRules.EnsureNotLastAdmin(cmd.ProductCode, current.Code, otherAdmins);
 
-        await repo.SuspendAsync(cmd.TenantId, cmd.UserId, cmd.ProductCode, current.Id, cmd.Actor.UserId, ct).ConfigureAwait(false);
+        await repo.SuspendAsync(cmd.TenantId, cmd.UserId, cmd.ProductCode, current.Id, cmd.Actor.UserId, null, ct).ConfigureAwait(false);
         var updated = member with { CurrentRole = null, SuspendedRole = current };
         return new ProductRoleOutcome(ProductRoleRules.RowFor(cmd.Actor, cmd.ProductCode, updated), current.Code, null, Changed: true);
     }

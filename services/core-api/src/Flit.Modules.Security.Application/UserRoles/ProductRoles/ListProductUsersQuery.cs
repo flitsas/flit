@@ -52,8 +52,10 @@ public sealed class ListProductUsersHandler(IProductRoleRepository repo)
         var invitations = await repo.ListPendingInvitationsAsync(query.TenantId, query.ProductCode, ct).ConfigureAwait(false);
 
         var needle = string.IsNullOrEmpty(search) ? null : Fold(search);
-        var rows = members.Select(m => ProductRoleRules.RowFor(query.Actor, query.ProductCode, m))
-            .Concat(invitations.Select(ProductRoleRules.RowFor))
+        // CR-1: solo roles de la lista blanca; un rol propio de la compañía con el mismo producto no aparece.
+        var rows = members.Where(m => ProductRoleRules.IsVisible(query.ProductCode, m))
+            .Select(m => ProductRoleRules.RowFor(query.Actor, query.ProductCode, m))
+            .Concat(invitations.Where(i => ProductRoleRules.IsAllowedRole(query.ProductCode, i.RoleCode)).Select(ProductRoleRules.RowFor))
             .Where(r => needle is null || Fold(r.Name).Contains(needle, StringComparison.Ordinal) || Fold(r.Email).Contains(needle, StringComparison.Ordinal))
             .Where(r => roles.Count == 0 || roles.Contains(r.RoleCode, StringComparer.Ordinal))
             .Where(r => states.Count == 0 || states.Contains(r.State))
@@ -66,9 +68,9 @@ public sealed class ListProductUsersHandler(IProductRoleRepository repo)
         return new ProductUsersPage(slice, rows.Count, page, size, ProductRoleRules.AssignableRoles(query.Actor, query.ProductCode));
     }
 
-    /// <summary>Conteos por empresa del producto, para la tabla de compañías del SuperAdmin.</summary>
+    /// <summary>Conteos por empresa del producto, para la tabla de compañías del SuperAdmin (solo roles de la lista blanca).</summary>
     public Task<IReadOnlyList<ProductTenantCount>> CountByTenantAsync(string productCode, CancellationToken ct) =>
-        repo.CountByTenantAsync(productCode, ProductRoleRules.AdminRole(productCode), ct);
+        repo.CountByTenantAsync(productCode, [ProductRoleRules.UserRole(productCode), ProductRoleRules.AdminRole(productCode)], ProductRoleRules.AdminRole(productCode), ct);
 
     private static int Rank(ProductUserState state) => state switch
     {

@@ -34,7 +34,7 @@ public sealed class AssignProductRoleHandler(IProductRoleRepository repo)
         var role = await repo.FindAssignableRoleAsync(cmd.ProductCode, cmd.RoleCode, ct).ConfigureAwait(false)
             ?? throw ProductRoleRules.Fail(ProductRoleErrorCodes.RolNoPermitido, ProductRoleErrorKind.InvalidArgument, "El rol no está disponible en el catálogo.");
 
-        await repo.ReplaceProductRoleAsync(cmd.TenantId, cmd.UserId, cmd.ProductCode, role.Id, cmd.Actor.UserId, ct).ConfigureAwait(false);
+        await repo.ReplaceProductRoleAsync(cmd.TenantId, cmd.UserId, cmd.ProductCode, role.Id, cmd.Actor.UserId, null, ct).ConfigureAwait(false);
         var updated = member with { CurrentRole = role };
         return new ProductRoleOutcome(ProductRoleRules.RowFor(cmd.Actor, cmd.ProductCode, updated), current.Code, role.Code, Changed: true);
     }

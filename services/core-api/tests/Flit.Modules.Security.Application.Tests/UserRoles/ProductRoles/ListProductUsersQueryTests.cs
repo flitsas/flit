@@ -126,4 +126,28 @@ public sealed class ListProductUsersQueryTests
 
         conteos.Single(c => c.TenantId == Empresa).Should().Be(new ProductTenantCount(Empresa, 3, 1));
     }
+
+    [Fact]
+    public async Task RolPropio_NoAparece_NiSuInvitacion()
+    {
+        Sembrar();
+        _repo.Miembro(Empresa, Guid.NewGuid(), "rol_propio_diagnostico", nombre: "Con Rol Propio");
+        _repo.Invitaciones.Add((Guid.NewGuid(), Empresa, "Invitado Propio", "propio@ejemplo.test", "rol_propio_diagnostico"));
+
+        var page = await Listar(Super);
+
+        page.Total.Should().Be(4);
+        page.Users.Select(u => u.Name).Should().NotContain(["Con Rol Propio", "Invitado Propio"]);
+    }
+
+    [Fact]
+    public async Task Conteo_SoloCuentaRolesDeListaBlanca()
+    {
+        Sembrar();
+        _repo.Miembro(Empresa, Guid.NewGuid(), "rol_propio_diagnostico");
+
+        var conteos = await new ListProductUsersHandler(_repo).CountByTenantAsync(P, Ct);
+
+        conteos.Single(c => c.TenantId == Empresa).Users.Should().Be(3, "el rol propio no cuenta");
+    }
 }
