@@ -106,7 +106,7 @@ export default function Inicio() {
               </h2>
               <p className={AYUDA_CLS}>Muchos vehículos desde un archivo.</p>
             </div>
-            <p className={AYUDA_CLS}>Archivo .xlsx o .csv con la columna Identificador_Vehiculo y, opcional, Documento_Locatario.</p>
+            <p className={AYUDA_CLS}>Archivo .xlsx o .csv con la columna Identificador_Vehiculo y, opcionales, Tipo_Documento_Propietario y Documento_Propietario (propietario actual).</p>
             <div className="mt-auto flex flex-wrap gap-2">
               <Link href="/diagnosticos/nuevo?modo=masivo" className={BOTON_PRIMARIO_CLS}>
                 <Icono nombre="reporte-detallado" className="h-4 w-4" />
