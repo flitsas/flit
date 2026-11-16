@@ -27,7 +27,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.5.0\"", "BE-0 sube a 1.5.0, aditivo (estadísticas y reportes)");
+        info.Should().Contain("version: \"1.6.0\"", "HU #14582 sube a 1.6.0 (propietario actual declarado)");
         info.Should().Contain("Versión 1.3.1").And.Contain("backoffice_diagnostico").And.Contain("SuperAdmin");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
         Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
@@ -184,7 +184,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void BE0_version_1_5_0_con_rutas_esquemas_y_codigos_de_estadisticas_y_reportes()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.5.0\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
+        info.Should().Contain("version: \"1.6.0\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
         var paths = Bloque("paths:", sangria: 0).Split('\n');
         foreach (var ruta in RutasEstadisticasYReportes)
             paths.Should().Contain("  /api/v1/diagnostico" + ruta, $"el contrato declara {ruta}");
@@ -249,6 +249,36 @@ public sealed class OpenApiDiagnosticoContratoTests
             Bloque(respuesta, sangria: 4).Should().Contain("lecturas_backoffice").And.NotContain("No audita").And.NotContain("no audita", respuesta);
         foreach (var operacion in new[] { "reporteEmpresaBackoffice", "exportarReporteEmpresaExcelBackoffice", "exportarReporteEmpresaPdfBackoffice" })
             Bloque("get:", sangria: 4, desde: "operationId: " + operacion).Should().Contain("intento", operacion);
+    }
+
+    // HU #14582 (contrato-api §1.1/§1.2, C1, C2, C5, SP-4) — 1.6.0: propietario actual declarado con alias obsoleto de entrada,
+    // cambio_propietario requerido en tablas y dictamen, ningún documento en las lecturas ni en la confirmación.
+    [Fact]
+    public void HU14582_version_1_6_0_propietario_declarado_y_cambio_propietario()
+    {
+        var info = Bloque("info:", sangria: 0);
+        info.Should().Contain("version: \"1.6.0\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
+
+        var fila = Bloque("FilaVehiculo:", sangria: 4);
+        fila.Should().Contain("required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, cambio_propietario]");
+        fila.Should().Contain("cambio_propietario:").And.NotContain("documento_declarado").And.NotContain("propietarios:");
+        Yaml.Value.Should().NotContain("    DocumentoDeclaradoGrilla:").And.NotContain("    PropietarioGrilla:");
+        foreach (var esquema in new[] { "FilaPlaca:", "DictamenVehiculo:", "DictamenVehiculoBackoffice:" })
+            Bloque(esquema, sangria: 4).Should().Contain("cambio_propietario:", esquema);
+
+        var resumen = Bloque("FilaResumen:", sangria: 4);
+        resumen.Should().Contain("tipo_documento_propietario:").And.Contain("documento_propietario:").And.NotContain("_locatario");
+        resumen.Should().Contain("Tipo_Documento_Propietario").And.Contain("Documento_Propietario");
+        foreach (var entrada in new[] { "FilaCapturada:", "CorreccionFila:", "ExpressEntrada:" })
+        {
+            var bloque = Bloque(entrada, sangria: 4);
+            bloque.Should().Contain("tipo_documento_propietario:").And.Contain("documento_propietario:", entrada);
+            bloque.Should().Contain("tipo_documento_locatario:").And.Contain("deprecated: true").And.Contain("CAMPOS_EXCLUYENTES", entrada);
+        }
+
+        Bloque("VehiculoConfirmado:", sangria: 4).Should().NotContain("documento", "C5: la confirmación no devuelve documentos");
+        Yaml.Value.Should().Contain("ENCABEZADO_AMBIGUO").And.Contain("El RUNT no reporta locatario")
+            .And.Contain("Identificador_Vehiculo, Tipo_Documento_Propietario y Documento_Propietario");
     }
 
     /// <summary>El bloque <c>responses:</c> de la operación cuya línea contiene <paramref name="operacion"/> (el primero después de ella).</summary>
