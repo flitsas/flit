@@ -533,7 +533,9 @@ paths:
       description: >
         Permiso diagnostico.diagnosticos.crear (HU #13749, F02-C5; HU #14582). Libro con una hoja «Vehiculos» y el encabezado
         Identificador_Vehiculo, Tipo_Documento_Propietario y Documento_Propietario (texto en las tres; el documento es el
-        propietario actual, opcional, que solo se compara con el propietario del RUNT). La carga acepta además las
+        propietario actual, opcional, que solo se compara con el propietario del RUNT). Una segunda hoja «Instrucciones» explica
+        cada columna; las dos del documento dicen «Propietario actual (opcional)». La hoja de datos va primero (el archivo se sube
+        tal cual). La carga acepta además las
         cabeceras anteriores Tipo_Documento_Locatario y Documento_Locatario como alias; un archivo con las dos parejas
         responde 422 ENCABEZADO_AMBIGUO. Archivo fijo, igual para toda compañía.
       responses:
@@ -751,6 +753,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResultadoConfirmacion"
+        "429": { $ref: "#/components/responses/DemasiadasSolicitudes" }
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1360,13 +1363,14 @@ paths:
         HU #13849 (F07-H4, F07-C5/C6/C8..C11). Permiso diagnostico.reportes.descargar y la misma visibilidad que la grilla. Se
         emite con el lote EN_PROCESO, COMPLETADO o INCOMPLETO (lo no terminado sale con su estado). Hojas, en este orden:
         «Vehículos»: una fila por vehículo en el orden de la carga. Columnas fijas Orden, Identificador, Tipo de identificador
-        (código, p. ej. PLACA_CARRO), Placa, VIN y Estado del vehículo (Terminado, En proceso o Con error). Luego, por cada fuente
+        (código, p. ej. PLACA_CARRO), Placa, VIN, Propietario actual declarado («TIPO ****1234» o vacío), Cambio de propietario
+        (Sí, No o vacío; HU #14582) y Estado del vehículo (Terminado, En proceso o Con error). Luego, por cada fuente
         del alcance en el orden de la grilla, «{fuente} — Estado» (Completado, Pendiente, «No aplica: {motivo}» o «Consulta no
         disponible», sin código de error ni causa) y sus columnas de dato, que solo se llenan con la fuente Completado (catálogo
         ColumnasExcel): RUNT → Servicio, Clase, Organismo de tránsito, Marca, Línea, Modelo, Propietarios (cantidad), Locatarios
         (cantidad); SIMIT vehículo → Semáforo, Comparendos, Valor total; RUNT propietarios / RUNT locatarios → Personas
-        consultadas, Personas con error, Documentos («TIPO ****1234» separados por «; », con «(Declarado por el cliente)» si lo
-        declaró el cliente); SIMIT propietarios / SIMIT locatarios → las mismas más Comparendos y Valor total sumados de las
+        consultadas, Personas con error, Documentos («TIPO ****1234» separados por «; »; los locatarios son solo los del RUNT: las
+        personas históricas declaradas por el cliente no se pintan, HU #14582); SIMIT propietarios / SIMIT locatarios → las mismas más Comparendos y Valor total sumados de las
         personas; Avalúo → Valor sugerido, Fuente principal, Sin valor comercial (Sí/No); Impuesto departamental → Total adeudado (número,
         pesos enteros) y Vigencias pendientes (cantidad de vigencias no pagadas), HU #13864.
         El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
@@ -2159,6 +2163,7 @@ paths:
                 $ref: "#/components/schemas/ExpressCreado"
         "400":
           description: Cuerpo que no es JSON válido.
+        "429": { $ref: "#/components/responses/DemasiadasSolicitudes" }
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -2217,6 +2222,7 @@ paths:
                 $ref: "#/components/schemas/EstimadoExpress"
         "400":
           description: Cuerpo que no es JSON válido.
+        "429": { $ref: "#/components/responses/DemasiadasSolicitudes" }
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4074,6 +4080,14 @@ components:
         genera el archivo, no descifra nada y no escribe accesos_reporte. En B5/B6 el intento ya quedó en lecturas_backoffice (lo
         registra la empresa explícita antes del conteo); en R2/R3 y B2/B3 no queda fila.
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorReporteDemasiadoGrande" } } }
+    DemasiadasSolicitudes:
+      description: >
+        DEMASIADAS_SOLICITUDES (HU #14582, SP-5). Se superó el límite de solicitudes de la ruta: diagnostico-express (30/min por
+        usuario) o diagnostico-confirmacion (10/min por usuario y 60/min por compañía), configurables en
+        Diagnostico:LimitesSolicitudes. No se procesa nada.
+      headers:
+        Retry-After: { schema: { type: integer, example: 60 }, description: Segundos para reintentar. }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
     ExportacionEnCurso:
       description: >
         EXPORTACION_EN_CURSO. El usuario ya tiene una exportación en curso, o el proceso ya tiene 4. No escribe accesos_reporte; en
@@ -7435,9 +7449,10 @@ components:
         un documento que no se pudo descifrar sale como «<tipo> No disponible» (por ejemplo «CC No disponible»), sin el número. En
         consumo, consultas_exitosas, consultas_con_error y consultas_runt|simit|avaluo|impuesto cuentan solo lo que consume: celdas
         COMPLETADO y ERROR no reutilizadas (sin NA, PENDIENTE, EN_CURSO ni reutilizadas del mismo día, D-10); las tres fuentes RUNT y
-        las tres SIMIT se suman.
+        las tres SIMIT se suman. En vehiculos (HU #14582, SP-6): propietario_declarado_documento es el propietario actual que
+        declaró el cliente, cambio_propietario es «Sí», «No» o null y locatario_runt_documento es solo el locatario del RUNT.
       x-columnas:
-        vehiculos: [fecha_diagnostico, diagnostico_nombre, modalidad, tipo_analisis, tipo_tramite, placa, vin, servicio, organismo, departamento, propietarios_documentos, locatario_documento, locatario_origen, veredicto, estado_consultas, saneamiento_estado, tramite_numero]
+        vehiculos: [fecha_diagnostico, diagnostico_nombre, modalidad, tipo_analisis, tipo_tramite, placa, vin, servicio, organismo, departamento, propietarios_documentos, propietario_declarado_documento, cambio_propietario, locatario_runt_documento, veredicto, estado_consultas, saneamiento_estado, tramite_numero]
         consultas: [fecha_diagnostico, diagnostico_nombre, placa, fuente, estado, motivo_na, tipo_error, intentos, duracion_ms, dato_obtenido_en, reutilizada, origen]
         saneamientos: [solicitado_en, placa, diagnostico_nombre, estado, tomado_en, cerrado_en, dias_hasta_cierre, motivo_cierre, renglones_total, renglones_pendientes]
         derivaciones: [fecha, placa, diagnostico_nombre, tipo_operacion, tipo_tramite, estado, motivo, tramite_numero]
