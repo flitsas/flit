@@ -60,8 +60,9 @@ public sealed class LimitesSolicitudesTests
         deOtro.StatusCode.Should().Be(HttpStatusCode.Created, "el cupo es por usuario");
     }
 
-    // SP-5 / §1.5 — confirmación: 1 por minuto por usuario y 2 por minuto por compañía. El segundo intento del usuario es 429 por
-    // usuario; el primero de otro usuario de la misma compañía es 429 por compañía; la compañía B no comparte el cupo.
+    // SP-5 / §1.5 — confirmación: 1 por minuto por usuario y 2 por minuto por compañía, encadenados usuario → compañía (CR-1 del
+    // review): el segundo intento de «uno» es 429 por usuario y NO gasta cupo de la compañía, así que «dos» pasa el límite (409:
+    // el lote ya está confirmado); «tres» es 429 por compañía; la compañía B no comparte el cupo.
     [Fact]
     public async Task Confirmacion_limita_por_usuario_y_por_compania()
     {
@@ -77,21 +78,25 @@ public sealed class LimitesSolicitudesTests
         cliente.Dispose();
         using var uno = api.Cliente(Token(api, empresas.A.Id, Guid.NewGuid().ToString()));
         using var dos = api.Cliente(Token(api, empresas.A.Id, Guid.NewGuid().ToString()));
+        using var tres = api.Cliente(Token(api, empresas.A.Id, Guid.NewGuid().ToString()));
         using var deB = api.Cliente(Token(api, empresas.B.Id, Guid.NewGuid().ToString()));
 
         var primera = await Lotes.ConfirmarAsync(uno, id, [Lotes.Fila("LIM201")], ct);
         var segunda = await Lotes.ConfirmarAsync(uno, id, [Lotes.Fila("LIM202")], ct);
-        var porCompania = await Lotes.ConfirmarAsync(dos, id, [Lotes.Fila("LIM203")], ct);
+        var deDos = await Lotes.ConfirmarAsync(dos, id, [Lotes.Fila("LIM203")], ct);
+        var porCompania = await Lotes.ConfirmarAsync(tres, id, [Lotes.Fila("LIM205")], ct);
         var otraCompania = await Lotes.ConfirmarAsync(deB, Guid.NewGuid(), [Lotes.Fila("LIM204")], ct);
 
         primera.StatusCode.Should().Be(HttpStatusCode.Accepted, await primera.Content.ReadAsStringAsync(ct));
         await Debe429Async(segunda, ct);
+        deDos.StatusCode.Should().Be(HttpStatusCode.Conflict, "CR-1: el intento rechazado por usuario no gastó cupo de la compañía");
         await Debe429Async(porCompania, ct);
         otraCompania.StatusCode.Should().Be(HttpStatusCode.NotFound, "B no comparte el cupo de A: pasa el límite y el lote no es suyo");
     }
 
-    // DM-2 — la política diagnostico-invitaciones queda registrada (la aplica be2b): una ruta con RequireRateLimiting de ese nombre
-    // responde y, por encima del límite por actor, 429 DEMASIADAS_SOLICITUDES.
+    // DM-2 — la política diagnostico-invitaciones queda registrada (la aplica be2b): 1 por hora por actor y 2 por hora por compañía,
+    // encadenados como la confirmación (CR-1): el segundo intento del actor 1 es 429 y no gasta cupo de la compañía; el actor 2
+    // pasa; el actor 3 es 429 por compañía.
     [Fact]
     public async Task Politica_de_invitaciones_queda_registrada()
     {
@@ -102,16 +107,23 @@ public sealed class LimitesSolicitudesTests
             configurar: b => b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Diagnostico:LimitesSolicitudes:InvitacionesPorActorPorHora"] = "1",
+                ["Diagnostico:LimitesSolicitudes:InvitacionesPorCompaniaPorHora"] = "2",
             }));
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
-        using var cliente = api.Cliente(Token(api, empresa.Id, Guid.NewGuid().ToString()));
+        using var actor1 = api.Cliente(Token(api, empresa.Id, Guid.NewGuid().ToString()));
+        using var actor2 = api.Cliente(Token(api, empresa.Id, Guid.NewGuid().ToString()));
+        using var actor3 = api.Cliente(Token(api, empresa.Id, Guid.NewGuid().ToString()));
 
-        var primera = await cliente.PostAsync(Ruta, null, ct);
-        var segunda = await cliente.PostAsync(Ruta, null, ct);
+        var primera = await actor1.PostAsync(Ruta, null, ct);
+        var segunda = await actor1.PostAsync(Ruta, null, ct);
+        var deActor2 = await actor2.PostAsync(Ruta, null, ct);
+        var deActor3 = await actor3.PostAsync(Ruta, null, ct);
 
         primera.StatusCode.Should().Be(HttpStatusCode.OK);
         await Debe429Async(segunda, ct);
+        deActor2.StatusCode.Should().Be(HttpStatusCode.OK, "CR-1: el rechazo por actor no gastó cupo de la compañía");
+        await Debe429Async(deActor3, ct);
         new[] { LimitesSolicitudes.Express, LimitesSolicitudes.Confirmacion, LimitesSolicitudes.Invitaciones }
             .Should().Equal("diagnostico-express", "diagnostico-confirmacion", "diagnostico-invitaciones");
     }
