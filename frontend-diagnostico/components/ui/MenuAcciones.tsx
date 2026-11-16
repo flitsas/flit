@@ -46,6 +46,8 @@ export interface MenuAccionesItem {
   tone?: "default" | "danger";
   /** Destaca el ítem (punto de alerta) cuando el disparador tiene `attention` por esta acción. */
   attention?: boolean;
+  /** Grupo del ítem (HU #14584, spec-ui §4): entre ítems seguidos de grupos distintos va un separador. */
+  grupo?: string;
 }
 
 export interface MenuAccionesProps {
@@ -63,7 +65,14 @@ export interface MenuAccionesProps {
   ocupado?: boolean;
 }
 
-type Coordenadas = { top: number; left: number; minWidth: number };
+/**
+ * Posición del panel (HU #14584, spec-ui §4). `medido` es false en la primera pasada: el panel se pinta oculto
+ * (`visibility: hidden`) para medir su alto y decidir el lado; el foco inicial espera a que quede visible.
+ */
+type Coordenadas = { top: number; left: number; minWidth: number; lado: "abajo" | "arriba"; maxHeight?: number; medido: boolean };
+
+const BORDE = 8;
+const SEPARACION = 4;
 
 export function MenuAcciones({
   items,
@@ -88,8 +97,33 @@ export function MenuAcciones({
     const menuWidth = Math.max(240, rect.width);
     // Alinea el borde derecho del menú con el del botón (como absolute right-0).
     const left = Math.min(Math.max(8, rect.right - menuWidth), window.innerWidth - menuWidth - 8);
-    setCoords({ top: rect.bottom + 4, left, minWidth: menuWidth });
+    const menu = menuRef.current;
+    if (!menu) {
+      setCoords({ top: rect.bottom + SEPARACION, left, minWidth: menuWidth, lado: "abajo", medido: false });
+      return;
+    }
+    // Flip vertical: abajo si cabe; si no, arriba cuando allí hay más espacio; si no cabe en ninguno, el lado con más
+    // espacio con altura máxima y scroll interno (último recurso). `scrollHeight` da el alto natural aunque ya tenga tope.
+    const alto = Math.max(menu.scrollHeight, menu.getBoundingClientRect().height);
+    const espacioAbajo = window.innerHeight - rect.bottom - BORDE;
+    const espacioArriba = rect.top - BORDE;
+    if (alto <= espacioAbajo) {
+      setCoords({ top: rect.bottom + SEPARACION, left, minWidth: menuWidth, lado: "abajo", medido: true });
+    } else if (alto <= espacioArriba) {
+      setCoords({ top: rect.top - alto - SEPARACION, left, minWidth: menuWidth, lado: "arriba", medido: true });
+    } else if (espacioArriba > espacioAbajo) {
+      const maxHeight = espacioArriba - BORDE;
+      setCoords({ top: rect.top - maxHeight - SEPARACION, left, minWidth: menuWidth, lado: "arriba", maxHeight, medido: true });
+    } else {
+      setCoords({ top: rect.bottom + SEPARACION, left, minWidth: menuWidth, lado: "abajo", maxHeight: espacioAbajo - BORDE, medido: true });
+    }
   };
+
+  // Segunda pasada: con el panel ya pintado (oculto), se mide y se decide el lado.
+  const medido = coords?.medido ?? false;
+  useLayoutEffect(() => {
+    if (open && coords && !medido) updateCoords();
+  }, [open, coords, medido]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -116,7 +150,7 @@ export function MenuAcciones({
   }, [open]);
 
   // Al pintarse el menú (coordenadas listas), el foco va al primer ítem habilitado (o al primero, si todos lo están).
-  const menuPintado = open && coords !== null;
+  const menuPintado = open && medido;
   useEffect(() => {
     if (!menuPintado) return;
     const primero = items.findIndex((item) => !item.disabled);
@@ -177,10 +211,24 @@ export function MenuAcciones({
         role="menu"
         aria-label={ariaLabel}
         onKeyDown={onMenuKeyDown}
-        style={{ top: coords.top, left: coords.left, minWidth: coords.minWidth }}
-        className="fixed z-[200] rounded-[9px] border border-[color:var(--di-border)] bg-card px-4 py-1 shadow-[var(--kit-sombra)]"
+        data-lado={coords.lado}
+        style={{
+          top: coords.top,
+          left: coords.left,
+          minWidth: coords.minWidth,
+          ...(coords.maxHeight !== undefined ? { maxHeight: coords.maxHeight } : {}),
+          ...(coords.medido ? {} : { visibility: "hidden" as const }),
+        }}
+        className={`fixed z-[200] rounded-[9px] border border-[color:var(--di-border)] bg-card px-4 py-1 shadow-[var(--kit-sombra)] ${
+          coords.maxHeight !== undefined ? "overflow-y-auto overscroll-contain" : ""
+        }`}
       >
-        {items.map((item, i) => {
+        {items.flatMap((item, i) => {
+          const anterior = i > 0 ? items[i - 1] : undefined;
+          const separador =
+            anterior && item.grupo !== undefined && anterior.grupo !== undefined && anterior.grupo !== item.grupo ? (
+              <div key={`sep-${item.key}`} role="separator" className="my-1 border-t border-[var(--di-divider)]" />
+            ) : null;
           const Icon = item.icon;
           const tono = item.attention
             ? "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)] hover:brightness-95"
@@ -207,7 +255,7 @@ export function MenuAcciones({
           const motivoId = motivo ? `${menuId}-${item.key}-motivo` : undefined;
           const clases = `flex min-h-10 w-full items-center gap-2 border-t border-[color:var(--di-border)] px-0 py-2 text-left text-sm font-medium transition first:border-t-0 focus-visible:outline-2 focus-visible:outline-[var(--di-action)] ${
             item.disabled ? "cursor-not-allowed" : "hover:text-[color:var(--kit-azul-texto)]"
-          } ${tono}`;
+          } ${separador ? "border-t-0" : ""} ${tono}`;
           const contenido = (
             <>
               {Icon && <Icon className={`h-3.5 w-3.5 shrink-0 ${item.disabled ? "opacity-60" : ""}`} aria-hidden="true" />}
@@ -223,7 +271,7 @@ export function MenuAcciones({
               {marca}
             </>
           );
-          return item.href && !item.disabled ? (
+          const elemento = item.href && !item.disabled ? (
             <a
               key={item.key}
               ref={ref}
@@ -254,6 +302,7 @@ export function MenuAcciones({
               {contenido}
             </button>
           );
+          return separador ? [separador, elemento] : [elemento];
         })}
       </div>,
       document.body,

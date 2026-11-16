@@ -34,7 +34,7 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
 
     await waitFor(() => expect(within(filaDe()).getByText("Corregida")).toBeInTheDocument());
     const [llamada] = llamadas(api, "POST", ruta("/carga/validar-filas"));
-    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 3, identificador: "tst124", tipo_documento_locatario: null, documento_locatario: null }] });
+    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 3, identificador: "tst124", tipo_documento_propietario: null, documento_propietario: null }] });
     expect(onFilaRevalidada).toHaveBeenCalledWith(
       expect.objectContaining({ fila: 3, valida: true }),
       expect.objectContaining({ fila: 3, identificador: "tst124" }),
@@ -90,21 +90,21 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
       fila: 6,
       identificador: "TST125",
       valida: false,
-      tipo_documento_locatario: "CC",
-      documento_locatario: "****12AB",
-      errores: [{ campo: "Documento_Locatario", code: "DOCUMENTO_INVALIDO", mensaje: "El documento solo admite dígitos." }],
+      tipo_documento_propietario: "CC",
+      documento_propietario: "****12AB",
+      errores: [{ campo: "Documento_Propietario", code: "DOCUMENTO_INVALIDO", mensaje: "El documento solo admite dígitos." }],
     });
-    const api = simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [fila({ fila: 6, identificador: "TST125", tipo_documento_locatario: "CC", documento_locatario: "****4050" })] })) });
+    const api = simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [fila({ fila: 6, identificador: "TST125", tipo_documento_propietario: "CC", documento_propietario: "****4050" })] })) });
     montar([conDoc]);
     expect(within(filaDe(6)).getByText("CC ****12AB")).toBeInTheDocument();
-    const documento = screen.getByLabelText("Documento del locatario de la fila 6") as HTMLInputElement;
+    const documento = screen.getByLabelText("Documento del propietario actual de la fila 6") as HTMLInputElement;
     expect(documento.value).toBe("");
 
     fireEvent.change(documento, { target: { value: "1020304050" } });
 
     await waitFor(() => expect(within(filaDe(6)).getByText("Corregida")).toBeInTheDocument());
     const [llamada] = llamadas(api, "POST", ruta("/carga/validar-filas"));
-    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 6, identificador: "TST125", tipo_documento_locatario: "CC", documento_locatario: "1020304050" }] });
+    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 6, identificador: "TST125", tipo_documento_propietario: "CC", documento_propietario: "1020304050" }] });
     expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 });
@@ -219,7 +219,7 @@ describe("TablaFilasCorregibles: tarjetas por debajo de 900 px (HU #14562 · M6)
       "Fila",
       "Identificador",
       "Tipo de documento",
-      "Documento del locatario",
+      "Documento del propietario actual",
       "Estado",
       "Acciones",
     ]);

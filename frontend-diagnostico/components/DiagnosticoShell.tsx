@@ -200,6 +200,8 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
       <ResumenSaneamientosContext.Provider value={resumen}>
       <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={nav} user={usuario} accountUrl={tramitesUrl}
         layout="app"
+        // HU #14583 (spec-ui §9): solo Diagnóstico reparte el dock mitad y mitad; los demás productos no pasan el prop.
+        dockDistribucion="equilibrada"
         headerActions={estado.sesion ? <CampanaDiagnostico /> : undefined}
       >
         <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>

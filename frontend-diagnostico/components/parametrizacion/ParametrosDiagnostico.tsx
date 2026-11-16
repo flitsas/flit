@@ -17,8 +17,8 @@ export interface ParametrosDiagnosticoProps {
   children?: ReactNode;
   /**
    * `vertical` (por defecto): Información general, Alcance y Modo apilados. `horizontal` (FE-3, pantalla de creación a una
-   * columna): Información general · Modo · Alcance lado a lado desde md (2 columnas, Alcance debajo a ancho completo) y en
-   * 3 columnas desde xl, con Alcance al doble de ancho por sus tres grupos.
+   * columna): Información general · Modo lado a lado desde md y, debajo, Alcance a fila completa (HU #14583, spec-ui
+   * §2.4: sus grupos van en filas con las fuentes en horizontal, así que necesita todo el ancho).
    */
   disposicion?: "vertical" | "horizontal";
 }
@@ -43,7 +43,7 @@ export function ParametrosDiagnostico({ p, nombre, onNombre, disabled = false, c
       compacta
     />
   );
-  const alcance = (columnas: boolean) => (
+  const alcance = (
     <SeccionAlcance
       habilitadas={p.contratadas}
       disponibles={p.disponibles}
@@ -53,7 +53,6 @@ export function ParametrosDiagnostico({ p, nombre, onNombre, disabled = false, c
       error={p.errores.alcance}
       disabled={disabled}
       compacta
-      columnas={columnas}
     />
   );
   const modo = (
@@ -76,7 +75,7 @@ export function ParametrosDiagnostico({ p, nombre, onNombre, disabled = false, c
       <div className="flex flex-col gap-5">
         <div
           data-disposicion="horizontal"
-          className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_minmax(16rem,1fr)_minmax(0,2fr)]"
+          className="grid grid-cols-1 gap-6 md:grid-cols-2"
         >
           <div data-zona="informacion" className="min-w-0">
             {informacion}
@@ -84,8 +83,8 @@ export function ParametrosDiagnostico({ p, nombre, onNombre, disabled = false, c
           <div data-zona="modo" className={`min-w-0 ${SEPARADOR_XL_CLS}`}>
             {modo}
           </div>
-          <div data-zona="alcance" className={`min-w-0 md:col-span-2 xl:col-span-1 ${SEPARADOR_XL_CLS}`}>
-            {alcance(true)}
+          <div data-zona="alcance" className="col-span-full min-w-0 border-t border-[color:var(--di-divider)] pt-5">
+            {alcance}
           </div>
         </div>
         {children}
@@ -96,7 +95,7 @@ export function ParametrosDiagnostico({ p, nombre, onNombre, disabled = false, c
   return (
     <div className="flex flex-col gap-5">
       {informacion}
-      {alcance(false)}
+      {alcance}
       {modo}
       {children}
     </div>

@@ -107,10 +107,12 @@ export function SelectorSegmentado<T extends string>({
             }}
             onKeyDown={(e) => alTeclear(e, i)}
             className={cn(
-              "min-h-9 rounded-full px-4 text-sm font-semibold motion-safe:transition-colors motion-safe:duration-[var(--di-motion-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)] disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60 aria-disabled:hover:bg-transparent",
+              "min-h-9 rounded-full px-4 text-sm font-semibold motion-safe:transition-colors motion-safe:duration-[var(--di-motion-fast)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)] disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60",
+              // HU #14583 (spec-ui §3): la marcada en la tinta del aplicativo (#162744 por token) con texto blanco; en
+              // oscuro la tinta casi no se separa de la pista, así que lleva además un aro interior de 2 px (1.4.11).
               marcada
-                ? "bg-[var(--di-surface)] text-[color:var(--di-action)] shadow-[var(--kit-sombra)]"
-                : "text-[color:var(--di-text-secondary)] hover:bg-[color:var(--kit-hover)]",
+                ? "bg-[color:var(--kit-tinta)] text-[color:var(--di-on-accent)] dark:shadow-[inset_0_0_0_2px_var(--di-heading)]"
+                : "text-[color:var(--di-text-secondary)] hover:bg-[color:var(--kit-hover)] aria-disabled:hover:bg-transparent",
             )}
           >
             {o.label}
