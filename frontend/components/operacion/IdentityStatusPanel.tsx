@@ -2,8 +2,9 @@
 
 import { esFamiliaTraspaso } from './wizardCapabilities';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, Clock, Info, XCircle } from 'lucide-react';
+import { type ComponentType, useCallback, useEffect, useRef, useState } from 'react';
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -19,6 +20,13 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_CERRAR = iconoComo("cerrar");
+const ICONO_EXCLAMACION = iconoComo("exclamacion");
+const ICONO_ALERTA = iconoComo("alerta");
+const ICONO_RELOJ = iconoComo("reloj");
 /**
 
  * HU #10875 + CF-08 (Feature #11004, HU #11009).
@@ -41,12 +49,12 @@ function parteLabel(role: string | null | undefined, fallback?: string | null): 
 
 const ALERT_META: Record<
   IdentityValidationAlertKind,
-  { label: string; tone: StatusTone; icon: typeof AlertCircle }
+  { label: string; tone: StatusTone; icon: ComponentType<{ className?: string }> }
 > = {
-  rechazada: { label: 'Rechazada', tone: 'danger', icon: XCircle },
-  expirada: { label: 'Expirada', tone: 'danger', icon: AlertCircle },
-  por_vencer: { label: 'Por vencer', tone: 'warning', icon: Clock },
-  atascada: { label: 'Atascada', tone: 'warning', icon: AlertTriangle },
+  rechazada: { label: 'Rechazada', tone: 'danger', icon: ICONO_CERRAR },
+  expirada: { label: 'Expirada', tone: 'danger', icon: ICONO_ALERTA },
+  por_vencer: { label: 'Por vencer', tone: 'warning', icon: ICONO_RELOJ },
+  atascada: { label: 'Atascada', tone: 'warning', icon: ICONO_ALERTA },
 };
 
 const ESTADO_LABEL: Record<string, string> = {
@@ -232,7 +240,7 @@ export function IdentityStatusPanel({
           style={{
             background: 'transparent',
             border: 'none',
-            color: '#475569',
+            color: 'var(--muted-foreground)',
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
@@ -243,12 +251,11 @@ export function IdentityStatusPanel({
         </button>
         {open && needsLive && (
           <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-            style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
+            {...etiquetaKit('info')}
             role="status"
             aria-live="polite"
           >
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
+            <span className={`${ETIQUETA_PUNTO_CLS} animate-pulse`} aria-hidden />
             En vivo
           </span>
         )}
@@ -258,21 +265,20 @@ export function IdentityStatusPanel({
         <div
           style={{
             marginTop: 12,
-            background: '#fff',
-            border: '1px solid #e2e8f0',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
             borderRadius: 12,
             padding: 16,
           }}
-          className="dark:bg-[#162744]"
         >
           {error && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+              style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
               role="alert"
               aria-live="polite"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-1">
                 <p className="font-semibold">No se pudo cargar el historial de identidad.</p>
                 <p className="opacity-80">{error}</p>
@@ -280,7 +286,7 @@ export function IdentityStatusPanel({
                   type="button"
                   onClick={() => void load()}
                   className="mt-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-white"
-                  style={{ background: '#FF4E00' }}
+                  style={{ background: 'var(--color-flit-alert)' }}
                 >
                   Reintentar
                 </button>
@@ -292,7 +298,7 @@ export function IdentityStatusPanel({
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-2">
               <span className="sr-only">Cargando historial de identidad…</span>
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-10 animate-pulse rounded-lg bg-black/5 dark:bg-white/5" aria-hidden />
+                <div key={i} className="h-10 animate-pulse rounded-lg bg-muted" aria-hidden />
               ))}
             </div>
           )}
@@ -332,7 +338,7 @@ export function IdentityStatusPanel({
                     return (
                       <li
                         key={v.id}
-                        className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2 last:border-0 last:pb-0 dark:border-white/10"
+                        className="flex flex-wrap items-start justify-between gap-2 border-b border-border pb-2 last:border-0 last:pb-0"
                       >
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex flex-wrap items-center gap-1.5">
@@ -343,9 +349,9 @@ export function IdentityStatusPanel({
                             </span>
                             {row.vigente && (
                               <span
-                                className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                                style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 12%, transparent)', color: 'var(--color-flit-brand)' }}
+                                {...etiquetaKit('success')}
                               >
+                                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                                 Vigente
                               </span>
                             )}
@@ -391,7 +397,7 @@ function MotivoNoEnvioRow({ motivo }: { motivo: EnvioValidacionMotivo }) {
   const copy = presentarMotivoNoEnvio(motivo.codigo, parte);
   const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
   const { color, background, border } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
-  const Icono = bloqueo ? AlertTriangle : Info;
+  const Icono = bloqueo ? ICONO_ALERTA : ICONO_EXCLAMACION;
 
   return (
     <div
@@ -429,7 +435,7 @@ function AlertsBanner({
       role="alert"
       aria-live="polite"
     >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="space-y-1">
         {alerts.length > 0 && (
           <p className="font-semibold">

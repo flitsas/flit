@@ -260,6 +260,8 @@ public static class DependencyInjection
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
         // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
+        // HU #14547 — regenerar SOLO el mandato (mandatario recalculado), mismo GenerarFurHandler del scope.
+        services.AddScoped<IMandatoRegenerador>(sp => sp.GetRequiredService<GenerarFurHandler>());
         // Bug #11613 — envoltura trazada de la regeneración en caliente para los flujos internos del OT
         // (aprobar, asignar placa): inspecciona el resultado, loguea a Error y persiste evento.
         services.AddScoped<RegenerarDocumentosTrazadoHandler>();
@@ -269,9 +271,13 @@ public static class DependencyInjection
         // sin depender de que alguien genere el consolidado.
         services.AddScoped<FirmarImprontaManualSiListaHandler>();
         services.AddScoped<BackfillFirmaImprontaManualHandler>();
+        // Copia de la firma de baúl de cada parte al radicar (el trámite radicado ya no lee el baúl en vivo).
+        services.AddScoped<FirmaBaulCopiaCapturer>();
         // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
         services.AddScoped<LimpiarConsolidadoHandler>();
         services.AddScoped<CargarConsolidadoExternoHandler>();
+        // HU #14547 — «Regenerar mandato y consolidado» (solo SuperAdmin).
+        services.AddScoped<RegenerarMandatoYConsolidadoHandler>();
         // HU #12159 — cambio de estado administrativo (sin TramiteStateMachine, excluye 'aprobado').
         services.AddScoped<AdminCambiarEstadoHandler>();
         // HU #12160 — anulación administrativa (cualquier origen, excluye 'aprobado' y 'revocado').
@@ -287,6 +293,7 @@ public static class DependencyInjection
         services.AddScoped<ActivarIdentidadManualHandler>();
         services.AddScoped<VencerIdentidadHandler>();
         services.AddScoped<RegenerarEnlaceManualHandler>();
+        services.AddScoped<CopiarEnlaceManualHandler>();
         // HU #13298/#13299 (Feature #13282 C) — aprobar y rechazar la revisión manual (Super Admin).
         services.AddScoped<AprobarValidacionManualHandler>();
         services.AddScoped<RechazarValidacionManualHandler>();
@@ -323,6 +330,8 @@ public static class DependencyInjection
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
         services.AddScoped<Identity.IdentitySignatureCapture>();
         services.AddScoped<Identity.IIdentitySignatureCapture>(sp => sp.GetRequiredService<Identity.IdentitySignatureCapture>());
+        // HU #14301 (Feature #14300, Épica #14271) — carta de identidad de FLIT al aprobar una validación manual.
+        services.AddScoped<Identity.IIdentityLetterService, Identity.IdentityLetterService>();
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
         services.AddScoped<GetIdentityAuditHandler>();
         // CF-07 (Feature #11004, ADR-0036) — misma bitácora, sin depender de instanceId (standalone + trámite).

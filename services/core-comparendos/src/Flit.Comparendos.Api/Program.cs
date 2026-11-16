@@ -96,6 +96,7 @@ public static class Program
 
         var app = builder.Build();
         app.UseExceptionHandler();
+        app.Use(LimitarCargaOcr);
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
@@ -115,6 +116,40 @@ app.UseMiddleware<LecturasSuperAdmin>();
         var grpcHost = $"*:{grpcPort}";
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;
+    }
+
+    /// <summary>
+    /// GDC punto 10: la carga de paquetes OCR admite 100 MB de archivos + 1 MB de sobre multipart (mismo valor que el
+    /// gateway y el proxy de Next); el resto de rutas sigue con el límite general de Kestrel. Por encima, un 413 con
+    /// <c>{ code, error }</c> que la pantalla puede mostrar, en vez del error genérico de la lectura del formulario.
+    /// El <c>FormOptions</c> por defecto no estorba: 128 MB de multipart y 1024 valores (el paquete trae hasta 200).
+    /// </summary>
+    public const long LimiteCargaOcrBytes = 101L * 1024 * 1024;
+
+    private static async Task LimitarCargaOcr(HttpContext context, RequestDelegate next)
+    {
+        if (!HttpMethods.IsPost(context.Request.Method)
+            || !string.Equals(context.Request.Path.Value?.TrimEnd('/'), $"{Prefijo}/ocr/paquetes", StringComparison.OrdinalIgnoreCase))
+        {
+            await next(context).ConfigureAwait(false);
+            return;
+        }
+
+        if (context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limite)
+            limite.MaxRequestBodySize = LimiteCargaOcrBytes;
+        try
+        {
+            await next(context).ConfigureAwait(false);
+        }
+        catch (Microsoft.AspNetCore.Http.BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge && !context.Response.HasStarted)
+        {
+            context.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                code = "PAQUETE_DEMASIADO_GRANDE",
+                error = "El paquete supera 100 MB. Pártelo en dos paquetes y cárgalos por separado.",
+            }).ConfigureAwait(false);
+        }
     }
 
     /// <summary>Aplica las migraciones pendientes del esquema del servicio (EF las serializa entre réplicas) y siembra.</summary>

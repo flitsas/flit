@@ -109,8 +109,10 @@ public static partial class OtPermissionMap
         // ot.documentos.manage (2)
         ["GET /api/v1/admin/ot/document-precedence"] = Documentos,
         ["PATCH /api/v1/admin/ot/document-precedence"] = Documentos,
-        // ot.usuarios.manage (6)
+        // ot.usuarios.manage (8) — HU #14425 (Feature #14420) suma la invitación masiva (plantilla + carga).
         ["POST /api/v1/admin/ot/users/invite"] = Usuarios,
+        ["GET /api/v1/admin/ot/users/invite/bulk/template"] = Usuarios,
+        ["POST /api/v1/admin/ot/users/invite/bulk"] = Usuarios,
         ["GET /api/v1/admin/ot/users"] = Usuarios,
         ["PATCH /api/v1/admin/ot/users/{userId}"] = Usuarios,
         ["POST /api/v1/admin/ot/invitations/{invitationId}/resend"] = Usuarios,

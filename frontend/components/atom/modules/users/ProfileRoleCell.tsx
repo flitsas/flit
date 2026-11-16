@@ -1,5 +1,6 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import {
   isAdminRole,
   profileLabel,
@@ -35,12 +36,7 @@ export function ProfileBadge({
   const base = full ? profileLabel(profile) : profileShortLabel(profile);
   return (
     <span
-      className="inline-flex w-fit max-w-full truncate rounded-md border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide"
-      style={{
-        background: `var(--badge-${tone}-bg)`,
-        color: `var(--badge-${tone}-fg)`,
-        borderColor: `var(--badge-${tone}-border)`,
-      }}
+      {...etiquetaKit(tone, { className: "w-fit max-w-full truncate uppercase tracking-wide" })}
     >
       {admin ? `${base} · Admin` : base}
     </span>

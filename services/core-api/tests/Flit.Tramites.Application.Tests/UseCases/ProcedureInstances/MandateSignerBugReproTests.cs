@@ -316,10 +316,6 @@ public sealed class MandateSignerBugReproTests
         vault.ResolveAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>()).Returns(carlosVault);
         vault.ResolveMandatarioAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>()).Returns(carlosVault);
 
-        var firmaPolicy = Substitute.For<IMandatoFirmaPolicy>();
-        firmaPolicy.ResolveAsync(TenantId, Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
-            .Returns(new MandatoFirmaContexto(false, true, FirmaFisica: true));
-
         var instance = NewInstance();
         _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
@@ -336,7 +332,6 @@ public sealed class MandateSignerBugReproTests
             vaultPolicy: vault,
             mandatoGenerator: mandatoGenerator,
             mandatePolicy: policy,
-            mandatoFirmaPolicy: firmaPolicy,
             mandateDirectory: directorio);
 
         var (_, error) = await handler.HandleAsync(InstanceId, TenantId, ct);

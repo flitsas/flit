@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, MessageSquareReply, RotateCcw, Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -57,7 +57,7 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
       <h4 className="text-xs font-semibold">Generar derecho de petición</h4>
       {tipologias.estado === "loading" && <p className="text-xs opacity-60">Cargando tipologías…</p>}
       {tipologias.estado === "error" && <InlineAlert tone="error">{tipologias.error}</InlineAlert>}
@@ -113,13 +113,13 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
           <div className="flex flex-wrap gap-2">
             {!v.bloqueos.some((b) => b.codigo === "SIN_PLANTILLA") && (
               <button type="button" className={controlCls(false)} onClick={verPdf}>
-                <FileText className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="documento" className="h-3.5 w-3.5" />
                 Ver documento
               </button>
             )}
             {puedeEnviar && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!v.puedeEnviar} onClick={() => setConfirmar(true)}>
-                <Send className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="radicacion" className="h-3.5 w-3.5" />
                 Generar y enviar
               </button>
             )}
@@ -127,7 +127,7 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
         </div>
       )}
 
-      <Modal
+      <Modal icono="radicacion"
         open={confirmar}
         onClose={() => setConfirmar(false)}
         busy={enviando}
@@ -179,7 +179,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
   };
 
   return (
-    <Modal
+    <Modal icono="log-mensajes"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -208,7 +208,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
           <input className={INPUT_CLS} type="date" max={hoy} min={dp.fechaRadicacion?.slice(0, 10)} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
         <fieldset className="flex flex-col gap-1 md:col-span-2">
-          <legend className="text-[11px] font-semibold text-[#5B6B82] dark:text-slate-300">Sentido</legend>
+          <legend className="text-[11px] font-semibold text-muted-foreground">Sentido</legend>
           <div className="flex gap-4 text-xs">
             {(["Favorable", "Desfavorable"] as const).map((s) => (
               <label key={s} className="flex items-center gap-1.5">
@@ -271,16 +271,16 @@ export function AccionesDp({ ctx }: { ctx: ContextoDetalle }) {
   if (!puedeReintentar && !puedeResponder) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-wrap gap-2 border-t border-border pt-3">
       {puedeReintentar && (
         <button type="button" className={controlCls(false)} disabled={reintentando} onClick={reintentar}>
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           {reintentando ? "Reintentando…" : "Reintentar envío"}
         </button>
       )}
       {puedeResponder && (
         <button type="button" className={controlCls(false)} onClick={() => setResponder(true)}>
-          <MessageSquareReply className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="log-mensajes" className="h-3.5 w-3.5" />
           Registrar respuesta del organismo
         </button>
       )}

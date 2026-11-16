@@ -20,10 +20,10 @@ describe('OtRejilla — estilo estándar de tablas (HU #13919)', () => {
     expect(cabecera).toHaveStyle({ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG });
 
     // Sin marco ni fondo blanco alrededor de toda la tabla; la tarjeta es cada fila.
-    expect(tabla.className).not.toMatch(/\b(border|bg-white|shadow|overflow-hidden)\b/);
+    expect(tabla.className).not.toMatch(/\b(border|bg-white|bg-card|shadow|overflow-hidden)\b/);
     const filas = within(tabla).getAllByRole('row').slice(1);
     expect(filas).toHaveLength(2);
-    filas.forEach((f) => expect(f.className).toMatch(/bg-white/));
+    filas.forEach((f) => expect(f.className).toMatch(/bg-card/));
   });
 
   it('OtRejillaPaginada pagina de a 10 y ofrece 10/20/30/50', async () => {

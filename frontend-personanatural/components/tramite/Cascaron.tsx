@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Car, Check, Info, LogOut, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import { MobilityEstado } from "@/components/MobilityLoader";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type TouchEvent } from "react";
 import { boton } from "@/components/landing/estilos";
@@ -16,7 +17,7 @@ import { MENSAJE_SIN_TARIFA, ValorTramite } from "@/components/tramite/ValorTram
 import type { ClientePortal, DefinicionTipo, Organismo, Solicitud } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { organismoElegido } from "@/lib/tramite/diagnostico";
-import { ASSETS } from "@/lib/assets";
+import { LogoInicio } from "@/components/marca/MarcaPunto";
 import { conservarPersonas } from "@/lib/tramite/actores";
 import { crearGuardadorSerial } from "@/lib/tramite/guardadoSerial";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
@@ -237,10 +238,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     <ProveedorWizard value={api}>
       <div className="min-h-screen bg-background font-sans text-foreground">
         <header className="wizard-header flex items-center justify-between border-b border-border bg-background py-3">
-          <Link href="/" aria-label="FLIT 2.0 — Ir al Dashboard">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={ASSETS.logo} alt="FLIT 2.0" className="h-9 w-auto" />
-          </Link>
+          <LogoInicio alt="FLIT 2.0" etiqueta="FLIT 2.0 — Ir al Dashboard" />
           <div className="hidden items-center gap-6 text-sm md:flex">
             {solicitante && (
               <span>
@@ -468,7 +466,7 @@ function ElegirOrganismo({ cliente, solicitud }: { cliente: ClientePortal; solic
       {organismos.isSuccess && (
         <SelectorOrganismo organismos={organismos.data ?? []} valor={null} onChange={(organismo) => asignar.mutate(organismo)} disabled={asignar.isPending} />
       )}
-      {organismos.isPending && <p className="text-xs text-muted-foreground">Cargando organismos…</p>}
+      {organismos.isPending && <MobilityEstado mensaje="Cargando organismos…" className="text-xs text-muted-foreground" />}
       {(organismos.isError || asignar.isError) && <p role="alert" className="mt-1 text-xs text-alert">{mensajeDe(organismos.error ?? asignar.error)}</p>}
     </div>
   );

@@ -78,6 +78,16 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private static ProcedureInstance FinalizeReady(Guid id, Guid tenant)
     {
         var i = Instance(id, tenant);
+        // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         i.Actors.Add(Actor(tenant, id, "comprador"));
         foreach (var t in new[] { "factura", "aduana", "impronta" })
         {
@@ -231,6 +241,8 @@ public sealed class FinalizeDraftProcedureInstanceTests
         // Borrador finalizado con docs+fur+organismo pero SIN biométrica aprobada.
         var instance = FinalizeReady(id, tenant);
         instance.DraftFinalizedAt = DateTimeOffset.UtcNow;
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),

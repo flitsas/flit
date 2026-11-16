@@ -1,0 +1,30 @@
+{
+  "currentCertificationPeriod": "2026",
+  "currentConsultationDate": "04/02/2026",
+  "currentVehicleCommercialAppraisal": "$ 20.000.000 COP",
+  "lastPaymentMadeYear": "2024",
+  "lastPaymentMadeDate": "09/02/2025",
+  "lastPaymentMadeAmountPaid": "$ 100.000 COP",
+  "pendingValidity": "2025",
+  "pendingDebtTaxes": true,
+  "pendingVehicleTaxValue": "$ 600.000 COP",
+  "pendingPenalties": "$ 10.000 COP",
+  "pendingInterestLate": "$ 5.000 COP",
+  "pendingSystematization": "",
+  "pendingTotalToPay": "$ 615.000 COP",
+  "idAttachedTaxSettlementConsolidated": "liq-consolidada-tst",
+  "pendingDetailTax": [
+    {
+      "validaty": "2025",
+      "validity": "2025",
+      "vehicleAppraisal": "$ 20.000.000",
+      "total": "$ 615.000",
+      "idAttachedTaxSettlement": "liq-vigencia-tst"
+    }
+  ],
+  "observationError": {
+    "descriptionError": "",
+    "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR",
+    "typeError": 0
+  }
+}

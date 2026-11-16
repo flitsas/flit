@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Settings2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "./ToggleSwitch";
 import type {
@@ -181,7 +180,7 @@ export function OTConfigModal({
       onClose={onClose}
       title={`Configurar — ${office.name}`}
       description="Define, para este organismo, bloqueos del preflight, consultas y obligatoriedad de prenda."
-      icon={Settings2}
+      icono="ajustes"
       size="lg"
     >
       <div className="space-y-5">

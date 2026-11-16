@@ -46,6 +46,14 @@ public sealed class NetworkHostsTests
     }
 
     [Fact]
+    public void ProductUrl_DaElDominioDelProductoEnLaRed_ONull()
+    {
+        NetworkHosts.ProductUrl(Red, "tramites").Should().Be("https://tramites.cliente.com");
+        NetworkHosts.ProductUrl(Red, "plataforma").Should().Be("https://marca.cliente.com");
+        NetworkHosts.ProductUrl(Red, "comparendos").Should().BeNull();
+    }
+
+    [Fact]
     public void RedSinDominios_NoCambiaNada()
     {
         NetworkHosts.Rebase(Apps, new Dictionary<string, string>(), "marca.cliente.com").Should().Equal(Apps);

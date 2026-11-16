@@ -30,6 +30,21 @@ public sealed class ReconciliarIdentidadHandler(
     }
 
     /// <summary>
+    /// Misma reconciliación on-demand por <c>validationId</c>, sin exigir trámite: cubre la validación ligada a un
+    /// trámite y la prevalidación standalone (<c>ProcedureInstanceId</c> nulo). La usa el botón «Actualizar estado»
+    /// del detalle de la persona (módulo Validaciones). <c>not_found</c> si no existe o es de otro tenant.
+    /// </summary>
+    public async Task<(ReconciliarIdentidadResult? Result, string? Error)> HandleByValidationAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default)
+    {
+        var v = await repo.GetBiometricByIdAsync(validationId, ct);
+        if (v is null || v.TenantId != tenantId)
+            return (null, "not_found");
+
+        return await ReconcileAsync(v, ct);
+    }
+
+    /// <summary>
     /// Misma reconciliación on-demand para la validación PROPIA de un mandatario (sin trámite): consulta la más
     /// reciente de su ficha, que es la única que decide su firma (HU #13247). La ficha no tiene pantalla de espera
     /// que pollee como el trámite, así que la consulta al abrirla (y el botón «Consultar estado») cumplen ese papel.

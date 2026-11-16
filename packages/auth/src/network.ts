@@ -7,7 +7,7 @@ import { appOrigin, type AuthConfig } from "./config";
 /** Igual que la caché del resolutor de dominios del servidor: un dominio nuevo o retirado se ve en un minuto. */
 const TTL_MS = 60_000;
 
-type NetworkHubs = Map<string, { hubUrl: string | null; until: number }>;
+type NetworkHubs = Map<string, { hubUrl: string | null; tramitesUrl: string | null; until: number }>;
 // En `globalThis`, como las renovaciones (store.ts): Next empaqueta cada ruta por separado.
 const hubs: NetworkHubs = ((globalThis as { __flitAuthNetworkHubs?: NetworkHubs }).__flitAuthNetworkHubs ??= new Map());
 
@@ -21,14 +21,30 @@ export async function withNetworkHub(request: Request, config: AuthConfig): Prom
   if (!config.networkDomains) return config;
   const host = new URL(appOrigin(request, config)).hostname.toLowerCase();
   if (host === new URL(config.hubUrl).hostname) return config;
-  const hubUrl = await networkHub(host, config);
+  const hubUrl = (await networkUrls(host, config))?.hubUrl;
   return hubUrl && hubUrl !== config.hubUrl ? { ...config, hubUrl } : config;
 }
 
-async function networkHub(host: string, config: AuthConfig): Promise<string | null> {
+/**
+ * Dominio de Trámites de la red del host de esta petición, o `null` si es un dominio de FLIT, la red no tiene uno, la
+ * bandera está apagada o la API no responde. Sirve al hub de la red: su administración vive en Trámites, y en el dominio
+ * de FLIT el usuario de la red recibe NETWORK_DOMAIN_REQUIRED.
+ */
+export async function networkTramitesUrl(
+  host: string | null,
+  config: Pick<AuthConfig, "apiOrigin" | "internalApiKey" | "networkDomains">,
+): Promise<string | null> {
+  if (!config.networkDomains || !host) return null;
+  return (await networkUrls(host.split(":")[0].toLowerCase(), config))?.tramitesUrl ?? null;
+}
+
+async function networkUrls(
+  host: string,
+  config: Pick<AuthConfig, "apiOrigin" | "internalApiKey">,
+): Promise<{ hubUrl: string | null; tramitesUrl: string | null } | null> {
   const now = Date.now();
   const cached = hubs.get(host);
-  if (cached && cached.until > now) return cached.hubUrl;
+  if (cached && cached.until > now) return cached;
 
   const headers: Record<string, string> = { accept: "application/json", "x-flit-domain": host };
   if (config.internalApiKey) headers["x-internal-key"] = config.internalApiKey;
@@ -36,9 +52,10 @@ async function networkHub(host: string, config: AuthConfig): Promise<string | nu
     const response = await fetch(`${config.apiOrigin}/api/v1/public/network`, { headers, cache: "no-store" });
     // Un fallo no se recuerda: la siguiente petición vuelve a preguntar.
     if (!response.ok) return null;
-    const hubUrl = httpsOrigin(((await response.json()) as { hubUrl?: unknown }).hubUrl);
-    hubs.set(host, { hubUrl, until: now + TTL_MS });
-    return hubUrl;
+    const body = (await response.json()) as { hubUrl?: unknown; tramitesUrl?: unknown };
+    const urls = { hubUrl: httpsOrigin(body.hubUrl), tramitesUrl: httpsOrigin(body.tramitesUrl) };
+    hubs.set(host, { ...urls, until: now + TTL_MS });
+    return urls;
   } catch {
     return null;
   }

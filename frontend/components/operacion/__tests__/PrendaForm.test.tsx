@@ -1610,8 +1610,7 @@ describe('HU #13112 — Omitir prenda', () => {
     const ayuda = screen.getByText(AYUDA, { exact: false });
     const parrafo = ayuda.closest('p') as HTMLElement;
     expect(parrafo).toHaveAttribute('id', 'prenda-omitir-ayuda');
-    expect(parrafo.className).toContain('text-[#59677D]');
-    expect(parrafo.className).toContain('dark:text-white/70');
+    expect(parrafo.className).toContain('text-muted-foreground');
     expect(parrafo).not.toHaveAttribute('role');
     expect(parrafo.closest('[role="alert"]')).toBeNull();
     // Permanente: visible aunque la opción aún no esté elegida.
@@ -1649,7 +1648,7 @@ describe('HU #13112 — Omitir prenda', () => {
       expect(input).toBeVisible();
       expect(input).toHaveValue('');
       expect(input).toBeDisabled();
-      expect(input.className).toContain('text-[#59677D]');
+      expect(input.className).toContain('text-muted-foreground');
       expect(input).not.toBeRequired();
     }
     expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();

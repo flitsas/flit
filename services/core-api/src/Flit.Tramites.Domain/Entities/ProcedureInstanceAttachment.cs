@@ -64,5 +64,19 @@ public sealed class ProcedureInstanceAttachment
     /// </summary>
     public int? MandateFormatVersion { get; set; }
 
+    /// <summary>
+    /// Bug #14559 (ADR-0085) — veredicto OCR declarado por el cliente al registrar el adjunto:
+    /// <c>verified</c> | <c>rejected</c> | <c>skipped</c>. <c>null</c> = sin dato (adjunto previo al fix, tipo sin
+    /// OCR, generado por el sistema o multipart). Informativo: nunca es compuerta de avance, envío ni validación.
+    /// </summary>
+    public string? OcrStatus { get; set; }
+
+    /// <summary>
+    /// Bug #14559 (ADR-0085) — código cerrado del motivo, solo con <see cref="OcrStatus"/> <c>rejected</c>/<c>skipped</c>:
+    /// <c>vin_mismatch</c> | <c>tipo_invalido</c> | <c>no_confirmado</c> | <c>ilegible</c> | <c>excede_tamano</c> |
+    /// <c>analisis_fallido</c>. Nunca texto libre del documento (Ley 1581).
+    /// </summary>
+    public string? OcrReason { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 }

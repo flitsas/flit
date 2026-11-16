@@ -78,14 +78,15 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
     // ── Cobertura: el mapa es el inventario del Anexo y apunta a rutas reales ──────────────────
 
     [Fact]
-    public void Mapa_Tiene90RutasConElConteoDelAnexoPorSlug()
+    public void Mapa_Tiene92RutasConElConteoDelAnexoPorSlug()
     {
-        OtPermissionMap.BySignature.Should().HaveCount(90);
+        // 90 del Anexo A + 2 de la invitación masiva OT (Feature #14420, HU #14425): plantilla y carga, ambas ot.usuarios.manage.
+        OtPermissionMap.BySignature.Should().HaveCount(92);
         OtPermissionMap.BySignature.GroupBy(kv => kv.Value).ToDictionary(g => g.Key, g => g.Count()).Should().BeEquivalentTo(
             new Dictionary<string, int>
             {
                 [OtPermissionMap.Tramites] = 29, [OtPermissionMap.Reportes] = 23, [OtPermissionMap.Mandatos] = 11,
-                [OtPermissionMap.Mandatarios] = 11, [OtPermissionMap.Usuarios] = 6, [OtPermissionMap.Improntas] = 4,
+                [OtPermissionMap.Mandatarios] = 11, [OtPermissionMap.Usuarios] = 8, [OtPermissionMap.Improntas] = 4,
                 [OtPermissionMap.Integracion] = 4, [OtPermissionMap.Documentos] = 2,
             });
     }
@@ -100,11 +101,20 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
 
         OtPermissionMap.BySignature.Keys.Except(registradas.Select(r => r.Firma)).Should().BeEmpty("cada ruta del mapa debe existir");
 
+        // Épica #14297: marca y precios del portal se autorizan por rol, sin slug. No cuentan en el Anexo A, pero no pueden
+        // quedar abiertos a otros roles OT ni entrar al mapa de permisos.
+        static bool EsDelPortal(string firma) => firma.Contains(" /api/v1/admin/ot/portal-", StringComparison.Ordinal);
+        var delPortal = registradas.Where(r => EsDelPortal(r.Firma)).ToList();
+        delPortal.Should().NotBeEmpty();
+        delPortal.Should().OnlyContain(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy));
+        OtPermissionMap.BySignature.Keys.Where(EsDelPortal).Should().BeEmpty();
+
         var conPolicyOt = registradas
+            .Where(r => !EsDelPortal(r.Firma))
             .Where(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a =>
                 a.Policy == AdminAuthorization.OtModulePolicy || a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy))
             .Select(r => r.Firma).Distinct().ToList();
-        conPolicyOt.Should().HaveCount(123);
+        conPolicyOt.Should().HaveCount(125); // 123 + las 2 de la invitación masiva OT (HU #14425)
         conPolicyOt.Except(OtPermissionMap.BySignature.Keys).Should().HaveCount(33);
     }
 
@@ -264,7 +274,9 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (partes[0] is "POST" or "PUT" or "PATCH")
         {
+            // multipart: attachments y invite/bulk (IFormFile); JSON en el resto evita 415 antes del 403 de permiso.
             request.Content = partes[1].EndsWith("/attachments", StringComparison.Ordinal)
+                || partes[1].EndsWith("/invite/bulk", StringComparison.Ordinal)
                 ? new MultipartFormDataContent()
                 : new StringContent("{}", Encoding.UTF8, "application/json");
         }

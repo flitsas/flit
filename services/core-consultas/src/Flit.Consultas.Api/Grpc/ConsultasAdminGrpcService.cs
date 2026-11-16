@@ -14,7 +14,7 @@ namespace Flit.Consultas.Api.Grpc;
 /// esquema de Consultas. La escribe core-api con lo que guarda el SuperAdmin en la pantalla de siempre; aplica a la
 /// siguiente consulta. Se guarda con los mismos JSON que <c>admin.tenant_operational_policies</c>.
 /// </summary>
-internal sealed class ConsultasAdminGrpcService(ConsultasDb db, TimeProvider time) : ConsultasAdminService.ConsultasAdminServiceBase
+internal sealed class ConsultasAdminGrpcService(ConsultasDb db, TimeProvider time, Impuesto.CatalogoDepartamentosImpuesto departamentosImpuesto) : ConsultasAdminService.ConsultasAdminServiceBase
 {
     public const string Scope = "platform.consultas.admin";
 
@@ -119,4 +119,39 @@ internal sealed class ConsultasAdminGrpcService(ConsultasDb db, TimeProvider tim
         }));
         return response;
     }
+
+    public override async Task<ListarCatalogoDepartamentosImpuestoResponse> ListarCatalogoDepartamentosImpuesto(
+        ListarCatalogoDepartamentosImpuestoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        _ = PlatformServiceCaller.From(context);
+        var filas = await departamentosImpuesto.ListarTodosAsync(context.CancellationToken).ConfigureAwait(false);
+        var respuesta = new ListarCatalogoDepartamentosImpuestoResponse();
+        respuesta.Departamentos.AddRange(filas.Select(AProto));
+        return respuesta;
+    }
+
+    public override async Task<GuardarDepartamentoImpuestoResponse> GuardarDepartamentoImpuesto(
+        GuardarDepartamentoImpuestoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        _ = PlatformServiceCaller.From(context);
+        try
+        {
+            var fila = await departamentosImpuesto.GuardarAsync(request.Codigo, request.Nombre, request.Activo, context.CancellationToken).ConfigureAwait(false);
+            return new GuardarDepartamentoImpuestoResponse { Departamento = AProto(fila) };
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, ex.Message));
+        }
+    }
+
+    private static DepartamentoImpuestoCatalogo AProto(Impuesto.DepartamentoHabilitado fila) => new()
+    {
+        Codigo = fila.Codigo,
+        Nombre = fila.Nombre,
+        Activo = fila.Activo,
+    };
 }

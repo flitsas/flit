@@ -1,15 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { motivoSinAviso, resumirMasivo, siguienteAviso } from "@/lib/avisos";
+import { avisoPorDefecto, motivoSinAviso, opcionesAviso, opcionesMasivo, resumirMasivo } from "@/lib/avisos";
 
 const BASE = { activo: true, pagado: false, notificadoFisicamente: false, contraventor: { correo: "juan@ejemplo.com" } };
 
 describe("avisos manuales", () => {
-  it("sugiere el siguiente aviso según el estado del conductor", () => {
-    expect(siguienteAviso("SinNotificar")).toBe("Aviso1");
-    expect(siguienteAviso("Aviso1")).toBe("Aviso2");
-    expect(siguienteAviso("Aviso2")).toBe("Aviso3");
-    expect(siguienteAviso("Aviso3")).toBe("Aviso3");
-    expect(siguienteAviso(null)).toBe("Aviso1");
+  it("propone el aviso más avanzado de los que proceden", () => {
+    expect(avisoPorDefecto(["Aviso1"])).toBe("Aviso1");
+    expect(avisoPorDefecto(["Aviso1", "Aviso2"])).toBe("Aviso2");
+    expect(avisoPorDefecto(["Aviso3"])).toBe("Aviso3");
+    expect(avisoPorDefecto([])).toBeNull();
+  });
+
+  it("solo ofrece los avisos que proceden y marca el reenvío", () => {
+    // Bug #14270 (AV-03): con el aviso 1 enviado y el 50 % vigente no se ofrecen el 2 ni el 3.
+    expect(opcionesAviso(["Aviso1"], "Aviso1")).toEqual([{ valor: "Aviso1", etiqueta: "Aviso 1 (inicial): reenviar" }]);
+    expect(opcionesAviso(["Aviso1", "Aviso2"], "Aviso1").map((o) => o.valor)).toEqual(["Aviso1", "Aviso2"]);
+    expect(opcionesAviso(["Aviso1"], "SinNotificar")[0]!.etiqueta).toBe("Aviso 1 (inicial)");
+  });
+
+  it("en el envío masivo ofrece los que proceden en algún comparendo", () => {
+    const o = opcionesMasivo(
+      [
+        { tipo: "Aviso1", aplica: 2 },
+        { tipo: "Aviso2", aplica: 1 },
+        { tipo: "Aviso3", aplica: 0 },
+      ],
+      3,
+    );
+    expect(o.map((x) => x.valor)).toEqual(["Aviso1", "Aviso2"]);
+    expect(o[1]!.etiqueta).toBe("Aviso 2 (recordatorio) (procede en 1 de 3)");
   });
 
   it("explica por qué no se puede enviar", () => {

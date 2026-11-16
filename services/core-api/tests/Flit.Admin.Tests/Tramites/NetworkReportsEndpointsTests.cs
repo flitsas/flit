@@ -243,7 +243,11 @@ public sealed class NetworkReportsEndpointsTests : IClassFixture<NetworkReportsE
         rows[0][0].Should().Be("Compañía");
         rows[0].Skip(1).Should().Equal(
             "Referencia", "Tipo de trámite", "Categoría", "Estado", "Radicado por", "Persona documento", "Persona nombre",
-            "Transformación", "Detalle transformación", "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado");
+            "Transformación", "Detalle transformación", "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado",
+            "Canal", "OT del canal", // HU #14319
+            // Contrato v3: grupos de identidad por rol, después de las columnas de siempre (mínimo 1 bloque por rol).
+            "Comprador", "Validación comprador", "Intentos comprador", "Motivo rechazo comprador",
+            "Vendedor", "Validación vendedor", "Intentos vendedor", "Motivo rechazo vendedor");
         rows.Should().HaveCount(2, "cabecera + la única fila que la consulta entrega para C2");
         rows[1][0].Should().Be($"Cliente {C2:N}"[..14]);
         rows[1][1].Should().Be(ReportsFactory.ReferenceOf(C2));
@@ -269,11 +273,18 @@ public sealed class NetworkReportsEndpointsTests : IClassFixture<NetworkReportsE
         (await client.GetAsync($"{Base}/procedures?{query}", TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await client.GetAsync($"{Base}/procedures/export?{query}", TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.OK);
 
+        // Listado (1) + el export hace dos: la consulta previa de máximos de actores por rol (fija el ancho del Excel) y la
+        // exportación. Las tres reciben el MISMO filtro.
         var calls = _factory.Repo.ReceivedCalls().ToList();
-        calls.Should().HaveCount(2);
+        calls.Select(c => c.GetMethodInfo().Name).Should().Equal(
+            nameof(INetworkDetailedReportReadRepository.GetNetworkProceduresAsync),
+            nameof(INetworkDetailedReportReadRepository.GetNetworkMaxActoresPorRolAsync),
+            nameof(INetworkDetailedReportReadRepository.ExportNetworkProceduresAsync));
         var listFilter = (NetworkDetailedReportFilter)calls[0].GetArguments()[0]!;
-        var exportFilter = (NetworkDetailedReportFilter)calls[1].GetArguments()[0]!;
+        var maxFilter = (NetworkDetailedReportFilter)calls[1].GetArguments()[0]!;
+        var exportFilter = (NetworkDetailedReportFilter)calls[2].GetArguments()[0]!;
         exportFilter.Should().BeEquivalentTo(listFilter);
+        maxFilter.Should().BeEquivalentTo(listFilter, "el ancho del Excel se calcula sobre el mismo filtro");
         exportFilter.TenantIds.Should().Equal(C1);
         exportFilter.Category.Should().Be("matriculas");
         exportFilter.IsLeasing.Should().BeTrue();

@@ -14,6 +14,8 @@ import {
   isPlateDigitDecisionRequired,
   isPlateDigitUndecided,
   toPlateDigitFieldValues,
+  avisoDigitoPlacaOt,
+  esPlacaAsignadaPorOt,
   toPlateDigitUiValue,
 } from '../plate-digit-preference';
 
@@ -131,5 +133,117 @@ describe('AC5 — regresión de ruteo', () => {
     const [digitField] = toPlateDigitFieldValues(DIGITO_PLACA_NO_DECIDIDO);
     expect(digitField.fieldKey).toBe(PLATE_PREFERRED_LAST_DIGIT_KEY);
     expect(digitField.valueText).toBe('');
+  });
+});
+
+// HU 3 (registro diferido 2026-11-09) — aviso al gestor sobre la placa que asignó el OT frente a
+// su dígito de preferencia.
+//
+// Uso de ejemplo:
+//   avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '5' })
+//     → { tono: 'exito', texto: 'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.' }
+describe('esPlacaAsignadaPorOt', () => {
+  it('source "ot" con placa → asignada por el OT', () => {
+    expect(esPlacaAsignadaPorOt('ABC125', 'ot')).toBe(true);
+  });
+  it('placa anterior al cambio (source vacío o null) → asignada por el OT', () => {
+    expect(esPlacaAsignadaPorOt('ABC125', '')).toBe(true);
+    expect(esPlacaAsignadaPorOt('ABC125', null)).toBe(true);
+    expect(esPlacaAsignadaPorOt('ABC125', undefined)).toBe(true);
+  });
+  it('placa del RUNT o elegida por el gestor no es del OT; sin placa tampoco', () => {
+    expect(esPlacaAsignadaPorOt('ABC125', 'consultation')).toBe(false);
+    expect(esPlacaAsignadaPorOt('ABC125', 'user')).toBe(false);
+    expect(esPlacaAsignadaPorOt('', 'ot')).toBe(false);
+    expect(esPlacaAsignadaPorOt('  ', '')).toBe(false);
+    expect(esPlacaAsignadaPorOt(null, 'ot')).toBe(false);
+  });
+});
+
+describe('avisoDigitoPlacaOt', () => {
+  it('AC coincide — tono éxito y literal exacto', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '5' })).toEqual({
+      tono: 'exito',
+      texto: 'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    });
+  });
+  it('AC no coincide — tono informativo y literal exacto', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC123', source: 'ot', digito: '5' })).toEqual({
+      tono: 'info',
+      texto:
+        'La placa ABC123 asignada por el organismo de tránsito no termina en tu dígito de preferencia (5). El organismo lo toma solo como guía.',
+    });
+  });
+  it('AC sin preferencia — vacía, "none" o nula → null', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: 'none' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: null })).toBeNull();
+  });
+  it('placa con source vacío (asignada antes del cambio) también avisa; RUNT no', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'abc125 ', source: '', digito: '5' })?.texto).toBe(
+      'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    );
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'consultation', digito: '5' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: '', source: 'ot', digito: '5' })).toBeNull();
+  });
+});
+
+// HU7 (registro diferido 2026-11-09, corrección del usuario) — el aviso depende de la clase:
+// MOTO (lista exacta) compara el PRIMER dígito numérico (ABC52D → 5); CARRO y sin grupo, el ÚLTIMO
+// dígito numérico (ABC125 → 5). Nunca el último carácter.
+// Uso de ejemplo: avisoDigitoPlacaOt({ placa: 'ABC52D', source: 'ot', digito: '5', clase: 'MOTOCICLETA' }) → tono 'exito'
+describe('avisoDigitoPlacaOt — dígito según la clase (HU7)', () => {
+  it('moto ABC52D con preferencia 5 → coincide con literal de primer número', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC52D', source: 'ot', digito: '5', clase: 'Motocicleta' })).toEqual({
+      tono: 'exito',
+      texto:
+        'La placa ABC52D asignada por el organismo de tránsito tiene como primer número el 5, tu dígito de preferencia.',
+    });
+  });
+  it('moto ABC52 con preferencia 5 → coincide', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC52', source: 'ot', digito: '5', clase: 'CICLOMOTOR' })?.tono).toBe('exito');
+  });
+  it('moto ABC12D con preferencia 2 → NO coincide (no compara el último dígito ni la letra)', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC12D', source: 'ot', digito: '2', clase: 'MOTOCICLETA' })).toEqual({
+      tono: 'info',
+      texto:
+        'La placa ABC12D asignada por el organismo de tránsito no tiene como primer número tu dígito de preferencia (2). El organismo lo toma solo como guía.',
+    });
+  });
+  it('carro ABC125 con 5 → coincide con el literal actual «termina en»', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC125', source: 'ot', digito: '5', clase: 'AUTOMOVIL' })).toEqual({
+      tono: 'exito',
+      texto: 'La placa ABC125 asignada por el organismo de tránsito termina en 5, tu dígito de preferencia.',
+    });
+  });
+  it('sin clase compara el ÚLTIMO dígito numérico, no el último carácter (ABC12D → 2)', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABC12D', source: 'ot', digito: '2' })).toEqual({
+      tono: 'exito',
+      texto: 'La placa ABC12D asignada por el organismo de tránsito termina en 2, tu dígito de preferencia.',
+    });
+    expect(avisoDigitoPlacaOt({ placa: 'ABC12D', source: 'ot', digito: '1', clase: '' })?.tono).toBe('info');
+  });
+  it('placa sin dígitos → sin aviso', () => {
+    expect(avisoDigitoPlacaOt({ placa: 'ABCDEF', source: 'ot', digito: '5' })).toBeNull();
+    expect(avisoDigitoPlacaOt({ placa: 'ABCDEF', source: 'ot', digito: '5', clase: 'MOTOCICLETA' })).toBeNull();
+  });
+});
+
+// HU10 — el motocarro usa la rama del primer número y los literales de moto.
+// Uso de ejemplo: avisoDigitoPlacaOt({ placa: '523ABC', source: 'ot', digito: '5', clase: 'MOTOCARRO' }) → éxito
+describe('avisoDigitoPlacaOt — motocarro (HU10)', () => {
+  it('523ABC con 5 → «tiene como primer número el 5»', () => {
+    expect(avisoDigitoPlacaOt({ placa: '523ABC', source: 'ot', digito: '5', clase: 'MOTOCARRO' })).toEqual({
+      tono: 'exito',
+      texto:
+        'La placa 523ABC asignada por el organismo de tránsito tiene como primer número el 5, tu dígito de preferencia.',
+    });
+  });
+  it('123ABC con 3 en un TRICIMOTO → no coincide (compara el primero, no el último)', () => {
+    expect(avisoDigitoPlacaOt({ placa: '123ABC', source: 'ot', digito: '3', clase: 'TRICIMOTO' })).toEqual({
+      tono: 'info',
+      texto:
+        'La placa 123ABC asignada por el organismo de tránsito no tiene como primer número tu dígito de preferencia (3). El organismo lo toma solo como guía.',
+    });
   });
 });

@@ -30,7 +30,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
         _notifier.NotifyAsync(Arg.Any<ManualCaptureLink>(), Arg.Any<CancellationToken>()).Returns(true);
     }
 
-    private RegenerarEnlaceManualHandler Handler() => new(_repo, _audit, _notifier, new FixedTime(Now));
+    private RegenerarEnlaceManualHandler Handler() => new(_repo, _audit, _notifier, new FakeManualCaptureTokenProtector(), new FixedTime(Now));
 
     private ProcedureInstanceBiometricValidation Fila(
         string status = BiometricEstados.ManualActivo, string provider = BiometricProviders.Manual)
@@ -45,6 +45,7 @@ public sealed class RegenerarEnlaceManualHandlerTests
             Status = status,
             Provider = provider,
             TokenHash = BiometricToken.Hash("token-viejo"),
+            ManualCaptureTokenEncrypted = "enc:token-viejo",
             ExpiresAt = Now.AddHours(-30),
             ManualActivatedAt = Now.AddHours(-54),
         };
@@ -73,6 +74,8 @@ public sealed class RegenerarEnlaceManualHandlerTests
         // El token nuevo reemplaza al viejo: en la fila solo está el hash nuevo; el viejo ya no coincide con nada.
         enviado.Should().NotBeNull();
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado!.Token)).And.NotBe(hashViejo).And.NotBe(enviado.Token);
+        // HU #14305 (AC1): el token cifrado sustituye al anterior.
+        v.ManualCaptureTokenEncrypted.Should().Be(FakeManualCaptureTokenProtector.Prefix + enviado.Token);
         BiometricToken.Hash("token-viejo").Should().NotBe(v.TokenHash);
         v.ExpiresAt.Should().Be(Now.AddHours(24));
         v.ResendCount.Should().Be(1);

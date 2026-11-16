@@ -33,11 +33,70 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         _cache = cache;
     }
 
-    public async Task<TenantDomain?> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<TenantDomain>> ListByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.TenantDomains
+            .AsNoTracking()
+            .Where(d => d.TenantId == tenantId && d.DeletedAt == null)
+            .OrderBy(d => d.Purpose == TenantDomainPurposes.Hub ? 0 : 1)
+            .ThenBy(d => d.Purpose)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return rows.Select(Map).ToList();
+    }
+
+    public async Task<IReadOnlyList<TenantDomain>> ActivateNetworkAsync(Guid tenantId, DateTimeOffset now, Guid? changedBy, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.TenantDomains
+            .Where(d => d.TenantId == tenantId
+                        && d.DeletedAt == null
+                        && d.Status == TenantDomainStatuses.Verified
+                        && d.CertificateIssuedAt != null)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var row in rows)
+        {
+            row.Status = TenantDomainStatuses.Active;
+            row.ActivatedAt = now;
+            row.UpdatedAt = now;
+            row.UpdatedBy = changedBy;
+            AddStatusAudit(tenantId, TenantDomainStatuses.Verified, TenantDomainStatuses.Active, null, changedBy, null, now);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        foreach (var row in rows)
+        {
+            InvalidateResolutionCache(row.Host, TenantDomainStatuses.Verified, TenantDomainStatuses.Active);
+        }
+
+        return await ListByTenantIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<DomainProvisioningItem>> ListProvisioningAsync(CancellationToken cancellationToken = default)
+    {
+        var query =
+            from d in _context.TenantDomains.AsNoTracking()
+            join t in _context.Tenants.AsNoTracking() on d.TenantId equals t.Id
+            where d.DeletedAt == null
+                  && t.TenantType == "MARCA_BLANCA"
+                  && t.IsGroupParent
+                  && t.IsActive
+                  && (d.Status == TenantDomainStatuses.Verified
+                      || d.Status == TenantDomainStatuses.Active
+                      || d.CertificateIssuedAt != null)
+            orderby d.Host
+            select new DomainProvisioningItem(d.Host, d.Purpose, d.Status, d.CertificateIssuedAt, d.CertificateExpiresAt);
+
+        return await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<TenantDomain?> GetByTenantIdAsync(Guid tenantId, string purpose, CancellationToken cancellationToken = default)
     {
         var entity = await _context.TenantDomains
             .AsNoTracking()
-            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == purpose && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -49,13 +108,14 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         string host,
         string verificationToken,
         Guid? changedBy,
+        string purpose,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(verificationToken);
 
         var current = await _context.TenantDomains
-            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == purpose && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -70,9 +130,12 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
+            Purpose = purpose,
             Host = host,
             Status = TenantDomainStatuses.Pending,
             VerificationToken = verificationToken,
+            // Sin esto el trabajo programado no la toma: solo reclama filas con next_check_at vencido.
+            NextCheckAt = now,
             CreatedAt = now,
             CreatedBy = changedBy,
             UpdatedAt = now,
@@ -110,7 +173,8 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             _context.ChangeTracker.Clear();
             throw new DomainTenantNotMarcaBlancaException(tenantId);
         }
-        catch (DbUpdateException ex) when (IsConstraint(ex, "uq_tenant_domains_host"))
+        // HU #14381: el mismo error cuando el host ya lo tiene el portal de un organismo (disparador de unicidad entre tablas).
+        catch (DbUpdateException ex) when (IsConstraint(ex, "uq_tenant_domains_host") || IsConstraint(ex, "uq_domain_host_entre_tablas"))
         {
             _context.ChangeTracker.Clear();
             throw new DomainHostAlreadyRegisteredException(host);
@@ -130,10 +194,10 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         return Map(created);
     }
 
-    public async Task<TenantDomain?> RetireAsync(Guid tenantId, Guid? changedBy, CancellationToken cancellationToken = default)
+    public async Task<TenantDomain?> RetireAsync(Guid tenantId, Guid? changedBy, string purpose, CancellationToken cancellationToken = default)
     {
         var current = await _context.TenantDomains
-            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == purpose && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -265,7 +329,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
                     LIMIT @batch_size
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING tenant_id, host, status, grace_until, check_attempts
+                RETURNING tenant_id, host, status, grace_until, check_attempts, purpose
                 """;
 
             AddParam(cmd, "leased_until", now + lease);
@@ -281,7 +345,8 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
                     reader.GetString(1),
                     reader.GetString(2),
                     reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
-                    reader.GetInt32(4)));
+                    reader.GetInt32(4),
+                    reader.GetString(5)));
             }
 
             return claims;
@@ -306,10 +371,11 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
         DateTimeOffset now,
         Guid? changedByUserId,
         string? changedByJob,
+        string purpose,
         CancellationToken cancellationToken = default)
     {
         var current = await _context.TenantDomains
-            .Where(d => d.TenantId == tenantId && d.Purpose == TenantDomainPurposes.Hub && d.DeletedAt == null)
+            .Where(d => d.TenantId == tenantId && d.Purpose == purpose && d.DeletedAt == null)
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -490,6 +556,7 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
     private static TenantDomain Map(TenantDomainEntity entity) => new()
     {
         TenantId = entity.TenantId,
+        Purpose = entity.Purpose,
         Host = entity.Host,
         Status = entity.Status,
         StatusReason = entity.FailureReason,

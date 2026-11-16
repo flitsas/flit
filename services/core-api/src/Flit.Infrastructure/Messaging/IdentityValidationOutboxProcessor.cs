@@ -100,11 +100,12 @@ internal sealed class IdentityValidationOutboxProcessor(
         // este aplica marcas explícitas) y mezclarlas haría imposible saber cuál disparó qué.
         var deferred = scope.ServiceProvider.GetRequiredService<DeferredSignatureBatchConsumer>();
         var signatureCapture = scope.ServiceProvider.GetRequiredService<IIdentitySignatureCapture>();
+        var letters = scope.ServiceProvider.GetRequiredService<IIdentityLetterService>();
 
         // El DbContext usa EnableRetryOnFailure → la transacción manual debe ir dentro de la execution
         // strategy (reintenta el bloque completo ante fallos transitorios de BD).
         var strategy = db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () => await ProcessOneAsync(db, consumer, deferred, signatureCapture, ct));
+        return await strategy.ExecuteAsync(async () => await ProcessOneAsync(db, consumer, deferred, signatureCapture, letters, ct));
     }
 
     private async Task<bool> ProcessOneAsync(
@@ -112,6 +113,7 @@ internal sealed class IdentityValidationOutboxProcessor(
         IdentityValidationCompletedConsumer consumer,
         DeferredSignatureBatchConsumer deferred,
         IIdentitySignatureCapture signatureCapture,
+        IIdentityLetterService letters,
         CancellationToken ct)
     {
         db.ChangeTracker.Clear(); // estado limpio en cada (re)intento de la strategy
@@ -135,12 +137,29 @@ internal sealed class IdentityValidationOutboxProcessor(
                 // ADR-0054 — recorte ANTES del auto-FUR. Retryable no aborta el ciclo ni el evento.
                 await signatureCapture.EnsureForValidationAsync(evt.ValidationId, ct);
 
+                // HU #14301 — carta de identidad de FLIT (solo aprobaciones manuales; el resto devuelve Skipped). Va ANTES del
+                // encadenamiento para que la carta exista cuando #14302 la adjunte, pero su fallo NO frena la firma/FUR: se
+                // guarda, se corre el resto del evento y al final se relanza para que la outbox reintente el evento completo
+                // (todo es idempotente). La aprobación ya está confirmada y no se revierte.
+                Exception? letterError = null;
+                try
+                {
+                    await letters.EnsureForValidationAsync(evt.ValidationId, ct);
+                }
+                catch (IdentityLetterGenerationException ex)
+                {
+                    letterError = ex;
+                }
+
                 var result = await consumer.HandleAsync(evt, ct);
                 OutboxProcessorLog.Dispatched(logger, row.ValidationId, result.Matched, result.Processed);
 
                 // HU #11196 — y el lote de los trámites que quedaron marcados esperando a esta persona.
                 var lote = await deferred.HandleAsync(evt, ct);
                 OutboxProcessorLog.Dispatched(logger, row.ValidationId, lote.Marcados, lote.Firmados);
+
+                if (letterError is not null)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(letterError).Throw();
             }
 
             row.PublishedAt = DateTimeOffset.UtcNow;

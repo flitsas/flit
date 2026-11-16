@@ -64,11 +64,13 @@ describe.each(ARCHIVOS)('guardián de diseño · %s', (archivo) => {
 
 describe('guardián de diseño · modal de IdentityManualFlowActions', () => {
   const src = codigo(ARCHIVOS[0]).join('\n');
-  it('overlay rgba(22,39,68,0.45) con blur(6px), panel de 18px y capa dark #162744', () => {
-    expect(src).toContain("rgba(22,39,68,0.45)");
-    expect(src).toContain('blur(6px)');
-    expect(src).toContain('rounded-[18px]');
-    expect(src).toContain('dark:bg-[#162744]');
-    expect(src).not.toContain('backdrop-blur-md');
+  it('velo, panel y franja del Modal en su sitio (homologación #14507), sin hex de oscuro', () => {
+    // Homologación #14507 (regla 3): el diálogo propio toma velo (--overlay), radio, sombra y franja del Modal
+    // desde `dialogo-propio.ts`, sin migrar a @flit/ui/Modal.
+    expect(src).toContain('MODAL_VELO_CLS'); // UI Kit 2026 (S3): el velo sale de @flit/ui/Modal
+    expect(src).toContain('DIALOGO_PANEL');
+    expect(src).toContain('DIALOGO_FRANJA');
+    expect(src).not.toContain("rgba(22,39,68,0.45)");
+    expect(src).not.toContain('dark:bg-[#162744]');
   });
 });

@@ -40,7 +40,8 @@ describe("HU #10496 — Modal (AC1 ancho + blur, AC2 contraste dark)", () => {
       </Modal>,
     );
     const dialog = screen.getByRole("dialog");
-    expect(dialog.className).toContain("backdrop-blur-md");
+    // UI Kit 2026 (propuesta-2): velo azul al 50 % con desenfoque de 5 px.
+    expect(dialog.className).toContain("backdrop-blur-[5px]");
     expect(dialog.className).toMatch(/fixed inset-0/);
     const panel = dialog.firstElementChild as HTMLElement;
     // md por defecto → max-w-lg (estándar, no el max-w-md angosto anterior).
@@ -94,8 +95,9 @@ describe("HU #10496 — Modal (AC1 ancho + blur, AC2 contraste dark)", () => {
       </Modal>,
     );
     const panel = screen.getByRole("dialog").firstElementChild as HTMLElement;
-    expect(panel.className).toContain("dark:text-white");
-    expect(panel.className).toContain("dark:bg-[#0B0F14]");
+    // UI kit (HU #14476): superficie y texto por token, que ya resuelven el tema oscuro.
+    expect(panel.className).toContain("dark:text-foreground");
+    expect(panel.className).toContain("bg-card");
   });
 
   it("edge: cuando busy=true, ni el botón cerrar ni Escape disparan onClose", () => {
@@ -162,7 +164,7 @@ describe("HU #10496 — AC3: página cambiar contraseña con fondo desenfocado",
     expect(src).toMatch(/variant\?:\s*"auth"\s*\|\s*"overlay"/);
     expect(src).toMatch(/app-bg/);
     expect(src).toMatch(/backdrop-blur-md/);
-    expect(src).toMatch(/dark:bg-\[#0B0F14\]/);
+    expect(src).toMatch(/bg-card/);
   });
 
   it("la página de cambiar contraseña usa variant='overlay'", () => {

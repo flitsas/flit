@@ -16,7 +16,6 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 public sealed class AttachmentsHandlerTests
 {
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
-    private readonly IChecklistCompanyParamsProvider _companyParams = Substitute.For<IChecklistCompanyParamsProvider>();
     private readonly FakeStorage _storage = new();
     private readonly UploadAttachmentHandler _upload;
     private readonly PresignAttachmentHandler _presign;
@@ -34,9 +33,7 @@ public sealed class AttachmentsHandlerTests
         _list = new ListAttachmentsHandler(_repo);
         _delete = new DeleteAttachmentHandler(_repo, _storage);
         _download = new DownloadAttachmentHandler(_repo, _storage);
-        _companyParams.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>(new List<CompanyDocumentParam>()));
-        _checklist = new GetChecklistHandler(_repo, _companyParams);
+        _checklist = new GetChecklistHandler(_repo);
     }
 
     /// <summary>Storage en memoria: registra saves/deletes y devuelve un hash determinista.</summary>
@@ -795,7 +792,7 @@ public sealed class AttachmentsHandlerTests
         catalog.ListSystemGeneratedCodesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlySet<string>>(
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "soat", "mandato" }));
-        var handler = new GetChecklistHandler(_repo, _companyParams, matrixProvider, catalog);
+        var handler = new GetChecklistHandler(_repo, matrixProvider, catalog);
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
@@ -819,7 +816,7 @@ public sealed class AttachmentsHandlerTests
         matrixProvider
             .GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ResolvedChecklistDoc>>([]));
-        var handler = new GetChecklistHandler(_repo, _companyParams, matrixProvider);
+        var handler = new GetChecklistHandler(_repo, matrixProvider);
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
@@ -839,7 +836,7 @@ public sealed class AttachmentsHandlerTests
         _repo.GetByIdWithChecklistGraphAsync(id, tenant, ct).Returns(instance);
 
         // Sin proveedor de matriz inyectado (degradación natural) ⇒ catálogo.
-        var handler = new GetChecklistHandler(_repo, _companyParams);
+        var handler = new GetChecklistHandler(_repo);
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 

@@ -270,6 +270,72 @@ public sealed class ManualCaptureEndpointTests : IClassFixture<ManualCaptureEndp
         _factory.Storage.Saved.Where(s => s.Key == id).Should().HaveCount(4);
     }
 
+    // ── HU #14310: validacionFotos por HTTP real + Postgres real ────────────────────────────
+
+    [Theory]
+    [InlineData(true)]   // campo ANTES de los archivos en el multipart
+    [InlineData(false)]  // campo DESPUÉS de los archivos
+    public async Task HU14310_Submit_con_validacionFotos_guarda_el_resultado_y_Form_no_rompe_la_lectura_de_los_archivos(bool campoPrimero)
+    {
+        var (id, token) = await SeedAsync(consentAt: DateTimeOffset.UtcNow.AddHours(-1));
+        var firma = Png(120);
+        var form = Form(firma: firma);
+        var campo = new StringContent(
+            """{"rostro":{"estado":"verificada","motivo":null},"anverso":{"estado":"no_verificada","motivo":"lado_incorrecto"},"reverso":{"estado":"no_verificada","motivo":"sin_soporte"}}""");
+        var reordenado = new MultipartFormDataContent();
+        if (campoPrimero)
+            reordenado.Add(campo, "validacionFotos");
+        foreach (var parte in form)
+            reordenado.Add(parte, parte.Headers.ContentDisposition!.Name!.Trim('"'), parte.Headers.ContentDisposition.FileName!.Trim('"'));
+        if (!campoPrimero)
+            reordenado.Add(campo, "validacionFotos");
+
+        var response = await Submit(token, reordenado);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        await using var db = NewDb();
+        var v = await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
+        v.Status.Should().Be(BiometricEstados.PendienteRevisionManual);
+        v.SignatureImageSha256.Should().Be(Convert.ToHexStringLower(SHA256.HashData(firma)), "los archivos se leyeron enteros");
+        v.FaceCheckStatus.Should().Be("verificada");
+        v.FaceCheckReason.Should().BeNull();
+        v.IdFrontCheckStatus.Should().Be("no_verificada");
+        v.IdFrontCheckReason.Should().Be("lado_incorrecto");
+        v.IdBackCheckStatus.Should().Be("no_verificada");
+        v.IdBackCheckReason.Should().Be("sin_soporte");
+        _factory.Storage.Saved.Where(s => s.Key == id).Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task HU14310_Submit_sin_el_campo_deja_las_3_fotos_no_verificada_sin_resultado()
+    {
+        var (id, token) = await SeedAsync(consentAt: DateTimeOffset.UtcNow.AddHours(-1));
+
+        var response = await Submit(token, Form());
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        await using var db = NewDb();
+        var v = await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
+        (v.FaceCheckStatus, v.FaceCheckReason).Should().Be(("no_verificada", "sin_resultado"));
+        (v.IdFrontCheckStatus, v.IdFrontCheckReason).Should().Be(("no_verificada", "sin_resultado"));
+        (v.IdBackCheckStatus, v.IdBackCheckReason).Should().Be(("no_verificada", "sin_resultado"));
+    }
+
+    [Fact]
+    public async Task HU14310_Submit_con_campo_basura_responde_200_y_guarda_sin_resultado()
+    {
+        var (id, token) = await SeedAsync(consentAt: DateTimeOffset.UtcNow.AddHours(-1));
+        var form = Form();
+        form.Add(new StringContent("{\"rostro\":{\"estado\":\"x\",\"motivo\":\"<b>libre</b>\"}"), "validacionFotos");
+
+        var response = await Submit(token, form);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(Ct));
+        await using var db = NewDb();
+        var v = await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
+        (v.FaceCheckStatus, v.FaceCheckReason).Should().Be(("no_verificada", "sin_resultado"));
+    }
+
     [Fact]
     public async Task Submit_simultaneo_con_el_mismo_token_solo_consume_el_enlace_una_vez()
     {

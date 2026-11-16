@@ -178,9 +178,13 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     expect(screen.getByRole('tab', { name: /Comprador 1/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Comprador 2/ })).toBeInTheDocument();
     expect(screen.getByText(/Porcentaje de propiedad/)).toBeInTheDocument();
-    // Reparto por defecto 50/50 — el solidario (Comprador 1) absorbe el residuo.
-    expect(screen.getByRole('tab', { name: /Comprador 1 50%/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Comprador 2 50%/ })).toBeInTheDocument();
+    // HU #14192 — edición manual: el 1º queda en 100%, el nuevo entra en 0% (residuo libre).
+    expect(screen.getByRole('tab', { name: /Comprador 1 100%/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Comprador 2 0%/ })).toBeInTheDocument();
+    // C2 activo con max=0: guía a bajar otro % para liberar espacio.
+    expect(
+      screen.getByText(/Baja el porcentaje de otro propietario para liberar espacio/),
+    ).toBeInTheDocument();
   });
 
   it('el bloque de porcentaje va DESPUÉS de los datos del actor (Datos de contacto), no junto a las pestañas', async () => {
@@ -207,39 +211,42 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     expect(panel).toHaveAttribute('aria-labelledby', activeTab.id);
   });
 
-  it('el solidario (ordinal=1) absorbe el residuo mientras no se edite a mano', async () => {
-    const user = userEvent.setup();
-    await addSecondComprador(user);
-
-    // La pestaña 2 queda activa tras agregar (foco natural en lo recién creado).
-    const input2 = screen.getByLabelText(/Porcentaje exacto de Comprador 2/) as HTMLInputElement;
-    await user.clear(input2);
-    await user.type(input2, '30');
-
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: /Comprador 1 70%/ })).toBeInTheDocument(),
-    );
-  });
-
-  it('al editar el solidario a mano, deja de absorber el residuo', async () => {
+  it('HU #14192 — editar un % no modifica automáticamente el de los otros', async () => {
     const user = userEvent.setup();
     await addSecondComprador(user);
 
     await user.click(screen.getByRole('tab', { name: /Comprador 1/ }));
     const input1 = screen.getByLabelText(/Porcentaje exacto de Comprador 1/) as HTMLInputElement;
     await user.clear(input1);
-    await user.type(input1, '40');
-    await waitFor(() => expect(input1).toHaveValue(40));
+    await user.type(input1, '60');
+    await waitFor(() => expect(input1).toHaveValue(60));
 
-    // Cambia el agregado: el solidario YA NO se recalcula — queda fijo en 40, aunque la suma se rompa.
     await user.click(screen.getByRole('tab', { name: /Comprador 2/ }));
     const input2 = screen.getByLabelText(/Porcentaje exacto de Comprador 2/) as HTMLInputElement;
     await user.clear(input2);
-    await user.type(input2, '10');
+    await user.type(input2, '40');
+    await waitFor(() => expect(input2).toHaveValue(40));
+
+    expect(screen.getByRole('tab', { name: /Comprador 1 60%/ })).toBeInTheDocument();
+    expect(screen.getByText('Exactamente 100%.')).toBeInTheDocument();
+  });
+
+  it('HU #14192 — no permite superar 100% total al editar (tope = 100 − suma de los demás)', async () => {
+    const user = userEvent.setup();
+    await addSecondComprador(user);
 
     await user.click(screen.getByRole('tab', { name: /Comprador 1/ }));
-    const input1Again = screen.getByLabelText(/Porcentaje exacto de Comprador 1/) as HTMLInputElement;
-    expect(input1Again).toHaveValue(40);
+    const input1 = screen.getByLabelText(/Porcentaje exacto de Comprador 1/) as HTMLInputElement;
+    await user.clear(input1);
+    await user.type(input1, '70');
+    await waitFor(() => expect(input1).toHaveValue(70));
+
+    await user.click(screen.getByRole('tab', { name: /Comprador 2/ }));
+    const input2 = screen.getByLabelText(/Porcentaje exacto de Comprador 2/) as HTMLInputElement;
+    await user.clear(input2);
+    await user.type(input2, '50'); // máximo disponible = 30
+    await waitFor(() => expect(input2).toHaveValue(30));
+    expect(screen.getByText('Exactamente 100%.')).toBeInTheDocument();
   });
 
   // CAMBIO DE COMPORTAMIENTO (decisión del usuario, con capturas de por medio): el bloque
@@ -285,11 +292,15 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
     const user = userEvent.setup();
     await addSecondComprador(user);
 
-    // Suma != 100: el solidario en 40, el agregado se queda en 50 (sin tocarlo) → suma 90.
+    // Tras agregar: 100/0. Baja el 1º a 60 y sube el 2º a 30 → suma 90 (sin cero).
     await user.click(screen.getByRole('tab', { name: /Comprador 1/ }));
     const input1 = screen.getByLabelText(/Porcentaje exacto de Comprador 1/) as HTMLInputElement;
     await user.clear(input1);
-    await user.type(input1, '40');
+    await user.type(input1, '60');
+    await user.click(screen.getByRole('tab', { name: /Comprador 2/ }));
+    const input2 = screen.getByLabelText(/Porcentaje exacto de Comprador 2/) as HTMLInputElement;
+    await user.clear(input2);
+    await user.type(input2, '30');
 
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
@@ -300,9 +311,7 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
       screen.queryByText('Todos los propietarios deben tener un porcentaje mayor a 0%.'),
     ).toBeNull();
 
-    // Ahora el agregado a 0%: el solidario vuelve a absorber (100), pero el agregado queda en 0.
-    await user.click(screen.getByRole('tab', { name: /Comprador 2/ }));
-    const input2 = screen.getByLabelText(/Porcentaje exacto de Comprador 2/) as HTMLInputElement;
+    // Deja el 2º en 0%: mensaje de cero (suma también falla, pero el cero es el texto buscado).
     await user.clear(input2);
     await user.type(input2, '0');
 

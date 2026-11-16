@@ -6,6 +6,12 @@ export type TriState = "" | "true" | "false";
 export interface DetailedReportFiltersState {
   range: DateRange;
   tenantId?: string;
+  /** Épica #14296 — SuperAdmin eligió «Todas las compañías»: no hay `tenantId`. */
+  allCompanies?: boolean;
+  /** Épica #14296 — código de canal (`CANAL_LABEL`). */
+  channel?: string;
+  /** Épica #14296 — OT del punto; solo existe con canal `pn_punto`. */
+  channelTransitOfficeId?: string;
   transitOfficeId?: string;
   procedureTypeId?: string;
   category?: string;
@@ -29,7 +35,7 @@ export interface DetailedReportFiltersState {
  */
 export function defaultDetailedFilters(reference: Date = new Date()): DetailedReportFiltersState {
   const from = new Date(reference);
-  from.setDate(from.getDate() - 30);
+  from.setDate(from.getDate() - 29); // 30 días contando hoy = preset «Últimos 30 días» de RangoFechas
   return {
     range: { from: toIsoDate(from), to: toIsoDate(reference) },
     hasTransformation: "",
@@ -77,7 +83,13 @@ export function toQueryParams(
   return {
     from: filters.range.from,
     to: filters.range.to,
-    tenantId: filters.tenantId,
+    // Con «Todas las compañías» viaja `allCompanies=true` y NUNCA `tenantId`.
+    tenantId: filters.allCompanies ? undefined : filters.tenantId,
+    allCompanies: filters.allCompanies ? true : undefined,
+    channel: filters.channel || undefined,
+    // El OT del punto solo es válido con Persona Natural OT: con otro canal no viaja aunque quede un valor.
+    channelTransitOfficeId:
+      filters.channel === "pn_punto" ? filters.channelTransitOfficeId || undefined : undefined,
     transitOfficeId: filters.transitOfficeId || undefined,
     procedureTypeId: filters.procedureTypeId || undefined,
     category: filters.category || undefined,

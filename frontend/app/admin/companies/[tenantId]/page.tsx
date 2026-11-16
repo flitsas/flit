@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Network } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import Link from "next/link";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -11,20 +11,18 @@ import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTab
 import { AdminChildContextBanner } from "@/components/admin/companies/AdminChildContextBanner";
 import { CompanyChildrenSection } from "@/components/admin/companies/CompanyChildrenSection";
 import { BrandingConfigurator } from "@/components/admin/branding/BrandingConfigurator";
-import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
-import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
+import { NetworkDomainsSection } from "@/components/admin/domain/NetworkDomainsSection";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
 import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
 import { resolveOtConfigPanelMode } from "@/lib/companies/ot-config-mode";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
-import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { CompanyUsersPanel } from "@/components/admin/companies/panels/CompanyUsersPanel";
 import { ExternalIntegrationsPanel } from "@/components/admin/companies/external-integrations/ExternalIntegrationsPanel";
 import { fetchCompany, fetchCompanyChildren, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import { isHeadTenantType } from "@/lib/api/types";
-import type { CompanyListItem, TenantDomainResponse, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
+import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   ADMIN_BACK_LINK_CLS,
@@ -221,7 +219,7 @@ function CompanyDetail() {
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
       <button type="button" onClick={() => router.push(backHref)} className={ADMIN_BACK_LINK_CLS}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> {backLabel}
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" /> {backLabel}
       </button>
 
       {managingChild && company && <AdminChildContextBanner childName={company.razonSocial} />}
@@ -238,7 +236,7 @@ function CompanyDetail() {
         action={
           showNetworkLink ? (
             <Link href={`/admin/companies/${tenantId}/children`} className={ADMIN_BRAND_OUTLINE_BTN_CLS}>
-              <Network className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="integraciones" className="h-3.5 w-3.5" />
               Panel de red
             </Link>
           ) : undefined
@@ -256,7 +254,7 @@ function CompanyDetail() {
               {isNew && (
                 <div
                   className="mb-3 rounded-xl border px-3 py-2 text-xs"
-                  style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+                  style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
                   role="status"
                 >
                   Esta compañía aún no tiene configuración. Define los valores y pulsa
@@ -288,12 +286,6 @@ function CompanyDetail() {
                   />
                 }
                 auditSlot={<AuditLogPanel tenantId={tenantId} networkHeadId={managingChild ? networkHeadId : null} />}
-                documentosSlot={
-                  <CompanyDocumentParamsPanel
-                    tenantId={tenantId}
-                    networkHeadId={managingChild ? networkHeadId : null}
-                  />
-                }
                 legalRepresentativesSlot={
                   <RepresentativesAndVaultTab
                     tenantId={tenantId}
@@ -315,7 +307,7 @@ function CompanyDetail() {
                   marcaBlancaHeadTabs ? (
                     <div className="flex flex-col gap-6">
                       <BrandingConfigurator source="admin" tenantId={tenantId} />
-                      <DomainAdminSection tenantId={tenantId} />
+                      <NetworkDomainsSection tenantId={tenantId} />
                     </div>
                   ) : undefined
                 }
@@ -336,42 +328,6 @@ function CompanyDetail() {
       {showChildrenSection && company && !marcaBlancaHeadTabs && <CompanyChildrenSection company={company} />}
 
     </main>
-  );
-}
-
-/** HU #12427 AC3 — coordina `DomainStatusPanel` (lectura + comprobar) y `DomainRegisterForm` (registrar/cambiar/retirar) sobre el mismo `tenantId`, ambos exclusivos SuperAdmin. */
-function DomainAdminSection({ tenantId }: { tenantId: string }) {
-  const [domain, setDomain] = useState<TenantDomainResponse | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  return (
-    <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
-      <div className="mb-3">
-        <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
-          Dominio de la red
-        </h2>
-        <p className="text-[11px] opacity-60">
-          Dominio propio para el acceso y las comunicaciones de esta red Marca Blanca.
-        </p>
-      </div>
-
-      <DomainStatusPanel mode="admin" tenantId={tenantId} onLoaded={setDomain} reloadToken={reloadToken} />
-
-      <div className="mt-4 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
-        <DomainRegisterForm
-          tenantId={tenantId}
-          domain={domain}
-          onRegistered={(updated) => {
-            setDomain(updated);
-            setReloadToken((n) => n + 1);
-          }}
-          onRemoved={() => {
-            setDomain(null);
-            setReloadToken((n) => n + 1);
-          }}
-        />
-      </div>
-    </section>
   );
 }
 

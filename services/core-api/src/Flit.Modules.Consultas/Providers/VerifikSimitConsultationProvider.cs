@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Consultations;
@@ -45,21 +45,21 @@ internal sealed class VerifikSimitConsultationProvider(
         {
             url = $"/v2/co/simit/consultar?documentType={Uri.EscapeDataString(documentType)}" +
                   $"&documentNumber={Uri.EscapeDataString(documentNumber)}";
+            return await SendAsync(url, RawProviderPayload.PersonSubject, documentNumber, ct);
         }
-        else if (!string.IsNullOrWhiteSpace(plate))
+
+        if (!string.IsNullOrWhiteSpace(plate))
         {
             url = $"/v2/co/simit/consultar/placa?plate={Uri.EscapeDataString(plate)}";
-        }
-        else
-        {
-            return InputError("Se requiere documento (tipo+número) o placa para consultar SIMIT");
+            return await SendAsync(url, RawProviderPayload.VehicleSubject, plate, ct);
         }
 
-        return await SendAsync(url, ct);
+        return InputError("Se requiere documento (tipo+número) o placa para consultar SIMIT");
     }
 
-    private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
+    private async Task<ConsultationResult> SendAsync(string url, string subjectKind, string subjectKey, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -68,18 +68,23 @@ internal sealed class VerifikSimitConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
+
+            // HU #14183: el cuerpo HTTP tal cual, también en el 404 («sin registros»). Sin ese cuerpo
+            // no se ve por qué el semáforo quedó verde. 5xx y cuerpo ilegible siguen sin crudo.
+            var raw = await response.Content.ReadAsStringAsync(ct);
 
             if (response.StatusCode == HttpStatusCode.NotFound)
-                return NotFound();
+                return NotFound() with { RawPayload = Crudo(subjectKind, subjectKey, raw) };
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
-            var payload = await response.Content.ReadFromJsonAsync<VerifikSimitResponse>(JsonOptions, ct);
+            var payload = JsonSerializer.Deserialize<VerifikSimitResponse>(raw, JsonOptions);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
-            return VerifikSimitResultMapper.Map(payload);
+            return VerifikSimitResultMapper.Map(payload) with { RawPayload = Crudo(subjectKind, subjectKey, raw) };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -87,15 +92,15 @@ internal sealed class VerifikSimitConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -129,6 +134,9 @@ internal sealed class VerifikSimitConsultationProvider(
             [new ConsultationCheck("multas", "Multas SIMIT", "ok", Key_, "Sin registros SIMIT")],
             []);
 
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
+
     // No se pudo verificar SIMIT (no-200/timeout/red/respuesta ilegible). Aviso (warn), no bloqueo:
     // el trámite puede seguir; el gestor ve «POR REVISAR» y puede reintentar la consulta después.
     private static ConsultationResult ProviderUnavailable() =>
@@ -141,6 +149,9 @@ internal sealed class VerifikSimitConsultationProvider(
         new(Key_, "yellow",
             [new ConsultationCheck("input", "Datos de consulta", "unknown", Key_, message)],
             []);
+
+    private static RawProviderPayload Crudo(string subjectKind, string subjectKey, string raw) =>
+        new(Key_, subjectKind, subjectKey, raw, DateTimeOffset.UtcNow);
 
     private static string? GetValue(ConsultationContext ctx, string key) =>
         ctx.FieldValues.TryGetValue(key, out var v) ? v : null;

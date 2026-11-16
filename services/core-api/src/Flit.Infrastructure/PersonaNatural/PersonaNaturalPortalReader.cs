@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Plataforma.PersonaNatural;
 using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk;
 using Flit.Tramites.Domain.Tramites.PersonaNatural;
@@ -117,9 +118,47 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
             SELECT id, concept, procedure_type_id,
                    transit_office_id, amount_cop
               FROM admin.persona_natural_tariffs
-             WHERE valid_from <= {fecha} AND (valid_to IS NULL OR valid_to >= {fecha})
+             WHERE superseded_at IS NULL AND valid_from <= {fecha} AND (valid_to IS NULL OR valid_to >= {fecha})
             """).ToListAsync(ct).ConfigureAwait(false);
         return filas.Select(f => new TarifaVigente(f.Concept, f.ProcedureTypeId, f.TransitOfficeId, f.AmountCop, f.Id)).ToList();
+    }
+
+    /// <summary>
+    /// HU #14393/#14395 — banderas de medios y switches guardados para un ámbito (organismo, o la web con <c>null</c>). Sin
+    /// caché: lo recién guardado se ve en la siguiente lectura. Sin filas, la configuración vacía (el portal cobra como antes).
+    /// </summary>
+    public async Task<ConfigCobroPn> ConfigCobroAsync(Guid? ambitoOrganismoId, CancellationToken ct)
+    {
+        var medios = await db.Database.SqlQuery<MedioCobroFila>($"""
+            SELECT method, enabled FROM admin.persona_natural_payment_methods
+             WHERE transit_office_id IS NOT DISTINCT FROM {ambitoOrganismoId}::uuid
+            """).ToListAsync(ct).ConfigureAwait(false);
+        var switches = await db.Database.SqlQuery<SwitchCobroFila>($"""
+            SELECT procedure_type_id AS tipo_id, method, charge, enabled
+              FROM admin.persona_natural_charge_switches
+             WHERE transit_office_id IS NOT DISTINCT FROM {ambitoOrganismoId}::uuid
+            """).ToListAsync(ct).ConfigureAwait(false);
+        return new ConfigCobroPn(
+            ambitoOrganismoId is null,
+            medios.Select(m => new MedioPnFila(m.Method, m.Enabled)),
+            switches.Select(s => new SwitchPnFila(s.TipoId, s.Method, s.Charge, s.Enabled)));
+    }
+
+    /// <summary>
+    /// HU #14395 — decide qué conceptos de la cotización se cobran en un medio: un concepto entra si el switch de su grupo
+    /// (trámite o gestión) está encendido para el tipo y el medio. Sin fila, el grupo vale encendido si su renglón base tiene
+    /// monto mayor que cero.
+    /// </summary>
+    public static Func<string, bool> ConceptosCobrados(
+        ConfigCobroPn config, Guid tipoId, Guid organismoId, string medio, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(tarifas);
+        var encendidos = CobrosPn.Todos.ToDictionary(
+            cobro => cobro,
+            cobro => config.SwitchEncendido(
+                tipoId, medio, cobro, CotizadorPersonaNatural.Resolver(CobrosPn.ConceptoBase(cobro), tipoId, organismoId, tarifas)?.ValorCop ?? 0));
+        return concepto => encendidos[CobrosPn.DeConcepto(concepto)];
     }
 
     /// <summary>
@@ -151,6 +190,43 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
                 ? t with { Elegibilidad = new ResultadoElegibilidad(false, [MotivoNoHabilitado]) }
                 : t)
             .ToList();
+    }
+
+    /// <summary>Un tipo se ofrece en un organismo solo si los dos renglones base tienen tarifa vigente (propia o general).</summary>
+    public static bool TieneTarifaBase(Guid tipoId, Guid organismoId, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        ArgumentNullException.ThrowIfNull(tarifas);
+        return CotizadorPersonaNatural.Resolver(ConceptosTarifa.DerechosTransito, tipoId, organismoId, tarifas) is not null
+            && CotizadorPersonaNatural.Resolver(ConceptosTarifa.ServicioFlit, tipoId, organismoId, tarifas) is not null;
+    }
+
+    /// <summary>
+    /// HU #14391 — de los organismos habilitados, deja los que ofrecen al menos un tipo (elegible, ya con la lista blanca
+    /// aplicada) con precio base vigente. Es el mismo criterio con que se listan los tipos de un organismo, así que un
+    /// organismo sin ningún tipo que ofrecer no aparece.
+    /// </summary>
+    public static IReadOnlyList<OrganismoHabilitadoPn> ConOferta(
+        IReadOnlyList<OrganismoHabilitadoPn> organismos, IReadOnlyList<TipoPersonaNatural> tipos, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        ArgumentNullException.ThrowIfNull(organismos);
+        ArgumentNullException.ThrowIfNull(tipos);
+        ArgumentNullException.ThrowIfNull(tarifas);
+        var elegibles = tipos.Where(t => t.Elegibilidad.Elegible).ToList();
+        return organismos.Where(o => elegibles.Any(t => TieneTarifaBase(t.Id, o.Id, tarifas))).ToList();
+    }
+
+    public sealed class MedioCobroFila
+    {
+        public string Method { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+    }
+
+    public sealed class SwitchCobroFila
+    {
+        public Guid TipoId { get; set; }
+        public string Method { get; set; } = string.Empty;
+        public string Charge { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
     }
 
     /// <summary>Forma de la fila leída por SQL (alias = nombre de propiedad).</summary>

@@ -19,9 +19,14 @@ cob=(); [ -n "${COBERTURA:-}" ] && cob=(--collect "XPlat Code Coverage")
 hilos=(); [ -n "${XUNIT_HILOS:-}" ] && hilos=(-- "xUnit.MaxParallelThreads=$XUNIT_HILOS")
 contar() { sed -n 's/^    //p' | grep -c . ; }
 
+# Admin nombra la prueba que se cuelga (HU14397): --blame-hang la corta a los 8 min y deja su nombre en el log.
+colgada=(--blame-hang --blame-hang-timeout 8min --blame-hang-dump-type none)
+
 # Corre el shard $SHARD de $2 del proyecto $1 repartiendo sus clases por turno (ver arriba). $3 = nombre del .trx.
+# $4.. = argumentos extra de dotnet test.
 por_clase() {
     local p=$1 n_shards=$2 trx=$3 lista total clases n f
+    shift 3
     lista=$(dotnet test "$p" --no-build -c Release --list-tests) || { echo "::error::--list-tests falló"; echo "$lista" | tail -30; exit 1; }
     total=$(echo "$lista" | contar)
     # Nombre de la prueba -> clase: se quitan los argumentos de las Theory y el último segmento (el método).
@@ -41,13 +46,14 @@ por_clase() {
       exit 0
     fi
     local args=(); [ -n "$f" ] && args=(--filter "$f")
-    exec dotnet test "$p" --no-build -c Release "${args[@]}" --logger "trx;LogFileName=$trx.trx" "${cob[@]}" "${hilos[@]}"
+    # "${hilos[@]}" va al final: empieza con «--» y lo que sigue son runsettings.
+    exec dotnet test "$p" --no-build -c Release "${args[@]}" --logger "trx;LogFileName=$trx.trx" "$@" "${cob[@]}" "${hilos[@]}"
 }
 
 case "$carril" in
   admin)
-    if [ "${ADMIN_SHARDS:-1}" -gt 1 ]; then por_clase tests/Flit.Admin.Tests "$ADMIN_SHARDS" "admin-$SHARD"; fi
-    exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" "${cob[@]}" "${hilos[@]}" ;;
+    if [ "${ADMIN_SHARDS:-1}" -gt 1 ]; then por_clase tests/Flit.Admin.Tests "$ADMIN_SHARDS" "admin-$SHARD" "${colgada[@]}"; fi
+    exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" "${colgada[@]}" "${cob[@]}" "${hilos[@]}" ;;
 
   integration)
     por_clase tests/Flit.Integration.Tests "$SHARDS" "integration-$SHARD" ;;

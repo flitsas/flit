@@ -85,6 +85,8 @@
     <!-- HU #10256 — generador PDF real del FUR (QuestPDF Community). Versión pineada en Directory.Packages.props. -->
     <PackageReference Include="QuestPDF" />
     <PackageReference Include="PdfSharpCore" />
+    <!-- HU #14312 — rasterizar PDF ilegible para PdfSharp (PDFium) antes del placeholder. -->
+    <PackageReference Include="PDFtoImage" />
     <PackageReference Include="SixLabors.ImageSharp" />
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="System.IO.Packaging" />

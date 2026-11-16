@@ -71,11 +71,20 @@ internal sealed class KyverumRuntApiClient(
     /// <c>{ documento, tipoDocumento? }</c>.
     /// </summary>
     public async Task<KyverumRuntPersonaResponse> ConsultarPersonaAsync(
+        KyverumRuntPersonaQuery query, CancellationToken ct = default) =>
+        (await ConsultarPersonaConCrudoAsync(query, ct)).Response;
+
+    /// <summary>
+    /// Igual que <see cref="ConsultarPersonaAsync"/>, pero devuelve además el JSON <b>tal como llegó</b> (HU #14153 AC1): el
+    /// detalle del Diagnóstico muestra la respuesta íntegra del proveedor (licencias con todos sus campos, aunque el DTO no los
+    /// declare). El crudo no se vuelca en trazas ni logs.
+    /// </summary>
+    public async Task<(KyverumRuntPersonaResponse Response, string Raw)> ConsultarPersonaConCrudoAsync(
         KyverumRuntPersonaQuery query, CancellationToken ct = default)
     {
         var body = new PersonaBody(query.Documento, query.TipoDocumento);
 
-        return await SendAsync<KyverumRuntPersonaResponse>(
+        return await SendWithRawAsync<KyverumRuntPersonaResponse>(
             "/v1/personas:consultar", body, r => r.Ok, ct);
     }
 

@@ -6,6 +6,9 @@ using FluentAssertions;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Documents;
@@ -44,6 +47,51 @@ public sealed class PdfExpedienteConsolidadoMergerTests
     {
         var png = MinimalPng();
         var normalized = Merger.NormalizeToPdf(png, "image/png");
+
+        Encoding.UTF8.GetString(normalized.AsSpan(0, 4)).Should().Be("%PDF");
+    }
+
+    // HU #14505 / ADR-0083 — magic bytes mandan sobre MIME (incidente FT1-0000372).
+    [Fact]
+    public void NormalizeToPdf_PdfBytesLabeledAsJpeg_TreatsAsPdf_WithoutQuestPdfImageDecode()
+    {
+        var pdf = MinimalPdf();
+        var normalized = Merger.NormalizeToPdf(pdf, "image/jpeg");
+
+        normalized.Should().BeEquivalentTo(pdf);
+        Encoding.UTF8.GetString(normalized.AsSpan(0, 4)).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void DetectContentKind_RecognizesPdfJpegPng()
+    {
+        PdfExpedienteConsolidadoMerger.DetectContentKind(MinimalPdf())
+            .Should().Be(PdfExpedienteConsolidadoMerger.AttachmentContentKind.Pdf);
+        PdfExpedienteConsolidadoMerger.DetectContentKind(MinimalPng())
+            .Should().Be(PdfExpedienteConsolidadoMerger.AttachmentContentKind.Png);
+        PdfExpedienteConsolidadoMerger.DetectContentKind(MinimalJpeg())
+            .Should().Be(PdfExpedienteConsolidadoMerger.AttachmentContentKind.Jpeg);
+        PdfExpedienteConsolidadoMerger.DetectContentKind([0x00, 0x01, 0x02])
+            .Should().Be(PdfExpedienteConsolidadoMerger.AttachmentContentKind.Unknown);
+    }
+
+    [Fact]
+    public void NormalizeToPdf_GarbageBytesLabeledAsJpeg_ReturnsPlaceholderPdf_WithoutThrowing()
+    {
+        var garbage = new byte[] { 0xFF, 0xD8, 0xFF, 0x00, 0x01, 0x02, 0x03 }; // JPEG SOI truncado/ilegible
+        byte[]? normalized = null;
+        var act = () => normalized = Merger.NormalizeToPdf(garbage, "image/jpeg");
+
+        act.Should().NotThrow();
+        Encoding.UTF8.GetString(normalized!.AsSpan(0, 4)).Should().Be("%PDF");
+        PageCount(normalized!).Should().Be(1);
+    }
+
+    [Fact]
+    public void NormalizeToPdf_JpegInput_ProducesPdf()
+    {
+        var jpeg = MinimalJpeg();
+        var normalized = Merger.NormalizeToPdf(jpeg, "image/jpeg");
 
         Encoding.UTF8.GetString(normalized.AsSpan(0, 4)).Should().Be("%PDF");
     }
@@ -163,5 +211,14 @@ public sealed class PdfExpedienteConsolidadoMergerTests
         // 1×1 PNG transparente
         return Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+    }
+
+    private static byte[] MinimalJpeg()
+    {
+        using var image = new Image<Rgba32>(1, 1);
+        image[0, 0] = new Rgba32(200, 40, 40);
+        using var ms = new MemoryStream();
+        image.Save(ms, new JpegEncoder { Quality = 90 });
+        return ms.ToArray();
     }
 }

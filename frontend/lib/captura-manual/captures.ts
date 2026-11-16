@@ -1,5 +1,6 @@
 // Capturas del cliente: viven SOLO en memoria del flujo hasta el envío final (HU #13294/#13295).
 import type { ManualCaptureError, ManualSubmitFiles } from "./types";
+import type { FotoKind, ResultadoFoto } from "./validacionFotos";
 
 export type CaptureKey = keyof ManualSubmitFiles;
 export type Captures = Partial<ManualSubmitFiles>;
@@ -22,3 +23,15 @@ export function offendingCapture(error: ManualCaptureError): CaptureKey | null {
   const keys: CaptureKey[] = ["rostro", "anverso", "reverso", "firma"];
   return keys.find((k) => text.includes(k)) ?? null;
 }
+
+/**
+ * Estado de validación de cada foto. Vive en el Flow (no en el visor) para que, al volver con «Atrás», el
+ * contador de intentos fallidos y el resultado de la foto ya confirmada se conserven.
+ */
+export interface EstadoFoto {
+  /** Resultado de la foto confirmada; sin él, en el envío queda «no verificada / sin_resultado». */
+  resultado?: ResultadoFoto;
+  /** Intentos fallidos acumulados en ese lado. */
+  fallos: number;
+}
+export type Fotos = Partial<Record<FotoKind, EstadoFoto>>;

@@ -11,7 +11,7 @@ export function OperacionLoadingState() {
         <div
           key={i}
           className="h-12 rounded-xl animate-pulse"
-          style={{ background: 'rgba(223,229,237,0.5)' }}
+          style={{ background: 'var(--surface-sunken)' }}
         />
       ))}
     </div>
@@ -31,11 +31,11 @@ export function OperacionErrorState({ message, onRetry }: ErrorProps) {
     >
       <div
         className="h-14 w-14 rounded-2xl grid place-items-center"
-        style={{ background: 'rgba(255,78,0,0.10)' }}
+        style={{ background: 'var(--badge-danger-bg)' }}
       >
         <svg
           className="h-7 w-7"
-          style={{ color: '#FF4E00' }}
+          style={{ color: 'var(--destructive)' }}
           fill="none"
           stroke="currentColor"
           strokeWidth={1.5}

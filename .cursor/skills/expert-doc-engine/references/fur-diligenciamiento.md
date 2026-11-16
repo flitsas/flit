@@ -49,7 +49,7 @@ Plantillas FLIT: automotor, remolques, maquinaria (`FurTemplateFormat`). Los eje
 
 Casillas = tipo base ∪ prenda ∪ transformaciones. Detalle y literales del párrafo 23: `docs/ot/fur/REGLAS-NUMERAL-3-TRES-CAPAS.md`.
 
-El mapper emite X en las casillas 1–5, 7, 8, 10–13, 15–18 que el resolver marque. **No** declara 6 ni 14.
+El mapper emite X en las casillas 1–5, 7–13, 15–18 que el resolver marque. **No** declara 6 ni 14.
 
 **Numeral 20 DATOS DE ALERTA:** inscripción/registro → LIM. PROPIEDAD + A FAVOR DE (acreedor). Levantamiento → OTRO + A FAVOR DE. Detalle en `REGLAS-NUMERAL-3-TRES-CAPAS.md`.
 
@@ -79,7 +79,7 @@ Usar el nombre del archivo como clave de escenario. PN = persona natural, PJ = j
 | `Fur_Traspaso+Transformacion_PJxPN.pdf` | Traspaso + transformación |
 | `Fur_Traspaso+Transformacion+Prenda_PNxPJ.pdf` | Traspaso + transformación + prenda |
 | `Fur_OtroTramite_CambioColor_PJ.pdf` | Cambio de color (casilla 5) |
-| `Fur_OtroTramite_CambioCombus.pdf` | Conversión de combustible (en FLIT: 18) |
+| `Fur_OtroTramite_CambioCombus.pdf` | Conversión de combustible (en FLIT: 9 Transformación + 18 Otros) |
 | `Fur_OtroTramite_Blindaje.pdf` | Blindaje |
 | `Fur_OtroTramite_InscrPrenda PN.pdf` | Inscripción de prenda (11) |
 | `Fur_OtroTramite_LevantPrenda.pdf` | Levantamiento de prenda (12) |

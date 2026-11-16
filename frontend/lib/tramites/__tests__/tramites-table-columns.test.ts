@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
+  TRAMITES_COLUMNS_RESHOWN_ONCE,
   TRAMITES_COLUMNS,
   buildTramitesGridLayout,
   buildTramitesColWidths,
@@ -26,6 +27,8 @@ describe('buildTramitesGridLayout', () => {
       'placa',
       'propietario',
       'comprador',
+      // Ajuste 2026-11-10 (D2=a) — visible de salida para todos: cierra el bloque de personas.
+      'gestor',
       'tramite',
       // HU #12183 — visible de salida: la prenda y la transformación no se ven en ninguna otra
       // columna, y una marca que hay que activar a mano no informa a quien no sabe que existe.
@@ -50,7 +53,7 @@ describe('buildTramitesGridLayout', () => {
     }
     // Fuera del default por decisión de producto, no por estar apiladas: se activan desde el
     // selector y la preferencia del gestor manda a partir de ahí.
-    for (const opcional of ['gestor', 'fuente']) {
+    for (const opcional of ['fuente']) {
       expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).not.toContain(opcional);
       expect(TRAMITES_COLUMNS.map((c) => c.key)).toContain(opcional);
     }
@@ -78,11 +81,11 @@ describe('buildTramitesGridLayout', () => {
       'placa',
       'propietario',
       'comprador',
+      'gestor',
       'tramite',
       'marcas',
       'confirmadoRunt',
       'secretaria',
-      'gestor',
       'fuente',
     ]);
     // Las visibles por defecto son un SUBCONJUNTO del grupo "Listado" —no todo el grupo— y se
@@ -247,8 +250,9 @@ describe('buildTramitesColWidths', () => {
   it('el peso de una columna flexible es su piso: reparte en proporción a lo que necesita', () => {
     // `secretaria` (piso 190) crece más que `gestor` (piso 160) en la misma proporción que sus
     // pisos. Es lo que garantiza que ninguna caiga por debajo de su mínimo al comprimir la tabla.
+    // Las anchuras salen en el orden del catálogo, y Gestor va antes que Organismo (2026-11-10).
     const widths = buildTramitesColWidths(['secretaria', 'gestor']);
-    const [secretaria, gestor] = widths.map((w) => percentOf(w));
+    const [gestor, secretaria] = widths.map((w) => percentOf(w));
     expect(secretaria).not.toBeNull();
     expect(gestor).not.toBeNull();
     expect(secretaria! / gestor!).toBeCloseTo(190 / 160, 3);
@@ -284,5 +288,16 @@ describe('columna «Confirmado en RUNT» (Feature #12276)', () => {
   it('no ofrece orden: no es un dato por el que se ordene el listado', () => {
     const campo = camposExport(['confirmadoRunt']).find((c) => c.id === 'confirmadoRunt');
     expect(campo?.sort).toBeUndefined();
+  });
+});
+
+// Ajuste 2026-11-10 (D2=a) — Gestor pasó al default: quien ya tenía preferencia guardada sin ella
+// la recupera UNA vez (marca `reshown` en useUiPreferences); después manda su selección.
+describe('TRAMITES_COLUMNS_RESHOWN_ONCE', () => {
+  it('declara Gestor, y solo columnas que están en el default', () => {
+    expect(TRAMITES_COLUMNS_RESHOWN_ONCE).toEqual(['gestor']);
+    for (const k of TRAMITES_COLUMNS_RESHOWN_ONCE) {
+      expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).toContain(k);
+    }
   });
 });

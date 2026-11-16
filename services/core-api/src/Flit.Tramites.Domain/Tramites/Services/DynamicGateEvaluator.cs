@@ -89,6 +89,12 @@ public sealed record DynamicWizardContext
     public decimal ValorVenta { get; init; }
     /// <summary>Códigos de actor con identidad/biometría aprobada (e.g. BUYER, OWNER).</summary>
     public IReadOnlySet<string> BiometricsApproved { get; init; } = new HashSet<string>();
+
+    /// <summary>
+    /// Matrícula sin placa (preasignación): la identidad/firma no bloquea el envío, así que el blocker
+    /// global <c>identidad_no_aprobada</c> no se emite. No altera el estado del paso biométrico.
+    /// </summary>
+    public bool IdentidadExentaPorPreasignacion { get; init; }
     public bool FurGenerado { get; init; }
     public bool PlateRequestCompleted { get; init; }
     /// <summary>Documentos requeridos (para el gate de documentos y sus blockers).</summary>
@@ -419,7 +425,7 @@ public static class DynamicGateEvaluator
             blockers.Add(DocumentosIncompletos);
             blockers.AddRange(MissingDocumentCodes(ctx));
         }
-        if (profile.RequiresBiometrics && !BiometricsOk(profile, ctx))
+        if (profile.RequiresBiometrics && !ctx.IdentidadExentaPorPreasignacion && !BiometricsOk(profile, ctx))
             blockers.Add(IdentidadNoAprobada);
         // El blocker GLOBAL de prenda: es el que pinta la franja «Requisitos pendientes antes del
         // envío» y deshabilita Finalizar. Un trámite sin dimensión de prenda no lo emite aunque el

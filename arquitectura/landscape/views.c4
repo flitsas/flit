@@ -1,0 +1,83 @@
+// V01 del plan 01 §5, partida para que se lea sin zoom en el marco de Atlas: un resumen por grupos y un detalle por grupo.
+views {
+  view landscape {
+    title 'Landscape de FLIT S.A.S.'
+    description 'Resumen por grupos. Toca un grupo para ver su detalle.'
+    include
+      flit2,
+      flito,
+      flit1,
+      atlas,
+      integrador,
+      usuarios with { navigateTo landscape_usuarios },
+      satelites with { navigateTo landscape_satelites },
+      fuentes with { navigateTo landscape_fuentes },
+      entidades with { navigateTo landscape_entidades },
+      terceros with { navigateTo landscape_terceros }
+    style element.tag = #legado {
+      color gray
+    }
+    autoLayout TopBottom 45 25
+  }
+
+  view landscape_usuarios of usuarios {
+    title 'Landscape: usuarios'
+    description 'Quién usa FLIT 2.0 y FLITO.'
+    include
+      usuarios.*,
+      integrador,
+      flit2,
+      flito
+    autoLayout LeftRight 60 25
+  }
+
+  view landscape_satelites of satelites {
+    title 'Landscape: satélites'
+    description 'Productos y servicios de apoyo de FLIT.'
+    include
+      satelites.*,
+      flit2,
+      flit1,
+      fuentes,
+      terceros
+    style element.tag = #objetivo {
+      opacity 40%
+    }
+    style element.tag = #legado {
+      color gray
+    }
+    autoLayout LeftRight 60 25
+  }
+
+  view landscape_fuentes of fuentes {
+    title 'Landscape: fuentes de datos'
+    description 'De dónde consultan FLIT 2.0 y FLITO.'
+    include
+      fuentes.*,
+      flit2,
+      flito,
+      satelites.egress
+    autoLayout TopBottom 45 25
+  }
+
+  view landscape_entidades of entidades {
+    title 'Landscape: entidades y reportes'
+    description 'Bandejas, facturación y reportes regulatorios.'
+    include
+      entidades.*,
+      flit2,
+      flito
+    autoLayout TopBottom 45 25
+  }
+
+  view landscape_terceros of terceros {
+    title 'Landscape: servicios de terceros'
+    description 'IA, correo, almacenamiento, firma y mensajería.'
+    include
+      terceros.*,
+      flit2,
+      flito,
+      satelites
+    autoLayout TopBottom 45 25
+  }
+}

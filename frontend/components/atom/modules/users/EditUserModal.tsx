@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, UserCog } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 import { sanitizeName, validateReadableName } from "@/lib/validation/fieldRules";
@@ -227,7 +227,7 @@ export function EditUserModal({
       open
       onClose={handleClose}
       busy={busy || roleBusy}
-      icon={UserCog}
+      icono="rol"
       title="Editar usuario"
       description={user.email}
     >
@@ -237,7 +237,7 @@ export function EditUserModal({
           // se cambia desde aquí. Está para que quien edita sepa en qué relación está parado.
           <div
             className="flex items-start gap-2 rounded-xl border px-3 py-2"
-            style={{ borderColor: "#DFE5ED", background: "rgba(223,229,237,0.18)" }}
+            style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
           >
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-wide opacity-60">Perfil</p>
@@ -259,7 +259,7 @@ export function EditUserModal({
             maxLength={255}
             required
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-            style={{ borderColor: nameError ? "#FF4E00" : "#DFE5ED" }}
+            style={{ borderColor: nameError ? "var(--destructive)" : "var(--border)" }}
           />
         </Field>
 
@@ -270,7 +270,7 @@ export function EditUserModal({
             readOnly
             value={user.email}
             className="w-full cursor-not-allowed rounded-xl border px-3 py-2 text-xs opacity-70 outline-none"
-            style={{ borderColor: "#DFE5ED", background: "rgba(223,229,237,0.25)" }}
+            style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
           />
           <p className="mt-1 text-[10px] opacity-60">
             El correo es la credencial de acceso del usuario y no se puede cambiar desde aquí.
@@ -286,7 +286,7 @@ export function EditUserModal({
               onChange={handleRoleChange}
               disabled={roleBusy || pendingRole !== null || roleSection.rolesLoading || selectableRoles.length === 0}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-60"
-              style={{ borderColor: "#DFE5ED" }}
+              style={{ borderColor: "var(--border)" }}
             >
               {roleSection.rolesLoading ? (
                 <option value="">Cargando roles…</option>
@@ -312,7 +312,7 @@ export function EditUserModal({
                 role="alertdialog"
                 aria-labelledby="eu-role-warning"
                 className="mt-2 space-y-2 rounded-lg px-3 py-2"
-                style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}
+                style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
               >
                 <p id="eu-role-warning" className="text-[11px] font-medium">
                   {roleChangeWarning(pendingRole.count)}
@@ -325,7 +325,7 @@ export function EditUserModal({
                     onClick={() => setPendingRole(null)}
                     disabled={roleBusy}
                     className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-                    style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+                    style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
                   >
                     Mantener rol actual
                   </button>
@@ -334,9 +334,9 @@ export function EditUserModal({
                     onClick={() => void applyRole(pendingRole.roleId)}
                     disabled={roleBusy}
                     className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
-                    style={{ background: "#FF4E00" }}
+                    style={{ background: "var(--destructive)" }}
                   >
-                    {roleBusy && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                    {roleBusy && <Icono nombre="girador" className="h-3 w-3 animate-spin" />}
                     Cambiar rol
                   </button>
                 </div>
@@ -357,7 +357,7 @@ export function EditUserModal({
           <p
             role="alert"
             className="rounded-lg px-3 py-2 text-[11px] font-medium"
-            style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}
+            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
           >
             {formError}
           </p>
@@ -376,9 +376,9 @@ export function EditUserModal({
             type="submit"
             disabled={busy || roleBusy}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {busy && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
             {busy ? "Guardando…" : "Guardar cambios"}
           </button>
         </div>
@@ -405,7 +405,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-[10px] font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

@@ -1,3 +1,4 @@
+using Flit.Modules.Security.Application.Auth.BulkInvitation;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Application.Auth.Network;
@@ -35,6 +36,12 @@ public static class SecurityApplicationExtensions
         services.AddScoped<ResendInvitationHandler>(); // HU #10625 — reenviar invitación pendiente
         services.AddScoped<CancelInvitationHandler>(); // HU #10627 — cancelar invitación pendiente
         services.AddScoped<ReactivateInvitationHandler>(); // HU #11552 — reactivar invitación cancelada
+
+        // Feature #14420 / ADR-0077 — invitación masiva por Excel. La política es la ÚNICA fuente de «qué roles puede
+        // asignar quien invita» (plantilla, dryRun y commit); BulkInvitationOptions, el parser, la plantilla y el
+        // directorio de destino se registran en Infraestructura.
+        services.AddScoped<IInvitationScopePolicy, InvitationScopePolicy>(); // HU #14421
+        services.AddScoped<BulkInvitationService>(); // HU #14423
 
         // HU #10161 — CRUD módulos dinámicos Super Admin
         services.AddScoped<CreateModuleHandler>();

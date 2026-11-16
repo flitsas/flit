@@ -174,7 +174,7 @@ describe('modal de activación (AC4)', () => {
     await user.click(screen.getByRole('button', { name: 'Activar flujo manual' }));
     await user.click(screen.getByRole('button', { name: 'Confirmar' }));
     expect(
-      await screen.findByText('No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido.'),
+      await screen.findByText('No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido, o cópialo y envíalo por otro canal.'),
     ).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
   });

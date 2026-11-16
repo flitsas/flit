@@ -1,5 +1,6 @@
 // Productos que el usuario puede abrir (GET /api/v1/platform/me/apps, contrato §6) y su icono.
-import { Box, FileText, FlaskConical, Gauge, LayoutGrid, Ticket } from "lucide-react";
+import { Box, FlaskConical } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavIcon } from "./nav";
 
 export interface SuiteApp {
@@ -14,10 +15,10 @@ export interface SuiteApp {
 
 // Nombres de platform.products.icon (DDL 119). Un icono desconocido cae a Box, nunca rompe el menú.
 const ICONS: Record<string, NavIcon> = {
-  "layout-grid": LayoutGrid,
-  "file-text": FileText,
-  ticket: Ticket,
-  gauge: Gauge,
+  "layout-grid": iconoComo("rejilla"),
+  "file-text": iconoComo("documento"),
+  ticket: iconoComo("comparendos"),
+  gauge: iconoComo("medidor"),
   "flask-conical": FlaskConical,
 };
 

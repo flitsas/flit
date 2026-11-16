@@ -35,7 +35,26 @@ public sealed record ManualDetail(
     DateTimeOffset? ReviewedAt,
     string? ReviewedBy,
     string? RejectionReasonCode,
-    DateTimeOffset? LinkExpiresAt);
+    DateTimeOffset? LinkExpiresAt,
+    ManualPhotoChecksDto? ValidacionFotos = null,
+    // HU #14302 — misma regla que BiometricValidationDto.cartaDisponible: manual, aprobada y con carta generada.
+    bool CartaDisponible = false);
+
+/// <summary>
+/// HU #14310 — resultado de la validación en el dispositivo de UNA foto: <c>estado</c> ∈ {verificada, no_verificada};
+/// <c>motivo</c> solo si no está verificada. Informativo: no es un control de seguridad ni bloquea nada.
+/// </summary>
+public sealed record ManualPhotoCheckDto(string Estado, string? Motivo)
+{
+    internal static ManualPhotoCheckDto From(ManualPhotoCheck c) => new(c.State, c.Reason);
+}
+
+/// <summary>HU #14310 — <c>ManualDetail.validacionFotos</c>; <c>null</c> en capturas anteriores a este cambio.</summary>
+public sealed record ManualPhotoChecksDto(ManualPhotoCheckDto Rostro, ManualPhotoCheckDto Anverso, ManualPhotoCheckDto Reverso)
+{
+    internal static ManualPhotoChecksDto? From(ManualPhotoChecks? c) =>
+        c is null ? null : new(ManualPhotoCheckDto.From(c.Face), ManualPhotoCheckDto.From(c.IdFront), ManualPhotoCheckDto.From(c.IdBack));
+}
 
 /// <summary>Consulta del detalle: <paramref name="ConsultedByUserId"/> es quien lo pidió (queda en la auditoría).</summary>
 public sealed record GetManualDetailQuery(Guid ValidationId, Guid ConsultedByUserId);
@@ -78,7 +97,9 @@ public sealed class GetManualDetailHandler(
         return (new ManualDetail(
             r.Id, r.FullName, r.DocumentNumber, r.TenantName, r.Origin, r.Status, r.ActivatedAt,
             ListManualIdentityValidationsHandler.WaitingMinutes(r.Status, r.WaitingSince, now),
-            r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt), null);
+            r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt,
+            ManualPhotoChecksDto.From(r.PhotoChecks),
+            r.CartaDisponible), null);
     }
 }
 

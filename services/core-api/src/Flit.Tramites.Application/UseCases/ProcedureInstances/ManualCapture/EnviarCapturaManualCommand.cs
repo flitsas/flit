@@ -17,7 +17,8 @@ public sealed record EnviarCapturaManualCommand(
     ManualCaptureUpload? Anverso,
     ManualCaptureUpload? Reverso,
     ManualCaptureUpload? Firma,
-    string? UserAgent);
+    string? UserAgent,
+    string? ValidacionFotos = null);
 
 /// <summary>Resultado del envío: el estado en el que quedó la validación.</summary>
 public sealed record EnviarCapturaManualResult(string Status);
@@ -120,7 +121,8 @@ public sealed class EnviarCapturaManualHandler(
             // El hash de la firma lo calcula el storage sobre los bytes guardados, igual que la rúbrica Kyverum (ADR-0054).
             sFirma = await SaveAsync(key, TipoFirma, $"firma-{sello}.png", firma, guardados, ct).ConfigureAwait(false);
 
-            v.RegistrarCapturaManual(sRostro.StoragePath, sAnverso.StoragePath, sReverso.StoragePath, sFirma.StoragePath, sFirma.Sha256, now);
+            v.RegistrarCapturaManual(sRostro.StoragePath, sAnverso.StoragePath, sReverso.StoragePath, sFirma.StoragePath, sFirma.Sha256, now,
+                ManualPhotoChecksParser.Parse(command.ValidacionFotos));
             if (!await repo.TryPersistManualCaptureAsync(v, ct).ConfigureAwait(false))
             {
                 // Otro envío del mismo token ya consumió el enlace: lo subido por este queda huérfano, se limpia.

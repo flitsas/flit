@@ -5,7 +5,7 @@ export function LoadingState() {
         <div
           key={i}
           className="h-12 rounded-xl animate-pulse"
-          style={{ background: 'rgba(223,229,237,0.5)' }}
+          style={{ background: 'var(--secondary)' }}
         />
       ))}
     </div>

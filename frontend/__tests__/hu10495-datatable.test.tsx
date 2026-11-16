@@ -63,7 +63,8 @@ describe("HU #10495 / Bug #13055 — Pagination estándar ('Mostrando X–Y de N
     render(<Pagination page={1} pageSize={10} totalCount={25} onPageChange={onPageChange} />);
     expect(screen.getByText(/Mostrando 1–10 de 25/)).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: /paginación/i });
-    expect(nav.className).toContain("justify-end");
+    // HU #14476 — el `.paginador` del prototipo reparte conteo y botones a los extremos.
+    expect(nav.className).toContain("justify-between");
     expect(screen.getByRole("button", { name: "Página 2" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /página siguiente/i }));
     expect(onPageChange).toHaveBeenCalledWith(2);

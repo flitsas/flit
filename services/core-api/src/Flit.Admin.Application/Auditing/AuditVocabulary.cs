@@ -29,6 +29,9 @@ public static class AuditVocabulary
         public const string Suspend = "suspend";
         public const string Unsuspend = "unsuspend";
         public const string Invite = "invite";
+
+        // Feature #14420 (ADR-0077) — invitación masiva por Excel: UNA fila resumen por carga confirmada (conteos en NewValue).
+        public const string BulkInvite = "bulk_invite";
         public const string ResendInvite = "resend_invite";
         public const string ReactivateInvite = "reactivate_invite";
         public const string DeleteUser = "delete_user";

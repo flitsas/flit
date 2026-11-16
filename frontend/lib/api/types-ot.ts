@@ -50,6 +50,9 @@ export interface UpdateOtFeatureFlagRequest {
   isEnabled: boolean;
 }
 
+/** Grupo de formato de placa de la bandeja OT (registro diferido 2026-11-09). */
+export type OtGrupoPlaca = "CARRO" | "MOTO" | "MOTOCARRO" | "REMOLQUE" | "MAQUINARIA";
+
 export interface OtClientProcedure {
   id: string;
   clientTenantId: string;
@@ -114,6 +117,11 @@ export interface OtClientProcedure {
   /** Color EFECTIVO: el nuevo si el trámite declara un cambio de color. */
   color?: string | null;
   clase?: string | null;
+  /**
+   * Grupo de formato de placa resuelto por el backend con su catálogo de clases (registro diferido
+   * 2026-11-09, HU6/HU8). `null`/ausente: el front cae a las listas exactas por {@link clase}.
+   */
+  grupoPlaca?: OtGrupoPlaca | null;
   servicio?: string | null;
   /** Combustible EFECTIVO. Ver {@link OtClientProcedure.color}. */
   combustible?: string | null;

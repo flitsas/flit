@@ -15,48 +15,31 @@ export const COLUMNAS_TEXTO_OT: ColumnaFiltro[] = [
 
 const BUSQUEDA_OT = (o: TransitOffice) => [o.name, o.code] as const;
 
-/** Organismos de tránsito: Organismo, Código, Estado y, solo si la tabla pinta Convenio, Convenio. */
-export function columnasFiltroOtConfig(conConvenio: boolean): ColumnaFiltro[] {
-  return [
-    ...COLUMNAS_TEXTO_OT,
-    {
-      id: "estado",
-      label: "Estado",
-      tipo: "seleccion",
-      opciones: [
-        { value: "habilitado", label: "Habilitado" },
-        { value: "no_habilitado", label: "No habilitado" },
-      ],
-    },
-    ...(conConvenio
-      ? [
-          {
-            id: "convenio",
-            label: "Convenio",
-            tipo: "seleccion" as const,
-            opciones: [
-              { value: "con", label: "Con convenio" },
-              { value: "sin", label: "Sin convenio" },
-            ],
-          },
-        ]
-      : []),
-  ];
-}
+/** Organismos de tránsito: Organismo, Código y Estado. */
+export const COLUMNAS_FILTRO_OT_CONFIG: ColumnaFiltro[] = [
+  ...COLUMNAS_TEXTO_OT,
+  {
+    id: "estado",
+    label: "Estado",
+    tipo: "seleccion",
+    opciones: [
+      { value: "habilitado", label: "Habilitado" },
+      { value: "no_habilitado", label: "No habilitado" },
+    ],
+  },
+];
 
 export function filtrarOrganismosOtConfig(
   offices: readonly TransitOffice[],
   condiciones: readonly CondicionFiltro[],
   busqueda: string,
   habilitados: ReadonlySet<string>,
-  convenios: ReadonlySet<string>,
 ): TransitOffice[] {
   return filtrarFilas(offices, condiciones, busqueda, {
     columnas: {
       name: (o) => o.name,
       code: (o) => o.code,
       estado: (o) => (habilitados.has(o.id) ? "habilitado" : "no_habilitado"),
-      convenio: (o) => (convenios.has(o.id) ? "con" : "sin"),
     },
     busqueda: BUSQUEDA_OT,
   });

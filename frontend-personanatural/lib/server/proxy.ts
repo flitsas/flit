@@ -13,9 +13,12 @@ export const PREFIJO_BFF = "/api/v1/persona-natural";
 /** Cabeceras del navegador que sí se reenvían al BFF. Todo lo demás (cookies, Host, Authorization) se descarta. */
 const CABECERAS_PERMITIDAS = ["content-type", "accept", "x-captcha-token", "idempotency-key", "x-correlation-id"];
 
-/** Contenido público del portal (HU #14073): anónimo, sin sesión; la imagen de los banners se revalida con ETag. */
+/**
+ * Contenido público del portal (HU #14073): anónimo, sin sesión; la imagen de los banners se revalida con ETag.
+ * HU #14379: las imágenes de marca del organismo (`marca/imagenes/{id}`) también son públicas; llevan su Cache-Control.
+ */
 function esConfiguracionPublica(path: string[]): boolean {
-  return path[0] === "configuracion";
+  return path[0] === "configuracion" || (path[0] === "marca" && path[1] === "imagenes");
 }
 
 export interface OpcionesProxy {

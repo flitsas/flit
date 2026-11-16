@@ -1,9 +1,11 @@
+using PDFtoImage;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.Advanced;
 using PdfSharpCore.Pdf.IO;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using SkiaSharp;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -12,9 +14,14 @@ namespace Flit.Infrastructure.Documents;
 /// (estampado de pie). N1 reescribe vía Import; N2 reconstruye desde imágenes embebidas (escaneos).
 /// HU #14240 — si tampoco abre en Import, sustituye por una página de aviso generada con QuestPDF
 /// (siempre Import-ok) para no tumbar el Merge del consolidado.
+/// HU #14312 — antes del placeholder, intenta rasterizar con PDFium (PDFtoImage) → QuestPDF
+/// para conservar el contenido visual del adjunto [ADR-0076].
 /// </summary>
 internal static class PdfModifyNormalizer
 {
+    /// <summary>DPI de rasterizado PDFium → PNG (balance tamaño/legibilidad del consolidado).</summary>
+    private const int PdfiumRenderDpi = 150;
+
     /// <summary>
     /// True si PdfSharp puede abrir el PDF en <see cref="PdfDocumentOpenMode.Import"/> (requisito de Merge).
     /// </summary>
@@ -36,23 +43,30 @@ internal static class PdfModifyNormalizer
     }
 
     /// <summary>
-    /// Devuelve <paramref name="pdf"/> si Import funciona; si no, una página de aviso Import-ok.
+    /// Devuelve <paramref name="pdf"/> si Import funciona; si no, intenta conversión PDFium;
+    /// si falla, página de aviso Import-ok.
     /// </summary>
-    public static byte[] EnsureImportable(byte[] pdf, string? documentName, out bool substituted)
+    public static byte[] EnsureImportable(byte[] pdf, string? documentName, out PdfImportRecovery recovery)
     {
         ArgumentNullException.ThrowIfNull(pdf);
         if (CanOpenForImport(pdf))
         {
-            substituted = false;
+            recovery = PdfImportRecovery.None;
             return pdf;
         }
 
-        substituted = true;
+        if (TryConvertViaPdfium(pdf, out var converted) && CanOpenForImport(converted))
+        {
+            recovery = PdfImportRecovery.Converted;
+            return converted;
+        }
+
+        recovery = PdfImportRecovery.Placeholder;
         return CreateIncompatiblePlaceholder(documentName);
     }
 
     /// <summary>
-    /// Página de aviso (QuestPDF) cuando el adjunto no es legible por PdfSharp. Siempre Import-ok.
+    /// Página de aviso (QuestPDF) cuando el adjunto no es legible por PdfSharp ni por PDFium. Siempre Import-ok.
     /// </summary>
     public static byte[] CreateIncompatiblePlaceholder(string? documentName)
     {
@@ -79,6 +93,54 @@ internal static class PdfModifyNormalizer
                 });
             });
         }).GeneratePdf();
+    }
+
+    /// <summary>
+    /// HU #14312 — rasteriza cada página con PDFium y reconstruye un PDF Import-ok con QuestPDF.
+    /// Falla de forma segura (false) si nativos no cargan o el PDF es irrecuperable.
+    /// </summary>
+    public static bool TryConvertViaPdfium(byte[] pdf, out byte[] converted)
+    {
+        converted = [];
+        if (pdf is not { Length: > 4 })
+            return false;
+
+        // PDFtoImage anuncia soporte solo en OS con nativos; core-api corre en Linux/Windows (y CI macOS).
+        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()))
+            return false;
+
+        try
+        {
+            using var input = new MemoryStream(pdf, writable: false);
+            var options = new RenderOptions(Dpi: PdfiumRenderDpi);
+            var pageImages = new List<byte[]>();
+
+            foreach (var bitmap in Conversion.ToImages(input, options: options))
+            {
+                using (bitmap)
+                {
+                    using var encoded = bitmap.Encode(SKEncodedImageFormat.Png, 90);
+                    if (encoded is null || encoded.Size == 0)
+                        return false;
+                    pageImages.Add(encoded.ToArray());
+                }
+            }
+
+            if (pageImages.Count == 0)
+                return false;
+
+            converted = ImagesToPdf(pageImages);
+            return converted.Length > 4;
+        }
+        catch (Exception ex) when (
+            IsRecoverablePdfException(ex)
+            || IsNativePdfiumFailure(ex)
+            || IsPdfiumLibraryException(ex))
+        {
+            // Incluye PDFtoImage.Exceptions.PdfInvalidFormatException y similares:
+            // la conversión nunca debe tumbar Merge; EnsureImportable cae al placeholder.
+            return false;
+        }
     }
 
     /// <summary>
@@ -155,6 +217,27 @@ internal static class PdfModifyNormalizer
             or ArgumentException
             or NotSupportedException
             or FormatException;
+
+    /// <summary>DllNotFound / BadImageFormat / TypeLoad al cargar libpdfium o Skia en Alpine/musl.</summary>
+    private static bool IsNativePdfiumFailure(Exception ex) =>
+        ex is DllNotFoundException
+            or BadImageFormatException
+            or TypeLoadException
+            or EntryPointNotFoundException;
+
+    /// <summary>Excepciones del paquete PDFtoImage (PdfInvalidFormatException, etc.).</summary>
+    private static bool IsPdfiumLibraryException(Exception ex)
+    {
+        for (var cur = ex; cur is not null; cur = cur.InnerException)
+        {
+            var ns = cur.GetType().Namespace;
+            if (ns is not null
+                && ns.StartsWith("PDFtoImage", StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
 
     private static byte[]? TryLargestPageImagePng(PdfPage page)
     {

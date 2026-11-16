@@ -23,7 +23,7 @@ public sealed record RegenerarEnlaceManualResult(
     bool EmailEnviado);
 
 /// <summary>
-/// Regenera el enlace de captura de una validación en <c>manual_activo</c>: emite un token nuevo (guardado solo como hash SHA-256,
+/// Regenera el enlace de captura de una validación en <c>manual_activo</c>: emite un token nuevo (guardado como hash SHA-256 y, cifrado, para poder copiarlo - HU #14305;
 /// vigente 24 h desde ahora) que REEMPLAZA al anterior — la búsqueda por hash ya no encuentra el token viejo, así que el público
 /// recibe el mismo 404 que ante un enlace inválido: sin una columna nueva no se distingue «reemplazado» de «inválido», y el
 /// front lo cubre con el mensaje «enlace inválido o reemplazado». Envía el correo (una vez) y audita sin PII ni token.
@@ -33,6 +33,7 @@ public sealed class RegenerarEnlaceManualHandler(
     IProcedureInstanceRepository repo,
     IIdentityValidationAuditLog audit,
     IManualCaptureLinkNotifier notifier,
+    IManualCaptureTokenProtector tokenProtector,
     TimeProvider? clock = null)
 {
     public const string NoEncontrada = "not_found";
@@ -53,7 +54,7 @@ public sealed class RegenerarEnlaceManualHandler(
 
         var now = (clock ?? TimeProvider.System).GetUtcNow();
         var token = BiometricToken.Generate();
-        v.RegenerarEnlaceManual(now, BiometricToken.Hash(token));
+        v.RegenerarEnlaceManual(now, BiometricToken.Hash(token), tokenProtector.Protect(token));
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
         await audit.LogAsync(new IdentityValidationAuditEntry(

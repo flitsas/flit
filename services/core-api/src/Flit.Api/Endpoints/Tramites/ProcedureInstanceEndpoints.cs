@@ -60,6 +60,10 @@ internal static class ProcedureInstanceEndpoints
             {
                 TenantId = effectiveTenant,
                 CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
+                // HU #14318 (AC6) — el canal lo fija el servidor: el gestor nunca lo impone. El alta por esta
+                // ruta es del producto Trámites (canal tramites, sin OT del canal), diga lo que diga el body.
+                Channel = TramiteCanal.Tramites,
+                ChannelTransitOfficeId = null,
             };
 
             // Bloqueo por familia (config compañía → Trámites). Activo = no permitir crear.
@@ -686,6 +690,7 @@ internal static class ProcedureInstanceEndpoints
                 "fur_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes de radicar."),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de radicar."),
                 SubmitGate.ImprontaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.ImprontaRequerida, detail: "Debe generar o cargar la impronta antes de radicar."),
+                SubmitGate.TipoServicioRequerido => Results.Problem(statusCode: 409, title: SubmitGate.TipoServicioRequerido, detail: "Debe seleccionar el tipo de servicio del vehículo (Particular, Público, Diplomático, Oficial, Especial u Otros) antes de radicar."),
                 "organismo_no_habilitado" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito seleccionado no está habilitado para la compañía."),
                 // HU #10806 — compañía con preasignación activa pero OT mal configurado (grant/allow): se
                 // bloquea la radicación para que se corrija la configuración, en vez de degradar a estándar.

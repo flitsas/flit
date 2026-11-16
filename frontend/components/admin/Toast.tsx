@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { CheckCircle2, X, XCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 // Toast mínimo sin dependencias externas (HU #10194). Éxito #00DBD5, error #FF4E00.
 // Región aria-live para accesibilidad (WCAG 2.1 AA).
@@ -44,7 +44,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+        className="fixed right-4 top-[84px] z-[100] flex flex-col gap-2 max-[640px]:top-[72px]"
         aria-live="polite"
         aria-atomic="true"
         role="status"
@@ -52,17 +52,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="flex items-start gap-2 rounded-xl border bg-white px-4 py-3 text-xs shadow-lg dark:bg-[#0B0F14]"
-            style={{ borderColor: toast.type === "success" ? "var(--color-flit-tech)" : "#FF4E00", minWidth: 260 }}
+            // Aviso del Manual UI Kit 2026 (`.aviso`): borde de 1 px y relleno al 10 % del color del tono, disco del
+            // paquete a la izquierda, sombra del kit; aparece arriba a la derecha, bajo la barra.
+            className="flex max-w-[min(380px,calc(100vw-32px))] items-center gap-2.5 rounded-[9px] border py-2.5 pl-3 pr-4 text-sm text-[color:var(--di-text-primary)] shadow-[var(--kit-sombra)]"
+            style={{
+              borderColor: toast.type === "success" ? "var(--kit-verde)" : "var(--kit-rojo)",
+              background: `color-mix(in srgb, ${toast.type === "success" ? "var(--kit-verde)" : "var(--kit-rojo)"} 10%, var(--di-surface-elevated))`,
+              minWidth: 260,
+            }}
           >
-            {toast.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} />
-            ) : (
-              <XCircle className="h-4 w-4 shrink-0" style={{ color: "#FF4E00" }} />
-            )}
-            <p className="flex-1 font-medium">{toast.message}</p>
+            {/* eslint-disable-next-line @next/next/no-img-element -- disco estático del kit */}
+            <img src={toast.type === "success" ? "/assets/kit/aviso-ok.svg" : "/assets/kit/aviso-error.svg"} alt="" aria-hidden="true" className="h-[30px] w-[30px] shrink-0" />
+            <p className="flex-1 font-normal">{toast.message}</p>
             <button type="button" aria-label="Cerrar notificación" onClick={() => dismiss(toast.id)}>
-              <X className="h-3.5 w-3.5 opacity-60" />
+              <Icono nombre="cerrar" className="h-3.5 w-3.5 opacity-60" />
             </button>
           </div>
         ))}

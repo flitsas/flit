@@ -12,7 +12,15 @@ import {
   agruparTiposTramite,
   type SeleccionTipoTramite,
 } from "@/components/consultas/tipo-tramite";
+import { CANAL_LABEL, CANALES_ORDENADOS } from "@/lib/tramites/tramites-row-labels";
 import { familyToCategory, PROCEDURE_STATUSES, type DetailedReportFiltersState, type TriState } from "./filters";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
+
+/** Épica #14296 — valor interno de la opción «Todas las compañías» del selector (nunca viaja a la API). */
+export const TODAS_LAS_COMPANIAS = "__todas__";
+const OPCION_TODAS = { value: TODAS_LAS_COMPANIAS, label: "Todas las compañías" };
+const CANAL_PUNTO = "pn_punto";
 
 /** Vuelta atrás de `familyToCategory`, para leer el filtro que ya venía guardado o en la URL. */
 const CATEGORIA_A_FAMILIA: Record<string, ProcedureFamily> = {
@@ -21,8 +29,8 @@ const CATEGORIA_A_FAMILIA: Record<string, ProcedureFamily> = {
   otros: "OTROS",
 };
 
-const inputClass =
-  "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-flit-primary outline-none focus:border-flit-brand dark:bg-[#0B0F14] dark:text-white";
+// HU #14484 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const inputClass = `${TRAMITES_INPUT_CLS} font-medium`;
 
 interface DetailedReportFiltersPanelProps {
   filters: DetailedReportFiltersState;
@@ -32,6 +40,8 @@ interface DetailedReportFiltersPanelProps {
   companies: CompanyListItem[];
   procedureTypes: ProcedureTypeSummary[];
   transitOffices: TransitOfficeOption[];
+  /** Épica #14296 — opciones de «OT del punto»; si no llega, se usan `transitOffices`. */
+  channelTransitOffices?: TransitOfficeOption[];
   compact?: boolean;
   /**
    * HU #12364 — el selector de alcance de red (`NetworkScopeSelector`), ya montado por el panel
@@ -48,6 +58,7 @@ export function DetailedReportFiltersPanel({
   companies,
   procedureTypes,
   transitOffices,
+  channelTransitOffices,
   compact = false,
   networkScopeSelector = null,
 }: DetailedReportFiltersPanelProps) {
@@ -76,18 +87,34 @@ export function DetailedReportFiltersPanel({
 
   // Único requisito para consultar: SuperAdmin debe elegir una compañía (el backend exige
   // tenantId). Para el resto de usuarios el rango de fechas basta y trae todos sus trámites.
-  const canSearch = !isSuper || Boolean(filters.tenantId);
+  const canSearch = !isSuper || Boolean(filters.tenantId) || Boolean(filters.allCompanies);
+
+  // Épica #14296 — «Todas las compañías» (solo SuperAdmin): sin `tenantId`, y sin OT de compañía
+  // porque el filtro de organismo depende de una compañía concreta.
+  function handleCompanyChange(value: string) {
+    if (value === TODAS_LAS_COMPANIAS) {
+      patch({ allCompanies: true, tenantId: undefined, transitOfficeId: undefined });
+    } else {
+      patch({ allCompanies: undefined, tenantId: value || undefined });
+    }
+  }
+
+  // Épica #14296 — el OT del punto solo existe con Persona Natural OT; al cambiar de canal su valor se limpia.
+  function handleChannelChange(channel: string) {
+    patch({ channel: channel || undefined, channelTransitOfficeId: undefined });
+  }
 
   return (
-    <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"}`}>
+    <div className={`flex flex-col gap-3 ${compact ? "" : "rounded-2xl border p-4 bg-card"}`}>
       <div className="flex flex-wrap items-end gap-3">
         <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
         {networkScopeSelector}
         {isSuper && (
           <CompanySelector
             companies={companies}
-            value={filters.tenantId ?? ""}
-            onChange={(tenantId) => patch({ tenantId })}
+            value={filters.allCompanies ? TODAS_LAS_COMPANIAS : (filters.tenantId ?? "")}
+            onChange={handleCompanyChange}
+            allOption={OPCION_TODAS}
           />
         )}
 
@@ -118,6 +145,41 @@ export function DetailedReportFiltersPanel({
           </select>
         </FilterField>
 
+        <FilterField id="dr-channel" label="Canal" minWidth={170}>
+          <select
+            id="dr-channel"
+            className={inputClass}
+            value={filters.channel ?? ""}
+            onChange={(e) => handleChannelChange(e.target.value)}
+          >
+            <option value="">Todos los canales</option>
+            {CANALES_ORDENADOS.map((canal) => (
+              <option key={canal} value={canal}>
+                {CANAL_LABEL[canal]}
+              </option>
+            ))}
+          </select>
+        </FilterField>
+
+        {filters.channel === CANAL_PUNTO && (
+          <FilterField id="dr-channel-ot" label="OT del punto" minWidth={200}>
+            <select
+              id="dr-channel-ot"
+              className={inputClass}
+              value={filters.channelTransitOfficeId ?? ""}
+              onChange={(e) => patch({ channelTransitOfficeId: e.target.value || undefined })}
+              disabled={(channelTransitOffices ?? transitOffices).length === 0}
+            >
+              <option value="">Todos los OT</option>
+              {(channelTransitOffices ?? transitOffices).map((office) => (
+                <option key={office.id} value={office.id}>
+                  {office.code} — {office.name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+        )}
+
         <FilterInput id="dr-ref" label="N.º OT / radicado" value={filters.referenceNumber ?? ""} onChange={(referenceNumber) => patch({ referenceNumber })} />
 
         <FilterField id="dr-status" label="Estado">
@@ -143,8 +205,7 @@ export function DetailedReportFiltersPanel({
           type="button"
           onClick={onSearch}
           disabled={!canSearch}
-          className="h-10 rounded-[10px] px-4 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "var(--color-flit-brand)" }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Buscar
         </button>

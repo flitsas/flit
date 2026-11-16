@@ -82,6 +82,16 @@ public sealed class TramiteLifecycleServiceTests
         }
         if (conGates)
         {
+            // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+            i.FieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                FieldKey = "vehicle_service",
+                ValueText = "PARTICULAR",
+                Source = "user",
+            });
             foreach (var t in new[] { "factura", "aduana", "impronta" })
             {
                 i.Attachments.Add(new ProcedureInstanceAttachment
@@ -249,6 +259,37 @@ public sealed class TramiteLifecycleServiceTests
         outcome.ErrorCode.Should().Be(VehicleStatePolicy.ErrorCode);
         i.Status.Should().Be(TramiteEstado.Borrador);
         _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Radicar_DesdeBorrador_CopiaLaFirmaDeBaul_EnLaMismaTransicion()
+    {
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        var capturador = new FirmaBaulCopiaCapturer(
+            _repo, NullSignatureVaultPolicy.Instance, Substitute.For<Flit.Tramites.Application.Storage.IAttachmentStorage>());
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Registrar),
+            firmaBaulCopia: capturador);
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        i.FirmaBaulCopiadaAt.Should().NotBeNull("al salir de borrador se copia la firma de baúl y se marca el trámite");
+    }
+
+    [Fact]
+    public async Task Radicar_SinCapturador_NoMarcaCopia_ComportamientoPrevio()
+    {
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+
+        var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        i.FirmaBaulCopiadaAt.Should().BeNull();
     }
 
     [Fact]
@@ -575,6 +616,29 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Entregado);
         i.TransitOfficeId.Should().Be(officeId); // se promueve el id elegido
         await _operabilityGate.Received(1).IsOperableAsync(officeId, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// HU #14318 AC5 — el organismo del trámite cambia al enviarlo al OT (se promueve el elegido en el FUR), pero el canal y el
+    /// OT del punto con el que nació el trámite no se tocan.
+    /// </summary>
+    [Fact]
+    public async Task AC5_Entrega_CambiaElOrganismoDelTramite_SinAlterarElCanalNiElOtDelCanal()
+    {
+        var otDelPunto = Guid.NewGuid();
+        var otElegido = Guid.NewGuid();
+        var i = Wire(TramiteEstado.Preparado);
+        i.Channel = "pn_punto";
+        i.ChannelTransitOfficeId = otDelPunto;
+        i.TransitOfficeId = otDelPunto;
+        SeleccionarOt(i, otElegido);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeTrue();
+        i.TransitOfficeId.Should().Be(otElegido, "el organismo del trámite sí cambia");
+        i.Channel.Should().Be("pn_punto");
+        i.ChannelTransitOfficeId.Should().Be(otDelPunto, "el OT del canal es el del punto y no se reescribe");
     }
 
     // HU #10604 (R19) — RNMC no es bloqueante: una medida correctiva pendiente NO veta el envío al OT.

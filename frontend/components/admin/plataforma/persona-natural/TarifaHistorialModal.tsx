@@ -3,8 +3,7 @@
 // HU #14074 AC4 — Historial de una tarifa: las versiones anteriores del mismo ámbito (concepto, tipo y organismo) con
 // su vigencia, valor y usuario. Solo lectura: una versión no se edita, el cambio es una versión nueva. El historial es
 // por concepto, así que si la fila tiene varios se elige cuál ver.
-import { useEffect, useState } from "react";
-import { History } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/atom/Modal";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -15,7 +14,6 @@ import { formatFechaCalendario, formatFechaHora } from "@/lib/format/date";
 import {
   CONCEPTOS_TARIFA,
   CONCEPTO_LABEL,
-  fetchHistorialTarifaPn,
   formatPesos,
   type ConceptoTarifa,
   type EstadoTarifa,
@@ -23,6 +21,7 @@ import {
   type TarifaPn,
 } from "@/lib/api/admin-pn-tarifas";
 import { PN_LABEL_CLS, PN_INPUT_CLS } from "./pn-ui";
+import { TARIFAS_API_PLATAFORMA, type TarifasApi } from "./tarifas-api";
 
 export const ESTADO_TARIFA_LABEL: Record<EstadoTarifa, string> = {
   vigente: "Vigente",
@@ -35,7 +34,7 @@ export const ESTADO_TARIFA_TONE: Record<EstadoTarifa, "success" | "info" | "neut
   cerrada: "neutral",
 };
 
-const columnas: DataTableColumn<TarifaPn>[] = [
+const columnasBase: DataTableColumn<TarifaPn>[] = [
   { key: "desde", header: "Vigente desde", render: (v) => formatFechaCalendario(v.vigenteDesde) },
   {
     key: "hasta",
@@ -51,7 +50,22 @@ const columnas: DataTableColumn<TarifaPn>[] = [
   { key: "registrada", header: "Registrada el", cellClassName: "whitespace-nowrap", render: (v) => formatFechaHora(v.creadaEn) },
 ];
 
-export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; onClose: () => void }) {
+const columnaAutor: DataTableColumn<TarifaPn> = {
+  key: "autor",
+  header: "Registrada por",
+  render: (v) => v.creadaPorNombre ?? "—",
+};
+
+export function TarifaHistorialModal({
+  grupo,
+  onClose,
+  api = TARIFAS_API_PLATAFORMA,
+}: {
+  grupo: GrupoTarifa;
+  onClose: () => void;
+  /** Cliente de API; por defecto el de Plataforma. */
+  api?: TarifasApi;
+}) {
   const conceptos = CONCEPTOS_TARIFA.filter((c) => grupo.porConcepto[c]);
   const [concepto, setConcepto] = useState<ConceptoTarifa>(conceptos[0]);
   const [versiones, setVersiones] = useState<TarifaPn[]>([]);
@@ -65,7 +79,8 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: el estado de carga se pinta de inmediato
     setStatus("loading");
-    fetchHistorialTarifaPn(idDelConcepto, controller.signal)
+    api
+      .historial(idDelConcepto, controller.signal)
       .then((list) => {
         if (controller.signal.aborted) return;
         setVersiones(list);
@@ -75,7 +90,13 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
         if (!controller.signal.aborted) setStatus("error");
       });
     return () => controller.abort();
-  }, [idDelConcepto, intento]);
+  }, [idDelConcepto, intento, api]);
+
+  // La columna del autor solo aparece cuando el servidor informa quién hizo los cambios.
+  const columnas = useMemo(
+    () => (versiones.some((v) => v.creadaPorNombre !== undefined) ? [...columnasBase, columnaAutor] : columnasBase),
+    [versiones],
+  );
 
   return (
     <Modal
@@ -83,7 +104,7 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
       onClose={onClose}
       title="Historial de la tarifa"
       description={`${grupo.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo.organismoNombre ?? "Todos los organismos"}`}
-      icon={History}
+      icono="reloj"
       size="xl"
     >
       <div className="flex flex-col gap-4">
@@ -104,7 +125,7 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
           </label>
         )}
         {conceptos.length === 1 && (
-          <p className="text-sm font-semibold text-flit-primary dark:text-white">{CONCEPTO_LABEL[concepto]}</p>
+          <p className="text-sm font-semibold text-flit-primary">{CONCEPTO_LABEL[concepto]}</p>
         )}
 
         {status === "loading" ? (
@@ -121,6 +142,7 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
               columns={columnas}
               rows={pg.paginar(versiones)}
               getRowKey={(v) => v.id}
+              tarjeta={false}
               pagination={{
                 page: pg.page,
                 pageSize: pg.pageSize,

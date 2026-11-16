@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { Moon, Sun } from "lucide-react";
 import {
   DARK_MODE_ENABLED,
   THEME_COMING_SOON_MESSAGE,
@@ -54,7 +53,8 @@ export function useSuiteTheme(): { dark: boolean; toggle: () => void } {
   return { dark: DARK_MODE_ENABLED ? dark : false, toggle };
 }
 
-/** El interruptor de siempre de Trámites (sol / luna). */
+/** Interruptor claro/oscuro del Manual UI Kit 2026 (`.tema-kit`): el dibujo del paquete de íconos (sol en claro, luna en
+ * oscuro) como fondo de 60 × 32 px; `aria-pressed` dice si el oscuro está puesto. Cada app sirve /assets/kit/. */
 export function ThemeToggle() {
   const { dark, toggle } = useSuiteTheme();
 
@@ -68,35 +68,13 @@ export function ThemeToggle() {
           aria-disabled="true"
           aria-label={THEME_COMING_SOON_MESSAGE}
           aria-pressed={false}
-          className="flex cursor-not-allowed items-center gap-1 rounded-full px-1 py-1 opacity-60 transition"
-          style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
-        >
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-white">
-            <Sun className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-          <span className="grid h-7 w-7 place-items-center rounded-full">
-            <Moon className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-        </button>
+          className="suite-tema"
+        />
       </span>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      aria-label="Cambiar tema"
-      aria-pressed={dark}
-      className="flex items-center gap-1 rounded-full px-1 py-1 transition"
-      style={{ background: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
-    >
-      <span className={`grid h-7 w-7 place-items-center rounded-full ${dark ? "" : "bg-white"}`}>
-        <Sun className="h-3.5 w-3.5" aria-hidden="true" />
-      </span>
-      <span className={`grid h-7 w-7 place-items-center rounded-full ${dark ? "bg-white" : ""}`}>
-        <Moon className="h-3.5 w-3.5" aria-hidden="true" />
-      </span>
-    </button>
+    <button type="button" onClick={toggle} aria-label="Cambiar tema" aria-pressed={dark} className="suite-tema" />
   );
 }

@@ -156,16 +156,40 @@ public sealed class PdfDocumentNameStampPipelineTests
     }
 
     [Fact]
-    public void EnsureImportable_WhenImportFails_ReturnsPlaceholder()
+    public void TryConvertViaPdfium_OnQuestPdf_ProducesImportablePdf()
+    {
+        var pdf = MinimalPdf();
+
+        var ok = PdfModifyNormalizer.TryConvertViaPdfium(pdf, out var converted);
+
+        ok.Should().BeTrue();
+        PdfModifyNormalizer.CanOpenForImport(converted).Should().BeTrue();
+        PageCount(converted).Should().Be(1);
+        Encoding.UTF8.GetString(converted.AsSpan(0, 4)).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void EnsureImportable_WhenImportFailsAndConvertFails_ReturnsPlaceholder()
     {
         var hostile = UnimportablePdf();
 
         PdfModifyNormalizer.CanOpenForImport(hostile).Should().BeFalse();
-        var safe = PdfModifyNormalizer.EnsureImportable(hostile, "Homologación", out var substituted);
+        var safe = PdfModifyNormalizer.EnsureImportable(hostile, "Homologación", out var recovery);
 
-        substituted.Should().BeTrue();
+        recovery.Should().Be(PdfImportRecovery.Placeholder);
         PdfModifyNormalizer.CanOpenForImport(safe).Should().BeTrue();
         Encoding.UTF8.GetString(safe.AsSpan(0, 4)).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void EnsureImportable_WhenAlreadyImportable_ReturnsNone()
+    {
+        var pdf = MinimalPdf();
+
+        var safe = PdfModifyNormalizer.EnsureImportable(pdf, "Doc", out var recovery);
+
+        recovery.Should().Be(PdfImportRecovery.None);
+        ReferenceEquals(safe, pdf).Should().BeTrue();
     }
 
     [Fact]

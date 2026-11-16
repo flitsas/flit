@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Analytics.Application.Queries;
 using Flit.Analytics.Application.Queries.Network;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Analytics;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Auditing;
@@ -69,13 +70,20 @@ internal static class NetworkReportsEndpoints
             [FromQuery] bool? hasTransformation = null,
             [FromQuery] bool? isLeasing = null,
             [FromQuery] int? page = null,
-            [FromQuery] int? pageSize = null) =>
+            [FromQuery] int? pageSize = null,
+            [FromQuery] string? channel = null,
+            [FromQuery] Guid? channelTransitOfficeId = null) =>
         {
+            if (!AnalyticsEndpointsHelpers.TryParseChannel(channel, out var channelCode, out var channelError))
+                return channelError!; // HU #14319 — canal fuera del catálogo: 400 con el motivo
+
             var request = new NetworkDetailedReportRequest(
                 childTenantId, from, to, transitOfficeId, procedureTypeId, category, status,
                 referenceNumber, personDocument, personName, hasTransformation, isLeasing)
             {
                 AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+                Channel = channelCode,
+                ChannelTransitOfficeId = channelTransitOfficeId,
             };
             var (result, error) = await handler.HandleAsync(
                 new GetNetworkDetailedProceduresQuery(
@@ -108,13 +116,20 @@ internal static class NetworkReportsEndpoints
             [FromQuery] string? personDocument = null,
             [FromQuery] string? personName = null,
             [FromQuery] bool? hasTransformation = null,
-            [FromQuery] bool? isLeasing = null) =>
+            [FromQuery] bool? isLeasing = null,
+            [FromQuery] string? channel = null,
+            [FromQuery] Guid? channelTransitOfficeId = null) =>
         {
+            if (!AnalyticsEndpointsHelpers.TryParseChannel(channel, out var channelCode, out var channelError))
+                return channelError!; // HU #14319 — canal fuera del catálogo: 400 con el motivo
+
             var request = new NetworkDetailedReportRequest(
                 childTenantId, from, to, transitOfficeId, procedureTypeId, category, status,
                 referenceNumber, personDocument, personName, hasTransformation, isLeasing)
             {
                 AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+                Channel = channelCode,
+                ChannelTransitOfficeId = channelTransitOfficeId,
             };
             // AC5 — la misma función de resolución que el listado: mismo conjunto, mismos filtros normalizados.
             var (filter, error) = ExportNetworkDetailedProceduresHandler.Validate(RequestTenantResolver.ScopeFromItems(http), request);
@@ -193,7 +208,7 @@ internal static class NetworkReportsEndpoints
         }
     }
 
-    internal static string FiltersJson(NetworkDetailedReportRequest request, int? page, int? pageSize)
+    internal static string FiltersJson(NetworkDetailedReportRequest request, int? page, int? pageSize, bool allCompanies = false)
     {
         var textFilters = new List<string>(3);
         if (!string.IsNullOrWhiteSpace(request.ReferenceNumber)) textFilters.Add("referenceNumber");
@@ -202,6 +217,7 @@ internal static class NetworkReportsEndpoints
 
         return JsonSerializer.Serialize(new
         {
+            allCompanies = allCompanies ? true : (bool?)null, // HU #14320
             childTenantId = request.ChildTenantId,
             from = request.From,
             to = request.To,
@@ -211,6 +227,8 @@ internal static class NetworkReportsEndpoints
             status = NullIfBlank(request.Status),
             hasTransformation = request.HasTransformation,
             isLeasing = request.IsLeasing,
+            channel = NullIfBlank(request.Channel), // HU #14319 — código de catálogo, no personal
+            channelTransitOfficeId = request.ChannelTransitOfficeId,
             page,
             pageSize,
             textFilters = textFilters.Count > 0 ? textFilters : null,

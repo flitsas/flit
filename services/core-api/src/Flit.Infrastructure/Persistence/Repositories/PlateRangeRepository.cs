@@ -505,7 +505,7 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
                 var parsed = PlateRangeRules.ParsePlate(normalized);
                 if (parsed is null)
                 {
-                    return PlateOpResult.Fail("La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+                    return PlateOpResult.Fail(PlateRangeRules.InvalidPlateFormatMessage);
                 }
 
                 var now = DateTimeOffset.UtcNow;

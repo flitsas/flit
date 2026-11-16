@@ -20,6 +20,8 @@ public sealed class RegistroArchivos(ComparendosDb db, IAlmacenArchivos almacen,
     public async Task<Guid> GuardarAsync(Guid? tenantId, string dominio, string nombre, string contentType, byte[] contenido, CancellationToken ct, Guid? usuario = null)
     {
         ArgumentNullException.ThrowIfNull(contenido);
+        // HU #14366: evidencia OCR intacta; otros PDF pasan por el optimizador (hoy sin pérdida / identidad).
+        contenido = Infraestructura.Archivos.OptimizadorPdf.Preparar(dominio, contentType, contenido);
         var guardado = await almacen.GuardarAsync(tenantId ?? Guid.Empty, dominio, nombre, contentType, contenido, ct).ConfigureAwait(false);
         var archivo = new Archivo
         {

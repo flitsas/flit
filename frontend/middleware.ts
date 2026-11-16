@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { claimsTokenFromCookieHeader, isOidcSessionMode } from "@flit/auth/request";
-import { evaluateAdminAccess, evaluateEmpresaAccess, evaluateLoginAccess } from "@/lib/auth/guard";
+import { evaluateAdminAccess, evaluateEmpresaAccess, evaluateLoginAccess, type RouteAccessOptions } from "@/lib/auth/guard";
 import { TOKEN_COOKIE } from "@/lib/auth/jwt";
 
 // Gates en el borde, antes de renderizar:
@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
       const returnTo = `${pathname}${search}`;
       return NextResponse.redirect(new URL(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`, request.url));
     }
-    return gate(pathname, claims, request);
+    return gate(pathname, claims, request, { renewableSession: true });
   }
 
   if (pathname.startsWith("/api/v1/")) {
@@ -56,16 +56,16 @@ function isProtectedPage(pathname: string): boolean {
   return pathname === "/" || PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function gate(pathname: string, token: string | null | undefined, request: NextRequest) {
+function gate(pathname: string, token: string | null | undefined, request: NextRequest, options?: RouteAccessOptions) {
   if (pathname.startsWith("/empresa")) {
-    const { allowed, redirectTo } = evaluateEmpresaAccess(token);
+    const { allowed, redirectTo } = evaluateEmpresaAccess(token, options);
     return allowed
       ? NextResponse.next()
       : NextResponse.redirect(new URL(redirectTo ?? "/403", request.url));
   }
 
   if (pathname.startsWith("/admin")) {
-    const { allowed, redirectTo } = evaluateAdminAccess(token, pathname);
+    const { allowed, redirectTo } = evaluateAdminAccess(token, pathname, options);
     return allowed
       ? NextResponse.next()
       : NextResponse.redirect(new URL(redirectTo ?? "/403", request.url));

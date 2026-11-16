@@ -18,8 +18,6 @@ vi.mock("@/lib/api/admin-companies", () => ({
   setOtBlockingPolicy: vi.fn(),
   fetchOtConsultationRestrictions: vi.fn(() => Promise.resolve([])),
   setOtConsultationRestriction: vi.fn(),
-  fetchTransitAgreements: vi.fn(),
-  setTransitAgreement: vi.fn(),
   fetchOtPrendaDocumentPolicies: vi.fn(() => Promise.resolve([])),
   setOtPrendaDocumentPolicy: vi.fn(),
   fetchTransitBlocks: vi.fn(),
@@ -38,11 +36,9 @@ vi.mock("@/components/admin/Toast", () => ({
 import {
   addTransitBlock,
   addTransitGrant,
-  fetchTransitAgreements,
   fetchTransitBlocks,
   fetchTransitGrants,
   fetchTransitOffices,
-  setTransitAgreement,
 } from "@/lib/api/admin-companies";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 
@@ -108,9 +104,8 @@ function embudoActivo(columna: string): boolean {
 
 function arrangeOt() {
   vi.mocked(fetchTransitOffices).mockResolvedValue(offices);
-  // o1 habilitado y con convenio; o2 habilitado sin convenio; o3 sin ninguno.
+  // o1 y o2 habilitados; o3 no.
   vi.mocked(fetchTransitGrants).mockResolvedValue({ transitOfficeIds: ["o1", "o2"] });
-  vi.mocked(fetchTransitAgreements).mockResolvedValue({ transitOfficeIds: ["o1"] });
   vi.mocked(fetchTransitBlocks).mockResolvedValue({ transitOfficeIds: [] });
   vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(activos());
 }
@@ -121,10 +116,10 @@ describe("HU #14003 AC1 — Organismos de tránsito: filtros por columna", () =>
     arrangeOt();
   });
 
-  it("ofrece Organismo, Código, Estado y Convenio, y nunca Acciones", async () => {
+  it("ofrece Organismo, Código y Estado, y nunca Convenio ni Acciones", async () => {
     render(<OTConfigTablePanel tenantId={TENANT} />);
     await screen.findByText("Secretaría Bogotá");
-    expect(columnasFiltrables()).toEqual(["Organismo", "Código", "Estado", "Convenio"]);
+    expect(columnasFiltrables()).toEqual(["Organismo", "Código", "Estado"]);
   });
 
   it("filtra por Organismo", async () => {
@@ -146,7 +141,7 @@ describe("HU #14003 AC1 — Organismos de tránsito: filtros por columna", () =>
     expect(screen.queryByText("Secretaría Bogotá")).not.toBeInTheDocument();
   });
 
-  it("filtra por Estado y por Convenio con AND entre ambos", async () => {
+  it("filtra por Estado y por Código con AND entre ambos", async () => {
     const user = userEvent.setup();
     render(<OTConfigTablePanel tenantId={TENANT} />);
     await screen.findByText("Secretaría Bogotá");
@@ -156,7 +151,7 @@ describe("HU #14003 AC1 — Organismos de tránsito: filtros por columna", () =>
     expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
     expect(screen.getByText("Secretaría Medellín")).toBeInTheDocument();
 
-    await aplicarFiltro(user, "Convenio", ["Con convenio"]);
+    await aplicarFiltro(user, "Código", "11001");
     await waitFor(() => expect(screen.queryByText("Secretaría Medellín")).not.toBeInTheDocument());
     expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
   });
@@ -177,12 +172,12 @@ describe("HU #14003 AC1 — Organismos de tránsito: filtros por columna", () =>
     expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
     expect(screen.getByText("Secretaría Medellín")).toBeInTheDocument();
 
-    await aplicarFiltro(user, "Convenio", ["Con convenio"]);
+    await aplicarFiltro(user, "Código", "11001");
     await waitFor(() => expect(screen.queryByText("Secretaría Medellín")).not.toBeInTheDocument());
     expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
   });
 
-  it("modo solo lectura: sin columna Convenio, tampoco su filtro", async () => {
+  it("modo solo lectura: ofrece los mismos filtros", async () => {
     render(<OTConfigTablePanel tenantId={TENANT} mode="readonly-concession-inherited" />);
     await screen.findByText("Secretaría Bogotá");
     expect(columnasFiltrables()).toEqual(["Organismo", "Código", "Estado"]);
@@ -195,10 +190,9 @@ describe("HU #14003 AC3 — acciones con filtros aplicados (Organismos de tráns
     arrangeOt();
   });
 
-  it("habilitar y cambiar convenio de un organismo visible guarda, actualiza la fila y conserva el filtro", async () => {
+  it("habilitar un organismo visible guarda, actualiza la fila y conserva el filtro", async () => {
     const user = userEvent.setup();
     vi.mocked(addTransitGrant).mockResolvedValue(undefined);
-    vi.mocked(setTransitAgreement).mockResolvedValue(undefined);
     render(<OTConfigTablePanel tenantId={TENANT} />);
     await screen.findByText("Tránsito Cali");
     await aplicarFiltro(user, "Organismo", "cali");
@@ -208,12 +202,6 @@ describe("HU #14003 AC3 — acciones con filtros aplicados (Organismos de tráns
     await waitFor(() => expect(addTransitGrant).toHaveBeenCalledWith(TENANT, "o3"));
     expect(
       await screen.findByRole("switch", { name: /deshabilitar tránsito cali/i }),
-    ).toBeChecked();
-
-    await user.click(screen.getByRole("switch", { name: /marcar convenio con tránsito cali/i }));
-    await waitFor(() => expect(setTransitAgreement).toHaveBeenCalledWith(TENANT, "o3", true));
-    expect(
-      await screen.findByRole("switch", { name: /quitar convenio con tránsito cali/i }),
     ).toBeChecked();
 
     // El filtro sigue aplicado: contador en el disparador y las demás filas siguen fuera.

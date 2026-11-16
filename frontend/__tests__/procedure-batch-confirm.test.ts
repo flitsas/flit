@@ -242,6 +242,41 @@ describe('useProcedureBatchUpload — selección', () => {
   });
 });
 
+describe('useProcedureBatchUpload — veredicto OCR al registrar (Bug #14559)', () => {
+  async function confirmarUnica(over: Partial<BatchOcrPiece> = {}) {
+    const { result } = await enRevision([pieza(over)]);
+    const item = result.current.state.items[0];
+    act(() => result.current.setDecision(item.id, 'accept'));
+    await act(async () => {
+      await result.current.confirm();
+    });
+    expect(client.uploadAttachment).toHaveBeenCalledTimes(1);
+    return client.uploadAttachment.mock.calls[0][4];
+  }
+
+  it('un documento verificado se registra con {verified}', async () => {
+    expect(await confirmarUnica()).toEqual({ status: 'verified' });
+  });
+
+  it('un VIN que no cruza se registra con {rejected, vin_mismatch}, sin VIN ni texto libre', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [{ fieldKey: 'vin', valueText: 'BBBBBBBBBBBBBBBBB' }],
+    } as never);
+    const ocr = await confirmarUnica({ data: { es_valido: true, vehiculo_vin: 'AAAAAAAAAAAAAAAAA' } });
+    expect(ocr).toEqual({ status: 'rejected', reason: 'vin_mismatch' });
+  });
+
+  it('una pieza sin datos por fallo del análisis se registra con {skipped, analisis_fallido}', async () => {
+    const ocr = await confirmarUnica({ data: null, analisisError: 'El modelo no respondió.' });
+    expect(ocr).toEqual({ status: 'skipped', reason: 'analisis_fallido' });
+  });
+
+  it('una pieza sin datos y sin error de análisis se registra con {rejected, ilegible}', async () => {
+    const ocr = await confirmarUnica({ data: null, analisisError: null });
+    expect(ocr).toEqual({ status: 'rejected', reason: 'ilegible' });
+  });
+});
+
 describe('useProcedureBatchUpload — confirmar', () => {
   it('sube sólo lo marcado, por el flujo de adjuntos de siempre', async () => {
     const { result } = await enRevision([

@@ -58,6 +58,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 
 const COLUMNS_STORAGE_KEY = "flit-ot-revisores-columnas";
 
@@ -251,7 +259,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               <Tile
                 value={`${resumen.aprobacionPct.toFixed(1).replace(".", ",")} %`}
                 label="Aprobación del equipo"
-                accent="#8CC63F"
+                accent="var(--di-text-primary)"
               />
               <Tile
                 value={formatHours(resumen.tiempoMedianoHoras)}
@@ -261,7 +269,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               <Tile
                 value={`${resumen.concentracionTopPct.toFixed(1).replace(".", ",")} %`}
                 label="Concentración"
-                accent={resumen.concentracionTopPct >= 60 ? "#F9AC00" : undefined}
+                accent={resumen.concentracionTopPct >= 60 ? "var(--di-warning)" : undefined}
                 hint={
                   resumen.revisorMasActivo
                     ? `Se lo lleva ${resumen.revisorMasActivo}`
@@ -273,7 +281,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
             {/* Un equipo donde una persona hace más de la mitad no es un equipo: es un cuello de
                 botella con testigos. El número solo no lo dice; la frase sí. */}
             {resumen.concentracionTopPct >= 60 && resumen.revisores > 1 && (
-              <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+              <p className="rounded-xl bg-[var(--di-warning-soft)] text-[color:var(--di-warning)] px-3 py-2 text-[11px]">
                 {resumen.revisorMasActivo} concentra el{" "}
                 {resumen.concentracionTopPct.toFixed(1).replace(".", ",")} % de las decisiones del
                 periodo. Si esa persona falta, la cola se detiene.
@@ -309,7 +317,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               disabled={exportState.busy || sinFilas}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
               data-testid="ot-reviewers-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
@@ -319,7 +327,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 type="button"
                 onClick={() => handleExport("csv")}
                 disabled={exportState.busy || sinFilas}
-                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60 dark:border-white/10"
+                className="rounded-xl border border-border px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60"
                 data-testid="ot-reviewers-export-csv"
               >
                 CSV
@@ -329,7 +337,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         }
       >
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50">
+          <span className="text-[11px] font-semibold text-muted-foreground">
             Vistas rápidas:
           </span>
           {REVIEWER_PRESETS.map((preset) => {
@@ -344,7 +352,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                   activa
                     ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
-                    : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand hover:text-flit-brand dark:border-white/10 dark:text-white/50"
+                    : "border-border text-muted-foreground hover:border-flit-brand hover:text-flit-brand"
                 }`}
               >
                 {preset.label}
@@ -353,7 +361,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
           })}
           {presetActivo === null && (
             <span
-              className="rounded-full bg-[#F5F7FA] px-3 py-1 text-[11px] font-semibold text-[#6B7280] dark:bg-white/5 dark:text-white/50"
+              className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold text-muted-foreground"
               data-testid="ot-reviewers-preset-personalizada"
             >
               Selección propia
@@ -364,7 +372,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         {exportState.notice && (
           <p
             role="status"
-            className="rounded-xl bg-[#F5F7FA] px-3 py-2 text-[11px] text-[#6B7280] dark:bg-white/5 dark:text-white/60"
+            className="rounded-xl bg-secondary px-3 py-2 text-[11px] text-muted-foreground"
           >
             {exportState.notice}
           </p>
@@ -383,8 +391,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         ) : (
           <>
           <div className={CARDLIST_SCROLL}>
-            <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-reviewers-table">
-              <thead>
+            <table className={`min-w-[40rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} data-testid="ot-reviewers-table">
+              <thead className={TABLA_MOVIL_THEAD_CLS}>
                 <tr className={CARDLIST_HEAD_ROW}>
                   {columns.map((column) => (
                     <th key={column.id} scope="col" className={CARDLIST_TH}>
@@ -392,7 +400,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                         <button
                           type="button"
                           onClick={() => toggleSort(column.sort!)}
-                          className="flex items-center gap-1 uppercase transition hover:text-flit-brand"
+                          className="flex items-center gap-1 normal-case text-inherit transition hover:opacity-80"
                           aria-label={`Ordenar por ${column.label}`}
                         >
                           {column.label}
@@ -405,13 +413,14 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className={TABLA_MOVIL_TBODY_CLS}>
                 {pg.paginar(report!.filas).map((row) => (
-                  <tr key={row.userId} className={CARDLIST_ROW}>
-                    {columns.map((column) => (
+                  <tr key={row.userId} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                    {columns.map((column, i) => (
                       <td
                         key={column.id}
-                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
+                        data-label={column.label}
+                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""} ${TABLA_MOVIL_CELL_CLS} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
                       >
                         {column.value(row)}
                       </td>
@@ -451,11 +460,11 @@ function ReviewerLoadChart({ filas }: { filas: OtReviewerRow[] }) {
     <div className="flex flex-col gap-2" data-testid="ot-reviewers-reparto-chart">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "#8CC63F" }} />
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--di-success-dot)" }} />
           Aprobados
         </span>
         <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "#FF4E00" }} />
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: "var(--di-alerta-punto)" }} />
           Rechazados
         </span>
       </div>
@@ -469,17 +478,17 @@ function ReviewerLoadChart({ filas }: { filas: OtReviewerRow[] }) {
             {fila.displayName}
           </span>
           <span
-            className="flex h-2.5 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10"
+            className="flex h-2.5 overflow-hidden rounded bg-secondary"
             role="img"
             aria-label={`${fila.displayName}: ${fila.aprobados} aprobados y ${fila.rechazados} rechazados`}
           >
             <span
               className="h-full"
-              style={{ width: `${(fila.aprobados / max) * 100}%`, background: "#8CC63F" }}
+              style={{ width: `${(fila.aprobados / max) * 100}%`, background: "var(--di-success-dot)" }}
             />
             <span
               className="h-full"
-              style={{ width: `${(fila.rechazados / max) * 100}%`, background: "#FF4E00" }}
+              style={{ width: `${(fila.rechazados / max) * 100}%`, background: "var(--di-alerta-punto)" }}
             />
           </span>
           <span className="tabular-nums font-semibold">{formatInt(fila.decididos)}</span>

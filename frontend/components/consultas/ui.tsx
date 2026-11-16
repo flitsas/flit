@@ -49,13 +49,13 @@ export function Section({
 }) {
   return (
     <section
-      className="flex flex-col gap-3 rounded-xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
+      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
       data-testid={testId}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{title}</h3>
-          {hint && <p className="mt-0.5 text-[11px] text-[#6B7280] dark:text-white/50">{hint}</p>}
+          {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
         </div>
         {actions}
       </div>
@@ -65,14 +65,14 @@ export function Section({
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-[#6B7280] dark:text-white/50">{children}</p>;
+  return <p className="text-xs text-muted-foreground">{children}</p>;
 }
 
 export function ErrorNotice({ message }: { message: string }) {
   return (
     <p
       role="alert"
-      className="rounded-xl bg-red-50 px-4 py-3 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300"
+      className="rounded-xl bg-[var(--badge-danger-bg)] px-4 py-3 text-xs text-destructive"
     >
       {message}
     </p>
@@ -97,7 +97,7 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       className="rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-      style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+      style={{ background: "var(--gradient-action)" }}
     >
       {children}
     </button>

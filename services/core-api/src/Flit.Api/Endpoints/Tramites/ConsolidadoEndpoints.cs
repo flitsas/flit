@@ -55,10 +55,11 @@ internal static class ConsolidadoEndpoints
         }).WithName("GenerarProcedureInstanceConsolidado");
 
         // HU #12785 — ruta ÚNICA de entrega (gestor y SuperAdmin con X-Tenant-Id): devuelve los metadatos
-        // del consolidado vigente y lo reconstruye SOLO si la bandera está abajo. Estado final, PDF del
-        // SuperAdmin (Source=user) y migrado V1 se entregan tal cual. El binario se baja luego por la
-        // descarga / preview-url del adjunto con `document.attachmentId`. Sin GeneracionDocumentalGestorGuard
-        // a propósito: en estado final la entrega NO genera, sirve el definitivo (AC3).
+        // del consolidado vigente y lo reconstruye SOLO si la bandera está abajo (fuera de estado final).
+        // En estado final: excepciones (migrado, maestro Quipux radicado, Source=user) y, si el PDF está
+        // obsoleto frente al último cambio relevante, regeneración JIT vía EntregarConsolidadoHandler (HU #14494);
+        // el query `force` no aplica aquí (siempre false). El binario se baja por preview-url con `document.attachmentId`.
+        // Sin GeneracionDocumentalGestorGuard a propósito: el gestor no dispara generación documental por esta vía.
         // Épica #12760 (security M1): un GET no puede forzar escrituras ⇒ `force=true` responde 400
         // (queda para el POST de generación). HU #12787: el maestro es del OT ⇒ solo el SuperAdmin lo pide
         // por aquí; el gestor recibe 403. NO reutilizar este handler desde rutas /network (ver

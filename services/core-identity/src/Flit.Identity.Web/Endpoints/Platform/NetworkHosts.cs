@@ -17,7 +17,11 @@ internal static class NetworkHosts
 
     /// <summary>URL del hub de la red, o <c>null</c> si la red no tiene dominio <c>HUB</c> activo.</summary>
     public static string? HubUrl(IReadOnlyDictionary<string, string> hostsByPurpose) =>
-        hostsByPurpose.TryGetValue(TenantDomainPurposes.Hub, out var hub) ? $"https://{hub}" : null;
+        ProductUrl(hostsByPurpose, ProductCodes.Plataforma);
+
+    /// <summary>URL de <paramref name="productCode"/> en la red, o <c>null</c> si la red no tiene dominio activo para él.</summary>
+    public static string? ProductUrl(IReadOnlyDictionary<string, string> hostsByPurpose, string productCode) =>
+        hostsByPurpose.TryGetValue(PurposeFor(productCode), out var host) ? $"https://{host}" : null;
 
     /// <summary>
     /// El menú de productos visto desde un dominio de la red: cada producto con dominio en la red se abre en él (la sesión

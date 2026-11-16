@@ -42,12 +42,14 @@ export function createHttpClient(fetchImpl: typeof fetch = (...a) => fetch(...a)
       });
       if (!res.ok) return failFrom(res);
     },
-    async submit(token, files: ManualSubmitFiles) {
+    async submit(token, files: ManualSubmitFiles, validacion) {
       const form = new FormData();
       form.append("rostro", files.rostro, "rostro.jpg");
       form.append("anverso", files.anverso, "anverso.jpg");
       form.append("reverso", files.reverso, "reverso.jpg");
       form.append("firma", files.firma, "firma.png");
+      // Resultado de validar cada foto en el dispositivo: solo texto JSON, nunca imágenes.
+      if (validacion) form.append("validacionFotos", JSON.stringify(validacion));
       const res = await fetchImpl(url(token, "/submit"), {
         method: "POST",
         headers: { Accept: "application/json" }, // sin Content-Type: el navegador fija el boundary

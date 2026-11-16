@@ -172,6 +172,7 @@ internal static class BiometricaEndpoints
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
             [FromQuery] bool? standalone,
+            [FromQuery] string? referenceNumber,
             HttpContext http,
             ListTenantBiometricPersonsHandler handler,
             CancellationToken ct) =>
@@ -193,7 +194,8 @@ internal static class BiometricaEndpoints
                 venceEnDias,
                 page ?? 1,
                 pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
-                standalone);
+                standalone,
+                referenceNumber);
 
             var (result, error) = await handler.HandleAsync(scope, query, ct);
             return error is not null
@@ -380,11 +382,47 @@ internal static class BiometricaEndpoints
                 "sin_certificado" => Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay certificado disponible para esta validación."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la descarga del certificado."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                // HU #14302 — carta de una validación manual que aún no se pudo generar/leer: reintentable.
+                "carta_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "La carta de identidad aún no está disponible. Intenta descargarla de nuevo en unos minutos."),
                 _ => Results.File(result!.Content, result.ContentType, result.FileName),
             };
         })
         .WithName("DescargarCertificadoIdentidad")
         .Produces(StatusCodes.Status200OK, contentType: "application/pdf");
+
+        // GET carta de identidad de una validación MANUAL aprobada, SIN trámite (HU #14302, Épica #14271): sirve la prevalidación
+        // standalone. Super Admin: cualquier compañía (el tenant sale de la fila, no del header). Resto: mismo permiso del módulo
+        // que la bitácora y el detalle del trámite (validaciones.read/manage o tramites.read) y solo su propio tenant; otro tenant
+        // responde 404 (no revela que existe). Genera la carta si falta; si no puede, 503 reintentable.
+        group.MapGet("/biometric-validations/{id:guid}/certificado", async (
+            Guid id,
+            HttpContext http,
+            DescargarCertificadoIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            Guid? scope = null;
+            if (!RequestTenantResolver.IsSuperAdmin(http.User))
+            {
+                if (!RequestTenantResolver.TryResolveNonEmptyTenantId(http.User, out var tenantId))
+                    return Results.Problem(statusCode: 403, title: "Forbidden", detail: "El usuario autenticado no tiene una compañía asignada.");
+                scope = tenantId;
+            }
+
+            var (result, error) = await handler.HandleCartaPorValidacionAsync(id, scope, ct);
+            return error switch
+            {
+                null => Results.File(result!.Content, result.ContentType, result.FileName),
+                "carta_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "La carta de identidad aún no está disponible. Intenta descargarla de nuevo en unos minutos."),
+                _ => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+            };
+        })
+        .RequireIdentityModuleOrTramites()
+        .WithName("DescargarCartaIdentidadPorValidacion")
+        .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
         // secreto o no, firma, resultado y reconciliaciones. Diagnóstico desde la API sin entrar a la BD/pod.
@@ -420,18 +458,36 @@ internal static class BiometricaEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, validationId, ct);
-            return error switch
-            {
-                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
-                "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
-                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
-                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
-                "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),
-                _ => Results.Ok(result),
-            };
+            return ReconcileResponse(result, error);
         })
         .WithName("ReconciliarProcedureInstanceIdentity")
         .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK);
+
+        // POST reconciliar con Kyverum por validationId, sin trámite en la ruta: sirve para la validación ligada a un
+        // trámite y para la prevalidación standalone. La usa «Actualizar estado» del detalle de la persona (módulo
+        // Validaciones). Escribe el estado y puede disparar la firma automática → exige validaciones.manage (D1).
+        // Mismas respuestas que la ruta del wizard.
+        group.MapPost("/biometric-validations/{id:guid}/reconcile", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ReconciliarIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleByValidationAsync(tenantId.Value, id, ct);
+            return ReconcileResponse(result, error);
+        })
+        .RequireIdentityModuleManage()
+        .WithName("ReconciliarBiometricValidation")
+        .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status502BadGateway)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         // POST crear prevalidación standalone (HU #10866, CF-01): crea una validación biométrica sin
         // trámite previo. Hace upsert de la entidad Person por (tenant, docType, docNum) y delega
@@ -728,6 +784,50 @@ internal static class BiometricaEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status409Conflict);
 
+        // POST copiar el enlace de captura manual vigente (HU #14305, Feature #14304, Épica #14271). SOLO Super Admin (misma
+        // policy que regenerate-manual-link). Devuelve el enlace completo SIN regenerarlo: token y hash no cambian y no hay correo.
+        // Cross-tenant: el tenant sale de la fila. La respuesta lleva el token en la URL, así que va con Cache-Control: no-store.
+        // 409 con `code`: enlace_vencido | enlace_no_disponible | flujo_manual_no_activo (en los dos primeros se regenera).
+        group.MapPost("/biometric-validations/{id:guid}/manual-link/copy", async (
+            Guid id,
+            HttpContext http,
+            CopiarEnlaceManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que copia el enlace.");
+
+            http.Response.Headers.CacheControl = "no-store";
+            var (result, error) = await handler.HandleAsync(new CopiarEnlaceManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(new { url = result!.Url, expiresAt = result.ExpiresAt }),
+                CopiarEnlaceManualHandler.NoEncontrada => Results.Json(
+                    new { code = error, message = "Validación de identidad no encontrada." },
+                    statusCode: StatusCodes.Status404NotFound),
+                CopiarEnlaceManualHandler.EnlaceVencido => Results.Json(
+                    new { code = error, message = "El enlace de captura venció: regenera uno nuevo." },
+                    statusCode: StatusCodes.Status409Conflict),
+                CopiarEnlaceManualHandler.EnlaceNoDisponible => Results.Json(
+                    new { code = error, message = "El enlace ya no está disponible para copiar: regenera uno nuevo si hace falta." },
+                    statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Json(
+                    new { code = CopiarEnlaceManualHandler.FlujoManualNoActivo, message = "La validación no está esperando una captura manual." },
+                    statusCode: StatusCodes.Status409Conflict),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("CopiarEnlaceManual")
+        .WithSummary("Devuelve el enlace de captura manual vigente (solo Super Admin) sin regenerarlo ni enviar correo")
+        .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
         // POST vencer una identidad aprobada y vigente (HU #13824, Feature #13820, Épica #13817). SOLO Super Admin: policy real
         // por rol del JWT (401 sin sesión, 403 a cualquier otro rol, incluido AdminCompany) + permiso propio
         // `identidad.validaciones.vencer` (concedido solo a SuperAdmin). Sirve a validaciones de trámite y a prevalidaciones
@@ -772,6 +872,17 @@ internal static class BiometricaEndpoints
 
         return app;
     }
+
+    /// <summary>Respuesta HTTP común de las dos rutas de reconciliación con Kyverum (wizard y por validationId).</summary>
+    private static IResult ReconcileResponse(ReconciliarIdentidadResult? result, string? error) => error switch
+    {
+        "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+        "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
+        "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
+        "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+        "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),
+        _ => Results.Ok(result),
+    };
 
     /// <summary>
     /// HU #12706 — alcance de las LECTURAS transversales de identidad (listado plano, por persona y

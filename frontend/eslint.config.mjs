@@ -38,6 +38,8 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // Motores de validación de fotos copiados desde node_modules (scripts/copiar-motores-fotos.mjs).
+    "public/captura-manual/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

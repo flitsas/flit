@@ -76,6 +76,22 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
         });
 
         // HU #13348: valores de avalúo del modo mock, antes en tramites.avaluo_mock_values.
+        modelBuilder.Entity<DepartamentoConsultaImpuesto>(e =>
+        {
+            e.ToTable("vehicle_tax_departments", t => t.HasComment(
+                "Catálogo global de departamentos con consulta de impuesto. Sin tenant_id: ADR-0080. Lista efectiva: is_active y deleted_at nulo."));
+            e.HasKey(d => d.Id).HasName("pk_vehicle_tax_departments");
+            e.Property(d => d.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(d => d.DepartmentCode).HasColumnName("department_code").HasMaxLength(5).IsRequired();
+            e.Property(d => d.DepartmentName).HasColumnName("department_name").HasMaxLength(50).IsRequired();
+            e.Property(d => d.IsActive).HasColumnName("is_active");
+            e.Property(d => d.CreatedAt).HasColumnName("created_at");
+            e.Property(d => d.UpdatedAt).HasColumnName("updated_at");
+            e.Property(d => d.DeletedAt).HasColumnName("deleted_at");
+            e.Property(d => d.ExternalRefs).HasColumnName("external_refs").HasColumnType("jsonb");
+            e.HasIndex(d => d.DepartmentCode).IsUnique().HasDatabaseName("uq_vehicle_tax_departments_department_code");
+        });
+
         modelBuilder.Entity<ValorMockAvaluo>(e =>
         {
             e.ToTable("valores_mock_avaluo");
@@ -102,6 +118,8 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
     public DbSet<ConfiguracionEmpresa> ConfiguracionEmpresas => Set<ConfiguracionEmpresa>();
 
     public DbSet<ValorMockAvaluo> ValoresMockAvaluo => Set<ValorMockAvaluo>();
+
+    public DbSet<DepartamentoConsultaImpuesto> DepartamentosImpuesto => Set<DepartamentoConsultaImpuesto>();
 
     /// <summary>Opciones comunes: Npgsql con la tabla de migraciones dentro del propio esquema.</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString) =>

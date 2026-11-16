@@ -55,10 +55,23 @@ public sealed class OidcClientSyncConcurrenciaTests : IClassFixture<OidcClientSy
 
     private async Task BorrarClienteAsync(string clientId, CancellationToken ct)
     {
-        await using var scope = _host.Services.CreateAsyncScope();
-        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-        if (await manager.FindByClientIdAsync(clientId, ct) is { } app)
-            await manager.DeleteAsync(app, ct);
+        // El host también sincroniza este cliente al arrancar: si lo actualizó entre leer y borrar, se vuelve a leer y se reintenta.
+        for (var intento = 1; ; intento++)
+        {
+            await using var scope = _host.Services.CreateAsyncScope();
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            if (await manager.FindByClientIdAsync(clientId, ct) is not { } app)
+                return;
+            try
+            {
+                await manager.DeleteAsync(app, ct);
+                return;
+            }
+            catch (OpenIddictExceptions.ConcurrencyException) when (intento < 5)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100 * intento), ct);
+            }
+        }
     }
 
     private async Task<bool> ExisteAsync(string clientId, CancellationToken ct)

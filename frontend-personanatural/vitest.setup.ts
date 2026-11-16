@@ -10,7 +10,10 @@ import { routerPush } from "./__tests__/router";
 // La landing navega con el router de Next, que no existe fuera de la app: se simula y las pruebas miran `routerPush`.
 vi.mock("next/navigation", async () => {
   const { routerPush } = await import("./__tests__/router");
-  return { useRouter: () => ({ push: routerPush, replace: routerPush, back: vi.fn(), prefetch: vi.fn(), refresh: vi.fn() }) };
+  return {
+    useRouter: () => ({ push: routerPush, replace: routerPush, back: vi.fn(), prefetch: vi.fn(), refresh: vi.fn() }),
+    usePathname: () => (globalThis as { __pathname?: string }).__pathname ?? "/",
+  };
 });
 
 class MemoryStorage implements Storage {

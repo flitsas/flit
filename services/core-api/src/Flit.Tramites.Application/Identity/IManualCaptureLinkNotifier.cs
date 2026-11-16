@@ -2,8 +2,8 @@ namespace Flit.Tramites.Application.Identity;
 
 /// <summary>
 /// Enlace de captura manual recién generado (HU #13284/#13287, Épica #13202). <see cref="Token"/> es el token EN CLARO: existe
-/// solo en memoria, entre el caso de uso que lo genera y el notificador; en la base se guarda únicamente su hash SHA-256
-/// (<c>TokenHash</c>) y nunca viaja en la respuesta HTTP ni en logs ni en la auditoría. <see cref="RecipientEmail"/> y
+/// solo en memoria, entre el caso de uso que lo genera y el notificador; en la base se guarda su hash SHA-256 y, cifrado, el token (HU #14305: copiar el enlace); el claro no se persiste
+/// (<c>TokenHash</c>); nunca viaja en la respuesta HTTP ni en logs ni en la auditoría. <see cref="RecipientEmail"/> y
 /// <see cref="RecipientName"/> son los del titular (PII): solo para componer el correo, jamás para registrarlos.
 /// <para>
 /// <see cref="RejectionReasonLabel"/> (HU #13299): solo cuando el enlace nuevo sale de un RECHAZO de la revisión manual; es la

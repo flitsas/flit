@@ -49,7 +49,7 @@ public static class AdminInfrastructureExtensions
     /// <summary>
     /// <paramref name="configuration"/> es opcional (retrocompatible con el único call site anterior,
     /// <c>Program.cs</c>): HU #12416 la necesita para ligar <c>DomainOptions</c> (sección
-    /// <c>Domains</c>); sin ella, los dominios reservados quedan vacíos y <c>EdgeTarget</c> en blanco
+    /// <c>Domains</c>); sin ella, los dominios reservados quedan vacíos y <c>EdgeIp</c> en blanco
     /// (falla cerrado: nada queda "reservado" por omisión, así que en ese caso el SuperAdmin debe
     /// tener presente que la lista de reservados no está poblada).
     /// </summary>
@@ -96,6 +96,7 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.Domains.RegisterDomain.RegisterDomainHandler>();
         services.AddScoped<Flit.Admin.Application.Companies.Domains.GetDomain.GetDomainHandler>();
         services.AddScoped<Flit.Admin.Application.Companies.Domains.RemoveDomain.RemoveDomainHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.Activation.ActivateNetworkHandler>();
 
         // HU #12425 (Feature #12370, Épica #12237) — comprobación de titularidad por TXT DNS y ciclo
         // de estados pending → verified → active. Mismo patrón que DomainOptions: Application consume
@@ -120,6 +121,13 @@ public static class AdminInfrastructureExtensions
         // se registra siempre para que encender/apagar por configuración no requiera reiniciar el DI.
         services.AddHostedService<Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor>();
 
+        // Feature #14380 (Epica #14297) - dominio del portal de cada organismo: mismo ciclo, sobre su tabla propia (DDL 183).
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioVerificador>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioAdminHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioPuntoHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioCertificadoHandler>();
+        services.AddHostedService<Flit.Infrastructure.Domains.PortalDomainVerificationSchedulerProcessor>();
+
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();
@@ -136,9 +144,6 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
-        // Convenio comercial compañía↔OT. Distinto del grant de arriba: aquel habilita la radicación,
-        // este decide si el contrato de mandato lleva bloque de firma del mandatario.
-        services.AddScoped<ICompanyAgreementRepository, CompanyAgreementRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
         // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
@@ -236,11 +241,6 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
 
-        // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
-        // mandato lleva bloque de firma del mandatario y de qué forma.
-        services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
-            Flit.Infrastructure.OtRules.MandatoFirmaPolicy>();
-
         // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
         // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateSignerDirectory,
@@ -301,9 +301,22 @@ public static class AdminInfrastructureExtensions
         // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (admin.persona_natural_tariffs).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalTarifaRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalTarifaRepository>();
+            // HU #14393 (Feature #14392) — banderas de medios y switches de cobro del portal (DDL 182).
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCobroRepository,
+                Flit.Infrastructure.PersonaNatural.PersonaNaturalCobroRepository>();
         // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
+            // HU #14397 / #14398 (Feature #14396, Épica #14297) — reporte de los trámites del portal por alcance y su Excel.
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IReportePortalReadRepository,
+                Flit.Infrastructure.PersonaNatural.ReportePortalReadRepository>();
+            services.AddScoped<Flit.Admin.Application.Plataforma.PersonaNatural.IReportePortalExcelExporter,
+                Flit.Infrastructure.Documents.ReportePortalExcelExporter>();
+        // Feature #14374 (Épica #14297) — marca del portal por organismo (DDL 180), sin tablas de marca blanca.
+        services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.PortalMarca.IPortalMarcaRepository,
+            Flit.Infrastructure.PortalMarca.PortalMarcaRepository>();
+        services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.PortalMarca.IPortalMarcaImagenStorage,
+            Flit.Infrastructure.PortalMarca.PortalMarcaImagenStorage>();
         // HU #14073 — contenido administrable del portal (preguntas, banners, enlaces y versiones publicadas).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalContenidoRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalContenidoRepository>();
@@ -343,10 +356,6 @@ public static class AdminInfrastructureExtensions
 
         // HU #10198 — overrides de obligatoriedad documental por OT (3 estados).
         services.AddScoped<IDocumentRequirementOverrideRepository, DocumentRequirementOverrideRepository>();
-
-        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
-        services.AddScoped<Flit.Admin.Domain.CompanyDocumentParams.ICompanyDocumentParamRepository,
-            CompanyDocumentParamRepository>();
 
         // HU #10197 — instancias de trámite + snapshot documental inmutable.
         // Tras el merge del rework (#10128) la implementación vive en

@@ -92,10 +92,75 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var (empresa, ids) = await PrepararAsync("AV-3");
-        var r = await api.Cliente(new UsuarioDePrueba(empresa, Operador)).PostAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["AV3"]}/avisos", new { tipo = "Aviso2" }, TestContext.Current.CancellationToken);
+        var r = await api.Cliente(new UsuarioDePrueba(empresa, Operador)).PostAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["AV3"]}/avisos", new { tipo = "Aviso1" }, TestContext.Current.CancellationToken);
 
         (await r.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("estado").GetString().Should().Be("Enviado");
-        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == ids["AV3"]))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso2);
+        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == ids["AV3"]))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso1);
+    }
+
+    /// <summary>Bug #14270 (AV-03/AV-04): la secuencia es estricta en el servidor, también si el pedido llega por fuera de la pantalla.</summary>
+    [Fact]
+    public async Task Secuencia_RechazaCadaSaltoYAceptaElOrdenValido()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, ids) = await PrepararAsync("AV-S");
+        var id = ids["AVS"];
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        async Task<(HttpStatusCode, string?)> EnviarAsync(string tipo)
+        {
+            var r = await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/avisos", new { tipo }, ct);
+            return (r.StatusCode, r.IsSuccessStatusCode ? null : (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString());
+        }
+
+        async Task<string[]> PermitidosAsync() =>
+            (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/avisos/permitidos", ct)).GetProperty("permitidos").EnumerateArray().Select(x => x.GetString()!).ToArray();
+
+        // Sin avisos (el caso POU273): ni el 2 ni el 3, y el estado no cambia.
+        (await PermitidosAsync()).Should().Equal("Aviso1");
+        (await EnviarAsync("Aviso3")).Should().Be((HttpStatusCode.UnprocessableEntity, "Primero debe salir el aviso 1."));
+        (await EnviarAsync("Aviso2")).Should().Be((HttpStatusCode.UnprocessableEntity, "Primero debe salir el aviso 1."));
+        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == id, ct))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.SinNotificar);
+
+        // Aviso 1 en el 50 %: el 2 espera a que venza el 50 % y el 3 a la tarifa plena; solo se puede reenviar el 1.
+        (await EnviarAsync("Aviso1")).Item1.Should().Be(HttpStatusCode.OK);
+        (await PermitidosAsync()).Should().Equal("Aviso1");
+        (await EnviarAsync("Aviso2")).Should().Be((HttpStatusCode.UnprocessableEntity, "El aviso 2 sale cuando vence el descuento del 50 %."));
+        (await EnviarAsync("Aviso3")).Should().Be((HttpStatusCode.UnprocessableEntity, "El aviso 3 sale cuando el comparendo ya no tiene descuento."));
+
+        // En el 25 %: procede el 2; después ya no se vuelve al 1.
+        api.Reloj.Hoy(new DateOnly(2026, 10, 21));
+        (await PermitidosAsync()).Should().Equal("Aviso1", "Aviso2");
+        (await EnviarAsync("Aviso2")).Item1.Should().Be(HttpStatusCode.OK);
+        (await EnviarAsync("Aviso1")).Should().Be((HttpStatusCode.UnprocessableEntity, "El conductor ya recibió el aviso 2: no se le envía uno anterior."));
+
+        // Sin descuento: procede el 3.
+        api.Reloj.Hoy(new DateOnly(2026, 11, 13));
+        (await PermitidosAsync()).Should().Equal("Aviso3");
+        (await EnviarAsync("Aviso3")).Item1.Should().Be(HttpStatusCode.OK);
+        (await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id).OrderBy(a => a.RegistradoEn).Select(a => a.TipoAviso).ToListAsync(ct)))
+            .Should().Equal(TipoAviso.Aviso1, TipoAviso.Aviso2, TipoAviso.Aviso3);
+    }
+
+    [Fact]
+    public async Task Secuencia_EnvioMasivo_OmiteConMotivoLosQueNoProceden()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, ids) = await PrepararAsync("AV-M1", "AV-M2");
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        (await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["AVM1"]}/avisos", new { tipo = "Aviso1" }, ct)).EnsureSuccessStatusCode();
+        api.Reloj.Hoy(new DateOnly(2026, 10, 21));
+        var seleccion = new { comparendoIds = ids.Values };
+
+        var cuenta = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/avisos/masivo/permitidos", seleccion, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        cuenta.EnumerateArray().ToDictionary(x => x.GetProperty("tipo").GetString()!, x => x.GetProperty("aplica").GetInt32())
+            .Should().BeEquivalentTo(new Dictionary<string, int> { ["Aviso1"] = 2, ["Aviso2"] = 1, ["Aviso3"] = 0 });
+
+        var r = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/avisos/masivo", new { comparendoIds = ids.Values, tipo = "Aviso2" }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        var porNumero = r.EnumerateArray().ToDictionary(x => x.GetProperty("comparendoId").GetGuid(), x => (x.GetProperty("enviado").GetBoolean(), x.GetProperty("motivo").GetString()));
+        porNumero[ids["AVM1"]].Should().Be((true, null));
+        porNumero[ids["AVM2"]].Should().Be((false, "Primero debe salir el aviso 1."));
     }
 
     [Theory]

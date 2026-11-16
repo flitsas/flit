@@ -155,3 +155,43 @@ Pasos:
 | Fecha | Dominio de prueba | Resultado | Ejecutado por | Notas |
 |---|---|---|---|---|
 | _(pendiente)_ | _(pendiente — depende de §(v) de #12421 y del endpoint `pending-certificate` confirmado)_ | _(pendiente)_ | _(pendiente)_ | _(pendiente)_ |
+
+## (vii) Dominios de portal de organismo (HU #14383 y #14384, Epica #14297)
+
+El portal Persona Natural de un organismo puede publicarse en un dominio propio. El proceso de certificados es **el mismo** de
+las secciones anteriores: `pending-certificate` incluye los dominios de portal `verified` sin certificado (y los `active` por
+vencer), `poll-and-issue.sh` emite y `notify-certificate.sh` hace `PUT /api/v1/internal/domains/{host}/certificate`.
+
+Diferencias respecto a marca blanca:
+
+| Tema | Marca blanca | Portal de organismo |
+|---|---|---|
+| Activacion | Paso aparte del SuperAdmin (`ActivateNetworkHandler`) | Automatica: TXT correcto + certificado emitido => `active` |
+| Destino en el borde | Frontend de FLIT (catch-all) | Frontend del portal Persona Natural (`PORTAL_PN_PORT`), por el mapa de hosts |
+| Login | Login de la red | No tiene: `/api/v1/auth`, `/connect` y `/.well-known` responden 404 `PORTAL_SIN_LOGIN` |
+
+### Alta (por dominio)
+1. El administrador del organismo registra el dominio en el hub (`POST /api/v1/admin/ot/portal-dominio`) y crea el TXT y el A que
+   se le muestran. El job `dns-verification-portal` lo pasa a `verified` (o a `failed` con el motivo).
+2. El poller emite el certificado y avisa; el dominio pasa a `active`.
+3. `deploy/edge/nginx/sync-portal-hosts.sh.example` (cron/timer de 1 min, instalado a mano) regenera el mapa de hosts y recarga
+   nginx; desde ahi la raiz del dominio abre el portal del organismo. Plantilla: `deploy/edge/nginx/flit-portal-domains.conf.example`.
+
+### Fallo de emision
+Si `acme.sh --issue` falla, `poll-and-issue.sh` llama `PUT /api/v1/internal/domains/{host}/certificate-failure`. El dominio de
+portal `verified` pasa a `failed` con motivo `CERT_NOT_ISSUED`, se registra una alerta de nivel Error en core-api
+(`ALERTA: no se pudo emitir el certificado del dominio del portal ...`) y **no se activa**; el job de comprobacion lo reintenta
+con retroceso. El portal sigue en el enlace del punto (`/o/{codigo}`). Para hosts de marca blanca responde 404 y se ignora.
+
+### Renovacion
+Un dominio `active` con `certificate_expires_at` dentro de 30 dias vuelve a salir en `pending-certificate`; `acme.sh` renueva y
+la misma senal actualiza las fechas sin cambiar el estado. Una renovacion fallida no tumba un dominio con certificado vigente:
+solo deja la alerta. `alert-expiry.sh` aplica igual.
+
+### Baja
+`DELETE /api/v1/admin/ot/portal-dominio` retira el dominio (el portal sigue en `/o/{codigo}`). El mapa de hosts lo omite en la
+siguiente sincronizacion; revocar el certificado es opcional (seccion ii).
+
+### Estado de instalacion
+Nada de esto esta instalado ni desplegado en ningun VPS por esta HU: scripts, timer y plantillas se entregan como codigo. La
+instalacion en DEV (y confirmar la version de nginx >= 1.15.9 y si el timer del poller ya existe) requiere confirmacion humana.

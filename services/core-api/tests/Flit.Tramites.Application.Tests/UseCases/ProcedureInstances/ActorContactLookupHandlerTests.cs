@@ -128,6 +128,22 @@ public sealed class ActorContactLookupHandlerTests
         result.Should().BeNull();
     }
 
+    // HU #14498 — PPT es tipo válido en contact-lookup (no invalid_document_type).
+    [Fact]
+    public async Task HandleAsync_Ppt_NoRetornaInvalidDocumentType()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        _repo.FindLatestActorContactAsync(tenantId, "PPT", "V12345678", ct)
+            .Returns((ProcedureInstanceActor?)null);
+
+        var (result, error) = await _sut.HandleAsync(tenantId, "ppt", " V12345678 ", ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        await _repo.Received(1).FindLatestActorContactAsync(tenantId, "PPT", "V12345678", ct);
+    }
+
     [Fact]
     public async Task HandleAsync_NumeroDocumentoFaltante_RetornaError()
     {

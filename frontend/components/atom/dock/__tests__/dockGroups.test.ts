@@ -51,9 +51,21 @@ describe("catálogo de Trámites", () => {
       "Mandatos",
       "Validar impronta",
       "Webhooks",
+      // Épica #14297 / HU #14377 — solo el ot_admin, por rol.
+      "Portal Persona Natural",
     ]);
     // Los módulos homónimos de la SPA se omiten: el único Trámites es el del organismo.
     expect(groups[0].items.map((i) => i.href)).toEqual(["/admin/transit-offices/ot-1/client-procedures"]);
+  });
+
+  it("HU14377 — Portal Persona Natural solo lo ve el ot_admin, no otro rol del organismo, y apunta a su organismo", () => {
+    const admin = dock({ isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" }, { roles: ["ot_admin"], modules: ["tramites", "reportes", "usuarios"] });
+    const entrada = admin.flatMap((g) => g.items).find((i) => i.key === OT_ADM_DOCK.portalPersonaNatural);
+    expect(entrada?.href).toBe("/admin/transit-offices/ot-1/portal-persona-natural");
+    expect(DOCK_ITEM_GROUP[OT_ADM_DOCK.portalPersonaNatural]).toBe("administracion");
+
+    const gestor = dock({ isOtUser: true, isOtAdmin: false, otTransitOfficeId: "ot-1" }, { roles: ["gestor_ot"], modules: ["tramites"] });
+    expect(gestor.flatMap((g) => g.items).map((i) => i.key)).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
   });
 
   it("usuario OT sin organismo resuelto todavía: sus pestañas esperan (no hay a dónde llevarlas)", () => {
@@ -83,21 +95,19 @@ describe("catálogo de Trámites", () => {
     expect(Object.keys(OT_ADM_DOCK)).not.toContain("preasignacion");
   });
 
-  it("SuperAdmin: Administradores en el orden de siempre, con Plataforma anidada", () => {
+  it("SuperAdmin: Administradores en cuatro secciones con nombre (HU #14479), con las mismas entradas", () => {
     const groups = dock({}, { isSuperAdmin: true });
     const admin = groups.find((g) => g.id === "administradores")!;
     expect(admin.items.map((i) => i.label)).toEqual([
-      "Compañías",
-      "Tránsito",
-      "Documental",
-      "Improntas",
-      "Quipux",
-      "Procesos periódicos",
-      "RBAC Admin",
-      "Auditoría",
+      "Compañías y tránsito",
+      "Documentos",
       "Plataforma",
-      "Generación documental",
+      "Seguridad y operación",
     ]);
+    const hijos = (key: string) => admin.items.find((i) => i.key === key)?.children?.map((c) => c.label);
+    expect(hijos("admin-transit")).toEqual(["Compañías", "Organismos", "Causales de rechazo"]);
+    expect(hijos("admin-documentos")).toEqual(["Documental", "Improntas", "Generación documental", "Quipux"]);
+    expect(hijos("admin-seguridad")).toEqual(["RBAC Admin", "Auditoría", "Procesos periódicos"]);
     const plataforma = admin.items.find((i) => i.key === "admin-plataforma");
     expect(plataforma?.children?.map((c) => c.label)).toEqual([
       "Tipos de trámites",
