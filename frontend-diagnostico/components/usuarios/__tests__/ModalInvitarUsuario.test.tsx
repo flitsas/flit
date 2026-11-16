@@ -125,3 +125,15 @@ describe("HU14588 ModalInvitarUsuario", () => {
     expect(onCerrar).toHaveBeenCalled();
   });
 });
+
+// Code review HU #14588 (CR-3): el resumen de errores es una sola región role="alert" (sin otra viva adentro).
+describe("HU14588 ModalInvitarUsuario — una sola región de alerta (CR-3)", () => {
+  it("con errores de validación hay exactamente un role=alert y ninguna región viva anidada", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { dialogo, enviar } = montar();
+    fireEvent.click(enviar);
+    const alertas = await within(dialogo).findAllByRole("alert");
+    expect(alertas).toHaveLength(1);
+    expect(alertas[0].querySelectorAll('[role="alert"], [role="status"], [aria-live]')).toHaveLength(0);
+  });
+});

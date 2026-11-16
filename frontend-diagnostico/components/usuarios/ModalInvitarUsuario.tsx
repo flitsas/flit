@@ -107,9 +107,10 @@ export function ModalInvitarUsuario({ abierto, empresa, rolesAsignables, onCerra
       }
     >
       <form id={`${id}-form`} noValidate onSubmit={enviar} className="flex flex-col gap-4">
+        {/* Una sola región role="alert" (el contenedor); el InlineAlert va sin región propia (CR-3). */}
         {listaErrores.length > 0 && (
           <div ref={resumenRef} tabIndex={-1} role="alert" className="outline-none">
-            <InlineAlert tone="error" title="Revisa los datos de la invitación">
+            <InlineAlert tone="error" title="Revisa los datos de la invitación" vivo={false}>
               {/* El resumen nombra los campos; el motivo va junto a cada uno (aria-describedby), sin repetirlo aquí. */}
               <ul className="list-disc pl-5">
                 {listaErrores.map(([c]) => (
