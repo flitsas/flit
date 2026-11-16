@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import {
   TABLA_MOVIL_CELL_CLS,
@@ -60,42 +61,53 @@ export function TablaUsuarios({ usuarios, onAccion, ocupado = null }: TablaUsuar
         </thead>
         <tbody className={TABLA_MOVIL_TBODY_CLS}>
           {usuarios.map((u) => (
-            <tr
-              key={u.id}
-              className={`${FILA_TABLA_CLS} bg-card transition-colors duration-[var(--dx-motion-rapido)] hover:bg-[var(--table-row-hover)] motion-reduce:transition-none ${TABLA_MOVIL_ROW_CLS}`}
-            >
-              <td data-label="Nombre" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} font-semibold`}>
-                {u.nombre}
-              </td>
-              <td data-label="Correo" className={`${CELDA_CLS} break-all`}>
-                {u.correo}
-              </td>
-              <td data-label="Rol" className={CELDA_CLS}>
-                {u.rol_etiqueta}
-              </td>
-              <td data-label="Estado" className={CELDA_CLS}>
-                <EtiquetaEstadoUsuario estado={u.estado} />
-              </td>
-              <td data-label="Acciones" className={`${CELDA_CLS} ${FIJA_CLS}`}>
-                {u.acciones.length > 0 ? (
-                  <MenuAcciones
-                    ariaLabel={`Acciones de ${u.nombre}`}
-                    ocupado={ocupado === u.id}
-                    items={u.acciones.map((accion) => ({
-                      key: accion,
-                      ...ACCION[accion],
-                      onSelect: ({ disparador }) => onAccion(accion, u, disparador),
-                    }))}
-                  />
-                ) : (
-                  <span className={TEXTO_SECUNDARIO_CLS}>{u.motivo_sin_acciones ? TEXTO_MOTIVO[u.motivo_sin_acciones] : "Sin acciones"}</span>
-                )}
-              </td>
-            </tr>
+            <FilaUsuario key={u.id} usuario={u} onAccion={onAccion} ocupado={ocupado === u.id} />
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * Una fila. El disparador del menú se llama «Acciones del usuario» y se describe con el nombre visible de su celda
+ * (`aria-describedby`): ni el nombre ni el correo se copian en `aria-label` o `title` (SP-19, SP-20; CR-1).
+ */
+function FilaUsuario({ usuario: u, onAccion, ocupado }: { usuario: UsuarioDiagnostico; onAccion: TablaUsuariosProps["onAccion"]; ocupado: boolean }) {
+  const nombreId = useId();
+  return (
+    <tr
+      className={`${FILA_TABLA_CLS} bg-card transition-colors duration-[var(--dx-motion-rapido)] hover:bg-[var(--table-row-hover)] motion-reduce:transition-none ${TABLA_MOVIL_ROW_CLS}`}
+    >
+      <td data-label="Nombre" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} font-semibold`}>
+        <span id={nombreId}>{u.nombre}</span>
+      </td>
+      <td data-label="Correo" className={`${CELDA_CLS} break-all`}>
+        {u.correo}
+      </td>
+      <td data-label="Rol" className={CELDA_CLS}>
+        {u.rol_etiqueta}
+      </td>
+      <td data-label="Estado" className={CELDA_CLS}>
+        <EtiquetaEstadoUsuario estado={u.estado} />
+      </td>
+      <td data-label="Acciones" className={`${CELDA_CLS} ${FIJA_CLS}`}>
+        {u.acciones.length > 0 ? (
+          <MenuAcciones
+            ariaLabel="Acciones del usuario"
+            ariaDescribedBy={nombreId}
+            ocupado={ocupado}
+            items={u.acciones.map((accion) => ({
+              key: accion,
+              ...ACCION[accion],
+              onSelect: ({ disparador }) => onAccion(accion, u, disparador),
+            }))}
+          />
+        ) : (
+          <span className={TEXTO_SECUNDARIO_CLS}>{u.motivo_sin_acciones ? TEXTO_MOTIVO[u.motivo_sin_acciones] : "Sin acciones"}</span>
+        )}
+      </td>
+    </tr>
   );
 }
 

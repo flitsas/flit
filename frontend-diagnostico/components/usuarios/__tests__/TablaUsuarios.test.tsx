@@ -93,3 +93,16 @@ describe("HU14588 TablaUsuarios", () => {
     expect(etiquetas).toEqual(["Nombre", "Correo", "Rol", "Estado", "Acciones"]);
   });
 });
+
+// Code review HU #14588 (CR-1): el nombre de la persona no va en aria-label ni en title; el disparador se llama «Acciones
+// del usuario» y se describe con la celda del nombre.
+describe("HU14588 TablaUsuarios — nombre fuera de atributos (CR-1)", () => {
+  it("ningún aria-label ni title contiene el nombre de una fila; el disparador se describe con la celda del nombre", () => {
+    render(<TablaUsuarios usuarios={USUARIOS} onAccion={vi.fn()} />);
+    const disparador = within(fila("Usuario Uno")).getByRole("button", { name: "Acciones del usuario" });
+    expect(disparador).toHaveAccessibleDescription("Usuario Uno");
+    fireEvent.click(disparador);
+    const valores = Array.from(document.body.querySelectorAll("[aria-label], [title]")).flatMap((n) => [n.getAttribute("aria-label") ?? "", n.getAttribute("title") ?? ""]);
+    for (const u of USUARIOS) expect(valores.filter((v) => v.includes(u.nombre))).toEqual([]);
+  });
+});
