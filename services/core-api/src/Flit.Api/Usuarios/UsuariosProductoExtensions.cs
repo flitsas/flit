@@ -48,7 +48,8 @@ internal static class UsuariosProductoExtensions
 /// <summary>
 /// Invitación nueva desde un producto sobre <see cref="CreateInvitationHandler"/> (correo, tema de la red y enlace de
 /// activación de siempre) con UN rol. Si otra invitación o cuenta con ese correo se adelantó, no falla: devuelve
-/// <c>null</c> y el caso de uso lo trata como «invitación pendiente» (respuesta uniforme, SP-15).
+/// <c>null</c> y el caso de uso lo trata como «invitación pendiente» (respuesta uniforme, SP-15). Un rol que ya no existe sale
+/// como ROL_NO_PERMITIDO (CR-6).
 /// </summary>
 internal sealed class InvitacionProductoPorPlataforma(CreateInvitationHandler handler) : IProductInvitationSender
 {
@@ -62,6 +63,11 @@ internal sealed class InvitacionProductoPorPlataforma(CreateInvitationHandler ha
         catch (Exception ex) when (ex is InvitationAlreadyPendingException or UserAlreadyExistsException)
         {
             return null;
+        }
+        catch (Exception ex) when (ex is RoleNotFoundException or NoRolesSelectedException)
+        {
+            // CR-6: el rol desapareció del catálogo entre la resolución por código y la invitación.
+            throw new ProductRoleRuleException(ProductRoleErrorCodes.RolNoPermitido, ProductRoleErrorKind.InvalidArgument, "El rol no está disponible en el catálogo.");
         }
     }
 }

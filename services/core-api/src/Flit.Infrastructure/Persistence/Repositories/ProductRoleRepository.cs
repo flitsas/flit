@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.UserRoles.ProductRoles;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -78,18 +79,18 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
     }
 
     public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
-        InTransactionAsync(async () =>
+        TraducirAsync(() => InTransactionAsync(async () =>
         {
             await GuardLastAdminAsync(tenantId, userId, lastAdminGuardRoleCode, ct).ConfigureAwait(false);
             await CloseProductAssignmentsAsync(tenantId, userId, productCode, actorId, ct).ConfigureAwait(false);
             await InsertAssignmentAsync(tenantId, userId, roleId, actorId, ct).ConfigureAwait(false);
-        }, ct);
+        }, ct));
 
     public Task AddProductRoleAsync(Guid tenantId, Guid userId, Guid roleId, Guid actorId, CancellationToken ct) =>
-        InsertAssignmentAsync(tenantId, userId, roleId, actorId, ct);
+        TraducirAsync(() => InsertAssignmentAsync(tenantId, userId, roleId, actorId, ct));
 
     public Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
-        InTransactionAsync(async () =>
+        TraducirAsync(() => InTransactionAsync(async () =>
         {
             await GuardLastAdminAsync(tenantId, userId, lastAdminGuardRoleCode, ct).ConfigureAwait(false);
             await CloseProductAssignmentsAsync(tenantId, userId, productCode, actorId, ct).ConfigureAwait(false);
@@ -105,14 +106,14 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
                 SuspendedBy = actorId,
             });
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        }, ct);
+        }, ct));
 
     public Task ReactivateAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, CancellationToken ct) =>
-        InTransactionAsync(async () =>
+        TraducirAsync(() => InTransactionAsync(async () =>
         {
             await InsertAssignmentAsync(tenantId, userId, roleId, actorId, ct).ConfigureAwait(false);
             await DeleteMarkerAsync(tenantId, userId, productCode, ct).ConfigureAwait(false);
-        }, ct);
+        }, ct));
 
     public Task ClearSuspensionAsync(Guid tenantId, Guid userId, string productCode, CancellationToken ct) =>
         DeleteMarkerAsync(tenantId, userId, productCode, ct);
@@ -291,6 +292,29 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
         db.ProductRoleSuspensions
             .Where(s => s.TenantId == tenantId && s.UserId == userId && s.ProductCode == productCode)
             .ExecuteDeleteAsync(ct);
+
+    /// <summary>
+    /// CR-6 — las violaciones de la base no salen como <c>DbUpdateException</c>: unicidad (otra escritura dio el rol del
+    /// producto entretanto, <c>uq_ura_active_user_tenant_product</c> / <c>uq_product_role_suspensions</c>) → ROL_YA_VIGENTE;
+    /// FK (usuario, empresa, rol o producto que ya no existe) → USUARIO_NO_ENCONTRADO. El cliente nunca ve un PostgresException.
+    /// </summary>
+    private async Task TraducirAsync(Func<Task> escritura)
+    {
+        try
+        {
+            await escritura().ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            db.ChangeTracker.Clear();
+            throw new ProductRoleRuleException(ProductRoleErrorCodes.RolYaVigente, ProductRoleErrorKind.FailedPrecondition, "Otra operación cambió el rol del producto de este usuario; refresque la fila.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            db.ChangeTracker.Clear();
+            throw new ProductRoleRuleException(ProductRoleErrorCodes.UsuarioNoEncontrado, ProductRoleErrorKind.NotFound, "Usuario no encontrado.");
+        }
+    }
 
     /// <summary>Con <c>EnableRetryOnFailure</c> la transacción va dentro de la estrategia de ejecución.</summary>
     private Task InTransactionAsync(Func<Task> work, CancellationToken ct)
