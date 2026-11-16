@@ -353,6 +353,36 @@ public sealed class UsuariosEndpointsTests
         ((ReactivarEnProductoRequest)falso.Llamadas.Last().Peticion).Producto.Should().Be("diagnostico");
     }
 
+    // CR-5 (review be2b) / D-5 — core-api escribió con éxito y devolvió una fila que no se puede mostrar (rol fuera de la lista blanca):
+    // la respuesta sigue siendo 404 USUARIO_NO_ENCONTRADO, pero es un contrato roto y va al log como Error (en la lista, una fila rara
+    // solo se omite con Warning).
+    [Fact]
+    public async Task HU14587_CR5_fila_no_mostrable_tras_una_escritura_se_registra_como_Error()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var objetivo = Guid.NewGuid();
+        var falso = new UsuariosProductoFalso { Fila = UsuariosDePrueba.Fila(objetivo, rol: "AdminCompany") };
+        falso.Lista.Usuarios.Add(UsuariosDePrueba.Fila(Guid.NewGuid(), rol: "AdminCompany"));
+        var logs = new CapturaDeLogs();
+        await using var api = await ApiDePrueba.SinBaseAsync(configurar: b =>
+        {
+            falso.Registrar(b);
+            logs.Registrar(b);
+        });
+        using var cliente = api.Cliente(UsuariosDePrueba.Admin(api, Guid.NewGuid()));
+
+        (await cliente.GetAsync(Base, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        logs.Lineas.Should().Contain(l => l.StartsWith("[Warning]", StringComparison.Ordinal) && l.Contains("se omiten", StringComparison.Ordinal));
+        logs.Lineas.Should().NotContain(l => l.StartsWith("[Error]", StringComparison.Ordinal) && l.Contains("fila", StringComparison.OrdinalIgnoreCase));
+
+        var respuesta = await cliente.PutAsync($"{Base}/{objetivo}/rol", Json("""{ "rol": "usuario_diagnostico" }"""), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Code(respuesta, ct)).Should().Be("USUARIO_NO_ENCONTRADO");
+        logs.Lineas.Should().Contain(l => l.StartsWith("[Error]", StringComparison.Ordinal) && l.Contains("CambiarRol", StringComparison.Ordinal),
+            "una escritura con éxito que devuelve una fila fuera del contrato es un contrato roto");
+    }
+
     // §3.3 — un {usuario} que no es uuid no existe (404), sin llamar a la plataforma.
     [Fact]
     public async Task HU14587_usuario_que_no_es_uuid_es_404()

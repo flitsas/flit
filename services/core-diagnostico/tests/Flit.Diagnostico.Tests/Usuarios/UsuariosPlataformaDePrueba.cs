@@ -178,7 +178,7 @@ public sealed class CapturaDeLogs : ILoggerProvider
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             var valores = state is IEnumerable<KeyValuePair<string, object?>> pares ? string.Join('|', pares.Select(p => $"{p.Key}={p.Value}")) : string.Empty;
-            lineas.Enqueue($"{formatter(state, exception)} {valores} {exception}");
+            lineas.Enqueue($"[{logLevel}] {formatter(state, exception)} {valores} {exception}");
         }
     }
 }

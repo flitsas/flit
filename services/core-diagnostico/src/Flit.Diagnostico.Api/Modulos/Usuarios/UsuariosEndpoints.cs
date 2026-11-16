@@ -71,10 +71,10 @@ public static partial class UsuariosEndpoints
                 CambiarRolAsync(http, u, Contexto(http, u, empresa), usuario, p, l, ct))
             .CuerpoAcotado().WithName("CambiarRolUsuario" + sufijo);
         grupo.MapPost(RutaSuspension, (Guid usuario, HttpContext http, UsuarioActual u, IUsuariosPlataforma p, ILoggerFactory l, CancellationToken ct) =>
-                AccionAsync(Contexto(http, u, empresa), usuario, l, (c, id, t) => p.SuspenderAsync(c, id, t), ct))
+                AccionAsync(Contexto(http, u, empresa), usuario, l, "Suspender", (c, id, t) => p.SuspenderAsync(c, id, t), ct))
             .WithName("SuspenderUsuario" + sufijo);
         grupo.MapDelete(RutaSuspension, (Guid usuario, HttpContext http, UsuarioActual u, IUsuariosPlataforma p, ILoggerFactory l, CancellationToken ct) =>
-                AccionAsync(Contexto(http, u, empresa), usuario, l, (c, id, t) => p.ReactivarAsync(c, id, t), ct))
+                AccionAsync(Contexto(http, u, empresa), usuario, l, "Reactivar", (c, id, t) => p.ReactivarAsync(c, id, t), ct))
             .WithName("ReactivarUsuario" + sufijo);
     }
 
@@ -168,25 +168,28 @@ public static partial class UsuariosEndpoints
         NoSobreSiMismo(contexto, objetivo);
         var rol = RolDelCuerpo(await LeerObjetoAsync(http, ct).ConfigureAwait(false), usuario);
         var fila = await DelegarAsync(logs, sobreUsuario: true, () => plataforma.CambiarRolAsync(contexto, objetivo, rol, ct)).ConfigureAwait(false);
-        return Fila(fila, logs, contexto);
+        return Fila(fila, logs, contexto, "CambiarRol");
     }
 
     private static async Task<IResult> AccionAsync(
-        ContextoUsuarios contexto, Guid objetivo, ILoggerFactory logs,
+        ContextoUsuarios contexto, Guid objetivo, ILoggerFactory logs, string operacion,
         Func<ContextoUsuarios, Guid, CancellationToken, Task<UsuarioProducto>> accion, CancellationToken ct)
     {
         NoSobreSiMismo(contexto, objetivo);
         var fila = await DelegarAsync(logs, sobreUsuario: true, () => accion(contexto, objetivo, ct)).ConfigureAwait(false);
-        return Fila(fila, logs, contexto);
+        return Fila(fila, logs, contexto, operacion);
     }
 
-    /// <summary>La fila que devuelve la plataforma; si no se puede mostrar (D-5) se responde como no encontrada, nunca un 500.</summary>
-    private static IResult Fila(UsuarioProducto fila, ILoggerFactory logs, ContextoUsuarios contexto)
+    /// <summary>
+    /// La fila que devuelve la plataforma tras una escritura con éxito; si no se puede mostrar (D-5) se responde como no encontrada, nunca
+    /// un 500. Ahí core-api ya escribió y rompió el contrato, así que va al log como Error (CR-5); en la lista solo se omite con Warning.
+    /// </summary>
+    private static IResult Fila(UsuarioProducto fila, ILoggerFactory logs, ContextoUsuarios contexto, string operacion)
     {
         if (UsuarioDiagnosticoDto.De(fila) is { } dto)
             return Results.Ok(dto);
         var log = logs.CreateLogger(typeof(UsuariosEndpoints));
-        LogFilasOmitidas(log, 1, contexto.Empresa);
+        LogFilaNoMostrableTrasEscritura(log, operacion, contexto.Empresa);
         throw TraduccionErroresUsuarios.UsuarioNoEncontrado();
     }
 
@@ -294,6 +297,9 @@ public static partial class UsuariosEndpoints
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Invitación a Diagnóstico delegada en la plataforma: actor {Actor}, compañía {Empresa}, rol {Rol} (202 uniforme).")]
     private static partial void LogInvitacion(ILogger logger, Guid actor, Guid empresa, string rol);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Contrato roto: {Operacion} de usuarios de Diagnóstico se aplicó en la plataforma (compañía {Empresa}) y devolvió una fila con un rol o estado fuera del contrato: se responde 404.")]
+    private static partial void LogFilaNoMostrableTrasEscritura(ILogger logger, string operacion, Guid empresa);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "La plataforma devolvió {Cantidad} fila(s) de usuarios de la compañía {Empresa} con un rol o estado fuera del contrato: se omiten.")]
     private static partial void LogFilasOmitidas(ILogger logger, int cantidad, Guid empresa);
