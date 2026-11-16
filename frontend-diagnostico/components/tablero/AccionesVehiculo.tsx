@@ -43,6 +43,8 @@ export interface AccionesVehiculoProps {
    * primero, en su grupo, en toda fila. Sin él, no hay ítem.
    */
   onVerDictamen?: (disparador: HTMLElement | null) => void;
+  /** HU #14584 §6.4: «Auditoría del dictamen» tras «Ver dictamen»; quien pinta lo pasa solo con la capacidad verAuditoria. */
+  onVerAuditoria?: (disparador: HTMLElement | null) => void;
 }
 
 type IconoItem = NonNullable<MenuAccionesItem["icon"]>;
@@ -54,6 +56,7 @@ const Externo = iconoComo("externo") as IconoItem;
 const NubeBajar = iconoComo("nube-bajar") as IconoItem;
 const Reintento = iconoComo("reintento") as IconoItem;
 const Dictamen = iconoComo("documento") as IconoItem;
+const Auditoria = iconoComo("portapapeles") as IconoItem;
 
 /** Grupos del menú (spec-ui §4): separador entre «Dictamen» y el resto. */
 const GRUPO_DICTAMEN = "dictamen";
@@ -88,6 +91,7 @@ export function AccionesVehiculo({
   onReintentado,
   onErrorReintento,
   onVerDictamen,
+  onVerAuditoria,
 }: AccionesVehiculoProps) {
   const placa = v.placa || v.vin || v.identificador;
   // Disparador «Acciones» de la fila: destino del foco al cancelar un modal de crear trámite (se busca al cerrar el modal).
@@ -130,6 +134,16 @@ export function AccionesVehiculo({
       icon: Dictamen,
       grupo: GRUPO_DICTAMEN,
       onSelect: ({ disparador: d }) => onVerDictamen(d),
+    });
+  }
+  if (onVerAuditoria) {
+    items.push({
+      key: "auditoria",
+      label: "Auditoría del dictamen",
+      ariaLabel: `Auditoría del dictamen de ${placa}`,
+      icon: Auditoria,
+      grupo: GRUPO_DICTAMEN,
+      onSelect: ({ disparador: d }) => onVerAuditoria(d),
     });
   }
   const inicioAcciones = items.length;

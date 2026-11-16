@@ -263,3 +263,20 @@ describe("AccionesVehiculo — HU #14584: «Ver dictamen» en el menú", () => {
     expect(abrir().map((i) => i.textContent?.trim())).toEqual(["Ver dictamen"]);
   });
 });
+
+// HU #14584 §6.4: «Auditoría del dictamen» en el grupo Dictamen del menú del cliente, solo si quien pinta pasa onVerAuditoria
+// (capacidad verAuditoria). Uso de ejemplo: <AccionesVehiculo … onVerAuditoria={puedeAuditar ? abrir : undefined} />.
+describe("AccionesVehiculo — HU #14584: «Auditoría del dictamen» con verAuditoria", () => {
+  it("con onVerAuditoria, va justo después de «Ver dictamen» y llama con el disparador", () => {
+    const onVerAuditoria = vi.fn();
+    pintar({ onVerDictamen: vi.fn(), onVerAuditoria });
+    expect(abrir().map((i) => i.textContent?.trim()).slice(0, 2)).toEqual(["Ver dictamen", "Auditoría del dictamen"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Auditoría del dictamen de TST001" }));
+    expect(onVerAuditoria).toHaveBeenCalledWith(disparador());
+  });
+
+  it("sin onVerAuditoria no hay auditoría", () => {
+    pintar({ onVerDictamen: vi.fn() });
+    expect(abrir().map((i) => i.textContent?.trim())).not.toContain("Auditoría del dictamen");
+  });
+});
