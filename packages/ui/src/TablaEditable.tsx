@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type FocusEvent, type ReactNode } from "react";
 import { cn } from "./cn";
 import {
   TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS,
@@ -113,6 +113,9 @@ interface RecetasApilado {
   /** Se suma a `celda` cuando la celda no tiene nada en ese renglón (H-13). Vacía: la celda se pinta igual. */
   celdaSinContenido: string;
 }
+
+/** Barra de cabecera del sistema (tokens.css): fondo y tinta de la tabla por defecto. */
+const ESTILO_CABECERA: CSSProperties = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" };
 
 const RECETAS: Record<ApiladoTabla, RecetasApilado> = {
   pantalla: {
@@ -548,7 +551,9 @@ export function TablaEditable<F>({
   // N3: cada anuncio lleva su número; el nodo se vuelve a montar y el lector lo lee aunque el texto se repita.
   const [anuncio, setAnuncio] = useState<{ texto: string; n: number }>({ texto: "", n: 0 });
   const anunciar = useCallback((texto: string) => setAnuncio((a) => ({ texto, n: a.n + 1 })), []);
-  const cabecera = "px-3 py-2 text-left text-xs font-semibold text-[color:var(--di-text-secondary)]";
+  // HU #14585: cabecera de la tabla por defecto de Diagnóstico, la misma receta del sistema (barra --table-header-*,
+  // versalita de 12 px). En tarjetas el thead sigue sr-only por su receta de apilado.
+  const cabecera = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider";
   return (
     <div
       className={cn(
@@ -558,17 +563,17 @@ export function TablaEditable<F>({
       )}
     >
       <table aria-label={etiqueta} className={`w-full border-collapse ${recetas.tabla}`}>
-        <thead className={`bg-[var(--di-surface-sunken)] ${recetas.cabecera}`}>
+        <thead className={recetas.cabecera}>
           <tr>
             {columnas.map((c) => (
-              <th key={c.campo} scope="col" className={cabecera}>
+              <th key={c.campo} scope="col" className={cabecera} style={ESTILO_CABECERA}>
                 {c.titulo}
               </th>
             ))}
-            <th scope="col" className={cabecera}>
+            <th scope="col" className={cabecera} style={ESTILO_CABECERA}>
               Estado
             </th>
-            <th scope="col" className={cabecera}>
+            <th scope="col" className={cabecera} style={ESTILO_CABECERA}>
               Acciones
             </th>
           </tr>
