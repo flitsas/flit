@@ -229,7 +229,7 @@ describe("TablaFilasCorregibles: tarjetas por debajo de 900 px (HU #14562 · M6)
 // HU #14585 (spec-ui §7, A7.1): la tabla de filas corregibles usa el contenedor de la tabla por defecto (CONTENEDOR_TABLA_CLS).
 // Uso de ejemplo: <TablaFilasCorregibles diagnosticoId={id} filas={[FILA_ERRONEA]} onFilaRevalidada={…} />.
 describe("TablaFilasCorregibles — HU #14585: contenedor de la tabla por defecto", () => {
-  it("el contenedor de TablaEditable lleva radio 12 px y el borde de marca del listado principal", () => {
+  it("el contenedor de TablaEditable lleva el radio del kit (rounded-xl) y el borde de marca del listado principal", () => {
     render(<TablaFilasCorregibles diagnosticoId={ID} filas={[FILA_ERRONEA]} onFilaRevalidada={vi.fn()} />);
     const contenedor = screen.getByRole("table", { name: "Filas con errores" }).parentElement!;
     expect(contenedor.className).toContain("rounded-xl");

@@ -301,7 +301,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
         errorFila={(f) => f.edicion.errorServidor}
         // «Reintentar» (solo tras un fallo de la revalidación) vuelve a pedirla con lo digitado.
         onGuardar={(f) => revalidar(f.edicion)}
-        // HU #14585 (spec-ui §7): contenedor de la tabla por defecto (radio 12 px y borde de marca); la cabecera es del kit.
+        // HU #14585 (spec-ui §7): contenedor de la tabla por defecto (rounded-xl = 9 px y borde de marca); la cabecera es del kit.
         className={CONTENEDOR_TABLA_CLS}
       />
       {paginas > 1 && (

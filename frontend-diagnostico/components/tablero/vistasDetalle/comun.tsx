@@ -8,7 +8,7 @@ import { etiquetaKit } from "@flit/ui/StatusBadge";
  * «Tabla por defecto» de Diagnóstico (HU #14584/#14585, spec-ui §1; referente: ListadoDiagnosticos). Todas las tablas propias
  * (listado, grilla del lote, backoffice, saneamiento, vehículos) usan estas recetas en vez de repetir radio, borde o cabecera.
  */
-/** Contenedor de la tabla: desborde horizontal dentro del bloque, radio 12 px y borde gris de marca. */
+/** Contenedor de la tabla: desborde horizontal dentro del bloque, radio del kit (rounded-xl = var(--radius) = 9 px) y borde gris de marca. */
 export const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-border";
 /** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 12 px (T4: piso tipográfico del kit). */
 export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider";
