@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Tooltip } from "@flit/ui/Tooltip";
+import type { ComponentProps } from "react";
 
 // Uso de ejemplo: <Tooltip contenido={<>Ejecutado<span className={TOOLTIP_SECUNDARIO_CLS}>Dato del 15/11/2026 00:04</span></>}>
 //   <a href={urlDetalle}>Ejecutado</a>
@@ -252,5 +253,47 @@ describe("Tooltip — táctil (spec-ui §5.2)", () => {
     pointer("pointerEnter", disparador(), "touch");
     act(() => vi.advanceTimersByTime(500));
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+});
+
+// Code review del kit (CR-3 y CR-4, 2026-11-16).
+describe("Tooltip — envoltorio, componentes y una sola llamada (CR-3)", () => {
+  it("CR-3 (i): en el envoltorio, el onClick, onKeyDown y onFocus del hijo corren una sola vez", () => {
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn();
+    const onFocus = vi.fn();
+    render(
+      <Tooltip contenido="Sin solicitar">
+        <span tabIndex={undefined} onClick={onClick} onKeyDown={onKeyDown} onFocus={onFocus}>
+          Sin solicitar
+        </span>
+      </Tooltip>,
+    );
+    const hijo = screen.getByText("Sin solicitar");
+    expect(hijo.parentElement).toHaveAttribute("tabindex", "0");
+    fireEvent.click(hijo);
+    fireEvent.keyDown(hijo, { key: "a" });
+    fireEvent.focus(hijo);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it("CR-3 (ii): un componente (no host) se clona sin envoltorio: una sola parada de Tab y su onClick una vez", () => {
+    const onClick = vi.fn();
+    function Boton(props: ComponentProps<"button">) {
+      return <button type="button" data-prueba="disparador" {...props} />;
+    }
+    const { container } = render(
+      <Tooltip contenido="Motivo">
+        <Boton onClick={onClick}>Ejecutado</Boton>
+      </Tooltip>,
+    );
+    expect(container.querySelectorAll("[tabindex='0']")).toHaveLength(0);
+    expect(disparador().parentElement).toBe(container);
+    fireEvent.click(disparador());
+    expect(onClick).toHaveBeenCalledTimes(1);
+    act(() => disparador().focus());
+    expect(disparador().getAttribute("aria-describedby")).toBe(screen.getByRole("tooltip").id);
   });
 });

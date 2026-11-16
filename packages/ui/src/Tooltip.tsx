@@ -32,6 +32,10 @@ import { cn } from "./cn";
  * - SP-19 (security-previa): por defecto el contenido se monta al abrir; cerrada no queda nada oculto en el DOM ni el
  *   disparador apunta a un id inexistente. `persistente` deja la burbuja montada (oculta con opacidad, sin aria-hidden)
  *   para que `aria-describedby` la lea siempre: úsalo solo con literales fijos sin datos personales.
+ * - Disparador: un elemento host enfocable (button, a, input, select, textarea o con tabIndex) o un componente (Button,
+ *   Link) recibe los manejadores por clonación, sin envoltorio: una sola parada de Tab. Solo un elemento host no
+ *   enfocable (span, img) se envuelve en un span enfocable; ese span no reenvía los manejadores del hijo (ya los recibe
+ *   el hijo por el burbujeo del evento), así que nunca corren dos veces.
  * - `describirHijo={false}` + `id`: el consumidor enlaza la burbuja desde un control interno (p. ej. la casilla de una
  *   etiqueta), y el hijo no se envuelve aunque no sea enfocable (el foco del control interno sube por React).
  */
@@ -185,25 +189,28 @@ export function Tooltip({
   const props = hijo.props;
   const tipo = typeof hijo.type === "string" ? hijo.type : "";
   const esEnlace = tipo === "a" && props.href !== undefined;
-  const enfocable = ENFOCABLES.has(tipo) || props.tabIndex !== undefined;
+  // Un componente (tipo no string) se clona: se asume que reenvía props y ref a su elemento enfocable (Button, Link).
+  const enfocable = tipo === "" || ENFOCABLES.has(tipo) || props.tabIndex !== undefined;
   const envolver = describirHijo && !enfocable;
   const montada = abierto || persistente;
+  // En el envoltorio, los manejadores del hijo ya corren por el burbujeo del evento: no se vuelven a llamar.
+  const delHijo: PropsHijo = envolver ? {} : props;
 
   const handlers: PropsHijo = {
     onPointerEnter: (e) => {
-      props.onPointerEnter?.(e);
+      delHijo.onPointerEnter?.(e);
       ultimoPuntero.current = e.pointerType;
       if (e.pointerType === "touch") return;
       if (abierto) limpiar();
       else programar(abrir, RETARDO_HOVER_MS);
     },
     onPointerLeave: (e) => {
-      props.onPointerLeave?.(e);
+      delHijo.onPointerLeave?.(e);
       if (e.pointerType === "touch") return;
       programar(cerrar, GRACIA_MS);
     },
     onPointerDown: (e) => {
-      props.onPointerDown?.(e);
+      delHijo.onPointerDown?.(e);
       ultimoPuntero.current = e.pointerType;
       punteroAbajo.current = true;
       setTimeout(() => {
@@ -211,12 +218,12 @@ export function Tooltip({
       }, 0);
     },
     onFocus: (e) => {
-      props.onFocus?.(e);
+      delHijo.onFocus?.(e);
       // Foco por teclado: al instante. El foco que trae un clic o un toque no la abre (el toque usa onClick).
       if (!punteroAbajo.current) abrir();
     },
     onBlur: (e) => {
-      props.onBlur?.(e);
+      delHijo.onBlur?.(e);
       const siguiente = e.relatedTarget as Node | null;
       if (siguiente && burbujaRef.current?.contains(siguiente)) return;
       cerrar();
@@ -227,10 +234,10 @@ export function Tooltip({
         cerrar();
         return;
       }
-      props.onKeyDown?.(e);
+      delHijo.onKeyDown?.(e);
     },
     onClick: (e) => {
-      props.onClick?.(e);
+      delHijo.onClick?.(e);
       if (ultimoPuntero.current !== "touch" || esEnlace) return;
       if (abierto) cerrar();
       else abrir();
